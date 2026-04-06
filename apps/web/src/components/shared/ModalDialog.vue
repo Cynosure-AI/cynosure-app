@@ -1,0 +1,69 @@
+<script setup lang="ts">
+import { Icon } from '@iconify/vue'
+
+defineProps<{
+  /** Controls visibility */
+  show: boolean
+  /** Title shown in header */
+  title: string
+  /** Iconify icon name for the header badge */
+  icon?: string
+  /** Color theme for the icon badge: 'blue' | 'red' | 'amber' */
+  iconColor?: 'blue' | 'red' | 'amber'
+  /** Max width class (default: 'max-w-md') */
+  maxWidth?: string
+}>()
+
+const emit = defineEmits<{
+  close: []
+}>()
+</script>
+
+<template>
+  <Teleport to="body">
+    <div
+      v-if="show"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      @click.self="emit('close')"
+    >
+      <div
+        class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden w-full"
+        :class="maxWidth || 'max-w-md'"
+      >
+        <div class="p-6">
+          <!-- Header -->
+          <div class="flex items-center gap-3 mb-4">
+            <div
+              v-if="icon"
+              class="p-2 rounded-lg"
+              :class="{
+                'bg-blue-500/20 text-blue-400': iconColor === 'blue' || !iconColor,
+                'bg-red-500/20 text-red-400': iconColor === 'red',
+                'bg-amber-500/20 text-amber-400': iconColor === 'amber',
+              }"
+            >
+              <Icon
+                :icon="icon"
+                class="w-6 h-6"
+              />
+            </div>
+            <h3 class="text-lg font-semibold text-zinc-100">
+              {{ title }}
+            </h3>
+          </div>
+
+          <!-- Body slot -->
+          <slot />
+
+          <!-- Actions slot -->
+          <div
+            v-if="$slots.actions"
+            class="flex flex-col gap-3 mt-6"
+          >
+            <slot name="actions" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+</template>

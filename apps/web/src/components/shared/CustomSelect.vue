@@ -1,0 +1,248 @@
+<script setup lang="ts">
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { Icon } from '@iconify/vue'
+
+export interface SelectOption {
+  value: string
+  label: string
+  imgSrc?: string | null
+  iconName?: string
+  tooltip?: string
+  /** Small badge shown to the right of the label (e.g. "+3") */
+  tag?: string
+}
+
+export interface SelectOptionGroup {
+  /** Shown as a group header; omit for ungrouped options */
+  label?: string
+  options: SelectOption[]
+}
+
+const props = withDefaults(
+  defineProps<{
+    modelValue: string
+    groups: SelectOptionGroup[]
+    placeholder?: string
+    placeholderIcon?: string
+    /** Max height CSS class for the dropdown list (default: 'max-h-56') */
+    maxHeight?: string
+  }>(),
+  {
+    placeholder: 'Select...',
+    placeholderIcon: 'lucide:chevrons-up-down',
+    maxHeight: 'max-h-56',
+  },
+)
+
+const emit = defineEmits<{
+  'update:modelValue': [value: string]
+  change: [value: string]
+}>()
+
+const isOpen = ref(false)
+const containerRef = ref<HTMLElement | null>(null)
+const listRef = ref<HTMLElement | null>(null)
+/** Which option is keyboard-focused (by value) */
+const focusedValue = ref<string>('')
+
+const allOptions = computed(() => props.groups.flatMap((g) => g.options))
+const selectedOption = computed(() => allOptions.value.find((o) => o.value === props.modelValue) ?? null)
+
+function open(): void {
+  isOpen.value = true
+  focusedValue.value = props.modelValue
+}
+
+function toggle(): void {
+  isOpen.value ? (isOpen.value = false) : open()
+}
+
+function selectOption(value: string): void {
+  emit('update:modelValue', value)
+  emit('change', value)
+  isOpen.value = false
+}
+
+function handleKeydown(e: KeyboardEvent): void {
+  const opts = allOptions.value
+  if (!isOpen.value) {
+    if (['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+      e.preventDefault()
+      open()
+    }
+    return
+  }
+  const idx = opts.findIndex((o) => o.value === focusedValue.value)
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault()
+      focusedValue.value = opts[(idx + 1) % opts.length].value
+      break
+    case 'ArrowUp':
+      e.preventDefault()
+      focusedValue.value = opts[(idx - 1 + opts.length) % opts.length].value
+      break
+    case 'Enter':
+    case ' ':
+      e.preventDefault()
+      if (idx >= 0) selectOption(opts[idx].value)
+      break
+    case 'Escape':
+      e.preventDefault()
+      isOpen.value = false
+      break
+    case 'Tab':
+      isOpen.value = false
+      break
+  }
+}
+
+function handleClickOutside(e: MouseEvent): void {
+  if (containerRef.value && !containerRef.value.contains(e.target as Node)) {
+    isOpen.value = false
+  }
+}
+
+/** Scroll keyboard-focused item into view */
+watch(focusedValue, (val) => {
+  nextTick(() => {
+    const el = listRef.value?.querySelector(`[data-value="${CSS.escape(val)}"]`) as HTMLElement | null
+    el?.scrollIntoView({ block: 'nearest' })
+  })
+})
+
+onMounted(() => document.addEventListener('mousedown', handleClickOutside))
+onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutside))
+</script>
+
+<template>
+  <div
+    ref="containerRef"
+    class="relative w-full"
+  >
+    <!-- ── Trigger ──────────────────────────────────────────────── -->
+    <button
+      type="button"
+      role="combobox"
+      :aria-expanded="isOpen"
+      tabindex="0"
+      class="w-full flex items-center gap-2 bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer select-none"
+      @click="toggle"
+      @keydown="handleKeydown"
+    >
+      <!-- Icon / image -->
+      <span class="shrink-0 w-4 h-4 flex items-center justify-center">
+        <img
+          v-if="selectedOption?.imgSrc"
+          :src="selectedOption.imgSrc"
+          class="w-4 h-4 object-contain rounded-sm"
+          alt=""
+        >
+        <Icon
+          v-else-if="selectedOption?.iconName"
+          :icon="selectedOption.iconName"
+          class="w-3.5 h-3.5 text-zinc-400"
+        />
+        <Icon
+          v-else
+          :icon="placeholderIcon"
+          class="w-3.5 h-3.5 text-zinc-500"
+        />
+      </span>
+
+      <!-- Label -->
+      <span class="flex-1 text-left truncate">
+        {{ selectedOption?.label ?? placeholder }}
+      </span>
+
+      <!-- Chevron -->
+      <Icon
+        icon="lucide:chevron-down"
+        class="w-3 h-3 text-zinc-500 shrink-0 transition-transform duration-150"
+        :class="{ 'rotate-180': isOpen }"
+      />
+    </button>
+
+    <!-- ── Dropdown panel ──────────────────────────────────────── -->
+    <div
+      v-if="isOpen"
+      ref="listRef"
+      role="listbox"
+      class="absolute z-50 top-full mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
+    >
+      <div
+        class="py-1 overflow-y-auto"
+        :class="maxHeight"
+      >
+        <template
+          v-for="(group, gi) in groups"
+          :key="gi"
+        >
+          <!-- Group header -->
+          <div
+            v-if="group.label"
+            class="px-2.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500"
+            :class="gi > 0 ? 'pt-2 mt-1 border-t border-zinc-800' : 'pt-1.5'"
+          >
+            {{ group.label }}
+          </div>
+
+          <!-- Options -->
+          <button
+            v-for="opt in group.options"
+            :key="opt.value"
+            type="button"
+            role="option"
+            :aria-selected="opt.value === modelValue"
+            :title="opt.tooltip"
+            :data-value="opt.value"
+            class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer transition-colors"
+            :class="[
+              opt.value === modelValue ? 'text-zinc-100' : 'text-zinc-300',
+              opt.value === focusedValue
+                ? 'bg-zinc-700/80'
+                : opt.value === modelValue
+                  ? 'bg-blue-600/15 hover:bg-blue-600/25'
+                  : 'hover:bg-zinc-800',
+            ]"
+            @click="selectOption(opt.value)"
+            @mouseenter="focusedValue = opt.value"
+          >
+            <!-- Icon / image -->
+            <span class="shrink-0 w-4 h-4 flex items-center justify-center">
+              <img
+                v-if="opt.imgSrc"
+                :src="opt.imgSrc"
+                class="w-4 h-4 object-contain rounded-sm"
+                alt=""
+              >
+              <Icon
+                v-else-if="opt.iconName"
+                :icon="opt.iconName"
+                class="w-3.5 h-3.5 text-zinc-400"
+              />
+            </span>
+
+            <!-- Label -->
+            <span class="flex-1 text-left truncate">{{ opt.label }}</span>
+
+            <!-- Optional tag badge -->
+            <span
+              v-if="opt.tag"
+              class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-400"
+            >
+              {{ opt.tag }}
+            </span>
+
+            <!-- Check mark for currently selected value -->
+            <Icon
+              v-if="opt.value === modelValue"
+              icon="lucide:check"
+              class="w-3 h-3 text-blue-400 shrink-0"
+            />
+          </button>
+        </template>
+      </div>
+    </div>
+  </div>
+</template>

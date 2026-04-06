@@ -1,0 +1,137 @@
+import type { FastifyInstance } from 'fastify'
+import { getAgentMemory } from '../core/memory/agent-memory.js'
+import { getMemoryAggregator } from '../core/memory/memory-aggregator.js'
+import { getHistoryStore } from '../core/memory/history.js'
+import { getEmbeddingProvider } from '../core/memory/embedding.js'
+import { getMemoryParser } from '../core/memory/parser.js'
+import { getRAGStore } from '../core/memory/rag.js'
+import { getDb } from '../db/database.js'
+import { getGateway } from '../core/gateway/gateway.js'
+import OpenAI from 'openai'
+
+export async function registerMemoryRoutes(app: FastifyInstance): Promise<void> {
+  // POST /api/memory/search — search permanent memory
+  app.post<{ Body: { query: string; topK?: number } }>('/search', async (req) => {
+    const { query, topK } = req.body
+    const mem = getAgentMemory()
+    return mem.recall(query, topK)
+  })
+
+  // POST /api/memory/entries/delete — delete entries by IDs
+  app.post<{ Body: { ids: string[] } }>('/entries/delete', async (req) => {
+    const { ids } = req.body
+    if (!ids?.length) return { success: false, error: 'No IDs provided' }
+    const rag = getRAGStore()
+    await rag.deleteByIds('permanent_memory', ids)
+    return { success: true, deleted: ids.length }
+  })
+
+  // POST /api/memory/aggregate — aggregated search
+  app.post<{
+    Body: { query: string; opts?: { taskId?: string; conversationId?: string } }
+  }>('/aggregate', async (req) => {
+    const { query, opts } = req.body
+    const aggregator = getMemoryAggregator()
+    const memory = await aggregator.aggregate(query, opts)
+    return {
+      permanent: memory.permanent,
+      formatted: aggregator.format(memory)
+    }
+  })
+
+  // GET /api/memory/history/:conversationId — get history
+  app.get<{ Params: { conversationId: string } }>(
+    '/history/:conversationId',
+    async (req) => {
+      const history = getHistoryStore()
+      return history.getThread(req.params.conversationId)
+    }
+  )
+
+  // POST /api/memory/embeddings/configure — configure embeddings
+  app.post<{
+    Body: { providerId?: string; baseUrl?: string; apiKey?: string; model?: string; dimensions?: number }
+  }>('/embeddings/configure', async (req) => {
+    const embedder = getEmbeddingProvider()
+    const oldConfig = embedder.getConfig()
+    embedder.configure(req.body)
+    const newConfig = embedder.getConfig()
+
+    // If model or dimensions changed, existing vectors are incompatible
+    const modelChanged = oldConfig.model !== newConfig.model || oldConfig.dimensions !== newConfig.dimensions
+    if (modelChanged) {
+      const rag = getRAGStore()
+      await rag.deleteTable('permanent_memory')
+    }
+
+    return { success: true, vectorsDropped: modelChanged }
+  })
+
+  // GET /api/memory/embeddings/config — get current embedding config
+  app.get('/embeddings/config', async () => {
+    const embedder = getEmbeddingProvider()
+    return embedder.getConfig()
+  })
+
+  // POST /api/memory/embeddings/drop — drop all vector data
+  app.post('/embeddings/drop', async () => {
+    const rag = getRAGStore()
+    await rag.deleteTable('permanent_memory')
+    return { success: true }
+  })
+
+  // POST /api/memory/embeddings/probe — test-embed a token to detect output dimensions
+  app.post<{
+    Body: { providerId?: string; model: string }
+  }>('/embeddings/probe', async (req, reply) => {
+    const { providerId, model } = req.body
+    try {
+      let client: OpenAI
+      if (providerId) {
+        const provider = getGateway().getProvider(providerId)
+        if (!provider) return reply.status(400).send({ error: 'Provider not found' })
+        client = new OpenAI({
+          baseURL: provider.config.baseUrl,
+          apiKey: provider.config.apiKey || 'no-key'
+        })
+      } else {
+        const provider = getGateway().getActiveProvider()
+        client = new OpenAI({
+          baseURL: provider.config.baseUrl,
+          apiKey: provider.config.apiKey || 'no-key'
+        })
+      }
+      const res = await client.embeddings.create({ model, input: 'test' })
+      const dimensions = res.data[0].embedding.length
+      return { dimensions }
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error).message })
+    }
+  })
+
+  // GET /api/memory/chunking/config — get chunking config
+  app.get('/chunking/config', async () => {
+    const parser = getMemoryParser()
+    return parser.getConfig()
+  })
+
+  // POST /api/memory/chunking/configure — set chunking config
+  app.post<{
+    Body: { chunkSize: number; chunkOverlap: number }
+  }>('/chunking/configure', async (req, reply) => {
+    const { chunkSize, chunkOverlap } = req.body
+    if (!chunkSize || chunkSize < 100 || chunkSize > 10000) {
+      return reply.status(400).send({ error: 'chunkSize must be between 100 and 10000' })
+    }
+    if (chunkOverlap === undefined || chunkOverlap < 0 || chunkOverlap >= chunkSize) {
+      return reply.status(400).send({ error: 'chunkOverlap must be >= 0 and < chunkSize' })
+    }
+    const db = getDb()
+    db.prepare(
+      "INSERT OR REPLACE INTO settings (key, value_json) VALUES ('chunking', ?)"
+    ).run(JSON.stringify({ chunkSize, chunkOverlap }))
+    const parser = getMemoryParser()
+    parser.refreshConfig()
+    return { success: true, chunkSize, chunkOverlap }
+  })
+}

@@ -1,0 +1,119 @@
+import type { FastifyInstance } from 'fastify'
+import { readFileSync } from 'fs'
+import { getDb } from '../db/database.js'
+import {
+    listAgents,
+    getAgent,
+    createAgent,
+    updateAgent,
+    deleteAgent,
+    duplicateAgent,
+    getIconPath,
+    type CreateAgentInput,
+    type UpdateAgentInput,
+} from '../core/agents/agent-files.js'
+import { unscheduleAllForAgent, getCronJobsForAgent, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
+import { getChannelManager } from '../core/channels/channel-manager.js'
+
+export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promise<void> {
+    // GET /api/agents — list all
+    app.get('/', async () => {
+        const db = getDb()
+        const agents = listAgents()
+        const allLinks = db.prepare('SELECT agent_id, space_id FROM agent_memory_spaces').all() as { agent_id: string; space_id: string }[]
+        const linkMap = new Map<string, string[]>()
+        for (const row of allLinks) {
+            const arr = linkMap.get(row.agent_id) || []
+            arr.push(row.space_id)
+            linkMap.set(row.agent_id, arr)
+        }
+        return agents.map(a => ({ ...a, memorySpaces: linkMap.get(a.id) || [] }))
+    })
+
+    // GET /api/agents/:id — get single
+    app.get<{ Params: { id: string } }>('/:id', async (req, reply) => {
+        const agent = getAgent(req.params.id)
+        if (!agent) {
+            reply.code(404)
+            return { error: 'Agent not found' }
+        }
+        const db = getDb()
+        const spaceRows = db.prepare('SELECT space_id FROM agent_memory_spaces WHERE agent_id = ?').all(agent.id) as { space_id: string }[]
+        return { ...agent, memorySpaces: spaceRows.map(r => r.space_id) }
+    })
+
+    // GET /api/agents/:id/icon — serve agent icon
+    app.get<{ Params: { id: string } }>('/:id/icon', async (req, reply) => {
+        const icon = getIconPath(req.params.id)
+        if (!icon) {
+            reply.code(404)
+            return { error: 'No icon' }
+        }
+        const mimeMap: Record<string, string> = {
+            png: 'image/png',
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            svg: 'image/svg+xml',
+            webp: 'image/webp',
+        }
+        const contentType = mimeMap[icon.ext] || 'application/octet-stream'
+        reply.header('Content-Type', contentType)
+        reply.header('Cache-Control', 'public, max-age=3600')
+        return readFileSync(icon.path)
+    })
+
+    // POST /api/agents — create
+    app.post<{ Body: CreateAgentInput }>('/', async (req) => {
+        const agent = createAgent(req.body)
+        getChannelManager().refreshAllCommands()
+        return agent
+    })
+
+    // PUT /api/agents/:id — update
+    app.put<{ Params: { id: string }; Body: UpdateAgentInput & { memorySpaces?: string[] } }>('/:id', async (req, reply) => {
+        const { memorySpaces, ...rest } = req.body
+        const agent = updateAgent(req.params.id, rest)
+        if (!agent) {
+            reply.code(404)
+            return { error: 'Agent not found' }
+        }
+        // Sync memory space assignments if provided
+        if (memorySpaces !== undefined) {
+            const db = getDb()
+            db.prepare('DELETE FROM agent_memory_spaces WHERE agent_id = ?').run(agent.id)
+            const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
+            for (const spaceId of memorySpaces) insert.run(agent.id, spaceId)
+        }
+        const db = getDb()
+        const spaceRows = db.prepare('SELECT space_id FROM agent_memory_spaces WHERE agent_id = ?').all(agent.id) as { space_id: string }[]
+        getChannelManager().refreshAllCommands()
+        return { ...agent, memorySpaces: spaceRows.map(r => r.space_id) }
+    })
+
+    // POST /api/agents/:id/duplicate — duplicate
+    app.post<{ Params: { id: string } }>('/:id/duplicate', async (req, reply) => {
+        const agent = duplicateAgent(req.params.id)
+        if (!agent) {
+            reply.code(404)
+            return { error: 'Agent not found' }
+        }
+        getChannelManager().refreshAllCommands()
+        return agent
+    })
+
+    // DELETE /api/agents/:id — delete
+    app.delete<{ Params: { id: string } }>('/:id', async (req) => {
+        const { id } = req.params
+        const db = getDb()
+        db.prepare('UPDATE conversations SET agent_id = NULL WHERE agent_id = ?').run(id)
+        // Unschedule and delete all cron jobs for this agent
+        const agentCronJobs = getCronJobsForAgent(id)
+        for (const job of agentCronJobs) {
+            unscheduleCronJob(job.id)
+        }
+        db.prepare('DELETE FROM cron_jobs WHERE agent_id = ?').run(id)
+        deleteAgent(id)
+        getChannelManager().refreshAllCommands()
+        return { success: true }
+    })
+}

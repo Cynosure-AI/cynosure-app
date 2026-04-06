@@ -1,0 +1,33 @@
+{
+  "name": "openagent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OpenAgent monorepo — server, web UI, and Electron desktop app",
+  "scripts": {
+    "dev:server": "pnpm --filter open-agent-server dev",
+    "dev:web": "pnpm --filter open-agent-web dev",
+    "dev:electron": "pnpm --filter openagent-desktop dev",
+    "dev": "pnpm --filter open-agent-server dev & pnpm --filter open-agent-web dev",
+    "build:server": "pnpm --filter open-agent-server build",
+    "build:web": "pnpm --filter open-agent-web build",
+    "build:electron": "pnpm --filter openagent-desktop build",
+    "build": "pnpm --filter open-agent-server build && pnpm --filter open-agent-web build",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "package:electron": "pnpm --filter openagent-desktop package",
+    "package:linux": "pnpm --filter openagent-desktop package:linux",
+    "package:win": "pnpm --filter openagent-desktop package:win",
+    "package:mac": "pnpm --filter openagent-desktop package:mac"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "electron",
+      "electron-winstaller",
+      "esbuild",
+      "onnxruntime-node",
+      "protobufjs",
+      "sharp"
+    ]
+  }
+}

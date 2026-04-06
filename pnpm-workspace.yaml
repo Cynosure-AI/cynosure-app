@@ -1,0 +1,10 @@
+packages:
+  - "apps/*"
+allowBuilds:
+  better-sqlite3: true
+  electron: true
+  electron-winstaller: true
+  esbuild: false
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true

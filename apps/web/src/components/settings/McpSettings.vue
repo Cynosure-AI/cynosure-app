@@ -1,0 +1,73 @@
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
+import { api } from '../../api/client'
+import { useAgentStore } from '../../stores/agent.store'
+import TabBar, { type TabDef } from '../shared/TabBar.vue'
+import { useMcpServers } from '../../composables/useMcpServers'
+import McpBrowseTab from './McpBrowseTab.vue'
+import McpInstalledTab from './McpInstalledTab.vue'
+import McpToolsTab from './McpToolsTab.vue'
+
+const agentStore = useAgentStore()
+const { servers, actionError, authInProgress, loadServers, refreshAll } = useMcpServers()
+
+type McpTab = 'browse' | 'installed' | 'tools'
+const activeTab = ref<McpTab>('browse')
+
+const cleanups: (() => void)[] = []
+
+onMounted(() => {
+  loadServers()
+  agentStore.loadTools()
+
+  // Auto-refresh when background OAuth completes
+  cleanups.push(
+    api.mcp.onAuthComplete(async (data) => {
+      if (authInProgress.value === data.serverId) {
+        authInProgress.value = null
+      }
+      delete actionError.value[data.serverId]
+      await refreshAll()
+    }),
+  )
+})
+
+onUnmounted(() => {
+  cleanups.forEach((fn) => fn())
+})
+</script>
+
+<template>
+  <div>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-zinc-200">
+        MCP Servers
+      </h2>
+    </div>
+
+    <p class="text-xs text-zinc-500 mb-4">
+      Connect MCP (Model Context Protocol) servers to add external tools the LLM can use.
+    </p>
+
+    <!-- Tabs -->
+    <TabBar
+      v-model="activeTab"
+      :tabs="[
+        { value: 'browse', label: 'Browse Registry', icon: 'lucide:search' } as TabDef<McpTab>,
+        { value: 'installed', label: 'Installed', icon: 'lucide:plug', badge: servers.length || undefined } as TabDef<McpTab>,
+        { value: 'tools', label: 'Registered Tools', icon: 'lucide:wrench' } as TabDef<McpTab>,
+      ]"
+      class="mb-5"
+    />
+
+    <McpBrowseTab
+      v-if="activeTab === 'browse'"
+      @go-to-installed="activeTab = 'installed'"
+    />
+    <McpInstalledTab
+      v-else-if="activeTab === 'installed'"
+      @go-to-browse="activeTab = 'browse'"
+    />
+    <McpToolsTab v-else-if="activeTab === 'tools'" />
+  </div>
+</template>
