@@ -222,7 +222,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
       <!-- Agents Grid -->
       <div
         v-if="filteredAgents.length && viewMode === 'grid'"
-        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+        class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4"
       >
         <div
           v-for="agent in filteredAgents"
