@@ -1,0 +1,37 @@
+{
+  "name": "open-agent-web",
+  "version": "1.0.0",
+  "description": "OpenAgent web frontend – Vue SPA connecting to the OpenAgent server",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "eslint \"src/**/*.{vue,ts,js}\"",
+    "lint:fix": "eslint \"src/**/*.{vue,ts,js}\" --fix"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@iconify/vue": "^5.0.0",
+    "highlight.js": "^11.11.1",
+    "marked": "^17.0.4",
+    "marked-highlight": "^2.2.3",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.25",
+    "vue-router": "^5.0.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/marked": "^5.0.2",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitejs/plugin-vue": "^6.0.2",
+    "@vue/eslint-config-typescript": "^13.0.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-vue": "^9.33.0",
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.6",
+    "vue-tsc": "^3.1.6"
+  }
+}

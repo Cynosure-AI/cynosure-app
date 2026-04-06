@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+build/
+
+# Electron release artifacts
+apps/electron/release/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Logs
+*.log*
+
+# ESLint
+.eslintcache
+
+# Server data directory
+apps/server/data/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# MCPs (separate repository)
+mcps/
+
+# TypeScript build cache
+*.tsbuildinfo

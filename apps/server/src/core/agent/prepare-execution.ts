@@ -1,0 +1,221 @@
+/**
+ * Shared pre-action builder for agent execution.
+ *
+ * Consolidates the duplicated pre-action logic (tool resolution, memory
+ * enrichment, system prompt construction, provider/model resolution) that
+ * was previously copy-pasted across chat, cron, file-watcher, channels,
+ * and sub-agent triggers.
+ */
+
+import { getGateway } from '../gateway/gateway.js'
+import { getToolRegistry } from '../tools/tool-registry.js'
+import { getMemoryAggregator } from '../memory/memory-aggregator.js'
+import { getEventBus } from '../telemetry/event-bus.js'
+import { hydrateBuiltInTools } from '../tools/built-in-tools.js'
+import type { AgentData, SubAgentAssignment } from '../agents/agent-files.js'
+import type { ChatMessage, ToolDefinition } from '../gateway/providers/base.provider.js'
+
+type BroadcastFn = (event: string, data: unknown) => void
+
+export interface PrepareExecutionInput {
+    /** The resolved agent config */
+    agent: AgentData
+    /** Conversation ID for tool hydration and memory aggregation */
+    conversationId: string
+    /** WebSocket broadcast function */
+    broadcast: BroadcastFn
+
+    // ── Overrides ──
+
+    /** Provider override (session-level or trigger-level) */
+    providerOverride?: string
+    /** Model override (session-level or trigger-level) */
+    modelOverride?: string
+    /** Replace the agent's system prompt entirely */
+    systemPromptOverride?: string
+    /** Append extra instructions to the system prompt */
+    systemPromptSuffix?: string
+
+    // ── Memory enrichment ──
+
+    /** The user's query text — used as the memory retrieval query */
+    userQuery?: string
+    /** Whether this is the first user message (memory enrichment only triggers on first message) */
+    isFirstMessage?: boolean
+
+    // ── Sub-agents ──
+
+    /** Whether to include sub-agent delegation tools (default: true) */
+    includeSubAgents?: boolean
+    /** Override agent.subAgents (e.g. when sub-agents come from the request body) */
+    subAgentAssignments?: SubAgentAssignment[]
+    /** Parent abort signal passed to sub-agent executors */
+    signal?: AbortSignal
+
+    // ── Agentless overrides ──
+
+    /** Memory space overrides for agentless chat (bypasses agent's assigned spaces) */
+    memorySpaceOverrides?: { id: string; name: string }[]
+}
+
+export interface MemorySource {
+    text: string
+    source: string
+    score: number
+}
+
+export interface PreparedExecution {
+    /** Tool definitions ready for the executor */
+    tools: ToolDefinition[]
+    /** Resolved provider ID */
+    providerId: string | undefined
+    /** Resolved model name */
+    model: string
+    /** System messages to prepend to conversation history (order: system prompt, then memory context) */
+    systemMessages: ChatMessage[]
+    /** Retrieved memory sources for UI metadata (null if none) */
+    retrievedMemorySources: MemorySource[] | null
+    /** Whether sub-agent delegation tools were added */
+    hasSubAgents: boolean
+}
+
+/**
+ * Prepare all shared pre-action state for agent execution.
+ *
+ * Returns resolved tools (with hydration + sub-agents), provider/model,
+ * system messages (prompt + memory context), and memory sources.
+ *
+ * The caller is responsible for:
+ * - Building conversation messages (history or fresh)
+ * - Creating the AbortController and AgentExecutor
+ * - Post-execution persistence
+ */
+export async function prepareAgentExecution(input: PrepareExecutionInput): Promise<PreparedExecution> {
+    const {
+        agent, conversationId, broadcast,
+        providerOverride, modelOverride,
+        systemPromptOverride, systemPromptSuffix,
+        userQuery, isFirstMessage,
+        includeSubAgents = true,
+        subAgentAssignments,
+        signal,
+        memorySpaceOverrides,
+    } = input
+
+    const gateway = getGateway()
+    const toolRegistry = getToolRegistry()
+
+    // ── 1. Resolve tools ──
+
+    let tools = toolRegistry.resolveForExecution(agent.tools || [])
+
+    // ── 2. Sub-agent delegation tools ──
+
+    const effectiveSubAgents = includeSubAgents
+        ? (subAgentAssignments ?? agent.subAgents)
+        : undefined
+    const hasSubAgents = Boolean(effectiveSubAgents?.length)
+
+    if (hasSubAgents) {
+        const { buildSubAgentTools } = await import('./sub-agent-tools.js')
+        const subAgentTools = buildSubAgentTools({
+            subAgents: effectiveSubAgents!,
+            conversationId,
+            broadcast,
+            signal,
+            modelOverride: modelOverride || undefined,
+            providerOverride: providerOverride || undefined,
+        })
+        tools = [...tools, ...subAgentTools]
+    }
+
+    // ── 3. Hydrate built-in tool stubs ──
+
+    tools = hydrateBuiltInTools(tools, {
+        agentId: agent.id,
+        conversationId,
+        broadcast,
+        memorySpaceOverrides,
+    })
+
+    // ── 4. Resolve provider / model ──
+
+    const providerId = providerOverride || agent.providerId || undefined
+    const activeProvider = providerId
+        ? gateway.getProvider(providerId) || gateway.getActiveProvider()
+        : gateway.getActiveProvider()
+    const rawModel = modelOverride || agent.model || activeProvider.config.defaultModel
+    const model = (!rawModel || rawModel === 'default') ? activeProvider.config.defaultModel : rawModel
+
+    // ── 5. Memory enrichment ──
+
+    const systemMessages: ChatMessage[] = []
+    let retrievedMemorySources: MemorySource[] | null = null
+
+    if (agent.getMemoriesAtStart && isFirstMessage && userQuery) {
+        try {
+            const aggregator = getMemoryAggregator()
+            const memory = await aggregator.aggregate(userQuery, { conversationId, agentId: agent.id })
+
+            if (memory.permanent.length > 0) {
+                retrievedMemorySources = memory.permanent.map(c => ({
+                    text: c.text.slice(0, 200),
+                    source: c.sourceFile || c.source,
+                    score: Math.round(c.score * 100) / 100,
+                }))
+
+                broadcast('chat:memory-sources', { conversationId, sources: retrievedMemorySources })
+
+                const eventBus = getEventBus()
+                eventBus.emit('step:status', {
+                    conversationId,
+                    iteration: 0,
+                    status: 'memory-retrieved',
+                    message: `Retrieved ${retrievedMemorySources.length} memory source${retrievedMemorySources.length !== 1 ? 's' : ''}`,
+                })
+                eventBus.emit('step:executed', {
+                    conversationId,
+                    results: retrievedMemorySources.map(s => ({
+                        name: s.source || 'memory',
+                        success: true,
+                        output: `[${Math.round(s.score * 100)}% relevance] ${s.text}`,
+                    })),
+                })
+            }
+
+            const memoryContext = aggregator.format(memory)
+            if (memoryContext) {
+                // Memory context goes AFTER system prompt in the array —
+                // callers prepend systemMessages, so index 0 = first system message.
+                systemMessages.push({ role: 'system', content: `[Retrieved Memory Context]\n${memoryContext}` })
+            }
+        } catch { /* memory not available — proceed without */ }
+    }
+
+    // ── 6. System prompt ──
+
+    let effectiveSystemPrompt = systemPromptOverride ?? agent.systemPrompt ?? ''
+
+    if (hasSubAgents) {
+        const { buildSubAgentPrompt } = await import('./sub-agent-tools.js')
+        effectiveSystemPrompt = (effectiveSystemPrompt ? effectiveSystemPrompt + '\n' : '') + buildSubAgentPrompt(effectiveSubAgents!)
+    }
+
+    if (systemPromptSuffix) {
+        effectiveSystemPrompt = (effectiveSystemPrompt ? effectiveSystemPrompt + '\n' : '') + systemPromptSuffix
+    }
+
+    if (effectiveSystemPrompt) {
+        // System prompt goes BEFORE memory context (insert at position 0)
+        systemMessages.unshift({ role: 'system', content: effectiveSystemPrompt })
+    }
+
+    return {
+        tools,
+        providerId,
+        model,
+        systemMessages,
+        retrievedMemorySources,
+        hasSubAgents,
+    }
+}

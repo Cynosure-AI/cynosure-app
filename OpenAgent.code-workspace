@@ -1,0 +1,25 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "apps/server"
+		},
+		{
+			"path": "apps/web"
+		},
+		{
+			"path": "apps/electron"
+		},
+		{
+			"path": "mcps"
+		}
+	],
+	"settings": {
+		"chat.tools.terminal.autoApprove": {
+			"npx vue-tsc": true,
+			"npx tsc": true
+		}
+	}
+}
