@@ -23,6 +23,7 @@ function toggle(id: string) {
   } else {
     chatStore.freeChatSubAgentIds.push(id)
   }
+  chatStore.markOverridesModified()
 }
 
 function agentIcon(agent: { iconUrl: string | null; providerId: string }): string | null {

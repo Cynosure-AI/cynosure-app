@@ -29,6 +29,7 @@ function toggle(id: string) {
   } else {
     selected.push(id)
   }
+  chatStore.markOverridesModified()
 }
 </script>
 
