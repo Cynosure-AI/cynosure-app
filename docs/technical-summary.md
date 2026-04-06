@@ -30,7 +30,7 @@ Routes are thin (Fastify plugin functions in `routes/`); all domain logic is in 
 - **better-sqlite3** — synchronous SQLite, WAL mode, foreign keys ON
 - **Inline migration** — `runMigrations()` runs `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE` add-column migrations every boot (no migration versioning tool)
 - **SQLite tables**: `providers`, `conversations`, `messages`, `tasks`, `execution_logs`, `execution_steps`, `mcp_servers`, `tool_approvals`, `pending_hitl`, `settings`, `agents`, `channels`, `cron_jobs`, `file_watchers`, `agent_memory_spaces`, `memory_spaces`, `notifications`
-- **Agents are NOT in SQLite** — they live as JSON config files on disk in `{appDataDir}/agents/{agentId}/` (managed by `server/src/core/agents/agent-files.ts`)
+- **Agents are NOT in SQLite** — they live as JSON config files on disk in `{appDataDir}/agents/{agentId}/` (managed by `server/src/core/agents/agent-files.ts`). The `AgentConfig` includes: `name`, `codename`, `description`, `category`, `providerId`, `model`, `tools`, `subAgents`, `getMemoriesAtStart`, `autoApproveTools`, `maxToolOutputChars`, `showInCarousel`, `favorite`, `createdAt`, `updatedAt`
 - **Vector DB**: LanceDB (`@lancedb/lancedb`) for RAG/memory at `{appDataDir}/lancedb` (`server/src/core/memory/rag.ts`)
 
 ---
@@ -156,16 +156,18 @@ Singleton lifecycle manager for **Telegram, Discord, and Slack** integrations:
 
 ### LLM Gateway (`server/src/core/gateway/gateway.ts`)
 
-`LLMGateway` maintains a `Map<string, BaseLLMProvider>`. Supports **6 providers**:
+`LLMGateway` maintains a `Map<string, BaseLLMProvider>`. Supports **8 providers**:
 
-| Provider  | Class               |
-| --------- | ------------------- |
-| OpenAI    | `OpenAIProvider`    |
-| Anthropic | `AnthropicProvider` |
-| Gemini    | `GeminiProvider`    |
-| LM Studio | `LMStudioProvider`  |
-| Grok      | `GrokProvider`      |
-| Ollama    | `OllamaProvider`    |
+| Provider   | Class                |
+| ---------- | -------------------- |
+| OpenAI     | `OpenAIProvider`     |
+| Anthropic  | `AnthropicProvider`  |
+| Gemini     | `GeminiProvider`     |
+| LM Studio  | `LMStudioProvider`   |
+| Grok       | `GrokProvider`       |
+| Ollama     | `OllamaProvider`     |
+| Groq       | `GroqProvider`       |
+| OpenRouter | `OpenRouterProvider` |
 
 All implement `BaseLLMProvider` with `complete()` and `streamComplete()`. The gateway routes to the named provider or falls back to `activeProviderId`.
 
@@ -242,7 +244,7 @@ Key dependencies:
 | `preferences`       | `web/src/stores/preferences.store.ts`       | Low           |
 | `notifications`     | `web/src/stores/notification.store.ts`      | Low           |
 
-#### `chat.store.ts` (~700+ lines)
+#### `chat.store.ts` (~880 lines)
 
 The most complex file in the frontend. Key responsibilities:
 
@@ -278,6 +280,7 @@ The most complex file in the frontend. Key responsibilities:
 | `useProviderLogos` | Theme-aware provider logo URL map                                           |
 | `useCronHuman`     | **Cron expression parser + builder (pure functions)**                       |
 | `useWhisper`       | **On-device STT via Web Worker + HuggingFace transformers + MediaRecorder** |
+| `useMcpServers`    | MCP server management composable                                            |
 
 `useWhisper` manages: Web Worker lifecycle, MediaRecorder audio capture, multiple status states (`idle | loading | ready | recording | transcribing | error`), per-file download progress tracking, and model caching in localStorage.
 
