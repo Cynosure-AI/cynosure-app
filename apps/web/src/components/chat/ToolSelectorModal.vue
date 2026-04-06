@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { useAgentStore } from '../../stores/agent.store'
+import { useChatStore } from '../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import { watch } from 'vue'
 import ToolSelector from '../shared/ToolSelector.vue'
 
 const agentStore = useAgentStore()
+const chatStore = useChatStore()
 
 const visible = defineModel<boolean>({ required: true })
 
@@ -14,6 +16,7 @@ function closeModal(): void {
 
 function onToolsUpdate(tools: string[]) {
   agentStore.selectedToolNames = tools
+  chatStore.markOverridesModified()
 }
 </script>
 

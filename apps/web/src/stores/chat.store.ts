@@ -693,8 +693,12 @@ export const useChatStore = defineStore('chat', () => {
     return sorted1.every((v, i) => v === sorted2[i])
   }
 
+  // Track whether the user has actively modified overrides in this session.
+  // Prevents the override notice from showing on cold start before any user action.
+  const userModifiedOverrides = ref(false)
+
   const hasAgentOverrides = computed(() => {
-    if (!activeAgentId.value) return false
+    if (!activeAgentId.value || !userModifiedOverrides.value) return false
     return (
       !arraysEqual(agentStore.selectedToolNames, agentOriginalTools.value) ||
       !arraysEqual(freeChatSubAgentIds.value, agentOriginalSubAgentIds.value) ||
@@ -706,6 +710,7 @@ export const useChatStore = defineStore('chat', () => {
     agentStore.selectedToolNames = [...agentOriginalTools.value]
     freeChatSubAgentIds.value = [...agentOriginalSubAgentIds.value]
     freeChatMemorySpaceIds.value = [...agentOriginalMemorySpaceIds.value]
+    userModifiedOverrides.value = false
   }
 
   async function applyOverridesToAgent(): Promise<void> {
@@ -736,10 +741,12 @@ export const useChatStore = defineStore('chat', () => {
     agentOriginalTools.value = [...agentStore.selectedToolNames]
     agentOriginalSubAgentIds.value = [...freeChatSubAgentIds.value]
     agentOriginalMemorySpaceIds.value = [...freeChatMemorySpaceIds.value]
+    userModifiedOverrides.value = false
   }
 
   async function setActiveAgent(id: string | null) {
     activeAgentId.value = id
+    userModifiedOverrides.value = false
     if (id) {
       localStorage.setItem('oa-active-agent', id)
       const agentDefs = useAgentDefinitionsStore()
@@ -794,6 +801,7 @@ export const useChatStore = defineStore('chat', () => {
     const memIds = agent.memorySpaces?.length ? [...agent.memorySpaces] : []
     freeChatMemorySpaceIds.value = [...memIds]
     agentOriginalMemorySpaceIds.value = [...memIds]
+    userModifiedOverrides.value = false
   }
 
   function handlePostAction(data: { conversationId: string; action: string; status: 'started' | 'completed' }): void {
@@ -833,6 +841,7 @@ export const useChatStore = defineStore('chat', () => {
     agentOriginalTools,
     agentOriginalSubAgentIds,
     agentOriginalMemorySpaceIds,
+    markOverridesModified() { userModifiedOverrides.value = true },
     resetAgentOverrides,
     applyOverridesToAgent,
     loadConversations,
