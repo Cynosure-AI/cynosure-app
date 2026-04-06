@@ -45,7 +45,7 @@ const filteredAgents = computed(() => {
   else if (activeCategory.value) agents = agents.filter(a => (a.category || '') === activeCategory.value)
   const q = searchQuery.value.trim().toLowerCase()
   if (q) agents = agents.filter(a => a.name.toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q))
-  return agents
+  return [...agents].sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0))
 })
 
 onMounted(() => agentDefs.load())
@@ -87,6 +87,10 @@ function confirmDelete(agent: { id: string; name: string }) {
 
 async function duplicateAgent(id: string) {
   await agentDefs.duplicate(id)
+}
+
+async function toggleFavorite(agent: { id: string; favorite: boolean }) {
+  await agentDefs.update(agent.id, { favorite: !agent.favorite })
 }
 
 function formatDate(ts: number): string {
@@ -267,6 +271,17 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
                   icon="lucide:trash-2"
                   class="w-4 h-4"
                 />
+              </button>              <button
+                :class="agent.favorite ? 'text-amber-400' : 'opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-amber-400'"
+                class="p-1.5 rounded-md transition-all"
+                :title="agent.favorite ? 'Remove from favorites' : 'Add to favorites'"
+                @click.stop="toggleFavorite(agent)"
+              >
+                <Icon
+                  :icon="agent.favorite ? 'lucide:star' : 'lucide:star'"
+                  class="w-4 h-4"
+                  :class="agent.favorite ? 'fill-amber-400' : ''"
+                />
               </button>
             </div>
           </div>
@@ -399,6 +414,18 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
 
           <!-- Actions -->
           <div class="flex items-center gap-0.5 shrink-0">
+            <button
+              :class="agent.favorite ? 'text-amber-400' : 'opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-amber-400'"
+              class="p-1.5 rounded-md transition-all"
+              :title="agent.favorite ? 'Remove from favorites' : 'Add to favorites'"
+              @click.stop="toggleFavorite(agent)"
+            >
+              <Icon
+                :icon="agent.favorite ? 'lucide:star' : 'lucide:star'"
+                class="w-4 h-4"
+                :class="agent.favorite ? 'fill-amber-400' : ''"
+              />
+            </button>
             <button
               class="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-500 hover:text-blue-400 rounded-md transition-all"
               title="Duplicate agent"

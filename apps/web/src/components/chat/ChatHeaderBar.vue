@@ -50,11 +50,12 @@ const agentDropdownGroups = computed((): SelectOptionGroup[] => {
     options: [{ value: '', label: 'Default', iconName: 'lucide:message-square' }],
   }
   if (!agentDefs.agents.length) return [base]
+  const sorted = [...agentDefs.agents].sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0))
   return [
     base,
     {
       label: 'Agents',
-      options: agentDefs.agents.map((a) => {
+      options: sorted.map((a) => {
         let imgSrc: string | null = a.iconUrl || null
         if (!imgSrc) {
           const prov = providerStore.providers.find((p) => p.id === a.providerId)
