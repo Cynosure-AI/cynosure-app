@@ -24,6 +24,7 @@ export interface AgentConfig {
     autoApproveTools: boolean
     maxToolOutputChars: number
     showInCarousel: boolean
+    favorite: boolean
     createdAt: number
     updatedAt: number
 }
@@ -51,6 +52,7 @@ export type CreateAgentInput = {
     autoApproveTools?: boolean
     maxToolOutputChars?: number
     showInCarousel?: boolean
+    favorite?: boolean
 }
 
 export type UpdateAgentInput = Partial<Omit<CreateAgentInput, 'codename'> & { codename?: string; subAgents?: SubAgentAssignment[]; autoApproveTools?: boolean }>
@@ -165,6 +167,7 @@ function readAgentFromDir(agentDir: string, id: string): AgentData | null {
         autoApproveTools: config.autoApproveTools === true,
         maxToolOutputChars: config.maxToolOutputChars ?? 16_384,
         showInCarousel: config.showInCarousel !== false,
+        favorite: config.favorite === true,
         createdAt: config.createdAt || 0,
         updatedAt: config.updatedAt || 0,
     }
@@ -219,6 +222,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
         autoApproveTools: input.autoApproveTools === true,
         maxToolOutputChars: input.maxToolOutputChars ?? 16_384,
         showInCarousel: input.showInCarousel !== false,
+        favorite: input.favorite === true,
         createdAt: now,
         updatedAt: now,
     }
@@ -267,6 +271,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         autoApproveTools: input.autoApproveTools !== undefined ? input.autoApproveTools : (existing.autoApproveTools === true),
         maxToolOutputChars: input.maxToolOutputChars !== undefined ? input.maxToolOutputChars : (existing.maxToolOutputChars ?? 16_384),
         showInCarousel: input.showInCarousel !== undefined ? input.showInCarousel : (existing.showInCarousel !== false),
+        favorite: input.favorite !== undefined ? input.favorite : (existing.favorite === true),
         createdAt: existing.createdAt,
         updatedAt: now,
     }

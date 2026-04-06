@@ -246,6 +246,7 @@ export interface AgentDefinition {
   generateTitle: boolean
   maxToolOutputChars: number
   showInCarousel: boolean
+  favorite: boolean
   memorySpaces: string[]
   createdAt: number
   updatedAt: number
