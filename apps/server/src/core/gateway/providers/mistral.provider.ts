@@ -1,11 +1,11 @@
-import { GroqProvider } from './groq.provider.js'
+import { OpenRouterProvider } from './openrouter.provider.js'
 import type { LLMProviderConfig } from './base.provider.js'
 
 /**
  * Mistral provider — uses the OpenAI-compatible Chat Completions API
  * at https://api.mistral.ai/v1.
  */
-export class MistralProvider extends GroqProvider {
+export class MistralProvider extends OpenRouterProvider {
     constructor(config: LLMProviderConfig) {
         super({
             ...config,
