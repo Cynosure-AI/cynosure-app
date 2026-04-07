@@ -502,17 +502,6 @@ body {
   color: #111827;
 }
 
-/* Ensure input / textarea / select always show dark text in light mode.
-   Without this, some Chromium / Electron builds fall back to the system
-   "window text" colour which can render white-on-white in light colour-scheme. */
-[data-theme="light"] input,
-[data-theme="light"] textarea,
-[data-theme="light"] select {
-  color: var(--color-zinc-200);
-  -webkit-text-fill-color: var(--color-zinc-200);
-  caret-color: var(--color-zinc-200);
-}
-
 /* ── Syntax highlighting – light theme overrides ──────────────────────────
    atom-one-dark.css is imported globally (works for dark/cyberpunk/midnight).
    Override key colours for the light theme so code blocks remain readable.
