@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useAgentStore } from '../../stores/agent.store'
 import { useChatStore } from '../../stores/chat.store'
 import { Icon } from '@iconify/vue'
@@ -9,8 +9,23 @@ const chatStore = useChatStore()
 const denyReason = ref('')
 const showReasonInput = ref(false)
 const expandedArgs = ref<Set<number>>(new Set())
+const showApproveDropdown = ref(false)
+
+const approveAllLabel = computed(() => {
+  const names = [...new Set(agentStore.pendingHITL?.toolCalls.map(tc => tc.name) ?? [])]
+  return `Allow All (${names.join(', ')})`
+})
 
 function approve(): void {
+  agentStore.respondHITL(true)
+  resetState()
+}
+
+async function approveAll(): Promise<void> {
+  showApproveDropdown.value = false
+  if (!agentStore.pendingHITL) return
+  const toolNames = agentStore.pendingHITL.toolCalls.map(tc => tc.name)
+  await Promise.all(toolNames.map(name => agentStore.setToolApproval(name, true)))
   agentStore.respondHITL(true)
   resetState()
 }
@@ -33,6 +48,7 @@ function resetState(): void {
   showReasonInput.value = false
   denyReason.value = ''
   expandedArgs.value.clear()
+  showApproveDropdown.value = false
 }
 
 function formatArgs(args: string): string {
@@ -136,13 +152,49 @@ function toggleExpand(index: number): void {
         >
           {{ showReasonInput ? 'Confirm Deny' : 'Deny Request' }}
         </button>
-        <button
+        <!-- Split Allow button with dropdown -->
+        <div
           v-if="!showReasonInput"
-          class="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-4 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          @click="approve"
+          class="relative"
         >
-          Approve
-        </button>
+          <div class="flex items-center rounded-lg bg-emerald-600 border border-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 overflow-hidden">
+            <button
+              class="px-4 py-1.5 text-xs font-semibold text-white dark:text-emerald-400 hover:bg-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 transition-all focus:outline-none"
+              @click="approve"
+            >
+              Allow
+            </button>
+            <span class="w-px h-4 bg-white/30 dark:bg-emerald-500/20 self-center shrink-0" />
+            <button
+              class="px-1.5 py-1.5 text-white dark:text-emerald-400 hover:bg-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 transition-all focus:outline-none"
+              @click.stop="showApproveDropdown = !showApproveDropdown"
+            >
+              <Icon
+                icon="mdi:chevron-down"
+                class="w-3.5 h-3.5 transition-transform"
+                :class="showApproveDropdown ? 'rotate-180' : ''"
+              />
+            </button>
+          </div>
+          <!-- Dropdown menu -->
+          <div
+            v-if="showApproveDropdown"
+            class="absolute right-0 bottom-full mb-1 w-52 rounded-lg border border-zinc-700 bg-zinc-800 shadow-lg shadow-black/40 overflow-hidden z-50"
+          >
+            <button
+              class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
+              @click="approveAll"
+            >
+              {{ approveAllLabel }}
+            </button>
+          </div>
+          <!-- Backdrop to close dropdown -->
+          <div
+            v-if="showApproveDropdown"
+            class="fixed inset-0 z-40"
+            @click="showApproveDropdown = false"
+          />
+        </div>
       </div>
     </div>
   </div>
