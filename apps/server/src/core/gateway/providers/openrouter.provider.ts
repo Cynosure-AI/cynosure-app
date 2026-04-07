@@ -54,19 +54,19 @@ export class OpenRouterProvider extends BaseLLMProvider {
     private formatMessages(
         messages: ChatMessage[]
     ): OpenAI.Chat.ChatCompletionMessageParam[] {
-        return messages.map((msg) => {
+        return messages.flatMap((msg) => {
             if (msg.role === 'system') {
-                return {
+                return [{
                     role: 'system' as const,
                     content:
                         typeof msg.content === 'string'
                             ? msg.content
                             : this.getTextContent(msg.content)
-                }
+                }]
             }
 
             if (msg.role === 'tool') {
-                return {
+                const toolMsg: OpenAI.Chat.ChatCompletionMessageParam = {
                     role: 'tool' as const,
                     tool_call_id: msg.toolCallId || '',
                     content:
@@ -74,6 +74,27 @@ export class OpenRouterProvider extends BaseLLMProvider {
                             ? msg.content
                             : this.getTextContent(msg.content)
                 }
+                // If the tool returned images, inject them as a follow-up user message
+                // because the Chat Completions tool role only supports text content
+                if (Array.isArray(msg.content)) {
+                    const imageParts = (msg.content as ContentPart[])
+                        .filter((p) => p.type === 'image_url')
+                        .map((p) => ({
+                            type: 'image_url' as const,
+                            image_url: { url: (p as { type: 'image_url'; image_url: { url: string } }).image_url.url }
+                        }))
+                    if (imageParts.length) {
+                        const imageFollowUp: OpenAI.Chat.ChatCompletionMessageParam = {
+                            role: 'user' as const,
+                            content: [
+                                { type: 'text' as const, text: 'Here is the visual output from the tool:' },
+                                ...imageParts
+                            ]
+                        }
+                        return [toolMsg, imageFollowUp]
+                    }
+                }
+                return [toolMsg]
             }
 
             if (msg.role === 'assistant') {
