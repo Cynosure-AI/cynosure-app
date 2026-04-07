@@ -179,7 +179,7 @@ export interface McpServerInfo {
   icon_url?: string
   origin?: string
   pendingAuthUrl?: string
-  envHints?: { name: string; description?: string; required: boolean }[]
+  envHints?: { name: string; description?: string; required: boolean; sensitive?: boolean }[]
   serverInfo?: { title?: string; description?: string; websiteUrl?: string } | null
 }
 
