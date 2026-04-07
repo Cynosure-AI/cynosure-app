@@ -37,7 +37,8 @@ const defaultBaseUrls: Record<string, string> = {
   grok: 'https://api.x.ai/v1',
   ollama: 'http://localhost:11434/v1',
   openrouter: 'https://openrouter.ai/api/v1',
-  groq: 'https://api.groq.com/openai/v1'
+  groq: 'https://api.groq.com/openai/v1',
+  mistral: 'https://api.mistral.ai/v1'
 }
 
 const defaultModels: Record<string, string> = {
@@ -48,7 +49,8 @@ const defaultModels: Record<string, string> = {
   grok: 'grok-3-mini',
   ollama: '',
   openrouter: 'openai/gpt-4o',
-  groq: 'llama-3.3-70b-versatile'
+  groq: 'llama-3.3-70b-versatile',
+  mistral: 'mistral-large-latest'
 }
 
 function onTypeChange(): void {
@@ -124,7 +126,8 @@ async function addProvider(): Promise<void> {
       newProvider.type === 'grok' ||
       newProvider.type === 'ollama' ||
       newProvider.type === 'openrouter' ||
-      newProvider.type === 'groq'
+      newProvider.type === 'groq' ||
+      newProvider.type === 'mistral'
   }
 
   await providerStore.addProvider(config)
@@ -183,7 +186,8 @@ function getProviderIcon(type: string): string {
     grok: 'X',
     ollama: 'O',
     openrouter: 'R',
-    groq: 'G'
+    groq: 'G',
+    mistral: 'M'
   }
   return icons[type] || '?'
 }
@@ -252,6 +256,9 @@ function getProviderIcon(type: string): string {
               </option>
               <option value="groq">
                 Groq
+              </option>
+              <option value="mistral">
+                Mistral
               </option>
             </select>
           </div>

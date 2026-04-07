@@ -13,6 +13,7 @@ import { GrokProvider } from './providers/grok.provider.js'
 import { OllamaProvider } from './providers/ollama.provider.js'
 import { OpenRouterProvider } from './providers/openrouter.provider.js'
 import { GroqProvider } from './providers/groq.provider.js'
+import { MistralProvider } from './providers/mistral.provider.js'
 
 export class LLMGateway {
   private providers = new Map<string, BaseLLMProvider>()
@@ -44,6 +45,8 @@ export class LLMGateway {
         return new OpenRouterProvider(config)
       case 'groq':
         return new GroqProvider(config)
+      case 'mistral':
+        return new MistralProvider(config)
       default:
         throw new Error(`Unknown provider type: ${config.type}`)
     }
