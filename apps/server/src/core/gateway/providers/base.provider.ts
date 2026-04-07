@@ -3,7 +3,7 @@
 export interface LLMProviderConfig {
   id: string
   name: string
-  type: 'openai' | 'anthropic' | 'gemini' | 'lmstudio' | 'grok' | 'ollama' | 'openrouter' | 'groq'
+  type: 'openai' | 'anthropic' | 'gemini' | 'lmstudio' | 'grok' | 'ollama' | 'openrouter' | 'groq' | 'mistral'
   baseUrl: string
   apiKey?: string
   defaultModel: string
