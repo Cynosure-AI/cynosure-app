@@ -6,6 +6,9 @@ dist/
 out/
 build/
 
+#But allow the electron build folder for the icons
+!apps/electron/build/
+
 # Electron release artifacts
 apps/electron/release/
 
