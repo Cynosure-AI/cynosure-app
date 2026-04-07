@@ -26,11 +26,16 @@ const props = withDefaults(
     placeholderIcon?: string
     /** Max height CSS class for the dropdown list (default: 'max-h-56') */
     maxHeight?: string
+    /** Show a text input inside the dropdown for filtering options */
+    filterable?: boolean
+    /** Width class(es) for the dropdown panel (default: 'w-full'). Use e.g. 'min-w-full' to auto-expand to contents. */
+    dropdownWidth?: string
   }>(),
   {
     placeholder: 'Select...',
     placeholderIcon: 'lucide:chevrons-up-down',
     maxHeight: 'max-h-56',
+    dropdownWidth: 'w-full',
   },
 )
 
@@ -42,15 +47,36 @@ const emit = defineEmits<{
 const isOpen = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
 const listRef = ref<HTMLElement | null>(null)
+const filterInputRef = ref<HTMLInputElement | null>(null)
 /** Which option is keyboard-focused (by value) */
 const focusedValue = ref<string>('')
+const filterQuery = ref('')
 
 const allOptions = computed(() => props.groups.flatMap((g) => g.options))
 const selectedOption = computed(() => allOptions.value.find((o) => o.value === props.modelValue) ?? null)
 
+const filteredGroups = computed(() => {
+  if (!props.filterable || !filterQuery.value.trim()) return props.groups
+  const q = filterQuery.value.toLowerCase()
+  return props.groups
+    .map((g) => ({ ...g, options: g.options.filter((o) => o.label.toLowerCase().includes(q)) }))
+    .filter((g) => g.options.length > 0)
+})
+
+const filteredAllOptions = computed(() => filteredGroups.value.flatMap((g) => g.options))
+
+/** True when at least one visible option carries an icon — avoids wasting column space */
+const hasOptionIcons = computed(() =>
+  filteredAllOptions.value.some((o) => o.imgSrc || o.iconName),
+)
+
 function open(): void {
+  filterQuery.value = ''
   isOpen.value = true
   focusedValue.value = props.modelValue
+  if (props.filterable) {
+    nextTick(() => filterInputRef.value?.focus())
+  }
 }
 
 function toggle(): void {
@@ -64,7 +90,7 @@ function selectOption(value: string): void {
 }
 
 function handleKeydown(e: KeyboardEvent): void {
-  const opts = allOptions.value
+  const opts = props.filterable ? filteredAllOptions.value : allOptions.value
   if (!isOpen.value) {
     if (['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
       e.preventDefault()
@@ -102,6 +128,14 @@ function handleClickOutside(e: MouseEvent): void {
     isOpen.value = false
   }
 }
+
+/** When filter changes, move focus to first visible option if current one is hidden */
+watch(filterQuery, () => {
+  const opts = filteredAllOptions.value
+  if (opts.length && !opts.find((o) => o.value === focusedValue.value)) {
+    focusedValue.value = opts[0].value
+  }
+})
 
 /** Scroll keyboard-focused item into view */
 watch(focusedValue, (val) => {
@@ -168,14 +202,40 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
       v-if="isOpen"
       ref="listRef"
       role="listbox"
-      class="absolute z-50 top-full mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
+      class="absolute z-50 top-full mt-1 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
+      :class="dropdownWidth"
     >
+      <!-- Filter input -->
+      <div
+        v-if="filterable"
+        class="px-2 pt-2 pb-1"
+      >
+        <input
+          ref="filterInputRef"
+          v-model="filterQuery"
+          type="text"
+          placeholder="Search…"
+          autocomplete="off"
+          class="w-full bg-zinc-700/60 border border-zinc-600 rounded-md px-2.5 py-1 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          @keydown.esc.prevent="isOpen = false"
+          @keydown.arrow-down.prevent="handleKeydown"
+          @keydown.arrow-up.prevent="handleKeydown"
+          @keydown.enter.prevent="handleKeydown"
+        >
+      </div>
+
       <div
         class="py-1 overflow-y-auto"
         :class="maxHeight"
       >
+        <div
+          v-if="filterable && filterQuery && !filteredAllOptions.length"
+          class="px-3 py-2 text-xs text-zinc-500 italic"
+        >
+          No results
+        </div>
         <template
-          v-for="(group, gi) in groups"
+          v-for="(group, gi) in filteredGroups"
           :key="gi"
         >
           <!-- Group header -->
@@ -209,7 +269,10 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
             @mouseenter="focusedValue = opt.value"
           >
             <!-- Icon / image -->
-            <span class="shrink-0 w-4 h-4 flex items-center justify-center">
+            <span
+              v-if="hasOptionIcons"
+              class="shrink-0 w-4 h-4 flex items-center justify-center"
+            >
               <img
                 v-if="opt.imgSrc"
                 :src="opt.imgSrc"

@@ -101,6 +101,13 @@ const defaultModelLabel = computed(() => {
   return effectiveDefault ? `Default (${effectiveDefault})` : 'Provider default'
 })
 
+const modelDropdownGroups = computed((): SelectOptionGroup[] => [{
+  options: [
+    { value: '', label: defaultModelLabel.value },
+    ...sidebarModels.value.map((m) => ({ value: m, label: m })),
+  ],
+}])
+
 async function fetchSidebarModels(): Promise<void> {
   const providerId = currentProviderId.value
   if (!providerId) return
@@ -177,6 +184,7 @@ async function newChat(): Promise<void> {
           placeholder="Default"
           placeholder-icon="lucide:message-square"
           max-height="max-h-96"
+          :filterable="true"
           @change="onAgentChange"
         />
       </div>
@@ -199,22 +207,16 @@ async function newChat(): Promise<void> {
         v-if="currentProviderId"
         class="items-center gap-1 hidden sm:flex"
       >
-        <select
-          :value="chatStore.sessionModelOverride || ''"
-          class="min-w-0 bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          @change="onModelChange(($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">
-            {{ defaultModelLabel }}
-          </option>
-          <option
-            v-for="m in sidebarModels"
-            :key="m"
-            :value="m"
-          >
-            {{ m }}
-          </option>
-        </select>
+        <div class="w-52 shrink-0">
+          <CustomSelect
+            :model-value="chatStore.sessionModelOverride || ''"
+            :groups="modelDropdownGroups"
+            max-height="max-h-96"
+            dropdown-width="min-w-full"
+            :filterable="true"
+            @change="onModelChange"
+          />
+        </div>
         <button
           :disabled="loadingModels"
           class="p-1 text-zinc-500 hover:text-zinc-300 disabled:opacity-40 rounded-lg transition-colors shrink-0"
