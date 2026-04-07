@@ -70,17 +70,17 @@ interface McpEnvHint {
 }
 
 /**
- * Try to find a `mcp-meta.json` next to the MCP server's entry file.
+ * Try to find a `manifest.json` next to the MCP server's entry file.
  * Returns parsed env var hints if found.
  */
-function findMcpMeta(command: string, argsJson: string): McpEnvHint[] | null {
+function findManifest(command: string, argsJson: string): McpEnvHint[] | null {
     const args = JSON.parse(argsJson) as string[]
     const entryPath = args.find(a => isAbsolute(a) && !a.startsWith('-'))
     if (!entryPath) return null
 
     let dir = dirname(resolve(entryPath))
     for (let i = 0; i < 3 && dir.length > 1; i++) {
-        const p = join(dir, 'mcp-meta.json')
+        const p = join(dir, 'manifest.json')
         if (existsSync(p)) {
             try {
                 const meta = JSON.parse(readFileSync(p, 'utf-8')) as { envVars?: McpEnvHint[] }
@@ -164,7 +164,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
             connected: manager.isConnected(row.id),
             toolCount: manager.getTools(row.id).length,
             pendingAuthUrl: pendingAuths[row.id] || null,
-            envHints: findMcpMeta(row.command, row.args_json),
+            envHints: findManifest(row.command, row.args_json),
             serverInfo: manager.getServerInfo(row.id) || null,
         }))
     })
