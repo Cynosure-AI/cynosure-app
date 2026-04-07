@@ -67,10 +67,20 @@ interface McpEnvHint {
     name: string
     description?: string
     required: boolean
+    sensitive?: boolean
+}
+
+interface McpbUserConfigEntry {
+    type?: string
+    title?: string
+    description?: string
+    required?: boolean
+    sensitive?: boolean
 }
 
 /**
  * Try to find a `manifest.json` next to the MCP server's entry file.
+ * Supports MCPB `user_config` (preferred) and legacy `envVars`.
  * Returns parsed env var hints if found.
  */
 function findManifest(command: string, argsJson: string): McpEnvHint[] | null {
@@ -83,8 +93,20 @@ function findManifest(command: string, argsJson: string): McpEnvHint[] | null {
         const p = join(dir, 'manifest.json')
         if (existsSync(p)) {
             try {
-                const meta = JSON.parse(readFileSync(p, 'utf-8')) as { envVars?: McpEnvHint[] }
-                return meta.envVars || null
+                const manifest = JSON.parse(readFileSync(p, 'utf-8')) as {
+                    user_config?: Record<string, McpbUserConfigEntry>
+                    envVars?: McpEnvHint[]
+                }
+                if (manifest.user_config) {
+                    const hints = Object.entries(manifest.user_config).map(([name, cfg]) => ({
+                        name,
+                        description: cfg.description,
+                        required: cfg.required ?? false,
+                        sensitive: cfg.sensitive,
+                    }))
+                    return hints.length ? hints : null
+                }
+                return manifest.envVars || null
             } catch { return null }
         }
         dir = dirname(dir)

@@ -476,7 +476,7 @@ defineExpose({ loadServers })
                       </label>
                       <input
                         v-model="editEnvFields[hint.name]"
-                        type="text"
+                        :type="hint.sensitive ? 'password' : 'text'"
                         :placeholder="hint.name"
                         class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
                       >
