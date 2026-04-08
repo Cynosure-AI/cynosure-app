@@ -594,38 +594,58 @@ export const useChatStore = defineStore('chat', () => {
   }): void {
     streamBuffers.delete(data.conversationId)
 
+    const isPrimaryStream = data.streamId === primaryStreamId.value
+
     // Only clear primary tracking when the orchestrator's stream ends
-    if (data.streamId === primaryStreamId.value) {
+    if (isPrimaryStream) {
       primaryStreamId.value = null
       primaryStreamAgent.value = {}
     }
 
     if (data.conversationId === activeConversationId.value) {
-      isStreaming.value = false
-      currentStreamId.value = null
+      // Sub-agent per-round stream-ends should NOT finalize the overall
+      // streaming state — the orchestrator is still running.
+      if (isPrimaryStream) {
+        isStreaming.value = false
+        currentStreamId.value = null
+      }
 
       const streamMsg = findStreamingMsg()
       if (streamMsg) {
-        streamMsg.isStreaming = false
-        streamMsg.createdAt = Date.now()  // stamp so it sorts after tool-group entries
-        streamMsg.model = data.model
+        if (isPrimaryStream) {
+          // Primary orchestrator stream ended — fully finalize
+          streamMsg.isStreaming = false
+          streamMsg.createdAt = Date.now()
+          streamMsg.model = data.model
+          if (data.usage) {
+            streamMsg.promptTokens = data.usage.promptTokens
+            streamMsg.completionTokens = data.usage.completionTokens
+          }
+          if (!data.cancelled && !streamMsg.content && !streamMsg.thinking) {
+            streamMsg.isError = true
+            streamMsg.content = 'No response received from the model.'
+          }
+        } else {
+          // Sub-agent per-round stream ended — finalize the placeholder
+          // but don't flag as error when empty (tool-call-only rounds are normal).
+          streamMsg.isStreaming = false
+          streamMsg.createdAt = Date.now()
+          if (!streamMsg.content && !streamMsg.thinking) {
+            // Empty sub-agent round (tool calls only) — remove the placeholder
+            // so it doesn't clutter the chat with blank messages.
+            const idx = messages.value.indexOf(streamMsg)
+            if (idx !== -1) messages.value.splice(idx, 1)
+          }
+        }
+      }
+
+      if (isPrimaryStream) {
         if (data.usage) {
-          streamMsg.promptTokens = data.usage.promptTokens
-          streamMsg.completionTokens = data.usage.completionTokens
+          lastUsage.value = { ...data.usage, model: data.model }
         }
-        // If stream ended with no content (and not cancelled), show an empty response notice
-        if (!data.cancelled && !streamMsg.content && !streamMsg.thinking) {
-          streamMsg.isError = true
-          streamMsg.content = 'No response received from the model.'
-        }
+        streamingContent.value = ''
+        streamingThinking.value = ''
       }
-
-      if (data.usage) {
-        lastUsage.value = { ...data.usage, model: data.model }
-      }
-
-      streamingContent.value = ''
-      streamingThinking.value = ''
     }
   }
 
