@@ -451,9 +451,24 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       if (resolvedAgent) {
         // ── Agent-based chat: use shared builder ──
-        const effectiveSubAgents = resolvedAgent.subAgents?.length ? resolvedAgent.subAgents : reqSubAgents
+
+        // Session-level overrides: prefer request body over agent config
+        const effectiveSubAgents = reqSubAgents ?? resolvedAgent.subAgents
+        const effectiveAgent = Array.isArray(allowedTools)
+          ? { ...resolvedAgent, tools: allowedTools }
+          : resolvedAgent
+
+        // Resolve memory space overrides (request body ids → { id, name } objects)
+        let memorySpaceOverrides: { id: string; name: string }[] | undefined
+        if (reqMemorySpaceIds?.length) {
+          const spaceRows = reqMemorySpaceIds.map(sid =>
+            db.prepare('SELECT id, name FROM memory_spaces WHERE id = ?').get(sid) as { id: string; name: string } | undefined
+          ).filter((r): r is { id: string; name: string } => Boolean(r))
+          if (spaceRows.length) memorySpaceOverrides = spaceRows
+        }
+
         const prepared = await prepareAgentExecution({
-          agent: resolvedAgent,
+          agent: effectiveAgent,
           conversationId,
           broadcast,
           providerOverride: providerOverride || undefined,
@@ -465,6 +480,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             ? messages[messages.length - 1].content as string
             : content,
           isFirstMessage: isFirstUserMessage,
+          memorySpaceOverrides,
         })
 
         tools = prepared.tools
