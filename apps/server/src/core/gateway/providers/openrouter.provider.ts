@@ -54,7 +54,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
     private formatMessages(
         messages: ChatMessage[]
     ): OpenAI.Chat.ChatCompletionMessageParam[] {
-        return messages.flatMap((msg) => {
+        return messages.flatMap((msg): OpenAI.Chat.ChatCompletionMessageParam[] => {
             if (msg.role === 'system') {
                 return [{
                     role: 'system' as const,
@@ -115,12 +115,12 @@ export class OpenRouterProvider extends BaseLLMProvider {
                         }
                     }))
                 }
-                return result
+                return [result]
             }
 
             // user message
             if (typeof msg.content === 'string') {
-                return { role: 'user' as const, content: msg.content }
+                return [{ role: 'user' as const, content: msg.content }]
             }
 
             // multimodal user message
@@ -142,7 +142,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
                     text: `[Audio: ${(part as { type: 'audio_url'; audio_url: { url: string } }).audio_url.url}]`
                 }
             })
-            return { role: 'user' as const, content: parts }
+            return [{ role: 'user' as const, content: parts }]
         })
     }
 
