@@ -306,16 +306,24 @@ export const useChatStore = defineStore('chat', () => {
     // (works for both free chat and agent-preset overrides).
     const hasSubAgentOverride = agent && !arraysEqual(freeChatSubAgentIds.value, agentOriginalSubAgentIds.value)
     const hasMemSpaceOverride = agent && !arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value)
-    const subAgents = (hasSubAgentOverride || !agent) && freeChatSubAgentIds.value.length
+    const subAgents = hasSubAgentOverride
       ? freeChatSubAgentIds.value.map(id => {
         const def = agentDefs.get(id)
         const codename = def ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : id
         return { agentId: id, codename, role: def?.description || '' }
       })
-      : undefined
-    const memorySpaceIds = (hasMemSpaceOverride || !agent) && freeChatMemorySpaceIds.value.length
+      : (!agent && freeChatSubAgentIds.value.length)
+        ? freeChatSubAgentIds.value.map(id => {
+          const def = agentDefs.get(id)
+          const codename = def ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : id
+          return { agentId: id, codename, role: def?.description || '' }
+        })
+        : undefined
+    const memorySpaceIds = hasMemSpaceOverride
       ? freeChatMemorySpaceIds.value
-      : undefined
+      : (!agent && freeChatMemorySpaceIds.value.length)
+        ? freeChatMemorySpaceIds.value
+        : undefined
 
     // Send to backend (streaming happens via WebSocket events)
     await api.chat.send(
@@ -594,58 +602,35 @@ export const useChatStore = defineStore('chat', () => {
   }): void {
     streamBuffers.delete(data.conversationId)
 
-    const isPrimaryStream = data.streamId === primaryStreamId.value
-
-    // Only clear primary tracking when the orchestrator's stream ends
-    if (isPrimaryStream) {
+    if (data.streamId === primaryStreamId.value) {
       primaryStreamId.value = null
       primaryStreamAgent.value = {}
     }
 
     if (data.conversationId === activeConversationId.value) {
-      // Sub-agent per-round stream-ends should NOT finalize the overall
-      // streaming state — the orchestrator is still running.
-      if (isPrimaryStream) {
-        isStreaming.value = false
-        currentStreamId.value = null
-      }
+      isStreaming.value = false
+      currentStreamId.value = null
 
       const streamMsg = findStreamingMsg()
       if (streamMsg) {
-        if (isPrimaryStream) {
-          // Primary orchestrator stream ended — fully finalize
-          streamMsg.isStreaming = false
-          streamMsg.createdAt = Date.now()
-          streamMsg.model = data.model
-          if (data.usage) {
-            streamMsg.promptTokens = data.usage.promptTokens
-            streamMsg.completionTokens = data.usage.completionTokens
-          }
-          if (!data.cancelled && !streamMsg.content && !streamMsg.thinking) {
-            streamMsg.isError = true
-            streamMsg.content = 'No response received from the model.'
-          }
-        } else {
-          // Sub-agent per-round stream ended — finalize the placeholder
-          // but don't flag as error when empty (tool-call-only rounds are normal).
-          streamMsg.isStreaming = false
-          streamMsg.createdAt = Date.now()
-          if (!streamMsg.content && !streamMsg.thinking) {
-            // Empty sub-agent round (tool calls only) — remove the placeholder
-            // so it doesn't clutter the chat with blank messages.
-            const idx = messages.value.indexOf(streamMsg)
-            if (idx !== -1) messages.value.splice(idx, 1)
-          }
+        streamMsg.isStreaming = false
+        streamMsg.createdAt = Date.now()
+        streamMsg.model = data.model
+        if (data.usage) {
+          streamMsg.promptTokens = data.usage.promptTokens
+          streamMsg.completionTokens = data.usage.completionTokens
+        }
+        if (!data.cancelled && !streamMsg.content && !streamMsg.thinking) {
+          streamMsg.isError = true
+          streamMsg.content = 'No response received from the model.'
         }
       }
 
-      if (isPrimaryStream) {
-        if (data.usage) {
-          lastUsage.value = { ...data.usage, model: data.model }
-        }
-        streamingContent.value = ''
-        streamingThinking.value = ''
+      if (data.usage) {
+        lastUsage.value = { ...data.usage, model: data.model }
       }
+      streamingContent.value = ''
+      streamingThinking.value = ''
     }
   }
 
@@ -680,6 +665,75 @@ export const useChatStore = defineStore('chat', () => {
           createdAt: Date.now()
         })
       }
+    }
+  }
+
+  // ── Sub-agent stream handlers ──
+  // These are dedicated handlers for sub-agent per-round streaming.
+  // They manage sub-agent messages independently from the primary stream:
+  // no effect on isStreaming, currentStreamId, or primaryStreamId.
+
+  /** Sub-agent streaming message, tracked separately from the primary stream */
+  const subAgentStreamMsg = ref<DisplayMessage | null>(null)
+
+  function handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void {
+    if (data.conversationId !== activeConversationId.value) return
+
+    // Clean up any leftover sub-agent streaming message
+    if (subAgentStreamMsg.value) {
+      subAgentStreamMsg.value.isStreaming = false
+      if (!subAgentStreamMsg.value.content && !subAgentStreamMsg.value.thinking) {
+        const idx = messages.value.indexOf(subAgentStreamMsg.value)
+        if (idx !== -1) messages.value.splice(idx, 1)
+      }
+    }
+
+    const msg: DisplayMessage = {
+      id: `sa_stream_${Date.now()}`,
+      role: 'assistant',
+      content: '',
+      agentId: data.agentId,
+      agentName: data.agentName,
+      agentIconUrl: data.agentIconUrl,
+      createdAt: Date.now(),
+      isStreaming: true
+    }
+    messages.value.push(msg)
+    subAgentStreamMsg.value = msg
+  }
+
+  function handleSubAgentStreamChunk(data: { streamId: string; conversationId: string; content: string }): void {
+    if (data.conversationId !== activeConversationId.value) return
+    if (subAgentStreamMsg.value) {
+      subAgentStreamMsg.value.content += data.content
+    }
+  }
+
+  function handleSubAgentStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void {
+    if (data.conversationId !== activeConversationId.value) return
+    if (subAgentStreamMsg.value) {
+      subAgentStreamMsg.value.thinking = (subAgentStreamMsg.value.thinking || '') + data.thinking
+    }
+  }
+
+  function handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void {
+    if (data.conversationId !== activeConversationId.value) return
+    if (subAgentStreamMsg.value) {
+      subAgentStreamMsg.value.imageDataUrls = [...(subAgentStreamMsg.value.imageDataUrls || []), ...data.images]
+    }
+  }
+
+  function handleSubAgentStreamEnd(data: { streamId: string; conversationId: string }): void {
+    if (data.conversationId !== activeConversationId.value) return
+    if (subAgentStreamMsg.value) {
+      subAgentStreamMsg.value.isStreaming = false
+      subAgentStreamMsg.value.createdAt = Date.now()
+      // Remove empty sub-agent rounds (tool-call-only, no visible output)
+      if (!subAgentStreamMsg.value.content && !subAgentStreamMsg.value.thinking) {
+        const idx = messages.value.indexOf(subAgentStreamMsg.value)
+        if (idx !== -1) messages.value.splice(idx, 1)
+      }
+      subAgentStreamMsg.value = null
     }
   }
 
@@ -881,6 +935,11 @@ export const useChatStore = defineStore('chat', () => {
     handleStreamReset,
     handleStreamEnd,
     handleStreamError,
+    handleSubAgentStreamStart,
+    handleSubAgentStreamChunk,
+    handleSubAgentStreamThinking,
+    handleSubAgentStreamImages,
+    handleSubAgentStreamEnd,
     handleTitleUpdated,
     handleMemorySources,
     handleNewMessage,

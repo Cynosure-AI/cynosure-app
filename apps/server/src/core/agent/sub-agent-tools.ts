@@ -88,6 +88,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     temperature: 0.3,
                     signal,
                     streamMode: 'per-round',
+                    streamEventPrefix: 'chat:subagent-stream',
                     saveMessages: true,
                     emitEvents: true,
                     eventMeta: { maCodename: assignment.codename, maAgentName: agentData.name },
@@ -118,10 +119,24 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                         )
                     }
 
+                    // Separate file-path URLs (for UI display) from base64 data-URLs
+                    // (for LLM vision context in the parent) so the parent executor
+                    // can inject them into the conversation correctly.
+                    const fileImages: string[] = []
+                    const dataImages: string[] = []
+                    for (const img of result.images) {
+                        if (img.startsWith('data:')) {
+                            dataImages.push(img)
+                        } else {
+                            fileImages.push(img)
+                        }
+                    }
+
                     return {
                         success: true,
                         output: result.content || '(no output)',
-                        images: result.images.length ? result.images : undefined,
+                        images: fileImages.length ? fileImages : undefined,
+                        imageDataUrls: dataImages.length ? dataImages : undefined,
                     }
                 } catch (err) {
                     return {

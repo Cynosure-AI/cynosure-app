@@ -476,6 +476,24 @@ export const api = {
     onStreamError: (
       cb: (data: { streamId: string; conversationId: string; error: string }) => void
     ) => onWsEvent('chat:stream-error', cb as WsHandler),
+
+    // Sub-agent stream events — dedicated handlers so the UI can manage
+    // sub-agent streaming separately from the primary orchestrator stream.
+    onSubAgentStreamStart: (cb: (data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }) => void) =>
+      onWsEvent('chat:subagent-stream-start', cb as WsHandler),
+    onSubAgentStreamChunk: (
+      cb: (data: { streamId: string; conversationId: string; content: string }) => void
+    ) => onWsEvent('chat:subagent-stream-chunk', cb as WsHandler),
+    onSubAgentStreamThinking: (
+      cb: (data: { streamId: string; conversationId: string; thinking: string }) => void
+    ) => onWsEvent('chat:subagent-stream-thinking', cb as WsHandler),
+    onSubAgentStreamImages: (
+      cb: (data: { streamId: string; conversationId: string; images: string[] }) => void
+    ) => onWsEvent('chat:subagent-stream-images', cb as WsHandler),
+    onSubAgentStreamEnd: (
+      cb: (data: { streamId: string; conversationId: string }) => void
+    ) => onWsEvent('chat:subagent-stream-end', cb as WsHandler),
+
     onTitleUpdated: (
       cb: (data: { conversationId: string; title: string }) => void
     ) => onWsEvent('chat:title-updated', cb as WsHandler),

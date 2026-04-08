@@ -49,6 +49,12 @@ export interface AgentExecutorConfig {
     emitEvents?: boolean
     /** Extra metadata to merge into all emitted EventBus events (e.g. { maCodename, maAgentName } for sub-agent attribution) */
     eventMeta?: Record<string, unknown>
+    /**
+     * Prefix for broadcast stream events (default: 'chat:stream').
+     * Sub-agents use 'chat:subagent-stream' so the UI can handle them
+     * with dedicated handlers that don't interfere with primary stream state.
+     */
+    streamEventPrefix?: string
 }
 
 export interface AgentExecutorResult {
@@ -154,7 +160,11 @@ export class AgentExecutor {
             ...config
         }
         this._streamId = config.streamId || nanoid()
+        this._sp = config.streamEventPrefix || 'chat:stream'
     }
+
+    /** Resolved stream event prefix (e.g. 'chat:stream' or 'chat:subagent-stream') */
+    private _sp: string
 
     /**
      * Run the agent execution loop.
@@ -190,7 +200,7 @@ export class AgentExecutor {
         const primaryStreamId = this._streamId
         let activeStreamId = primaryStreamId
 
-        broadcast('chat:stream-start', {
+        broadcast(`${this._sp}-start`, {
             streamId: activeStreamId,
             conversationId,
             agentId: this.config.agentId,
@@ -212,18 +222,18 @@ export class AgentExecutor {
         for await (const chunk of initialStream) {
             if (chunk.content) {
                 fullContent += chunk.content
-                broadcast('chat:stream-chunk', { streamId: activeStreamId, conversationId, content: chunk.content })
+                broadcast(`${this._sp}-chunk`, { streamId: activeStreamId, conversationId, content: chunk.content })
                 emit('step:content', { conversationId, content: chunk.content })
             }
             if (chunk.thinking) {
                 fullThinking += chunk.thinking
                 lastRoundThinking += chunk.thinking
-                broadcast('chat:stream-thinking', { streamId: activeStreamId, conversationId, thinking: chunk.thinking })
+                broadcast(`${this._sp}-thinking`, { streamId: activeStreamId, conversationId, thinking: chunk.thinking })
                 emit('step:thinking', { conversationId, thinking: chunk.thinking })
             }
             if (chunk.images?.length) {
                 collectedImages.push(...chunk.images)
-                broadcast('chat:stream-images', { streamId: activeStreamId, conversationId, images: chunk.images })
+                broadcast(`${this._sp}-images`, { streamId: activeStreamId, conversationId, images: chunk.images })
             }
             if (chunk.toolCalls?.length) {
                 pendingToolCalls = chunk.toolCalls
@@ -234,14 +244,14 @@ export class AgentExecutor {
 
         // No tool calls → done after Phase 1
         if (!pendingToolCalls?.length) {
-            broadcast('chat:stream-end', { streamId: activeStreamId, conversationId, usage, model })
+            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model })
             return { content: fullContent, usage, toolRounds: 0, images: collectedImages, thinking: lastRoundThinking, provider: providerId, model }
         }
 
         // --- Phase 2: Tool-calling loop ---
         // End Phase 1 stream if per-round mode
         if (this.config.streamMode === 'per-round') {
-            broadcast('chat:stream-end', { streamId: activeStreamId, conversationId })
+            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId })
         }
 
         emit('task:started', { taskId, conversationId })
@@ -405,7 +415,7 @@ export class AgentExecutor {
 
         // End final stream
         if (this.config.streamMode === 'single') {
-            broadcast('chat:stream-end', { streamId: activeStreamId, conversationId, usage, model })
+            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model })
         } else if (!pendingToolCalls?.length) {
             // per-round: the last round's stream-end is sent by streamLLMRound
             // but if we exited because of tool calls (max rounds), end the last stream
@@ -446,7 +456,7 @@ export class AgentExecutor {
         let streamId = currentStreamId
         if (this.config.streamMode === 'per-round') {
             streamId = nanoid()
-            broadcast('chat:stream-start', {
+            broadcast(`${this._sp}-start`, {
                 streamId,
                 conversationId,
                 agentId: this.config.agentId,
@@ -454,7 +464,7 @@ export class AgentExecutor {
                 agentIconUrl: this.config.agentIconUrl
             })
         } else {
-            broadcast('chat:stream-reset', { streamId, conversationId })
+            broadcast(`${this._sp}-reset`, { streamId, conversationId })
         }
 
         let content = ''
@@ -478,7 +488,7 @@ export class AgentExecutor {
             for await (const chunk of stream) {
                 if (chunk.content) {
                     content += chunk.content
-                    broadcast('chat:stream-chunk', { streamId, conversationId, content: chunk.content })
+                    broadcast(`${this._sp}-chunk`, { streamId, conversationId, content: chunk.content })
                     if (this.config.emitEvents) {
                         const payload: Record<string, unknown> = { conversationId, content: chunk.content }
                         if (this.config.eventMeta) Object.assign(payload, this.config.eventMeta)
@@ -487,7 +497,7 @@ export class AgentExecutor {
                 }
                 if (chunk.thinking) {
                     thinking += chunk.thinking
-                    broadcast('chat:stream-thinking', { streamId, conversationId, thinking: chunk.thinking })
+                    broadcast(`${this._sp}-thinking`, { streamId, conversationId, thinking: chunk.thinking })
                     if (this.config.emitEvents) {
                         const payload: Record<string, unknown> = { conversationId, thinking: chunk.thinking }
                         if (this.config.eventMeta) Object.assign(payload, this.config.eventMeta)
@@ -496,7 +506,7 @@ export class AgentExecutor {
                 }
                 if (chunk.images?.length) {
                     images.push(...chunk.images)
-                    broadcast('chat:stream-images', { streamId, conversationId, images: chunk.images })
+                    broadcast(`${this._sp}-images`, { streamId, conversationId, images: chunk.images })
                 }
                 if (chunk.toolCalls?.length) {
                     toolCalls = chunk.toolCalls
@@ -517,7 +527,7 @@ export class AgentExecutor {
 
         // In per-round mode, end the stream for this round
         if (this.config.streamMode === 'per-round') {
-            broadcast('chat:stream-end', { streamId, conversationId })
+            broadcast(`${this._sp}-end`, { streamId, conversationId })
         }
 
         return { content, thinking, images, toolCalls, usage, streamId }
@@ -525,6 +535,7 @@ export class AgentExecutor {
 
     /** Execute an array of tool calls concurrently and return results in original order. */
     private async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolCallResult[]> {
+        const { signal } = this.config
         const promises = toolCalls.map(async (tc): Promise<ToolCallResult> => {
             let output: string
             let images: string[] | undefined
@@ -533,7 +544,40 @@ export class AgentExecutor {
                 const args = JSON.parse(tc.function.arguments)
                 const tool = this.config.tools.find(t => t.name === tc.function.name)
                 if (tool) {
-                    const res = await tool.execute(args)
+                    // Enforce tool timeout: combine tool's own timeout with the
+                    // parent abort signal so both cancellation and timeouts work.
+                    const toolTimeout = tool.timeout > 0 ? tool.timeout : 0
+                    let execPromise = tool.execute(args)
+
+                    if (toolTimeout > 0) {
+                        const timeoutSignal = AbortSignal.timeout(toolTimeout)
+                        const combinedSignal = signal
+                            ? AbortSignal.any([signal, timeoutSignal])
+                            : timeoutSignal
+
+                        execPromise = Promise.race([
+                            execPromise,
+                            new Promise<never>((_, reject) => {
+                                combinedSignal.addEventListener('abort', () => {
+                                    reject(new Error(
+                                        signal?.aborted
+                                            ? 'Tool execution cancelled'
+                                            : `Tool "${tc.function.name}" timed out after ${Math.round(toolTimeout / 1000)}s`
+                                    ))
+                                }, { once: true })
+                                // If already aborted, reject immediately
+                                if (combinedSignal.aborted) {
+                                    reject(new Error(
+                                        signal?.aborted
+                                            ? 'Tool execution cancelled'
+                                            : `Tool "${tc.function.name}" timed out after ${Math.round(toolTimeout / 1000)}s`
+                                    ))
+                                }
+                            })
+                        ])
+                    }
+
+                    const res = await execPromise
                     if (typeof res === 'string') {
                         output = res
                     } else {
