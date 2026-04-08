@@ -474,34 +474,45 @@ export class AgentExecutor {
             providerId
         )
 
-        for await (const chunk of stream) {
-            if (chunk.content) {
-                content += chunk.content
-                broadcast('chat:stream-chunk', { streamId, conversationId, content: chunk.content })
-                if (this.config.emitEvents) {
-                    const payload: Record<string, unknown> = { conversationId, content: chunk.content }
-                    if (this.config.eventMeta) Object.assign(payload, this.config.eventMeta)
-                    getEventBus().emit('step:content', payload)
+        try {
+            for await (const chunk of stream) {
+                if (chunk.content) {
+                    content += chunk.content
+                    broadcast('chat:stream-chunk', { streamId, conversationId, content: chunk.content })
+                    if (this.config.emitEvents) {
+                        const payload: Record<string, unknown> = { conversationId, content: chunk.content }
+                        if (this.config.eventMeta) Object.assign(payload, this.config.eventMeta)
+                        getEventBus().emit('step:content', payload)
+                    }
                 }
-            }
-            if (chunk.thinking) {
-                thinking += chunk.thinking
-                broadcast('chat:stream-thinking', { streamId, conversationId, thinking: chunk.thinking })
-                if (this.config.emitEvents) {
-                    const payload: Record<string, unknown> = { conversationId, thinking: chunk.thinking }
-                    if (this.config.eventMeta) Object.assign(payload, this.config.eventMeta)
-                    getEventBus().emit('step:thinking', payload)
+                if (chunk.thinking) {
+                    thinking += chunk.thinking
+                    broadcast('chat:stream-thinking', { streamId, conversationId, thinking: chunk.thinking })
+                    if (this.config.emitEvents) {
+                        const payload: Record<string, unknown> = { conversationId, thinking: chunk.thinking }
+                        if (this.config.eventMeta) Object.assign(payload, this.config.eventMeta)
+                        getEventBus().emit('step:thinking', payload)
+                    }
                 }
+                if (chunk.images?.length) {
+                    images.push(...chunk.images)
+                    broadcast('chat:stream-images', { streamId, conversationId, images: chunk.images })
+                }
+                if (chunk.toolCalls?.length) {
+                    toolCalls = chunk.toolCalls
+                }
+                if (chunk.usage) usage = chunk.usage
+                if (chunk.done) break
             }
-            if (chunk.images?.length) {
-                images.push(...chunk.images)
-                broadcast('chat:stream-images', { streamId, conversationId, images: chunk.images })
+        } catch (err) {
+            // If the user cancelled, re-throw so the caller can handle it
+            if (signal?.aborted) throw err
+            // Transient stream failure (timeout, connection drop, provider error).
+            // Append any partial content we got and return without tool calls
+            // so the executor loop exits gracefully with whatever we accumulated.
+            if (!content) {
+                content = `[Stream interrupted: ${(err as Error).message}]`
             }
-            if (chunk.toolCalls?.length) {
-                toolCalls = chunk.toolCalls
-            }
-            if (chunk.usage) usage = chunk.usage
-            if (chunk.done) break
         }
 
         // In per-round mode, end the stream for this round
