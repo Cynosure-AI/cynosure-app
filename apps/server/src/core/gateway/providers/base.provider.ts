@@ -8,7 +8,6 @@ export interface LLMProviderConfig {
   apiKey?: string
   defaultModel: string
   availableModels: string[]
-  maxContextWindow: number
   supportsStreaming: boolean
   supportsToolCalls: boolean
   supportsVision: boolean
