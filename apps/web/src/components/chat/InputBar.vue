@@ -69,6 +69,18 @@ function handleFileSelect(e: Event): void {
   input.value = ''
 }
 
+/** File extensions that should be read as binary (base64) for server-side parsing */
+const PARSEABLE_DOC_EXTENSIONS = new Set([
+  '.docx', '.pptx', '.xlsx',
+  '.odt', '.odp', '.ods',
+  '.pdf', '.rtf'
+])
+
+function isParseableDoc(filename: string): boolean {
+  const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase()
+  return PARSEABLE_DOC_EXTENSIONS.has(ext)
+}
+
 function processFiles(files: File[]): void {
   for (const file of files) {
     if (file.size > 20 * 1024 * 1024) continue // 20MB limit
@@ -88,6 +100,16 @@ function processFiles(files: File[]): void {
         attachedAudio.value.push({
           url: reader.result as string,
           name: file.name
+        })
+      }
+      reader.readAsDataURL(file)
+    } else if (isParseableDoc(file.name)) {
+      // Read document files as base64 for server-side parsing (officeparser)
+      const reader = new FileReader()
+      reader.onload = () => {
+        attachedFiles.value.push({
+          name: file.name,
+          content: reader.result as string
         })
       }
       reader.readAsDataURL(file)
