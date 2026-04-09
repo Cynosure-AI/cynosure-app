@@ -50,7 +50,7 @@ const agentDropdownGroups = computed((): SelectOptionGroup[] => {
     options: [{ value: '', label: 'Default', iconName: 'lucide:message-square' }],
   }
   if (!agentDefs.agents.length) return [base]
-  const sorted = [...agentDefs.agents].sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0))
+  const sorted = [...agentDefs.agents].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
   return [
     base,
     {

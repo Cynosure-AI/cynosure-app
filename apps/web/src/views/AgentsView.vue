@@ -45,7 +45,7 @@ const filteredAgents = computed(() => {
   else if (activeCategory.value) agents = agents.filter(a => (a.category || '') === activeCategory.value)
   const q = searchQuery.value.trim().toLowerCase()
   if (q) agents = agents.filter(a => a.name.toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q))
-  return [...agents].sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0))
+  return [...agents].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
 })
 
 onMounted(() => agentDefs.load())
@@ -89,8 +89,78 @@ async function duplicateAgent(id: string) {
   await agentDefs.duplicate(id)
 }
 
-async function toggleFavorite(agent: { id: string; favorite: boolean }) {
-  await agentDefs.update(agent.id, { favorite: !agent.favorite })
+// ─── Drag-and-drop reorder ───────────────────────────────
+const dragReorderId = ref<string | null>(null)
+const dropTargetId = ref<string | null>(null)
+const dropPosition = ref<'before' | 'after'>('before')
+
+function onReorderDragStart(e: DragEvent, agentId: string) {
+  dragReorderId.value = agentId
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', agentId)
+  }
+}
+
+function onReorderDragOver(e: DragEvent, targetId: string) {
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  if (!dragReorderId.value || dragReorderId.value === targetId) {
+    dropTargetId.value = null
+    return
+  }
+
+  // Determine drop position based on cursor position within the element
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const isListView = viewMode.value === 'list'
+  const midpoint = isListView
+    ? rect.top + rect.height / 2
+    : rect.left + rect.width / 2
+  const pos = isListView ? e.clientY : e.clientX
+  dropPosition.value = pos < midpoint ? 'before' : 'after'
+  dropTargetId.value = targetId
+}
+
+function onReorderDragLeave(e: DragEvent, targetId: string) {
+  // Only clear if truly leaving (not entering a child)
+  const related = e.relatedTarget as HTMLElement | null
+  const current = e.currentTarget as HTMLElement
+  if (!related || !current.contains(related)) {
+    if (dropTargetId.value === targetId) dropTargetId.value = null
+  }
+}
+
+async function onReorderDrop(e: DragEvent, targetAgentId: string) {
+  e.preventDefault()
+  const draggedId = dragReorderId.value
+  dragReorderId.value = null
+  dropTargetId.value = null
+  if (!draggedId || draggedId === targetAgentId) return
+
+  const list = filteredAgents.value
+  const fromIdx = list.findIndex(a => a.id === draggedId)
+  let toIdx = list.findIndex(a => a.id === targetAgentId)
+  if (fromIdx === -1 || toIdx === -1) return
+
+  // Reorder locally
+  const reordered = [...list]
+  const [moved] = reordered.splice(fromIdx, 1)
+  // Adjust target index after removal
+  if (fromIdx < toIdx) toIdx--
+  if (dropPosition.value === 'after') toIdx++
+  reordered.splice(toIdx, 0, moved)
+
+  // Persist new sortOrder for all affected agents
+  for (let i = 0; i < reordered.length; i++) {
+    if (reordered[i].sortOrder !== i) {
+      await agentDefs.update(reordered[i].id, { sortOrder: i })
+    }
+  }
+}
+
+function onReorderDragEnd() {
+  dragReorderId.value = null
+  dropTargetId.value = null
 }
 
 function formatDate(ts: number): string {
@@ -99,13 +169,6 @@ function formatDate(ts: number): string {
     day: 'numeric',
     year: 'numeric'
   })
-}
-
-function onDragStart(e: DragEvent, agentId: string) {
-  if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', agentId)
-  }
 }
 
 async function onCategoryDrop(payload: { itemId: string; category: string }) {
@@ -144,7 +207,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
             My Agents
           </h1>
           <p class="text-sm text-zinc-500 mt-1">
-            Create and manage AI agents with custom configurations. Drag and drop cards onto category tabs to organize.
+            Create and manage AI agents with custom configurations. Drag and drop to reorder or organize into categories.
           </p>
         </div>
         <button
@@ -232,10 +295,29 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
           v-for="agent in filteredAgents"
           :key="agent.id"
           draggable="true"
-          class="group rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 hover:border-zinc-700 transition-all cursor-pointer"
+          class="group relative rounded-xl border bg-zinc-900/50 p-5 hover:border-zinc-700 transition-all cursor-pointer"
+          :class="[
+            dragReorderId === agent.id ? 'border-blue-500/60 opacity-50' : 'border-zinc-800',
+            dropTargetId === agent.id && dropPosition === 'before' ? 'ring-l-2 ring-blue-500' : '',
+            dropTargetId === agent.id && dropPosition === 'after' ? 'ring-r-2 ring-blue-500' : ''
+          ]"
           @click="router.push(`/agents/${agent.id}`)"
-          @dragstart="onDragStart($event, agent.id)"
+          @dragstart="onReorderDragStart($event, agent.id)"
+          @dragover="onReorderDragOver($event, agent.id)"
+          @dragleave="onReorderDragLeave($event, agent.id)"
+          @drop="onReorderDrop($event, agent.id)"
+          @dragend="onReorderDragEnd"
         >
+          <!-- Drop indicator: left edge -->
+          <div
+            v-if="dropTargetId === agent.id && dropPosition === 'before'"
+            class="absolute -left-0.75 top-1 bottom-1 w-0.75 rounded-full bg-blue-500"
+          />
+          <!-- Drop indicator: right edge -->
+          <div
+            v-if="dropTargetId === agent.id && dropPosition === 'after'"
+            class="absolute -right-0.75 top-1 bottom-1 w-0.75 rounded-full bg-blue-500"
+          />
           <div class="flex items-start justify-between mb-3">
             <div
               class="w-10 h-10 rounded-lg bg-linear-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden"
@@ -270,17 +352,6 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
                 <Icon
                   icon="lucide:trash-2"
                   class="w-4 h-4"
-                />
-              </button>              <button
-                :class="agent.favorite ? 'text-amber-400' : 'opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-amber-400'"
-                class="p-1.5 rounded-md transition-all"
-                :title="agent.favorite ? 'Remove from favorites' : 'Add to favorites'"
-                @click.stop="toggleFavorite(agent)"
-              >
-                <Icon
-                  :icon="agent.favorite ? 'lucide:star' : 'lucide:star'"
-                  class="w-4 h-4"
-                  :class="agent.favorite ? 'fill-amber-400' : ''"
                 />
               </button>
             </div>
@@ -342,10 +413,26 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
           v-for="agent in filteredAgents"
           :key="agent.id"
           draggable="true"
-          class="group flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3 hover:border-zinc-700 transition-all cursor-pointer"
+          class="group relative flex items-center gap-4 rounded-xl border bg-zinc-900/50 px-4 py-3 hover:border-zinc-700 transition-all cursor-pointer"
+          :class="dragReorderId === agent.id ? 'border-blue-500/60 opacity-50' : 'border-zinc-800'"
           @click="router.push(`/agents/${agent.id}`)"
-          @dragstart="onDragStart($event, agent.id)"
+          @dragstart="onReorderDragStart($event, agent.id)"
+          @dragover="onReorderDragOver($event, agent.id)"
+          @dragleave="onReorderDragLeave($event, agent.id)"
+          @drop="onReorderDrop($event, agent.id)"
+          @dragend="onReorderDragEnd"
         >
+          <!-- Drop indicator: top edge -->
+          <div
+            v-if="dropTargetId === agent.id && dropPosition === 'before'"
+            class="absolute -top-0.75 left-2 right-2 h-0.75 rounded-full bg-blue-500"
+          />
+          <!-- Drop indicator: bottom edge -->
+          <div
+            v-if="dropTargetId === agent.id && dropPosition === 'after'"
+            class="absolute -bottom-0.75 left-2 right-2 h-0.75 rounded-full bg-blue-500"
+          />
+
           <!-- Icon -->
           <div class="w-9 h-9 shrink-0 rounded-lg bg-linear-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden">
             <img
@@ -414,18 +501,6 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
 
           <!-- Actions -->
           <div class="flex items-center gap-0.5 shrink-0">
-            <button
-              :class="agent.favorite ? 'text-amber-400' : 'opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-amber-400'"
-              class="p-1.5 rounded-md transition-all"
-              :title="agent.favorite ? 'Remove from favorites' : 'Add to favorites'"
-              @click.stop="toggleFavorite(agent)"
-            >
-              <Icon
-                :icon="agent.favorite ? 'lucide:star' : 'lucide:star'"
-                class="w-4 h-4"
-                :class="agent.favorite ? 'fill-amber-400' : ''"
-              />
-            </button>
             <button
               class="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-500 hover:text-blue-400 rounded-md transition-all"
               title="Duplicate agent"

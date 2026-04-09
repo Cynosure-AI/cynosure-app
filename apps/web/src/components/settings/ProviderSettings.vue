@@ -89,7 +89,6 @@ async function fetchModelsForNew(): Promise<void> {
     apiKey: newProvider.apiKey || undefined,
     defaultModel: newProvider.defaultModel || 'temp',
     availableModels: [],
-    maxContextWindow: 128000,
     supportsStreaming: true,
     supportsToolCalls: true,
     supportsVision: false
@@ -116,7 +115,6 @@ async function addProvider(): Promise<void> {
     apiKey: newProvider.apiKey || undefined,
     defaultModel: newProvider.defaultModel,
     availableModels: [],
-    maxContextWindow: 128000,
     supportsStreaming: true,
     supportsToolCalls: true,
     supportsVision:

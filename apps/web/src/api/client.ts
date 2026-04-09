@@ -139,7 +139,6 @@ export interface LLMProviderConfig {
   apiKey?: string
   defaultModel: string
   availableModels: string[]
-  maxContextWindow: number
   supportsStreaming: boolean
   supportsToolCalls: boolean
   supportsVision: boolean
@@ -246,7 +245,7 @@ export interface AgentDefinition {
   generateTitle: boolean
   maxToolOutputChars: number
   showInCarousel: boolean
-  favorite: boolean
+  sortOrder: number
   memorySpaces: string[]
   createdAt: number
   updatedAt: number
