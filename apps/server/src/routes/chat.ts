@@ -9,6 +9,7 @@ import { getAgent } from '../core/agents/agent-files.js'
 import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { hydrateBuiltInTools } from '../core/tools/built-in-tools.js'
 import type { ChatMessage, ContentPart } from '../core/gateway/providers/base.provider.js'
+import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import { nanoid } from 'nanoid'
 import { unlinkSync } from 'fs'
 
@@ -371,9 +372,22 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const parts: ContentPart[] = [{ type: 'text', text: content }]
         if (files?.length) {
           for (const file of files) {
+            let fileText = file.content
+            // Parse office documents (docx, pdf, xlsx, etc.) from base64 data URLs
+            if (isParseableDocument(file.name) && file.content.startsWith('data:')) {
+              try {
+                const base64 = file.content.split(',')[1]
+                if (base64) {
+                  const buf = Buffer.from(base64, 'base64')
+                  fileText = await parseDocument(buf, file.name)
+                }
+              } catch (err) {
+                fileText = `[Error parsing ${file.name}: ${err instanceof Error ? err.message : 'unknown error'}]`
+              }
+            }
             parts.push({
               type: 'text',
-              text: `[Attached file: ${file.name}]\n\`\`\`\n${file.content}\n\`\`\``
+              text: `[Attached file: ${file.name}]\n${fileText}`
             })
           }
         }
