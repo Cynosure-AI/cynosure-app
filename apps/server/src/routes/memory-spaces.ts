@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getRAGStore } from '../core/memory/rag.js'
+import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import { nanoid } from 'nanoid'
 
 interface MemorySpaceRow {
@@ -112,8 +113,17 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         if (!fileName || !content) return reply.status(400).send({ error: 'fileName and content are required' })
         try {
             const mem = getAgentMemory()
+            let textContent = content
+            // Parse document files (docx, pdf, xlsx, etc.) from base64 data URLs
+            if (isParseableDocument(fileName) && content.startsWith('data:')) {
+                const base64 = content.split(',')[1]
+                if (base64) {
+                    const buf = Buffer.from(base64, 'base64')
+                    textContent = await parseDocument(buf, fileName)
+                }
+            }
             const uniqueName = await mem.resolveUniqueSourceFile(fileName, row.id)
-            const count = await mem.store(content, uniqueName, row.id)
+            const count = await mem.store(textContent, uniqueName, row.id)
             return { success: true, chunksStored: count, fileName: uniqueName }
         } catch (err) {
             const message = (err as Error).message || 'Failed to ingest file'
@@ -131,8 +141,17 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         try {
             const rag = getRAGStore()
             const mem = getAgentMemory()
+            let textContent = content
+            // Parse document files (docx, pdf, xlsx, etc.) from base64 data URLs
+            if (isParseableDocument(sourceFile) && content.startsWith('data:')) {
+                const base64 = content.split(',')[1]
+                if (base64) {
+                    const buf = Buffer.from(base64, 'base64')
+                    textContent = await parseDocument(buf, sourceFile)
+                }
+            }
             await rag.deleteBySource('permanent_memory', sourceFile, `spaceId = '${row.id.replace(/'/g, "''")}'`)
-            const count = await mem.store(content, sourceFile, row.id)
+            const count = await mem.store(textContent, sourceFile, row.id)
             return { success: true, chunksStored: count, fileName: sourceFile }
         } catch (err) {
             const message = (err as Error).message || 'Failed to reingest file'

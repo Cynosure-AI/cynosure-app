@@ -299,7 +299,7 @@ defineExpose({ processFiles })
       </div>
 
       <div class="flex items-end gap-2">
-        <!-- Image attach button -->
+        <!-- File attach button -->
         <button
           class="p-2.5 text-zinc-500 hover:text-zinc-300 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500"
           title="Attach file"
@@ -309,7 +309,7 @@ defineExpose({ processFiles })
           @click="openFilePicker"
         >
           <Icon
-            icon="mdi:attachment"
+            icon="streamline-ultimate:attachment"
             class="h-5 w-5"
           />
         </button>

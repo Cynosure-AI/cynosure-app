@@ -212,6 +212,29 @@ async function moveSelectedGroups(targetSpaceId: string) {
 }
 
 // Upload
+const PARSEABLE_DOC_EXTENSIONS = new Set([
+  '.docx', '.pptx', '.xlsx', '.odt', '.odp', '.ods', '.pdf', '.rtf'
+])
+
+function isParseableDoc(filename: string): boolean {
+  const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase()
+  return PARSEABLE_DOC_EXTENSIONS.has(ext)
+}
+
+/** Read file content — returns base64 data URL for document files, plain text otherwise */
+function readFileContent(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (isParseableDoc(file.name)) {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsDataURL(file)
+    } else {
+      file.text().then(resolve, reject)
+    }
+  })
+}
+
 async function handleFileUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const files = input.files
@@ -229,7 +252,7 @@ async function handleFileUpload(event: Event) {
       continue
     }
     try {
-      const content = await file.text()
+      const content = await readFileContent(file)
       const res = await api.memorySpaces.ingestFile(selectedSpaceId.value!, file.name, content)
       results.push({ fileName: res.fileName, chunks: res.chunksStored })
     } catch (err) {
@@ -262,7 +285,7 @@ async function handleReingestFile(event: Event) {
   const sourceFile = pendingReingestSourceFile
   reingestingGroup.value = sourceFile
   try {
-    const content = await file.text()
+    const content = await readFileContent(file)
     const res = await api.memorySpaces.reingestFile(selectedSpaceId.value, sourceFile, content)
     const idx = groups.value.findIndex(g => g.sourceFile === sourceFile)
     if (idx !== -1) groups.value[idx] = { ...groups.value[idx], chunkCount: res.chunksStored, createdAt: Date.now() }
@@ -826,14 +849,14 @@ onMounted(() => loadSpaces())
         ref="fileInput"
         type="file"
         multiple
-        accept=".txt,.md,.markdown,.json,.csv,.log,.xml,.yaml,.yml,.html,.htm,.toml,.ini,.cfg,.conf,.rst,.tex,.py,.js,.ts,.java,.c,.cpp,.h,.hpp,.go,.rs,.rb,.php,.sh,.bat,.ps1,.sql,.r,.swift,.kt"
+        accept=".txt,.md,.markdown,.json,.csv,.log,.xml,.yaml,.yml,.html,.htm,.toml,.ini,.cfg,.conf,.rst,.tex,.py,.js,.ts,.java,.c,.cpp,.h,.hpp,.go,.rs,.rb,.php,.sh,.bat,.ps1,.sql,.r,.swift,.kt,.docx,.pptx,.xlsx,.odt,.odp,.ods,.pdf,.rtf"
         class="hidden"
         @change="handleFileUpload"
       >
       <input
         ref="reingestFileInput"
         type="file"
-        accept=".txt,.md,.markdown,.json,.csv,.log,.xml,.yaml,.yml,.html,.htm,.toml,.ini,.cfg,.conf,.rst,.tex,.py,.js,.ts,.java,.c,.cpp,.h,.hpp,.go,.rs,.rb,.php,.sh,.bat,.ps1,.sql,.r,.swift,.kt"
+        accept=".txt,.md,.markdown,.json,.csv,.log,.xml,.yaml,.yml,.html,.htm,.toml,.ini,.cfg,.conf,.rst,.tex,.py,.js,.ts,.java,.c,.cpp,.h,.hpp,.go,.rs,.rb,.php,.sh,.bat,.ps1,.sql,.r,.swift,.kt,.docx,.pptx,.xlsx,.odt,.odp,.ods,.pdf,.rtf"
         class="hidden"
         @change="handleReingestFile"
       >
