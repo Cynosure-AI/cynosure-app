@@ -164,7 +164,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
 
         // ── Daily activity (last N days) ────────────────────────────────────
 
-        const dailyActivity = db.prepare(`
+        const dailyRows = db.prepare(`
             SELECT
                 DATE(created_at / 1000, 'unixepoch') as date,
                 COUNT(DISTINCT conversation_id) as conversations,
@@ -180,6 +180,36 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             messages: number
             tokens: number
         }[]
+
+        // Per-day model breakdown
+        const dailyModelRows = db.prepare(`
+            SELECT
+                DATE(created_at / 1000, 'unixepoch') as date,
+                COALESCE(model, 'unknown') as model,
+                COUNT(*) as messages,
+                COALESCE(SUM(prompt_tokens), 0) + COALESCE(SUM(completion_tokens), 0) as tokens
+            FROM messages
+            WHERE created_at >= ?
+            GROUP BY date, model
+            ORDER BY date ASC, messages DESC
+        `).all(sinceMs) as {
+            date: string
+            model: string
+            messages: number
+            tokens: number
+        }[]
+
+        const modelsByDate = new Map<string, { model: string; messages: number; tokens: number }[]>()
+        for (const row of dailyModelRows) {
+            let arr = modelsByDate.get(row.date)
+            if (!arr) { arr = []; modelsByDate.set(row.date, arr) }
+            arr.push({ model: row.model, messages: row.messages, tokens: row.tokens })
+        }
+
+        const dailyActivity = dailyRows.map(day => ({
+            ...day,
+            models: modelsByDate.get(day.date) ?? []
+        }))
 
         // ── Origin breakdown ────────────────────────────────────────────────
 
