@@ -7,7 +7,7 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 </script>
 
 <template>
-  <div class="flex flex-col h-[60vh]">
+  <div class="flex flex-col h-[75vh]">
     <p class="text-sm text-zinc-500 mb-3 shrink-0">
       Select which tools this agent can access
     </p>

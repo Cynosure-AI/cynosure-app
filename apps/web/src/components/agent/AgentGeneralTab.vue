@@ -119,21 +119,13 @@ watch(() => props.agent.providerId, (newId) => {
       <div class="flex gap-2">
         <div class="flex-1">
           <CustomSelect
-            v-if="fetchedModels.length > 0"
             :model-value="agent.model || ''"
             :groups="modelGroups"
             placeholder="Use provider default"
             placeholder-icon="lucide:settings"
+            filterable
             @update:model-value="emit('update', 'model', $event)"
           />
-          <input
-            v-else
-            :value="agent.model"
-            type="text"
-            placeholder="Use provider default"
-            class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            @change="emit('update', 'model', ($event.target as HTMLInputElement).value)"
-          >
         </div>
         <button
           type="button"
