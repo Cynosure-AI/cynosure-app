@@ -392,6 +392,26 @@
   text-shadow: 0 0 6px var(--cb-cyan-glow);
 }
 
+/* Black text on cyan accent backgrounds (blue→cyan remap) */
+[data-theme="arasaka"] .bg-blue-600,
+[data-theme="arasaka"] .bg-blue-500,
+[data-theme="arasaka"] .bg-blue-400 {
+  color: #0a1018;
+}
+[data-theme="arasaka"] .bg-blue-600 .text-white,
+[data-theme="arasaka"] .bg-blue-500 .text-white,
+[data-theme="arasaka"] .bg-blue-400 .text-white,
+[data-theme="arasaka"] .text-white.bg-blue-600,
+[data-theme="arasaka"] .text-white.bg-blue-500,
+[data-theme="arasaka"] .text-white.bg-blue-400 {
+  color: #0a1018;
+}
+/* Gradient backgrounds (from-blue-* to-blue-*) — force dark text */
+[data-theme="arasaka"] .from-blue-500 .text-white,
+[data-theme="arasaka"] .from-blue-400 .text-white {
+  color: #0a1018;
+}
+
 /* Subtle scan-line overlay on the root */
 [data-theme="arasaka"] body::after {
   content: "";
@@ -501,6 +521,27 @@ body {
 [data-theme="light"] ::selection {
   background: rgba(59, 130, 246, 0.25);
   color: #111827;
+}
+
+/* Light theme: markdown rendering overrides */
+[data-theme="light"] .msg-markdown :not(pre) > code {
+  background: rgba(229, 231, 235, 0.6);
+  color: #2563eb;
+}
+[data-theme="light"] .msg-markdown strong {
+  color: rgba(24, 24, 27, 1);
+}
+[data-theme="light"] .code-header {
+  background: rgba(246, 248, 250, 0.95);
+  border-color: rgba(209, 213, 219, 0.5);
+  color: rgba(107, 114, 128, 0.9);
+}
+[data-theme="light"] .code-copy-btn {
+  color: rgba(107, 114, 128, 0.6);
+}
+[data-theme="light"] .code-copy-btn:hover {
+  color: rgba(24, 24, 27, 0.9);
+  background: rgba(209, 213, 219, 0.5);
 }
 
 /* ── Syntax highlighting – light theme overrides ──────────────────────────

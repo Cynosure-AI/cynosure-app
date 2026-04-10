@@ -372,7 +372,7 @@ const settingsItems: NavItem[] = [
         />
         <div
           v-if="instances.length"
-          class="rounded-full flex justify-center items-center bg-blue-400 text-xs text-white arasaka:text-black w-5 h-5 ml-2"
+          class="rounded-full flex justify-center items-center bg-blue-400 text-xs text-white w-5 h-5 ml-2"
         >
           <span v-if="instances.length > 9">9+</span>
           <span v-else>{{ instances.length }}</span>
