@@ -26,6 +26,7 @@ export interface DisplayMessage {
   thinking?: string
   imageDataUrls?: string[]
   audioDataUrls?: string[]
+  fileAttachments?: { name: string }[]
   memorySources?: MemorySource[]
   agentId?: string
   agentName?: string
@@ -136,6 +137,7 @@ export const useChatStore = defineStore('chat', () => {
       thinking: r.thinking || undefined,
       imageDataUrls: r.imageDataUrls || undefined,
       audioDataUrls: r.audioDataUrls || undefined,
+      fileAttachments: r.fileAttachments || undefined,
       memorySources: r.memorySources || undefined,
       agentId: r.agentId || undefined,
       agentName: r.agentName || undefined,
@@ -253,6 +255,7 @@ export const useChatStore = defineStore('chat', () => {
       content,
       imageDataUrls,
       audioDataUrls,
+      fileAttachments: files?.map(f => ({ name: f.name })),
       createdAt: Date.now()
     })
 

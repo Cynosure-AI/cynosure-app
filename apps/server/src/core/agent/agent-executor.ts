@@ -78,6 +78,7 @@ interface ToolCallResult {
     toolCallId: string
     name: string
     output: string
+    success: boolean
     /** File-path URLs for UI display */
     images?: string[]
     /** Base64 data-URL images for LLM vision */
@@ -359,7 +360,7 @@ export class AgentExecutor {
                 iteration: round + 1,
                 results: toolCallResults.map(tr => ({
                     name: tr.name,
-                    success: !tr.output.startsWith('Error:'),
+                    success: tr.success,
                     output: tr.output,
                     images: tr.images,
                     imageDataUrls: tr.imageDataUrls
@@ -538,6 +539,7 @@ export class AgentExecutor {
         const { signal } = this.config
         const promises = toolCalls.map(async (tc): Promise<ToolCallResult> => {
             let output: string
+            let success = true
             let images: string[] | undefined
             let imageDataUrls: string[] | undefined
             try {
@@ -582,16 +584,19 @@ export class AgentExecutor {
                         output = res
                     } else {
                         output = res?.output || JSON.stringify(res)
+                        if (res?.success === false) success = false
                         images = res?.images
                         imageDataUrls = res?.imageDataUrls
                     }
                 } else {
                     output = `Error: Unknown tool "${tc.function.name}"`
+                    success = false
                 }
             } catch (err) {
                 output = `Error: ${(err as Error).message}`
+                success = false
             }
-            return { toolCallId: tc.id, name: tc.function.name, output, images, imageDataUrls }
+            return { toolCallId: tc.id, name: tc.function.name, output, success, images, imageDataUrls }
         })
 
         return Promise.all(promises)

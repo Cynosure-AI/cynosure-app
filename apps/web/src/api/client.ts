@@ -154,6 +154,7 @@ export interface StoredMessage {
   toolCallId?: string
   imageDataUrls?: string[]
   audioDataUrls?: string[]
+  fileAttachments?: { name: string }[]
   memorySources?: { text: string; source: string; score: number }[]
   agentId?: string
   agentName?: string
