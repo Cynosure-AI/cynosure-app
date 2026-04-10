@@ -4,6 +4,7 @@ import { api, type MetricsSummary } from '../../api/client'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'
 import ModalDialog from './ModalDialog.vue'
+import DailyActivityChart from './DailyActivityChart.vue'
 
 const agentDefs = useAgentDefinitionsStore()
 
@@ -39,20 +40,6 @@ function formatNumber(n: number): string {
 }
 
 // ── Daily activity chart helpers ────────────────────────────────────────────
-
-const maxDailyMessages = computed(() => {
-  if (!metrics.value) return 1
-  return Math.max(...metrics.value.dailyActivity.map(d => d.messages), 1)
-})
-
-function barHeight(val: number): string {
-  return Math.max((val / maxDailyMessages.value) * 100, 2) + '%'
-}
-
-function shortDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
 
 // ── Model usage: bar widths ─────────────────────────────────────────────────
 
@@ -233,31 +220,11 @@ async function confirmReset(): Promise<void> {
     </p>
 
     <!-- Daily Activity Chart -->
-    <div
+    <DailyActivityChart
       v-if="metrics.dailyActivity.length"
-      class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 mb-6"
-    >
-      <h3 class="text-xs font-medium text-zinc-400 mb-3">
-        Daily Activity
-      </h3>
-      <div class="flex items-end gap-0.75 h-28 overflow-x-auto">
-        <div
-          v-for="day in metrics.dailyActivity"
-          :key="day.date"
-          class="flex-1 min-w-1.5 max-w-4.5 group relative"
-        >
-          <div
-            class="w-full bg-blue-500/60 rounded-t-sm transition-all hover:bg-blue-400/80"
-            :style="{ height: barHeight(day.messages) }"
-            :title="`${shortDate(day.date)}: ${day.messages} msgs, ${day.conversations} convos, ${formatNumber(day.tokens)} tokens`"
-          />
-        </div>
-      </div>
-      <div class="flex justify-between mt-1.5 text-[10px] text-zinc-600">
-        <span v-if="metrics.dailyActivity.length">{{ shortDate(metrics.dailyActivity[0].date) }}</span>
-        <span v-if="metrics.dailyActivity.length > 1">{{ shortDate(metrics.dailyActivity[metrics.dailyActivity.length - 1].date) }}</span>
-      </div>
-    </div>
+      :data="metrics.dailyActivity"
+      :days="selectedDays"
+    />
 
     <!-- Two-column: Models + Tools -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
