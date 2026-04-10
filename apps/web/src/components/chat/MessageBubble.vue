@@ -545,18 +545,11 @@ const isUser = computed(() => props.role === 'user')
   content: none;
 }
 
-[data-theme="light"] .msg-markdown :not(pre) > code {
-  background: rgba(229, 231, 235, 0.6);
-  color: #2563eb;
-}
-
 /* ── Spacing ── */
 .msg-markdown p { margin: 0.5rem 0; }
 .msg-markdown ul, .msg-markdown ol { margin: 0.5rem 0; }
 .msg-markdown li { margin: 0.125rem 0; }
 .msg-markdown strong { color: rgba(244, 244, 245, 1); }
-
-[data-theme="light"] .msg-markdown strong { color: rgba(24, 24, 27, 1); }
 
 /* ── Code block wrapper ── */
 .code-block-wrapper {
@@ -602,11 +595,5 @@ const isUser = computed(() => props.role === 'user')
   margin-top: 0 !important;
   border-top-left-radius: 0 !important;
   border-top-right-radius: 0 !important;
-}
-
-[data-theme="light"] .code-header {
-  background: rgba(246, 248, 250, 0.95);
-  border-color: rgba(209, 213, 219, 0.5);
-  color: rgba(107, 114, 128, 0.9);
 }
 </style>
