@@ -109,7 +109,18 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     let tools = toolRegistry.resolveForExecution(agent.tools || [])
 
-    // ── 2. Sub-agent delegation tools ──
+    // ── 2. Resolve provider / model ──
+    // Must happen before sub-agent tool building so we can pass the resolved
+    // provider to sub-agents when a model override is active.
+
+    const providerId = providerOverride || agent.providerId || undefined
+    const activeProvider = providerId
+        ? gateway.getProvider(providerId) || gateway.getActiveProvider()
+        : gateway.getActiveProvider()
+    const rawModel = modelOverride || agent.model || activeProvider.config.defaultModel
+    const model = (!rawModel || rawModel === 'default') ? activeProvider.config.defaultModel : rawModel
+
+    // ── 3. Sub-agent delegation tools ──
 
     const effectiveSubAgents = includeSubAgents
         ? (subAgentAssignments ?? agent.subAgents)
@@ -124,12 +135,12 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             broadcast,
             signal,
             modelOverride: modelOverride || undefined,
-            providerOverride: providerOverride || undefined,
+            providerOverride: modelOverride ? activeProvider.config.id : (providerOverride || undefined),
         })
         tools = [...tools, ...subAgentTools]
     }
 
-    // ── 3. Hydrate built-in tool stubs ──
+    // ── 4. Hydrate built-in tool stubs ──
 
     tools = hydrateBuiltInTools(tools, {
         agentId: agent.id,
@@ -137,15 +148,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         broadcast,
         memorySpaceOverrides,
     })
-
-    // ── 4. Resolve provider / model ──
-
-    const providerId = providerOverride || agent.providerId || undefined
-    const activeProvider = providerId
-        ? gateway.getProvider(providerId) || gateway.getActiveProvider()
-        : gateway.getActiveProvider()
-    const rawModel = modelOverride || agent.model || activeProvider.config.defaultModel
-    const model = (!rawModel || rawModel === 'default') ? activeProvider.config.defaultModel : rawModel
 
     // ── 5. Memory enrichment ──
 
