@@ -131,9 +131,17 @@ export const useAgentStore = defineStore('agent', () => {
     pendingHITL.value = null
   }
 
-  async function respondHITL(approved: boolean, reason?: string): Promise<void> {
+  async function respondHITL(approved: boolean, reason?: string, approvalType?: 'once' | 'session' | 'always'): Promise<void> {
     if (!pendingHITL.value) return
-    await api.agent.respondHITL(pendingHITL.value.taskId, approved, reason)
+    const toolNames = [...new Set(pendingHITL.value.toolCalls.map(tc => tc.name))]
+    await api.agent.respondHITL(
+      pendingHITL.value.taskId,
+      approved,
+      reason,
+      approvalType,
+      pendingHITL.value.conversationId,
+      toolNames
+    )
     pendingHITL.value = null
   }
 

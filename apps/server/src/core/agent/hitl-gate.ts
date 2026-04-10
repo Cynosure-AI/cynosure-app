@@ -11,6 +11,7 @@ export interface ApprovalResult {
 export class HITLGate {
   private eventBus = getEventBus()
   private pendingByConversation = new Map<string, string>() // taskId → conversationId
+  private sessionApprovals = new Map<string, Set<string>>() // conversationId → Set<toolName>
 
   /** Returns the set of conversationIds that currently have a pending HITL request. */
   getPendingConversationIds(): Set<string> {
@@ -66,8 +67,9 @@ export class HITLGate {
     // Filter to only tool calls that are NOT auto-approved
     // Sub-agent delegation tools (delegate_to_*) are always auto-approved —
     // the sub-agent's own tool calls hit the HITL gate independently.
+    const sessionSet = conversationId ? this.sessionApprovals.get(conversationId) : undefined
     const needsApproval = toolCalls.filter(
-      (tc) => !tc.function.name.startsWith('delegate_to_') && !this.isAutoApproved(tc.function.name)
+      (tc) => !tc.function.name.startsWith('delegate_to_') && !this.isAutoApproved(tc.function.name) && !sessionSet?.has(tc.function.name)
     )
 
     // If every tool call is whitelisted, auto-approve
@@ -109,6 +111,23 @@ export class HITLGate {
         }
       })
     })
+  }
+
+  /** Add session-scoped auto-approval for specific tools in a conversation. */
+  addSessionApproval(conversationId: string, toolNames: string[]): void {
+    let set = this.sessionApprovals.get(conversationId)
+    if (!set) {
+      set = new Set()
+      this.sessionApprovals.set(conversationId, set)
+    }
+    for (const name of toolNames) {
+      set.add(name)
+    }
+  }
+
+  /** Clear all session approvals for a conversation. */
+  clearSessionApprovals(conversationId: string): void {
+    this.sessionApprovals.delete(conversationId)
   }
 }
 

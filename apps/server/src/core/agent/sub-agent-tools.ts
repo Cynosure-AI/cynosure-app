@@ -53,7 +53,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 },
                 required: ['instructions']
             },
-            timeout: 120_000,
+            timeout: 180_000,
             execute: async (params: unknown): Promise<ToolResult> => {
                 const { instructions } = params as { instructions: string }
 
