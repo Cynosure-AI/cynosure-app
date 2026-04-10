@@ -192,7 +192,11 @@ export function useChatStreaming(
                         isStreaming: true
                     })
                 } else {
+                    // Update createdAt so unifiedTimeline sorts this message
+                    // after tool-group and sub-agent entries that appeared
+                    // during tool execution (they have earlier timestamps).
                     streamMsg.content = ''
+                    streamMsg.createdAt = Date.now()
                 }
             } else {
                 messages.value.push({
