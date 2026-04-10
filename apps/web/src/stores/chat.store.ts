@@ -565,7 +565,26 @@ export const useChatStore = defineStore('chat', () => {
       isStreaming.value = true
       const streamMsg = findStreamingMsg()
       if (streamMsg) {
-        streamMsg.content = ''
+        // If the streaming message has content from the previous round,
+        // finalize it and create a fresh placeholder so each round's
+        // output is preserved as a separate message bubble.
+        if (streamMsg.content || streamMsg.thinking) {
+          streamMsg.isStreaming = false
+          // Keep original createdAt so it sorts before the tool execution
+          // that follows (tool cards have later timestamps).
+          messages.value.push({
+            id: `streaming_${Date.now()}`,
+            role: 'assistant',
+            content: '',
+            agentId: primaryStreamAgent.value.agentId,
+            agentName: primaryStreamAgent.value.agentName,
+            agentIconUrl: primaryStreamAgent.value.agentIconUrl,
+            createdAt: Date.now(),
+            isStreaming: true
+          })
+        } else {
+          streamMsg.content = ''
+        }
       } else {
         // No streaming message exists (sub-agent ended it) — recreate one
         // so the orchestrator's next round has somewhere to stream into.
