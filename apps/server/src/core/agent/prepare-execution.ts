@@ -120,6 +120,9 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     const rawModel = modelOverride || agent.model || activeProvider.config.defaultModel
     const model = (!rawModel || rawModel === 'default') ? activeProvider.config.defaultModel : rawModel
 
+    // Always resolve to the actual provider ID so metrics track correctly
+    const resolvedProviderId = activeProvider.config.id
+
     // ── 3. Sub-agent delegation tools ──
 
     const effectiveSubAgents = includeSubAgents
@@ -214,7 +217,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     return {
         tools,
-        providerId,
+        providerId: resolvedProviderId,
         model,
         systemMessages,
         retrievedMemorySources,
