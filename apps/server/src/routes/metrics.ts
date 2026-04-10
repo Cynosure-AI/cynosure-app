@@ -181,15 +181,15 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             tokens: number
         }[]
 
-        // Per-day model breakdown
+        // Per-day model breakdown (only assistant messages have model set)
         const dailyModelRows = db.prepare(`
             SELECT
                 DATE(created_at / 1000, 'unixepoch') as date,
-                COALESCE(model, 'unknown') as model,
+                model,
                 COUNT(*) as messages,
                 COALESCE(SUM(prompt_tokens), 0) + COALESCE(SUM(completion_tokens), 0) as tokens
             FROM messages
-            WHERE created_at >= ?
+            WHERE created_at >= ? AND model IS NOT NULL
             GROUP BY date, model
             ORDER BY date ASC, messages DESC
         `).all(sinceMs) as {
