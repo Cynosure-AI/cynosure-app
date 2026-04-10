@@ -135,10 +135,10 @@ const maContext = computed(() => {
       >
         <!-- Status icon -->
         <Icon
-          :icon="isActive && !results.length ? 'svg-spinners:ring-resize' : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
+          :icon="toolNames.length && !results.length ? 'svg-spinners:ring-resize' : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
           class="w-3.5 h-3.5 shrink-0"
           :class="[
-            isActive && !results.length ? 'text-blue-400' :
+            toolNames.length && !results.length ? 'text-blue-400' :
             allSuccess ? 'text-emerald-400' :
             anyFailed ? 'text-red-400' :
             currentPhase.color
