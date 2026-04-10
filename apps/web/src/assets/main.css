@@ -2,6 +2,7 @@
 
 /* Custom dark variant based on data-theme attribute */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="arasaka"], [data-theme="arasaka"] *, [data-theme="midnight-purple"], [data-theme="midnight-purple"] *, [data-theme="cyberpunk"], [data-theme="cyberpunk"] *));
+@custom-variant arasaka (&:where([data-theme="arasaka"], [data-theme="arasaka"] *));
 
 /* ─── Light mode: remap zinc scale ─── */
 [data-theme="light"] {

@@ -327,7 +327,7 @@ defineExpose({ processFiles })
             class="h-5 w-5"
           />
           <span
-            class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
+            class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white arasaka:text-black px-1 leading-none bg-blue-600"
           >
             {{ agentStore.selectedToolNames.length }}
           </span>
@@ -347,7 +347,7 @@ defineExpose({ processFiles })
           />
           <span
             v-if="subAgentCount > 0"
-            class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
+            class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white arasaka:text-black px-1 leading-none bg-blue-600"
           >
             {{ subAgentCount }}
           </span>
@@ -366,7 +366,7 @@ defineExpose({ processFiles })
           />
           <span
             v-if="memorySpaceCount > 0"
-            class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
+            class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white arasaka:text-black px-1 leading-none bg-blue-600"
           >
             {{ memorySpaceCount }}
           </span>
