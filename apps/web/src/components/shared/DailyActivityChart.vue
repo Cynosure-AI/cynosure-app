@@ -1,17 +1,52 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
+
+interface ModelBreakdown {
+  model: string
+  messages: number
+  tokens: number
+}
 
 interface DayData {
   date: string
   conversations: number
   messages: number
   tokens: number
+  models: ModelBreakdown[]
 }
 
 const props = defineProps<{
   data: DayData[]
   days: number
 }>()
+
+const hoveredIndex = ref<number | null>(null)
+const popoverStyle = ref<Record<string, string>>({})
+
+const hoveredDay = computed(() =>
+  hoveredIndex.value !== null ? filledData.value[hoveredIndex.value] : null
+)
+
+function onBarEnter(e: MouseEvent, i: number) {
+  hoveredIndex.value = i
+  updatePopoverPos(e)
+}
+
+function onBarMove(e: MouseEvent) {
+  updatePopoverPos(e)
+}
+
+function updatePopoverPos(e: MouseEvent) {
+  const popoverWidth = 208
+  let left = e.clientX + 12
+  if (left + popoverWidth > window.innerWidth - 8) left = e.clientX - popoverWidth - 12
+  popoverStyle.value = {
+    position: 'fixed',
+    top: `${e.clientY - 8}px`,
+    left: `${left}px`,
+    transform: 'translateY(-100%)',
+  }
+}
 
 function localDateStr(d: Date): string {
   const y = d.getFullYear()
@@ -31,6 +66,8 @@ function shortDate(dateStr: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+const emptyDay: DayData = { date: '', conversations: 0, messages: 0, tokens: 0, models: [] }
+
 /** Fill all dates in the selected period, including today. */
 const filledData = computed<DayData[]>(() => {
   const byDate = new Map(props.data.map(d => [d.date, d]))
@@ -42,7 +79,7 @@ const filledData = computed<DayData[]>(() => {
 
   for (const d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
     const key = localDateStr(d)
-    result.push(byDate.get(key) ?? { date: key, conversations: 0, messages: 0, tokens: 0 })
+    result.push(byDate.get(key) ?? { ...emptyDay, date: key })
   }
   return result
 })
@@ -69,6 +106,8 @@ const gridLines = computed(() => {
   lines.push(max)
   return lines
 })
+
+
 </script>
 
 <template>
@@ -98,16 +137,21 @@ const gridLines = computed(() => {
         <div
           v-for="(day, i) in filledData"
           :key="day.date"
-          class="flex-1 h-full flex flex-col items-center justify-end"
+          class="flex-1 h-full flex flex-col items-center justify-end relative"
           style="min-width: 3px;"
+          @mouseenter="onBarEnter($event, i)"
+          @mousemove="onBarMove"
+          @mouseleave="hoveredIndex = null"
         >
           <!-- Bar -->
           <div
             v-if="day.messages > 0"
-            class="w-full rounded-t-sm bg-blue-500/60 hover:bg-blue-400/80 transition-colors cursor-default"
+            class="w-full rounded-t-sm bg-blue-500/60 transition-colors cursor-default"
+            :class="hoveredIndex === i ? 'bg-blue-400/90' : ''"
             :style="{ height: (day.messages / maxMessages * 100) + '%' }"
-            :title="`${shortDate(day.date)}: ${day.messages} msgs, ${day.conversations} convos, ${formatNumber(day.tokens)} tokens`"
           />
+
+
 
           <!-- Date label -->
           <span
@@ -122,5 +166,60 @@ const gridLines = computed(() => {
 
     <!-- Bottom spacer for labels -->
     <div class="h-5" />
+
+    <!-- Popover (teleported to body to avoid overflow clipping) -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div
+          v-if="hoveredDay && hoveredDay.messages > 0"
+          class="w-52 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl shadow-black/40 p-2.5 text-xs pointer-events-none z-9999"
+          :style="popoverStyle"
+        >
+          <div class="font-medium text-zinc-300 mb-1.5">
+            {{ shortDate(hoveredDay.date) }}
+          </div>
+          <div class="flex justify-between text-zinc-400 mb-0.5">
+            <span>Messages</span><span class="text-zinc-300">{{ hoveredDay.messages }}</span>
+          </div>
+          <div class="flex justify-between text-zinc-400 mb-0.5">
+            <span>Conversations</span><span class="text-zinc-300">{{ hoveredDay.conversations }}</span>
+          </div>
+          <div class="flex justify-between text-zinc-400">
+            <span>Tokens</span><span class="text-zinc-300">{{ formatNumber(hoveredDay.tokens) }}</span>
+          </div>
+
+          <template v-if="hoveredDay.models?.length">
+            <div class="border-t border-zinc-800 mt-2 pt-1.5 mb-1 text-[10px] text-zinc-500 uppercase tracking-wider">
+              Models
+            </div>
+            <div
+              v-for="m in hoveredDay.models.slice(0, 6)"
+              :key="m.model"
+              class="flex justify-between text-zinc-400 mb-0.5"
+            >
+              <span class="truncate mr-2 text-zinc-300">{{ m.model }}</span>
+              <span class="shrink-0">{{ m.messages }}</span>
+            </div>
+            <div
+              v-if="hoveredDay.models.length > 6"
+              class="text-zinc-600 text-[10px]"
+            >
+              +{{ hoveredDay.models.length - 6 }} more
+            </div>
+          </template>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

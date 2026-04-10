@@ -791,6 +791,7 @@ export interface MetricsSummary {
     conversations: number
     messages: number
     tokens: number
+    models: { model: string; messages: number; tokens: number }[]
   }[]
   originBreakdown: {
     origin: string
