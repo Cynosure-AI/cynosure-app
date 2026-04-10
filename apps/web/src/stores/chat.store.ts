@@ -88,6 +88,8 @@ export const useChatStore = defineStore('chat', () => {
     agentId?: string
     agentName?: string
     agentIconUrl?: string | null
+    /** Timestamp when the current streaming message was created (for sort-order preservation on restore) */
+    createdAt: number
   }
   const streamBuffers = new Map<string, StreamBuffer>()
 
@@ -178,7 +180,7 @@ export const useChatStore = defineStore('chat', () => {
         agentId: buf.agentId,
         agentName: buf.agentName,
         agentIconUrl: buf.agentIconUrl,
-        createdAt: Date.now(),
+        createdAt: buf.createdAt,
         isStreaming: true
       })
     } else {
@@ -439,7 +441,8 @@ export const useChatStore = defineStore('chat', () => {
       active: true,
       agentId: data.agentId,
       agentName: data.agentName,
-      agentIconUrl: data.agentIconUrl
+      agentIconUrl: data.agentIconUrl,
+      createdAt: Date.now()
     })
 
     if (data.conversationId === activeConversationId.value) {
@@ -543,17 +546,32 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * Finalize the current streaming message (if it has content) so it sorts
+   * by its original timestamp instead of always-last.  Called when tool
+   * execution begins — before the next stream-reset arrives.
+   */
+  function finalizeCurrentStreaming(conversationId: string): void {
+    if (conversationId !== activeConversationId.value) return
+    const streamMsg = findStreamingMsg()
+    if (streamMsg && (streamMsg.content || streamMsg.thinking)) {
+      streamMsg.isStreaming = false
+    }
+  }
+
   function handleStreamReset(data: { streamId: string; conversationId: string }): void {
     let buf = streamBuffers.get(data.conversationId)
     if (buf) {
       buf.content = ''
+      buf.createdAt = Date.now()
     } else {
       // Sub-agent's stream-end deleted the buffer — recreate it
       buf = {
         streamId: data.streamId, content: '', thinking: '', active: true,
         agentId: primaryStreamAgent.value.agentId,
         agentName: primaryStreamAgent.value.agentName,
-        agentIconUrl: primaryStreamAgent.value.agentIconUrl
+        agentIconUrl: primaryStreamAgent.value.agentIconUrl,
+        createdAt: Date.now()
       }
       streamBuffers.set(data.conversationId, buf)
     }
@@ -636,7 +654,6 @@ export const useChatStore = defineStore('chat', () => {
       const streamMsg = findStreamingMsg()
       if (streamMsg) {
         streamMsg.isStreaming = false
-        streamMsg.createdAt = Date.now()
         streamMsg.model = data.model
         if (data.usage) {
           streamMsg.promptTokens = data.usage.promptTokens
@@ -749,7 +766,6 @@ export const useChatStore = defineStore('chat', () => {
     if (data.conversationId !== activeConversationId.value) return
     if (subAgentStreamMsg.value) {
       subAgentStreamMsg.value.isStreaming = false
-      subAgentStreamMsg.value.createdAt = Date.now()
       // Remove empty sub-agent rounds (tool-call-only, no visible output)
       if (!subAgentStreamMsg.value.content && !subAgentStreamMsg.value.thinking) {
         const idx = messages.value.indexOf(subAgentStreamMsg.value)
@@ -955,6 +971,7 @@ export const useChatStore = defineStore('chat', () => {
     handleStreamThinking,
     handleStreamImages,
     handleStreamReset,
+    finalizeCurrentStreaming,
     handleStreamEnd,
     handleStreamError,
     handleSubAgentStreamStart,

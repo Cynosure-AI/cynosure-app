@@ -124,52 +124,11 @@ const unifiedTimeline = computed(() => {
     }
   }
 
-  entries.sort((a, b) => {
-    // The currently-streaming message always sorts last so tool-group cards
-    // appear before it, not after it.
-    const aIsStreaming = a.type === 'message' && a.msg.isStreaming
-    const bIsStreaming = b.type === 'message' && b.msg.isStreaming
-    if (aIsStreaming && !bIsStreaming) return 1
-    if (!aIsStreaming && bIsStreaming) return -1
-    return a.ts - b.ts
-  })
-
-  // Post-sort structural correction: execution step groups must precede the
-  // assistant response they lead into, regardless of timestamp clock skew
-  // (server-saved DB timestamps vs. frontend WebSocket-arrival timestamps).
-  if (hasExecSteps) {
-    let lastAssistantIdx = -1
-    for (let i = entries.length - 1; i >= 0; i--) {
-      const e = entries[i]
-      if (e.type === 'message' && e.msg.role === 'assistant') {
-        lastAssistantIdx = i
-        break
-      }
-    }
-    if (lastAssistantIdx >= 0) {
-      const displaced: TimelineEntry[] = []
-      const kept: TimelineEntry[] = []
-      for (let i = 0; i < entries.length; i++) {
-        if (i > lastAssistantIdx && entries[i].type === 'tool-group') {
-          displaced.push(entries[i])
-        } else {
-          kept.push(entries[i])
-        }
-      }
-      if (displaced.length > 0) {
-        let insertAt = -1
-        for (let i = kept.length - 1; i >= 0; i--) {
-          const e = kept[i]
-          if (e.type === 'message' && e.msg.role === 'assistant') {
-            insertAt = i
-            break
-          }
-        }
-        if (insertAt >= 0) kept.splice(insertAt, 0, ...displaced)
-        return kept
-      }
-    }
-  }
+  // Pure chronological sort. Streaming messages naturally have the latest
+  // createdAt (set via Date.now() at stream-start/reset) so they already
+  // sort last without special-casing. This ensures tool-group cards always
+  // appear BELOW the agent message that triggered them.
+  entries.sort((a, b) => a.ts - b.ts)
 
   return entries
 })
