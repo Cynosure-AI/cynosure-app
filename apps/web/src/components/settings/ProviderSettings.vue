@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import { useProviderStore } from '../../stores/provider.store'
 import type { LLMProviderConfig } from '../../api/client'
 import { useProviderLogos } from '../../composables/useProviderLogos'
+import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
 
 const { providerLogos } = useProviderLogos()
 
@@ -175,6 +176,19 @@ async function testConnection(id: string): Promise<void> {
   testingId.value = null
 }
 
+const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
+  if (!fetchedModels.value.length) {
+    // When no models fetched, show current value as single option (if set)
+    if (newProvider.defaultModel) {
+      return [{ options: [{ value: newProvider.defaultModel, label: newProvider.defaultModel }] }]
+    }
+    return [{ options: [] }]
+  }
+  return [{
+    options: fetchedModels.value.map(m => ({ value: m, label: m }))
+  }]
+})
+
 function getProviderIcon(type: string): string {
   const icons: Record<string, string> = {
     openai: 'O',
@@ -295,26 +309,23 @@ function getProviderIcon(type: string): string {
       <div>
         <label class="block text-sm text-zinc-400 mb-1">Default Model</label>
         <div class="flex gap-2">
-          <select
-            v-if="fetchedModels.length > 0"
-            v-model="newProvider.defaultModel"
-            class="flex-1 bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option
-              v-for="m in fetchedModels"
-              :key="m"
-              :value="m"
+          <div class="flex-1">
+            <CustomSelect
+              v-if="fetchedModels.length > 0"
+              :model-value="newProvider.defaultModel"
+              :groups="modelSelectGroups"
+              placeholder="Select a model..."
+              filterable
+              @update:model-value="newProvider.defaultModel = $event"
+            />
+            <input
+              v-else
+              v-model="newProvider.defaultModel"
+              type="text"
+              placeholder="gpt-4o"
+              class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
             >
-              {{ m }}
-            </option>
-          </select>
-          <input
-            v-else
-            v-model="newProvider.defaultModel"
-            type="text"
-            placeholder="gpt-4o"
-            class="flex-1 bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
-          >
+          </div>
           <button
             v-if="!editingProviderId"
             type="button"

@@ -183,6 +183,11 @@ function runMigrations(db: Database.Database): void {
     db.exec("ALTER TABLE messages ADD COLUMN audio_urls_json TEXT")
   }
 
+  // Add file_attachments_json column to messages (stores JSON array of {name,type} for attached files)
+  if (!msgCols.some((c) => c.name === 'file_attachments_json')) {
+    db.exec("ALTER TABLE messages ADD COLUMN file_attachments_json TEXT")
+  }
+
   // Agents table
   db.exec(`
     CREATE TABLE IF NOT EXISTS agents (

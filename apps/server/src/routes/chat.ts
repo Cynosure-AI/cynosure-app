@@ -141,6 +141,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         tool_call_id: string | null
         image_urls_json: string | null
         audio_urls_json: string | null
+        file_attachments_json: string | null
         memory_sources_json: string | null
         agent_id: string | null
         provider: string | null
@@ -179,6 +180,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       try {
         memorySources = row.memory_sources_json ? JSON.parse(row.memory_sources_json) : undefined
       } catch { /* malformed JSON — ignore */ }
+      let fileAttachments: { name: string }[] | undefined
+      try {
+        fileAttachments = row.file_attachments_json ? JSON.parse(row.file_attachments_json) : undefined
+      } catch { /* malformed JSON — ignore */ }
       return {
         id: row.id,
         conversationId: row.conversation_id,
@@ -189,6 +194,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         toolCallId: row.tool_call_id || undefined,
         imageDataUrls,
         audioDataUrls,
+        fileAttachments,
         memorySources,
         agentId: row.agent_id || undefined,
         agentName,
@@ -412,9 +418,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const userMsgId = (providedMsgId && idPattern.test(providedMsgId)) ? providedMsgId : nanoid()
       const now = Date.now()
       db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(userMsgId, conversationId, 'user', content, imageDataUrls?.length ? JSON.stringify(imageDataUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, now)
+        `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, file_attachments_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(userMsgId, conversationId, 'user', content, imageDataUrls?.length ? JSON.stringify(imageDataUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, files?.length ? JSON.stringify(files.map(f => ({ name: f.name }))) : null, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
       // Build message history

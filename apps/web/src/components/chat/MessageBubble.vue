@@ -7,6 +7,23 @@ import hljs from 'highlight.js'
 import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
 
+const markdownRef = ref<HTMLElement | null>(null)
+
+function handleMarkdownClick(e: MouseEvent): void {
+  const btn = (e.target as HTMLElement).closest('.code-copy-btn') as HTMLElement | null
+  if (!btn) return
+  const wrapper = btn.closest('.code-block-wrapper')
+  const code = wrapper?.querySelector('code')
+  if (!code) return
+  navigator.clipboard.writeText(code.textContent || '')
+  btn.classList.add('copied')
+  btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+  setTimeout(() => {
+    btn.classList.remove('copied')
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>'
+  }, 1500)
+}
+
 const props = defineProps<{
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
@@ -14,6 +31,7 @@ const props = defineProps<{
   thinking?: string
   imageDataUrls?: string[]
   audioDataUrls?: string[]
+  fileAttachments?: { name: string }[]
   memorySources?: { text: string; source: string; score: number }[]
   agentId?: string | null
   agentIconUrl?: string | null
@@ -95,16 +113,15 @@ marked.use(
   })
 )
 
-// Custom code block renderer with language label
+// Custom code block renderer with language label + copy button
 marked.use({
   renderer: {
     code({ text, lang, escaped }: { text: string; lang?: string; escaped?: boolean }) {
       const langLabel = (lang || '').split(/\s/)[0].replace(/[<>&"']/g, '')
       const codeContent = escaped ? text : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       const langClass = langLabel ? `hljs language-${langLabel}` : 'hljs'
-      const headerHtml = langLabel
-        ? `<div class="code-header"><span>${langLabel}</span></div>`
-        : ''
+      const copyBtn = `<button class="code-copy-btn" title="Copy code"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>`
+      const headerHtml = `<div class="code-header"><span>${langLabel}</span>${copyBtn}</div>`
       return `<div class="code-block-wrapper">${headerHtml}<pre><code class="${langClass}">${codeContent}</code></pre></div>`
     }
   }
@@ -320,6 +337,24 @@ const isUser = computed(() => props.role === 'user')
             class="max-w-full h-10"
           />
         </div>
+        <!-- File attachments badge -->
+        <div
+          v-if="fileAttachments?.length"
+          class="flex gap-1.5 mt-2 flex-wrap"
+        >
+          <span
+            v-for="(file, idx) in fileAttachments"
+            :key="idx"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] bg-black/25 text-white/90 backdrop-blur-sm border border-white/15"
+            :title="file.name"
+          >
+            <Icon
+              icon="lucide:paperclip"
+              class="w-3 h-3 shrink-0 opacity-70"
+            />
+            <span class="truncate max-w-40">{{ file.name }}</span>
+          </span>
+        </div>
       </div>
 
       <!-- Error message -->
@@ -337,7 +372,9 @@ const isUser = computed(() => props.role === 'user')
       <!-- Assistant message: rendered markdown -->
       <div
         v-else-if="!isUser"
+        ref="markdownRef"
         class="msg-markdown prose dark:prose-invert prose-sm max-w-none"
+        @click="handleMarkdownClick"
         v-html="renderedContent"
       />
 
@@ -530,6 +567,7 @@ const isUser = computed(() => props.role === 'user')
 .code-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0.375rem 1rem;
   font-size: 0.75rem;
   color: rgba(161, 161, 170, 0.8);
@@ -538,6 +576,26 @@ const isUser = computed(() => props.role === 'user')
   border-bottom: none;
   border-radius: 0.5rem 0.5rem 0 0;
   user-select: none;
+}
+
+.code-copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  color: rgba(161, 161, 170, 0.6);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.code-copy-btn:hover {
+  color: rgba(244, 244, 245, 0.9);
+  background: rgba(63, 63, 70, 0.5);
+}
+.code-copy-btn.copied {
+  color: #34d399;
 }
 
 .code-header + pre {
