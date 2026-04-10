@@ -517,8 +517,8 @@ export const api = {
       onWsEvent('agent:hitl-request', cb),
     onHITLResolved: (cb: (data: unknown) => void) =>
       onWsEvent('agent:hitl-resolved', cb),
-    respondHITL: (taskId: string, approved: boolean, reason?: string) => {
-      sendWsMessage('hitl:response', { taskId, approved, reason })
+    respondHITL: (taskId: string, approved: boolean, reason?: string, approvalType?: 'once' | 'session' | 'always', conversationId?: string, toolNames?: string[]) => {
+      sendWsMessage('hitl:response', { taskId, approved, reason, approvalType, conversationId, toolNames })
       return Promise.resolve()
     },
     getToolApprovals: () =>

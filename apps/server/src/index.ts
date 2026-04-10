@@ -11,7 +11,7 @@ import type { WebSocket } from 'ws'
 import { nanoid } from 'nanoid'
 
 import { closeDb, getDb } from './db/database.js'
-import { type ApprovalResult } from './core/agent/hitl-gate.js'
+import { type ApprovalResult, getHITLGate } from './core/agent/hitl-gate.js'
 import { getRAGStore } from './core/memory/rag.js'
 import { getEventBus } from './core/telemetry/event-bus.js'
 
@@ -228,14 +228,21 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
             return
           }
 
-          const { taskId, approved, reason } = msg.data as {
+          const { taskId, approved, reason, approvalType, conversationId, toolNames } = msg.data as {
             taskId: string
             approved: boolean
             reason?: string
+            approvalType?: 'once' | 'session' | 'always'
+            conversationId?: string
+            toolNames?: string[]
           }
           const resolver = pendingHITLResolvers.get(taskId)
           if (!resolver) {
             return
+          }
+
+          if (approvalType === 'session' && conversationId && toolNames?.length) {
+            getHITLGate().addSessionApproval(conversationId, toolNames)
           }
 
           resolver({ approved, reason })

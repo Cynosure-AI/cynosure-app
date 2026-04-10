@@ -17,7 +17,13 @@ const approveAllLabel = computed(() => {
 })
 
 function approve(): void {
-  agentStore.respondHITL(true)
+  agentStore.respondHITL(true, undefined, 'once')
+  resetState()
+}
+
+function approveSession(): void {
+  showApproveDropdown.value = false
+  agentStore.respondHITL(true, undefined, 'session')
   resetState()
 }
 
@@ -26,7 +32,7 @@ async function approveAll(): Promise<void> {
   if (!agentStore.pendingHITL) return
   const toolNames = agentStore.pendingHITL.toolCalls.map(tc => tc.name)
   await Promise.all(toolNames.map(name => agentStore.setToolApproval(name, true)))
-  agentStore.respondHITL(true)
+  agentStore.respondHITL(true, undefined, 'always')
   resetState()
 }
 
@@ -183,6 +189,12 @@ function toggleExpand(index: number): void {
           >
             <button
               class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
+              @click="approveSession"
+            >
+              Allow in this Session
+            </button>
+            <button
+              class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-zinc-700/50"
               @click="approveAll"
             >
               {{ approveAllLabel }}
