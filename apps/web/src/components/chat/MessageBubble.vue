@@ -551,6 +551,53 @@ const isUser = computed(() => props.role === 'user')
 .msg-markdown li { margin: 0.125rem 0; }
 .msg-markdown strong { color: rgba(244, 244, 245, 1); }
 
+/* ── Tables ── */
+.msg-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.85rem;
+  border: 1px solid var(--color-zinc-700);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.msg-markdown thead {
+  background: var(--color-zinc-700);
+}
+.msg-markdown th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-zinc-100);
+  border-bottom: 2px solid var(--color-zinc-600);
+  border-right: 1px solid var(--color-zinc-600);
+  white-space: nowrap;
+}
+.msg-markdown th:last-child {
+  border-right: none;
+}
+.msg-markdown td {
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--color-zinc-700);
+  border-right: 1px solid var(--color-zinc-700);
+  color: var(--color-zinc-300);
+}
+.msg-markdown td:last-child {
+  border-right: none;
+}
+.msg-markdown tr:last-child td {
+  border-bottom: none;
+}
+.msg-markdown tbody tr:nth-child(even) {
+  background: var(--color-zinc-800);
+}
+.msg-markdown tbody tr:nth-child(odd) {
+  background: color-mix(in srgb, var(--color-zinc-800) 40%, var(--color-zinc-900));
+}
+.msg-markdown tbody tr:hover {
+  background: var(--color-zinc-700);
+}
+
 /* ── Code block wrapper ── */
 .code-block-wrapper {
   position: relative;
