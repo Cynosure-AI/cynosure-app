@@ -7,12 +7,6 @@ import IconUpload from '../shared/IconUpload.vue'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
 import { useProviderLogos } from '../../composables/useProviderLogos'
 
-function toCodename(name: string): string {
-  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-}
-
-const computedCodename = computed(() => toCodename(props.agent.name || ''))
-
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 
@@ -83,12 +77,6 @@ watch(() => props.agent.providerId, (newId) => {
         class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
         @change="emit('update', 'name', ($event.target as HTMLInputElement).value)"
       >
-      <p
-        v-if="computedCodename"
-        class="text-xs text-zinc-600 mt-1.5"
-      >
-        Sub-agent codename: <code class="text-violet-400/70 bg-violet-400/10 px-1 py-0.5 rounded font-mono text-[11px]">{{ computedCodename }}</code>
-      </p>
     </div>
 
     <div>
