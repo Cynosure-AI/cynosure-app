@@ -31,6 +31,10 @@ function agentIcon(agent: { iconUrl: string | null; providerId: string }): strin
   const prov = providerStore.providers.find(p => p.id === agent.providerId)
   return prov ? logoUrl(prov.type) : null
 }
+
+function toCodename(name: string): string {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
 </script>
 
 <template>
@@ -40,7 +44,7 @@ function agentIcon(agent: { iconUrl: string | null; providerId: string }): strin
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       @click.self="visible = false"
     >
-      <div class="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-105 max-h-[70vh] flex flex-col">
+      <div class="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-lg max-h-[70vh] flex flex-col">
         <!-- Header -->
         <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
           <h3 class="text-sm font-semibold text-zinc-200">
@@ -86,8 +90,13 @@ function agentIcon(agent: { iconUrl: string | null; providerId: string }): strin
                 class="w-3.5 h-3.5 text-zinc-500"
               />
             </div>
-            <div class="flex-1 min-w-0">
-              <div class="text-sm text-zinc-200 truncate">
+            <div
+              class="flex-1 min-w-0"
+              :title="toCodename(agent.name) ? `Internal Codename: ${toCodename(agent.name)}` : undefined"
+            >
+              <div
+                class="text-sm text-zinc-200 truncate"
+              >
                 {{ agent.name }}
               </div>
               <div
