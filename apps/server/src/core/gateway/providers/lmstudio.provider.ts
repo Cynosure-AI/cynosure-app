@@ -1,5 +1,5 @@
 import { OpenAIProvider } from './openai.provider.js'
-import type { LLMProviderConfig } from './base.provider.js'
+import type { LLMProviderConfig, ModelInfo } from './base.provider.js'
 
 interface LMStudioModel {
   type: 'llm' | 'embedding'
@@ -7,6 +7,8 @@ interface LMStudioModel {
   display_name: string
   architecture?: string | null
   params_string?: string | null
+  max_context_length?: number
+  loaded_instances?: { id: string; config: { context_length?: number } }[]
 }
 
 /**
@@ -49,6 +51,29 @@ export class LMStudioProvider extends OpenAIProvider {
     } catch {
       // Fall back to OpenAI-compatible endpoint
       return super.listModels(type)
+    }
+  }
+
+  /**
+   * Fetch model metadata from LM Studio's native API.
+   * Returns max_context_length if available.
+   */
+  async getModelInfo(modelId: string): Promise<ModelInfo> {
+    const base = (this.config.baseUrl || 'http://localhost:1234/v1').replace(/\/v1\/?$/, '')
+    try {
+      const res = await fetch(`${base}/api/v1/models`, {
+        headers: this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}
+      })
+      if (!res.ok) return { id: modelId }
+      const data = (await res.json()) as { models: LMStudioModel[] }
+      const model = data.models.find(m => m.key === modelId)
+      // Prefer the loaded instance's runtime context_length (user-configured, VRAM-limited)
+      // over max_context_length (model's theoretical maximum)
+      const loadedCtx = model?.loaded_instances?.[0]?.config?.context_length
+      const contextLength = loadedCtx || model?.max_context_length || undefined
+      return { id: modelId, contextLength }
+    } catch {
+      return { id: modelId }
     }
   }
 }

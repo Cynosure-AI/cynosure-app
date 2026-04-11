@@ -13,7 +13,8 @@ import {
   type StreamChunk,
   type ChatMessage,
   type ContentPart,
-  type ToolDefinition
+  type ToolDefinition,
+  type ModelInfo
 } from './base.provider.js'
 
 export class GeminiProvider extends BaseLLMProvider {
@@ -298,6 +299,19 @@ export class GeminiProvider extends BaseLLMProvider {
       return true
     } catch {
       return false
+    }
+  }
+
+  async getModelInfo(modelId: string): Promise<ModelInfo> {
+    try {
+      const model = await this.client.models.get({ model: modelId })
+      const limit = (model as unknown as Record<string, unknown>).inputTokenLimit
+      return {
+        id: modelId,
+        contextLength: typeof limit === 'number' ? limit : undefined
+      }
+    } catch {
+      return { id: modelId }
     }
   }
 }

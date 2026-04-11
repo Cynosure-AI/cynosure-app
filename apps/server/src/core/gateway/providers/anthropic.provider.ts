@@ -6,7 +6,8 @@ import {
   type CompletionResponse,
   type StreamChunk,
   type ChatMessage,
-  type ContentPart
+  type ContentPart,
+  type ModelInfo
 } from './base.provider.js'
 
 export class AnthropicProvider extends BaseLLMProvider {
@@ -313,5 +314,20 @@ export class AnthropicProvider extends BaseLLMProvider {
     } catch {
       return false
     }
+  }
+
+  async getModelInfo(modelId: string): Promise<ModelInfo> {
+    // Anthropic models list API doesn't expose context_length;
+    // use the SDK to retrieve individual model metadata.
+    try {
+      const model = await this.client.models.retrieve(modelId)
+      // The Anthropic SDK model object may not have a typed `context_window`
+      // field, but the REST API does return it. Cast for safety.
+      const ctx = (model as unknown as Record<string, unknown>).context_window
+      if (typeof ctx === 'number') {
+        return { id: modelId, contextLength: ctx }
+      }
+    } catch { /* ignore */ }
+    return { id: modelId }
   }
 }

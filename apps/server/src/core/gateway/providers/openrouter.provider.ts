@@ -7,7 +7,8 @@ import {
     type StreamChunk,
     type ChatMessage,
     type ContentPart,
-    type ToolCall
+    type ToolCall,
+    type ModelInfo
 } from './base.provider.js'
 
 /**
@@ -385,5 +386,29 @@ export class OpenRouterProvider extends BaseLLMProvider {
             if (text.endsWith(tag.slice(0, len))) return len
         }
         return 0
+    }
+
+    /**
+     * Fetch model metadata from OpenRouter's models API.
+     * The API returns context_length for each model.
+     */
+    async getModelInfo(modelId: string): Promise<ModelInfo> {
+        const baseUrl = (this.config.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/+$/, '')
+        try {
+            const res = await fetch(`${baseUrl}/models`, {
+                headers: this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}
+            })
+            if (!res.ok) return { id: modelId }
+            const data = (await res.json()) as {
+                data: Array<{ id: string; context_length?: number }>
+            }
+            const model = data.data.find(m => m.id === modelId)
+            return {
+                id: modelId,
+                contextLength: model?.context_length || undefined
+            }
+        } catch {
+            return { id: modelId }
+        }
     }
 }
