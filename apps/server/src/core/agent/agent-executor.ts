@@ -420,9 +420,9 @@ export class AgentExecutor {
         // End final stream
         if (this.config.streamMode === 'single') {
             broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow })
-        } else if (!pendingToolCalls?.length) {
-            // per-round: the last round's stream-end is sent by streamLLMRound
-            // but if we exited because of tool calls (max rounds), end the last stream
+        } else {
+            // per-round: send a final end event with usage so the client gets token counts
+            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow })
         }
 
         emit('task:completed', { taskId, conversationId })

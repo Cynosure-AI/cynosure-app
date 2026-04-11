@@ -231,6 +231,11 @@ export class OpenRouterProvider extends BaseLLMProvider {
         let insideThink = false
         let tagBuffer = ''
 
+        // Track finish state — usage may arrive in a separate chunk AFTER
+        // the finish_reason chunk (OpenAI-compatible streaming protocol).
+        let finished = false
+        let finishedUsage: StreamChunk['usage']
+
         for await (const chunk of stream) {
             const delta = chunk.choices?.[0]?.delta
 
@@ -301,9 +306,19 @@ export class OpenRouterProvider extends BaseLLMProvider {
                 if (contentOut) yield { content: contentOut, done: false }
             }
 
+            // Capture usage from any chunk (may arrive on finish chunk or a separate subsequent one)
+            if (chunk.usage) {
+                finishedUsage = {
+                    promptTokens: chunk.usage.prompt_tokens,
+                    completionTokens: chunk.usage.completion_tokens,
+                    totalTokens: chunk.usage.total_tokens
+                }
+            }
+
             // Check for finish
             const finishReason = chunk.choices?.[0]?.finish_reason
             if (finishReason) {
+                finished = true
                 // Flush remaining tag buffer
                 if (tagBuffer) {
                     if (insideThink) {
@@ -313,26 +328,23 @@ export class OpenRouterProvider extends BaseLLMProvider {
                     }
                     tagBuffer = ''
                 }
+            }
+        }
 
-                const completedToolCalls: ToolCall[] = Array.from(
-                    toolCallAccumulator.values()
-                ).map((tc) => ({
-                    id: tc.id,
-                    type: 'function' as const,
-                    function: { name: tc.name, arguments: tc.arguments }
-                }))
+        // Yield done after the stream ends so we capture usage from post-finish chunks
+        if (finished) {
+            const completedToolCalls: ToolCall[] = Array.from(
+                toolCallAccumulator.values()
+            ).map((tc) => ({
+                id: tc.id,
+                type: 'function' as const,
+                function: { name: tc.name, arguments: tc.arguments }
+            }))
 
-                yield {
-                    done: true,
-                    toolCalls: completedToolCalls.length > 0 ? completedToolCalls : undefined,
-                    usage: chunk.usage
-                        ? {
-                            promptTokens: chunk.usage.prompt_tokens,
-                            completionTokens: chunk.usage.completion_tokens,
-                            totalTokens: chunk.usage.total_tokens
-                        }
-                        : undefined
-                }
+            yield {
+                done: true,
+                toolCalls: completedToolCalls.length > 0 ? completedToolCalls : undefined,
+                usage: finishedUsage
             }
         }
     }

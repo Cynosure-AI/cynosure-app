@@ -65,7 +65,7 @@ export const useChatStore = defineStore('chat', () => {
 
   // ── Composables ──
 
-  const streaming = useChatStreaming(activeConversationId, messages, conversations)
+  const streaming = useChatStreaming(activeConversationId, messages, conversations, contextWindow)
 
   async function loadConversations(): Promise<void> {
     const agentId = agentConfig.activeAgentId.value
@@ -269,7 +269,6 @@ export const useChatStore = defineStore('chat', () => {
     streaming.isStreaming.value = false
     streaming.currentStreamId.value = null
     streaming.lastUsage.value = null
-    contextWindow.value = null
     agentConfig.sessionModelOverride.value = null
     agentConfig.sessionProviderOverride.value = null
   }
@@ -284,7 +283,6 @@ export const useChatStore = defineStore('chat', () => {
     streaming.isStreaming.value = false
     streaming.currentStreamId.value = null
     streaming.lastUsage.value = null
-    contextWindow.value = null
   }
 
   // ── Post-actions ──

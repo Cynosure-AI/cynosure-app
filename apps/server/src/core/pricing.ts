@@ -68,6 +68,17 @@ export function getModelCost(provider: string, model: string): ModelCost | null 
     const fallback = modelOnlyLookup.get(model)
     if (fallback) return fallback
 
+    // 3. OpenRouter-style IDs: "anthropic/claude-3.5-sonnet" → try "anthropic" + "claude-3.5-sonnet"
+    const slashIdx = model.indexOf('/')
+    if (slashIdx > 0) {
+        const embeddedProvider = normaliseProvider(model.slice(0, slashIdx))
+        const embeddedModel = model.slice(slashIdx + 1)
+        const nested = exactLookup.get(`${embeddedProvider}/${embeddedModel}`)
+        if (nested) return nested
+        const nestedFallback = modelOnlyLookup.get(embeddedModel)
+        if (nestedFallback) return nestedFallback
+    }
+
     return null
 }
 
@@ -79,6 +90,17 @@ export function getModelContextLength(provider: string, model: string): number |
 
     const fallback = contextModelOnlyLookup.get(model)
     if (fallback) return fallback
+
+    // OpenRouter-style IDs: "anthropic/claude-3.5-sonnet" → try "anthropic" + "claude-3.5-sonnet"
+    const slashIdx = model.indexOf('/')
+    if (slashIdx > 0) {
+        const embeddedProvider = normaliseProvider(model.slice(0, slashIdx))
+        const embeddedModel = model.slice(slashIdx + 1)
+        const nested = contextExactLookup.get(`${embeddedProvider}/${embeddedModel}`)
+        if (nested) return nested
+        const nestedFallback = contextModelOnlyLookup.get(embeddedModel)
+        if (nestedFallback) return nestedFallback
+    }
 
     return null
 }
