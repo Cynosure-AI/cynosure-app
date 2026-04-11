@@ -36,7 +36,7 @@ export interface ChatStreamingState {
     handleStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void
     handleStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleStreamReset(data: { streamId: string; conversationId: string }): void
-    handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string }): void
+    handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number }): void
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
     handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void
     handleSubAgentStreamChunk(data: { streamId: string; conversationId: string; content: string }): void
@@ -52,6 +52,7 @@ export function useChatStreaming(
     activeConversationId: Ref<string | null>,
     messages: Ref<DisplayMessage[]>,
     conversations: Ref<{ id: string; title: string }[]>,
+    contextWindow: Ref<number | null>,
 ): ChatStreamingState {
     const isStreaming = ref(false)
     const currentStreamId = ref<string | null>(null)
@@ -222,7 +223,7 @@ export function useChatStreaming(
 
     function handleStreamEnd(data: {
         streamId: string; conversationId: string; cancelled?: boolean
-        usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string
+        usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number
     }): void {
         streamBuffers.delete(data.conversationId)
 
@@ -251,6 +252,9 @@ export function useChatStreaming(
 
             if (data.usage) {
                 lastUsage.value = { ...data.usage, model: data.model }
+            }
+            if (data.contextWindow) {
+                contextWindow.value = data.contextWindow
             }
             streamingContent.value = ''
             streamingThinking.value = ''

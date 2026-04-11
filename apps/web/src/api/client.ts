@@ -471,6 +471,7 @@ export const api = {
         cancelled?: boolean
         usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
         model?: string
+        contextWindow?: number
       }) => void
     ) => onWsEvent('chat:stream-end', cb as WsHandler),
     onStreamReset: (cb: (data: { streamId: string; conversationId: string }) => void) =>
