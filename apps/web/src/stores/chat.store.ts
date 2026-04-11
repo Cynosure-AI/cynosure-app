@@ -12,6 +12,7 @@ export interface Conversation {
   id: string
   title: string
   origin?: string
+  pinned: boolean
   createdAt: number
   updatedAt: number
 }
@@ -71,10 +72,11 @@ export const useChatStore = defineStore('chat', () => {
     const agentId = agentConfig.activeAgentId.value
     const rows = await api.chat.listConversations(agentId !== null ? agentId : '')
     conversations.value = rows.map(
-      (r: { id: string; title: string; origin: string; created_at: number; updated_at: number }) => ({
+      (r: { id: string; title: string; origin: string; pinned: number; created_at: number; updated_at: number }) => ({
         id: r.id,
         title: r.title,
         origin: r.origin,
+        pinned: !!r.pinned,
         createdAt: r.created_at,
         updatedAt: r.updated_at
       })
@@ -92,6 +94,7 @@ export const useChatStore = defineStore('chat', () => {
       id: conv.id,
       title: conv.title,
       origin: conv.origin,
+      pinned: false,
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt
     })
@@ -246,6 +249,8 @@ export const useChatStore = defineStore('chat', () => {
   }, { immediate: true })
 
   async function deleteConversation(id: string): Promise<void> {
+    const conv = conversations.value.find(c => c.id === id)
+    if (conv?.pinned) return
     await api.chat.deleteConversation(id)
     conversations.value = conversations.value.filter((c) => c.id !== id)
     streaming.streamBuffers.delete(id)
@@ -275,14 +280,34 @@ export const useChatStore = defineStore('chat', () => {
 
   async function deleteAllConversations(): Promise<void> {
     await api.chat.deleteAllConversations(agentConfig.activeAgentId.value)
-    conversations.value = []
-    activeConversationId.value = null
-    messages.value = []
+    // Keep pinned conversations in the local list
+    const pinned = conversations.value.filter(c => c.pinned)
+    conversations.value = pinned
+    if (pinned.length > 0) {
+      activeConversationId.value = pinned[0].id
+      await selectConversation(pinned[0].id)
+    } else {
+      activeConversationId.value = null
+      messages.value = []
+    }
     streaming.streamingContent.value = ''
     streaming.streamingThinking.value = ''
     streaming.isStreaming.value = false
     streaming.currentStreamId.value = null
     streaming.lastUsage.value = null
+  }
+
+  async function pinConversation(id: string, pinned: boolean): Promise<void> {
+    await api.chat.pinConversation(id, pinned)
+    const conv = conversations.value.find(c => c.id === id)
+    if (conv) {
+      conv.pinned = pinned
+      // Re-sort: pinned first, then by updatedAt desc
+      conversations.value.sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+        return b.updatedAt - a.updatedAt
+      })
+    }
   }
 
   // ── Post-actions ──
@@ -374,6 +399,7 @@ export const useChatStore = defineStore('chat', () => {
     selectConversation,
     deleteConversation,
     deleteAllConversations,
+    pinConversation,
     startNewChat,
     handlePostAction,
   }

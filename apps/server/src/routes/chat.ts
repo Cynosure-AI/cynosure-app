@@ -170,17 +170,18 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     const db = getDb()
     const { agentId, maWorkspaceId } = req.query
     const excerpt = `(SELECT SUBSTR(m.content, 1, 120) FROM messages m WHERE m.conversation_id = conversations.id AND m.role = 'user' ORDER BY m.created_at DESC LIMIT 1) AS last_user_message`
+    const orderBy = 'ORDER BY pinned DESC, updated_at DESC'
     if (maWorkspaceId) {
-      return db.prepare(`SELECT *, ${excerpt} FROM conversations WHERE ma_workspace_id = ? ORDER BY updated_at DESC`).all(maWorkspaceId)
+      return db.prepare(`SELECT *, ${excerpt} FROM conversations WHERE ma_workspace_id = ? ${orderBy}`).all(maWorkspaceId)
     }
     if (agentId) {
-      return db.prepare(`SELECT *, ${excerpt} FROM conversations WHERE agent_id = ? ORDER BY updated_at DESC`).all(agentId)
+      return db.prepare(`SELECT *, ${excerpt} FROM conversations WHERE agent_id = ? ${orderBy}`).all(agentId)
     }
     if (agentId === '') {
       // Explicitly empty string → conversations with no agent and no MA workspace
-      return db.prepare(`SELECT *, ${excerpt} FROM conversations WHERE agent_id IS NULL AND ma_workspace_id IS NULL ORDER BY updated_at DESC`).all()
+      return db.prepare(`SELECT *, ${excerpt} FROM conversations WHERE agent_id IS NULL AND ma_workspace_id IS NULL ${orderBy}`).all()
     }
-    return db.prepare(`SELECT *, ${excerpt} FROM conversations ORDER BY updated_at DESC`).all()
+    return db.prepare(`SELECT *, ${excerpt} FROM conversations ${orderBy}`).all()
   })
 
   // GET /api/chat/conversations/:id/messages — get messages
@@ -319,9 +320,28 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     }
   })
 
-  // DELETE /api/chat/conversations/:id — delete
-  app.delete<{ Params: { id: string } }>('/conversations/:id', async (req) => {
+  // PATCH /api/chat/conversations/:id/pin — toggle pinned state
+  app.patch<{ Params: { id: string }; Body: { pinned: boolean } }>(
+    '/conversations/:id/pin',
+    async (req) => {
+      const { pinned } = req.body
+      const db = getDb()
+      db.prepare('UPDATE conversations SET pinned = ?, updated_at = ? WHERE id = ?').run(
+        pinned ? 1 : 0,
+        Date.now(),
+        req.params.id
+      )
+      return { success: true }
+    }
+  )
+
+  // DELETE /api/chat/conversations/:id — delete (blocked for pinned conversations)
+  app.delete<{ Params: { id: string } }>('/conversations/:id', async (req, reply) => {
     const db = getDb()
+    const row = db.prepare('SELECT pinned FROM conversations WHERE id = ?').get(req.params.id) as { pinned: number } | undefined
+    if (row?.pinned) {
+      return reply.status(400).send({ error: 'Cannot delete a pinned conversation. Unpin it first.' })
+    }
     cleanupConversationImages([req.params.id])
     db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(req.params.id)
     db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(req.params.id)
@@ -329,25 +349,27 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     return { success: true }
   })
 
-  // DELETE /api/chat/conversations — delete all conversations (optionally filtered by agent)
+  // DELETE /api/chat/conversations — delete all conversations (optionally filtered by agent), skips pinned
   app.delete<{ Querystring: { agentId?: string } }>('/conversations', async (req) => {
     const db = getDb()
     const { agentId } = req.query
     if (agentId !== undefined) {
       const filter = agentId === '' ? 'agent_id IS NULL AND ma_workspace_id IS NULL' : 'agent_id = ?'
-      const ids = db.prepare(`SELECT id FROM conversations WHERE ${filter}`).all(...(agentId === '' ? [] : [agentId])) as { id: string }[]
+      const ids = db.prepare(`SELECT id FROM conversations WHERE ${filter} AND pinned = 0`).all(...(agentId === '' ? [] : [agentId])) as { id: string }[]
       cleanupConversationImages(ids.map(r => r.id))
       for (const { id } of ids) {
         db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
         db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
       }
-      db.prepare(`DELETE FROM conversations WHERE ${filter}`).run(...(agentId === '' ? [] : [agentId]))
+      db.prepare(`DELETE FROM conversations WHERE ${filter} AND pinned = 0`).run(...(agentId === '' ? [] : [agentId]))
     } else {
-      const allIds = db.prepare('SELECT id FROM conversations').all() as { id: string }[]
+      const allIds = db.prepare('SELECT id FROM conversations WHERE pinned = 0').all() as { id: string }[]
       cleanupConversationImages(allIds.map(r => r.id))
-      db.prepare('DELETE FROM execution_steps').run()
-      db.prepare('DELETE FROM messages').run()
-      db.prepare('DELETE FROM conversations').run()
+      for (const { id } of allIds) {
+        db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
+        db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
+      }
+      db.prepare('DELETE FROM conversations WHERE pinned = 0').run()
     }
     return { success: true }
   })

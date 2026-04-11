@@ -394,7 +394,7 @@ export const api = {
         params.set('agentId', agentId ?? '')
       }
       const qs = params.toString()
-      return get<{ id: string; title: string; agent_id: string | null; ma_workspace_id: string | null; origin: string; created_at: number; updated_at: number; last_user_message: string | null }[]>(
+      return get<{ id: string; title: string; agent_id: string | null; ma_workspace_id: string | null; origin: string; pinned: number; created_at: number; updated_at: number; last_user_message: string | null }[]>(
         `/api/chat/conversations${qs ? `?${qs}` : ''}`
       )
     },
@@ -416,6 +416,8 @@ export const api = {
     },
     updateTitle: (conversationId: string, title: string) =>
       patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/title`, { title }),
+    pinConversation: (conversationId: string, pinned: boolean) =>
+      patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/pin`, { pinned }),
     send: (
       conversationId: string,
       content: string,

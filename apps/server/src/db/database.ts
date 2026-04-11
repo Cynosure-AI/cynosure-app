@@ -235,6 +235,11 @@ function runMigrations(db: Database.Database): void {
     db.exec("ALTER TABLE conversations ADD COLUMN origin TEXT NOT NULL DEFAULT 'chat'")
   }
 
+  // Add pinned column to conversations (0 = not pinned, 1 = pinned)
+  if (!convCols.some((c) => c.name === 'pinned')) {
+    db.exec("ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+  }
+
   // Add icon_url and origin column to mcp_servers
   const mcpCols = db.prepare("PRAGMA table_info(mcp_servers)").all() as { name: string }[]
   if (!mcpCols.some((c) => c.name === 'icon_url')) {

@@ -29,6 +29,11 @@ async function deleteChat(id: string, event: Event): Promise<void> {
   await chatStore.deleteConversation(id)
 }
 
+async function togglePin(id: string, pinned: boolean, event: Event): Promise<void> {
+  event.stopPropagation()
+  await chatStore.pinConversation(id, !pinned)
+}
+
 function formatDate(ts: number): string {
   const d = new Date(ts)
   const now = new Date()
@@ -88,6 +93,11 @@ function displayTitle(conv: { title: string; origin?: string }): string {
       >
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
+            <Icon
+              v-if="conv.pinned"
+              icon="lucide:pin"
+              class="w-3 h-3 shrink-0 text-amber-400"
+            />
             <span
               class="text-sm truncate"
               :class="
@@ -112,6 +122,18 @@ function displayTitle(conv: { title: string; origin?: string }): string {
           </div>
         </div>
         <button
+          class="opacity-0 group-hover:opacity-100 p-1 transition-all"
+          :class="conv.pinned ? 'text-amber-400 hover:text-amber-300' : 'text-zinc-500 hover:text-amber-400'"
+          :title="conv.pinned ? 'Unpin conversation' : 'Pin conversation'"
+          @click="togglePin(conv.id, conv.pinned, $event)"
+        >
+          <Icon
+            :icon="conv.pinned ? 'lucide:pin-off' : 'lucide:pin'"
+            class="w-3.5 h-3.5"
+          />
+        </button>
+        <button
+          v-if="!conv.pinned"
           class="opacity-0 group-hover:opacity-100 p-1 text-zinc-500 hover:text-red-400 transition-all"
           @click="deleteChat(conv.id, $event)"
         >
@@ -139,7 +161,7 @@ function displayTitle(conv: { title: string; origin?: string }): string {
       @close="showClearConfirm = false"
     >
       <p class="text-zinc-400 leading-relaxed">
-        Are you sure you want to delete all conversations for <strong class="text-zinc-200">{{ clearLabel }}</strong>? This action cannot be undone.
+        Are you sure you want to delete all conversations for <strong class="text-zinc-200">{{ clearLabel }}</strong>? This action cannot be undone. Pinned conversations will be kept.
       </p>
       <template #actions>
         <button
