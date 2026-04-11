@@ -315,7 +315,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(async (instance) => registerChatRoutes(instance, broadcast), { prefix: '/api/chat' })
   app.register(registerAgentRoutes, { prefix: '/api/agent' })
   app.register(registerAgentDefinitionRoutes, { prefix: '/api/agents' })
-  app.register(registerMemoryRoutes, { prefix: '/api/memory' })
+  app.register(async (instance) => registerMemoryRoutes(instance, broadcast), { prefix: '/api/memory' })
   app.register(registerMcpRoutes, { prefix: '/api/mcp' })
   app.register(async (instance) => registerNotificationRoutes(instance, broadcast), { prefix: '/api/notifications' })
   app.register(registerInstanceRoutes, { prefix: '/api/instances' })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProviderStore } from '../../stores/provider.store'
 import { api } from '../../api/client'
 import { Icon } from '@iconify/vue'
@@ -24,7 +24,26 @@ const chunkSaving = ref(false)
 
 // Confirmation dialog
 const showDropConfirm = ref(false)
-const pendingSave = ref<(() => Promise<void>) | null>(null)
+
+// Re-embed progress
+const reembedProgress = ref<{ current: number; total: number; status: string } | null>(null)
+const reembedPercent = computed(() => {
+  if (!reembedProgress.value || reembedProgress.value.total === 0) return 0
+  return Math.round((reembedProgress.value.current / reembedProgress.value.total) * 100)
+})
+
+let unsubReembed: (() => void) | null = null
+onMounted(() => {
+  unsubReembed = api.memory.onReembedProgress((data) => {
+    reembedProgress.value = data
+    if (data.status === 'completed') {
+      setTimeout(() => { reembedProgress.value = null }, 2000)
+    }
+  })
+})
+onUnmounted(() => {
+  unsubReembed?.()
+})
 
 // Manual clear
 const showManualClear = ref(false)
@@ -101,38 +120,38 @@ async function saveEmbeddings() {
   try {
     const current = await api.memory.getEmbeddingConfig()
     if (current.model !== embModel.value || current.dimensions !== embDimensions.value) {
-      pendingSave.value = doSaveEmbeddings
       showDropConfirm.value = true
       return
     }
   } catch { /* no current config, safe to save */ }
-  await doSaveEmbeddings()
+  await doSaveEmbeddings(false)
 }
 
-async function doSaveEmbeddings() {
+async function doSaveEmbeddings(reembed: boolean) {
   embSaving.value = true
   try {
     await api.memory.configureEmbeddings({
       providerId: embProviderId.value || undefined,
       model: embModel.value,
-      dimensions: embDimensions.value
+      dimensions: embDimensions.value,
+      reembed
     })
     embDirty.value = false
   } catch { /* error handling */ }
   embSaving.value = false
   showDropConfirm.value = false
-  pendingSave.value = null
+}
+
+async function confirmReembed() {
+  await doSaveEmbeddings(true)
 }
 
 async function confirmDrop() {
-  if (pendingSave.value) {
-    await pendingSave.value()
-  }
+  await doSaveEmbeddings(false)
 }
 
 function cancelDrop() {
   showDropConfirm.value = false
-  pendingSave.value = null
 }
 
 async function manualClearDb() {
@@ -160,7 +179,7 @@ async function manualClearDb() {
         </h3>
         <p class="text-xs text-zinc-500">
           Select which provider and model to use for generating vector embeddings.
-          Changing the model will drop all stored vectors since they become incompatible.
+          Changing the model will offer to re-embed existing memories or drop them.
         </p>
         <p class="text-xs text-zinc-500 mt-1">
           For local embeddings we recommend <span class="text-zinc-300 font-medium">mxbai-embed-large</span> for
@@ -340,23 +359,51 @@ async function manualClearDb() {
     <!-- Model change confirmation modal -->
     <ModalDialog
       :show="showDropConfirm"
-      title="Vector Database Will Be Dropped"
+      title="Embedding Model Changed"
       icon="lucide:alert-triangle"
       icon-color="amber"
       @close="cancelDrop"
     >
       <p class="text-zinc-400 leading-relaxed">
         Changing the embedding model or dimensions makes existing vectors incompatible.
-        All stored permanent memories will be deleted and need to be re-ingested.
+        You can <strong class="text-zinc-200">re-embed</strong> all stored memories with the new model to preserve your data,
+        or <strong class="text-zinc-200">drop</strong> all vectors and re-upload files manually.
       </p>
+
+      <!-- Re-embed progress bar -->
+      <div
+        v-if="reembedProgress"
+        class="mt-4 space-y-2"
+      >
+        <div class="flex items-center justify-between text-xs text-zinc-400">
+          <span>Re-embedding...</span>
+          <span>{{ reembedProgress.current }} / {{ reembedProgress.total }} chunks ({{ reembedPercent }}%)</span>
+        </div>
+        <div class="w-full h-2 bg-zinc-700 rounded-full overflow-hidden">
+          <div
+            class="h-full bg-blue-500 rounded-full transition-all duration-300"
+            :style="{ width: `${reembedPercent}%` }"
+          />
+        </div>
+      </div>
+
       <template #actions>
         <button
-          class="w-full px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-center font-medium transition-colors"
-          @click="confirmDrop"
+          :disabled="embSaving"
+          class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 text-white rounded-xl text-center font-medium transition-colors"
+          @click="confirmReembed"
         >
-          Drop & Save
+          {{ embSaving ? 'Re-Embedding...' : 'Re-Embed All Memories' }}
         </button>
         <button
+          :disabled="embSaving"
+          class="w-full px-4 py-3 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 text-white rounded-xl text-center font-medium transition-colors"
+          @click="confirmDrop"
+        >
+          {{ embSaving ? 'Saving...' : 'Drop & Save' }}
+        </button>
+        <button
+          :disabled="embSaving"
           class="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-center font-medium transition-colors"
           @click="cancelDrop"
         >
