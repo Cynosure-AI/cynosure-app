@@ -9,7 +9,9 @@ import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import OpenAI from 'openai'
 
-export async function registerMemoryRoutes(app: FastifyInstance): Promise<void> {
+type BroadcastFn = (event: string, data: unknown) => void
+
+export async function registerMemoryRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   // POST /api/memory/search — search permanent memory
   app.post<{ Body: { query: string; topK?: number } }>('/search', async (req) => {
     const { query, topK } = req.body
@@ -50,21 +52,77 @@ export async function registerMemoryRoutes(app: FastifyInstance): Promise<void> 
 
   // POST /api/memory/embeddings/configure — configure embeddings
   app.post<{
-    Body: { providerId?: string; baseUrl?: string; apiKey?: string; model?: string; dimensions?: number }
+    Body: { providerId?: string; baseUrl?: string; apiKey?: string; model?: string; dimensions?: number; reembed?: boolean }
   }>('/embeddings/configure', async (req) => {
     const embedder = getEmbeddingProvider()
     const oldConfig = embedder.getConfig()
-    embedder.configure(req.body)
-    const newConfig = embedder.getConfig()
+    const { reembed, ...configOpts } = req.body
 
-    // If model or dimensions changed, existing vectors are incompatible
-    const modelChanged = oldConfig.model !== newConfig.model || oldConfig.dimensions !== newConfig.dimensions
+    // Check if model or dimensions changed
+    const newModel = configOpts.model || oldConfig.model
+    const newDimensions = configOpts.dimensions || oldConfig.dimensions || 1536
+    const modelChanged = oldConfig.model !== newModel || oldConfig.dimensions !== newDimensions
+
+    if (modelChanged && reembed) {
+      // Re-embed flow: read all existing chunks → configure new provider → drop → re-embed → write back
+      const rag = getRAGStore()
+      const existingDocs = await rag.listDocuments('permanent_memory')
+      const chunksToReembed = existingDocs.filter(d => d.id !== '__seed__')
+
+      // Configure new provider FIRST so embedBatch uses the new model
+      embedder.configure(configOpts)
+
+      // Drop old table (incompatible dimensions)
+      await rag.deleteTable('permanent_memory')
+
+      if (chunksToReembed.length > 0) {
+        // Re-embed in batches
+        const BATCH_SIZE = 32
+        let totalReembedded = 0
+        const totalChunks = chunksToReembed.length
+
+        broadcast('memory:reembed-progress', { current: 0, total: totalChunks, status: 'started' })
+
+        for (let i = 0; i < chunksToReembed.length; i += BATCH_SIZE) {
+          const batch = chunksToReembed.slice(i, i + BATCH_SIZE)
+          const texts = batch.map(d => d.text)
+
+          try {
+            const embeddings = await embedder.embedBatch(texts)
+            const docs = batch.map((doc, j) => ({
+              id: doc.id,
+              text: doc.text,
+              vector: embeddings[j].vector,
+              source: doc.source,
+              sourceFile: doc.sourceFile || '',
+              chunkIndex: doc.chunkIndex ?? 0,
+              spaceId: doc.spaceId || '',
+              createdAt: doc.createdAt
+            }))
+            await rag.addDocuments('permanent_memory', docs, newDimensions)
+            totalReembedded += docs.length
+            broadcast('memory:reembed-progress', { current: totalReembedded, total: totalChunks, status: 'in-progress' })
+          } catch (err) {
+            console.error(`[reembed] Batch failed at offset ${i}:`, err)
+            // Continue with remaining batches
+          }
+        }
+
+        broadcast('memory:reembed-progress', { current: totalReembedded, total: totalChunks, status: 'completed' })
+        return { success: true, vectorsDropped: false, reembedded: true, reembeddedCount: totalReembedded }
+      }
+
+      return { success: true, vectorsDropped: false, reembedded: true, reembeddedCount: 0 }
+    }
+
+    embedder.configure(configOpts)
+
     if (modelChanged) {
       const rag = getRAGStore()
       await rag.deleteTable('permanent_memory')
     }
 
-    return { success: true, vectorsDropped: modelChanged }
+    return { success: true, vectorsDropped: modelChanged, reembedded: false, reembeddedCount: 0 }
   })
 
   // GET /api/memory/embeddings/config — get current embedding config

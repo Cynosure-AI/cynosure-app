@@ -574,7 +574,8 @@ export const api = {
       apiKey?: string
       model?: string
       dimensions?: number
-    }) => post<{ success: boolean; vectorsDropped: boolean }>('/api/memory/embeddings/configure', opts),
+      reembed?: boolean
+    }) => post<{ success: boolean; vectorsDropped: boolean; reembedded: boolean; reembeddedCount: number }>('/api/memory/embeddings/configure', opts),
     getEmbeddingConfig: () =>
       get<{ providerId?: string; model: string; dimensions: number }>('/api/memory/embeddings/config'),
     dropVectors: () =>
@@ -584,7 +585,9 @@ export const api = {
     getChunkingConfig: () =>
       get<{ chunkSize: number; chunkOverlap: number }>('/api/memory/chunking/config'),
     configureChunking: (opts: { chunkSize: number; chunkOverlap: number }) =>
-      post<{ success: boolean; chunkSize: number; chunkOverlap: number }>('/api/memory/chunking/configure', opts)
+      post<{ success: boolean; chunkSize: number; chunkOverlap: number }>('/api/memory/chunking/configure', opts),
+    onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>
+      onWsEvent('memory:reembed-progress', cb as WsHandler)
   },
 
   memorySpaces: {
