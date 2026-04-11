@@ -527,7 +527,7 @@ const isUser = computed(() => props.role === 'user')
 .msg-markdown pre code {
   color: inherit;
   background: transparent;
-  padding: 0;
+  padding: 0.75rem 1rem;
   font-size: inherit;
   border-radius: 0;
 }
