@@ -88,6 +88,20 @@ interface ToolCallResult {
     imageDataUrls?: string[]
 }
 
+/** Accumulate token usage across multiple LLM rounds (tool-calling loop). */
+function accumulateUsage(
+    prev: AgentExecutorResult['usage'],
+    next: AgentExecutorResult['usage']
+): AgentExecutorResult['usage'] {
+    if (!next) return prev
+    if (!prev) return next
+    return {
+        promptTokens: prev.promptTokens + next.promptTokens,
+        completionTokens: prev.completionTokens + next.completionTokens,
+        totalTokens: prev.totalTokens + next.totalTokens,
+    }
+}
+
 /**
  * Shared agent execution engine.
  * Implements a direct tool-calling loop with streaming, optional HITL approval,
@@ -329,7 +343,7 @@ export class AgentExecutor {
                     fullThinking += result.thinking
                     collectedImages.push(...result.images)
                     pendingToolCalls = result.toolCalls
-                    usage = result.usage
+                    usage = accumulateUsage(usage, result.usage)
                     if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
                     continue
                 }
@@ -413,7 +427,7 @@ export class AgentExecutor {
             lastRoundThinking = result.thinking
             collectedImages.push(...result.images)
             pendingToolCalls = result.toolCalls
-            usage = result.usage
+            usage = accumulateUsage(usage, result.usage)
             if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
         }
 
