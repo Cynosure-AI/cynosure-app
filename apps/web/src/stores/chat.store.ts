@@ -1,7 +1,9 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { api, type StoredMessage } from '../api/client'
 import { useAgentStore } from './agent.store'
+import { useAgentDefinitionsStore } from './agent-definitions.store'
+import { useProviderStore } from './provider.store'
 import { useChatStreaming } from '../composables/useChatStreaming'
 import { useChatMessages } from '../composables/useChatMessages'
 import { useChatAgentConfig } from '../composables/useChatAgentConfig'
@@ -44,12 +46,15 @@ export interface DisplayMessage {
 
 export const useChatStore = defineStore('chat', () => {
   const agentStore = useAgentStore()
+  const agentDefs = useAgentDefinitionsStore()
+  const providerStore = useProviderStore()
 
   // ── Core state ──
 
   const conversations = ref<Conversation[]>([])
   const activeConversationId = ref<string | null>(null)
   const messages = ref<DisplayMessage[]>([])
+  const contextWindow = ref<number | null>(null)
   const postActionsMap = new Map<string, Set<string>>()
   const postActionsTrigger = ref(0)
   const activePostActions = computed(() => {
@@ -167,7 +172,78 @@ export const useChatStore = defineStore('chat', () => {
       streaming.streamingContent.value = ''
       streaming.streamingThinking.value = ''
     }
+
+    // Restore context usage from the last assistant message
+    restoreContextUsage()
   }
+
+  /**
+   * Derive lastUsage from the most recent assistant message in the current conversation.
+   */
+  function restoreContextUsage(): void {
+    const lastAssistant = [...messages.value].reverse().find(
+      m => m.role === 'assistant' && m.promptTokens
+    )
+    if (lastAssistant?.promptTokens) {
+      streaming.lastUsage.value = {
+        promptTokens: lastAssistant.promptTokens,
+        completionTokens: lastAssistant.completionTokens || 0,
+        totalTokens: (lastAssistant.promptTokens || 0) + (lastAssistant.completionTokens || 0),
+        model: lastAssistant.model
+      }
+    } else {
+      streaming.lastUsage.value = null
+    }
+  }
+
+  /** Fetch and update the context window for a given provider + model. */
+  function fetchContextWindow(providerId: string, model: string): void {
+    api.provider.getModelInfo(providerId, model)
+      .then(info => {
+        if (info.contextLength) {
+          contextWindow.value = info.contextLength
+        } else {
+          contextWindow.value = null
+        }
+      })
+      .catch(() => { contextWindow.value = null })
+  }
+
+  /**
+   * Resolved provider + model for the current session.
+   * Priority: session override > agent config > provider store defaults.
+   */
+  const resolvedModelProvider = computed(() => {
+    // Session overrides take priority
+    if (agentConfig.sessionModelOverride.value && agentConfig.sessionProviderOverride.value) {
+      return {
+        model: agentConfig.sessionModelOverride.value,
+        providerId: agentConfig.sessionProviderOverride.value
+      }
+    }
+    // Agent config
+    if (agentConfig.activeAgentId.value) {
+      const agent = agentDefs.get(agentConfig.activeAgentId.value)
+      if (agent?.model && agent?.providerId) {
+        return { model: agent.model, providerId: agent.providerId }
+      }
+    }
+    // Provider store default
+    const active = providerStore.activeProvider
+    if (active) {
+      return { model: active.defaultModel, providerId: active.id }
+    }
+    return null
+  })
+
+  // Watch resolved model/provider and auto-fetch context window
+  watch(resolvedModelProvider, (resolved) => {
+    if (resolved) {
+      fetchContextWindow(resolved.providerId, resolved.model)
+    } else {
+      contextWindow.value = null
+    }
+  }, { immediate: true })
 
   async function deleteConversation(id: string): Promise<void> {
     await api.chat.deleteConversation(id)
@@ -193,6 +269,7 @@ export const useChatStore = defineStore('chat', () => {
     streaming.isStreaming.value = false
     streaming.currentStreamId.value = null
     streaming.lastUsage.value = null
+    contextWindow.value = null
     agentConfig.sessionModelOverride.value = null
     agentConfig.sessionProviderOverride.value = null
   }
@@ -207,6 +284,7 @@ export const useChatStore = defineStore('chat', () => {
     streaming.isStreaming.value = false
     streaming.currentStreamId.value = null
     streaming.lastUsage.value = null
+    contextWindow.value = null
   }
 
   // ── Post-actions ──
@@ -249,6 +327,7 @@ export const useChatStore = defineStore('chat', () => {
     streamingContent: streaming.streamingContent,
     streamingThinking: streaming.streamingThinking,
     lastUsage: streaming.lastUsage,
+    contextWindow,
     handleStreamStart: streaming.handleStreamStart,
     handleStreamChunk: streaming.handleStreamChunk,
     handleStreamThinking: streaming.handleStreamThinking,
@@ -289,6 +368,7 @@ export const useChatStore = defineStore('chat', () => {
     setActiveAgent: agentConfig.setActiveAgent,
     setSessionModel: agentConfig.setSessionModel,
     syncAgentBaseline: agentConfig.syncAgentBaseline,
+    fetchContextWindow,
 
     // Conversation CRUD
     loadConversations,

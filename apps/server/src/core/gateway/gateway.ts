@@ -3,8 +3,10 @@ import {
   type LLMProviderConfig,
   type CompletionRequest,
   type CompletionResponse,
-  type StreamChunk
+  type StreamChunk,
+  type ModelInfo
 } from './providers/base.provider.js'
+import { ensurePricingLoaded, getModelContextLength } from '../pricing.js'
 import { OpenAIProvider } from './providers/openai.provider.js'
 import { AnthropicProvider } from './providers/anthropic.provider.js'
 import { GeminiProvider } from './providers/gemini.provider.js'
@@ -18,6 +20,8 @@ import { MistralProvider } from './providers/mistral.provider.js'
 export class LLMGateway {
   private providers = new Map<string, BaseLLMProvider>()
   private activeProviderId: string = ''
+  /** Cache model info keyed by "providerId:modelId" — TTL 10 minutes */
+  private modelInfoCache = new Map<string, { info: ModelInfo; ts: number }>()
 
   registerProvider(config: LLMProviderConfig): void {
     const provider = this.createProvider(config)
@@ -114,6 +118,40 @@ export class LLMGateway {
       : this.getActiveProvider()
     if (!provider) throw new Error(`Provider not found`)
     return provider.listModels(type)
+  }
+
+  /**
+   * Get metadata for a specific model (cached for 10 minutes).
+   * Returns context length when the provider supports it.
+   * Falls back to models.dev data when the provider doesn't expose context length.
+   */
+  async getModelInfo(modelId: string, providerId?: string): Promise<ModelInfo> {
+    const provider = providerId
+      ? this.providers.get(providerId)
+      : this.getActiveProvider()
+    if (!provider) throw new Error(`Provider not found`)
+
+    const pid = providerId || this.activeProviderId
+    const cacheKey = `${pid}:${modelId}`
+    const cached = this.modelInfoCache.get(cacheKey)
+    if (cached && Date.now() - cached.ts < 10 * 60 * 1000) {
+      return cached.info
+    }
+
+    const info = await provider.getModelInfo(modelId)
+
+    // Fallback: if provider didn't return contextLength, try models.dev
+    if (!info.contextLength) {
+      await ensurePricingLoaded()
+      const providerType = provider.config.type
+      const ctxLen = getModelContextLength(providerType, modelId)
+      if (ctxLen) {
+        info.contextLength = ctxLen
+      }
+    }
+
+    this.modelInfoCache.set(cacheKey, { info, ts: Date.now() })
+    return info
   }
 
   async testConnection(providerId: string): Promise<boolean> {

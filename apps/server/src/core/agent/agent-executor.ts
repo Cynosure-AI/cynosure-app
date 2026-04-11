@@ -55,6 +55,9 @@ export interface AgentExecutorConfig {
      * with dedicated handlers that don't interfere with primary stream state.
      */
     streamEventPrefix?: string
+    /** Context window size (max tokens) for the model being used.
+     *  Included in stream-end events so the UI can display context usage. */
+    contextWindow?: number
 }
 
 export interface AgentExecutorResult {
@@ -245,7 +248,7 @@ export class AgentExecutor {
 
         // No tool calls → done after Phase 1
         if (!pendingToolCalls?.length) {
-            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model })
+            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow })
             return { content: fullContent, usage, toolRounds: 0, images: collectedImages, thinking: lastRoundThinking, provider: providerId, model }
         }
 
@@ -416,7 +419,7 @@ export class AgentExecutor {
 
         // End final stream
         if (this.config.streamMode === 'single') {
-            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model })
+            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow })
         } else if (!pendingToolCalls?.length) {
             // per-round: the last round's stream-end is sent by streamLLMRound
             // but if we exited because of tool calls (max rounds), end the last stream

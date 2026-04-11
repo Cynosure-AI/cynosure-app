@@ -10,7 +10,7 @@ interface ModelCost {
 
 interface ModelsDevProvider {
     id: string
-    models: Record<string, { cost?: { input?: number; output?: number } }>
+    models: Record<string, { cost?: { input?: number; output?: number }; limit?: { context?: number } }>
 }
 
 type ModelsDevData = Record<string, ModelsDevProvider>
@@ -38,6 +38,12 @@ let exactLookup: Map<string, ModelCost> = new Map()
 /** model → cost  (first-seen cost for a model across all providers) */
 let modelOnlyLookup: Map<string, ModelCost> = new Map()
 
+/** (provider, model) → context length */
+let contextExactLookup: Map<string, number> = new Map()
+
+/** model → context length (first-seen across all providers) */
+let contextModelOnlyLookup: Map<string, number> = new Map()
+
 let lastFetchedAt = 0
 let fetchPromise: Promise<void> | null = null
 
@@ -60,6 +66,18 @@ export function getModelCost(provider: string, model: string): ModelCost | null 
 
     // 2. Model-only fallback (cross-provider)
     const fallback = modelOnlyLookup.get(model)
+    if (fallback) return fallback
+
+    return null
+}
+
+export function getModelContextLength(provider: string, model: string): number | null {
+    const normProvider = normaliseProvider(provider)
+
+    const exact = contextExactLookup.get(`${normProvider}/${model}`)
+    if (exact) return exact
+
+    const fallback = contextModelOnlyLookup.get(model)
     if (fallback) return fallback
 
     return null
@@ -97,25 +115,38 @@ async function fetchPricing(): Promise<void> {
 function buildLookups(data: ModelsDevData): void {
     const newExact = new Map<string, ModelCost>()
     const newModelOnly = new Map<string, ModelCost>()
+    const newCtxExact = new Map<string, number>()
+    const newCtxModelOnly = new Map<string, number>()
 
     for (const [providerKey, provider] of Object.entries(data)) {
         if (!provider?.models || typeof provider.models !== 'object') continue
 
         for (const [modelId, modelInfo] of Object.entries(provider.models)) {
+            // Cost lookup
             const cost = modelInfo?.cost
-            if (!cost || typeof cost.input !== 'number' || typeof cost.output !== 'number') continue
-            if (cost.input === 0 && cost.output === 0) continue // skip free / unknown
+            if (cost && typeof cost.input === 'number' && typeof cost.output === 'number') {
+                if (cost.input !== 0 || cost.output !== 0) {
+                    const entry: ModelCost = { input: cost.input, output: cost.output }
+                    newExact.set(`${providerKey}/${modelId}`, entry)
+                    if (!newModelOnly.has(modelId)) {
+                        newModelOnly.set(modelId, entry)
+                    }
+                }
+            }
 
-            const entry: ModelCost = { input: cost.input, output: cost.output }
-            newExact.set(`${providerKey}/${modelId}`, entry)
-
-            // Keep first seen per model name (typically the canonical provider)
-            if (!newModelOnly.has(modelId)) {
-                newModelOnly.set(modelId, entry)
+            // Context length lookup
+            const ctxLen = modelInfo?.limit?.context
+            if (typeof ctxLen === 'number' && ctxLen > 0) {
+                newCtxExact.set(`${providerKey}/${modelId}`, ctxLen)
+                if (!newCtxModelOnly.has(modelId)) {
+                    newCtxModelOnly.set(modelId, ctxLen)
+                }
             }
         }
     }
 
     exactLookup = newExact
     modelOnlyLookup = newModelOnly
+    contextExactLookup = newCtxExact
+    contextModelOnlyLookup = newCtxModelOnly
 }

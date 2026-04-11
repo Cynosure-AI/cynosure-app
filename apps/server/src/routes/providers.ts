@@ -112,4 +112,14 @@ export async function registerProviderRoutes(app: FastifyInstance): Promise<void
       return reply.status(500).send({ error: (err as Error).message })
     }
   })
+
+  // GET /api/providers/:id/models/:model/info — get model metadata (context length etc.)
+  app.get<{ Params: { id: string; model: string } }>('/:id/models/:model/info', async (req, reply) => {
+    try {
+      const info = await gateway.getModelInfo(decodeURIComponent(req.params.model), req.params.id)
+      return info
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error).message })
+    }
+  })
 }

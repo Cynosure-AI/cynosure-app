@@ -15,6 +15,63 @@ import { unlinkSync } from 'fs'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
+/** Fraction of the context window to use before trimming old messages (0–1). */
+const SLIDING_CONTEXT_WINDOW_THRESHOLD = 0.85
+
+/**
+ * Rough token estimate: ~4 characters per token.
+ * Conservative multiplier keeps us well under the limit.
+ */
+function estimateTokens(msg: ChatMessage): number {
+  const text = typeof msg.content === 'string'
+    ? msg.content
+    : msg.content.filter(p => p.type === 'text').map(p => (p as { type: 'text'; text: string }).text).join('')
+  // Add overhead for role, tool calls, etc.
+  const toolCallOverhead = msg.toolCalls ? JSON.stringify(msg.toolCalls).length / 4 : 0
+  return Math.ceil(text.length / 4) + 10 + toolCallOverhead
+}
+
+/**
+ * Sliding context window: trim oldest non-system messages when total
+ * estimated tokens exceed 85% of the model's context window.
+ * Keeps system messages and the most recent messages.
+ */
+function trimMessagesToContextLimit(messages: ChatMessage[], contextWindow: number): ChatMessage[] {
+  const threshold = Math.floor(contextWindow * SLIDING_CONTEXT_WINDOW_THRESHOLD)
+  const totalEstimate = messages.reduce((sum, m) => sum + estimateTokens(m), 0)
+  if (totalEstimate <= threshold) return messages
+
+  // Separate system messages (always kept) from the rest
+  const systemMsgs = messages.filter(m => m.role === 'system')
+  const nonSystemMsgs = messages.filter(m => m.role !== 'system')
+
+  const systemTokens = systemMsgs.reduce((sum, m) => sum + estimateTokens(m), 0)
+  const budget = threshold - systemTokens
+
+  // Keep messages from the end until we exceed the budget
+  let acc = 0
+  let cutIndex = nonSystemMsgs.length
+  for (let i = nonSystemMsgs.length - 1; i >= 0; i--) {
+    const t = estimateTokens(nonSystemMsgs[i])
+    if (acc + t > budget) {
+      cutIndex = i + 1
+      break
+    }
+    acc += t
+  }
+
+  const kept = nonSystemMsgs.slice(cutIndex)
+  // If we trimmed, add a note so the model knows history was truncated
+  if (cutIndex > 0 && kept.length > 0) {
+    kept.unshift({
+      role: 'system',
+      content: `[Earlier conversation history (${cutIndex} messages) was trimmed to fit the context window.]`
+    })
+  }
+
+  return [...systemMsgs, ...kept]
+}
+
 /** Delete image files referenced by messages in the given conversation IDs. */
 function cleanupConversationImages(conversationIds: string[]): void {
   const db = getDb()
@@ -569,6 +626,18 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const streamId = nanoid()
       activeAbortControllers.set(streamId, abortController)
 
+      // Fetch context window size (best-effort, non-blocking for the critical path)
+      let contextWindow: number | undefined
+      try {
+        const modelInfo = await gateway.getModelInfo(responseModel, providerId)
+        contextWindow = modelInfo.contextLength
+      } catch { /* ignore — context window info is optional */ }
+
+      // Sliding context window: trim history if approaching the limit
+      if (contextWindow) {
+        messages = trimMessagesToContextLimit(messages, contextWindow)
+      }
+
       const executor = new AgentExecutor({
         gateway,
         tools,
@@ -585,6 +654,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         agentId: agentId || undefined,
         agentName: chatAgentName,
         agentIconUrl: chatAgentIconUrl,
+        contextWindow,
       })
 
       const executionId = streamId

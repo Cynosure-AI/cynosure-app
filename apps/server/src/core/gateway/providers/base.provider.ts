@@ -55,6 +55,11 @@ export interface ToolResult {
   imageDataUrls?: string[]
 }
 
+export interface ModelInfo {
+  id: string
+  contextLength?: number
+}
+
 export interface CompletionRequest {
   messages: ChatMessage[]
   model?: string
@@ -100,6 +105,15 @@ export abstract class BaseLLMProvider {
   ): AsyncIterable<StreamChunk>
   abstract listModels(type?: 'llm' | 'embedding'): Promise<string[]>
   abstract testConnection(): Promise<boolean>
+
+  /**
+   * Return metadata for a specific model — most importantly contextLength.
+   * Providers override this to query their native API. The default returns
+   * only the model id with no context length.
+   */
+  async getModelInfo(modelId: string): Promise<ModelInfo> {
+    return { id: modelId }
+  }
 
   protected formatToolsForProvider(
     tools: ToolDefinition[]

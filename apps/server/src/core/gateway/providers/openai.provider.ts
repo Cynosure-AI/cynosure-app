@@ -7,7 +7,8 @@ import {
   type StreamChunk,
   type ChatMessage,
   type ContentPart,
-  type ToolCall
+  type ToolCall,
+  type ModelInfo
 } from './base.provider.js'
 
 export class OpenAIProvider extends BaseLLMProvider {
@@ -380,6 +381,27 @@ export class OpenAIProvider extends BaseLLMProvider {
       return true
     } catch {
       return false
+    }
+  }
+
+  /**
+   * Retrieve model metadata from the OpenAI-compatible API.
+   * Some providers (OpenAI, compatible APIs) may not expose context_length
+   * in the model object — this is a best-effort attempt.
+   */
+  async getModelInfo(modelId: string): Promise<ModelInfo> {
+    try {
+      const model = await this.client.models.retrieve(modelId)
+      // The OpenAI SDK doesn't type context_length, but some compatible
+      // APIs (and OpenAI itself for newer models) include it.
+      const raw = model as unknown as Record<string, unknown>
+      const ctx = raw.context_length ?? raw.context_window
+      return {
+        id: modelId,
+        contextLength: typeof ctx === 'number' ? ctx : undefined
+      }
+    } catch {
+      return { id: modelId }
     }
   }
 

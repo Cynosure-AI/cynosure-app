@@ -18,6 +18,16 @@ const prefs = usePreferencesStore()
 // Override detection
 const hasOverrides = computed(() => chatStore.hasAgentOverrides)
 
+// Context window usage
+const contextUsage = computed(() => {
+  const usage = chatStore.lastUsage
+  const ctxWindow = chatStore.contextWindow
+  if (!usage || !ctxWindow) return null
+  const used = usage.totalTokens
+  const percent = Math.min((used / ctxWindow) * 100, 100)
+  return { used, max: ctxWindow, percent }
+})
+
 // Sub-agent / memory space counts
 const subAgentCount = computed(() =>
   chatStore.freeChatSubAgentIds.length
@@ -186,8 +196,8 @@ defineExpose({ processFiles })
 </script>
 
 <template>
-  <div class="border-t border-zinc-800 bg-zinc-900 px-4 py-3">
-    <div class="max-w-4xl mx-auto">
+  <div class="border-t border-zinc-800 bg-zinc-900 px-4 py-3 flex items-end gap-3">
+    <div class="max-w-4xl mx-auto flex-1 min-w-0">
       <!-- Attached images preview -->
       <div
         v-if="attachedImages.length"
@@ -298,6 +308,7 @@ defineExpose({ processFiles })
         </button>
       </div>
 
+      <!-- Controls row -->
       <div class="flex items-end gap-2">
         <!-- File attach button -->
         <button
@@ -386,7 +397,7 @@ defineExpose({ processFiles })
           v-model="inputText"
           placeholder="Type a message..."
           rows="1"
-          class="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-500"
+          class="flex-1 min-w-0 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-500"
           aria-label="Type a message"
           @keydown="onKeydown"
           @input="autoResize"
@@ -482,6 +493,50 @@ defineExpose({ processFiles })
           />
         </button>
       </div>
+    </div>
+
+    <!-- Context window usage ring — pinned to the far right of the bar -->
+    <!-- Always rendered at fixed size so layout never shifts when it appears -->
+    <div
+      class="relative flex items-center justify-center shrink-0 self-end pb-[3px] w-9 h-9"
+      :class="contextUsage ? '' : 'invisible'"
+      :title="contextUsage ? `Context: ${contextUsage.used.toLocaleString()} / ${contextUsage.max.toLocaleString()} tokens (${Math.round(contextUsage.percent)}%)` : ''"
+    >
+      <svg
+        v-if="contextUsage"
+        class="w-9 h-9 -rotate-90"
+        viewBox="0 0 36 36"
+      >
+        <!-- Background circle -->
+        <circle
+          cx="18"
+          cy="18"
+          r="14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          class="text-zinc-700/50"
+        />
+        <!-- Progress arc -->
+        <circle
+          cx="18"
+          cy="18"
+          r="14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          :stroke-dasharray="87.96"
+          :stroke-dashoffset="87.96 - (87.96 * contextUsage.percent) / 100"
+          :class="contextUsage.percent > 90 ? 'text-red-500' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-blue-500'"
+          class="transition-all duration-500"
+        />
+      </svg>
+      <span
+        v-if="contextUsage"
+        class="absolute text-[8px] font-bold leading-none"
+        :class="contextUsage.percent > 90 ? 'text-red-400' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-zinc-400'"
+      >{{ Math.round(contextUsage.percent) }}%</span>
     </div>
   </div>
 

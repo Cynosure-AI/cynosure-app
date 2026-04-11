@@ -375,6 +375,8 @@ export const api = {
       const params = type ? `?type=${type}` : ''
       return get<string[]>(`/api/providers/${encodeURIComponent(id)}/models${params}`)
     },
+    getModelInfo: (providerId: string, modelId: string) =>
+      get<{ id: string; contextLength?: number }>(`/api/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}/info`),
     loadSaved: () => Promise.resolve() // no-op in web — server loads on startup
   },
 

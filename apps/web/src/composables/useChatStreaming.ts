@@ -1,6 +1,13 @@
 import { ref, type Ref } from 'vue'
 import type { DisplayMessage, MemorySource } from '../stores/chat.store'
 
+export interface TokenUsage {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+    model?: string
+}
+
 interface StreamBuffer {
     streamId: string
     content: string
@@ -17,7 +24,7 @@ export interface ChatStreamingState {
     currentStreamId: Ref<string | null>
     streamingContent: Ref<string>
     streamingThinking: Ref<string>
-    lastUsage: Ref<{ promptTokens: number; completionTokens: number; totalTokens: number; model?: string } | null>
+    lastUsage: Ref<TokenUsage | null>
     pendingMemorySources: Ref<MemorySource[] | null>
     primaryStreamId: Ref<string | null>
     primaryStreamAgent: Ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>
@@ -50,7 +57,7 @@ export function useChatStreaming(
     const currentStreamId = ref<string | null>(null)
     const streamingContent = ref('')
     const streamingThinking = ref('')
-    const lastUsage = ref<{ promptTokens: number; completionTokens: number; totalTokens: number; model?: string } | null>(null)
+    const lastUsage = ref<TokenUsage | null>(null)
     const pendingMemorySources = ref<MemorySource[] | null>(null)
     const primaryStreamId = ref<string | null>(null)
     const primaryStreamAgent = ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>({})
