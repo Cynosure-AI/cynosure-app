@@ -574,49 +574,69 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 
 /**
- * Create a `memory_ingest_document` tool that reads a file from disk
- * and ingests its content into a memory space.
+ * Create a `memory_ingest_document` tool that ingests content into a memory space.
+ * Accepts either a file path to read from disk, or direct document content with a name.
  */
 export function makeMemoryIngestDocumentTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedSpaces = [] } = opts
     return {
         name: 'memory_ingest_document',
         description:
-            'Ingest a document from the local filesystem into memory. ' +
-            'Reads the file at the given path, chunks it, and stores it for semantic retrieval. ' +
-            'Supports text-based files (txt, md, csv, json, xml, html, log, etc.).',
+            'Ingest a document into memory for semantic retrieval. ' +
+            'You can either provide "content" directly (with an optional "documentName"), ' +
+            'or provide a "filePath" to read from the local filesystem. ' +
+            'When a user attaches a file in chat, always use "content" with the file text and "documentName" with the file name.',
         parameters: {
             type: 'object',
             properties: {
-                filePath: { type: 'string', description: 'Absolute path to the file on the local filesystem.' },
+                filePath: { type: 'string', description: 'Absolute path to a file on the local filesystem. Use this only when you have a real file path.' },
+                content: { type: 'string', description: 'The full text content of the document to ingest. Use this when the document content is already available (e.g. from a chat attachment).' },
+                documentName: { type: 'string', description: 'A descriptive name for the document (e.g. "report.pdf", "meeting-notes.md"). Used when providing content directly. Defaults to "document.txt".' },
                 space: { type: 'string', description: 'Target memory space name or ID. Defaults to the assigned space when only one is available.' }
             },
-            required: ['filePath']
+            required: []
         },
         timeout: 60_000,
         execute: async (params: unknown) => {
-            const { filePath: rawPath, space } = params as { filePath: string; space?: string }
+            const { filePath: rawPath, content: directContent, documentName, space } = params as {
+                filePath?: string; content?: string; documentName?: string; space?: string
+            }
+
+            if (!rawPath && !directContent) {
+                return { success: false, output: 'Either "filePath" or "content" must be provided.' }
+            }
 
             const resolved = resolveTargetSpace(assignedSpaces, space)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
-            // Read file
             let content: string
-            try {
-                const buf = await readFile(rawPath)
-                if (buf.length > MAX_FILE_SIZE) {
-                    return { success: false, output: `File is too large (${(buf.length / 1024 / 1024).toFixed(1)} MB). Maximum supported size is 10 MB.` }
+            let fileName: string
+
+            if (directContent) {
+                // Direct content mode – no filesystem access needed
+                content = directContent
+                fileName = documentName || 'document.txt'
+                if (Buffer.byteLength(content, 'utf-8') > MAX_FILE_SIZE) {
+                    return { success: false, output: `Content is too large (${(Buffer.byteLength(content, 'utf-8') / 1024 / 1024).toFixed(1)} MB). Maximum supported size is 10 MB.` }
                 }
-                content = buf.toString('utf-8')
-            } catch (err) {
-                return { success: false, output: `Failed to read file: ${(err as Error).message}` }
+            } else {
+                // File path mode – read from disk
+                try {
+                    const buf = await readFile(rawPath!)
+                    if (buf.length > MAX_FILE_SIZE) {
+                        return { success: false, output: `File is too large (${(buf.length / 1024 / 1024).toFixed(1)} MB). Maximum supported size is 10 MB.` }
+                    }
+                    content = buf.toString('utf-8')
+                } catch (err) {
+                    return { success: false, output: `Failed to read file: ${(err as Error).message}` }
+                }
+                fileName = basename(rawPath!)
             }
 
             if (!content.trim()) {
-                return { success: false, output: 'File is empty.' }
+                return { success: false, output: 'Document content is empty.' }
             }
 
-            const fileName = basename(rawPath)
             const mem = getAgentMemory()
             const uniqueName = await mem.resolveUniqueSourceFile(fileName, resolved.spaceId)
             const chunks = await mem.store(content, uniqueName, resolved.spaceId)

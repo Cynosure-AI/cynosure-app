@@ -70,7 +70,7 @@ function displayTitle(conv: { title: string; origin?: string }): string {
     <div class="px-3 py-2.5 border-b border-zinc-800/60 flex items-center justify-between">
       <span class="text-xs font-medium text-zinc-500 uppercase tracking-wider">Chat History</span>
       <button
-        v-if="chatStore.conversations.length > 0"
+        v-if="chatStore.sortedConversations.length > 0"
         class="p-1 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
         title="Clear all history"
         @click="showClearConfirm = true"
@@ -85,7 +85,7 @@ function displayTitle(conv: { title: string; origin?: string }): string {
     <!-- Conversation list -->
     <div class="flex-1 overflow-y-auto">
       <div
-        v-for="conv in chatStore.conversations"
+        v-for="conv in chatStore.sortedConversations"
         :key="conv.id"
         class="group flex items-center px-3 py-2.5 mx-2 my-0.5 rounded-lg cursor-pointer transition-colors hover:bg-zinc-800/60"
         :class="{ 'bg-zinc-800': conv.id === chatStore.activeConversationId }"
@@ -145,7 +145,7 @@ function displayTitle(conv: { title: string; origin?: string }): string {
       </div>
 
       <div
-        v-if="chatStore.conversations.length === 0"
+        v-if="chatStore.sortedConversations.length === 0"
         class="px-4 py-8 text-center text-zinc-600 text-sm"
       >
         No conversations yet
