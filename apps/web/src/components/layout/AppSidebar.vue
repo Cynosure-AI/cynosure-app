@@ -538,6 +538,7 @@ const settingsItems: NavItem[] = [
   .sidebar-collapsed .section-separator {
     margin: 0.375rem auto 0.375rem;
     width: 60%;
+    opacity: 1;
   }
   .sidebar-collapsed .brand-area {
     justify-content: center;

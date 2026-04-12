@@ -57,7 +57,7 @@ watch(() => props.agent.providerId, (newId) => {
 </script>
 
 <template>
-  <div class="space-y-5">
+  <div class="space-y-5 mb-6">
     <!-- Icon -->
     <IconUpload
       :icon-url="agent.iconUrl"

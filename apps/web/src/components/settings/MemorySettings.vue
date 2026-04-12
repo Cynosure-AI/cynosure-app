@@ -238,10 +238,6 @@ async function manualClearDb() {
 
 <template>
   <div>
-    <h2 class="text-lg font-semibold text-zinc-200 mb-4">
-      Memory & Embeddings
-    </h2>
-
     <!-- Embedding Model -->
     <div class="rounded-lg border border-zinc-700 bg-zinc-800 p-4 space-y-4 mb-4">
       <div>
