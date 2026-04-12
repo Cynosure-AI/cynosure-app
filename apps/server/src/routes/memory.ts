@@ -198,18 +198,20 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const db = getDb()
     const row = db.prepare("SELECT value_json FROM settings WHERE key = 'documentParser'").get() as { value_json: string } | undefined
     if (row) {
-      return JSON.parse(row.value_json) as { ocrEnabled: boolean }
+      const cfg = JSON.parse(row.value_json) as { ocrEnabled: boolean; ocrLanguage?: string }
+      return { ocrEnabled: cfg.ocrEnabled, ocrLanguage: cfg.ocrLanguage || 'eng' }
     }
-    return { ocrEnabled: false }
+    return { ocrEnabled: false, ocrLanguage: 'eng' }
   })
 
   // POST /api/memory/parser/configure — set document parser config
-  app.post<{ Body: { ocrEnabled: boolean } }>('/parser/configure', async (req) => {
-    const { ocrEnabled } = req.body
+  app.post<{ Body: { ocrEnabled: boolean; ocrLanguage?: string } }>('/parser/configure', async (req) => {
+    const { ocrEnabled, ocrLanguage } = req.body
+    const lang = (ocrLanguage || 'eng').trim()
     const db = getDb()
     db.prepare(
       "INSERT OR REPLACE INTO settings (key, value_json) VALUES ('documentParser', ?)"
-    ).run(JSON.stringify({ ocrEnabled: !!ocrEnabled }))
-    return { success: true, ocrEnabled: !!ocrEnabled }
+    ).run(JSON.stringify({ ocrEnabled: !!ocrEnabled, ocrLanguage: lang }))
+    return { success: true, ocrEnabled: !!ocrEnabled, ocrLanguage: lang }
   })
 }

@@ -20,25 +20,26 @@ export function isParseableDocument(filename: string): boolean {
 }
 
 /** Read the OCR enabled flag from DB settings. */
-function isOcrEnabled(): boolean {
+function getParserConfig(): { ocrEnabled: boolean; ocrLanguage: string } {
     try {
         const db = getDb()
         const row = db.prepare("SELECT value_json FROM settings WHERE key = 'documentParser'").get() as { value_json: string } | undefined
         if (row) {
-            const cfg = JSON.parse(row.value_json) as { ocrEnabled?: boolean }
-            return !!cfg.ocrEnabled
+            const cfg = JSON.parse(row.value_json) as { ocrEnabled?: boolean; ocrLanguage?: string }
+            return { ocrEnabled: !!cfg.ocrEnabled, ocrLanguage: cfg.ocrLanguage || 'eng' }
         }
     } catch { /* DB not ready */ }
-    return false
+    return { ocrEnabled: false, ocrLanguage: 'eng' }
 }
 
 /** Parse a document buffer and return structured Markdown text */
 export async function parseDocument(buffer: Buffer, filename: string): Promise<string> {
-    const ocr = isOcrEnabled()
+    const { ocrEnabled: ocr, ocrLanguage } = getParserConfig()
     const ast = await parseOffice(buffer, {
         outputErrorToConsole: false,
         extractAttachments: ocr,
         ocr,
+        ocrLanguage,
     })
 
     const lines: string[] = []

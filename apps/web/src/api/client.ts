@@ -587,9 +587,9 @@ export const api = {
     configureChunking: (opts: { chunkSize: number; chunkOverlap: number }) =>
       post<{ success: boolean; chunkSize: number; chunkOverlap: number }>('/api/memory/chunking/configure', opts),
     getParserConfig: () =>
-      get<{ ocrEnabled: boolean }>('/api/memory/parser/config'),
-    configureParser: (opts: { ocrEnabled: boolean }) =>
-      post<{ success: boolean; ocrEnabled: boolean }>('/api/memory/parser/configure', opts),
+      get<{ ocrEnabled: boolean; ocrLanguage: string }>('/api/memory/parser/config'),
+    configureParser: (opts: { ocrEnabled: boolean; ocrLanguage?: string }) =>
+      post<{ success: boolean; ocrEnabled: boolean; ocrLanguage: string }>('/api/memory/parser/configure', opts),
     onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>
       onWsEvent('memory:reembed-progress', cb as WsHandler)
   },
