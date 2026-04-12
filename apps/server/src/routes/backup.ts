@@ -105,7 +105,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
     app.get<{ Querystring: { modules?: string } }>(
         '/export',
         async (req, reply) => {
-            const requested = (req.query.modules || 'agents,providers,mcp,settings,channels,memory')
+            const requested = (req.query.modules || 'agents,providers,mcp,settings,channels,memory,usage')
                 .split(',')
                 .map((m) => m.trim())
 
@@ -234,6 +234,21 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 archive.append(JSON.stringify({ spaces, assignments }, null, 2), { name: 'memory/spaces.json' })
                 archive.append(JSON.stringify({ chunkOverlap, documents }, null, 2), { name: 'memory/documents.json' })
                 manifest.modules.memory = { count: documents.length }
+            }
+
+            // --- Usage statistics (conversations, messages, execution data) ---
+            if (requested.includes('usage')) {
+                const db = getDb()
+                const conversations = db.prepare('SELECT * FROM conversations ORDER BY created_at').all()
+                const messages = db.prepare('SELECT * FROM messages ORDER BY created_at').all()
+                const executionLogs = db.prepare('SELECT * FROM execution_logs ORDER BY created_at').all()
+                const executionSteps = db.prepare('SELECT * FROM execution_steps ORDER BY created_at').all()
+
+                archive.append(JSON.stringify(conversations, null, 2), { name: 'usage/conversations.json' })
+                archive.append(JSON.stringify(messages, null, 2), { name: 'usage/messages.json' })
+                archive.append(JSON.stringify(executionLogs, null, 2), { name: 'usage/execution_logs.json' })
+                archive.append(JSON.stringify(executionSteps, null, 2), { name: 'usage/execution_steps.json' })
+                manifest.modules.usage = { count: conversations.length + messages.length }
             }
 
             // Write manifest
@@ -608,6 +623,91 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 res.errors.push((e as Error).message)
             }
             results.memory = res
+        }
+
+        // --- Restore Usage statistics ---
+        if (requestedModules.includes('usage') && manifest.modules.usage) {
+            const res = { restored: 0, errors: [] as string[] }
+            try {
+                // Conversations
+                const convEntry = zip.getEntry('usage/conversations.json')
+                if (convEntry) {
+                    const conversations = JSON.parse(convEntry.getData().toString('utf-8')) as Record<string, unknown>[]
+                    for (const c of conversations) {
+                        try {
+                            db.prepare(
+                                'INSERT OR REPLACE INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)'
+                            ).run(c.id, c.title || '', c.created_at || Date.now(), c.updated_at || Date.now())
+                            res.restored++
+                        } catch (e) {
+                            res.errors.push(`Conversation: ${(e as Error).message}`)
+                        }
+                    }
+                }
+
+                // Messages
+                const msgEntry = zip.getEntry('usage/messages.json')
+                if (msgEntry) {
+                    const messages = JSON.parse(msgEntry.getData().toString('utf-8')) as Record<string, unknown>[]
+                    for (const m of messages) {
+                        try {
+                            db.prepare(
+                                `INSERT OR REPLACE INTO messages (id, conversation_id, role, content, tool_calls_json, tool_call_id, provider, model, prompt_tokens, completion_tokens, latency_ms, created_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                            ).run(
+                                m.id, m.conversation_id, m.role, m.content,
+                                m.tool_calls_json || null, m.tool_call_id || null,
+                                m.provider || null, m.model || null,
+                                m.prompt_tokens ?? null, m.completion_tokens ?? null,
+                                m.latency_ms ?? null, m.created_at || Date.now()
+                            )
+                            res.restored++
+                        } catch (e) {
+                            res.errors.push(`Message: ${(e as Error).message}`)
+                        }
+                    }
+                }
+
+                // Execution logs
+                const logsEntry = zip.getEntry('usage/execution_logs.json')
+                if (logsEntry) {
+                    const logs = JSON.parse(logsEntry.getData().toString('utf-8')) as Record<string, unknown>[]
+                    for (const log of logs) {
+                        try {
+                            db.prepare(
+                                `INSERT OR REPLACE INTO execution_logs (id, task_id, conversation_id, iteration, event_type, data_json, created_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?)`
+                            ).run(log.id, log.task_id, log.conversation_id, log.iteration ?? 0, log.event_type, log.data_json, log.created_at || Date.now())
+                        } catch (e) {
+                            res.errors.push(`Execution log: ${(e as Error).message}`)
+                        }
+                    }
+                }
+
+                // Execution steps
+                const stepsEntry = zip.getEntry('usage/execution_steps.json')
+                if (stepsEntry) {
+                    const steps = JSON.parse(stepsEntry.getData().toString('utf-8')) as Record<string, unknown>[]
+                    for (const s of steps) {
+                        try {
+                            db.prepare(
+                                `INSERT OR REPLACE INTO execution_steps (id, conversation_id, task_id, iteration, status, message, plan, tool_calls_json, result_json, tokens_used, created_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                            ).run(
+                                s.id, s.conversation_id, s.task_id || null, s.iteration ?? 0,
+                                s.status, s.message || null, s.plan || null,
+                                s.tool_calls_json || null, s.result_json || null,
+                                s.tokens_used ?? null, s.created_at || Date.now()
+                            )
+                        } catch (e) {
+                            res.errors.push(`Execution step: ${(e as Error).message}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                res.errors.push((e as Error).message)
+            }
+            results.usage = res
         }
 
         return { success: true, results }

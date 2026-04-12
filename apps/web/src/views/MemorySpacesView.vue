@@ -382,7 +382,7 @@ onMounted(() => loadSpaces())
     <div class="max-w-5xl mx-auto px-6 py-6">
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h1 class="text-xl font-semibold text-zinc-100">
+          <h1 class="text-2xl font-bold text-zinc-100">
             Memory Spaces
           </h1>
           <p class="text-sm text-zinc-500 mt-1">

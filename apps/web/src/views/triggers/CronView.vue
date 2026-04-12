@@ -490,7 +490,7 @@ onUnmounted(() => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
         @click.self="showAddCron = false"
       >
-        <div class="w-full max-w-lg md:max-w-3xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
+        <div class="w-full max-w-lg md:max-w-4xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
           <h2 class="text-lg font-semibold text-zinc-100 mb-4">
             {{ editingJobId ? 'Edit Cron Job' : 'Add Cron Job' }}
           </h2>

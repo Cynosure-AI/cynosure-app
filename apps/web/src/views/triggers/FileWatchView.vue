@@ -395,7 +395,7 @@ onUnmounted(() => {
     <ModalDialog
       :show="showDialog"
       :title="editingId ? 'Edit File Watcher' : 'New File Watcher'"
-      max-width="max-w-2xl"
+      max-width="max-w-3xl"
       @close="showDialog = false"
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -428,7 +428,7 @@ onUnmounted(() => {
             <label class="block text-xs text-zinc-400 mb-1">Paths to watch (one per line)</label>
             <textarea
               v-model="dlgPaths"
-              rows="3"
+              rows="4"
               placeholder="/home/user/project/src&#10;/home/user/project/config"
               class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
             />
@@ -439,7 +439,7 @@ onUnmounted(() => {
             <label class="block text-xs text-zinc-400 mb-1">Ignore patterns (one glob per line)</label>
             <textarea
               v-model="dlgIgnorePatterns"
-              rows="2"
+              rows="3"
               placeholder="node_modules/**&#10;.git/**"
               class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
             />
@@ -453,7 +453,7 @@ onUnmounted(() => {
             <label class="block text-xs text-zinc-400 mb-1">Prompt (optional instructions for the agent)</label>
             <textarea
               v-model="dlgPrompt"
-              rows="5"
+              rows="7"
               placeholder="Analyze the changes and update the documentation…"
               class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
             />
