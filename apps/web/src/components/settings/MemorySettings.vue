@@ -4,6 +4,7 @@ import { useProviderStore } from '../../stores/provider.store'
 import { api } from '../../api/client'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
+import MultiSelect from '../shared/MultiSelect.vue'
 
 const providerStore = useProviderStore()
 
@@ -24,7 +25,47 @@ const chunkSaving = ref(false)
 
 // Document parser state
 const ocrEnabled = ref(false)
+const ocrLanguage = ref('eng')
 const ocrSaving = ref(false)
+
+const OCR_LANGUAGE_OPTIONS = [
+  { value: 'eng', label: 'English', hint: 'eng' },
+  { value: 'deu', label: 'German', hint: 'deu' },
+  { value: 'fra', label: 'French', hint: 'fra' },
+  { value: 'spa', label: 'Spanish', hint: 'spa' },
+  { value: 'ita', label: 'Italian', hint: 'ita' },
+  { value: 'por', label: 'Portuguese', hint: 'por' },
+  { value: 'nld', label: 'Dutch', hint: 'nld' },
+  { value: 'pol', label: 'Polish', hint: 'pol' },
+  { value: 'rus', label: 'Russian', hint: 'rus' },
+  { value: 'jpn', label: 'Japanese', hint: 'jpn' },
+  { value: 'kor', label: 'Korean', hint: 'kor' },
+  { value: 'chi_sim', label: 'Chinese (Simplified)', hint: 'chi_sim' },
+  { value: 'chi_tra', label: 'Chinese (Traditional)', hint: 'chi_tra' },
+  { value: 'ara', label: 'Arabic', hint: 'ara' },
+  { value: 'hin', label: 'Hindi', hint: 'hin' },
+  { value: 'tur', label: 'Turkish', hint: 'tur' },
+  { value: 'swe', label: 'Swedish', hint: 'swe' },
+  { value: 'nor', label: 'Norwegian', hint: 'nor' },
+  { value: 'dan', label: 'Danish', hint: 'dan' },
+  { value: 'fin', label: 'Finnish', hint: 'fin' },
+  { value: 'ces', label: 'Czech', hint: 'ces' },
+  { value: 'ron', label: 'Romanian', hint: 'ron' },
+  { value: 'hun', label: 'Hungarian', hint: 'hun' },
+  { value: 'ukr', label: 'Ukrainian', hint: 'ukr' },
+  { value: 'tha', label: 'Thai', hint: 'tha' },
+  { value: 'vie', label: 'Vietnamese', hint: 'vie' },
+]
+
+const selectedOcrLangs = computed({
+  get: () => ocrLanguage.value.split('+').filter(Boolean),
+  set: (val: string[]) => { ocrLanguage.value = val.join('+') },
+})
+
+async function onOcrLangsUpdate(langs: string[]) {
+  selectedOcrLangs.value = langs
+  await saveOcrLanguage()
+}
 
 // Confirmation dialog
 const showDropConfirm = ref(false)
@@ -95,14 +136,23 @@ async function loadParserConfig() {
   try {
     const config = await api.memory.getParserConfig()
     ocrEnabled.value = config.ocrEnabled
+    ocrLanguage.value = config.ocrLanguage || 'eng'
   } catch { /* defaults */ }
 }
 
 async function toggleOcr() {
   ocrSaving.value = true
   try {
-    const res = await api.memory.configureParser({ ocrEnabled: !ocrEnabled.value })
+    const res = await api.memory.configureParser({ ocrEnabled: !ocrEnabled.value, ocrLanguage: ocrLanguage.value })
     ocrEnabled.value = res.ocrEnabled
+  } catch { /* error handling */ }
+  ocrSaving.value = false
+}
+
+async function saveOcrLanguage() {
+  ocrSaving.value = true
+  try {
+    await api.memory.configureParser({ ocrEnabled: ocrEnabled.value, ocrLanguage: ocrLanguage.value.trim() || 'eng' })
   } catch { /* error handling */ }
   ocrSaving.value = false
 }
@@ -382,6 +432,18 @@ async function manualClearDb() {
             :class="ocrEnabled ? 'translate-x-6' : 'translate-x-1'"
           />
         </button>
+      </div>
+
+      <!-- OCR Language Multi-select -->
+      <div v-if="ocrEnabled">
+        <label class="text-xs text-zinc-400 mb-1 block">OCR Language(s)</label>
+        <MultiSelect
+          :model-value="selectedOcrLangs"
+          :options="OCR_LANGUAGE_OPTIONS"
+          :min-selected="1"
+          placeholder="Select languages..."
+          @update:model-value="onOcrLangsUpdate"
+        />
       </div>
     </div>
 
