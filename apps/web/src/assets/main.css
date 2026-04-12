@@ -218,8 +218,8 @@
     var(--cp-yellow) 0%,
     var(--cp-yellow) 60%,
     transparent 60%,
-    transparent 62%,
-    var(--cp-green) 62%,
+    transparent 61%,
+    var(--cp-green) 61%,
     var(--cp-green) 80%,
     transparent 80%
   );
@@ -376,6 +376,29 @@
   text-transform: uppercase;
 }
 
+/* Section header labels: warm red-tinted text */
+[data-theme="arasaka"] label,
+[data-theme="arasaka"] .text-zinc-400 {
+  color: #c47080;
+}
+
+/* Section dividers: red accent lines */
+[data-theme="arasaka"] hr,
+[data-theme="arasaka"] .border-b {
+  border-color: var(--cb-red-dim);
+}
+
+/* Toggle switches: cyan accent when active */
+[data-theme="arasaka"] input[type="checkbox"]:checked {
+  accent-color: var(--cb-cyan);
+}
+
+/* Cards & panels: subtle red left-border accent */
+[data-theme="arasaka"] .bg-zinc-800,
+[data-theme="arasaka"] .bg-zinc-900\/50 {
+  border: 1px solid var(--cb-red-dim);
+}
+
 /* Input focus: neon border + inner glow */
 [data-theme="arasaka"] input:focus,
 [data-theme="arasaka"] textarea:focus,
@@ -390,6 +413,15 @@
 /* Button hover glow */
 [data-theme="arasaka"] button:hover {
   text-shadow: 0 0 6px var(--cb-cyan-glow);
+}
+
+/* Primary buttons: stronger cyan glow border */
+[data-theme="arasaka"] button.bg-blue-600,
+[data-theme="arasaka"] button.bg-blue-500 {
+  box-shadow:
+    0 0 8px var(--cb-cyan-glow),
+    inset 0 0 6px rgba(0, 220, 232, 0.08);
+  border: 1px solid rgba(0, 220, 232, 0.35);
 }
 
 /* Black text on cyan accent backgrounds (blue→cyan remap) */
