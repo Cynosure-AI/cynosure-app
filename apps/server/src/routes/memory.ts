@@ -192,4 +192,24 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     parser.refreshConfig()
     return { success: true, chunkSize, chunkOverlap }
   })
+
+  // GET /api/memory/parser/config — get document parser config (OCR etc.)
+  app.get('/parser/config', async () => {
+    const db = getDb()
+    const row = db.prepare("SELECT value_json FROM settings WHERE key = 'documentParser'").get() as { value_json: string } | undefined
+    if (row) {
+      return JSON.parse(row.value_json) as { ocrEnabled: boolean }
+    }
+    return { ocrEnabled: false }
+  })
+
+  // POST /api/memory/parser/configure — set document parser config
+  app.post<{ Body: { ocrEnabled: boolean } }>('/parser/configure', async (req) => {
+    const { ocrEnabled } = req.body
+    const db = getDb()
+    db.prepare(
+      "INSERT OR REPLACE INTO settings (key, value_json) VALUES ('documentParser', ?)"
+    ).run(JSON.stringify({ ocrEnabled: !!ocrEnabled }))
+    return { success: true, ocrEnabled: !!ocrEnabled }
+  })
 }

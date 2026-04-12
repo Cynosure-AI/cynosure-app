@@ -22,6 +22,10 @@ const chunkSize = ref(512)
 const chunkOverlap = ref(64)
 const chunkSaving = ref(false)
 
+// Document parser state
+const ocrEnabled = ref(false)
+const ocrSaving = ref(false)
+
 // Confirmation dialog
 const showDropConfirm = ref(false)
 
@@ -53,6 +57,7 @@ onMounted(async () => {
   await providerStore.loadProviders()
   await loadEmbeddingConfig()
   await loadChunkingConfig()
+  await loadParserConfig()
 })
 
 async function loadEmbeddingConfig() {
@@ -84,6 +89,22 @@ async function saveChunking() {
     })
   } catch { /* error handling */ }
   chunkSaving.value = false
+}
+
+async function loadParserConfig() {
+  try {
+    const config = await api.memory.getParserConfig()
+    ocrEnabled.value = config.ocrEnabled
+  } catch { /* defaults */ }
+}
+
+async function toggleOcr() {
+  ocrSaving.value = true
+  try {
+    const res = await api.memory.configureParser({ ocrEnabled: !ocrEnabled.value })
+    ocrEnabled.value = res.ocrEnabled
+  } catch { /* error handling */ }
+  ocrSaving.value = false
 }
 
 async function fetchEmbModels(providerId: string) {
@@ -335,6 +356,33 @@ async function manualClearDb() {
         <span v-if="chunkSaving">Saving...</span>
         <span v-else>Save Chunking Config</span>
       </button>
+    </div>
+
+    <!-- Document Parsing – OCR -->
+    <div class="rounded-lg border border-zinc-700 bg-zinc-800 p-4 space-y-4 mb-4">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h3 class="text-sm font-medium text-zinc-200 mb-1">
+            OCR for Document Images
+          </h3>
+          <p class="text-xs text-zinc-500">
+            When enabled, images embedded in uploaded documents (PDFs, DOCX, PPTX, etc.) will be
+            processed with OCR to extract visible text. Useful for scanned documents, diagrams with
+            labels, or presentations with text inside images. Increases processing time.
+          </p>
+        </div>
+        <button
+          :disabled="ocrSaving"
+          class="shrink-0 mt-0.5 relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none"
+          :class="ocrEnabled ? 'bg-blue-600' : 'bg-zinc-600'"
+          @click="toggleOcr"
+        >
+          <span
+            class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+            :class="ocrEnabled ? 'translate-x-6' : 'translate-x-1'"
+          />
+        </button>
+      </div>
     </div>
 
     <!-- Danger Zone -->
