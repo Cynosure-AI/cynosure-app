@@ -57,6 +57,7 @@ const sourcesExpanded = ref(false)
 const copied = ref(false)
 const isEditing = ref(false)
 const editContent = ref('')
+const lightboxSrc = ref<string | null>(null)
 
 function copyContent(): void {
   navigator.clipboard.writeText(props.content)
@@ -322,7 +323,9 @@ const isUser = computed(() => props.role === 'user')
             v-for="(url, idx) in imageDataUrls"
             :key="idx"
             :src="url"
-            class="h-32 rounded-lg object-cover border border-white/20"
+            class="h-32 rounded-lg object-cover border border-white/20 cursor-pointer hover:opacity-80 transition-opacity"
+            title="Click to enlarge"
+            @click="lightboxSrc = url"
           >
         </div>
         <div
@@ -387,7 +390,9 @@ const isUser = computed(() => props.role === 'user')
           v-for="(url, idx) in imageDataUrls"
           :key="idx"
           :src="url"
-          class="max-w-full rounded-lg border border-zinc-600"
+          class="max-w-full rounded-lg border border-zinc-600 cursor-pointer hover:opacity-80 transition-opacity"
+          title="Click to enlarge"
+          @click="lightboxSrc = url"
         >
       </div>
 
@@ -464,6 +469,33 @@ const isUser = computed(() => props.role === 'user')
       U
     </div>
   </div>
+
+  <!-- Image lightbox -->
+  <Teleport to="body">
+    <div
+      v-if="lightboxSrc"
+      class="fixed inset-0 z-100 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      tabindex="0"
+      @click.self="lightboxSrc = null"
+      @keydown.escape="lightboxSrc = null"
+    >
+      <button
+        class="absolute top-4 right-4 p-2 rounded-full bg-zinc-800/80 text-zinc-300 hover:text-white hover:bg-zinc-700 transition-colors z-10"
+        title="Close"
+        @click="lightboxSrc = null"
+      >
+        <Icon
+          icon="mdi:close"
+          class="w-5 h-5"
+        />
+      </button>
+      <img
+        :src="lightboxSrc"
+        class="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl object-contain"
+        @click.stop
+      >
+    </div>
+  </Teleport>
 </template>
 
 <style>
