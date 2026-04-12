@@ -4,6 +4,7 @@ import { useProviderStore } from '../../stores/provider.store'
 import type { LLMProviderConfig } from '../../api/client'
 import { useProviderLogos } from '../../composables/useProviderLogos'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
+import { Icon } from '@iconify/vue'
 
 const { providerLogos } = useProviderLogos()
 
@@ -12,6 +13,7 @@ const providerStore = useProviderStore()
 const showAddForm = ref(false)
 const editingProviderId = ref<string | null>(null)
 const testingId = ref<string | null>(null)
+const showApiKey = ref(false)
 const testResult = ref<Map<string, boolean>>(new Map())
 const fetchedModels = ref<string[]>([])
 const loadingModels = ref(false)
@@ -160,8 +162,13 @@ function startEditProvider(provider: LLMProviderConfig): void {
   newProvider.apiKey = provider.apiKey || ''
   newProvider.defaultModel = provider.defaultModel
   fetchedModels.value = []
+  showApiKey.value = false
   showAddForm.value = true
   fetchModelsForEdit(provider.id)
+}
+
+async function setDefaultProvider(id: string): Promise<void> {
+  await providerStore.setActive(id)
 }
 
 function cancelForm(): void {
@@ -298,12 +305,22 @@ function getProviderIcon(type: string): string {
 
       <div>
         <label class="block text-sm text-zinc-400 mb-1">API Key</label>
-        <input
-          v-model="newProvider.apiKey"
-          type="password"
-          placeholder="sk-..."
-          class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
-        >
+        <div class="relative">
+          <input
+            v-model="newProvider.apiKey"
+            :type="showApiKey ? 'text' : 'password'"
+            placeholder="sk-..."
+            class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+          >
+          <button
+            type="button"
+            class="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+            :title="showApiKey ? 'Hide API key' : 'Show API key'"
+            @click="showApiKey = !showApiKey"
+          >
+            <Icon :icon="showApiKey ? 'lucide:eye-off' : 'lucide:eye'" class="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       <div>
@@ -390,6 +407,10 @@ function getProviderIcon(type: string): string {
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
             <span class="font-medium text-zinc-200">{{ provider.name }}</span>
+            <span
+              v-if="provider.id === providerStore.activeProviderId"
+              class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium"
+            >Default</span>
           </div>
           <div class="text-sm text-zinc-500 truncate">
             {{ provider.defaultModel }} · {{ provider.type }}
@@ -398,6 +419,23 @@ function getProviderIcon(type: string): string {
 
         <!-- Actions -->
         <div class="flex items-center gap-2">
+          <button
+            :disabled="provider.id === providerStore.activeProviderId"
+            class="p-1.5 rounded-md transition-colors"
+            :class="
+              provider.id === providerStore.activeProviderId
+                ? 'text-blue-400 cursor-default'
+                : 'text-zinc-500 hover:text-blue-400 hover:bg-zinc-700'
+            "
+            :title="provider.id === providerStore.activeProviderId ? 'Default provider' : 'Set as default'"
+            @click="setDefaultProvider(provider.id)"
+          >
+            <Icon
+              :icon="provider.id === providerStore.activeProviderId ? 'lucide:star' : 'lucide:star'"
+              class="w-4 h-4"
+              :class="{ 'fill-current': provider.id === providerStore.activeProviderId }"
+            />
+          </button>
           <button
             :disabled="testingId === provider.id"
             class="px-2.5 py-1 text-xs rounded-md transition-colors"

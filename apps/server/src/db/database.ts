@@ -108,6 +108,12 @@ function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_execution_steps_conversation ON execution_steps(conversation_id);
   `)
 
+  // Add is_default column to providers (migration for existing DBs)
+  const providerCols = db.prepare("PRAGMA table_info(providers)").all() as { name: string }[]
+  if (!providerCols.some((c) => c.name === 'is_default')) {
+    db.exec('ALTER TABLE providers ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0')
+  }
+
   // Add task_id column to execution_steps (migration for existing DBs)
   const stepCols = db.prepare("PRAGMA table_info(execution_steps)").all() as { name: string }[]
   if (!stepCols.some((c) => c.name === 'task_id')) {
