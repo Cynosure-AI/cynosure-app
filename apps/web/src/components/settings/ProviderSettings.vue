@@ -214,10 +214,7 @@ function getProviderIcon(type: string): string {
 
 <template>
   <div>
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold text-zinc-200">
-        LLM Providers
-      </h2>
+    <div class="flex items-center justify-end mb-4">
       <button
         class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
         @click="showAddForm ? cancelForm() : startAddProvider()"
@@ -318,7 +315,10 @@ function getProviderIcon(type: string): string {
             :title="showApiKey ? 'Hide API key' : 'Show API key'"
             @click="showApiKey = !showApiKey"
           >
-            <Icon :icon="showApiKey ? 'lucide:eye-off' : 'lucide:eye'" class="w-4 h-4" />
+            <Icon
+              :icon="showApiKey ? 'lucide:eye-off' : 'lucide:eye'"
+              class="w-4 h-4"
+            />
           </button>
         </div>
       </div>

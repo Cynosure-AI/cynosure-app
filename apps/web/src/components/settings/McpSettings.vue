@@ -39,16 +39,6 @@ onUnmounted(() => {
 
 <template>
   <div>
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold text-zinc-200">
-        MCP Servers
-      </h2>
-    </div>
-
-    <p class="text-xs text-zinc-500 mb-4">
-      Connect MCP (Model Context Protocol) servers to add external tools the LLM can use.
-    </p>
-
     <!-- Tabs -->
     <TabBar
       v-model="activeTab"

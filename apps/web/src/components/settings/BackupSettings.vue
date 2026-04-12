@@ -13,7 +13,8 @@ const exportModules = reactive({
   mcp: true,
   settings: true,
   channels: true,
-  memory: true
+  memory: true,
+  usage: true
 })
 const exporting = ref(false)
 const exportError = ref('')
@@ -127,7 +128,8 @@ const moduleLabels: Record<string, { label: string; icon: string; description: s
   mcp: { label: 'MCP Servers', icon: 'lucide:plug', description: 'MCP server configurations and connection settings' },
   settings: { label: 'Settings', icon: 'lucide:sliders-horizontal', description: 'Tool approvals, cron jobs, and app settings' },
   channels: { label: 'Channels', icon: 'lucide:radio', description: 'Channel configurations (Telegram, etc.)' },
-  memory: { label: 'Memory Spaces', icon: 'lucide:book-open', description: 'Memory space definitions, agent assignments, and document content (re-embedded on import)' }
+  memory: { label: 'Memory Spaces', icon: 'lucide:book-open', description: 'Memory space definitions, agent assignments, and document content (re-embedded on import)' },
+  usage: { label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Conversations, messages, and execution history used for usage metrics' }
 }
 
 // ── Reset state ──
@@ -152,15 +154,6 @@ async function doReset(): Promise<void> {
 
 <template>
   <div>
-    <div class="mb-6">
-      <h2 class="text-lg font-semibold text-zinc-200">
-        Backup & Restore
-      </h2>
-      <p class="text-xs text-zinc-500 mt-1">
-        Export your OpenAgent configuration as a zip file, or restore from a previous backup.
-      </p>
-    </div>
-
     <!-- ═══════════════════ EXPORT ═══════════════════ -->
     <section class="mb-8">
       <h3 class="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
