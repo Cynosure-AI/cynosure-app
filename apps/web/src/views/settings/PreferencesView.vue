@@ -177,27 +177,6 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
             <ToggleSwitch v-model="prefs.generateTitle" />
           </div>
         </div>
-
-        <!-- Tool Approvals Info -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-          <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
-              <Icon
-                icon="lucide:shield-check"
-                class="w-5 h-5 text-zinc-400"
-              />
-            </div>
-            <div>
-              <h3 class="text-sm font-medium text-zinc-200">
-                Tool Approvals
-              </h3>
-              <p class="text-xs text-zinc-500 mt-0.5">
-                Configure which tools run automatically and which require confirmation. Manage
-                approvals per tool in the MCP settings.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>

@@ -332,6 +332,13 @@ export const useChatStore = defineStore('chat', () => {
 
   // ── Computed ──
 
+  const sortedConversations = computed(() =>
+    [...conversations.value].sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+      return b.updatedAt - a.updatedAt
+    })
+  )
+
   const activeConversation = computed(() =>
     conversations.value.find((c) => c.id === activeConversationId.value)
   )
@@ -339,6 +346,7 @@ export const useChatStore = defineStore('chat', () => {
   return {
     // Core state
     conversations,
+    sortedConversations,
     activeConversationId,
     messages,
     activeConversation,
