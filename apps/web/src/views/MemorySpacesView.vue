@@ -95,6 +95,11 @@ const moving = ref(false)
 const exporting = ref(false)
 const showMoveDialog = ref(false)
 
+// Document viewer modal
+const showDocumentModal = ref(false)
+const modalSourceFile = ref('')
+const modalViewMode = ref<'merged' | 'chunks'>('merged')
+
 // Upload
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
@@ -149,8 +154,9 @@ async function loadGroupChunks(sourceFile: string) {
 }
 
 function toggleExpandGroup(sourceFile: string) {
-  if (expandedGroup.value === sourceFile) { expandedGroup.value = null; return }
-  expandedGroup.value = sourceFile
+  modalSourceFile.value = sourceFile
+  modalViewMode.value = 'merged'
+  showDocumentModal.value = true
   loadGroupChunks(sourceFile)
 }
 
@@ -299,7 +305,7 @@ async function handleReingestFile(event: Event) {
 
 // View mode helpers
 function getGroupViewMode(sf: string): 'merged' | 'chunks' { return groupViewMode.value[sf] || 'merged' }
-function setGroupViewMode(sf: string, mode: 'merged' | 'chunks') { groupViewMode.value = { ...groupViewMode.value, [sf]: mode } }
+function setGroupViewMode(sf: string, mode: 'merged' | 'chunks') { groupViewMode.value = { ...groupViewMode.value, [sf]: mode }; modalViewMode.value = mode }
 
 function findOverlap(a: string, b: string): number {
   const maxLen = Math.min(a.length, b.length, 300)
@@ -731,91 +737,15 @@ onMounted(() => loadSpaces())
                 </button>
                 <Icon
                   v-if="!groupChunksLoading.has(group.sourceFile)"
-                  icon="lucide:chevron-down"
-                  class="w-4 h-4 text-zinc-500 transition-transform shrink-0"
-                  :class="{ 'rotate-180': expandedGroup === group.sourceFile }"
+                  icon="lucide:eye"
+                  class="w-4 h-4 text-zinc-500 shrink-0"
+                  title="View document"
                 />
                 <Icon
                   v-else
                   icon="lucide:loader-2"
                   class="w-4 h-4 text-zinc-500 shrink-0 animate-spin"
                 />
-              </div>
-
-              <!-- Expanded content -->
-              <div
-                v-if="expandedGroup === group.sourceFile"
-                class="border-t border-zinc-800"
-              >
-                <div
-                  v-if="groupChunksLoading.has(group.sourceFile)"
-                  class="flex items-center justify-center gap-2 py-6 text-zinc-500 text-xs"
-                >
-                  <Icon
-                    icon="lucide:loader-2"
-                    class="w-4 h-4 animate-spin"
-                  />
-                  Loading chunks…
-                </div>
-
-                <template v-else-if="groupChunks.has(group.sourceFile)">
-                  <div class="flex items-center gap-1 px-3 py-2 border-b border-zinc-800/60">
-                    <button
-                      class="px-2.5 py-1 text-xs rounded-md transition-colors"
-                      :class="getGroupViewMode(group.sourceFile) === 'merged'
-                        ? 'bg-zinc-700 text-zinc-200'
-                        : 'text-zinc-500 hover:text-zinc-300'"
-                      @click="setGroupViewMode(group.sourceFile, 'merged')"
-                    >
-                      <Icon
-                        icon="lucide:file-text"
-                        class="w-3 h-3 inline mr-1"
-                      />
-                      Document
-                    </button>
-                    <button
-                      class="px-2.5 py-1 text-xs rounded-md transition-colors"
-                      :class="getGroupViewMode(group.sourceFile) === 'chunks'
-                        ? 'bg-zinc-700 text-zinc-200'
-                        : 'text-zinc-500 hover:text-zinc-300'"
-                      @click="setGroupViewMode(group.sourceFile, 'chunks')"
-                    >
-                      <Icon
-                        icon="lucide:layers"
-                        class="w-3 h-3 inline mr-1"
-                      />
-                      Chunks ({{ group.chunkCount }})
-                    </button>
-                    <div class="flex-1" />
-                  </div>
-
-                  <!-- Merged view -->
-                  <div
-                    v-if="getGroupViewMode(group.sourceFile) === 'merged'"
-                    class="p-3 max-h-80 overflow-y-auto"
-                  >
-                    <pre class="text-xs text-zinc-300 whitespace-pre-wrap font-mono leading-relaxed">{{ getMergedText(group.sourceFile) }}</pre>
-                  </div>
-
-                  <!-- Chunks view -->
-                  <div
-                    v-else
-                    class="divide-y divide-zinc-800/60 max-h-80 overflow-y-auto"
-                  >
-                    <div
-                      v-for="chunk in getLoadedChunks(group.sourceFile)"
-                      :key="chunk.id"
-                      class="px-3 py-2"
-                    >
-                      <div class="flex items-center gap-2 mb-1">
-                        <span class="text-[10px] font-mono text-zinc-600">
-                          #{{ (chunk.chunkIndex ?? 0) + 1 }}
-                        </span>
-                      </div>
-                      <pre class="text-xs text-zinc-400 whitespace-pre-wrap font-mono leading-relaxed">{{ chunk.text }}</pre>
-                    </div>
-                  </div>
-                </template>
               </div>
             </div>
           </div>
@@ -965,6 +895,117 @@ onMounted(() => loadSpaces())
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
+
+      <!-- Document Viewer Modal -->
+      <Teleport to="body">
+        <div
+          v-if="showDocumentModal && modalSourceFile"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          @click.self="showDocumentModal = false"
+        >
+          <div class="bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col">
+            <!-- Modal header -->
+            <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
+              <div class="flex items-center gap-3 min-w-0">
+                <Icon
+                  icon="lucide:file-text"
+                  class="w-5 h-5 text-zinc-400 shrink-0"
+                />
+                <div class="min-w-0">
+                  <h3 class="text-sm font-medium text-zinc-200 truncate">
+                    {{ modalSourceFile }}
+                  </h3>
+                  <p class="text-xs text-zinc-500">
+                    {{ groups.find(g => g.sourceFile === modalSourceFile)?.chunkCount || 0 }} chunks
+                  </p>
+                </div>
+              </div>
+              <button
+                class="p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg hover:bg-zinc-800 transition-colors"
+                @click="showDocumentModal = false"
+              >
+                <Icon
+                  icon="lucide:x"
+                  class="w-4 h-4"
+                />
+              </button>
+            </div>
+
+            <!-- View mode toggle -->
+            <div class="flex items-center gap-1 px-5 py-2.5 border-b border-zinc-800/60 shrink-0">
+              <button
+                class="px-3 py-1.5 text-xs rounded-md transition-colors"
+                :class="modalViewMode === 'merged'
+                  ? 'bg-zinc-700 text-zinc-200'
+                  : 'text-zinc-500 hover:text-zinc-300'"
+                @click="modalViewMode = 'merged'"
+              >
+                <Icon
+                  icon="lucide:file-text"
+                  class="w-3 h-3 inline mr-1"
+                />
+                Document
+              </button>
+              <button
+                class="px-3 py-1.5 text-xs rounded-md transition-colors"
+                :class="modalViewMode === 'chunks'
+                  ? 'bg-zinc-700 text-zinc-200'
+                  : 'text-zinc-500 hover:text-zinc-300'"
+                @click="modalViewMode = 'chunks'"
+              >
+                <Icon
+                  icon="lucide:layers"
+                  class="w-3 h-3 inline mr-1"
+                />
+                Chunks ({{ groups.find(g => g.sourceFile === modalSourceFile)?.chunkCount || 0 }})
+              </button>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-1 overflow-y-auto">
+              <div
+                v-if="groupChunksLoading.has(modalSourceFile)"
+                class="flex items-center justify-center gap-2 py-12 text-zinc-500 text-xs"
+              >
+                <Icon
+                  icon="lucide:loader-2"
+                  class="w-4 h-4 animate-spin"
+                />
+                Loading…
+              </div>
+
+              <template v-else-if="groupChunks.has(modalSourceFile)">
+                <!-- Merged view -->
+                <div
+                  v-if="modalViewMode === 'merged'"
+                  class="p-5"
+                >
+                  <pre class="text-xs text-zinc-300 whitespace-pre-wrap font-mono leading-relaxed">{{ getMergedText(modalSourceFile) }}</pre>
+                </div>
+
+                <!-- Chunks view -->
+                <div
+                  v-else
+                  class="divide-y divide-zinc-800/60"
+                >
+                  <div
+                    v-for="chunk in getLoadedChunks(modalSourceFile)"
+                    :key="chunk.id"
+                    class="px-5 py-3"
+                  >
+                    <div class="flex items-center gap-2 mb-1.5">
+                      <span class="text-[10px] font-mono text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
+                        Chunk #{{ (chunk.chunkIndex ?? 0) + 1 }}
+                      </span>
+                    </div>
+                    <pre class="text-xs text-zinc-400 whitespace-pre-wrap font-mono leading-relaxed">{{ chunk.text }}</pre>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
         </div>

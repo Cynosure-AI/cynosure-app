@@ -292,6 +292,7 @@ const settingsItems: NavItem[] = [
       </RouterLink>
 
       <!-- Triggers -->
+      <div class="section-separator" />
       <div class="section-label">
         Triggers
       </div>
@@ -311,6 +312,7 @@ const settingsItems: NavItem[] = [
       </RouterLink>
 
       <!-- Agents -->
+      <div class="section-separator" />
       <div class="section-label">
         Agents
       </div>
@@ -352,6 +354,7 @@ const settingsItems: NavItem[] = [
       </RouterLink>
       
       <!-- Instances -->
+      <div class="section-separator" />
       <div class="section-label">
         Instances
       </div>
@@ -382,6 +385,7 @@ const settingsItems: NavItem[] = [
 
 
       <!-- Settings -->
+      <div class="section-separator" />
       <div class="section-label">
         Settings
       </div>
@@ -511,6 +515,13 @@ const settingsItems: NavItem[] = [
   padding: 1.25rem 0.75rem 0.5rem;
 }
 
+.section-separator {
+  height: 1px;
+  margin: 0.5rem 0.75rem 0;
+  background-color: var(--color-zinc-800, #27272a);
+  opacity: 0.6;
+}
+
 /* ── Collapsed sidebar (desktop only) ── */
 @media (min-width: 768px) {
   .sidebar-collapsed .nav-item {
@@ -523,6 +534,10 @@ const settingsItems: NavItem[] = [
   }
   .sidebar-collapsed .section-label {
     display: none;
+  }
+  .sidebar-collapsed .section-separator {
+    margin: 0.375rem auto 0.375rem;
+    width: 60%;
   }
   .sidebar-collapsed .brand-area {
     justify-content: center;

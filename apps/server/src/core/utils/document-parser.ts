@@ -3,7 +3,8 @@
  * from office documents (docx, pptx, xlsx, odt, odp, ods, pdf, rtf)
  * and converts the AST to Markdown for LLM consumption.
  */
-import { parseOffice, type OfficeContentNode } from 'officeparser'
+import { parseOffice, type OfficeContentNode, type OfficeAttachment } from 'officeparser'
+import { getDb } from '../../db/database.js'
 
 /** File extensions that officeparser can handle */
 const PARSEABLE_EXTENSIONS = new Set([
@@ -18,9 +19,27 @@ export function isParseableDocument(filename: string): boolean {
     return PARSEABLE_EXTENSIONS.has(ext)
 }
 
+/** Read the OCR enabled flag from DB settings. */
+function isOcrEnabled(): boolean {
+    try {
+        const db = getDb()
+        const row = db.prepare("SELECT value_json FROM settings WHERE key = 'documentParser'").get() as { value_json: string } | undefined
+        if (row) {
+            const cfg = JSON.parse(row.value_json) as { ocrEnabled?: boolean }
+            return !!cfg.ocrEnabled
+        }
+    } catch { /* DB not ready */ }
+    return false
+}
+
 /** Parse a document buffer and return structured Markdown text */
 export async function parseDocument(buffer: Buffer, filename: string): Promise<string> {
-    const ast = await parseOffice(buffer, { outputErrorToConsole: false })
+    const ocr = isOcrEnabled()
+    const ast = await parseOffice(buffer, {
+        outputErrorToConsole: false,
+        extractAttachments: ocr,
+        ocr,
+    })
 
     const lines: string[] = []
 
@@ -40,6 +59,19 @@ export async function parseDocument(buffer: Buffer, filename: string): Promise<s
     for (const node of ast.content) {
         const md = nodeToMarkdown(node)
         if (md) lines.push(md)
+    }
+
+    // Append OCR text from image attachments
+    if (ocr && ast.attachments?.length) {
+        const ocrTexts = (ast.attachments as OfficeAttachment[])
+            .filter(a => a.ocrText?.trim())
+            .map(a => `**[OCR – ${a.name || 'image'}]:**\n${a.ocrText!.trim()}`)
+        if (ocrTexts.length) {
+            lines.push('')
+            lines.push('---')
+            lines.push('## Extracted Text from Images (OCR)')
+            lines.push(...ocrTexts)
+        }
     }
 
     return lines.join('\n\n')
