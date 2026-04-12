@@ -12,8 +12,10 @@ export function loadSavedProviders(): void {
     id: string
     config_json: string
     api_key_enc: string | null
+    is_default: number
   }[]
 
+  let defaultId: string | null = null
   for (const row of rows) {
     const config = JSON.parse(row.config_json) as LLMProviderConfig
     // api_key_enc is now stored in plaintext (was safeStorage-encrypted in Electron)
@@ -22,10 +24,13 @@ export function loadSavedProviders(): void {
     }
     try {
       gateway.registerProvider(config)
+      if (row.is_default === 1) defaultId = row.id
     } catch {
       // Skip invalid providers
     }
   }
+  // Restore the persisted default provider (overrides the first-registered fallback)
+  if (defaultId) gateway.setActiveProvider(defaultId)
 }
 
 export async function registerProviderRoutes(app: FastifyInstance): Promise<void> {
@@ -82,8 +87,11 @@ export async function registerProviderRoutes(app: FastifyInstance): Promise<void
     return { success: true }
   })
 
-  // PUT /api/providers/active — set active provider
+  // PUT /api/providers/active — set active provider (persisted as is_default in DB)
   app.put<{ Body: { id: string } }>('/active', async (req) => {
+    const db = getDb()
+    db.prepare('UPDATE providers SET is_default = 0').run()
+    db.prepare('UPDATE providers SET is_default = 1 WHERE id = ?').run(req.body.id)
     gateway.setActiveProvider(req.body.id)
     return { success: true }
   })
