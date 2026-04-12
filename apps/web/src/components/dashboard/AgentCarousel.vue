@@ -115,7 +115,7 @@ function onWheel(e: WheelEvent): void {
     @wheel.prevent="onWheel"
   >
     <!-- Stage -->
-    <div class="carousel-stage relative flex items-center justify-center overflow-hidden">
+    <div class="carousel-stage relative flex items-center justify-center">
       <div
         v-for="card in cards"
         :key="card.agent.id"
@@ -232,6 +232,12 @@ function onWheel(e: WheelEvent): void {
 .carousel-stage {
   /* Taller stage to accommodate larger cards */
   height: 320px;
+  /* Clip side-cards that leave the track horizontally without clipping the vertical glow */
+  overflow-x: clip;
+  overflow-y: visible;
+  /* Give vertical breathing room for the active-card drop shadow */
+  padding-block: 16px;
+  margin-block: -16px;
 }
 
 .carousel-card {
