@@ -237,27 +237,35 @@ export class AgentExecutor {
             providerId
         )
 
-        for await (const chunk of initialStream) {
-            if (chunk.content) {
-                fullContent += chunk.content
-                broadcast(`${this._sp}-chunk`, { streamId: activeStreamId, conversationId, content: chunk.content })
-                emit('step:content', { conversationId, content: chunk.content })
+        try {
+            for await (const chunk of initialStream) {
+                if (chunk.content) {
+                    fullContent += chunk.content
+                    broadcast(`${this._sp}-chunk`, { streamId: activeStreamId, conversationId, content: chunk.content })
+                    emit('step:content', { conversationId, content: chunk.content })
+                }
+                if (chunk.thinking) {
+                    fullThinking += chunk.thinking
+                    lastRoundThinking += chunk.thinking
+                    broadcast(`${this._sp}-thinking`, { streamId: activeStreamId, conversationId, thinking: chunk.thinking })
+                    emit('step:thinking', { conversationId, thinking: chunk.thinking })
+                }
+                if (chunk.images?.length) {
+                    collectedImages.push(...chunk.images)
+                    broadcast(`${this._sp}-images`, { streamId: activeStreamId, conversationId, images: chunk.images })
+                }
+                if (chunk.toolCalls?.length) {
+                    pendingToolCalls = chunk.toolCalls
+                }
+                if (chunk.usage) usage = chunk.usage
+                if (chunk.done) break
             }
-            if (chunk.thinking) {
-                fullThinking += chunk.thinking
-                lastRoundThinking += chunk.thinking
-                broadcast(`${this._sp}-thinking`, { streamId: activeStreamId, conversationId, thinking: chunk.thinking })
-                emit('step:thinking', { conversationId, thinking: chunk.thinking })
-            }
-            if (chunk.images?.length) {
-                collectedImages.push(...chunk.images)
-                broadcast(`${this._sp}-images`, { streamId: activeStreamId, conversationId, images: chunk.images })
-            }
-            if (chunk.toolCalls?.length) {
-                pendingToolCalls = chunk.toolCalls
-            }
-            if (chunk.usage) usage = chunk.usage
-            if (chunk.done) break
+        } catch (err) {
+            // Always close the stream on the client before re-throwing, otherwise
+            // the frontend's streaming message is left open and a subsequent
+            // stream-reset for the outer agent will reuse it (wrong icon/identity).
+            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, cancelled: signal?.aborted })
+            throw err
         }
 
         // No tool calls → done after Phase 1
