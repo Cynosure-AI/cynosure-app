@@ -1,4 +1,4 @@
-import { ref, computed, type Ref } from 'vue'
+import { ref, computed, type Ref, type ComputedRef } from 'vue'
 import { api } from '../api/client'
 import { useAgentStore } from '../stores/agent.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
@@ -13,7 +13,7 @@ export interface ChatAgentConfigApi {
     agentOriginalTools: Ref<string[]>
     agentOriginalSubAgentIds: Ref<string[]>
     agentOriginalMemorySpaceIds: Ref<string[]>
-    hasAgentOverrides: ReturnType<typeof computed<boolean>>
+    hasAgentOverrides: ComputedRef<boolean>
     markOverridesModified(): void
     resetAgentOverrides(): void
     applyOverridesToAgent(): Promise<void>

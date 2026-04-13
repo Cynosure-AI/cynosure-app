@@ -289,8 +289,7 @@ function createWindow(): BrowserWindow {
     win.on('ready-to-show', () => win.show())
 
     // Minimize (not close) hides to tray; pressing X actually quits the app
-    win.on('minimize', (event) => {
-        event.preventDefault()
+    win.on('minimize', () => {
         win.hide()
     })
 
@@ -406,6 +405,7 @@ function killServer(): void {
 
 app.on('before-quit', () => {
     isQuitting = true
+    tray?.destroy()
     killServer()
 })
 process.on('exit', killServer)
