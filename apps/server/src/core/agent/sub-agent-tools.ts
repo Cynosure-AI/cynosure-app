@@ -42,7 +42,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
 
         tools.push({
             name: toolName,
-            description: `Delegate a task to a dedicated sub-agent with fresh context "${assignment.codename}". Role: ${assignment.role}. Send clear, self-contained instructions describing exactly what you need done. The sub-agent will handle tool selection independently.`,
+            description: `Delegate a task to the "${assignment.codename}" sub-agent. Role: ${assignment.role}. Send clear, self-contained instructions describing exactly what you need done. The sub-agent has no context or state beyond what you provide and will handle tool selection independently.`,
             parameters: {
                 type: 'object',
                 properties: {
@@ -158,7 +158,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
 export function buildSubAgentPrompt(subAgents: SubAgentAssignment[]): string {
     const lines = [
         '\n## Sub-Agents',
-        'You have sub-agents you can delegate tasks to. Use the delegate_to_<codename> tools to send tasks to them.',
+        'You have sub-agents you can delegate tasks to. Invoke them by calling their `delegate_to_<codename>_agent` tool.',
         'Each sub-agent is specialized — delegate tasks that match their role rather than trying to do everything yourself.',
         'Send clear, detailed instructions. The sub-agent has no context beyond what you provide.\n',
     ]
@@ -166,7 +166,7 @@ export function buildSubAgentPrompt(subAgents: SubAgentAssignment[]): string {
     for (const sa of subAgents) {
         const agentData = getAgent(sa.agentId)
         if (!agentData) continue
-        lines.push(`- **${sa.codename}** (${agentData.name}): ${sa.role}`)
+        lines.push(`- **delegate_to_${sa.codename}** (${agentData.name}): ${sa.role}`)
     }
 
     return lines.join('\n')

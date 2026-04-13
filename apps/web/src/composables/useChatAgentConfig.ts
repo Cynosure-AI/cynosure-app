@@ -81,7 +81,7 @@ export function useChatAgentConfig(
             updates.subAgents = freeChatSubAgentIds.value.map(id => {
                 const def = agentDefs.get(id)
                 const codename = def
-                    ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+                    ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent'
                     : id
                 return { agentId: id, codename, role: def?.description || '' }
             })

@@ -20,19 +20,20 @@ const availableAgents = computed(() => {
   return agentDefs.agents.filter(a => !assignedIds.has(a.id))
 })
 
-function toCodename(name: string): string {
+function toSubAgentCodename(name: string): string {
   return name
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '')
+    + '_agent'
 }
 
 watch(addAgentId, (newId) => {
   if (newId) {
     const agent = agentDefs.get(newId)
     if (agent) {
-      addCodename.value = toCodename(agent.name)
+      addCodename.value = toSubAgentCodename(agent.name)
       addRole.value = agent.description || ''
     }
   }
