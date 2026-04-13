@@ -65,6 +65,13 @@ export function useChatStreaming(
     const primaryStreamAgent = ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>({})
     const streamBuffers = new Map<string, StreamBuffer>()
     const subAgentStreamMsg = ref<DisplayMessage | null>(null)
+    /** Tracks the last completed (non-empty) sub-agent message so the final
+     *  subagent-stream-end event (which carries model/usage) can find it
+     *  even after subAgentStreamMsg has been nulled. */
+    const lastCompletedSubAgentMsg = ref<DisplayMessage | null>(null)
+    /** All primary-stream messages created in the current turn (reset on stream-start).
+     *  Used to back-fill the model on earlier round messages when stream-end arrives. */
+    const currentTurnMsgs: DisplayMessage[] = []
 
     function findStreamingMsg(): DisplayMessage | undefined {
         for (let i = messages.value.length - 1; i >= 0; i--) {
@@ -102,6 +109,9 @@ export function useChatStreaming(
             currentStreamId.value = data.streamId
             isStreaming.value = true
 
+            // Reset the turn message tracker for the new primary turn
+            currentTurnMsgs.length = 0
+
             const lastMsg = messages.value[messages.value.length - 1]
             if (lastMsg?.isStreaming) {
                 lastMsg.isStreaming = false
@@ -124,9 +134,12 @@ export function useChatStreaming(
             })
 
             const streamingMsg = messages.value[messages.value.length - 1]
-            if (streamingMsg && streamingMsg.isStreaming && pendingMemorySources.value) {
-                streamingMsg.memorySources = pendingMemorySources.value
-                pendingMemorySources.value = null
+            if (streamingMsg && streamingMsg.isStreaming) {
+                currentTurnMsgs.push(streamingMsg)
+                if (pendingMemorySources.value) {
+                    streamingMsg.memorySources = pendingMemorySources.value
+                    pendingMemorySources.value = null
+                }
             }
         }
     }
@@ -190,7 +203,7 @@ export function useChatStreaming(
             if (streamMsg) {
                 if (streamMsg.content || streamMsg.thinking) {
                     streamMsg.isStreaming = false
-                    messages.value.push({
+                    const newMsg: DisplayMessage = {
                         id: `streaming_${Date.now()}`,
                         role: 'assistant',
                         content: '',
@@ -199,7 +212,9 @@ export function useChatStreaming(
                         agentIconUrl: primaryStreamAgent.value.agentIconUrl,
                         createdAt: Date.now(),
                         isStreaming: true
-                    })
+                    }
+                    messages.value.push(newMsg)
+                    currentTurnMsgs.push(newMsg)
                 } else {
                     // Update createdAt so unifiedTimeline sorts this message
                     // after tool-group and sub-agent entries that appeared
@@ -208,7 +223,7 @@ export function useChatStreaming(
                     streamMsg.createdAt = Date.now()
                 }
             } else {
-                messages.value.push({
+                const newMsg: DisplayMessage = {
                     id: `streaming_${Date.now()}`,
                     role: 'assistant',
                     content: '',
@@ -217,7 +232,9 @@ export function useChatStreaming(
                     agentIconUrl: primaryStreamAgent.value.agentIconUrl,
                     createdAt: Date.now(),
                     isStreaming: true
-                })
+                }
+                messages.value.push(newMsg)
+                currentTurnMsgs.push(newMsg)
             }
         }
     }
@@ -258,6 +275,15 @@ export function useChatStreaming(
                     streamMsg.content = 'No response received from the model.'
                 }
             }
+
+            // Back-fill the model on all earlier round messages from this turn
+            // (they were completed via stream-reset without model info).
+            if (data.model) {
+                for (const msg of currentTurnMsgs) {
+                    if (!msg.model) msg.model = data.model
+                }
+            }
+            currentTurnMsgs.length = 0
 
             if (data.usage) {
                 lastUsage.value = { ...data.usage, model: data.model }
@@ -360,8 +386,22 @@ export function useChatStreaming(
             if (!subAgentStreamMsg.value.content && !subAgentStreamMsg.value.thinking) {
                 const idx = messages.value.indexOf(subAgentStreamMsg.value)
                 if (idx !== -1) messages.value.splice(idx, 1)
+            } else {
+                lastCompletedSubAgentMsg.value = subAgentStreamMsg.value
             }
             subAgentStreamMsg.value = null
+        } else if (lastCompletedSubAgentMsg.value && (data.model || data.usage)) {
+            // Final subagent-stream-end from run() arrives after per-round ends already nulled subAgentStreamMsg.
+            // Apply the model/usage to the last completed sub-agent message.
+            if (data.model) {
+                lastCompletedSubAgentMsg.value.model = data.model
+            }
+            if (data.usage) {
+                lastCompletedSubAgentMsg.value.promptTokens = data.usage.promptTokens
+                lastCompletedSubAgentMsg.value.completionTokens = data.usage.completionTokens
+                lastUsage.value = { ...data.usage, model: data.model }
+            }
+            lastCompletedSubAgentMsg.value = null
         }
     }
 
