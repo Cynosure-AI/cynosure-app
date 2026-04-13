@@ -51,6 +51,8 @@ export interface PrepareExecutionInput {
     subAgentAssignments?: SubAgentAssignment[]
     /** Parent abort signal passed to sub-agent executors */
     signal?: AbortSignal
+    /** When false, model/provider overrides are NOT propagated to sub-agents (default: true) */
+    overrideSubAgents?: boolean
 
     // ── Agentless overrides ──
 
@@ -99,6 +101,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         includeSubAgents = true,
         subAgentAssignments,
         signal,
+        overrideSubAgents = true,
         memorySpaceOverrides,
     } = input
 
@@ -137,8 +140,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             conversationId,
             broadcast,
             signal,
-            modelOverride: modelOverride || undefined,
-            providerOverride: modelOverride ? activeProvider.config.id : (providerOverride || undefined),
+            modelOverride: overrideSubAgents ? (modelOverride || undefined) : undefined,
+            providerOverride: overrideSubAgents ? (modelOverride ? activeProvider.config.id : (providerOverride || undefined)) : undefined,
         })
         tools = [...tools, ...subAgentTools]
     }

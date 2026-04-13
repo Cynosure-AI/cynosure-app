@@ -444,11 +444,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       generateTitle?: boolean
       subAgents?: { agentId: string; codename: string; role: string }[]
       memorySpaceIds?: string[]
+      overrideSubAgents?: boolean
     }
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents } = req.body
       const db = getDb()
 
       // Build content (text + optional images + optional audio + optional files)
@@ -580,6 +581,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             : content,
           isFirstMessage: isFirstUserMessage,
           memorySpaceOverrides,
+          overrideSubAgents: overrideSubAgents !== false,
         })
 
         tools = prepared.tools
@@ -614,14 +616,17 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if (reqSubAgents?.length) {
           const { buildSubAgentTools, buildSubAgentPrompt } = await import('../core/agent/sub-agent-tools.js')
           messages = [{ role: 'system', content: buildSubAgentPrompt(reqSubAgents) }, ...messages]
-          // In agentless/free-chat mode, do NOT propagate the session model/provider
-          // override to sub-agents. The override is for the main free-chat LLM only;
-          // each sub-agent should use its own configured provider and model.
+          // In agentless/free-chat mode, propagate the session model/provider
+          // override to sub-agents only when the client explicitly requests it
+          // (overrideSubAgents === true). Default: each sub-agent uses its own
+          // configured provider and model.
           const subAgentTools = buildSubAgentTools({
             subAgents: reqSubAgents,
             conversationId,
             broadcast,
             signal: abortController.signal,
+            modelOverride: overrideSubAgents ? (model || undefined) : undefined,
+            providerOverride: overrideSubAgents ? (providerOverride || undefined) : undefined,
           })
           tools = [...tools, ...subAgentTools]
           hasSubAgents = true

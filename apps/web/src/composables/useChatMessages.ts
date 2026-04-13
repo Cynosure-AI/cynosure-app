@@ -23,6 +23,7 @@ export function useChatMessages(
     agentConfig: {
         sessionModelOverride: Ref<string | null>
         sessionProviderOverride: Ref<string | null>
+        sessionOverrideSubAgents: Ref<boolean>
         freeChatSubAgentIds: Ref<string[]>
         freeChatMemorySpaceIds: Ref<string[]>
         agentOriginalSubAgentIds: Ref<string[]>
@@ -128,7 +129,8 @@ export function useChatMessages(
             msgId,
             audioDataUrls,
             subAgents,
-            memorySpaceIds
+            memorySpaceIds,
+            agentConfig.sessionOverrideSubAgents.value
         )
     }
 

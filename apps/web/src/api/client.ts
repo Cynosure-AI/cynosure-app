@@ -431,7 +431,8 @@ export const api = {
       messageId?: string,
       audioDataUrls?: string[],
       subAgents?: SubAgentAssignment[],
-      memorySpaceIds?: string[]
+      memorySpaceIds?: string[],
+      overrideSubAgents?: boolean
     ) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, {
         content,
@@ -445,7 +446,8 @@ export const api = {
         systemPrompt,
         generateTitle,
         subAgents,
-        memorySpaceIds
+        memorySpaceIds,
+        overrideSubAgents
       }),
     truncateFrom: (conversationId: string, messageId: string) =>
       post<{ success: boolean; deleted: number }>(

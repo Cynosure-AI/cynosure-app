@@ -6,6 +6,7 @@ import { useProviderStore } from '../../stores/provider.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
+import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import { useChatSidebar } from '../../composables/useChatSidebar'
 import { useProviderLogos } from '../../composables/useProviderLogos'
 import { useRouter } from 'vue-router'
@@ -231,13 +232,25 @@ async function newChat(): Promise<void> {
         </button>
       </div>
 
-      <!-- Sub-agent override notice -->
-      <span
-        v-if="chatStore.sessionModelOverride && selectedAgent?.subAgents?.length"
-        class="text-[10px] text-amber-500/80 hidden md:inline"
+      <!-- Sub-agent override toggle -->
+      <label
+        v-if="(chatStore.sessionModelOverride || chatStore.sessionProviderOverride) && (selectedAgent?.subAgents?.length || chatStore.freeChatSubAgentIds?.length)"
+        class="items-center gap-1.5 hidden md:flex cursor-pointer select-none shrink-0"
+        :title="chatStore.sessionOverrideSubAgents ? 'Override applies to all sub-agents — click to restrict to main agent only' : 'Override applies to main agent only — click to propagate to sub-agents'"
       >
-        Override applies to {{ selectedAgent.subAgents.length }} sub-agent{{ selectedAgent.subAgents.length !== 1 ? 's' : '' }}
-      </span>
+        <ToggleSwitch
+          :model-value="chatStore.sessionOverrideSubAgents"
+          size="sm"
+          color="amber"
+          @update:model-value="chatStore.sessionOverrideSubAgents = $event"
+        />
+        <span
+          class="text-[10px]"
+          :class="chatStore.sessionOverrideSubAgents ? 'text-amber-400' : 'text-zinc-500'"
+        >
+          Apply to All agents
+        </span>
+      </label>
 
       <!-- Conversation title -->
       <span
