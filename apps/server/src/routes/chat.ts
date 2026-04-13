@@ -612,21 +612,35 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           ? toolRegistry.resolveForExecution(selectedToolNames || [])
           : toolRegistry.getToolDefinitions()
 
+        // Resolve the effective provider + model up-front so sub-agent tools
+        // receive the same provider that the main executor will use.
+        // In free-chat mode the frontend calls providerStore.setActive() (a server
+        // API) instead of setting sessionProviderOverride, so providerOverride in
+        // the request body may be null — getActiveProvider() is the true source.
+        providerId = providerOverride || undefined
+        const freeChatActiveProvider = providerId
+          ? gateway.getProvider(providerId) || gateway.getActiveProvider()
+          : gateway.getActiveProvider()
+        responseProvider = freeChatActiveProvider.config.id
+        const rawModel = model || freeChatActiveProvider.config.defaultModel
+        responseModel = (!rawModel || rawModel === 'default') ? freeChatActiveProvider.config.defaultModel : rawModel
+
         // Sub-agent tools from request body (MA workspace)
         if (reqSubAgents?.length) {
           const { buildSubAgentTools, buildSubAgentPrompt } = await import('../core/agent/sub-agent-tools.js')
           messages = [{ role: 'system', content: buildSubAgentPrompt(reqSubAgents) }, ...messages]
-          // In agentless/free-chat mode, propagate the session model/provider
-          // override to sub-agents only when the client explicitly requests it
-          // (overrideSubAgents === true). Default: each sub-agent uses its own
-          // configured provider and model.
+          // Propagate the resolved provider (not the raw request param) so that
+          // sub-agents use the same provider as the main free-chat executor when
+          // overrideSubAgents is true — even if providerOverride was null because
+          // the frontend set the active provider via setActive() rather than a
+          // session override.
           const subAgentTools = buildSubAgentTools({
             subAgents: reqSubAgents,
             conversationId,
             broadcast,
             signal: abortController.signal,
             modelOverride: overrideSubAgents ? (model || undefined) : undefined,
-            providerOverride: overrideSubAgents ? (providerOverride || undefined) : undefined,
+            providerOverride: overrideSubAgents ? responseProvider : undefined,
           })
           tools = [...tools, ...subAgentTools]
           hasSubAgents = true
@@ -641,14 +655,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           if (spaceRows.length) memorySpaceOverrides = spaceRows
         }
         tools = hydrateBuiltInTools(tools, { agentId: undefined, conversationId, broadcast, memorySpaceOverrides })
-
-        providerId = providerOverride || undefined
-        const activeProvider = providerId
-          ? gateway.getProvider(providerId) || gateway.getActiveProvider()
-          : gateway.getActiveProvider()
-        responseProvider = activeProvider.config.id
-        const rawModel = model || activeProvider.config.defaultModel
-        responseModel = (!rawModel || rawModel === 'default') ? activeProvider.config.defaultModel : rawModel
       }
 
       const streamId = nanoid()
