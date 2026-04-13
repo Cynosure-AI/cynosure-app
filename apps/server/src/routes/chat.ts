@@ -614,13 +614,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if (reqSubAgents?.length) {
           const { buildSubAgentTools, buildSubAgentPrompt } = await import('../core/agent/sub-agent-tools.js')
           messages = [{ role: 'system', content: buildSubAgentPrompt(reqSubAgents) }, ...messages]
+          // In agentless/free-chat mode, do NOT propagate the session model/provider
+          // override to sub-agents. The override is for the main free-chat LLM only;
+          // each sub-agent should use its own configured provider and model.
           const subAgentTools = buildSubAgentTools({
             subAgents: reqSubAgents,
             conversationId,
             broadcast,
             signal: abortController.signal,
-            modelOverride: model || undefined,
-            providerOverride: providerOverride || undefined,
           })
           tools = [...tools, ...subAgentTools]
           hasSubAgents = true
