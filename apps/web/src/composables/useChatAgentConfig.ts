@@ -8,6 +8,7 @@ export interface ChatAgentConfigApi {
     activeAgentId: Ref<string | null>
     sessionModelOverride: Ref<string | null>
     sessionProviderOverride: Ref<string | null>
+    sessionOverrideSubAgents: Ref<boolean>
     freeChatSubAgentIds: Ref<string[]>
     freeChatMemorySpaceIds: Ref<string[]>
     agentOriginalTools: Ref<string[]>
@@ -35,6 +36,7 @@ export function useChatAgentConfig(
     )
     const sessionModelOverride = ref<string | null>(null)
     const sessionProviderOverride = ref<string | null>(null)
+    const sessionOverrideSubAgents = ref<boolean>(true)
     const freeChatSubAgentIds = ref<string[]>([])
     const freeChatMemorySpaceIds = ref<string[]>([])
     const agentOriginalTools = ref<string[]>([])
@@ -157,6 +159,7 @@ export function useChatAgentConfig(
         activeAgentId,
         sessionModelOverride,
         sessionProviderOverride,
+        sessionOverrideSubAgents,
         freeChatSubAgentIds,
         freeChatMemorySpaceIds,
         agentOriginalTools,
