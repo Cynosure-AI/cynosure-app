@@ -429,6 +429,12 @@ export class AgentExecutor {
             pendingToolCalls = result.toolCalls
             usage = accumulateUsage(usage, result.usage)
             if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
+
+            // Broadcast accumulated usage after each tool round so the client
+            // can update the context circle without waiting for the full turn to end.
+            if (usage) {
+                broadcast(`${this._sp}-usage`, { conversationId, usage, model, contextWindow: this.config.contextWindow })
+            }
         }
 
         // End final stream

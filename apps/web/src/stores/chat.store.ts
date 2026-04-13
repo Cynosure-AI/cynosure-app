@@ -364,6 +364,7 @@ export const useChatStore = defineStore('chat', () => {
     handleStreamThinking: streaming.handleStreamThinking,
     handleStreamImages: streaming.handleStreamImages,
     handleStreamReset: streaming.handleStreamReset,
+    handleStreamUsage: streaming.handleStreamUsage,
     finalizeCurrentStreaming: streaming.finalizeCurrentStreaming,
     handleStreamEnd: streaming.handleStreamEnd,
     handleStreamError: streaming.handleStreamError,
