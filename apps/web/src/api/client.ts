@@ -478,6 +478,9 @@ export const api = {
     ) => onWsEvent('chat:stream-end', cb as WsHandler),
     onStreamReset: (cb: (data: { streamId: string; conversationId: string }) => void) =>
       onWsEvent('chat:stream-reset', cb as WsHandler),
+    onStreamUsage: (
+      cb: (data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number }) => void
+    ) => onWsEvent('chat:stream-usage', cb as WsHandler),
     onStreamError: (
       cb: (data: { streamId: string; conversationId: string; error: string }) => void
     ) => onWsEvent('chat:stream-error', cb as WsHandler),

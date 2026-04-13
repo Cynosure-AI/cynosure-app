@@ -36,6 +36,7 @@ export interface ChatStreamingState {
     handleStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void
     handleStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleStreamReset(data: { streamId: string; conversationId: string }): void
+    handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number }): void
     handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number }): void
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
     handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void
@@ -218,6 +219,14 @@ export function useChatStreaming(
                     isStreaming: true
                 })
             }
+        }
+    }
+
+    function handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number }): void {
+        if (data.conversationId !== activeConversationId.value) return
+        lastUsage.value = { ...data.usage, model: data.model }
+        if (data.contextWindow) {
+            contextWindow.value = data.contextWindow
         }
     }
 
@@ -410,6 +419,7 @@ export function useChatStreaming(
         handleStreamThinking,
         handleStreamImages,
         handleStreamReset,
+        handleStreamUsage,
         handleStreamEnd,
         handleStreamError,
         handleSubAgentStreamStart,
