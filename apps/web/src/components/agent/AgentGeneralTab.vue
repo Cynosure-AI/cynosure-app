@@ -51,6 +51,9 @@ if (props.agent.providerId) {
 }
 
 watch(() => props.agent.providerId, (newId) => {
+  // Reset the model whenever the provider changes so stale model IDs
+  // from the old provider don't get sent to the new provider.
+  emit('update', 'model', '')
   if (newId) fetchModelsForProvider(newId)
   else fetchedModels.value = []
 })
