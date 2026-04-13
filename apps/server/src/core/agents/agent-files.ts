@@ -73,6 +73,20 @@ function toCodename(name: string): string {
         .replace(/^-|-$/g, '')
 }
 
+/**
+ * Generate a sub-agent codename from a name.
+ * Uses underscores (matching tool naming convention) and appends `_agent` suffix
+ * so the LLM clearly sees these as delegatable agent tools.
+ */
+export function toSubAgentCodename(name: string): string {
+    return name
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_|_$/g, '')
+        + '_agent'
+}
+
 const ICON_EXTENSIONS = ['png', 'jpg', 'jpeg', 'svg', 'webp'] as const
 
 function findIconFile(agentDir: string): string | null {

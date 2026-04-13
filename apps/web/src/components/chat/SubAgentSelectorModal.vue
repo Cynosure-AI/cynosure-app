@@ -32,8 +32,8 @@ function agentIcon(agent: { iconUrl: string | null; providerId: string }): strin
   return prov ? logoUrl(prov.type) : null
 }
 
-function toCodename(name: string): string {
-  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+function toSubAgentCodename(name: string): string {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent'
 }
 </script>
 
@@ -92,7 +92,7 @@ function toCodename(name: string): string {
             </div>
             <div
               class="flex-1 min-w-0"
-              :title="toCodename(agent.name) ? `Internal Codename: ${toCodename(agent.name)}` : undefined"
+              :title="toSubAgentCodename(agent.name) ? `Tool name: delegate_to_${toSubAgentCodename(agent.name)}` : undefined"
             >
               <div
                 class="text-sm text-zinc-200 truncate"
