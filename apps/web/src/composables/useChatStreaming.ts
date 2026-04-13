@@ -42,7 +42,7 @@ export interface ChatStreamingState {
     handleSubAgentStreamChunk(data: { streamId: string; conversationId: string; content: string }): void
     handleSubAgentStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void
     handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
-    handleSubAgentStreamEnd(data: { streamId: string; conversationId: string }): void
+    handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void
     handleMemorySources(data: { conversationId: string; sources: MemorySource[] }): void
     handleTitleUpdated(data: { conversationId: string; title: string }): void
     handleNewMessage(data: { conversationId: string; message: { id: string; conversationId: string; role: string; content: string; createdAt: number; agentId?: string; agentName?: string; agentIconUrl?: string | null } }): void
@@ -336,10 +336,18 @@ export function useChatStreaming(
         }
     }
 
-    function handleSubAgentStreamEnd(data: { streamId: string; conversationId: string }): void {
+    function handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void {
         if (data.conversationId !== activeConversationId.value) return
         if (subAgentStreamMsg.value) {
             subAgentStreamMsg.value.isStreaming = false
+            if (data.model) {
+                subAgentStreamMsg.value.model = data.model
+            }
+            if (data.usage) {
+                subAgentStreamMsg.value.promptTokens = data.usage.promptTokens
+                subAgentStreamMsg.value.completionTokens = data.usage.completionTokens
+                lastUsage.value = { ...data.usage, model: data.model }
+            }
             if (!subAgentStreamMsg.value.content && !subAgentStreamMsg.value.thinking) {
                 const idx = messages.value.indexOf(subAgentStreamMsg.value)
                 if (idx !== -1) messages.value.splice(idx, 1)

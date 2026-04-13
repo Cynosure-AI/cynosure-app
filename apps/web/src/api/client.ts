@@ -496,7 +496,7 @@ export const api = {
       cb: (data: { streamId: string; conversationId: string; images: string[] }) => void
     ) => onWsEvent('chat:subagent-stream-images', cb as WsHandler),
     onSubAgentStreamEnd: (
-      cb: (data: { streamId: string; conversationId: string }) => void
+      cb: (data: { streamId: string; conversationId: string; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }) => void
     ) => onWsEvent('chat:subagent-stream-end', cb as WsHandler),
 
     onTitleUpdated: (
