@@ -214,7 +214,7 @@ const isUser = computed(() => props.role === 'user')
       :class="[
         isUser ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-zinc-800/60 border text-zinc-200 rounded-tl-sm',
         isError && !isUser ? 'border-red-500/40' : !isUser ? 'border-zinc-700/50' : '',
-        isEditing ? 'w-[85%] md:w-[85%]' : ''
+        isEditing ? 'w-[85%] md:w-[80%]' : ''
       ]"
     >
       <!-- Action buttons: copy (all), retry + edit (user only) -->
