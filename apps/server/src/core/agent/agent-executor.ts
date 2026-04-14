@@ -211,6 +211,7 @@ export class AgentExecutor {
         let lastRoundThinking = ''
         const collectedImages: string[] = []
         let usage: AgentExecutorResult['usage']
+        let lastRoundPromptTokens: number | undefined
         let pendingToolCalls: ToolCall[] | undefined
         let toolRounds = 0
 
@@ -257,7 +258,7 @@ export class AgentExecutor {
                 if (chunk.toolCalls?.length) {
                     pendingToolCalls = chunk.toolCalls
                 }
-                if (chunk.usage) usage = chunk.usage
+                if (chunk.usage) { usage = chunk.usage; lastRoundPromptTokens = chunk.usage.promptTokens }
                 if (chunk.done) break
             }
         } catch (err) {
@@ -270,7 +271,7 @@ export class AgentExecutor {
 
         // No tool calls → done after Phase 1
         if (!pendingToolCalls?.length) {
-            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow })
+            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow, lastRoundPromptTokens })
             return { content: fullContent, usage, toolRounds: 0, images: collectedImages, thinking: lastRoundThinking, provider: providerId, model }
         }
 
@@ -351,6 +352,7 @@ export class AgentExecutor {
                     fullThinking += result.thinking
                     collectedImages.push(...result.images)
                     pendingToolCalls = result.toolCalls
+                    if (result.usage?.promptTokens) lastRoundPromptTokens = result.usage.promptTokens
                     usage = accumulateUsage(usage, result.usage)
                     if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
                     continue
@@ -435,22 +437,26 @@ export class AgentExecutor {
             lastRoundThinking = result.thinking
             collectedImages.push(...result.images)
             pendingToolCalls = result.toolCalls
+            if (result.usage?.promptTokens) lastRoundPromptTokens = result.usage.promptTokens
             usage = accumulateUsage(usage, result.usage)
             if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
 
             // Broadcast accumulated usage after each tool round so the client
             // can update the context circle without waiting for the full turn to end.
             if (usage) {
-                broadcast(`${this._sp}-usage`, { conversationId, usage, model, contextWindow: this.config.contextWindow })
+                broadcast(`${this._sp}-usage`, {
+                    conversationId, usage, model, contextWindow: this.config.contextWindow,
+                    lastRoundPromptTokens
+                })
             }
         }
 
         // End final stream
         if (this.config.streamMode === 'single') {
-            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow })
+            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow, lastRoundPromptTokens })
         } else {
             // per-round: send a final end event with usage so the client gets token counts
-            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow })
+            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow, lastRoundPromptTokens })
         }
 
         emit('task:completed', { taskId, conversationId })
