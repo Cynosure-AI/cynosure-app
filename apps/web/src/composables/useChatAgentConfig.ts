@@ -9,6 +9,8 @@ export interface ChatAgentConfigApi {
     sessionModelOverride: Ref<string | null>
     sessionProviderOverride: Ref<string | null>
     sessionOverrideSubAgents: Ref<boolean>
+    sessionSystemPrompt: Ref<string>
+    agentOriginalSystemPrompt: Ref<string>
     freeChatSubAgentIds: Ref<string[]>
     freeChatMemorySpaceIds: Ref<string[]>
     agentOriginalTools: Ref<string[]>
@@ -37,6 +39,8 @@ export function useChatAgentConfig(
     const sessionModelOverride = ref<string | null>(null)
     const sessionProviderOverride = ref<string | null>(null)
     const sessionOverrideSubAgents = ref<boolean>(true)
+    const sessionSystemPrompt = ref<string>('')
+    const agentOriginalSystemPrompt = ref<string>('')
     const freeChatSubAgentIds = ref<string[]>([])
     const freeChatMemorySpaceIds = ref<string[]>([])
     const agentOriginalTools = ref<string[]>([])
@@ -56,7 +60,8 @@ export function useChatAgentConfig(
         return (
             !arraysEqual(agentStore.selectedToolNames, agentOriginalTools.value) ||
             !arraysEqual(freeChatSubAgentIds.value, agentOriginalSubAgentIds.value) ||
-            !arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value)
+            !arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value) ||
+            sessionSystemPrompt.value !== agentOriginalSystemPrompt.value
         )
     })
 
@@ -68,6 +73,7 @@ export function useChatAgentConfig(
         agentStore.selectedToolNames = [...agentOriginalTools.value]
         freeChatSubAgentIds.value = [...agentOriginalSubAgentIds.value]
         freeChatMemorySpaceIds.value = [...agentOriginalMemorySpaceIds.value]
+        sessionSystemPrompt.value = agentOriginalSystemPrompt.value
         userModifiedOverrides.value = false
     }
 
@@ -92,12 +98,17 @@ export function useChatAgentConfig(
             updates.memorySpaces = [...freeChatMemorySpaceIds.value]
         }
 
+        if (sessionSystemPrompt.value !== agentOriginalSystemPrompt.value) {
+            updates.systemPrompt = sessionSystemPrompt.value
+        }
+
         if (Object.keys(updates).length === 0) return
         await agentDefs.update(activeAgentId.value, updates)
 
         agentOriginalTools.value = [...agentStore.selectedToolNames]
         agentOriginalSubAgentIds.value = [...freeChatSubAgentIds.value]
         agentOriginalMemorySpaceIds.value = [...freeChatMemorySpaceIds.value]
+        agentOriginalSystemPrompt.value = sessionSystemPrompt.value
         userModifiedOverrides.value = false
     }
 
@@ -117,6 +128,8 @@ export function useChatAgentConfig(
             const memSpaceIds = agent?.memorySpaces?.length ? [...agent.memorySpaces] : []
             freeChatMemorySpaceIds.value = [...memSpaceIds]
             agentOriginalMemorySpaceIds.value = [...memSpaceIds]
+            sessionSystemPrompt.value = agent?.systemPrompt || ''
+            agentOriginalSystemPrompt.value = agent?.systemPrompt || ''
         } else {
             localStorage.removeItem('oa-active-agent')
             agentStore.clearSelectedTools()
@@ -125,6 +138,8 @@ export function useChatAgentConfig(
             agentOriginalTools.value = []
             agentOriginalSubAgentIds.value = []
             agentOriginalMemorySpaceIds.value = []
+            sessionSystemPrompt.value = ''
+            agentOriginalSystemPrompt.value = ''
         }
         sessionModelOverride.value = null
         sessionProviderOverride.value = null
@@ -152,6 +167,8 @@ export function useChatAgentConfig(
         const memIds = agent.memorySpaces?.length ? [...agent.memorySpaces] : []
         freeChatMemorySpaceIds.value = [...memIds]
         agentOriginalMemorySpaceIds.value = [...memIds]
+        sessionSystemPrompt.value = agent.systemPrompt || ''
+        agentOriginalSystemPrompt.value = agent.systemPrompt || ''
         userModifiedOverrides.value = false
     }
 
@@ -160,6 +177,8 @@ export function useChatAgentConfig(
         sessionModelOverride,
         sessionProviderOverride,
         sessionOverrideSubAgents,
+        sessionSystemPrompt,
+        agentOriginalSystemPrompt,
         freeChatSubAgentIds,
         freeChatMemorySpaceIds,
         agentOriginalTools,

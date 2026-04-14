@@ -389,6 +389,8 @@ export const useChatStore = defineStore('chat', () => {
     sessionModelOverride: agentConfig.sessionModelOverride,
     sessionProviderOverride: agentConfig.sessionProviderOverride,
     sessionOverrideSubAgents: agentConfig.sessionOverrideSubAgents,
+    sessionSystemPrompt: agentConfig.sessionSystemPrompt,
+    agentOriginalSystemPrompt: agentConfig.agentOriginalSystemPrompt,
     freeChatSubAgentIds: agentConfig.freeChatSubAgentIds,
     freeChatMemorySpaceIds: agentConfig.freeChatMemorySpaceIds,
     agentOriginalTools: agentConfig.agentOriginalTools,
