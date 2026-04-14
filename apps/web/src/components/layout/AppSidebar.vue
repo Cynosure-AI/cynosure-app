@@ -8,6 +8,7 @@ import { api, wsConnected, type AgentInstance } from '../../api/client'
 import { Icon } from '@iconify/vue'
 import { useSidebar } from '../../composables/useSidebar'
 import StatusPopover from './StatusPopover.vue'
+import HoverTooltip from '../shared/HoverTooltip.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -278,109 +279,157 @@ const settingsItems: NavItem[] = [
     <!-- Navigation -->
     <nav class="flex-1 overflow-y-auto py-2 px-3">
       <!-- Dashboard -->
-      <RouterLink
-        to="/dashboard"
-        class="nav-item"
-        title="Dashboard"
-        :class="{ active: isActiveExact('/dashboard') }"
+      <HoverTooltip
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
       >
-        <Icon
-          icon="lucide:layout-dashboard"
-          class="w-4.5 h-4.5"
-        />
-        <span>Dashboard</span>
-      </RouterLink>
+        <RouterLink
+          to="/dashboard"
+          class="nav-item"
+          :class="{ active: isActiveExact('/dashboard') }"
+        >
+          <Icon
+            icon="lucide:layout-dashboard"
+            class="w-4.5 h-4.5"
+          />
+          <span>Dashboard</span>
+        </RouterLink>
+        <template #content>
+          Dashboard
+        </template>
+      </HoverTooltip>
 
       <!-- Triggers -->
       <div class="section-separator" />
       <div class="section-label">
         Triggers
       </div>
-      <RouterLink
+      <HoverTooltip
         v-for="item in triggerItems"
         :key="item.to"
-        :to="item.to"
-        class="nav-item"
-        :title="item.label"
-        :class="{ active: isActive(item.to) }"
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
       >
-        <Icon
-          :icon="item.icon"
-          class="w-4.5 h-4.5"
-        />
-        <span>{{ item.label }}</span>
-      </RouterLink>
+        <RouterLink
+          :to="item.to"
+          class="nav-item"
+          :class="{ active: isActive(item.to) }"
+        >
+          <Icon
+            :icon="item.icon"
+            class="w-4.5 h-4.5"
+          />
+          <span>{{ item.label }}</span>
+        </RouterLink>
+        <template #content>
+          {{ item.label }}
+        </template>
+      </HoverTooltip>
 
       <!-- Agents -->
       <div class="section-separator" />
       <div class="section-label">
         Agents
       </div>
-      <RouterLink
-        to="/agents"
-        class="nav-item"
-        title="My Agents"
-        :class="{ active: isActive('/agents') }"
+      <HoverTooltip
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
       >
-        <Icon
-          icon="lucide:bot"
-          class="w-4.5 h-4.5"
-        />
-        <span>My Agents</span>
-      </RouterLink>
-      <RouterLink
-        to="/memory-spaces"
-        class="nav-item"
-        title="Memory Spaces"
-        :class="{ active: isActive('/memory-spaces') }"
+        <RouterLink
+          to="/agents"
+          class="nav-item"
+          :class="{ active: isActive('/agents') }"
+        >
+          <Icon
+            icon="lucide:bot"
+            class="w-4.5 h-4.5"
+          />
+          <span>My Agents</span>
+        </RouterLink>
+        <template #content>
+          My Agents
+        </template>
+      </HoverTooltip>
+      <HoverTooltip
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
       >
-        <Icon
-          icon="lucide:brain"
-          class="w-4.5 h-4.5"
-        />
-        <span>Memory Spaces</span>
-      </RouterLink>
-      <RouterLink
-        to="/usage"
-        class="nav-item"
-        title="Usage"
-        :class="{ active: isActive('/usage') }"
+        <RouterLink
+          to="/memory-spaces"
+          class="nav-item"
+          :class="{ active: isActive('/memory-spaces') }"
+        >
+          <Icon
+            icon="lucide:brain"
+            class="w-4.5 h-4.5"
+          />
+          <span>Memory Spaces</span>
+        </RouterLink>
+        <template #content>
+          Memory Spaces
+        </template>
+      </HoverTooltip>
+      <HoverTooltip
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
       >
-        <Icon
-          icon="lucide:bar-chart-3"
-          class="w-4.5 h-4.5"
-        />
-        <span>Usage</span>
-      </RouterLink>
+        <RouterLink
+          to="/usage"
+          class="nav-item"
+          :class="{ active: isActive('/usage') }"
+        >
+          <Icon
+            icon="lucide:bar-chart-3"
+            class="w-4.5 h-4.5"
+          />
+          <span>Usage</span>
+        </RouterLink>
+        <template #content>
+          Usage
+        </template>
+      </HoverTooltip>
       
       <!-- Instances -->
       <div class="section-separator" />
       <div class="section-label">
         Instances
       </div>
-      <RouterLink
-        to="/instances"
-        class="nav-item"
-        title="Instances"
-        :class="{ active: isActive('/instances') }"
+      <HoverTooltip
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
       >
-        <Icon
-          icon="lucide:activity"
-          class="w-4.5 h-4.5"
-        />
-        <span>View all</span>
-        <span
-          v-if="hasAwaitingApproval"
-          class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse ml-1 shrink-0"
-        />
-        <div
-          v-if="instances.length"
-          class="rounded-full flex justify-center items-center bg-blue-400 text-xs text-white w-5 h-5 ml-2"
+        <RouterLink
+          to="/instances"
+          class="nav-item"
+          :class="{ active: isActive('/instances') }"
         >
-          <span v-if="instances.length > 9">9+</span>
-          <span v-else>{{ instances.length }}</span>
-        </div>
-      </RouterLink>
+          <Icon
+            icon="lucide:activity"
+            class="w-4.5 h-4.5"
+          />
+          <span>View all</span>
+          <span
+            v-if="hasAwaitingApproval"
+            class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse ml-1 shrink-0"
+          />
+          <div
+            v-if="instances.length"
+            class="rounded-full flex justify-center items-center bg-blue-400 text-xs text-white w-5 h-5 ml-2"
+          >
+            <span v-if="instances.length > 9">9+</span>
+            <span v-else>{{ instances.length }}</span>
+          </div>
+        </RouterLink>
+        <template #content>
+          Instances
+        </template>
+      </HoverTooltip>
 
 
 
@@ -389,20 +438,28 @@ const settingsItems: NavItem[] = [
       <div class="section-label">
         Settings
       </div>
-      <RouterLink
+      <HoverTooltip
         v-for="item in settingsItems"
         :key="item.to"
-        :to="item.to"
-        class="nav-item"
-        :title="item.label"
-        :class="{ active: isActive(item.to) }"
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
       >
-        <Icon
-          :icon="item.icon"
-          class="w-4.5 h-4.5"
-        />
-        <span>{{ item.label }}</span>
-      </RouterLink>
+        <RouterLink
+          :to="item.to"
+          class="nav-item"
+          :class="{ active: isActive(item.to) }"
+        >
+          <Icon
+            :icon="item.icon"
+            class="w-4.5 h-4.5"
+          />
+          <span>{{ item.label }}</span>
+        </RouterLink>
+        <template #content>
+          {{ item.label }}
+        </template>
+      </HoverTooltip>
     </nav>
 
     <!-- Collapse toggle (desktop only) -->
@@ -493,6 +550,7 @@ const settingsItems: NavItem[] = [
   cursor: pointer;
   margin-bottom: 2px;
   transition: all 150ms ease;
+  width: 100%;
 }
 
 .nav-item:hover {

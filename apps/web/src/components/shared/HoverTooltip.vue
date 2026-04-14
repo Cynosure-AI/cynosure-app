@@ -4,14 +4,17 @@ import { ref, computed } from 'vue'
 const props = withDefaults(defineProps<{
   /** Disable the tooltip (still renders the slot, just no popover) */
   disabled?: boolean
-  /** Preferred horizontal placement: center above trigger, or follow mouse */
-  placement?: 'above' | 'mouse'
+  /** Preferred placement: center above trigger, follow mouse, or right of trigger */
+  placement?: 'above' | 'mouse' | 'right'
   /** Max width in pixels */
   maxWidth?: number
+  /** Use block layout (full width) instead of inline-flex */
+  block?: boolean
 }>(), {
   disabled: false,
   placement: 'above',
   maxWidth: 260,
+  block: false,
 })
 
 const triggerRef = ref<HTMLElement | null>(null)
@@ -28,6 +31,21 @@ const popoverStyle = computed<Record<string, string>>(() => {
       top: `${mousePos.value.y - 8}px`,
       left: `${left}px`,
       transform: 'translateY(-100%)',
+      maxWidth: `${props.maxWidth}px`,
+    }
+  }
+  if (props.placement === 'right') {
+    const el = triggerRef.value
+    if (!el) return { position: 'fixed', top: '0', left: '0', maxWidth: `${props.maxWidth}px` }
+    const rect = el.getBoundingClientRect()
+    let top = rect.top + rect.height / 2
+    const left = rect.right + 8
+    if (top < 8) top = 8
+    return {
+      position: 'fixed',
+      top: `${top}px`,
+      left: `${left}px`,
+      transform: 'translateY(-50%)',
       maxWidth: `${props.maxWidth}px`,
     }
   }
@@ -65,7 +83,7 @@ function onLeave() {
 <template>
   <div
     ref="triggerRef"
-    class="inline-flex"
+    :class="block ? 'flex w-full' : 'inline-flex'"
     @mouseenter="onEnter"
     @mousemove="onMove"
     @mouseleave="onLeave"
