@@ -99,7 +99,7 @@ function displayTitle(conv: { title: string; origin?: string }): string {
               class="w-3 h-3 shrink-0 text-amber-400"
             />
             <span
-              class="text-sm truncate"
+              class="text-xs truncate"
               :class="
                 conv.id === chatStore.activeConversationId ? 'text-zinc-100' : 'text-zinc-400'
               "
