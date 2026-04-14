@@ -63,10 +63,17 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     })
 
     // POST /api/agents — create
-    app.post<{ Body: CreateAgentInput }>('/', async (req) => {
-        const agent = createAgent(req.body)
+    app.post<{ Body: CreateAgentInput & { memorySpaces?: string[] } }>('/', async (req) => {
+        const { memorySpaces, ...rest } = req.body
+        const agent = createAgent(rest)
+        // Sync memory space assignments if provided
+        if (memorySpaces?.length) {
+            const db = getDb()
+            const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
+            for (const spaceId of memorySpaces) insert.run(agent.id, spaceId)
+        }
         getChannelManager().refreshAllCommands()
-        return agent
+        return { ...agent, memorySpaces: memorySpaces || [] }
     })
 
     // PUT /api/agents/:id — update
