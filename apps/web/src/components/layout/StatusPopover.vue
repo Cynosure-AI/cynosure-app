@@ -33,9 +33,9 @@ const providerChecked = ref(false)
 const mcpServers = ref<McpServerInfo[]>([])
 const mcpLoaded = ref(false)
 
-// Cache: skip re-fetch if data is less than 10s old
+// Cache: skip re-fetch if data is less than 20s old
 let lastFetchedAt = 0
-const CACHE_TTL = 10000 // 10 seconds
+const CACHE_TTL = 20000 // 20 seconds
 const refreshing = ref(false)
 
 const mcpStats = computed(() => {
