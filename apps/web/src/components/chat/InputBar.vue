@@ -47,7 +47,10 @@ onMounted(async () => {
 
 // Tooltip helpers
 const selectedToolsList = computed(() =>
-  agentStore.availableTools.filter(t => agentStore.selectedToolNames.includes(t.name))
+  agentStore.availableTools.filter(t =>
+    agentStore.selectedToolNames.includes(t.name) ||
+    agentStore.selectedToolNames.includes(`${t.namespace.id}::${t.name}`)
+  )
 )
 const selectedSubAgents = computed(() => {
   const ids = chatStore.freeChatSubAgentIds
@@ -374,7 +377,7 @@ defineExpose({ processFiles })
             </div>
             <template v-if="selectedToolsList.length">
               <div
-                v-for="t in selectedToolsList.slice(0, 8)"
+                v-for="t in selectedToolsList.slice(0, 12)"
                 :key="t.name"
                 class="flex items-start gap-1.5 mb-1 last:mb-0"
               >
@@ -389,10 +392,10 @@ defineExpose({ processFiles })
                 </div>
               </div>
               <div
-                v-if="selectedToolsList.length > 8"
+                v-if="selectedToolsList.length > 12"
                 class="text-zinc-500 text-[10px] mt-1"
               >
-                +{{ selectedToolsList.length - 8 }} more
+                +{{ selectedToolsList.length - 12 }} more
               </div>
             </template>
             <div
@@ -438,7 +441,14 @@ defineExpose({ processFiles })
                 :key="a.id"
                 class="flex items-start gap-1.5 mb-1 last:mb-0"
               >
+                <img
+                  v-if="a.iconUrl"
+                  :src="a.iconUrl"
+                  :alt="a.name"
+                  class="w-3 h-3 rounded-sm shrink-0 mt-0.5 object-cover"
+                >
                 <Icon
+                  v-else
                   icon="lucide:bot"
                   class="w-3 h-3 text-blue-400 shrink-0 mt-0.5"
                 />

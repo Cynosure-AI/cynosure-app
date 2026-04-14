@@ -43,7 +43,7 @@ function close(): void {
     <textarea
       v-model="draft"
       placeholder="Optional system instructions..."
-      rows="10"
+      rows="20"
       class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 font-mono resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
     />
 
