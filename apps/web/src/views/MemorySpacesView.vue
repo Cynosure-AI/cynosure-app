@@ -245,36 +245,8 @@ async function handleFileUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const files = input.files
   if (!files?.length || !selectedSpaceId.value) return
-  uploading.value = true
-  uploadResults.value = []
-  const fileList = Array.from(files)
-  uploadProgress.value = { current: 0, total: fileList.length }
-  const results: typeof uploadResults.value = []
-
-  for (const file of fileList) {
-    uploadProgress.value.current++
-    if (file.size > 10 * 1024 * 1024) {
-      results.push({ fileName: file.name, chunks: 0, error: 'File too large (max 10MB)' })
-      continue
-    }
-    try {
-      const content = await readFileContent(file)
-      const res = await api.memorySpaces.ingestFile(selectedSpaceId.value!, file.name, content)
-      results.push({ fileName: res.fileName, chunks: res.chunksStored })
-    } catch (err) {
-      results.push({ fileName: file.name, chunks: 0, error: (err as Error).message })
-    }
-    uploadResults.value = [...results]
-  }
-  uploadResults.value = results
-  uploading.value = false
+  await ingestFiles(Array.from(files), selectedSpaceId.value)
   input.value = ''
-  // Invalidate and reload
-  const newMap = new Map(groupChunks.value)
-  for (const r of results) { if (!r.error) newMap.delete(r.fileName) }
-  groupChunks.value = newMap
-  loadGroups()
-  loadSpaces()
 }
 
 // Reingest
@@ -363,6 +335,79 @@ async function exportDocument(sourceFile: string) {
   URL.revokeObjectURL(url)
 }
 
+// Drag-and-drop
+const dragCounter = ref(0)
+const dropTargetSpaceId = ref<string | null>(null)
+
+function onDragEnter(e: DragEvent, spaceId?: string) {
+  e.preventDefault()
+  if (spaceId) {
+    dropTargetSpaceId.value = spaceId
+  } else {
+    dragCounter.value++
+  }
+}
+
+function onDragLeave(e: DragEvent, spaceId?: string) {
+  e.preventDefault()
+  if (spaceId) {
+    // Only clear if leaving the same space card
+    if (dropTargetSpaceId.value === spaceId) dropTargetSpaceId.value = null
+  } else {
+    dragCounter.value--
+    if (dragCounter.value <= 0) dragCounter.value = 0
+  }
+}
+
+function onDragOver(e: DragEvent) {
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+}
+
+async function onDrop(e: DragEvent, targetSpaceId?: string) {
+  e.preventDefault()
+  dragCounter.value = 0
+  dropTargetSpaceId.value = null
+  const files = e.dataTransfer?.files
+  if (!files?.length) return
+  const spaceId = targetSpaceId || selectedSpaceId.value
+  if (!spaceId) return
+  // If dropped on a different space, select it
+  if (spaceId !== selectedSpaceId.value) selectedSpaceId.value = spaceId
+  await ingestFiles(Array.from(files), spaceId)
+}
+
+async function ingestFiles(fileList: File[], spaceId: string) {
+  uploading.value = true
+  uploadResults.value = []
+  uploadProgress.value = { current: 0, total: fileList.length }
+  const results: typeof uploadResults.value = []
+
+  for (const file of fileList) {
+    uploadProgress.value.current++
+    if (file.size > 10 * 1024 * 1024) {
+      results.push({ fileName: file.name, chunks: 0, error: 'File too large (max 10MB)' })
+      continue
+    }
+    try {
+      const content = await readFileContent(file)
+      const res = await api.memorySpaces.ingestFile(spaceId, file.name, content)
+      results.push({ fileName: res.fileName, chunks: res.chunksStored })
+    } catch (err) {
+      results.push({ fileName: file.name, chunks: 0, error: (err as Error).message })
+    }
+    uploadResults.value = [...results]
+  }
+  uploadResults.value = results
+  uploading.value = false
+  // Invalidate and reload
+  const newMap = new Map(groupChunks.value)
+  for (const r of results) { if (!r.error) newMap.delete(r.fileName) }
+  groupChunks.value = newMap
+  loadGroups()
+  loadSpaces()
+}
+
 // Lifecycle
 watch(selectedSpaceId, () => {
   groups.value = []
@@ -378,7 +423,31 @@ onMounted(() => loadSpaces())
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto">
+  <div
+    class="h-full overflow-y-auto relative"
+    @dragenter="onDragEnter($event)"
+    @dragleave="onDragLeave($event)"
+    @dragover="onDragOver($event)"
+    @drop="onDrop($event)"
+  >
+    <!-- Drop overlay for selected space -->
+    <div
+      v-if="dragCounter > 0 && selectedSpaceId && !dropTargetSpaceId"
+      class="absolute inset-0 z-40 flex items-center justify-center bg-blue-500/10 border-2 border-dashed border-blue-500/40 rounded-xl pointer-events-none"
+    >
+      <div class="text-center">
+        <Icon
+          icon="lucide:upload-cloud"
+          class="w-12 h-12 text-blue-400 mx-auto mb-2"
+        />
+        <p class="text-blue-300 font-medium">
+          Drop files to ingest into {{ selectedSpace?.name || 'selected space' }}
+        </p>
+        <p class="text-blue-400/60 text-sm mt-1">
+          Files will be chunked and indexed automatically
+        </p>
+      </div>
+    </div>
     <div class="max-w-5xl mx-auto px-6 py-6">
       <div class="flex items-center justify-between mb-6">
         <div>
@@ -435,11 +504,18 @@ onMounted(() => loadSpaces())
           <button
             v-for="space in spaces"
             :key="space.id"
-            class="flex-shrink-0 rounded-xl border px-4 py-3 text-left transition-colors min-w-48"
-            :class="selectedSpaceId === space.id
-              ? 'border-blue-500/50 bg-blue-500/10'
-              : 'border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/60'"
+            class="flex-shrink-0 rounded-xl border px-4 py-3 text-left transition-colors min-w-48 relative"
+            :class="[
+              selectedSpaceId === space.id
+                ? 'border-blue-500/50 bg-blue-500/10'
+                : 'border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/60',
+              dropTargetSpaceId === space.id ? 'ring-2 ring-blue-400 border-blue-400/50 bg-blue-500/15' : ''
+            ]"
             @click="selectedSpaceId = space.id"
+            @dragenter.stop="onDragEnter($event, space.id)"
+            @dragleave.stop="onDragLeave($event, space.id)"
+            @dragover.prevent
+            @drop.stop="onDrop($event, space.id)"
           >
             <div class="flex items-center gap-2 mb-1">
               <Icon

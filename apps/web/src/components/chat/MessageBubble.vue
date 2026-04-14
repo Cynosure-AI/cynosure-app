@@ -133,6 +133,10 @@ marked.use(
 // Custom code block renderer with language label + copy button
 marked.use({
   renderer: {
+    link({ href, text }: { href: string; text: string }) {
+      const safeHref = (href || '').replace(/["<>]/g, '')
+      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${text}</a>`
+    },
     code({ text, lang, escaped }: { text: string; lang?: string; escaped?: boolean }) {
       const langLabel = (lang || '').split(/\s/)[0].replace(/[<>&"']/g, '')
       const codeContent = escaped ? text : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -162,8 +166,23 @@ function rewriteLocalImagePaths(html: string): string {
   )
 }
 
+/** Turn bare URLs in plain text into clickable anchor tags (used for user messages). */
+function linkifyText(text: string): string {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  return escaped.replace(
+    /(?:https?:\/\/|www\.)[^\s<>"'`)\]]+/gi,
+    (url) => {
+      const href = url.startsWith('www.') ? `https://${url}` : url
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">${url}</a>`
+    }
+  )
+}
+
 const renderedContent = computed(() => {
-  if (props.role === 'user') return props.content
+  if (props.role === 'user') return linkifyText(props.content)
   try {
     const html = marked.parse(props.content) as string
     return rewriteLocalImagePaths(html)
@@ -327,12 +346,14 @@ const isUser = computed(() => props.role === 'user')
         </div>
       </div>
 
-      <!-- User message: plain text -->
+      <!-- User message: linkified text -->
       <div
         v-else-if="isUser"
-        class="whitespace-pre-wrap"
       >
-        {{ content }}
+        <div
+          class="whitespace-pre-wrap"
+          v-html="renderedContent"
+        />
         <div
           v-if="imageDataUrls?.length"
           class="flex gap-2 mt-2 flex-wrap"
@@ -593,6 +614,18 @@ const isUser = computed(() => props.role === 'user')
 .msg-markdown :not(pre) > code::before,
 .msg-markdown :not(pre) > code::after {
   content: none;
+}
+
+/* ── Links ── */
+.msg-markdown a {
+  color: #93c5fd;
+  text-decoration: underline;
+  text-decoration-color: rgba(147, 197, 253, 0.3);
+  transition: text-decoration-color 0.15s;
+  word-break: break-all;
+}
+.msg-markdown a:hover {
+  text-decoration-color: rgba(147, 197, 253, 0.8);
 }
 
 /* ── Spacing ── */
