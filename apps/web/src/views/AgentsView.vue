@@ -63,7 +63,6 @@ async function createAgent() {
     systemPrompt: '',
     cronPrompt: '',
     tools: [],
-    getMemoriesAtStart: false,
     autoApproveTools: false,
     generateTitle: true
   })

@@ -20,7 +20,6 @@ export interface AgentConfig {
     model: string
     tools: string[]
     subAgents: SubAgentAssignment[]
-    getMemoriesAtStart: boolean
     autoApproveTools: boolean
     maxToolOutputChars: number
     showInCarousel: boolean
@@ -48,7 +47,6 @@ export type CreateAgentInput = {
     cronPrompt?: string
     tools?: string[]
     subAgents?: SubAgentAssignment[]
-    getMemoriesAtStart?: boolean
     autoApproveTools?: boolean
     maxToolOutputChars?: number
     showInCarousel?: boolean
@@ -151,18 +149,10 @@ function readAgentFromDir(agentDir: string, id: string): AgentData | null {
     // Backward compat: migrate legacy memoryEnabled toggles into the tools array
     const raw = config as unknown as Record<string, unknown>
     let tools = config.tools || []
-    if (raw.memoryEnabled === true || (raw.memoryEnabled !== false && config.getMemoriesAtStart === undefined && raw.memoryEnabled === undefined)) {
-        // Old agents with memoryEnabled: true → add memory tools if missing
-        if (raw.memoryEnabled === true) {
-            if (!tools.includes('memory_retrieve_chunks')) tools = [...tools, 'memory_retrieve_chunks']
-            if (!tools.includes('memory_semantic_search')) tools = [...tools, 'memory_semantic_search']
-        }
+    if (raw.memoryEnabled === true) {
+        if (!tools.includes('memory_retrieve_chunks')) tools = [...tools, 'memory_retrieve_chunks']
+        if (!tools.includes('memory_semantic_search')) tools = [...tools, 'memory_semantic_search']
     }
-
-    // Resolve getMemoriesAtStart: prefer new field, fall back to legacy memoryEnabled
-    const getMemoriesAtStart = config.getMemoriesAtStart !== undefined
-        ? config.getMemoriesAtStart
-        : (raw.memoryEnabled !== undefined ? raw.memoryEnabled === true : false)
 
     return {
         id,
@@ -177,7 +167,6 @@ function readAgentFromDir(agentDir: string, id: string): AgentData | null {
         cronPrompt,
         tools,
         subAgents: config.subAgents || [],
-        getMemoriesAtStart: getMemoriesAtStart as boolean,
         autoApproveTools: config.autoApproveTools === true,
         maxToolOutputChars: config.maxToolOutputChars ?? 16_384,
         showInCarousel: config.showInCarousel !== false,
@@ -232,7 +221,6 @@ export function createAgent(input: CreateAgentInput): AgentData {
         model: input.model || '',
         tools: input.tools || [],
         subAgents: input.subAgents || [],
-        getMemoriesAtStart: input.getMemoriesAtStart === true,
         autoApproveTools: input.autoApproveTools === true,
         maxToolOutputChars: input.maxToolOutputChars ?? 16_384,
         showInCarousel: input.showInCarousel !== false,
@@ -281,7 +269,6 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         model: input.model ?? existing.model,
         tools: input.tools !== undefined ? input.tools : existing.tools,
         subAgents: input.subAgents !== undefined ? input.subAgents : (existing.subAgents || []),
-        getMemoriesAtStart: input.getMemoriesAtStart !== undefined ? input.getMemoriesAtStart : existing.getMemoriesAtStart,
         autoApproveTools: input.autoApproveTools !== undefined ? input.autoApproveTools : (existing.autoApproveTools === true),
         maxToolOutputChars: input.maxToolOutputChars !== undefined ? input.maxToolOutputChars : (existing.maxToolOutputChars ?? 16_384),
         showInCarousel: input.showInCarousel !== undefined ? input.showInCarousel : (existing.showInCarousel !== false),

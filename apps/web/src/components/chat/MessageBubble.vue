@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { marked } from 'marked'
 import { markedHighlight } from 'marked-highlight'
@@ -58,6 +58,7 @@ const copied = ref(false)
 const isEditing = ref(false)
 const editContent = ref('')
 const lightboxSrc = ref<string | null>(null)
+const editTextareaRef = ref<HTMLTextAreaElement | null>(null)
 
 function copyContent(): void {
   navigator.clipboard.writeText(props.content)
@@ -68,7 +69,22 @@ function copyContent(): void {
 function startEditing(): void {
   editContent.value = props.content
   isEditing.value = true
+  nextTick(() => {
+    autoResizeEdit()
+  })
 }
+
+function autoResizeEdit(): void {
+  const el = editTextareaRef.value
+  if (el) {
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }
+}
+
+watch(editContent, () => {
+  nextTick(autoResizeEdit)
+})
 
 function cancelEdit(): void {
   isEditing.value = false
@@ -197,7 +213,8 @@ const isUser = computed(() => props.role === 'user')
       class="relative md:max-w-[85%] max-w-[90%] rounded-3xl px-5 py-3 text-[15px] leading-relaxed shadow-sm transition-all"
       :class="[
         isUser ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-zinc-800/60 border text-zinc-200 rounded-tl-sm',
-        isError && !isUser ? 'border-red-500/40' : !isUser ? 'border-zinc-700/50' : ''
+        isError && !isUser ? 'border-red-500/40' : !isUser ? 'border-zinc-700/50' : '',
+        isEditing ? 'w-[85%] md:w-[85%]' : ''
       ]"
     >
       <!-- Action buttons: copy (all), retry + edit (user only) -->
@@ -285,10 +302,11 @@ const isUser = computed(() => props.role === 'user')
         class="min-w-48"
       >
         <textarea
+          ref="editTextareaRef"
           v-model="editContent"
-          rows="3"
           autofocus
-          class="w-full bg-transparent resize-none outline-none text-white placeholder-white/40 text-[15px] leading-relaxed"
+          class="w-full bg-transparent resize-none outline-none text-white placeholder-white/40 text-[15px] leading-relaxed overflow-hidden"
+          @input="autoResizeEdit"
           @keydown.enter.meta.prevent="submitEdit"
           @keydown.enter.ctrl.prevent="submitEdit"
           @keydown.escape="cancelEdit"

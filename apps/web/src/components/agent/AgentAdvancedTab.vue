@@ -37,34 +37,6 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
       </div>
     </div>
 
-    <!-- Retrieve memories at start -->
-    <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-      <div class="flex items-start justify-between gap-4">
-        <div class="flex-1">
-          <div class="flex items-center gap-2 mb-1">
-            <Icon
-              icon="lucide:brain"
-              class="w-4 h-4 text-purple-400"
-            />
-            <h3 class="text-sm font-medium text-zinc-200">
-              Retrieve Memories at Start
-            </h3>
-          </div>
-          <p class="text-xs text-zinc-500 leading-relaxed">
-            When enabled, the agent will automatically search its knowledge base on the first message and inject relevant
-            memory context. This is independent of the memory tools — the agent can still use memory tools on demand when
-            they are enabled in the Tools tab.
-          </p>
-        </div>
-        <ToggleSwitch
-          :model-value="agent.getMemoriesAtStart"
-          color="purple"
-          class="mt-0.5"
-          @update:model-value="emit('update', 'getMemoriesAtStart', $event)"
-        />
-      </div>
-    </div>
-
     <!-- Max tool output chars -->
     <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
       <div class="flex items-start justify-between gap-4">

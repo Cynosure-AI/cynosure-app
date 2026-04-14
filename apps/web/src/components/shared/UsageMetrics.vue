@@ -5,6 +5,7 @@ import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'
 import ModalDialog from './ModalDialog.vue'
 import DailyActivityChart from './DailyActivityChart.vue'
+import HoverTooltip from './HoverTooltip.vue'
 
 const agentDefs = useAgentDefinitionsStore()
 
@@ -161,47 +162,105 @@ async function confirmReset(): Promise<void> {
   <template v-else-if="metrics">
     <!-- Summary Cards -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-        <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
-          Conversations
+      <HoverTooltip>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+          <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
+            Conversations
+          </div>
+          <div class="text-xl font-semibold text-zinc-100">
+            {{ formatNumber(metrics.totals.conversations) }}
+          </div>
         </div>
-        <div class="text-xl font-semibold text-zinc-100">
-          {{ formatNumber(metrics.totals.conversations) }}
+        <template #content>
+          <div class="font-medium text-zinc-300 mb-1">
+            Conversations
+          </div>
+          <div class="text-zinc-400">
+            Total: {{ metrics.totals.conversations.toLocaleString() }}
+          </div>
+          <div class="text-zinc-500 text-[10px] mt-1">
+            Unique chat sessions in the selected period
+          </div>
+        </template>
+      </HoverTooltip>
+      <HoverTooltip>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+          <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
+            Messages
+          </div>
+          <div class="text-xl font-semibold text-zinc-100">
+            {{ formatNumber(metrics.totals.messages) }}
+          </div>
         </div>
-      </div>
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-        <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
-          Messages
+        <template #content>
+          <div class="font-medium text-zinc-300 mb-1">
+            Messages
+          </div>
+          <div class="text-zinc-400">
+            Total: {{ metrics.totals.messages.toLocaleString() }}
+          </div>
+          <div class="text-zinc-500 text-[10px] mt-1">
+            User + assistant messages across all conversations
+          </div>
+        </template>
+      </HoverTooltip>
+      <HoverTooltip>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+          <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
+            Total Tokens
+          </div>
+          <div class="text-xl font-semibold text-zinc-100">
+            {{ formatNumber(metrics.totals.totalTokens) }}
+          </div>
+          <div class="text-[10px] text-zinc-600 mt-0.5">
+            {{ formatNumber(metrics.totals.promptTokens) }} in · {{ formatNumber(metrics.totals.completionTokens) }} out
+          </div>
         </div>
-        <div class="text-xl font-semibold text-zinc-100">
-          {{ formatNumber(metrics.totals.messages) }}
+        <template #content>
+          <div class="font-medium text-zinc-300 mb-1">
+            Token Usage
+          </div>
+          <div class="flex justify-between text-zinc-400 mb-0.5">
+            <span>Prompt (input)</span><span class="text-zinc-300">{{ metrics.totals.promptTokens.toLocaleString() }}</span>
+          </div>
+          <div class="flex justify-between text-zinc-400 mb-0.5">
+            <span>Completion (output)</span><span class="text-zinc-300">{{ metrics.totals.completionTokens.toLocaleString() }}</span>
+          </div>
+          <div class="flex justify-between text-zinc-400 border-t border-zinc-800 pt-1 mt-1">
+            <span>Total</span><span class="text-zinc-200 font-medium">{{ metrics.totals.totalTokens.toLocaleString() }}</span>
+          </div>
+        </template>
+      </HoverTooltip>
+      <HoverTooltip>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+          <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
+            Est. Cost
+          </div>
+          <div
+            class="text-xl font-semibold"
+            :class="metrics.totals.estimatedCost !== null ? 'text-amber-400' : 'text-zinc-500'"
+          >
+            {{ formatCost(metrics.totals.estimatedCost) }}
+          </div>
+          <div class="text-[10px] text-zinc-600 mt-0.5">
+            {{ metrics.totals.avgLatencyMs.toLocaleString() }}ms avg latency
+          </div>
         </div>
-      </div>
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-        <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
-          Total Tokens
-        </div>
-        <div class="text-xl font-semibold text-zinc-100">
-          {{ formatNumber(metrics.totals.totalTokens) }}
-        </div>
-        <div class="text-[10px] text-zinc-600 mt-0.5">
-          {{ formatNumber(metrics.totals.promptTokens) }} in · {{ formatNumber(metrics.totals.completionTokens) }} out
-        </div>
-      </div>
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-        <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
-          Est. Cost
-        </div>
-        <div
-          class="text-xl font-semibold"
-          :class="metrics.totals.estimatedCost !== null ? 'text-amber-400' : 'text-zinc-500'"
-        >
-          {{ formatCost(metrics.totals.estimatedCost) }}
-        </div>
-        <div class="text-[10px] text-zinc-600 mt-0.5">
-          {{ metrics.totals.avgLatencyMs.toLocaleString() }}ms avg latency
-        </div>
-      </div>
+        <template #content>
+          <div class="font-medium text-zinc-300 mb-1">
+            Cost &amp; Latency
+          </div>
+          <div class="flex justify-between text-zinc-400 mb-0.5">
+            <span>Estimated cost</span><span class="text-amber-400">{{ formatCost(metrics.totals.estimatedCost) }}</span>
+          </div>
+          <div class="flex justify-between text-zinc-400">
+            <span>Avg latency</span><span class="text-zinc-300">{{ metrics.totals.avgLatencyMs.toLocaleString() }}ms</span>
+          </div>
+          <div class="text-zinc-500 text-[10px] mt-1">
+            Cost estimates via models.dev pricing data
+          </div>
+        </template>
+      </HoverTooltip>
     </div>
 
     <!-- Cost attribution -->

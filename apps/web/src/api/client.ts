@@ -240,7 +240,6 @@ export interface AgentDefinition {
   systemPrompt: string
   cronPrompt: string
   tools: string[]
-  getMemoriesAtStart: boolean
   subAgents?: SubAgentAssignment[]
   autoApproveTools: boolean
   generateTitle: boolean

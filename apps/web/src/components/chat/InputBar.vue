@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import { useChatStore } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import { useWhisper } from '../../composables/useWhisper'
 import { Icon } from '@iconify/vue'
+import { api, type MemorySpace } from '../../api/client'
 import ToolSelectorModal from './ToolSelectorModal.vue'
 import SubAgentSelectorModal from './SubAgentSelectorModal.vue'
 import MemorySpaceSelectorModal from './MemorySpaceSelectorModal.vue'
+import HoverTooltip from '../shared/HoverTooltip.vue'
 
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
@@ -35,6 +37,25 @@ const subAgentCount = computed(() =>
 const memorySpaceCount = computed(() =>
   chatStore.freeChatMemorySpaceIds.length
 )
+
+// Memory space cache for tooltips
+const cachedMemorySpaces = ref<MemorySpace[]>([])
+onMounted(async () => {
+  try { cachedMemorySpaces.value = await api.memorySpaces.list() } catch { /* ignore */ }
+})
+
+// Tooltip helpers
+const selectedToolsList = computed(() =>
+  agentStore.availableTools.filter(t => agentStore.selectedToolNames.includes(t.name))
+)
+const selectedSubAgents = computed(() => {
+  const ids = chatStore.freeChatSubAgentIds
+  return agentDefs.agents.filter(a => ids.includes(a.id))
+})
+const selectedMemorySpaces = computed(() => {
+  const ids = chatStore.freeChatMemorySpaceIds
+  return cachedMemorySpaces.value.filter(s => ids.includes(s.id))
+})
 
 const { status: whisperStatus, progress: whisperProgress, startRecording, stopRecording } = useWhisper()
 
@@ -326,62 +347,189 @@ defineExpose({ processFiles })
         </button>
 
         <!-- Tools button -->
-        <button
+        <HoverTooltip
           v-if="agentStore.availableTools.length"
-          class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-500 hover:text-zinc-300"
-          title="Tool access"
-          aria-label="Tool access"
-          @click="showToolModal = true"
+          :max-width="280"
         >
-          <Icon
-            icon="mdi:tools"
-            class="h-5 w-5"
-          />
-          <span
-            class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
+          <button
+            class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-500 hover:text-zinc-300"
+            aria-label="Tool access"
+            @click="showToolModal = true"
           >
-            {{ agentStore.selectedToolNames.length }}
-          </span>
-        </button>
+            <Icon
+              icon="mdi:tools"
+              class="h-5 w-5"
+            />
+            <span
+              class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
+            >
+              {{ agentStore.selectedToolNames.length }}
+            </span>
+          </button>
+          <template #content>
+            <div class="font-medium text-zinc-300 mb-1.5">
+              Tools ({{ agentStore.selectedToolNames.length }}/{{ agentStore.availableTools.length }})
+            </div>
+            <template v-if="selectedToolsList.length">
+              <div
+                v-for="t in selectedToolsList.slice(0, 8)"
+                :key="t.name"
+                class="flex items-start gap-1.5 mb-1 last:mb-0"
+              >
+                <Icon
+                  icon="lucide:check"
+                  class="w-3 h-3 text-emerald-400 shrink-0 mt-0.5"
+                />
+                <div class="min-w-0">
+                  <div class="text-zinc-300 font-mono text-[11px] truncate">
+                    {{ t.name }}
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="selectedToolsList.length > 8"
+                class="text-zinc-500 text-[10px] mt-1"
+              >
+                +{{ selectedToolsList.length - 8 }} more
+              </div>
+            </template>
+            <div
+              v-else
+              class="text-zinc-500"
+            >
+              No tools selected
+            </div>
+            <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
+              Click to configure
+            </div>
+          </template>
+        </HoverTooltip>
 
         <!-- Sub-agents button -->
-        <button
+        <HoverTooltip
           v-if="agentDefs.agents.length"
-          class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-500 hover:text-zinc-300"
-          title="Sub-agents"
-          aria-label="Sub-agents"
-          @click="showSubAgentModal = true"
+          :max-width="260"
         >
-          <Icon
-            icon="lucide:bot"
-            class="h-5 w-5"
-          />
-          <span
-            v-if="subAgentCount > 0"
-            class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
+          <button
+            class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-500 hover:text-zinc-300"
+            aria-label="Sub-agents"
+            @click="showSubAgentModal = true"
           >
-            {{ subAgentCount }}
-          </span>
-        </button>
+            <Icon
+              icon="lucide:bot"
+              class="h-5 w-5"
+            />
+            <span
+              v-if="subAgentCount > 0"
+              class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
+            >
+              {{ subAgentCount }}
+            </span>
+          </button>
+          <template #content>
+            <div class="font-medium text-zinc-300 mb-1.5">
+              Sub-Agents ({{ subAgentCount }} selected)
+            </div>
+            <template v-if="selectedSubAgents.length">
+              <div
+                v-for="a in selectedSubAgents.slice(0, 6)"
+                :key="a.id"
+                class="flex items-start gap-1.5 mb-1 last:mb-0"
+              >
+                <Icon
+                  icon="lucide:bot"
+                  class="w-3 h-3 text-blue-400 shrink-0 mt-0.5"
+                />
+                <div class="min-w-0">
+                  <div class="text-zinc-300 text-[11px] truncate">
+                    {{ a.name }}
+                  </div>
+                  <div
+                    v-if="a.description"
+                    class="text-zinc-500 text-[10px] truncate"
+                  >
+                    {{ a.description }}
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="selectedSubAgents.length > 6"
+                class="text-zinc-500 text-[10px] mt-1"
+              >
+                +{{ selectedSubAgents.length - 6 }} more
+              </div>
+            </template>
+            <div
+              v-else
+              class="text-zinc-500"
+            >
+              No sub-agents selected
+            </div>
+            <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
+              Click to configure
+            </div>
+          </template>
+        </HoverTooltip>
 
         <!-- Memory spaces button -->
-        <button
-          class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-500 hover:text-zinc-300"
-          title="Memory spaces"
-          aria-label="Memory spaces"
-          @click="showMemorySpaceModal = true"
-        >
-          <Icon
-            icon="lucide:brain"
-            class="h-5 w-5"
-          />
-          <span
-            v-if="memorySpaceCount > 0"
-            class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
+        <HoverTooltip :max-width="260">
+          <button
+            class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-500 hover:text-zinc-300"
+            aria-label="Memory spaces"
+            @click="showMemorySpaceModal = true"
           >
-            {{ memorySpaceCount }}
-          </span>
-        </button>
+            <Icon
+              icon="lucide:brain"
+              class="h-5 w-5"
+            />
+            <span
+              v-if="memorySpaceCount > 0"
+              class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
+            >
+              {{ memorySpaceCount }}
+            </span>
+          </button>
+          <template #content>
+            <div class="font-medium text-zinc-300 mb-1.5">
+              Memory Spaces ({{ memorySpaceCount }} selected)
+            </div>
+            <template v-if="selectedMemorySpaces.length">
+              <div
+                v-for="s in selectedMemorySpaces.slice(0, 6)"
+                :key="s.id"
+                class="flex items-start gap-1.5 mb-1 last:mb-0"
+              >
+                <Icon
+                  icon="lucide:database"
+                  class="w-3 h-3 text-purple-400 shrink-0 mt-0.5"
+                />
+                <div class="min-w-0">
+                  <div class="text-zinc-300 text-[11px] truncate">
+                    {{ s.name }}
+                  </div>
+                  <div class="text-zinc-500 text-[10px]">
+                    {{ s.documentCount }} docs
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="selectedMemorySpaces.length > 6"
+                class="text-zinc-500 text-[10px] mt-1"
+              >
+                +{{ selectedMemorySpaces.length - 6 }} more
+              </div>
+            </template>
+            <div
+              v-else
+              class="text-zinc-500"
+            >
+              No memory spaces selected
+            </div>
+            <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
+              Click to configure
+            </div>
+          </template>
+        </HoverTooltip>
 
         <input
           ref="fileInputRef"
@@ -497,47 +645,73 @@ defineExpose({ processFiles })
 
     <!-- Context window usage ring — pinned to the far right of the bar -->
     <!-- Always rendered at fixed size so layout never shifts when it appears -->
-    <div
-      class="relative flex items-center justify-center shrink-0 self-end pb-[3px] w-9 h-9"
-      :class="contextUsage ? '' : 'invisible'"
-      :title="contextUsage ? `Context: ${contextUsage.used.toLocaleString()} / ${contextUsage.max.toLocaleString()} tokens (${Math.round(contextUsage.percent)}%)` : ''"
-    >
-      <svg
-        v-if="contextUsage"
-        class="w-9 h-9 -rotate-90"
-        viewBox="0 0 36 36"
+    <HoverTooltip :disabled="!contextUsage">
+      <div
+        class="relative flex items-center justify-center shrink-0 self-end pb-0.75 w-9 h-9"
+        :class="contextUsage ? '' : 'invisible'"
       >
-        <!-- Background circle -->
-        <circle
-          cx="18"
-          cy="18"
-          r="14"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          class="text-zinc-700/50"
-        />
-        <!-- Progress arc -->
-        <circle
-          cx="18"
-          cy="18"
-          r="14"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          :stroke-dasharray="87.96"
-          :stroke-dashoffset="87.96 - (87.96 * contextUsage.percent) / 100"
-          :class="contextUsage.percent > 90 ? 'text-red-500' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-blue-500'"
-          class="transition-all duration-500"
-        />
-      </svg>
-      <span
-        v-if="contextUsage"
-        class="absolute text-[8px] font-bold leading-none"
-        :class="contextUsage.percent > 90 ? 'text-red-400' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-zinc-400'"
-      >{{ Math.round(contextUsage.percent) }}%</span>
-    </div>
+        <svg
+          v-if="contextUsage"
+          class="w-9 h-9 -rotate-90"
+          viewBox="0 0 36 36"
+        >
+          <!-- Background circle -->
+          <circle
+            cx="18"
+            cy="18"
+            r="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            class="text-zinc-700/50"
+          />
+          <!-- Progress arc -->
+          <circle
+            cx="18"
+            cy="18"
+            r="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            :stroke-dasharray="87.96"
+            :stroke-dashoffset="87.96 - (87.96 * contextUsage.percent) / 100"
+            :class="contextUsage.percent > 90 ? 'text-red-500' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-blue-500'"
+            class="transition-all duration-500"
+          />
+        </svg>
+        <span
+          v-if="contextUsage"
+          class="absolute text-[8px] font-bold leading-none"
+          :class="contextUsage.percent > 90 ? 'text-red-400' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-zinc-400'"
+        >{{ Math.round(contextUsage.percent) }}%</span>
+      </div>
+      <template #content>
+        <div
+          v-if="contextUsage"
+          class="min-w-36"
+        >
+          <div class="font-medium text-zinc-300 mb-1.5">
+            Context Window
+          </div>
+          <div class="flex justify-between text-zinc-400 mb-0.5">
+            <span>Used</span><span class="text-zinc-300">{{ contextUsage.used.toLocaleString() }}</span>
+          </div>
+          <div class="flex justify-between text-zinc-400 mb-0.5">
+            <span>Capacity</span><span class="text-zinc-300">{{ contextUsage.max.toLocaleString() }}</span>
+          </div>
+          <div class="flex justify-between text-zinc-400">
+            <span>Usage</span>
+            <span
+              :class="contextUsage.percent > 90 ? 'text-red-400' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-zinc-300'"
+            >{{ Math.round(contextUsage.percent) }}%</span>
+          </div>
+          <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
+            Tokens used in current conversation
+          </div>
+        </div>
+      </template>
+    </HoverTooltip>
   </div>
 
   <ToolSelectorModal v-model="showToolModal" />

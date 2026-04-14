@@ -9,8 +9,6 @@
 
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
-import { getMemoryAggregator } from '../memory/memory-aggregator.js'
-import { getEventBus } from '../telemetry/event-bus.js'
 import { hydrateBuiltInTools } from '../tools/built-in-tools.js'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-files.js'
 import type { ChatMessage, ToolDefinition } from '../gateway/providers/base.provider.js'
@@ -97,7 +95,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         agent, conversationId, broadcast,
         providerOverride, modelOverride,
         systemPromptOverride, systemPromptSuffix,
-        userQuery, isFirstMessage,
         includeSubAgents = true,
         subAgentAssignments,
         signal,
@@ -155,52 +152,9 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         memorySpaceOverrides,
     })
 
-    // ── 5. Memory enrichment ──
+    // ── 5. System prompt ──
 
     const systemMessages: ChatMessage[] = []
-    let retrievedMemorySources: MemorySource[] | null = null
-
-    if (agent.getMemoriesAtStart && isFirstMessage && userQuery) {
-        try {
-            const aggregator = getMemoryAggregator()
-            const memory = await aggregator.aggregate(userQuery, { conversationId, agentId: agent.id })
-
-            if (memory.permanent.length > 0) {
-                retrievedMemorySources = memory.permanent.map(c => ({
-                    text: c.text.slice(0, 200),
-                    source: c.sourceFile || c.source,
-                    score: Math.round(c.score * 100) / 100,
-                }))
-
-                broadcast('chat:memory-sources', { conversationId, sources: retrievedMemorySources })
-
-                const eventBus = getEventBus()
-                eventBus.emit('step:status', {
-                    conversationId,
-                    iteration: 0,
-                    status: 'memory-retrieved',
-                    message: `Retrieved ${retrievedMemorySources.length} memory source${retrievedMemorySources.length !== 1 ? 's' : ''}`,
-                })
-                eventBus.emit('step:executed', {
-                    conversationId,
-                    results: retrievedMemorySources.map(s => ({
-                        name: s.source || 'memory',
-                        success: true,
-                        output: `[${Math.round(s.score * 100)}% relevance] ${s.text}`,
-                    })),
-                })
-            }
-
-            const memoryContext = aggregator.format(memory)
-            if (memoryContext) {
-                // Memory context goes AFTER system prompt in the array —
-                // callers prepend systemMessages, so index 0 = first system message.
-                systemMessages.push({ role: 'system', content: `[Retrieved Memory Context]\n${memoryContext}` })
-            }
-        } catch { /* memory not available — proceed without */ }
-    }
-
-    // ── 6. System prompt ──
 
     let effectiveSystemPrompt = systemPromptOverride ?? agent.systemPrompt ?? ''
 
@@ -223,7 +177,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         providerId: resolvedProviderId,
         model,
         systemMessages,
-        retrievedMemorySources,
+        retrievedMemorySources: null,
         hasSubAgents,
     }
 }
