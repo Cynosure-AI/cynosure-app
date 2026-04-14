@@ -97,6 +97,8 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
 
         // ── Model usage (top models by request count) ───────────────────────
 
+        // Fetch ALL model combinations (no LIMIT) so cost can be summed correctly.
+        // The display table will be capped at 20 entries client-side/below.
         const modelUsage = db.prepare(`
             SELECT
                 COALESCE(provider, 'unknown') as provider,
@@ -108,7 +110,6 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             WHERE role = 'assistant' AND created_at >= ?
             GROUP BY provider, model
             ORDER BY request_count DESC
-            LIMIT 20
         `).all(sinceMs) as {
             provider: string
             model: string
@@ -260,7 +261,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             }
         })
 
-        // Sum up all model costs that were resolvable
+        // Sum up all model costs that were resolvable (across ALL models, not just top 20)
         const totalEstimatedCost = modelUsageWithCost.reduce<number | null>((sum, m) => {
             if (m.estimatedCost === null) return sum
             return (sum ?? 0) + m.estimatedCost
@@ -276,7 +277,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
                 avgLatencyMs: Math.round(totals.avg_latency),
                 estimatedCost: totalEstimatedCost,
             },
-            modelUsage: modelUsageWithCost,
+            modelUsage: modelUsageWithCost.slice(0, 20),
             toolUsage,
             agentUsage: agentUsage.map(a => ({
                 agentId: a.agent_id,
