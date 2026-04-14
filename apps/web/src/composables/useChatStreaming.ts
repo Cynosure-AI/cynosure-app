@@ -6,6 +6,8 @@ export interface TokenUsage {
     completionTokens: number
     totalTokens: number
     model?: string
+    /** Prompt tokens from the last LLM round (for accurate context window display) */
+    lastRoundPromptTokens?: number
 }
 
 interface StreamBuffer {
@@ -239,9 +241,9 @@ export function useChatStreaming(
         }
     }
 
-    function handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number }): void {
+    function handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundPromptTokens?: number }): void {
         if (data.conversationId !== activeConversationId.value) return
-        lastUsage.value = { ...data.usage, model: data.model }
+        lastUsage.value = { ...data.usage, model: data.model, lastRoundPromptTokens: data.lastRoundPromptTokens }
         if (data.contextWindow) {
             contextWindow.value = data.contextWindow
         }
@@ -250,6 +252,7 @@ export function useChatStreaming(
     function handleStreamEnd(data: {
         streamId: string; conversationId: string; cancelled?: boolean
         usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number
+        lastRoundPromptTokens?: number
     }): void {
         streamBuffers.delete(data.conversationId)
 
@@ -286,7 +289,7 @@ export function useChatStreaming(
             currentTurnMsgs.length = 0
 
             if (data.usage) {
-                lastUsage.value = { ...data.usage, model: data.model }
+                lastUsage.value = { ...data.usage, model: data.model, lastRoundPromptTokens: data.lastRoundPromptTokens }
             }
             if (data.contextWindow) {
                 contextWindow.value = data.contextWindow
@@ -381,7 +384,6 @@ export function useChatStreaming(
             if (data.usage) {
                 subAgentStreamMsg.value.promptTokens = data.usage.promptTokens
                 subAgentStreamMsg.value.completionTokens = data.usage.completionTokens
-                lastUsage.value = { ...data.usage, model: data.model }
             }
             if (!subAgentStreamMsg.value.content && !subAgentStreamMsg.value.thinking) {
                 const idx = messages.value.indexOf(subAgentStreamMsg.value)
@@ -399,7 +401,6 @@ export function useChatStreaming(
             if (data.usage) {
                 lastCompletedSubAgentMsg.value.promptTokens = data.usage.promptTokens
                 lastCompletedSubAgentMsg.value.completionTokens = data.usage.completionTokens
-                lastUsage.value = { ...data.usage, model: data.model }
             }
             lastCompletedSubAgentMsg.value = null
         }
