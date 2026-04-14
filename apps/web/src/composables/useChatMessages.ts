@@ -90,7 +90,7 @@ export function useChatMessages(
             const provider = providerStore.providers.find(p => p.id === providerOverride)
             model = provider?.defaultModel || undefined
         }
-        const systemPrompt = agent?.systemPrompt || undefined
+        const systemPrompt = agentConfig.sessionSystemPrompt.value || agent?.systemPrompt || undefined
 
         const { usePreferencesStore } = await import('../stores/preferences.store')
         const prefs = usePreferencesStore()
