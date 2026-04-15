@@ -384,13 +384,14 @@ export class DiscordChannel implements ChannelProvider {
             // Save assistant message
             const assistantMsgId = nanoid()
             db.prepare(
-                `INSERT INTO messages (id, conversation_id, role, content, thinking, agent_id, provider, model, prompt_tokens, completion_tokens, latency_ms, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                `INSERT INTO messages (id, conversation_id, role, content, thinking, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
                 assistantMsgId, conversationId, 'assistant', result.content,
                 result.thinking || null, effectiveAgentId,
                 prepared.providerId || null, prepared.model || null,
-                result.usage?.promptTokens || null, result.usage?.completionTokens || null,
+                result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null,
+                result.contextTokens ?? null,
                 Date.now() - now, Date.now()
             )
 

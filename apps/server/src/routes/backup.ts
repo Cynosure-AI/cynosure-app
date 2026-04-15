@@ -671,13 +671,14 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                         if (!importedConversationIds.has(m.conversation_id as string)) continue
                         try {
                             db.prepare(
-                                `INSERT OR REPLACE INTO messages (id, conversation_id, role, content, tool_calls_json, tool_call_id, provider, model, prompt_tokens, completion_tokens, latency_ms, agent_id, created_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                `INSERT OR REPLACE INTO messages (id, conversation_id, role, content, tool_calls_json, tool_call_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, agent_id, created_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 m.id, m.conversation_id, m.role, m.content,
                                 m.tool_calls_json || null, m.tool_call_id || null,
                                 m.provider || null, m.model || null,
                                 m.prompt_tokens ?? null, m.completion_tokens ?? null,
+                                m.context_tokens ?? null,
                                 m.latency_ms ?? null, m.agent_id || null,
                                 m.created_at || Date.now()
                             )

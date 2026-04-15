@@ -194,6 +194,11 @@ function runMigrations(db: Database.Database): void {
     db.exec("ALTER TABLE messages ADD COLUMN file_attachments_json TEXT")
   }
 
+  // Add context_tokens column to messages (last-round total tokens for accurate context window display)
+  if (!msgCols.some((c) => c.name === 'context_tokens')) {
+    db.exec("ALTER TABLE messages ADD COLUMN context_tokens INTEGER")
+  }
+
   // Agents table
   db.exec(`
     CREATE TABLE IF NOT EXISTS agents (

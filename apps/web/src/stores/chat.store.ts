@@ -39,6 +39,7 @@ export interface DisplayMessage {
   model?: string
   promptTokens?: number
   completionTokens?: number
+  contextTokens?: number
   latencyMs?: number
   createdAt: number
   isStreaming?: boolean
@@ -134,6 +135,7 @@ export const useChatStore = defineStore('chat', () => {
       model: r.model || undefined,
       promptTokens: r.promptTokens || undefined,
       completionTokens: r.completionTokens || undefined,
+      contextTokens: r.contextTokens || undefined,
       latencyMs: r.latencyMs || undefined,
       createdAt: r.createdAt
     }))
@@ -176,8 +178,11 @@ export const useChatStore = defineStore('chat', () => {
       streaming.streamingThinking.value = ''
     }
 
-    // Restore context usage from the last assistant message
-    restoreContextUsage()
+    // Restore context usage: prefer live cache (survives mid-execution switches),
+    // then fall back to persisted data from the last assistant message.
+    if (!streaming.restoreCachedUsage(id)) {
+      restoreContextUsage()
+    }
   }
 
   /**
@@ -193,7 +198,7 @@ export const useChatStore = defineStore('chat', () => {
         completionTokens: lastAssistant.completionTokens || 0,
         totalTokens: (lastAssistant.promptTokens || 0) + (lastAssistant.completionTokens || 0),
         model: lastAssistant.model,
-        lastRoundTotalTokens: (lastAssistant.promptTokens || 0) + (lastAssistant.completionTokens || 0)
+        lastRoundTotalTokens: lastAssistant.contextTokens ?? ((lastAssistant.promptTokens || 0) + (lastAssistant.completionTokens || 0))
       }
     } else {
       streaming.lastUsage.value = null
@@ -266,6 +271,7 @@ export const useChatStore = defineStore('chat', () => {
     await api.chat.deleteConversation(id)
     conversations.value = conversations.value.filter((c) => c.id !== id)
     streaming.streamBuffers.delete(id)
+    streaming.deleteUsageCache(id)
     if (activeConversationId.value === id) {
       activeConversationId.value = conversations.value[0]?.id || null
       if (activeConversationId.value) {
