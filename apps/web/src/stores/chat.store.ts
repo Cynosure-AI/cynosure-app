@@ -118,7 +118,9 @@ export const useChatStore = defineStore('chat', () => {
 
   async function selectConversation(id: string): Promise<void> {
     activeConversationId.value = id
-    const rows = await api.chat.getMessages(id)
+    const response = await api.chat.getMessages(id)
+    const rows = response.messages
+    const lastContextTokens = response.lastContextTokens
     messages.value = rows.map((r: StoredMessage) => ({
       id: r.id,
       role: r.role as DisplayMessage['role'],
@@ -178,17 +180,31 @@ export const useChatStore = defineStore('chat', () => {
       streaming.streamingThinking.value = ''
     }
 
-    // Restore context usage: prefer live cache (survives mid-execution switches),
-    // then fall back to persisted data from the last assistant message.
-    if (!streaming.restoreCachedUsage(id)) {
-      restoreContextUsage()
-    }
+    // Restore context usage from DB-persisted last_context_tokens (updated mid-execution),
+    // falling back to per-message token data for completed executions.
+    restoreContextUsage(lastContextTokens)
   }
 
   /**
-   * Derive lastUsage from the most recent assistant message in the current conversation.
+   * Derive lastUsage from persisted token data.
+   * @param lastContextTokens conversation-level last_context_tokens (persisted mid-execution)
    */
-  function restoreContextUsage(): void {
+  function restoreContextUsage(lastContextTokens?: number | null): void {
+    // Prefer conversation-level context tokens (updated every LLM round)
+    if (lastContextTokens != null && lastContextTokens > 0) {
+      // Find the last assistant message for model info
+      const lastAssistant = [...messages.value].reverse().find(m => m.role === 'assistant')
+      streaming.lastUsage.value = {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: lastContextTokens,
+        model: lastAssistant?.model,
+        lastRoundTotalTokens: lastContextTokens,
+      }
+      return
+    }
+
+    // Fallback: derive from per-message token data
     const lastAssistant = [...messages.value].reverse().find(
       m => m.role === 'assistant' && m.promptTokens
     )
@@ -271,7 +287,6 @@ export const useChatStore = defineStore('chat', () => {
     await api.chat.deleteConversation(id)
     conversations.value = conversations.value.filter((c) => c.id !== id)
     streaming.streamBuffers.delete(id)
-    streaming.deleteUsageCache(id)
     if (activeConversationId.value === id) {
       activeConversationId.value = conversations.value[0]?.id || null
       if (activeConversationId.value) {

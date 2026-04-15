@@ -10,11 +10,6 @@ export interface TokenUsage {
     lastRoundTotalTokens?: number
 }
 
-interface CachedUsage {
-    usage: TokenUsage
-    contextWindow?: number
-}
-
 interface StreamBuffer {
     streamId: string
     content: string
@@ -45,10 +40,7 @@ export interface ChatStreamingState {
     handleStreamReset(data: { streamId: string; conversationId: string }): void
     handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundTotalTokens?: number }): void
     handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundTotalTokens?: number }): void
-    /** Restore lastUsage + contextWindow from per-conversation cache. Returns true if found. */
-    restoreCachedUsage(conversationId: string): boolean
-    /** Delete cached usage for a conversation. */
-    deleteUsageCache(conversationId: string): void
+    handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
     handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void
     handleSubAgentStreamChunk(data: { streamId: string; conversationId: string; content: string }): void
@@ -71,8 +63,6 @@ export function useChatStreaming(
     const streamingContent = ref('')
     const streamingThinking = ref('')
     const lastUsage = ref<TokenUsage | null>(null)
-    /** Per-conversation usage cache so switching chats preserves token state. */
-    const usageCache = new Map<string, CachedUsage>()
     const pendingMemorySources = ref<MemorySource[] | null>(null)
     const primaryStreamId = ref<string | null>(null)
     const primaryStreamAgent = ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>({})
@@ -255,13 +245,8 @@ export function useChatStreaming(
     }
 
     function handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundTotalTokens?: number }): void {
-        // Always cache usage per-conversation so switching chats preserves it
-        const cached: CachedUsage = { usage: { ...data.usage, model: data.model, lastRoundTotalTokens: data.lastRoundTotalTokens } }
-        if (data.contextWindow) cached.contextWindow = data.contextWindow
-        usageCache.set(data.conversationId, cached)
-
         if (data.conversationId !== activeConversationId.value) return
-        lastUsage.value = cached.usage
+        lastUsage.value = { ...data.usage, model: data.model, lastRoundTotalTokens: data.lastRoundTotalTokens }
         if (data.contextWindow) {
             contextWindow.value = data.contextWindow
         }
@@ -273,13 +258,6 @@ export function useChatStreaming(
         lastRoundTotalTokens?: number
     }): void {
         streamBuffers.delete(data.conversationId)
-
-        // Always cache final usage regardless of active conversation
-        if (data.usage) {
-            const cached: CachedUsage = { usage: { ...data.usage, model: data.model, lastRoundTotalTokens: data.lastRoundTotalTokens } }
-            if (data.contextWindow) cached.contextWindow = data.contextWindow
-            usageCache.set(data.conversationId, cached)
-        }
 
         if (data.streamId === primaryStreamId.value) {
             primaryStreamId.value = null
@@ -468,20 +446,6 @@ export function useChatStreaming(
         }
     }
 
-    /** Restore lastUsage + contextWindow from per-conversation cache. Returns true if found. */
-    function restoreCachedUsage(conversationId: string): boolean {
-        const cached = usageCache.get(conversationId)
-        if (!cached) return false
-        lastUsage.value = cached.usage
-        if (cached.contextWindow) contextWindow.value = cached.contextWindow
-        return true
-    }
-
-    /** Delete cached usage for a conversation (cleanup on delete). */
-    function deleteUsageCache(conversationId: string): void {
-        usageCache.delete(conversationId)
-    }
-
     return {
         isStreaming,
         currentStreamId,
@@ -510,7 +474,5 @@ export function useChatStreaming(
         handleMemorySources,
         handleTitleUpdated,
         handleNewMessage,
-        restoreCachedUsage,
-        deleteUsageCache,
     }
 }

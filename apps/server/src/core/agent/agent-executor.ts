@@ -182,6 +182,17 @@ export class AgentExecutor {
     /** Resolved stream event prefix (e.g. 'chat:stream' or 'chat:subagent-stream') */
     private _sp: string
 
+    /** Persist the current context token count on the conversation row so it
+     *  survives chat switches and page reloads mid-execution.
+     *  Only the main-agent executor persists — sub-agents share the conversationId
+     *  but should not overwrite the main agent's context usage. */
+    private persistContextTokens(conversationId: string, tokens: number): void {
+        if (this._sp !== 'chat:stream') return
+        try {
+            getDb().prepare('UPDATE conversations SET last_context_tokens = ? WHERE id = ?').run(tokens, conversationId)
+        } catch { /* best-effort — don't crash the execution loop */ }
+    }
+
     /**
      * Run the agent execution loop.
      * Streams the initial LLM response, then executes tool calls in a loop
@@ -267,6 +278,9 @@ export class AgentExecutor {
             broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, cancelled: signal?.aborted })
             throw err
         }
+
+        // Persist context tokens so switching chats mid-execution shows correct values
+        if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
 
         // No tool calls → done after Phase 1
         if (!pendingToolCalls?.length) {
@@ -354,6 +368,7 @@ export class AgentExecutor {
                     if (result.usage?.totalTokens) lastRoundTotalTokens = result.usage.totalTokens
                     usage = accumulateUsage(usage, result.usage)
                     if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
+                    if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
                     continue
                 }
             }
@@ -432,6 +447,7 @@ export class AgentExecutor {
                     lastRoundTotalTokens
                 })
             }
+            if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
         }
 
         // End final stream
