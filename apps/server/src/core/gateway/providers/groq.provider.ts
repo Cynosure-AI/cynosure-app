@@ -9,6 +9,8 @@ import type { LLMProviderConfig, ModelInfo } from './base.provider.js'
  * (Llama, Mixtral, Gemma, etc.) with a generous free tier.
  */
 export class GroqProvider extends OpenRouterProvider {
+    protected get supportsReasoningParam(): boolean { return false }
+
     constructor(config: LLMProviderConfig) {
         super({
             ...config,

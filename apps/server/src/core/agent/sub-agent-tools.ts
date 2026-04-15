@@ -85,6 +85,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     hitl: !agentData.autoApproveTools,
                     maxRounds: 10,
                     maxToolOutputChars: agentData.maxToolOutputChars,
+                    thinkingEnabled: agentData.thinkingEnabled !== false,
                     temperature: 0.3,
                     signal,
                     streamMode: 'per-round',

@@ -6,6 +6,8 @@ import type { LLMProviderConfig, ModelInfo } from './base.provider.js'
  * at https://api.mistral.ai/v1.
  */
 export class MistralProvider extends OpenRouterProvider {
+    protected get supportsReasoningParam(): boolean { return false }
+
     constructor(config: LLMProviderConfig) {
         super({
             ...config,

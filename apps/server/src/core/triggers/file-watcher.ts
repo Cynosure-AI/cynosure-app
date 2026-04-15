@@ -359,6 +359,7 @@ async function runFileWatcher(
         temperature: 0.3,
         maxRounds: 10,
         maxToolOutputChars: agent.maxToolOutputChars,
+        thinkingEnabled: agent.thinkingEnabled !== false,
         streamMode: 'per-round',
         hitl: !agent.autoApproveTools,
         agentId: watcher.agentId,

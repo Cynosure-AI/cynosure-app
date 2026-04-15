@@ -269,6 +269,7 @@ export class SlackChannel implements ChannelProvider {
             hitl: !resolvedAgent.autoApproveTools,
             maxRounds: prepared.hasSubAgents ? 30 : 15,
             maxToolOutputChars: resolvedAgent.maxToolOutputChars,
+            thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
             streamMode: 'single',
             signal: execAbort.signal,
             streamId,

@@ -3,7 +3,7 @@ const props = withDefaults(
   defineProps<{
     modelValue: boolean
     /** Track color when on. Default: 'blue' */
-    color?: 'blue' | 'emerald' | 'green' | 'amber' | 'purple' | 'red'
+    color?: 'blue' | 'emerald' | 'green' | 'amber' | 'purple' | 'red' | 'indigo'
     /** Toggle size. 'sm' = compact list rows, 'md' = dialogs, 'lg' = settings cards */
     size?: 'sm' | 'md' | 'lg'
     disabled?: boolean
@@ -24,6 +24,7 @@ const onColors: Record<string, string> = {
   amber: 'bg-amber-500',
   purple: 'bg-purple-500',
   red: 'bg-red-500',
+  indigo: 'bg-indigo-500',
 }
 
 const offColors: Record<string, string> = {
