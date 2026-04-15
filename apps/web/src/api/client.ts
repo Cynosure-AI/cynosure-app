@@ -163,6 +163,7 @@ export interface StoredMessage {
   model?: string
   promptTokens?: number
   completionTokens?: number
+  contextTokens?: number
   latencyMs?: number
   createdAt: number
 }

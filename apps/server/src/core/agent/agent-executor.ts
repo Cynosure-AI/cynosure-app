@@ -65,6 +65,8 @@ export interface AgentExecutorResult {
     content: string
     /** Token usage from the last LLM call */
     usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+    /** Total tokens from the last LLM round (accurate context window usage) */
+    contextTokens?: number
     /** Number of tool-calling rounds executed */
     toolRounds: number
     /** Collected images from tool results */
@@ -269,7 +271,7 @@ export class AgentExecutor {
         // No tool calls → done after Phase 1
         if (!pendingToolCalls?.length) {
             broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow, lastRoundTotalTokens })
-            return { content: fullContent, usage, toolRounds: 0, images: collectedImages, thinking: lastRoundThinking, provider: providerId, model }
+            return { content: fullContent, usage, contextTokens: lastRoundTotalTokens, toolRounds: 0, images: collectedImages, thinking: lastRoundThinking, provider: providerId, model }
         }
 
         // --- Phase 2: Tool-calling loop ---
@@ -445,6 +447,7 @@ export class AgentExecutor {
         return {
             content: fullContent || '(completed)',
             usage,
+            contextTokens: lastRoundTotalTokens,
             toolRounds,
             images: collectedImages,
             thinking: lastRoundThinking,

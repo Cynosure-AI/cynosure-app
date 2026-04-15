@@ -149,6 +149,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         model: string | null
         prompt_tokens: number | null
         completion_tokens: number | null
+        context_tokens: number | null
         latency_ms: number | null
         created_at: number
       }[]
@@ -204,6 +205,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         model: row.model,
         promptTokens: row.prompt_tokens,
         completionTokens: row.completion_tokens,
+        contextTokens: row.context_tokens,
         latencyMs: row.latency_ms,
         createdAt: row.created_at
       }
@@ -672,8 +674,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         // Save final assistant message with metadata
         const assistantMsgId = nanoid()
         db.prepare(
-          `INSERT INTO messages (id, conversation_id, role, content, thinking, image_urls_json, memory_sources_json, agent_id, provider, model, prompt_tokens, completion_tokens, latency_ms, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO messages (id, conversation_id, role, content, thinking, image_urls_json, memory_sources_json, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
           assistantMsgId,
           conversationId,
@@ -685,8 +687,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           agentId,
           responseProvider,
           responseModel,
-          result.usage?.promptTokens || null,
-          result.usage?.completionTokens || null,
+          result.usage?.promptTokens ?? null,
+          result.usage?.completionTokens ?? null,
+          result.contextTokens ?? null,
           result.usage ? Date.now() - now : null,
           Date.now()
         )
