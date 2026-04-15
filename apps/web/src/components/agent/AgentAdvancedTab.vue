@@ -63,5 +63,33 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
         />
       </div>
     </div>
+
+    <!-- Thinking / Reasoning -->
+    <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            <Icon
+              icon="lucide:brain"
+              class="w-4 h-4 text-indigo-400"
+            />
+            <h3 class="text-sm font-medium text-zinc-200">
+              Thinking / Reasoning
+            </h3>
+          </div>
+          <p class="text-xs text-zinc-500 leading-relaxed">
+            When enabled, models that support reasoning tokens will output their chain-of-thought
+            before responding. This improves answer quality for complex tasks but uses more tokens.
+            Applies to providers like OpenRouter (Claude, OpenAI o-series, DeepSeek) and Anthropic.
+          </p>
+        </div>
+        <ToggleSwitch
+          :model-value="agent.thinkingEnabled !== false"
+          color="indigo"
+          class="mt-0.5"
+          @update:model-value="emit('update', 'thinkingEnabled', $event)"
+        />
+      </div>
+    </div>
   </div>
 </template>

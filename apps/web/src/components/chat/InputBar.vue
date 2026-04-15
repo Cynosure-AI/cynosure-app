@@ -30,7 +30,8 @@ const hasOverrides = computed(() => chatStore.hasAgentOverrides)
 const contextUsage = computed(() => {
   const usage = chatStore.lastUsage
   const ctxWindow = chatStore.contextWindow
-  if (!usage || !ctxWindow) return null
+  if (!ctxWindow) return null
+  if (!usage) return { used: 0, max: ctxWindow, percent: 0 }
   // Use last round's total tokens (prompt + completion = true context utilization) when available,
   // otherwise fall back to total accumulated tokens
   const used = usage.lastRoundTotalTokens ?? usage.totalTokens

@@ -585,7 +585,7 @@ const settingsItems: NavItem[] = [
   .sidebar-collapsed .nav-item {
     justify-content: center;
     gap: 0;
-    padding: 0.625rem;
+
   }
   .sidebar-collapsed .nav-item > *:not(:first-child) {
     display: none;
