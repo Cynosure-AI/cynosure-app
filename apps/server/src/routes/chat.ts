@@ -131,8 +131,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   app.get<{ Params: { id: string } }>('/conversations/:id/messages', async (req) => {
     const db = getDb()
 
-    // Fetch conversation-level context token count (persisted mid-execution)
-    const convRow = db.prepare('SELECT last_context_tokens FROM conversations WHERE id = ?').get(req.params.id) as { last_context_tokens: number | null } | undefined
+    // Fetch conversation-level metadata (context tokens + session config)
+    const convRow = db.prepare('SELECT last_context_tokens, config_json FROM conversations WHERE id = ?').get(req.params.id) as { last_context_tokens: number | null; config_json: string | null } | undefined
 
     const rows = db
       .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
@@ -158,8 +158,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         created_at: number
       }[]
 
+    let chatConfig: Record<string, unknown> | undefined
+    try {
+      chatConfig = convRow?.config_json ? JSON.parse(convRow.config_json) : undefined
+    } catch { /* malformed JSON — ignore */ }
+
     return {
       lastContextTokens: convRow?.last_context_tokens ?? null,
+      chatConfig,
       messages: rows.map((row) => {
         let agentName: string | undefined
         let agentIconUrl: string | null | undefined
@@ -454,6 +460,20 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(userMsgId, conversationId, 'user', content, imageDataUrls?.length ? JSON.stringify(imageDataUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, files?.length ? JSON.stringify(files.map(f => ({ name: f.name }))) : null, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
+
+      // Persist session-level config so it can be restored when navigating back to this conversation.
+      const chatConfig: Record<string, unknown> = {}
+      if (Array.isArray(allowedTools) && allowedTools.length) chatConfig.allowedTools = allowedTools
+      if (reqSubAgents?.length) chatConfig.subAgents = reqSubAgents
+      if (reqMemorySpaceIds?.length) chatConfig.memorySpaceIds = reqMemorySpaceIds
+      if (systemPrompt) chatConfig.systemPrompt = systemPrompt
+      if (model) chatConfig.model = model
+      if (providerOverride) chatConfig.providerId = providerOverride
+      if (overrideSubAgents !== undefined) chatConfig.overrideSubAgents = overrideSubAgents
+      db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
+        Object.keys(chatConfig).length ? JSON.stringify(chatConfig) : null,
+        conversationId
+      )
 
       // Build message history
       const historyRows = db
