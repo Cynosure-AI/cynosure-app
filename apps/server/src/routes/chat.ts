@@ -130,6 +130,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   // GET /api/chat/conversations/:id/messages — get messages
   app.get<{ Params: { id: string } }>('/conversations/:id/messages', async (req) => {
     const db = getDb()
+
+    // Fetch conversation-level context token count (persisted mid-execution)
+    const convRow = db.prepare('SELECT last_context_tokens FROM conversations WHERE id = ?').get(req.params.id) as { last_context_tokens: number | null } | undefined
+
     const rows = db
       .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
       .all(req.params.id) as {
@@ -154,62 +158,65 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         created_at: number
       }[]
 
-    return rows.map((row) => {
-      let agentName: string | undefined
-      let agentIconUrl: string | null | undefined
-      if (row.agent_id) {
+    return {
+      lastContextTokens: convRow?.last_context_tokens ?? null,
+      messages: rows.map((row) => {
+        let agentName: string | undefined
+        let agentIconUrl: string | null | undefined
+        if (row.agent_id) {
+          try {
+            const agent = getAgent(row.agent_id)
+            if (agent) {
+              agentName = agent.name
+              agentIconUrl = agent.iconUrl || null
+            }
+          } catch { /* agent not found — ignore */ }
+        }
+        let toolCalls: unknown | undefined
         try {
-          const agent = getAgent(row.agent_id)
-          if (agent) {
-            agentName = agent.name
-            agentIconUrl = agent.iconUrl || null
-          }
-        } catch { /* agent not found — ignore */ }
-      }
-      let toolCalls: unknown | undefined
-      try {
-        toolCalls = row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined
-      } catch { /* malformed JSON — ignore */ }
-      let imageDataUrls: string[] | undefined
-      try {
-        imageDataUrls = row.image_urls_json ? JSON.parse(row.image_urls_json) : undefined
-      } catch { /* malformed JSON — ignore */ }
-      let audioDataUrls: string[] | undefined
-      try {
-        audioDataUrls = row.audio_urls_json ? JSON.parse(row.audio_urls_json) : undefined
-      } catch { /* malformed JSON — ignore */ }
-      let memorySources: unknown | undefined
-      try {
-        memorySources = row.memory_sources_json ? JSON.parse(row.memory_sources_json) : undefined
-      } catch { /* malformed JSON — ignore */ }
-      let fileAttachments: { name: string }[] | undefined
-      try {
-        fileAttachments = row.file_attachments_json ? JSON.parse(row.file_attachments_json) : undefined
-      } catch { /* malformed JSON — ignore */ }
-      return {
-        id: row.id,
-        conversationId: row.conversation_id,
-        role: row.role,
-        content: row.content,
-        thinking: row.thinking || undefined,
-        toolCalls,
-        toolCallId: row.tool_call_id || undefined,
-        imageDataUrls,
-        audioDataUrls,
-        fileAttachments,
-        memorySources,
-        agentId: row.agent_id || undefined,
-        agentName,
-        agentIconUrl,
-        provider: row.provider,
-        model: row.model,
-        promptTokens: row.prompt_tokens,
-        completionTokens: row.completion_tokens,
-        contextTokens: row.context_tokens,
-        latencyMs: row.latency_ms,
-        createdAt: row.created_at
-      }
-    })
+          toolCalls = row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined
+        } catch { /* malformed JSON — ignore */ }
+        let imageDataUrls: string[] | undefined
+        try {
+          imageDataUrls = row.image_urls_json ? JSON.parse(row.image_urls_json) : undefined
+        } catch { /* malformed JSON — ignore */ }
+        let audioDataUrls: string[] | undefined
+        try {
+          audioDataUrls = row.audio_urls_json ? JSON.parse(row.audio_urls_json) : undefined
+        } catch { /* malformed JSON — ignore */ }
+        let memorySources: unknown | undefined
+        try {
+          memorySources = row.memory_sources_json ? JSON.parse(row.memory_sources_json) : undefined
+        } catch { /* malformed JSON — ignore */ }
+        let fileAttachments: { name: string }[] | undefined
+        try {
+          fileAttachments = row.file_attachments_json ? JSON.parse(row.file_attachments_json) : undefined
+        } catch { /* malformed JSON — ignore */ }
+        return {
+          id: row.id,
+          conversationId: row.conversation_id,
+          role: row.role,
+          content: row.content,
+          thinking: row.thinking || undefined,
+          toolCalls,
+          toolCallId: row.tool_call_id || undefined,
+          imageDataUrls,
+          audioDataUrls,
+          fileAttachments,
+          memorySources,
+          agentId: row.agent_id || undefined,
+          agentName,
+          agentIconUrl,
+          provider: row.provider,
+          model: row.model,
+          promptTokens: row.prompt_tokens,
+          completionTokens: row.completion_tokens,
+          contextTokens: row.context_tokens,
+          latencyMs: row.latency_ms,
+          createdAt: row.created_at
+        }
+      }),
+    }
   })
 
   // GET /api/chat/conversations/:id/steps — get execution steps

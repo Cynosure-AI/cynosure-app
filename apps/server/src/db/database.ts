@@ -251,6 +251,11 @@ function runMigrations(db: Database.Database): void {
     db.exec("ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
   }
 
+  // Add last_context_tokens to conversations for mid-execution persistence
+  if (!convCols.some((c) => c.name === 'last_context_tokens')) {
+    db.exec("ALTER TABLE conversations ADD COLUMN last_context_tokens INTEGER")
+  }
+
   // Add icon_url and origin column to mcp_servers
   const mcpCols = db.prepare("PRAGMA table_info(mcp_servers)").all() as { name: string }[]
   if (!mcpCols.some((c) => c.name === 'icon_url')) {
