@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useChatStore } from '../../stores/chat.store'
 import { Icon } from '@iconify/vue'
@@ -12,8 +12,17 @@ const providerStore = useProviderStore()
 const { logoUrl } = useProviderLogos()
 
 const visible = defineModel<boolean>({ required: true })
+const search = ref('')
 
 const agents = computed(() => agentDefs.agents)
+const filteredAgents = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return agents.value
+  return agents.value.filter(a =>
+    a.name.toLowerCase().includes(q) ||
+    (a.description && a.description.toLowerCase().includes(q))
+  )
+})
 const selected = computed(() => chatStore.freeChatSubAgentIds)
 
 function toggle(id: string) {
@@ -61,16 +70,26 @@ function toSubAgentCodename(name: string): string {
           </button>
         </div>
 
+        <!-- Search -->
+        <div class="px-3 pt-2">
+          <input
+            v-model="search"
+            type="text"
+            placeholder="Search agents…"
+            class="w-full px-3 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 outline-none focus:border-zinc-500 transition-colors"
+          >
+        </div>
+
         <!-- Agent list -->
         <div class="overflow-y-auto p-2 space-y-1">
           <div
-            v-if="agents.length === 0"
+            v-if="filteredAgents.length === 0"
             class="text-sm text-zinc-500 text-center py-6"
           >
-            No agents created yet
+            {{ search ? 'No matching agents' : 'No agents created yet' }}
           </div>
           <button
-            v-for="agent in agents"
+            v-for="agent in filteredAgents"
             :key="agent.id"
             class="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg transition-colors text-left"
             :class="selected.includes(agent.id)
