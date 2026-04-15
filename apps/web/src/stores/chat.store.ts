@@ -192,7 +192,8 @@ export const useChatStore = defineStore('chat', () => {
         promptTokens: lastAssistant.promptTokens,
         completionTokens: lastAssistant.completionTokens || 0,
         totalTokens: (lastAssistant.promptTokens || 0) + (lastAssistant.completionTokens || 0),
-        model: lastAssistant.model
+        model: lastAssistant.model,
+        lastRoundPromptTokens: lastAssistant.promptTokens
       }
     } else {
       streaming.lastUsage.value = null
