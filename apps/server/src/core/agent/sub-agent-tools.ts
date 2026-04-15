@@ -84,7 +84,6 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     model: prepared.model,
                     hitl: !agentData.autoApproveTools,
                     maxRounds: 10,
-                    maxToolOutputChars: agentData.maxToolOutputChars,
                     temperature: 0.3,
                     signal,
                     streamMode: 'per-round',

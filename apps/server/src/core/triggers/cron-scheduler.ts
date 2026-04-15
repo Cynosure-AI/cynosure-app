@@ -209,7 +209,6 @@ async function runCronJob(jobId: string): Promise<void> {
         model: prepared.model,
         temperature: 0.3,
         maxRounds: 10,
-        maxToolOutputChars: agent.maxToolOutputChars,
         streamMode: 'per-round',
         hitl: !agent.autoApproveTools,
         agentId: job.agentId,

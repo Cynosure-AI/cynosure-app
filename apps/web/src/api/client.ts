@@ -243,7 +243,6 @@ export interface AgentDefinition {
   subAgents?: SubAgentAssignment[]
   autoApproveTools: boolean
   generateTitle: boolean
-  maxToolOutputChars: number
   showInCarousel: boolean
   sortOrder: number
   memorySpaces: string[]
