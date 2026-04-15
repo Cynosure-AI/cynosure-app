@@ -449,16 +449,45 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       // Build message history
       const historyRows = db
         .prepare(
-          'SELECT role, content, tool_calls_json, tool_call_id FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
+          'SELECT role, content, tool_calls_json, tool_call_id, agent_id FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
         )
         .all(conversationId) as {
           role: string
           content: string
           tool_calls_json: string | null
           tool_call_id: string | null
+          agent_id: string | null
         }[]
 
-      let messages: ChatMessage[] = historyRows.map((row) => ({
+      // Filter out sub-agent intermediate messages.
+      // Keep: user messages, main-agent assistant messages + their tool results.
+      // Drop: sub-agent assistant messages and their tool results.
+      const convRow = db.prepare('SELECT agent_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null } | undefined
+      const mainAgentId: string | null = convRow?.agent_id || null
+      const keptToolCallIds = new Set<string>()
+      const filteredRows = historyRows.filter((row) => {
+        if (row.role === 'user') return true
+        if (row.role === 'assistant') {
+          const isMainAgent = row.agent_id === null || row.agent_id === mainAgentId
+          if (isMainAgent) {
+            if (row.tool_calls_json) {
+              try {
+                for (const tc of JSON.parse(row.tool_calls_json)) {
+                  if (tc.id) keptToolCallIds.add(tc.id)
+                }
+              } catch { /* ignore parse errors */ }
+            }
+            return true
+          }
+          return false
+        }
+        if (row.role === 'tool') {
+          return !row.tool_call_id || keptToolCallIds.has(row.tool_call_id)
+        }
+        return true // system messages etc.
+      })
+
+      let messages: ChatMessage[] = filteredRows.map((row) => ({
         role: row.role as ChatMessage['role'],
         content: row.content,
         toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
