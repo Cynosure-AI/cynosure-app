@@ -193,6 +193,7 @@ export const useChatStore = defineStore('chat', () => {
       if (cfg.memorySpaceIds?.length) agentConfig.freeChatMemorySpaceIds.value = [...cfg.memorySpaceIds]
       else agentConfig.freeChatMemorySpaceIds.value = []
       if (cfg.systemPrompt != null) agentConfig.sessionSystemPrompt.value = cfg.systemPrompt
+      if (cfg.thinkingEnabled != null) agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled
       if (cfg.model) agentConfig.sessionModelOverride.value = cfg.model
       if (cfg.providerId) agentConfig.sessionProviderOverride.value = cfg.providerId
       if (cfg.overrideSubAgents !== undefined) agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents
@@ -437,6 +438,7 @@ export const useChatStore = defineStore('chat', () => {
     sessionProviderOverride: agentConfig.sessionProviderOverride,
     sessionOverrideSubAgents: agentConfig.sessionOverrideSubAgents,
     sessionSystemPrompt: agentConfig.sessionSystemPrompt,
+    sessionThinkingEnabled: agentConfig.sessionThinkingEnabled,
     agentOriginalSystemPrompt: agentConfig.agentOriginalSystemPrompt,
     freeChatSubAgentIds: agentConfig.freeChatSubAgentIds,
     freeChatMemorySpaceIds: agentConfig.freeChatMemorySpaceIds,
