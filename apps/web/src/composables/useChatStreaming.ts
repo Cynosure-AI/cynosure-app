@@ -6,8 +6,8 @@ export interface TokenUsage {
     completionTokens: number
     totalTokens: number
     model?: string
-    /** Prompt tokens from the last LLM round (for accurate context window display) */
-    lastRoundPromptTokens?: number
+    /** Total tokens from the last LLM round (for accurate context window display) */
+    lastRoundTotalTokens?: number
 }
 
 interface StreamBuffer {
@@ -241,9 +241,9 @@ export function useChatStreaming(
         }
     }
 
-    function handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundPromptTokens?: number }): void {
+    function handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundTotalTokens?: number }): void {
         if (data.conversationId !== activeConversationId.value) return
-        lastUsage.value = { ...data.usage, model: data.model, lastRoundPromptTokens: data.lastRoundPromptTokens }
+        lastUsage.value = { ...data.usage, model: data.model, lastRoundTotalTokens: data.lastRoundTotalTokens }
         if (data.contextWindow) {
             contextWindow.value = data.contextWindow
         }
@@ -252,7 +252,7 @@ export function useChatStreaming(
     function handleStreamEnd(data: {
         streamId: string; conversationId: string; cancelled?: boolean
         usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number
-        lastRoundPromptTokens?: number
+        lastRoundTotalTokens?: number
     }): void {
         streamBuffers.delete(data.conversationId)
 
@@ -289,7 +289,7 @@ export function useChatStreaming(
             currentTurnMsgs.length = 0
 
             if (data.usage) {
-                lastUsage.value = { ...data.usage, model: data.model, lastRoundPromptTokens: data.lastRoundPromptTokens }
+                lastUsage.value = { ...data.usage, model: data.model, lastRoundTotalTokens: data.lastRoundTotalTokens }
             }
             if (data.contextWindow) {
                 contextWindow.value = data.contextWindow

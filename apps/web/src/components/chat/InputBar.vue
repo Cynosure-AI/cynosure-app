@@ -31,9 +31,9 @@ const contextUsage = computed(() => {
   const usage = chatStore.lastUsage
   const ctxWindow = chatStore.contextWindow
   if (!usage || !ctxWindow) return null
-  // Use last round's prompt tokens (true context utilization) when available,
+  // Use last round's total tokens (prompt + completion = true context utilization) when available,
   // otherwise fall back to total accumulated tokens
-  const used = usage.lastRoundPromptTokens ?? usage.totalTokens
+  const used = usage.lastRoundTotalTokens ?? usage.totalTokens
   const percent = Math.min((used / ctxWindow) * 100, 100)
   return { used, max: ctxWindow, percent }
 })
