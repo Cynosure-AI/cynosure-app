@@ -10,6 +10,7 @@ export interface ChatAgentConfigApi {
     sessionProviderOverride: Ref<string | null>
     sessionOverrideSubAgents: Ref<boolean>
     sessionSystemPrompt: Ref<string>
+    sessionThinkingEnabled: Ref<boolean>
     agentOriginalSystemPrompt: Ref<string>
     freeChatSubAgentIds: Ref<string[]>
     freeChatMemorySpaceIds: Ref<string[]>
@@ -40,6 +41,7 @@ export function useChatAgentConfig(
     const sessionProviderOverride = ref<string | null>(null)
     const sessionOverrideSubAgents = ref<boolean>(true)
     const sessionSystemPrompt = ref<string>('')
+    const sessionThinkingEnabled = ref<boolean>(true)
     const agentOriginalSystemPrompt = ref<string>('')
     const freeChatSubAgentIds = ref<string[]>([])
     const freeChatMemorySpaceIds = ref<string[]>([])
@@ -130,6 +132,7 @@ export function useChatAgentConfig(
             agentOriginalMemorySpaceIds.value = [...memSpaceIds]
             sessionSystemPrompt.value = agent?.systemPrompt || ''
             agentOriginalSystemPrompt.value = agent?.systemPrompt || ''
+            sessionThinkingEnabled.value = agent?.thinkingEnabled !== false
         } else {
             localStorage.removeItem('oa-active-agent')
             agentStore.clearSelectedTools()
@@ -140,6 +143,7 @@ export function useChatAgentConfig(
             agentOriginalMemorySpaceIds.value = []
             sessionSystemPrompt.value = ''
             agentOriginalSystemPrompt.value = ''
+            sessionThinkingEnabled.value = true
         }
         sessionModelOverride.value = null
         sessionProviderOverride.value = null
@@ -178,6 +182,7 @@ export function useChatAgentConfig(
         sessionProviderOverride,
         sessionOverrideSubAgents,
         sessionSystemPrompt,
+        sessionThinkingEnabled,
         agentOriginalSystemPrompt,
         freeChatSubAgentIds,
         freeChatMemorySpaceIds,

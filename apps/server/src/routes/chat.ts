@@ -403,11 +403,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       subAgents?: { agentId: string; codename: string; role: string }[]
       memorySpaceIds?: string[]
       overrideSubAgents?: boolean
+      thinkingEnabled?: boolean
     }
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled } = req.body
       const db = getDb()
 
       // Build content (text + optional images + optional audio + optional files)
@@ -470,6 +471,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       if (model) chatConfig.model = model
       if (providerOverride) chatConfig.providerId = providerOverride
       if (overrideSubAgents !== undefined) chatConfig.overrideSubAgents = overrideSubAgents
+      if (reqThinkingEnabled !== undefined) chatConfig.thinkingEnabled = reqThinkingEnabled
       db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
         Object.keys(chatConfig).length ? JSON.stringify(chatConfig) : null,
         conversationId
@@ -677,7 +679,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         model: responseModel,
         hitl: resolvedAgent ? !resolvedAgent.autoApproveTools : true,
         maxRounds: hasSubAgents ? 30 : 15,
-        thinkingEnabled: resolvedAgent?.thinkingEnabled !== false,
+        thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
         streamMode: 'single',
         signal: abortController.signal,
         streamId,

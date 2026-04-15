@@ -410,6 +410,7 @@ export const api = {
           model?: string
           providerId?: string
           overrideSubAgents?: boolean
+          thinkingEnabled?: boolean
         }
       }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
     getExecutionSteps: (conversationId: string) =>
@@ -444,7 +445,8 @@ export const api = {
       audioDataUrls?: string[],
       subAgents?: SubAgentAssignment[],
       memorySpaceIds?: string[],
-      overrideSubAgents?: boolean
+      overrideSubAgents?: boolean,
+      thinkingEnabled?: boolean
     ) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, {
         content,
@@ -459,7 +461,8 @@ export const api = {
         generateTitle,
         subAgents,
         memorySpaceIds,
-        overrideSubAgents
+        overrideSubAgents,
+        thinkingEnabled
       }),
     truncateFrom: (conversationId: string, messageId: string) =>
       post<{ success: boolean; deleted: number }>(
