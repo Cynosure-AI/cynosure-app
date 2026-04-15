@@ -245,6 +245,7 @@ export interface AgentDefinition {
   generateTitle: boolean
   maxToolOutputChars: number
   showInCarousel: boolean
+  thinkingEnabled: boolean
   sortOrder: number
   memorySpaces: string[]
   createdAt: number

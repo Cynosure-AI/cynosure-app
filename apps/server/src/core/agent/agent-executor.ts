@@ -28,6 +28,8 @@ export interface AgentExecutorConfig {
     maxToolOutputChars?: number
     /** LLM temperature (default: provider default) */
     temperature?: number
+    /** Enable reasoning/thinking tokens (default: true) */
+    thinkingEnabled?: boolean
     /** AbortSignal for cancellation */
     signal?: AbortSignal
     /** Whether to save messages to the database (default: true) */
@@ -190,7 +192,7 @@ export class AgentExecutor {
      * until the LLM responds without tool calls or max rounds is reached.
      */
     async run(messages: ChatMessage[]): Promise<AgentExecutorResult> {
-        const { gateway, tools, conversationId, broadcast, providerId, model, signal, temperature } = this.config
+        const { gateway, tools, conversationId, broadcast, providerId, model, signal, temperature, thinkingEnabled } = this.config
         const eventBus = getEventBus()
         const shouldEmit = this.config.emitEvents
         const meta = this.config.eventMeta
@@ -233,6 +235,7 @@ export class AgentExecutor {
                 model,
                 tools: tools.length ? tools : undefined,
                 temperature,
+                thinkingEnabled,
                 signal
             },
             providerId
@@ -489,7 +492,7 @@ export class AgentExecutor {
         usage: AgentExecutorResult['usage']
         streamId: string
     }> {
-        const { gateway, tools, conversationId, broadcast, providerId, model, signal, temperature } = this.config
+        const { gateway, tools, conversationId, broadcast, providerId, model, signal, temperature, thinkingEnabled } = this.config
 
         let streamId = currentStreamId
         if (this.config.streamMode === 'per-round') {
@@ -517,6 +520,7 @@ export class AgentExecutor {
                 model,
                 tools: tools.length ? tools : undefined,
                 temperature,
+                thinkingEnabled,
                 signal
             },
             providerId

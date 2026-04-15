@@ -185,6 +185,7 @@ export function useChatStreaming(
         let buf = streamBuffers.get(data.conversationId)
         if (buf) {
             buf.content = ''
+            buf.thinking = ''
             buf.createdAt = Date.now()
         } else {
             buf = {
@@ -199,6 +200,7 @@ export function useChatStreaming(
 
         if (data.conversationId === activeConversationId.value) {
             streamingContent.value = ''
+            streamingThinking.value = ''
             currentStreamId.value = data.streamId
             isStreaming.value = true
             const streamMsg = findStreamingMsg()
