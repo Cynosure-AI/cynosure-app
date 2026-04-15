@@ -24,8 +24,6 @@ export interface AgentExecutorConfig {
     hitl?: boolean
     /** Maximum number of tool-calling rounds (default: 15) */
     maxRounds?: number
-    /** Maximum characters for a single tool output before truncation (default: 16384). Set 0 to disable. */
-    maxToolOutputChars?: number
     /** LLM temperature (default: provider default) */
     temperature?: number
     /** AbortSignal for cancellation */
@@ -110,11 +108,8 @@ function accumulateUsage(
  * Used by chat, cron, and future trigger types.
  */
 export class AgentExecutor {
-    private config: Required<Pick<AgentExecutorConfig, 'hitl' | 'maxRounds' | 'maxToolOutputChars' | 'saveMessages' | 'streamMode' | 'emitEvents'>> & AgentExecutorConfig
+    private config: Required<Pick<AgentExecutorConfig, 'hitl' | 'maxRounds' | 'saveMessages' | 'streamMode' | 'emitEvents'>> & AgentExecutorConfig
     private _streamId: string
-    /** Buffer for truncated tool outputs — keyed by toolCallId */
-    private longOutputs = new Map<string, string>()
-
     /** The primary streamId (useful for callers that need it for cancel/error handling). */
     get streamId(): string { return this._streamId }
 
@@ -171,7 +166,6 @@ export class AgentExecutor {
         this.config = {
             hitl: false,
             maxRounds: 15,
-            maxToolOutputChars: 16_384,
             saveMessages: true,
             streamMode: 'single',
             emitEvents: true,
@@ -397,22 +391,6 @@ export class AgentExecutor {
             // Save tool result messages AFTER execution
             if (this.config.saveMessages) {
                 this.saveToolResultMessages(conversationId, toolCallResults)
-            }
-
-            // Truncate oversized tool outputs and buffer the full text
-            const limit = this.config.maxToolOutputChars
-            for (const tr of toolCallResults) {
-                if (limit > 0 && tr.output.length > limit) {
-                    this.longOutputs.set(tr.toolCallId, tr.output)
-                    tr.output = tr.output.slice(0, limit)
-                        + `\n\n[OUTPUT TRUNCATED — original ${this.longOutputs.get(tr.toolCallId)!.length} chars. `
-                        + `Use read_long_output tool with toolCallId="${tr.toolCallId}" to access remaining content.]`
-                }
-            }
-
-            // Inject read_long_output tool dynamically if any outputs were truncated
-            if (this.longOutputs.size > 0 && !tools.find(t => t.name === 'read_long_output')) {
-                tools.push(this.makeReadLongOutputTool())
             }
 
             // Append to conversation context (include images as multimodal content for LLM vision)
@@ -651,39 +629,6 @@ export class AgentExecutor {
         db.prepare(
             'INSERT INTO messages (id, conversation_id, role, content, thinking, tool_calls_json, agent_id, provider, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         ).run(assistantMsgId, conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(toolCalls), this.config.agentId || null, this.config.providerId || null, this.config.model || null, Date.now())
-    }
-
-    /** Create the dynamic read_long_output tool for accessing truncated outputs. */
-    private makeReadLongOutputTool(): ToolDefinition {
-        const chunkSize = this.config.maxToolOutputChars || 16_384
-        return {
-            name: 'read_long_output',
-            description:
-                'Read a portion of a previously truncated tool output. ' +
-                'Use this when a tool result was truncated and you need to see more of the content.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    toolCallId: { type: 'string', description: 'The toolCallId from the truncated output.' },
-                    startChar: { type: 'number', description: 'Start character offset (0-based, default 0).' },
-                    endChar: { type: 'number', description: `End character offset (exclusive). Max ${chunkSize} chars per read.` }
-                },
-                required: ['toolCallId']
-            },
-            timeout: 5_000,
-            execute: async (params: unknown) => {
-                const { toolCallId, startChar = 0, endChar } = params as { toolCallId: string; startChar?: number; endChar?: number }
-                const full = this.longOutputs.get(toolCallId)
-                if (!full) return { success: false, output: `No buffered output found for toolCallId "${toolCallId}".` }
-                const start = Math.max(0, startChar)
-                const end = Math.min(full.length, endChar ?? start + chunkSize)
-                const slice = full.slice(start, end)
-                return {
-                    success: true,
-                    output: slice + (end < full.length ? `\n\n[Showing chars ${start}-${end} of ${full.length}. More content available.]` : `\n\n[End of output — chars ${start}-${end} of ${full.length}.]`)
-                }
-            }
-        }
     }
 
     /** Save tool result messages to DB and broadcast them to the UI. */

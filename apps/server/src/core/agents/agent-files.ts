@@ -21,7 +21,6 @@ export interface AgentConfig {
     tools: string[]
     subAgents: SubAgentAssignment[]
     autoApproveTools: boolean
-    maxToolOutputChars: number
     showInCarousel: boolean
     sortOrder: number
     createdAt: number
@@ -48,7 +47,6 @@ export type CreateAgentInput = {
     tools?: string[]
     subAgents?: SubAgentAssignment[]
     autoApproveTools?: boolean
-    maxToolOutputChars?: number
     showInCarousel?: boolean
     sortOrder?: number
 }
@@ -168,7 +166,6 @@ function readAgentFromDir(agentDir: string, id: string): AgentData | null {
         tools,
         subAgents: config.subAgents || [],
         autoApproveTools: config.autoApproveTools === true,
-        maxToolOutputChars: config.maxToolOutputChars ?? 16_384,
         showInCarousel: config.showInCarousel !== false,
         sortOrder: typeof config.sortOrder === 'number' ? config.sortOrder : 0,
         createdAt: config.createdAt || 0,
@@ -222,7 +219,6 @@ export function createAgent(input: CreateAgentInput): AgentData {
         tools: input.tools || [],
         subAgents: input.subAgents || [],
         autoApproveTools: input.autoApproveTools === true,
-        maxToolOutputChars: input.maxToolOutputChars ?? 16_384,
         showInCarousel: input.showInCarousel !== false,
         sortOrder: typeof input.sortOrder === 'number' ? input.sortOrder : 0,
         createdAt: now,
@@ -270,7 +266,6 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         tools: input.tools !== undefined ? input.tools : existing.tools,
         subAgents: input.subAgents !== undefined ? input.subAgents : (existing.subAgents || []),
         autoApproveTools: input.autoApproveTools !== undefined ? input.autoApproveTools : (existing.autoApproveTools === true),
-        maxToolOutputChars: input.maxToolOutputChars !== undefined ? input.maxToolOutputChars : (existing.maxToolOutputChars ?? 16_384),
         showInCarousel: input.showInCarousel !== undefined ? input.showInCarousel : (existing.showInCarousel !== false),
         sortOrder: input.sortOrder !== undefined ? input.sortOrder : (typeof existing.sortOrder === 'number' ? existing.sortOrder : 0),
         createdAt: existing.createdAt,
