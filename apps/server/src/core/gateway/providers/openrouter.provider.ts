@@ -163,8 +163,8 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
 
         // Send reasoning parameter for OpenRouter native thinking support
-        if (this.supportsReasoningParam && request.thinkingEnabled !== false) {
-            params.reasoning = { enabled: true }
+        if (this.supportsReasoningParam) {
+            params.reasoning = { enabled: request.thinkingEnabled !== false }
         }
 
         if (request.tools?.length) {
@@ -241,8 +241,8 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
 
         // Send reasoning parameter for OpenRouter native thinking support
-        if (this.supportsReasoningParam && request.thinkingEnabled !== false) {
-            params.reasoning = { enabled: true }
+        if (this.supportsReasoningParam) {
+            params.reasoning = { enabled: request.thinkingEnabled !== false }
         }
 
         if (request.tools?.length) {
