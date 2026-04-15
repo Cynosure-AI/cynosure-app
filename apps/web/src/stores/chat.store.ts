@@ -183,6 +183,20 @@ export const useChatStore = defineStore('chat', () => {
     // Restore context usage from DB-persisted last_context_tokens (updated mid-execution),
     // falling back to per-message token data for completed executions.
     restoreContextUsage(lastContextTokens)
+
+    // Restore session-level chat config (tools, sub-agents, memory spaces, system prompt, model/provider)
+    const cfg = response.chatConfig
+    if (cfg) {
+      if (cfg.allowedTools?.length) agentStore.selectedToolNames = [...cfg.allowedTools]
+      if (cfg.subAgents?.length) agentConfig.freeChatSubAgentIds.value = cfg.subAgents.map(s => s.agentId)
+      else agentConfig.freeChatSubAgentIds.value = []
+      if (cfg.memorySpaceIds?.length) agentConfig.freeChatMemorySpaceIds.value = [...cfg.memorySpaceIds]
+      else agentConfig.freeChatMemorySpaceIds.value = []
+      if (cfg.systemPrompt != null) agentConfig.sessionSystemPrompt.value = cfg.systemPrompt
+      if (cfg.model) agentConfig.sessionModelOverride.value = cfg.model
+      if (cfg.providerId) agentConfig.sessionProviderOverride.value = cfg.providerId
+      if (cfg.overrideSubAgents !== undefined) agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents
+    }
   }
 
   /**

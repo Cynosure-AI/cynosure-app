@@ -653,8 +653,8 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                         if (c.agent_id && !existingAgentIds.has(c.agent_id as string)) continue
                         try {
                             db.prepare(
-                                'INSERT OR REPLACE INTO conversations (id, title, agent_id, ma_workspace_id, origin, pinned, last_context_tokens, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-                            ).run(c.id, c.title || '', c.agent_id || null, c.ma_workspace_id || null, c.origin || 'chat', c.pinned ?? 0, c.last_context_tokens ?? null, c.created_at || Date.now(), c.updated_at || Date.now())
+                                'INSERT OR REPLACE INTO conversations (id, title, agent_id, ma_workspace_id, origin, pinned, last_context_tokens, config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                            ).run(c.id, c.title || '', c.agent_id || null, c.ma_workspace_id || null, c.origin || 'chat', c.pinned ?? 0, c.last_context_tokens ?? null, c.config_json || null, c.created_at || Date.now(), c.updated_at || Date.now())
                             importedConversationIds.add(c.id as string)
                             res.restored++
                         } catch (e) {

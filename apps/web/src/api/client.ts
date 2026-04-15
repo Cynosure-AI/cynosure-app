@@ -399,7 +399,19 @@ export const api = {
       )
     },
     getMessages: (conversationId: string) =>
-      get<{ messages: StoredMessage[]; lastContextTokens: number | null }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
+      get<{
+        messages: StoredMessage[]
+        lastContextTokens: number | null
+        chatConfig?: {
+          allowedTools?: string[]
+          subAgents?: { agentId: string; codename: string; role: string }[]
+          memorySpaceIds?: string[]
+          systemPrompt?: string
+          model?: string
+          providerId?: string
+          overrideSubAgents?: boolean
+        }
+      }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
     getExecutionSteps: (conversationId: string) =>
       get<ExecutionStepRecord[]>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/steps`),
     getPendingHITL: (conversationId: string) =>

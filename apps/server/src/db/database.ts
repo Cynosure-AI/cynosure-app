@@ -256,6 +256,11 @@ function runMigrations(db: Database.Database): void {
     db.exec("ALTER TABLE conversations ADD COLUMN last_context_tokens INTEGER")
   }
 
+  // Add config_json to conversations (persists session-level chat config: tools, sub-agents, memory spaces, system prompt, model/provider)
+  if (!convCols.some((c) => c.name === 'config_json')) {
+    db.exec("ALTER TABLE conversations ADD COLUMN config_json TEXT")
+  }
+
   // Add icon_url and origin column to mcp_servers
   const mcpCols = db.prepare("PRAGMA table_info(mcp_servers)").all() as { name: string }[]
   if (!mcpCols.some((c) => c.name === 'icon_url')) {
