@@ -68,6 +68,8 @@ export interface CompletionRequest {
   tools?: ToolDefinition[]
   stream?: boolean
   signal?: AbortSignal
+  /** Enable reasoning/thinking tokens (default: true) */
+  thinkingEnabled?: boolean
 }
 
 export interface CompletionResponse {

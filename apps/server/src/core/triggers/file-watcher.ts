@@ -358,6 +358,7 @@ async function runFileWatcher(
         model: prepared.model,
         temperature: 0.3,
         maxRounds: 10,
+        thinkingEnabled: agent.thinkingEnabled !== false,
         streamMode: 'per-round',
         hitl: !agent.autoApproveTools,
         agentId: watcher.agentId,

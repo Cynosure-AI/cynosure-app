@@ -22,6 +22,9 @@ export class OpenRouterProvider extends BaseLLMProvider {
     readonly config: LLMProviderConfig
     private client: OpenAI
 
+    /** Whether this provider supports OpenRouter's native reasoning parameter */
+    protected get supportsReasoningParam(): boolean { return true }
+
     constructor(config: LLMProviderConfig) {
         super()
         this.config = config
@@ -151,7 +154,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
         const start = Date.now()
         const messages = this.formatMessages(request.messages)
 
-        const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+        const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown> = {
             model: request.model || this.config.defaultModel,
             messages,
             temperature: request.temperature,
@@ -159,17 +162,40 @@ export class OpenRouterProvider extends BaseLLMProvider {
             stream: false
         }
 
+        // Send reasoning parameter for OpenRouter native thinking support
+        if (this.supportsReasoningParam && request.thinkingEnabled !== false) {
+            params.reasoning = { enabled: true }
+        }
+
         if (request.tools?.length) {
             params.tools = this.formatToolsForProvider(request.tools) as unknown as OpenAI.Chat.ChatCompletionTool[]
         }
 
-        const response = await this.client.chat.completions.create(params, {
+        const response = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, {
             signal: request.signal
         })
 
         const choice = response.choices[0]
-        const rawContent = choice?.message?.content || ''
-        const { text, thinking } = this.separateThinking(rawContent)
+        const msg = choice?.message as unknown as Record<string, unknown> | undefined
+        const rawContent = (msg?.content as string) || ''
+        const { text, thinking: tagThinking } = this.separateThinking(rawContent)
+
+        // Extract native reasoning from OpenRouter response (reasoning field or reasoning_details)
+        let nativeReasoning = ''
+        if (msg?.reasoning && typeof msg.reasoning === 'string') {
+            nativeReasoning = msg.reasoning
+        } else if (Array.isArray(msg?.reasoning_details)) {
+            for (const detail of msg.reasoning_details as Array<Record<string, unknown>>) {
+                if (detail.type === 'reasoning.text' && typeof detail.text === 'string') {
+                    nativeReasoning += detail.text
+                } else if (detail.type === 'reasoning.summary' && typeof detail.summary === 'string') {
+                    nativeReasoning += detail.summary
+                }
+            }
+        }
+
+        // Prefer native reasoning; fall back to <think> tag extraction
+        const combinedThinking = nativeReasoning || tagThinking || ''
 
         const toolCalls: ToolCall[] | undefined = (
             choice?.message?.tool_calls as
@@ -187,7 +213,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
         return {
             id: response.id,
             content: text,
-            thinking: thinking || undefined,
+            thinking: combinedThinking || undefined,
             toolCalls: toolCalls?.length ? toolCalls : undefined,
             usage: {
                 promptTokens: response.usage?.prompt_tokens || 0,
@@ -205,7 +231,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
     ): AsyncIterable<StreamChunk> {
         const messages = this.formatMessages(request.messages)
 
-        const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
+        const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming & Record<string, unknown> = {
             model: request.model || this.config.defaultModel,
             messages,
             temperature: request.temperature,
@@ -214,11 +240,16 @@ export class OpenRouterProvider extends BaseLLMProvider {
             stream_options: { include_usage: true }
         }
 
+        // Send reasoning parameter for OpenRouter native thinking support
+        if (this.supportsReasoningParam && request.thinkingEnabled !== false) {
+            params.reasoning = { enabled: true }
+        }
+
         if (request.tools?.length) {
             params.tools = this.formatToolsForProvider(request.tools) as unknown as OpenAI.Chat.ChatCompletionTool[]
         }
 
-        const stream = await this.client.chat.completions.create(params, {
+        const stream = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsStreaming, {
             signal: request.signal
         })
 
@@ -230,6 +261,9 @@ export class OpenRouterProvider extends BaseLLMProvider {
         // State machine for streaming <think> tag extraction
         let insideThink = false
         let tagBuffer = ''
+        // When a model provides native reasoning fields, skip <think> tag
+        // parsing to avoid yielding thinking tokens twice.
+        let nativeReasoningDetected = false
 
         // Track finish state — usage may arrive in a separate chunk AFTER
         // the finish_reason chunk (OpenAI-compatible streaming protocol).
@@ -257,8 +291,29 @@ export class OpenRouterProvider extends BaseLLMProvider {
                 }
             }
 
+            // Handle native reasoning from OpenRouter (Claude, OpenAI o-series, Kimi, etc.)
+            // OpenRouter sends the same text in BOTH delta.reasoning AND delta.reasoning_details,
+            // so we only consume delta.reasoning to avoid doubling.
+            const deltaAny = delta as Record<string, unknown> | undefined
+            if (deltaAny?.reasoning && typeof deltaAny.reasoning === 'string') {
+                nativeReasoningDetected = true
+                yield { thinking: deltaAny.reasoning, done: false }
+            } else if (Array.isArray(deltaAny?.reasoning_details)) {
+                // Fallback: if reasoning field is absent but reasoning_details exists
+                for (const detail of deltaAny.reasoning_details as Array<Record<string, unknown>>) {
+                    if (detail.type === 'reasoning.text' && typeof detail.text === 'string') {
+                        nativeReasoningDetected = true
+                        yield { thinking: detail.text, done: false }
+                    } else if (detail.type === 'reasoning.summary' && typeof detail.summary === 'string') {
+                        nativeReasoningDetected = true
+                        yield { thinking: detail.summary, done: false }
+                    }
+                }
+            }
+
             // Handle content deltas with <think> tag parsing
-            if (delta?.content) {
+            // Skip tag parsing when native reasoning is active to avoid doubling.
+            if (delta?.content && !nativeReasoningDetected) {
                 let raw = tagBuffer + delta.content
                 tagBuffer = ''
                 let contentOut = ''
@@ -304,6 +359,9 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
                 if (thinkingOut) yield { thinking: thinkingOut, done: false }
                 if (contentOut) yield { content: contentOut, done: false }
+            } else if (delta?.content && nativeReasoningDetected) {
+                // Native reasoning is handling thinking — pass content through directly
+                yield { content: delta.content, done: false }
             }
 
             // Capture usage from any chunk (may arrive on finish chunk or a separate subsequent one)

@@ -619,6 +619,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         model: responseModel,
         hitl: resolvedAgent ? !resolvedAgent.autoApproveTools : true,
         maxRounds: hasSubAgents ? 30 : 15,
+        thinkingEnabled: resolvedAgent?.thinkingEnabled !== false,
         streamMode: 'single',
         signal: abortController.signal,
         streamId,

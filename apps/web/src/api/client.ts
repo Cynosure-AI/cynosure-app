@@ -244,6 +244,7 @@ export interface AgentDefinition {
   autoApproveTools: boolean
   generateTitle: boolean
   showInCarousel: boolean
+  thinkingEnabled: boolean
   sortOrder: number
   memorySpaces: string[]
   createdAt: number

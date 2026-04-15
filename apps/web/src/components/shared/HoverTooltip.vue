@@ -21,52 +21,49 @@ const triggerRef = ref<HTMLElement | null>(null)
 const hovered = ref(false)
 const mousePos = ref({ x: 0, y: 0 })
 
-const popoverStyle = computed((): Record<string, string> => {
+// Incremented on each mouseenter to force fresh getBoundingClientRect()
+const hoverTick = ref(0)
+
+const popoverStyle = computed(() => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  hoverTick.value // reactive dependency — recalculates on each hover
+  const style: Record<string, string> = {
+    position: 'fixed',
+    maxWidth: `${props.maxWidth}px`,
+  }
   if (props.placement === 'mouse') {
     const popoverWidth = props.maxWidth
     let left = mousePos.value.x + 12
     if (left + popoverWidth > window.innerWidth - 8) left = mousePos.value.x - popoverWidth - 12
-    return {
-      position: 'fixed',
-      top: `${mousePos.value.y - 8}px`,
-      left: `${left}px`,
-      transform: 'translateY(-100%)',
-      maxWidth: `${props.maxWidth}px`,
-    }
+    style.top = `${mousePos.value.y - 8}px`
+    style.left = `${left}px`
+    style.transform = 'translateY(-100%)'
+    return style
   }
-  if (props.placement === 'right') {
-    const el = triggerRef.value
-    if (!el) return { position: 'fixed', top: '0', left: '0', maxWidth: `${props.maxWidth}px` }
-    const rect = el.getBoundingClientRect()
-    let top = rect.top + rect.height / 2
-    const left = rect.right + 8
-    if (top < 8) top = 8
-    return {
-      position: 'fixed',
-      top: `${top}px`,
-      left: `${left}px`,
-      transform: 'translateY(-50%)',
-      maxWidth: `${props.maxWidth}px`,
-    }
-  }
-  // "above" placement: center above the trigger element
   const el = triggerRef.value
-  if (!el) return { position: 'fixed', top: '0', left: '0', maxWidth: `${props.maxWidth}px` }
-  const rect = el.getBoundingClientRect()
-  const centerX = rect.left + rect.width / 2
-  const halfW = props.maxWidth / 2
-  let left = centerX - halfW
-  if (left < 8) left = 8
-  if (left + props.maxWidth > window.innerWidth - 8) left = window.innerWidth - 8 - props.maxWidth
-  return {
-    position: 'fixed',
-    bottom: `${window.innerHeight - rect.top + 6}px`,
-    left: `${left}px`,
-    maxWidth: `${props.maxWidth}px`,
+  if (!el) {
+    style.top = '0'
+    style.left = '0'
+    return style
   }
+  const rect = el.getBoundingClientRect()
+  if (props.placement === 'right') {
+    let top = rect.top + rect.height / 2
+    if (top < 8) top = 8
+    style.top = `${top}px`
+    style.left = `${rect.right + 8}px`
+    style.transform = 'translateY(-50%)'
+    return style
+  }
+  // "above" placement: right-aligned above the trigger element
+  const right = window.innerWidth - rect.right
+  style.bottom = `${window.innerHeight - rect.top + 6}px`
+  style.right = `${right}px`
+  return style
 })
 
 function onEnter(e: MouseEvent) {
+  hoverTick.value++
   hovered.value = true
   mousePos.value = { x: e.clientX, y: e.clientY }
 }
