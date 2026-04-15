@@ -217,24 +217,35 @@ export const useChatStore = defineStore('chat', () => {
    * Priority: session override > agent config > provider store defaults.
    */
   const resolvedModelProvider = computed(() => {
-    // Session overrides take priority
-    if (agentConfig.sessionModelOverride.value && agentConfig.sessionProviderOverride.value) {
-      return {
-        model: agentConfig.sessionModelOverride.value,
-        providerId: agentConfig.sessionProviderOverride.value
-      }
-    }
-    // Agent config
+    // Resolve base model + provider from agent config or provider store
+    let model: string | undefined
+    let providerId: string | undefined
+
     if (agentConfig.activeAgentId.value) {
       const agent = agentDefs.get(agentConfig.activeAgentId.value)
       if (agent?.model && agent?.providerId) {
-        return { model: agent.model, providerId: agent.providerId }
+        model = agent.model
+        providerId = agent.providerId
       }
     }
-    // Provider store default
-    const active = providerStore.activeProvider
-    if (active) {
-      return { model: active.defaultModel, providerId: active.id }
+    if (!model || !providerId) {
+      const active = providerStore.activeProvider
+      if (active) {
+        model = active.defaultModel
+        providerId = active.id
+      }
+    }
+
+    // Apply session overrides on top
+    if (agentConfig.sessionProviderOverride.value) {
+      providerId = agentConfig.sessionProviderOverride.value
+    }
+    if (agentConfig.sessionModelOverride.value) {
+      model = agentConfig.sessionModelOverride.value
+    }
+
+    if (model && providerId) {
+      return { model, providerId }
     }
     return null
   })
