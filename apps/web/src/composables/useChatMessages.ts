@@ -24,6 +24,7 @@ export function useChatMessages(
         sessionModelOverride: Ref<string | null>
         sessionProviderOverride: Ref<string | null>
         sessionOverrideSubAgents: Ref<boolean>
+        sessionSystemPrompt: Ref<string>
         freeChatSubAgentIds: Ref<string[]>
         freeChatMemorySpaceIds: Ref<string[]>
         agentOriginalSubAgentIds: Ref<string[]>

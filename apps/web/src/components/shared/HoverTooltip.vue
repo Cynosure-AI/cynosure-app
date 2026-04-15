@@ -21,7 +21,7 @@ const triggerRef = ref<HTMLElement | null>(null)
 const hovered = ref(false)
 const mousePos = ref({ x: 0, y: 0 })
 
-const popoverStyle = computed<Record<string, string>>(() => {
+const popoverStyle = computed((): Record<string, string> => {
   if (props.placement === 'mouse') {
     const popoverWidth = props.maxWidth
     let left = mousePos.value.x + 12
