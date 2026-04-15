@@ -146,14 +146,6 @@ function readAgentFromDir(agentDir: string, id: string): AgentData | null {
 
     const hasIcon = findIconFile(agentDir) !== null
 
-    // Backward compat: migrate legacy memoryEnabled toggles into the tools array
-    const raw = config as unknown as Record<string, unknown>
-    let tools = config.tools || []
-    if (raw.memoryEnabled === true) {
-        if (!tools.includes('memory_retrieve_chunks')) tools = [...tools, 'memory_retrieve_chunks']
-        if (!tools.includes('memory_semantic_search')) tools = [...tools, 'memory_semantic_search']
-    }
-
     return {
         id,
         name: config.name,
@@ -165,7 +157,7 @@ function readAgentFromDir(agentDir: string, id: string): AgentData | null {
         model: config.model || '',
         systemPrompt,
         cronPrompt,
-        tools,
+        tools: config.tools || [],
         subAgents: config.subAgents || [],
         autoApproveTools: config.autoApproveTools === true,
         showInCarousel: config.showInCarousel !== false,
