@@ -1,8 +1,11 @@
 import { broadcast } from '../../../ws.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { ToolDefinition, ToolResult } from '../../gateway/providers/base.provider.js'
-import { writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'fs'
+import { McpOAuthProvider } from './oauth-provider.js'
+import { writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, rmSync } from 'fs'
 import { join, extname } from 'path'
 import { createHash } from 'crypto'
 import { homedir } from 'os'
@@ -44,11 +47,15 @@ export interface McpServerConfig {
 
 interface McpConnection {
     client: Client
-    transport: StdioClientTransport
+    transport: StdioClientTransport | StreamableHTTPClientTransport
     config: McpServerConfig
     tools: ToolDefinition[]
     slug: string
     serverInfo?: { title?: string; description?: string; websiteUrl?: string }
+    /** Whether this connection uses HTTP transport (vs stdio). */
+    isHttp?: boolean
+    /** OAuth provider for HTTP connections (needed for re-auth). */
+    oauthProvider?: McpOAuthProvider
 }
 
 interface PendingAuthConnection {
@@ -56,6 +63,14 @@ interface PendingAuthConnection {
     transport: StdioClientTransport
     config: McpServerConfig
     connectPromise: Promise<void>
+}
+
+/** Pending HTTP OAuth flow — the client is waiting for an authorization callback. */
+interface PendingHttpAuth {
+    client: Client
+    provider: McpOAuthProvider
+    config: McpServerConfig
+    serverUrl: string
 }
 
 /** Callback invoked when a pending OAuth flow completes and an MCP server auto-connects. */
@@ -68,7 +83,10 @@ export class McpManager {
     private connections = new Map<string, McpConnection>()
     private pendingAuths = new Map<string, string>()
     private pendingAuthConnections = new Map<string, PendingAuthConnection>()
+    private pendingHttpAuths = new Map<string, PendingHttpAuth>()
     private onAuthCompleteCallback?: AuthCompleteCallback
+    /** Base URL of the Open-Agent server (e.g. http://127.0.0.1:3099). Set before connecting HTTP servers. */
+    private serverBaseUrl = ''
 
     /**
      * Register a callback that fires when a pending OAuth flow completes
@@ -76,6 +94,11 @@ export class McpManager {
      */
     setOnAuthComplete(cb: AuthCompleteCallback): void {
         this.onAuthCompleteCallback = cb
+    }
+
+    /** Set the base URL so HTTP connections can construct OAuth callback URLs. */
+    setServerBaseUrl(url: string): void {
+        this.serverBaseUrl = url
     }
 
     /** Sanitise a server name into a valid function-name segment */
@@ -94,6 +117,118 @@ export class McpManager {
         // Clear any stale auth state from previous attempts
         this.pendingAuths.delete(config.id)
 
+        // Use HTTP transport for detected remote servers (Smithery, mcp-remote, etc.)
+        const remoteUrl = McpManager.extractRemoteUrl(config.args)
+        if (remoteUrl && this.serverBaseUrl) {
+            try {
+                return await this.connectHttp(config, remoteUrl)
+            } catch (err) {
+                // Auth-related errors should not fallback to stdio
+                if (err instanceof UnauthorizedError ||
+                    (err as Error).message?.includes('Authorization required')) {
+                    throw err
+                }
+                // Non-auth error — fall back to stdio transport
+                console.warn(`HTTP transport failed for "${config.name}", falling back to stdio:`, (err as Error).message)
+            }
+        }
+
+        return this.connectStdio(config)
+    }
+
+    /** Connect using StreamableHTTP transport (direct HTTP + OAuth). */
+    private async connectHttp(config: McpServerConfig, remoteUrl: string): Promise<ToolDefinition[]> {
+        const callbackUrl = `${this.serverBaseUrl}/api/mcp/oauth/callback/${encodeURIComponent(config.id)}`
+        let authUrl: string | null = null
+
+        const provider = new McpOAuthProvider(remoteUrl, callbackUrl, (url) => {
+            authUrl = url
+            this.pendingAuths.set(config.id, url)
+            broadcast('mcp-auth-needed', {
+                serverId: config.id,
+                serverName: config.name,
+                authUrl: url
+            })
+        })
+
+        const client = new Client({ name: 'open-agent', version: '1.0.0' })
+        const transport = new StreamableHTTPClientTransport(new URL(remoteUrl), {
+            authProvider: provider
+        })
+
+        try {
+            await client.connect(transport)
+        } catch (err) {
+            if (err instanceof UnauthorizedError || authUrl) {
+                // OAuth is required — store pending auth and wait for callback
+                console.warn(`MCP server "${config.name}" requires OAuth authorization (HTTP transport).`)
+                this.pendingHttpAuths.set(config.id, { client, provider, config, serverUrl: remoteUrl })
+                throw new Error('Authorization required — use the Authorize button to connect.')
+            }
+            try { await transport.close() } catch { /* ignore */ }
+            throw err
+        }
+
+        const { tools: mcpTools } = await client.listTools()
+        const slug = this.sanitiseName(config.name)
+        const tools = this.buildToolDefinitions(mcpTools, client, config)
+
+        const ver = client.getServerVersion()
+        const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl } : undefined
+
+        this.connections.set(config.id, { client, transport, config, tools, slug, serverInfo, isHttp: true, oauthProvider: provider })
+        return tools
+    }
+
+    /**
+     * Complete an HTTP OAuth flow after the user authorized in the browser.
+     * Called from the OAuth callback route with the authorization code.
+     */
+    async finishHttpAuth(serverId: string, code: string): Promise<ToolDefinition[]> {
+        const pending = this.pendingHttpAuths.get(serverId)
+        if (!pending) throw new Error('No pending HTTP auth for this server')
+
+        // Create a fresh transport with the same provider (which holds the code verifier)
+        const transport = new StreamableHTTPClientTransport(new URL(pending.serverUrl), {
+            authProvider: pending.provider
+        })
+
+        // Exchange the authorization code for tokens
+        await transport.finishAuth(code)
+        // Now connect — the provider has valid tokens
+        await pending.client.connect(transport)
+
+        const { tools: mcpTools } = await pending.client.listTools()
+        const slug = this.sanitiseName(pending.config.name)
+        const tools = this.buildToolDefinitions(mcpTools, pending.client, pending.config)
+
+        const ver = pending.client.getServerVersion()
+        const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl } : undefined
+
+        this.connections.set(serverId, {
+            client: pending.client, transport, config: pending.config,
+            tools, slug, serverInfo, isHttp: true, oauthProvider: pending.provider
+        })
+
+        this.pendingHttpAuths.delete(serverId)
+        this.pendingAuths.delete(serverId)
+
+        broadcast('mcp-auth-complete', { serverId, serverName: pending.config.name, toolCount: tools.length })
+
+        if (this.onAuthCompleteCallback) {
+            this.onAuthCompleteCallback(serverId, tools, pending.config)
+        }
+
+        return tools
+    }
+
+    /** Whether a server has a pending HTTP OAuth flow. */
+    hasPendingHttpAuth(serverId: string): boolean {
+        return this.pendingHttpAuths.has(serverId)
+    }
+
+    /** Connect using stdio transport (child process). */
+    private async connectStdio(config: McpServerConfig): Promise<ToolDefinition[]> {
         const transport = new StdioClientTransport({
             command: config.command,
             args: config.args,
@@ -243,8 +378,9 @@ export class McpManager {
     }
 
     async disconnect(serverId: string): Promise<void> {
-        // Cancel any pending OAuth connection first
+        // Cancel any pending OAuth connection first (stdio or HTTP)
         await this.cancelPendingAuth(serverId)
+        this.pendingHttpAuths.delete(serverId)
 
         const conn = this.connections.get(serverId)
         if (!conn) return
@@ -261,10 +397,12 @@ export class McpManager {
         for (const id of this.connections.keys()) {
             await this.disconnect(id)
         }
-        // Also clean up any pending auth connections
+        // Also clean up any pending auth connections (stdio)
         for (const id of this.pendingAuthConnections.keys()) {
             await this.cancelPendingAuth(id)
         }
+        // Clean up pending HTTP auth connections
+        this.pendingHttpAuths.clear()
     }
 
     getTools(serverId: string): ToolDefinition[] {
@@ -299,9 +437,9 @@ export class McpManager {
         return Object.fromEntries(this.pendingAuths)
     }
 
-    /** Whether a server has an active pending OAuth flow with its process still alive. */
+    /** Whether a server has an active pending OAuth flow (stdio or HTTP). */
     hasPendingAuthConnection(serverId: string): boolean {
-        return this.pendingAuthConnections.has(serverId)
+        return this.pendingAuthConnections.has(serverId) || this.pendingHttpAuths.has(serverId)
     }
 
     /**
@@ -397,29 +535,41 @@ export class McpManager {
     }
 
     /**
-     * Clear cached mcp-remote OAuth tokens for a given server URL.
-     * mcp-remote stores tokens in ~/.mcp-auth/mcp-remote-{version}/ keyed by MD5(url).
-     * Returns the number of files deleted.
+     * Clear cached OAuth tokens for a given server URL.
+     * Clears both mcp-remote tokens (~/.mcp-auth/) and direct HTTP OAuth tokens (<appDataDir>/mcp-oauth/).
+     * Returns the number of items deleted.
      */
     static clearMcpRemoteAuth(remoteUrl: string): number {
         const hash = createHash('md5').update(remoteUrl).digest('hex')
-        const authDir = join(homedir(), '.mcp-auth')
-        if (!existsSync(authDir)) return 0
-
         let deleted = 0
-        try {
-            for (const sub of readdirSync(authDir)) {
-                const subDir = join(authDir, sub)
-                try {
-                    for (const file of readdirSync(subDir)) {
-                        if (file.startsWith(hash)) {
-                            unlinkSync(join(subDir, file))
-                            deleted++
+
+        // Clear mcp-remote cache (~/.mcp-auth/mcp-remote-{version}/<hash>*)
+        const authDir = join(homedir(), '.mcp-auth')
+        if (existsSync(authDir)) {
+            try {
+                for (const sub of readdirSync(authDir)) {
+                    const subDir = join(authDir, sub)
+                    try {
+                        for (const file of readdirSync(subDir)) {
+                            if (file.startsWith(hash)) {
+                                unlinkSync(join(subDir, file))
+                                deleted++
+                            }
                         }
-                    }
-                } catch { /* not a directory or permission error */ }
-            }
-        } catch { /* auth dir unreadable */ }
+                    } catch { /* not a directory or permission error */ }
+                }
+            } catch { /* auth dir unreadable */ }
+        }
+
+        // Clear direct HTTP OAuth provider cache (<appDataDir>/mcp-oauth/<hash>/)
+        const oauthDir = join(getAppDataDir(), 'mcp-oauth', hash)
+        if (existsSync(oauthDir)) {
+            try {
+                rmSync(oauthDir, { recursive: true, force: true })
+                deleted++
+            } catch { /* ignore */ }
+        }
+
         return deleted
     }
 }

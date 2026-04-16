@@ -322,6 +322,13 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
         const manager = getMcpManager()
         const registry = getToolRegistry()
 
+        // Clean up cached OAuth tokens for remote servers
+        const row = db.prepare('SELECT args_json FROM mcp_servers WHERE id = ?').get(id) as { args_json: string } | undefined
+        if (row) {
+            const remoteUrl = McpManager.extractRemoteUrl(JSON.parse(row.args_json))
+            if (remoteUrl) McpManager.clearMcpRemoteAuth(remoteUrl)
+        }
+
         registry.unregisterByNamespace(`mcp:${id}`)
         await manager.disconnect(id)
         db.prepare('DELETE FROM mcp_servers WHERE id = ?').run(id)
@@ -473,6 +480,66 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
             return { connected: false, authRequired: manager.hasPendingAuthConnection(id), error: (err as Error).message, clearedTokenFiles: cleared }
         }
     })
+
+    // GET /api/mcp/oauth/callback/:serverId — OAuth redirect callback for HTTP transport
+    app.get<{ Params: { serverId: string }; Querystring: { code?: string; error?: string } }>(
+        '/oauth/callback/:serverId',
+        async (req, reply) => {
+            const { serverId } = req.params
+            const { code, error: oauthError } = req.query
+
+            if (oauthError) {
+                return reply.type('text/html').send(`
+                    <html><body style="font-family:system-ui;text-align:center;padding:80px 20px">
+                        <h2 style="color:#ef4444">Authorization Failed</h2>
+                        <p style="color:#71717a">Error: ${oauthError.replace(/</g, '&lt;')}</p>
+                        <p style="color:#a1a1aa;font-size:14px">You can close this window.</p>
+                    </body></html>
+                `)
+            }
+
+            if (!code) {
+                return reply.status(400).type('text/html').send(`
+                    <html><body style="font-family:system-ui;text-align:center;padding:80px 20px">
+                        <h2 style="color:#ef4444">Missing Authorization Code</h2>
+                        <p style="color:#a1a1aa;font-size:14px">No code was provided in the callback.</p>
+                    </body></html>
+                `)
+            }
+
+            const manager = getMcpManager()
+            const registry = getToolRegistry()
+
+            try {
+                const tools = await manager.finishHttpAuth(serverId, code)
+                // Tools were auto-registered via the auth-complete callback,
+                // but register explicitly in case the callback wasn't set up
+                const db = getDb()
+                const row = db.prepare('SELECT name FROM mcp_servers WHERE id = ?').get(serverId) as { name: string } | undefined
+                if (row) {
+                    const ns: ToolNamespace = { id: `mcp:${serverId}`, label: row.name }
+                    registerMcpTools(tools, manager.getSlug(serverId), ns, registry)
+                }
+
+                return reply.type('text/html').send(`
+                    <html><body style="font-family:system-ui;text-align:center;padding:80px 20px">
+                        <h2 style="color:#22c55e">Authorization Complete</h2>
+                        <p style="color:#a1a1aa">${tools.length} tool(s) connected successfully.</p>
+                        <p style="color:#71717a;font-size:14px">You can close this window and return to Open Agent.</p>
+                        <script>setTimeout(function(){ window.close() }, 2000)</script>
+                    </body></html>
+                `)
+            } catch (err) {
+                return reply.status(500).type('text/html').send(`
+                    <html><body style="font-family:system-ui;text-align:center;padding:80px 20px">
+                        <h2 style="color:#ef4444">Connection Failed</h2>
+                        <p style="color:#71717a">${(err as Error).message?.replace(/</g, '&lt;') || 'Unknown error'}</p>
+                        <p style="color:#a1a1aa;font-size:14px">You can close this window and try again.</p>
+                    </body></html>
+                `)
+            }
+        }
+    )
 
     // GET /api/mcp/registry — proxy to MCP registries (official, smithery, glama)
     app.get<{
