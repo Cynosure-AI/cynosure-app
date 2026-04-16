@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { api } from '../api/client'
 import type { MemorySpace } from '../api/client'
 import { Icon } from '@iconify/vue'
+import ModalDialog from '../components/shared/ModalDialog.vue'
 
 // --- Space management ---
 const spaces = ref<MemorySpace[]>([])
@@ -12,6 +13,13 @@ const showCreateDialog = ref(false)
 const editingSpace = ref<MemorySpace | null>(null)
 const spaceName = ref('')
 const spaceDescription = ref('')
+const showDeleteConfirm = ref(false)
+const pendingDeleteSpace = ref<MemorySpace | null>(null)
+
+function confirmDeleteSpace(space: MemorySpace) {
+  pendingDeleteSpace.value = space
+  showDeleteConfirm.value = true
+}
 
 // --- Drag-and-drop reorder ---
 const draggedSpaceId = ref<string | null>(null)
@@ -114,6 +122,8 @@ async function saveSpace() {
 }
 
 async function deleteSpace(space: MemorySpace) {
+  showDeleteConfirm.value = false
+  pendingDeleteSpace.value = null
   try {
     await api.memorySpaces.remove(space.id)
     await loadSpaces()
@@ -611,7 +621,7 @@ onMounted(() => loadSpaces())
             <button
               class="p-1 text-zinc-500 hover:text-red-400 transition-colors"
               title="Delete space"
-              @click="deleteSpace(selectedSpace!)"
+              @click="confirmDeleteSpace(selectedSpace!)"
             >
               <Icon
                 icon="lucide:trash-2"
@@ -1145,6 +1155,34 @@ onMounted(() => loadSpaces())
           </div>
         </div>
       </Teleport>
+
+      <!-- Delete Confirmation Modal -->
+      <ModalDialog
+        :show="showDeleteConfirm"
+        title="Delete Memory Space"
+        icon="lucide:trash-2"
+        icon-color="red"
+        @close="showDeleteConfirm = false"
+      >
+        <p class="text-zinc-400 leading-relaxed">
+          Are you sure you want to delete <strong class="text-zinc-200">{{ pendingDeleteSpace?.name }}</strong>?
+          All documents and chunks in this space will be permanently removed. This action cannot be undone.
+        </p>
+        <template #actions>
+          <button
+            class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
+            @click="deleteSpace(pendingDeleteSpace!)"
+          >
+            Delete Space
+          </button>
+          <button
+            class="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-center font-medium transition-colors"
+            @click="showDeleteConfirm = false"
+          >
+            Cancel
+          </button>
+        </template>
+      </ModalDialog>
     </div>
   </div>
 </template>
