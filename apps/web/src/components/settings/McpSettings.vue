@@ -13,7 +13,6 @@ const { servers, actionError, authInProgress, loadServers, refreshAll } = useMcp
 
 type McpTab = 'browse' | 'installed' | 'tools'
 const activeTab = ref<McpTab>('browse')
-const mcpSearch = ref('')
 
 const cleanups: (() => void)[] = []
 
@@ -53,12 +52,10 @@ onUnmounted(() => {
 
     <McpBrowseTab
       v-if="activeTab === 'browse'"
-      v-model:search="mcpSearch"
       @go-to-installed="activeTab = 'installed'"
     />
     <McpInstalledTab
       v-else-if="activeTab === 'installed'"
-      v-model:search="mcpSearch"
       @go-to-browse="activeTab = 'browse'"
     />
     <McpToolsTab v-else-if="activeTab === 'tools'" />
