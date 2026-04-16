@@ -235,6 +235,10 @@ export const useAgentStore = defineStore('agent', () => {
         })
         break
 
+      case 'step:hitl-denied':
+        updateLastStepByTask(taskId, { status: 'denied' })
+        break
+
     }
   }
 

@@ -75,7 +75,9 @@ export function trimMessagesToContextLimit(
         }
     }
 
-    // Don't split tool call groups
+    // Don't keep orphaned tool-result messages whose parent assistant was trimmed.
+    // Tool results always follow their assistant in the array, so if the cut lands
+    // on a tool message, advance past all consecutive tool messages to trim them too.
     while (cutIndex < nonSystemMsgs.length && nonSystemMsgs[cutIndex].role === 'tool') {
         cutIndex++
     }
@@ -85,10 +87,16 @@ export function trimMessagesToContextLimit(
     const keptMsgs = nonSystemMsgs.slice(cutIndex)
     const trimmedCount = cutIndex
 
-    const trimNote: ChatMessage = {
-        role: 'system',
-        content: `[Earlier conversation history (${trimmedCount} messages) was trimmed to fit the context window. Continue from the remaining context.]`,
-    }
+    // Append the trim note to the last system message so providers that only
+    // read the first system message (Anthropic, OpenAI, Gemini…) still see it.
+    const trimNote = `\n\n[Earlier conversation history (${trimmedCount} messages) was trimmed to fit the context window. Continue from the remaining context.]`
+    const mergedSystemMsgs = systemMsgs.length
+        ? systemMsgs.map((m, i) =>
+            i === systemMsgs.length - 1
+                ? { ...m, content: (typeof m.content === 'string' ? m.content : '') + trimNote }
+                : m
+        )
+        : [{ role: 'system' as const, content: trimNote.trimStart() }]
 
-    return [...systemMsgs, trimNote, ...keptMsgs]
+    return [...mergedSystemMsgs, ...keptMsgs]
 }

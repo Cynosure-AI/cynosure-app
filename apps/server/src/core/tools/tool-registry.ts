@@ -224,16 +224,6 @@ export class ToolRegistry {
         }
         continue
       }
-      // Legacy slug__name format (from before the registry rework)
-      const idx = name.indexOf('__')
-      if (idx > 0) {
-        const bare = name.slice(idx + 2)
-        const bareKeys = this.nameIndex.get(bare)
-        if (bareKeys && bareKeys.size > 0) {
-          const entry = this.entries.get([...bareKeys][0])!
-          resolved.push({ name: bare, entry })
-        }
-      }
     }
 
     // Phase 2: Detect collisions (same bare name, different namespaces)

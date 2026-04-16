@@ -66,15 +66,13 @@ export class RAGStore {
   // Table lifecycle
   // -----------------------------------------------------------------------
 
-  /** Open an existing table (with schema migration) or return null. */
+  /** Open an existing table or return null. */
   private async openExistingTable(tableName: string): Promise<lancedb.Table | null> {
     if (this.tables.has(tableName)) return this.tables.get(tableName)!
     if (!this.db) return null
     try {
       const table = await this.db.openTable(tableName)
-      await this.migrateSpaceIdColumn(table)
       this.tables.set(tableName, table)
-      // Cache field names after migration (spaceId column may have just been added)
       const schema = await table.schema()
       this.fieldNamesCache.set(tableName, new Set(schema.fields.map((f: { name: string }) => f.name)))
       return table
@@ -135,19 +133,6 @@ export class RAGStore {
   // -----------------------------------------------------------------------
   // Index management
   // -----------------------------------------------------------------------
-
-  /** Add spaceId column to tables created before the memory-spaces feature. */
-  private async migrateSpaceIdColumn(table: lancedb.Table): Promise<void> {
-    try {
-      const schema = await table.schema()
-      const hasSpaceId = schema.fields.some((f: { name: string }) => f.name === 'spaceId')
-      if (!hasSpaceId) {
-        await table.addColumns([{ name: 'spaceId', valueSql: "''" }])
-      }
-    } catch (err) {
-      console.warn('[rag] Failed to add spaceId column:', err)
-    }
-  }
 
   /** Ensure a BTree scalar index on spaceId (once per table per process). */
   private async ensureSpaceIdIndex(table: lancedb.Table, tableName: string): Promise<void> {
