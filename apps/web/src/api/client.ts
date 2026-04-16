@@ -666,6 +666,8 @@ export const api = {
       post<{ enabled: boolean; connected: boolean; toolCount?: number; error?: string }>(`/api/mcp/servers/${encodeURIComponent(id)}/toggle`),
     reconnectServer: (id: string) =>
       post<{ connected: boolean; toolCount?: number; error?: string }>(`/api/mcp/servers/${encodeURIComponent(id)}/reconnect`),
+    reauthServer: (id: string) =>
+      post<{ connected: boolean; authRequired?: boolean; toolCount?: number; error?: string; clearedTokenFiles?: number }>(`/api/mcp/servers/${encodeURIComponent(id)}/reauth`),
     searchRegistry: (opts?: { search?: string; cursor?: string; limit?: number; registry?: string }) => {
       const params = new URLSearchParams()
       if (opts?.search) params.set('search', opts.search)

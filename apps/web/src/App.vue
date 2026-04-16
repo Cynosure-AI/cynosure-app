@@ -30,6 +30,8 @@ const route = useRoute()
 watch(() => route.path, () => closeSidebar())
 
 const mcpAuthRequests = ref<{ serverId: string; serverName: string; authUrl: string }[]>([])
+const mcpAuthOpened = ref<Set<string>>(new Set())
+const mcpAuthReconnecting = ref<string | null>(null)
 
 const cleanups: (() => void)[] = []
 
@@ -55,6 +57,24 @@ function handleMcpAuth(data: { serverId: string; serverName: string; authUrl: st
 
 function dismissAuthRequest(serverId: string) {
   mcpAuthRequests.value = mcpAuthRequests.value.filter(r => r.serverId !== serverId)
+  mcpAuthOpened.value.delete(serverId)
+  mcpAuthReconnecting.value = null
+}
+
+function openAuthPage(serverId: string, authUrl: string) {
+  window.open(authUrl, '_blank')
+  mcpAuthOpened.value.add(serverId)
+}
+
+async function reconnectAfterAuth(serverId: string) {
+  mcpAuthReconnecting.value = serverId
+  try {
+    await api.mcp.reconnectServer(serverId)
+    dismissAuthRequest(serverId)
+    agentStore.loadTools()
+  } catch {
+    mcpAuthReconnecting.value = null
+  }
 }
 
 function handleMcpAuthComplete(data: { serverId: string; serverName: string; toolCount: number }) {
@@ -168,15 +188,24 @@ onUnmounted(() => {
         The MCP server <strong class="text-zinc-200">{{ mcpAuthRequests[0]?.serverName }}</strong> requires external authorization before it can connect. Please click the unblock link below.
       </p>
       <template #actions>
-        <a 
-          :href="mcpAuthRequests[0]?.authUrl" 
-          target="_blank" 
+        <a
+          v-if="!mcpAuthOpened.has(mcpAuthRequests[0]?.serverId)"
+          :href="mcpAuthRequests[0]?.authUrl"
+          target="_blank"
           class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-center font-medium transition-colors shadow-lg shadow-blue-500/20"
-          @click="dismissAuthRequest(mcpAuthRequests[0]?.serverId)"
+          @click.prevent="openAuthPage(mcpAuthRequests[0]?.serverId, mcpAuthRequests[0]?.authUrl)"
         >
           Open Authorization Page
         </a>
-        <button 
+        <button
+          v-if="mcpAuthOpened.has(mcpAuthRequests[0]?.serverId)"
+          class="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-center font-medium transition-colors shadow-lg shadow-emerald-500/20"
+          :disabled="mcpAuthReconnecting === mcpAuthRequests[0]?.serverId"
+          @click="reconnectAfterAuth(mcpAuthRequests[0]?.serverId)"
+        >
+          {{ mcpAuthReconnecting === mcpAuthRequests[0]?.serverId ? 'Connecting...' : 'I\'ve Authorized — Reconnect' }}
+        </button>
+        <button
           class="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-center font-medium transition-colors"
           @click="dismissAuthRequest(mcpAuthRequests[0]?.serverId)"
         >

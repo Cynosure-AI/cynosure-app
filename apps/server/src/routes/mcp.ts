@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { ToolDefinition } from '../core/gateway/providers/base.provider.js'
 import { getDb } from '../db/database.js'
-import { getMcpManager, type McpServerConfig } from '../core/tools/mcp/mcp-manager.js'
+import { getMcpManager, McpManager, type McpServerConfig } from '../core/tools/mcp/mcp-manager.js'
 import { getToolRegistry, type ToolNamespace, type ToolRegistry } from '../core/tools/tool-registry.js'
 import { nanoid } from 'nanoid'
 import { existsSync, readFileSync } from 'fs'
@@ -426,6 +426,51 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
             return { connected: true, toolCount: tools.length }
         } catch (err) {
             return { connected: false, error: (err as Error).message }
+        }
+    })
+
+    // POST /api/mcp/servers/:id/reauth — clear cached OAuth tokens and reconnect (forces fresh auth)
+    app.post<{ Params: { id: string } }>('/servers/:id/reauth', async (req, reply) => {
+        const { id } = req.params
+        const db = getDb()
+        const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as {
+            id: string; name: string; command: string; args_json: string; env_json: string; enabled: number
+        } | undefined
+
+        if (!row) {
+            return reply.status(404).send({ error: 'Server not found' })
+        }
+
+        const args: string[] = JSON.parse(row.args_json)
+        const remoteUrl = McpManager.extractRemoteUrl(args)
+        let cleared = 0
+        if (remoteUrl) {
+            cleared = McpManager.clearMcpRemoteAuth(remoteUrl)
+        }
+
+        // Disconnect, unregister tools, then reconnect to trigger fresh auth
+        const manager = getMcpManager()
+        const registry = getToolRegistry()
+        registry.unregisterByNamespace(`mcp:${id}`)
+        await manager.disconnect(id)
+
+        const config: McpServerConfig = {
+            id: row.id,
+            name: row.name,
+            command: row.command,
+            args,
+            env: JSON.parse(row.env_json),
+            enabled: row.enabled === 1
+        }
+
+        try {
+            const tools = await manager.connect(config)
+            const ns: ToolNamespace = { id: `mcp:${id}`, label: row.name }
+            registerMcpTools(tools, manager.getSlug(id), ns, registry)
+            return { connected: true, toolCount: tools.length, clearedTokenFiles: cleared }
+        } catch (err) {
+            // Expected when auth is required — the process stays alive for OAuth
+            return { connected: false, authRequired: manager.hasPendingAuthConnection(id), error: (err as Error).message, clearedTokenFiles: cleared }
         }
     })
 
