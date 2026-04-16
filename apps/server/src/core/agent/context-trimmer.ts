@@ -8,7 +8,7 @@ const CONTEXT_THRESHOLD = 0.75
 
 /**
  * Rough token estimate for a single message.
- * Uses ~3 chars per token (conservative) + per-message framing overhead.
+ * Uses ~4 chars per token + per-message framing overhead.
  */
 export function estimateTokens(msg: ChatMessage): number {
     let textLen = 0
@@ -17,12 +17,12 @@ export function estimateTokens(msg: ChatMessage): number {
     } else if (Array.isArray(msg.content)) {
         for (const part of msg.content) {
             if (part.type === 'text') textLen += part.text.length
-            else if (part.type === 'image_url') textLen += 4000 // ~1000 tokens
+            else if (part.type === 'image_url') textLen += 4000 // 4000 chars ÷ 4 = ~1000 tokens
         }
     }
-    const textTokens = Math.ceil(textLen / 3)
+    const textTokens = Math.ceil(textLen / 4)
     const toolCallTokens = msg.toolCalls
-        ? Math.ceil(JSON.stringify(msg.toolCalls).length / 3)
+        ? Math.ceil(JSON.stringify(msg.toolCalls).length / 4)
         : 0
     return textTokens + toolCallTokens + 15
 }
@@ -79,6 +79,12 @@ export function trimMessagesToContextLimit(
     // Tool results always follow their assistant in the array, so if the cut lands
     // on a tool message, advance past all consecutive tool messages to trim them too.
     while (cutIndex < nonSystemMsgs.length && nonSystemMsgs[cutIndex].role === 'tool') {
+        cutIndex++
+    }
+
+    // Many providers (Anthropic, Gemini) require the first non-system message to
+    // be a user message.  Advance past any leading assistant messages at the cut.
+    while (cutIndex < nonSystemMsgs.length && nonSystemMsgs[cutIndex].role !== 'user') {
         cutIndex++
     }
 
