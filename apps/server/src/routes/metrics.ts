@@ -69,7 +69,11 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
 
         // Load pricing data (cached, non-blocking on failure)
         await ensurePricingLoaded().catch(() => { /* pricing is best-effort */ })
-        const periodSinceMs = Date.now() - days * 86_400_000
+
+        // Calendar-based: start of day in local timezone (not rolling 24h window)
+        const now = new Date()
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+        const periodSinceMs = startOfToday - (days - 1) * 86_400_000
 
         // Respect the metrics reset cutoff if it is more recent than the period window
         const resetRow = db.prepare(`SELECT value_json FROM settings WHERE key = 'metrics_reset_at'`).get() as { value_json: string } | undefined
