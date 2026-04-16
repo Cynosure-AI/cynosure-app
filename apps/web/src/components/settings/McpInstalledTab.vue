@@ -263,6 +263,18 @@ async function finishAuth(id: string): Promise<void> {
   await reconnectServer(id)
 }
 
+async function reauthServer(id: string): Promise<void> {
+  setLoading(id, true)
+  try {
+    const result = await api.mcp.reauthServer(id)
+    if (result.error && !result.authRequired) actionError.value[id] = result.error
+    else delete actionError.value[id]
+    await refreshAll()
+  } finally {
+    setLoading(id, false)
+  }
+}
+
 async function removeServer(id: string): Promise<void> {
   await api.mcp.removeServer(id)
   delete actionError.value[id]
@@ -628,6 +640,19 @@ defineExpose({ loadServers })
                   @click="reconnectServer(server.id)"
                 >
                   {{ isLoading(server.id) ? 'Connecting...' : 'Reconnect' }}
+                </button>
+                <button
+                  v-if="server.enabled && !server.pendingAuthUrl && (server.origin === 'smithery.ai' || server.args.some(a => /^https?:\/\//.test(a) || a === 'mcp-remote'))"
+                  class="px-2.5 py-1.5 text-xs bg-amber-700/60 hover:bg-amber-600 text-amber-200 rounded-md transition-colors"
+                  :disabled="isLoading(server.id)"
+                  title="Clear cached OAuth tokens and re-authorize"
+                  @click="reauthServer(server.id)"
+                >
+                  <Icon
+                    icon="lucide:key-round"
+                    class="w-3 h-3 inline -mt-0.5 mr-1"
+                  />
+                  Re-Auth
                 </button>
                 <ToggleSwitch
                   :model-value="server.enabled"

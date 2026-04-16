@@ -2,8 +2,10 @@ import { broadcast } from '../../../ws.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { ToolDefinition, ToolResult } from '../../gateway/providers/base.provider.js'
-import { writeFileSync, mkdirSync, existsSync } from 'fs'
+import { writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'fs'
 import { join, extname } from 'path'
+import { createHash } from 'crypto'
+import { homedir } from 'os'
 import { getAppDataDir } from '../../data-dir.js'
 import { nanoid } from 'nanoid'
 
@@ -62,7 +64,7 @@ export type AuthCompleteCallback = (serverId: string, tools: ToolDefinition[], c
 /** How long to keep the child process alive while waiting for OAuth (5 minutes). */
 const AUTH_WAIT_TIMEOUT_MS = 5 * 60 * 1000
 
-class McpManager {
+export class McpManager {
     private connections = new Map<string, McpConnection>()
     private pendingAuths = new Map<string, string>()
     private pendingAuthConnections = new Map<string, PendingAuthConnection>()
@@ -114,7 +116,9 @@ class McpManager {
                 // Keep buffer manageable
                 if (stderrBuffer.length > 5000) stderrBuffer = stderrBuffer.slice(-5000)
 
-                const authMatch = stderrBuffer.match(/Please authorize this client by visiting:\s*(https?:\/\/[^\s]+)/i)
+                const authMatch = stderrBuffer.match(
+                    /(?:Please authorize this client by visiting:|authorize[:\s]+|auth(?:orization)?\s+(?:required|needed)[:\s]*)\s*(https?:\/\/[^\s]+)/i
+                )
                 if (authMatch) {
                     this.pendingAuths.set(config.id, authMatch[1])
                     broadcast('mcp-auth-needed', {
@@ -363,6 +367,60 @@ class McpManager {
         try { await pending.transport.close() } catch { }
         this.pendingAuthConnections.delete(serverId)
         this.pendingAuths.delete(serverId)
+    }
+
+    /**
+     * Extract the remote server URL from MCP args (e.g. `['mcp-remote', 'https://...']`
+     * or `['@smithery/cli@latest', 'run', '<identifier>']`).
+     */
+    static extractRemoteUrl(args: string[]): string | null {
+        // mcp-remote pattern: npx -y mcp-remote https://server.url
+        const remoteIdx = args.indexOf('mcp-remote')
+        if (remoteIdx >= 0 && remoteIdx + 1 < args.length) {
+            const url = args[remoteIdx + 1]
+            if (url.startsWith('http')) return url
+        }
+        // Check for any https:// URL in args
+        for (const a of args) {
+            if (/^https?:\/\//.test(a)) return a
+        }
+        // Smithery CLI pattern: @smithery/cli run <identifier>
+        // The CLI internally connects to https://<identifier>.run.tools
+        const runIdx = args.indexOf('run')
+        if (runIdx >= 0 && args.some(a => a.includes('@smithery/cli'))) {
+            const identifier = args[runIdx + 1]
+            if (identifier && !identifier.startsWith('-')) {
+                return `https://${identifier}.run.tools`
+            }
+        }
+        return null
+    }
+
+    /**
+     * Clear cached mcp-remote OAuth tokens for a given server URL.
+     * mcp-remote stores tokens in ~/.mcp-auth/mcp-remote-{version}/ keyed by MD5(url).
+     * Returns the number of files deleted.
+     */
+    static clearMcpRemoteAuth(remoteUrl: string): number {
+        const hash = createHash('md5').update(remoteUrl).digest('hex')
+        const authDir = join(homedir(), '.mcp-auth')
+        if (!existsSync(authDir)) return 0
+
+        let deleted = 0
+        try {
+            for (const sub of readdirSync(authDir)) {
+                const subDir = join(authDir, sub)
+                try {
+                    for (const file of readdirSync(subDir)) {
+                        if (file.startsWith(hash)) {
+                            unlinkSync(join(subDir, file))
+                            deleted++
+                        }
+                    }
+                } catch { /* not a directory or permission error */ }
+            }
+        } catch { /* auth dir unreadable */ }
+        return deleted
     }
 }
 
