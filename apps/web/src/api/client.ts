@@ -825,6 +825,7 @@ export interface MetricsSummary {
     conversations: number
     messages: number
     tokens: number
+    estimatedCost: number | null
     models: { model: string; messages: number; tokens: number }[]
   }[]
   originBreakdown: {
