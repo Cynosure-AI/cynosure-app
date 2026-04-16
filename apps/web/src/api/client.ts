@@ -283,6 +283,7 @@ export interface AgentInstance {
   agentId: string
   agentName: string
   agentIconUrl: string | null
+  model: string | null
   conversationId: string | null
   startedAt: number
   intervalMinutes: number
