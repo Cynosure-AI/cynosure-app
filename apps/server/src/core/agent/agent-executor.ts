@@ -186,6 +186,13 @@ export class AgentExecutor {
     /** Resolved stream event prefix (e.g. 'chat:stream' or 'chat:subagent-stream') */
     private _sp: string
 
+    /** Emit an EventBus event if emission is enabled, merging eventMeta if configured. */
+    private emit(event: string, payload: Record<string, unknown>): void {
+        if (!this.config.emitEvents) return
+        const meta = this.config.eventMeta
+        getEventBus().emit(event, meta ? { ...payload, ...meta } : payload)
+    }
+
     /** Persist the current context token count on the conversation row so it
      *  survives chat switches and page reloads mid-execution.
      *  Only the main-agent executor persists — sub-agents share the conversationId
@@ -204,18 +211,6 @@ export class AgentExecutor {
      */
     async run(messages: ChatMessage[]): Promise<AgentExecutorResult> {
         const { gateway, tools, conversationId, broadcast, providerId, model, signal, temperature, thinkingEnabled } = this.config
-        const eventBus = getEventBus()
-        const shouldEmit = this.config.emitEvents
-        const meta = this.config.eventMeta
-        const emit = (event: string, ...args: unknown[]) => {
-            if (shouldEmit) {
-                if (meta && args.length && typeof args[0] === 'object' && args[0] !== null) {
-                    eventBus.emit(event, { ...args[0] as Record<string, unknown>, ...meta })
-                } else {
-                    eventBus.emit(event, ...args)
-                }
-            }
-        }
         const taskId = nanoid()
 
         let currentMessages = [...messages]
@@ -252,36 +247,22 @@ export class AgentExecutor {
             providerId
         )
 
-        try {
-            for await (const chunk of initialStream) {
-                if (chunk.content) {
-                    fullContent += chunk.content
-                    broadcast(`${this._sp}-chunk`, { streamId: activeStreamId, conversationId, content: chunk.content })
-                    emit('step:content', { conversationId, content: chunk.content })
-                }
-                if (chunk.thinking) {
-                    fullThinking += chunk.thinking
-                    lastRoundThinking += chunk.thinking
-                    broadcast(`${this._sp}-thinking`, { streamId: activeStreamId, conversationId, thinking: chunk.thinking })
-                    emit('step:thinking', { conversationId, thinking: chunk.thinking })
-                }
-                if (chunk.images?.length) {
-                    collectedImages.push(...chunk.images)
-                    broadcast(`${this._sp}-images`, { streamId: activeStreamId, conversationId, images: chunk.images })
-                }
-                if (chunk.toolCalls?.length) {
-                    pendingToolCalls = chunk.toolCalls
-                }
-                if (chunk.usage) { usage = chunk.usage; if ((chunk.usage.totalTokens ?? 0) > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = chunk.usage.totalTokens }
-                if (chunk.done) break
-            }
-        } catch (err) {
+        const initialResult = await this.consumeStream(initialStream, activeStreamId, conversationId)
+        if (initialResult.error) {
             // Always close the stream on the client before re-throwing, otherwise
             // the frontend's streaming message is left open and a subsequent
             // stream-reset for the outer agent will reuse it (wrong icon/identity).
             broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, cancelled: signal?.aborted })
-            throw err
+            throw initialResult.error
         }
+
+        fullContent = initialResult.content
+        fullThinking = initialResult.thinking
+        lastRoundThinking = initialResult.thinking
+        collectedImages.push(...initialResult.images)
+        pendingToolCalls = initialResult.toolCalls
+        usage = initialResult.usage
+        if ((usage?.totalTokens ?? 0) > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = usage?.totalTokens
 
         // Persist context tokens so switching chats mid-execution shows correct values
         if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
@@ -298,185 +279,182 @@ export class AgentExecutor {
             broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId })
         }
 
-        emit('task:started', { taskId, conversationId })
+        this.emit('task:started', { taskId, conversationId })
 
         const hitlGate = this.config.hitl ? getHITLGate() : null
 
-        for (let round = 0; round < this.config.maxRounds && pendingToolCalls?.length; round++) {
-            if (signal?.aborted) break
-            toolRounds = round + 1
+        try {
+            for (let round = 0; round < this.config.maxRounds && pendingToolCalls?.length; round++) {
+                if (signal?.aborted) break
+                toolRounds = round + 1
 
-            // Emit tool calls
-            emit('step:status', {
-                taskId, conversationId,
-                iteration: round + 1,
-                status: 'choosing-tools',
-                message: 'Selecting tools...'
-            })
-            emit('step:tools-chosen', {
-                taskId, conversationId,
-                iteration: round + 1,
-                toolCalls: pendingToolCalls.map(tc => ({
-                    name: tc.function.name,
-                    arguments: tc.function.arguments
-                }))
-            })
-
-            // HITL approval (if enabled)
-            if (hitlGate) {
-                emit('step:status', {
+                // Emit tool calls
+                this.emit('step:status', {
                     taskId, conversationId,
                     iteration: round + 1,
-                    status: 'awaiting-approval',
-                    message: 'Checking tool approvals...'
+                    status: 'choosing-tools',
+                    message: 'Selecting tools...'
+                })
+                this.emit('step:tools-chosen', {
+                    taskId, conversationId,
+                    iteration: round + 1,
+                    toolCalls: pendingToolCalls.map(tc => ({
+                        name: tc.function.name,
+                        arguments: tc.function.arguments
+                    }))
                 })
 
-                const approval = await hitlGate.requestApproval(taskId, pendingToolCalls, signal, conversationId)
-
-                if (!approval.approved) {
-                    emit('step:hitl-denied', {
+                // HITL approval (if enabled)
+                if (hitlGate) {
+                    this.emit('step:status', {
                         taskId, conversationId,
                         iteration: round + 1,
-                        reason: approval.reason
+                        status: 'awaiting-approval',
+                        message: 'Checking tool approvals...'
                     })
 
-                    const denialReason = approval.reason?.trim()
+                    const approval = await hitlGate.requestApproval(taskId, pendingToolCalls, signal, conversationId)
 
-                    // Tool messages tell the LLM what "the tool returned"
-                    currentMessages.push(
-                        { role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls },
-                        ...pendingToolCalls.map(tc => ({
-                            role: 'tool' as const,
+                    if (!approval.approved) {
+                        this.emit('step:hitl-denied', {
+                            taskId, conversationId,
+                            iteration: round + 1,
+                            reason: approval.reason
+                        })
+
+                        const denialReason = approval.reason?.trim()
+
+                        // Tool messages tell the LLM what "the tool returned"
+                        currentMessages.push(
+                            { role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls },
+                            ...pendingToolCalls.map(tc => ({
+                                role: 'tool' as const,
+                                content: denialReason
+                                    ? `[DENIED] User rejected this tool call. Reason: "${denialReason}"`
+                                    : `[DENIED] User rejected this tool call.`,
+                                toolCallId: tc.id
+                            }))
+                        )
+
+                        // A follow-up user message is far more directive for the LLM than a tool message.
+                        // It tells the model exactly what to do next rather than just reporting a failure.
+                        currentMessages.push({
+                            role: 'user' as const,
                             content: denialReason
-                                ? `[DENIED] User rejected this tool call. Reason: "${denialReason}"`
-                                : `[DENIED] User rejected this tool call.`,
-                            toolCallId: tc.id
-                        }))
-                    )
+                                ? `I denied that action because: ${denialReason}. Please take a completely different approach that respects this constraint, or answer directly from what you already know. Do not retry the denied tool(s).`
+                                : `I denied that tool call. Please take a different approach or answer directly. Do not retry the denied tool(s).`
+                        })
 
-                    // A follow-up user message is far more directive for the LLM than a tool message.
-                    // It tells the model exactly what to do next rather than just reporting a failure.
-                    currentMessages.push({
-                        role: 'user' as const,
-                        content: denialReason
-                            ? `I denied that action because: ${denialReason}. Please take a completely different approach that respects this constraint, or answer directly from what you already know. Do not retry the denied tool(s).`
-                            : `I denied that tool call. Please take a different approach or answer directly. Do not retry the denied tool(s).`
-                    })
+                        // Trim context if needed (sliding window) — update display estimate first
+                        if (this.config.contextWindow) {
+                            const est = estimateTotalTokens(currentMessages)
+                            if (est > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = est
+                            currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow)
+                        }
 
-                    // Trim context if needed (sliding window) — update display estimate first
-                    if (this.config.contextWindow) {
-                        const est = estimateTotalTokens(currentMessages)
-                        if (est > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = est
-                        currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow)
+                        // Stream LLM's revised response
+                        const result = await this.streamLLMRound(currentMessages, activeStreamId, round)
+                        fullContent = result.content
+                        fullThinking += result.thinking
+                        lastRoundThinking = result.thinking
+                        collectedImages.push(...result.images)
+                        pendingToolCalls = result.toolCalls
+                        if (result.usage?.totalTokens && result.usage.totalTokens > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = result.usage.totalTokens
+                        usage = accumulateUsage(usage, result.usage)
+                        if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
+                        if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
+                        continue
                     }
-
-                    // Stream LLM's revised response
-                    const result = await this.streamLLMRound(currentMessages, activeStreamId, round)
-                    fullContent = result.content
-                    fullThinking += result.thinking
-                    collectedImages.push(...result.images)
-                    pendingToolCalls = result.toolCalls
-                    if (result.usage?.totalTokens && result.usage.totalTokens > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = result.usage.totalTokens
-                    usage = accumulateUsage(usage, result.usage)
-                    if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
-                    if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
-                    continue
                 }
-            }
 
-            // Save the assistant message (thinking + tool calls) BEFORE executing tools
-            // so it gets an earlier timestamp than sub-agent messages produced during execution.
-            if (this.config.saveMessages) {
-                this.saveAssistantToolCallMessage(conversationId, fullContent, lastRoundThinking, pendingToolCalls)
-            }
+                // Save the assistant message (thinking + tool calls) BEFORE executing tools
+                // so it gets an earlier timestamp than sub-agent messages produced during execution.
+                if (this.config.saveMessages) {
+                    this.saveAssistantToolCallMessage(conversationId, fullContent, lastRoundThinking, pendingToolCalls)
+                }
 
-            // Execute tool calls
-            emit('step:status', {
-                taskId, conversationId,
-                iteration: round + 1,
-                status: 'executing',
-                message: `Executing ${pendingToolCalls.length} tool(s)...`
-            })
-
-            const toolCallResults = await this.executeToolCalls(pendingToolCalls)
-
-            // Collect tool result images (base64 data-URLs) so they are
-            // available in the final AgentExecutorResult for channel adapters.
-            for (const tr of toolCallResults) {
-                if (tr.imageDataUrls?.length) collectedImages.push(...tr.imageDataUrls)
-            }
-
-            // Emit results
-            emit('step:executed', {
-                taskId, conversationId,
-                iteration: round + 1,
-                results: toolCallResults.map(tr => ({
-                    name: tr.name,
-                    success: tr.success,
-                    output: tr.output,
-                    images: tr.images,
-                    imageDataUrls: tr.imageDataUrls
-                }))
-            })
-
-            // Save tool result messages AFTER execution
-            if (this.config.saveMessages) {
-                this.saveToolResultMessages(conversationId, toolCallResults)
-            }
-
-            // Append to conversation context (include images as multimodal content for LLM vision)
-            currentMessages.push(
-                { role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls },
-                ...toolCallResults.map(tr => ({
-                    role: 'tool' as const,
-                    content: tr.imageDataUrls?.length
-                        ? [
-                            { type: 'text' as const, text: tr.output },
-                            ...tr.imageDataUrls.map(url => ({ type: 'image_url' as const, image_url: { url } }))
-                        ]
-                        : tr.output,
-                    toolCallId: tr.toolCallId
-                }))
-            )
-
-            // Trim context if it has grown beyond the model's window (sliding window)
-            if (this.config.contextWindow) {
-                const est = estimateTotalTokens(currentMessages)
-                if (est > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = est
-                currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow)
-            }
-
-            // Stream next LLM response
-            const result = await this.streamLLMRound(currentMessages, activeStreamId, round)
-            fullContent = result.content
-            fullThinking += result.thinking
-            lastRoundThinking = result.thinking
-            collectedImages.push(...result.images)
-            pendingToolCalls = result.toolCalls
-            if (result.usage?.totalTokens && result.usage.totalTokens > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = result.usage.totalTokens
-            usage = accumulateUsage(usage, result.usage)
-            if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
-
-            // Broadcast accumulated usage after each tool round so the client
-            // can update the context circle without waiting for the full turn to end.
-            if (usage) {
-                broadcast(`${this._sp}-usage`, {
-                    conversationId, usage, model, contextWindow: this.config.contextWindow,
-                    lastRoundTotalTokens
+                // Execute tool calls
+                this.emit('step:status', {
+                    taskId, conversationId,
+                    iteration: round + 1,
+                    status: 'executing',
+                    message: `Executing ${pendingToolCalls.length} tool(s)...`
                 })
+
+                const toolCallResults = await this.executeToolCalls(pendingToolCalls)
+
+                // Collect tool result images (base64 data-URLs) so they are
+                // available in the final AgentExecutorResult for channel adapters.
+                for (const tr of toolCallResults) {
+                    if (tr.imageDataUrls?.length) collectedImages.push(...tr.imageDataUrls)
+                }
+
+                // Emit results
+                this.emit('step:executed', {
+                    taskId, conversationId,
+                    iteration: round + 1,
+                    results: toolCallResults.map(tr => ({
+                        name: tr.name,
+                        success: tr.success,
+                        output: tr.output,
+                        images: tr.images,
+                        imageDataUrls: tr.imageDataUrls
+                    }))
+                })
+
+                // Save tool result messages AFTER execution
+                if (this.config.saveMessages) {
+                    this.saveToolResultMessages(conversationId, toolCallResults)
+                }
+
+                // Append to conversation context (include images as multimodal content for LLM vision)
+                currentMessages.push(
+                    { role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls },
+                    ...toolCallResults.map(tr => ({
+                        role: 'tool' as const,
+                        content: tr.imageDataUrls?.length
+                            ? [
+                                { type: 'text' as const, text: tr.output },
+                                ...tr.imageDataUrls.map(url => ({ type: 'image_url' as const, image_url: { url } }))
+                            ]
+                            : tr.output,
+                        toolCallId: tr.toolCallId
+                    }))
+                )
+
+                // Trim context if it has grown beyond the model's window (sliding window)
+                if (this.config.contextWindow) {
+                    const est = estimateTotalTokens(currentMessages)
+                    if (est > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = est
+                    currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow)
+                }
+
+                // Stream next LLM response
+                const result = await this.streamLLMRound(currentMessages, activeStreamId, round)
+                fullContent = result.content
+                fullThinking += result.thinking
+                lastRoundThinking = result.thinking
+                collectedImages.push(...result.images)
+                pendingToolCalls = result.toolCalls
+                if (result.usage?.totalTokens && result.usage.totalTokens > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = result.usage.totalTokens
+                usage = accumulateUsage(usage, result.usage)
+                if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
+
+                // Broadcast accumulated usage after each tool round so the client
+                // can update the context circle without waiting for the full turn to end.
+                if (usage) {
+                    broadcast(`${this._sp}-usage`, {
+                        conversationId, usage, model, contextWindow: this.config.contextWindow,
+                        lastRoundTotalTokens
+                    })
+                }
+                if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
             }
-            if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
-        }
-
-        // End final stream
-        if (this.config.streamMode === 'single') {
+        } finally {
+            // Guarantee stream-end is always sent, even if an error escapes the loop
             broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow, lastRoundTotalTokens })
-        } else {
-            // per-round: send a final end event with usage so the client gets token counts
-            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow, lastRoundTotalTokens })
+            this.emit('task:completed', { taskId, conversationId })
         }
-
-        emit('task:completed', { taskId, conversationId })
 
         return {
             content: fullContent || '(completed)',
@@ -488,6 +466,59 @@ export class AgentExecutor {
             provider: providerId,
             model
         }
+    }
+
+    /**
+     * Consume a streaming LLM response, broadcasting chunks and accumulating results.
+     * Returns partial state on error (via `error` field) so callers can handle
+     * errors differently (Phase 1 re-throws, tool rounds recover gracefully).
+     */
+    private async consumeStream(
+        stream: AsyncIterable<import('../gateway/providers/base.provider.js').StreamChunk>,
+        streamId: string,
+        conversationId: string
+    ): Promise<{
+        content: string
+        thinking: string
+        images: string[]
+        toolCalls: ToolCall[] | undefined
+        usage: AgentExecutorResult['usage']
+        error?: Error
+    }> {
+        const { broadcast } = this.config
+        let content = ''
+        let thinking = ''
+        const images: string[] = []
+        let toolCalls: ToolCall[] | undefined
+        let usage: AgentExecutorResult['usage']
+
+        try {
+            for await (const chunk of stream) {
+                if (chunk.content) {
+                    content += chunk.content
+                    broadcast(`${this._sp}-chunk`, { streamId, conversationId, content: chunk.content })
+                    this.emit('step:content', { conversationId, content: chunk.content })
+                }
+                if (chunk.thinking) {
+                    thinking += chunk.thinking
+                    broadcast(`${this._sp}-thinking`, { streamId, conversationId, thinking: chunk.thinking })
+                    this.emit('step:thinking', { conversationId, thinking: chunk.thinking })
+                }
+                if (chunk.images?.length) {
+                    images.push(...chunk.images)
+                    broadcast(`${this._sp}-images`, { streamId, conversationId, images: chunk.images })
+                }
+                if (chunk.toolCalls?.length) {
+                    toolCalls = chunk.toolCalls
+                }
+                if (chunk.usage) usage = chunk.usage
+                if (chunk.done) break
+            }
+        } catch (err) {
+            return { content, thinking, images, toolCalls, usage, error: err as Error }
+        }
+
+        return { content, thinking, images, toolCalls, usage }
     }
 
     /**
@@ -523,12 +554,6 @@ export class AgentExecutor {
             broadcast(`${this._sp}-reset`, { streamId, conversationId })
         }
 
-        let content = ''
-        let thinking = ''
-        const images: string[] = []
-        let toolCalls: ToolCall[] | undefined
-        let usage: AgentExecutorResult['usage']
-
         const stream = gateway.streamComplete(
             {
                 messages: AgentExecutor.trimOldImages(messages),
@@ -541,44 +566,15 @@ export class AgentExecutor {
             providerId
         )
 
-        try {
-            for await (const chunk of stream) {
-                if (chunk.content) {
-                    content += chunk.content
-                    broadcast(`${this._sp}-chunk`, { streamId, conversationId, content: chunk.content })
-                    if (this.config.emitEvents) {
-                        const payload: Record<string, unknown> = { conversationId, content: chunk.content }
-                        if (this.config.eventMeta) Object.assign(payload, this.config.eventMeta)
-                        getEventBus().emit('step:content', payload)
-                    }
-                }
-                if (chunk.thinking) {
-                    thinking += chunk.thinking
-                    broadcast(`${this._sp}-thinking`, { streamId, conversationId, thinking: chunk.thinking })
-                    if (this.config.emitEvents) {
-                        const payload: Record<string, unknown> = { conversationId, thinking: chunk.thinking }
-                        if (this.config.eventMeta) Object.assign(payload, this.config.eventMeta)
-                        getEventBus().emit('step:thinking', payload)
-                    }
-                }
-                if (chunk.images?.length) {
-                    images.push(...chunk.images)
-                    broadcast(`${this._sp}-images`, { streamId, conversationId, images: chunk.images })
-                }
-                if (chunk.toolCalls?.length) {
-                    toolCalls = chunk.toolCalls
-                }
-                if (chunk.usage) usage = chunk.usage
-                if (chunk.done) break
-            }
-        } catch (err) {
+        const result = await this.consumeStream(stream, streamId, conversationId)
+
+        if (result.error) {
             // If the user cancelled, re-throw so the caller can handle it
-            if (signal?.aborted) throw err
+            if (signal?.aborted) throw result.error
             // Transient stream failure (timeout, connection drop, provider error).
-            // Append any partial content we got and return without tool calls
-            // so the executor loop exits gracefully with whatever we accumulated.
-            if (!content) {
-                content = `[Stream interrupted: ${(err as Error).message}]`
+            // Return partial content so the executor loop exits gracefully.
+            if (!result.content) {
+                result.content = `[Stream interrupted: ${result.error.message}]`
             }
         }
 
@@ -587,7 +583,7 @@ export class AgentExecutor {
             broadcast(`${this._sp}-end`, { streamId, conversationId })
         }
 
-        return { content, thinking, images, toolCalls, usage, streamId }
+        return { content: result.content, thinking: result.thinking, images: result.images, toolCalls: result.toolCalls, usage: result.usage, streamId }
     }
 
     /** Execute an array of tool calls concurrently and return results in original order. */
