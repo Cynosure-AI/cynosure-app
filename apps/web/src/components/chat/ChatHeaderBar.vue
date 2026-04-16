@@ -123,13 +123,16 @@ async function fetchSidebarModels(): Promise<void> {
 }
 
 function onProviderOverride(providerId: string): void {
+  // Provider change → clear model (downstream in the chain), keep provider override
+  chatStore.sessionModelOverride = null
   if (chatStore.activeAgentId) {
-    // Provider change → clear model (downstream in the chain), keep provider override
     // If switching back to the agent's own provider, clear both overrides entirely.
-    chatStore.sessionModelOverride = null
     chatStore.sessionProviderOverride =
       providerId !== selectedAgent.value?.providerId ? providerId : null
   } else {
+    // Free chat — set per-session override so it persists per conversation,
+    // AND update the global active provider for new chats.
+    chatStore.sessionProviderOverride = providerId
     providerStore.setActive(providerId)
   }
 }
