@@ -9,6 +9,7 @@ interface MemorySpaceRow {
     id: string
     name: string
     description: string
+    sort_order: number
     created_at: number
 }
 
@@ -16,6 +17,7 @@ interface MemorySpaceData {
     id: string
     name: string
     description: string
+    sortOrder: number
     createdAt: number
     documentCount: number
 }
@@ -25,6 +27,7 @@ function rowToData(row: MemorySpaceRow, documentCount: number): MemorySpaceData 
         id: row.id,
         name: row.name,
         description: row.description,
+        sortOrder: row.sort_order,
         createdAt: row.created_at,
         documentCount,
     }
@@ -34,7 +37,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     // GET /api/memory-spaces — list all spaces with document counts
     app.get('/', async () => {
         const db = getDb()
-        const rows = db.prepare('SELECT * FROM memory_spaces ORDER BY created_at DESC').all() as MemorySpaceRow[]
+        const rows = db.prepare('SELECT * FROM memory_spaces ORDER BY sort_order ASC, created_at DESC').all() as MemorySpaceRow[]
         const mem = getAgentMemory()
         const results: MemorySpaceData[] = []
         for (const row of rows) {
@@ -52,7 +55,22 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const id = nanoid()
         const now = Date.now()
         db.prepare('INSERT INTO memory_spaces (id, name, description, created_at) VALUES (?, ?, ?, ?)').run(id, name.trim(), description || '', now)
-        return rowToData({ id, name: name.trim(), description: description || '', created_at: now }, 0)
+        return rowToData({ id, name: name.trim(), description: description || '', sort_order: 0, created_at: now }, 0)
+    })
+
+    // PUT /api/memory-spaces/reorder — update sort order
+    app.put<{ Body: { ids: string[] } }>('/reorder', async (req, reply) => {
+        const { ids } = req.body
+        if (!Array.isArray(ids)) return reply.status(400).send({ error: 'ids must be an array' })
+        const db = getDb()
+        const stmt = db.prepare('UPDATE memory_spaces SET sort_order = ? WHERE id = ?')
+        const runAll = db.transaction(() => {
+            for (let i = 0; i < ids.length; i++) {
+                stmt.run(i, ids[i])
+            }
+        })
+        runAll()
+        return { success: true }
     })
 
     // PUT /api/memory-spaces/:id — update name/description

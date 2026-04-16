@@ -273,6 +273,7 @@ export interface MemorySpace {
   id: string
   name: string
   description: string
+  sortOrder: number
   createdAt: number
   documentCount: number
 }
@@ -624,6 +625,8 @@ export const api = {
       put<MemorySpace>(`/api/memory-spaces/${encodeURIComponent(id)}`, data),
     remove: (id: string) =>
       del<{ success: boolean }>(`/api/memory-spaces/${encodeURIComponent(id)}`),
+    reorder: (ids: string[]) =>
+      put<{ success: boolean }>('/api/memory-spaces/reorder', { ids }),
     listGroups: (spaceId: string) =>
       get<{ sourceFile: string; chunkCount: number; createdAt: number }[]>(
         `/api/memory-spaces/${encodeURIComponent(spaceId)}/groups`

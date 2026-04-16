@@ -13,6 +13,60 @@ const editingSpace = ref<MemorySpace | null>(null)
 const spaceName = ref('')
 const spaceDescription = ref('')
 
+// --- Drag-and-drop reorder ---
+const draggedSpaceId = ref<string | null>(null)
+const dragOverSpaceId = ref<string | null>(null)
+
+function onSpaceDragStart(e: DragEvent, spaceId: string) {
+  draggedSpaceId.value = spaceId
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', spaceId)
+  }
+}
+
+function onSpaceDragOver(e: DragEvent, spaceId: string) {
+  if (!draggedSpaceId.value || draggedSpaceId.value === spaceId) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  dragOverSpaceId.value = spaceId
+}
+
+function onSpaceDragLeave(_e: DragEvent, spaceId: string) {
+  if (dragOverSpaceId.value === spaceId) dragOverSpaceId.value = null
+}
+
+async function onSpaceDrop(e: DragEvent, targetSpaceId: string) {
+  e.preventDefault()
+  dragOverSpaceId.value = null
+  const srcId = draggedSpaceId.value
+  draggedSpaceId.value = null
+  if (!srcId || srcId === targetSpaceId) return
+
+  const list = [...spaces.value]
+  const srcIdx = list.findIndex(s => s.id === srcId)
+  const tgtIdx = list.findIndex(s => s.id === targetSpaceId)
+  if (srcIdx === -1 || tgtIdx === -1) return
+
+  const [moved] = list.splice(srcIdx, 1)
+  list.splice(tgtIdx, 0, moved)
+  spaces.value = list
+
+  await api.memorySpaces.reorder(list.map(s => s.id))
+}
+
+function onSpaceDragEnd() {
+  draggedSpaceId.value = null
+  dragOverSpaceId.value = null
+}
+
+async function onSpaceOrFileDrop(e: DragEvent, spaceId: string) {
+  if (draggedSpaceId.value) {
+    return onSpaceDrop(e, spaceId)
+  }
+  return onDrop(e, spaceId)
+}
+
 const selectedSpace = computed(() => spaces.value.find(s => s.id === selectedSpaceId.value))
 
 async function loadSpaces() {
@@ -361,7 +415,7 @@ function onDragLeave(e: DragEvent, spaceId?: string) {
 
 function onDragOver(e: DragEvent) {
   e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+  if (e.dataTransfer && !draggedSpaceId.value) e.dataTransfer.dropEffect = 'copy'
 }
 
 async function onDrop(e: DragEvent, targetSpaceId?: string) {
@@ -430,9 +484,9 @@ onMounted(() => loadSpaces())
     @dragover="onDragOver($event)"
     @drop="onDrop($event)"
   >
-    <!-- Drop overlay for selected space -->
+    <!-- Drop overlay for selected space (only for external file drops, not space reordering) -->
     <div
-      v-if="dragCounter > 0 && selectedSpaceId && !dropTargetSpaceId"
+      v-if="dragCounter > 0 && selectedSpaceId && !dropTargetSpaceId && !draggedSpaceId"
       class="absolute inset-0 z-40 flex items-center justify-center bg-blue-500/10 border-2 border-dashed border-blue-500/40 rounded-xl pointer-events-none"
     >
       <div class="text-center">
@@ -499,23 +553,28 @@ onMounted(() => loadSpaces())
       </div>
 
       <template v-else>
-        <!-- Space cards row -->
-        <div class="flex gap-3 mb-6 overflow-x-auto pb-1">
+        <!-- Space cards grid -->
+        <div class="grid grid-cols-4 gap-3 mb-6">
           <button
             v-for="space in spaces"
             :key="space.id"
-            class="flex-shrink-0 rounded-xl border px-4 py-3 text-left transition-colors min-w-48 relative"
+            draggable="true"
+            class="rounded-xl border px-4 py-3 text-left transition-all min-w-0 relative"
             :class="[
               selectedSpaceId === space.id
                 ? 'border-blue-500/50 bg-blue-500/10'
                 : 'border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/60',
-              dropTargetSpaceId === space.id ? 'ring-2 ring-blue-400 border-blue-400/50 bg-blue-500/15' : ''
+              dropTargetSpaceId === space.id ? 'ring-2 ring-blue-400 border-blue-400/50 bg-blue-500/15' : '',
+              draggedSpaceId === space.id ? 'opacity-40' : '',
+              dragOverSpaceId === space.id && draggedSpaceId !== space.id ? 'ring-2 ring-indigo-400 border-indigo-400/50' : ''
             ]"
             @click="selectedSpaceId = space.id"
+            @dragstart="onSpaceDragStart($event, space.id)"
+            @dragover.prevent="onSpaceDragOver($event, space.id)"
+            @dragleave.stop="onSpaceDragLeave($event, space.id)"
+            @drop.stop.prevent="onSpaceOrFileDrop($event, space.id)"
+            @dragend="onSpaceDragEnd"
             @dragenter.stop="onDragEnter($event, space.id)"
-            @dragleave.stop="onDragLeave($event, space.id)"
-            @dragover.prevent
-            @drop.stop="onDrop($event, space.id)"
           >
             <div class="flex items-center gap-2 mb-1">
               <Icon
