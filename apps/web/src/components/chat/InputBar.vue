@@ -35,7 +35,7 @@ const contextUsage = computed(() => {
   // Use last round's total tokens (prompt + completion = true context utilization) when available,
   // otherwise fall back to total accumulated tokens
   const used = usage.lastRoundTotalTokens ?? usage.totalTokens
-  const percent = Math.min((used / ctxWindow) * 100, 100)
+  const percent = (used / ctxWindow) * 100
   return { used, max: ctxWindow, percent }
 })
 
@@ -292,7 +292,7 @@ defineExpose({ processFiles })
 
 <template>
   <div class="border-t border-zinc-800 bg-zinc-900 px-4 py-3 flex items-end gap-3">
-    <div class="max-w-4xl mx-auto flex-1 min-w-0">
+    <div class="max-w-5xl mx-auto flex-1 min-w-0">
       <!-- Attached images preview -->
       <div
         v-if="attachedImages.length"
@@ -851,7 +851,7 @@ defineExpose({ processFiles })
             stroke-width="2.5"
             stroke-linecap="round"
             :stroke-dasharray="87.96"
-            :stroke-dashoffset="87.96 - (87.96 * contextUsage.percent) / 100"
+            :stroke-dashoffset="Math.max(0, 87.96 - (87.96 * contextUsage.percent) / 100)"
             :class="contextUsage.percent > 90 ? 'text-red-500' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-blue-500'"
             class="transition-all duration-500"
           />
