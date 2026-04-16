@@ -80,7 +80,7 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
           <p class="text-xs text-zinc-500 leading-relaxed">
             When enabled, models that support reasoning tokens will output their chain-of-thought
             before responding. This improves answer quality for complex tasks but uses more tokens.
-            Applies to providers like OpenRouter (Claude, OpenAI o-series, DeepSeek) and Anthropic.
+            Applies to providers like OpenAI (o-series, GPT-5), OpenRouter (Claude, DeepSeek) and Anthropic.
           </p>
         </div>
         <ToggleSwitch

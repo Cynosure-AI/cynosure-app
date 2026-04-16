@@ -166,6 +166,9 @@ export class OpenAIProvider extends BaseLLMProvider {
     if (instructions) params.instructions = instructions
     const tools = this.formatToolsForResponses(request.tools)
     if (tools) params.tools = tools
+    if (request.thinkingEnabled) {
+      params.reasoning = { effort: 'medium', summary: 'auto' }
+    }
 
     const response = await (this.client.responses.create as Function)(params, {
       signal: request.signal
@@ -228,6 +231,9 @@ export class OpenAIProvider extends BaseLLMProvider {
     if (instructions) params.instructions = instructions
     const tools = this.formatToolsForResponses(request.tools)
     if (tools) params.tools = tools
+    if (request.thinkingEnabled) {
+      params.reasoning = { effort: 'medium', summary: 'auto' }
+    }
 
     const stream = (this.client.responses as unknown as {
       stream(params: unknown, opts?: unknown): AsyncIterable<{
