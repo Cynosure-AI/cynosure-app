@@ -335,6 +335,9 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   getEmbeddingProvider().loadFromDb()
   await getRAGStore().initialize()
   registerBuiltInTools()
+
+  // Set the server base URL so MCP HTTP transport can construct OAuth callback URLs
+  getMcpManager().setServerBaseUrl(`http://127.0.0.1:${options.port}`)
   await loadSavedMcpServers()
   startCronScheduler(broadcast)
   startFileWatcherService(broadcast)
