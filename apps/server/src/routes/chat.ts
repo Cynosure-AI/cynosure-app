@@ -8,6 +8,7 @@ import { prepareAgentExecution } from '../core/agent/prepare-execution.js'
 import { getAgent } from '../core/agents/agent-files.js'
 import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { hydrateBuiltInTools } from '../core/tools/built-in-tools.js'
+import { trimMessagesToContextLimit, estimateTotalTokens } from '../core/agent/context-trimmer.js'
 import type { ChatMessage, ContentPart } from '../core/gateway/providers/base.provider.js'
 import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import { nanoid } from 'nanoid'
@@ -670,6 +671,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         contextWindow = modelInfo.contextLength
       } catch { /* ignore — context window info is optional */ }
 
+      // Trim message history if it exceeds the model's context window (sliding window)
+      let initialContextEstimate: number | undefined
+      if (contextWindow) {
+        initialContextEstimate = estimateTotalTokens(messages)
+        messages = trimMessagesToContextLimit(messages, contextWindow)
+      }
+
       const executor = new AgentExecutor({
         gateway,
         tools,
@@ -687,6 +695,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         agentName: chatAgentName,
         agentIconUrl: chatAgentIconUrl,
         contextWindow,
+        initialContextEstimate,
       })
 
       const executionId = streamId

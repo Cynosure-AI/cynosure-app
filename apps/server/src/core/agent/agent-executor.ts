@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getHITLGate } from './hitl-gate.js'
+import { trimMessagesToContextLimit, estimateTotalTokens } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolCall, ToolDefinition } from '../gateway/providers/base.provider.js'
 
@@ -58,6 +59,9 @@ export interface AgentExecutorConfig {
     /** Context window size (max tokens) for the model being used.
      *  Included in stream-end events so the UI can display context usage. */
     contextWindow?: number
+    /** Pre-trim estimated token count from the caller.
+     *  Used as starting floor so the context indicator never drops after trimming. */
+    initialContextEstimate?: number
 }
 
 export interface AgentExecutorResult {
@@ -220,7 +224,7 @@ export class AgentExecutor {
         let lastRoundThinking = ''
         const collectedImages: string[] = []
         let usage: AgentExecutorResult['usage']
-        let lastRoundTotalTokens: number | undefined
+        let lastRoundTotalTokens: number | undefined = this.config.initialContextEstimate
         let pendingToolCalls: ToolCall[] | undefined
         let toolRounds = 0
 
@@ -268,7 +272,7 @@ export class AgentExecutor {
                 if (chunk.toolCalls?.length) {
                     pendingToolCalls = chunk.toolCalls
                 }
-                if (chunk.usage) { usage = chunk.usage; lastRoundTotalTokens = chunk.usage.totalTokens }
+                if (chunk.usage) { usage = chunk.usage; if ((chunk.usage.totalTokens ?? 0) > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = chunk.usage.totalTokens }
                 if (chunk.done) break
             }
         } catch (err) {
@@ -359,13 +363,20 @@ export class AgentExecutor {
                             : `I denied that tool call. Please take a different approach or answer directly. Do not retry the denied tool(s).`
                     })
 
+                    // Trim context if needed (sliding window) — update display estimate first
+                    if (this.config.contextWindow) {
+                        const est = estimateTotalTokens(currentMessages)
+                        if (est > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = est
+                        currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow)
+                    }
+
                     // Stream LLM's revised response
                     const result = await this.streamLLMRound(currentMessages, activeStreamId, round)
                     fullContent = result.content
                     fullThinking += result.thinking
                     collectedImages.push(...result.images)
                     pendingToolCalls = result.toolCalls
-                    if (result.usage?.totalTokens) lastRoundTotalTokens = result.usage.totalTokens
+                    if (result.usage?.totalTokens && result.usage.totalTokens > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = result.usage.totalTokens
                     usage = accumulateUsage(usage, result.usage)
                     if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
                     if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
@@ -428,6 +439,13 @@ export class AgentExecutor {
                 }))
             )
 
+            // Trim context if it has grown beyond the model's window (sliding window)
+            if (this.config.contextWindow) {
+                const est = estimateTotalTokens(currentMessages)
+                if (est > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = est
+                currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow)
+            }
+
             // Stream next LLM response
             const result = await this.streamLLMRound(currentMessages, activeStreamId, round)
             fullContent = result.content
@@ -435,7 +453,7 @@ export class AgentExecutor {
             lastRoundThinking = result.thinking
             collectedImages.push(...result.images)
             pendingToolCalls = result.toolCalls
-            if (result.usage?.totalTokens) lastRoundTotalTokens = result.usage.totalTokens
+            if (result.usage?.totalTokens && result.usage.totalTokens > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = result.usage.totalTokens
             usage = accumulateUsage(usage, result.usage)
             if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
 
