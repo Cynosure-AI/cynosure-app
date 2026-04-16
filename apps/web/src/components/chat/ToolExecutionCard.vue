@@ -31,6 +31,7 @@ const expanded = ref(prefs.autoExpandToolCalls)
 const lightboxSrc = ref<string | null>(null)
 const statusMeta: Record<string, { label: string; icon: string; color: string }> = {
   'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-amber-400' },
+  denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-red-400' },
   executing: { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-400' },
   'ma-status': { label: 'Orchestrator', icon: 'lucide:network', color: 'text-violet-400' },
   'ma-subagent-running': { label: 'Sub-agent running', icon: 'lucide:bot', color: 'text-indigo-400' },
@@ -135,9 +136,10 @@ const maContext = computed(() => {
       >
         <!-- Status icon -->
         <Icon
-          :icon="toolNames.length && !results.length ? 'svg-spinners:ring-resize' : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
+          :icon="currentPhase.label === 'Denied' ? 'lucide:shield-x' : toolNames.length && !results.length ? 'svg-spinners:ring-resize' : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
           class="w-3.5 h-3.5 shrink-0"
           :class="[
+            currentPhase.label === 'Denied' ? 'text-red-400' :
             toolNames.length && !results.length ? 'text-blue-400' :
             allSuccess ? 'text-emerald-400' :
             anyFailed ? 'text-red-400' :

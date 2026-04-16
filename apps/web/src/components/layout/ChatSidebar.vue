@@ -10,6 +10,7 @@ const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const showClearConfirm = ref(false)
+const searchQuery = ref('')
 
 const clearLabel = computed(() => {
   if (chatStore.activeAgentId) {
@@ -62,6 +63,14 @@ function displayTitle(conv: { title: string; origin?: string }): string {
   }
   return conv.title
 }
+
+const filteredConversations = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return chatStore.sortedConversations
+  return chatStore.sortedConversations.filter(conv =>
+    displayTitle(conv).toLowerCase().includes(q)
+  )
+})
 </script>
 
 <template>
@@ -82,10 +91,36 @@ function displayTitle(conv: { title: string; origin?: string }): string {
       </button>
     </div>
 
+    <!-- Search -->
+    <div class="px-2 py-1.5 border-b border-zinc-800/60">
+      <div class="relative">
+        <Icon
+          icon="lucide:search"
+          class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500"
+        />
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search chats…"
+          class="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-8 pr-7 py-1.5 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
+        >
+        <button
+          v-if="searchQuery"
+          class="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+          @click="searchQuery = ''"
+        >
+          <Icon
+            icon="lucide:x"
+            class="w-3.5 h-3.5"
+          />
+        </button>
+      </div>
+    </div>
+
     <!-- Conversation list -->
     <div class="flex-1 overflow-y-auto">
       <div
-        v-for="conv in chatStore.sortedConversations"
+        v-for="conv in filteredConversations"
         :key="conv.id"
         class="group flex items-center px-3 py-2.5 mx-2 my-0.5 rounded-lg cursor-pointer transition-colors hover:bg-zinc-800/60"
         :class="{ 'bg-zinc-800': conv.id === chatStore.activeConversationId }"
@@ -145,10 +180,10 @@ function displayTitle(conv: { title: string; origin?: string }): string {
       </div>
 
       <div
-        v-if="chatStore.sortedConversations.length === 0"
+        v-if="filteredConversations.length === 0"
         class="px-4 py-8 text-center text-zinc-600 text-sm"
       >
-        No conversations yet
+        {{ searchQuery ? 'No matching conversations' : 'No conversations yet' }}
       </div>
     </div>
 

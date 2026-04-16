@@ -56,6 +56,7 @@ export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
   const activeConversationId = ref<string | null>(null)
   const messages = ref<DisplayMessage[]>([])
+  const loadingMessages = ref(false)
   const contextWindow = ref<number | null>(null)
   const postActionsMap = new Map<string, Set<string>>()
   const postActionsTrigger = ref(0)
@@ -118,85 +119,90 @@ export const useChatStore = defineStore('chat', () => {
 
   async function selectConversation(id: string): Promise<void> {
     activeConversationId.value = id
-    const response = await api.chat.getMessages(id)
-    const rows = response.messages
-    const lastContextTokens = response.lastContextTokens
-    messages.value = rows.map((r: StoredMessage) => ({
-      id: r.id,
-      role: r.role as DisplayMessage['role'],
-      content: r.content,
-      thinking: r.thinking || undefined,
-      imageDataUrls: r.imageDataUrls || undefined,
-      audioDataUrls: r.audioDataUrls || undefined,
-      fileAttachments: r.fileAttachments || undefined,
-      memorySources: r.memorySources || undefined,
-      agentId: r.agentId || undefined,
-      agentName: r.agentName || undefined,
-      agentIconUrl: r.agentIconUrl ?? undefined,
-      provider: r.provider || undefined,
-      model: r.model || undefined,
-      promptTokens: r.promptTokens || undefined,
-      completionTokens: r.completionTokens || undefined,
-      contextTokens: r.contextTokens || undefined,
-      latencyMs: r.latencyMs || undefined,
-      createdAt: r.createdAt
-    }))
-
-    // Hydrate server-side post-action state
+    loadingMessages.value = true
     try {
-      const { actions } = await api.chat.getPostActions(id)
-      if (actions.length) {
-        postActionsMap.set(id, new Set(actions))
-      } else {
-        postActionsMap.delete(id)
+      const response = await api.chat.getMessages(id)
+      const rows = response.messages
+      const lastContextTokens = response.lastContextTokens
+      messages.value = rows.map((r: StoredMessage) => ({
+        id: r.id,
+        role: r.role as DisplayMessage['role'],
+        content: r.content,
+        thinking: r.thinking || undefined,
+        imageDataUrls: r.imageDataUrls || undefined,
+        audioDataUrls: r.audioDataUrls || undefined,
+        fileAttachments: r.fileAttachments || undefined,
+        memorySources: r.memorySources || undefined,
+        agentId: r.agentId || undefined,
+        agentName: r.agentName || undefined,
+        agentIconUrl: r.agentIconUrl ?? undefined,
+        provider: r.provider || undefined,
+        model: r.model || undefined,
+        promptTokens: r.promptTokens || undefined,
+        completionTokens: r.completionTokens || undefined,
+        contextTokens: r.contextTokens || undefined,
+        latencyMs: r.latencyMs || undefined,
+        createdAt: r.createdAt
+      }))
+
+      // Hydrate server-side post-action state
+      try {
+        const { actions } = await api.chat.getPostActions(id)
+        if (actions.length) {
+          postActionsMap.set(id, new Set(actions))
+        } else {
+          postActionsMap.delete(id)
+        }
+        postActionsTrigger.value++
+      } catch {
+        // Non-critical
       }
-      postActionsTrigger.value++
-    } catch {
-      // Non-critical
-    }
 
-    // Restore streaming state if this conversation has an active stream
-    const buf = streaming.streamBuffers.get(id)
-    if (buf?.active) {
-      streaming.isStreaming.value = true
-      streaming.currentStreamId.value = buf.streamId
-      streaming.streamingContent.value = buf.content
-      streaming.streamingThinking.value = buf.thinking
-      messages.value.push({
-        id: `streaming_${Date.now()}`,
-        role: 'assistant',
-        content: buf.content,
-        thinking: buf.thinking || undefined,
-        agentId: buf.agentId,
-        agentName: buf.agentName,
-        agentIconUrl: buf.agentIconUrl,
-        createdAt: buf.createdAt,
-        isStreaming: true
-      })
-    } else {
-      streaming.isStreaming.value = false
-      streaming.currentStreamId.value = null
-      streaming.streamingContent.value = ''
-      streaming.streamingThinking.value = ''
-    }
+      // Restore streaming state if this conversation has an active stream
+      const buf = streaming.streamBuffers.get(id)
+      if (buf?.active) {
+        streaming.isStreaming.value = true
+        streaming.currentStreamId.value = buf.streamId
+        streaming.streamingContent.value = buf.content
+        streaming.streamingThinking.value = buf.thinking
+        messages.value.push({
+          id: `streaming_${Date.now()}`,
+          role: 'assistant',
+          content: buf.content,
+          thinking: buf.thinking || undefined,
+          agentId: buf.agentId,
+          agentName: buf.agentName,
+          agentIconUrl: buf.agentIconUrl,
+          createdAt: buf.createdAt,
+          isStreaming: true
+        })
+      } else {
+        streaming.isStreaming.value = false
+        streaming.currentStreamId.value = null
+        streaming.streamingContent.value = ''
+        streaming.streamingThinking.value = ''
+      }
 
-    // Restore context usage from DB-persisted last_context_tokens (updated mid-execution),
-    // falling back to per-message token data for completed executions.
-    restoreContextUsage(lastContextTokens)
+      // Restore context usage from DB-persisted last_context_tokens (updated mid-execution),
+      // falling back to per-message token data for completed executions.
+      restoreContextUsage(lastContextTokens)
 
-    // Restore session-level chat config (tools, sub-agents, memory spaces, system prompt, model/provider)
-    const cfg = response.chatConfig
-    if (cfg) {
-      if (cfg.allowedTools?.length) agentStore.selectedToolNames = [...cfg.allowedTools]
-      if (cfg.subAgents?.length) agentConfig.freeChatSubAgentIds.value = cfg.subAgents.map(s => s.agentId)
-      else agentConfig.freeChatSubAgentIds.value = []
-      if (cfg.memorySpaceIds?.length) agentConfig.freeChatMemorySpaceIds.value = [...cfg.memorySpaceIds]
-      else agentConfig.freeChatMemorySpaceIds.value = []
-      if (cfg.systemPrompt != null) agentConfig.sessionSystemPrompt.value = cfg.systemPrompt
-      if (cfg.thinkingEnabled != null) agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled
-      if (cfg.model) agentConfig.sessionModelOverride.value = cfg.model
-      if (cfg.providerId) agentConfig.sessionProviderOverride.value = cfg.providerId
-      if (cfg.overrideSubAgents !== undefined) agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents
+      // Restore session-level chat config (tools, sub-agents, memory spaces, system prompt, model/provider)
+      const cfg = response.chatConfig
+      if (cfg) {
+        if (cfg.allowedTools?.length) agentStore.selectedToolNames = [...cfg.allowedTools]
+        if (cfg.subAgents?.length) agentConfig.freeChatSubAgentIds.value = cfg.subAgents.map(s => s.agentId)
+        else agentConfig.freeChatSubAgentIds.value = []
+        if (cfg.memorySpaceIds?.length) agentConfig.freeChatMemorySpaceIds.value = [...cfg.memorySpaceIds]
+        else agentConfig.freeChatMemorySpaceIds.value = []
+        if (cfg.systemPrompt != null) agentConfig.sessionSystemPrompt.value = cfg.systemPrompt
+        if (cfg.thinkingEnabled != null) agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled
+        if (cfg.model) agentConfig.sessionModelOverride.value = cfg.model
+        if (cfg.providerId) agentConfig.sessionProviderOverride.value = cfg.providerId
+        if (cfg.overrideSubAgents !== undefined) agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents
+      }
+    } finally {
+      loadingMessages.value = false
     }
   }
 
@@ -322,8 +328,7 @@ export const useChatStore = defineStore('chat', () => {
     streaming.isStreaming.value = false
     streaming.currentStreamId.value = null
     streaming.lastUsage.value = null
-    agentConfig.sessionModelOverride.value = null
-    agentConfig.sessionProviderOverride.value = null
+    // Keep model/provider — only reset when switching agents
   }
 
   async function deleteAllConversations(): Promise<void> {
@@ -397,6 +402,7 @@ export const useChatStore = defineStore('chat', () => {
     sortedConversations,
     activeConversationId,
     messages,
+    loadingMessages,
     activeConversation,
     activePostActions,
 

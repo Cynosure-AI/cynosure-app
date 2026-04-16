@@ -159,9 +159,21 @@ watch(() => agentStore.pendingHITL, scrollToBottomIfNear)
     ref="scrollContainer"
     class="flex-1 overflow-y-auto"
   >
+    <!-- Loading spinner for long conversations -->
+    <div
+      v-if="chatStore.loadingMessages"
+      class="flex flex-col items-center justify-center h-full"
+    >
+      <Icon
+        icon="lucide:loader-2"
+        class="w-8 h-8 text-zinc-500 animate-spin"
+      />
+      <span class="text-sm text-zinc-500 mt-3">Loading conversation…</span>
+    </div>
+
     <!-- Empty state -->
     <div
-      v-if="chatStore.messages.length === 0"
+      v-else-if="chatStore.messages.length === 0"
       class="flex flex-col items-center justify-center h-full text-zinc-400"
     >
       <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-indigo-500/10 to-purple-500/10 rounded-3xl border border-white/5 shadow-xl">

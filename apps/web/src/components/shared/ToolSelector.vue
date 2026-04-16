@@ -31,23 +31,16 @@ function toolKey(tool: ToolInfo): string {
   return `${tool.namespace.id}::${tool.name}`
 }
 
-/**
- * Check if a tool is selected. Accepts both composite keys (namespaced UI format)
- * and bare names (stored in older agent definitions before namespacing was added).
- */
 function isSelected(tool: ToolInfo): boolean {
-  return selectedSet.value.has(toolKey(tool)) || selectedSet.value.has(tool.name)
+  return selectedSet.value.has(toolKey(tool))
 }
 
 function toggleTool(tool: ToolInfo): void {
   const key = toolKey(tool)
   if (isSelected(tool)) {
-    // Remove both composite key and bare name forms
-    emit('update:modelValue', props.modelValue.filter((n) => n !== key && n !== tool.name))
+    emit('update:modelValue', props.modelValue.filter((n) => n !== key))
   } else {
-    // Add composite key; strip any bare-name entry first to avoid duplicates
-    const deduped = props.modelValue.filter((n) => n !== tool.name)
-    emit('update:modelValue', [...deduped, key])
+    emit('update:modelValue', [...props.modelValue, key])
   }
 }
 
@@ -93,8 +86,6 @@ const groupedTools = computed<NamespaceGroup[]>(() => {
 })
 
 function displayToolName(tool: ToolInfo): string {
-  const dblUnder = tool.name.indexOf('__')
-  if (dblUnder !== -1) return tool.name.slice(dblUnder + 2)
   return tool.name
 }
 
@@ -106,15 +97,9 @@ function toggleNamespace(group: NamespaceGroup): void {
   const allSelected = isNamespaceAllSelected(group)
   const current = new Set(props.modelValue)
   if (allSelected) {
-    for (const tool of group.tools) {
-      current.delete(toolKey(tool))
-      current.delete(tool.name) // also remove bare-name entries from older configs
-    }
+    for (const tool of group.tools) current.delete(toolKey(tool))
   } else {
-    for (const tool of group.tools) {
-      current.delete(tool.name) // remove bare-name entry if present
-      current.add(toolKey(tool))
-    }
+    for (const tool of group.tools) current.add(toolKey(tool))
   }
   emit('update:modelValue', Array.from(current))
 }
