@@ -12,6 +12,7 @@ interface DayData {
   conversations: number
   messages: number
   tokens: number
+  estimatedCost: number | null
   models: ModelBreakdown[]
 }
 
@@ -66,7 +67,7 @@ function shortDate(dateStr: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-const emptyDay: DayData = { date: '', conversations: 0, messages: 0, tokens: 0, models: [] }
+const emptyDay: DayData = { date: '', conversations: 0, messages: 0, tokens: 0, estimatedCost: null, models: [] }
 
 /** Fill all dates in the selected period, including today. */
 const filledData = computed<DayData[]>(() => {
@@ -186,6 +187,12 @@ const gridLines = computed(() => {
           </div>
           <div class="flex justify-between text-zinc-400">
             <span>Tokens</span><span class="text-zinc-300">{{ formatNumber(hoveredDay.tokens) }}</span>
+          </div>
+          <div
+            v-if="hoveredDay.estimatedCost != null"
+            class="flex justify-between text-zinc-400 mt-0.5"
+          >
+            <span>Est. Cost</span><span class="text-amber-400">${{ hoveredDay.estimatedCost < 0.01 ? hoveredDay.estimatedCost.toFixed(4) : hoveredDay.estimatedCost.toFixed(2) }}</span>
           </div>
 
           <template v-if="hoveredDay.models?.length">

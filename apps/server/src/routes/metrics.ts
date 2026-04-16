@@ -28,6 +28,7 @@ interface DailyActivity {
     conversations: number
     messages: number
     tokens: number
+    estimatedCost: number | null
 }
 
 interface MetricsSummary {
@@ -187,33 +188,62 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
         }[]
 
         // Per-day model breakdown (only assistant messages have model set)
+        // Include provider and separate token columns for per-day cost calculation
         const dailyModelRows = db.prepare(`
             SELECT
                 DATE(created_at / 1000, 'unixepoch') as date,
+                COALESCE(provider, '') as provider,
                 model,
                 COUNT(*) as messages,
-                COALESCE(SUM(prompt_tokens), 0) + COALESCE(SUM(completion_tokens), 0) as tokens
+                COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+                COALESCE(SUM(completion_tokens), 0) as completion_tokens
             FROM messages
             WHERE created_at >= ? AND model IS NOT NULL
-            GROUP BY date, model
+            GROUP BY date, provider, model
             ORDER BY date ASC, messages DESC
         `).all(sinceMs) as {
             date: string
+            provider: string
             model: string
             messages: number
-            tokens: number
+            prompt_tokens: number
+            completion_tokens: number
         }[]
 
+        // Aggregate model breakdown by date+model (combine providers for display)
         const modelsByDate = new Map<string, { model: string; messages: number; tokens: number }[]>()
         for (const row of dailyModelRows) {
             let arr = modelsByDate.get(row.date)
             if (!arr) { arr = []; modelsByDate.set(row.date, arr) }
-            arr.push({ model: row.model, messages: row.messages, tokens: row.tokens })
+            const totalTokens = row.prompt_tokens + row.completion_tokens
+            const existing = arr.find(m => m.model === row.model)
+            if (existing) {
+                existing.messages += row.messages
+                existing.tokens += totalTokens
+            } else {
+                arr.push({ model: row.model, messages: row.messages, tokens: totalTokens })
+            }
+        }
+
+        // Compute per-day estimated cost from model token breakdown
+        const providerTypeMap = new Map<string, string>()
+        for (const row of db.prepare('SELECT id, type FROM providers').all() as { id: string; type: string }[]) {
+            providerTypeMap.set(row.id, row.type)
+        }
+        const dailyCostMap = new Map<string, number>()
+        for (const row of dailyModelRows) {
+            const providerType = providerTypeMap.get(row.provider) ?? row.provider
+            const pricing = getModelCost(providerType, row.model)
+            if (pricing) {
+                const cost = (row.prompt_tokens * pricing.input + row.completion_tokens * pricing.output) / 1_000_000
+                dailyCostMap.set(row.date, (dailyCostMap.get(row.date) ?? 0) + cost)
+            }
         }
 
         const dailyActivity = dailyRows.map(day => ({
             ...day,
-            models: modelsByDate.get(day.date) ?? []
+            models: modelsByDate.get(day.date) ?? [],
+            estimatedCost: dailyCostMap.get(day.date) ?? null,
         }))
 
         // ── Origin breakdown ────────────────────────────────────────────────
