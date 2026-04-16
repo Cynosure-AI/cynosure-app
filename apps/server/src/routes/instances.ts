@@ -19,6 +19,7 @@ export async function registerInstanceRoutes(app: FastifyInstance): Promise<void
             agentId: string
             agentName: string
             agentIconUrl: string | null
+            model: string | null
             conversationId: string | null
             startedAt: number
             intervalMinutes: number
@@ -34,6 +35,7 @@ export async function registerInstanceRoutes(app: FastifyInstance): Promise<void
                 agentId: exec.agentId || '',
                 agentName: agent?.name || 'Default Agent',
                 agentIconUrl: agent?.iconUrl || null,
+                model: agent?.model || null,
                 conversationId: exec.conversationId,
                 startedAt: exec.startedAt,
                 intervalMinutes: 0,
@@ -50,6 +52,7 @@ export async function registerInstanceRoutes(app: FastifyInstance): Promise<void
                 agentId: run.agentId,
                 agentName: agent?.name || 'Unknown',
                 agentIconUrl: agent?.iconUrl || null,
+                model: agent?.model || null,
                 conversationId: run.conversationId,
                 startedAt: run.startedAt,
                 intervalMinutes: 0,
@@ -66,6 +69,7 @@ export async function registerInstanceRoutes(app: FastifyInstance): Promise<void
                 agentId: exec.agentId,
                 agentName: agent?.name || 'Unknown',
                 agentIconUrl: agent?.iconUrl || null,
+                model: agent?.model || null,
                 conversationId: exec.conversationId,
                 startedAt: exec.startedAt,
                 intervalMinutes: 0,
@@ -82,6 +86,7 @@ export async function registerInstanceRoutes(app: FastifyInstance): Promise<void
                 agentId: run.agentId,
                 agentName: agent?.name || 'Unknown',
                 agentIconUrl: agent?.iconUrl || null,
+                model: agent?.model || null,
                 conversationId: run.conversationId,
                 startedAt: run.startedAt,
                 intervalMinutes: 0,

@@ -202,6 +202,12 @@ onUnmounted(() => {
                 {{ typeConfig[inst.type]?.label || inst.type }}
               </span>
             </div>
+            <div
+              v-if="inst.model"
+              class="text-xs text-zinc-500 truncate"
+            >
+              {{ inst.model }}
+            </div>
           </div>
 
           <!-- Started / Duration -->
