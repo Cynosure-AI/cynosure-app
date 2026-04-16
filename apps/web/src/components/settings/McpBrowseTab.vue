@@ -1,17 +1,24 @@
 <script setup lang="ts">
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { api, type McpRegistryServer } from '../../api/client'
 import { Icon } from '@iconify/vue'
 import { useMcpServers } from '../../composables/useMcpServers'
 
+const props = defineProps<{
+  search: string
+}>()
 const emit = defineEmits<{
   goToInstalled: []
+  'update:search': [value: string]
 }>()
 
 const { servers, actionError, isLoading, setLoading, authInProgress, refreshAll } = useMcpServers()
 
 const registryServers = ref<McpRegistryServer[]>([])
-const registrySearch = ref('')
+const registrySearch = computed({
+  get: () => props.search,
+  set: (v: string) => emit('update:search', v),
+})
 const registrySource = ref<'official' | 'smithery' | 'glama'>('official')
 const selectedRegistryServer = ref<McpRegistryServer | null>(null)
 const registryCursor = ref<string | undefined>(undefined)

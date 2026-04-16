@@ -6,15 +6,22 @@ import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import { useMcpServers } from '../../composables/useMcpServers'
 import type { McpServerInfo } from '../../api/client'
 
+const props = defineProps<{
+  search: string
+}>()
 const emit = defineEmits<{
   goToBrowse: []
+  'update:search': [value: string]
 }>()
 
 const { servers, actionError, isLoading, setLoading, loadServers, refreshAll, authInProgress } = useMcpServers()
 
 const showAddForm = ref(false)
 const editingId = ref<string | null>(null)
-const installedFilter = ref('')
+const installedFilter = computed({
+  get: () => props.search,
+  set: (v: string) => emit('update:search', v),
+})
 const installedView = ref<'cards' | 'json'>('cards')
 
 // --- Raw JSON editor ---
