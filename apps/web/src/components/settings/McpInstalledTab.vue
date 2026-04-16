@@ -107,12 +107,14 @@ async function applyRawJson(): Promise<void> {
 
 const filteredServers = computed(() => {
   const q = installedFilter.value.trim().toLowerCase()
-  if (!q) return servers.value
-  return servers.value.filter(s =>
-    s.name.toLowerCase().includes(q) ||
-    s.command.toLowerCase().includes(q) ||
-    s.args.some(a => a.toLowerCase().includes(q)),
-  )
+  const list = q
+    ? servers.value.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        s.command.toLowerCase().includes(q) ||
+        s.args.some(a => a.toLowerCase().includes(q)),
+      )
+    : servers.value
+  return [...list].reverse()
 })
 
 const newServer = reactive({ name: '', command: '', args: '', env: '' })
