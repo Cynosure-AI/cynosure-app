@@ -35,13 +35,6 @@ export function useChatMessages(
     const agentStore = useAgentStore()
     const providerStore = useProviderStore()
 
-    function arraysEqual(a: string[], b: string[]): boolean {
-        if (a.length !== b.length) return false
-        const sorted1 = [...a].sort()
-        const sorted2 = [...b].sort()
-        return sorted1.every((v, i) => v === sorted2[i])
-    }
-
     async function sendMessage(
         content: string,
         imageDataUrls?: string[],
@@ -97,26 +90,21 @@ export function useChatMessages(
         const { usePreferencesStore } = await import('../stores/preferences.store')
         const prefs = usePreferencesStore()
 
-        const hasSubAgentOverride = agent && !arraysEqual(agentConfig.freeChatSubAgentIds.value, agentConfig.agentOriginalSubAgentIds.value)
-        const hasMemSpaceOverride = agent && !arraysEqual(agentConfig.freeChatMemorySpaceIds.value, agentConfig.agentOriginalMemorySpaceIds.value)
-        const subAgents = hasSubAgentOverride
-            ? agentConfig.freeChatSubAgentIds.value.map(id => {
+        // Always send the current effective sub-agents and memory spaces so the
+        // server persists them in config_json.  Without this, conversations
+        // using agent defaults would never save these fields and restoring the
+        // conversation would show an empty sub-agent / memory-space list.
+        const effectiveSubAgentIds = agentConfig.freeChatSubAgentIds.value
+        const subAgents = effectiveSubAgentIds.length
+            ? effectiveSubAgentIds.map(id => {
                 const def = agentDefs.get(id)
                 const codename = def ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent' : id
                 return { agentId: id, codename, role: def?.description || '' }
             })
-            : (!agent && agentConfig.freeChatSubAgentIds.value.length)
-                ? agentConfig.freeChatSubAgentIds.value.map(id => {
-                    const def = agentDefs.get(id)
-                    const codename = def ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent' : id
-                    return { agentId: id, codename, role: def?.description || '' }
-                })
-                : undefined
-        const memorySpaceIds = hasMemSpaceOverride
-            ? agentConfig.freeChatMemorySpaceIds.value
-            : (!agent && agentConfig.freeChatMemorySpaceIds.value.length)
-                ? agentConfig.freeChatMemorySpaceIds.value
-                : undefined
+            : undefined
+        const memorySpaceIds = agentConfig.freeChatMemorySpaceIds.value.length
+            ? [...agentConfig.freeChatMemorySpaceIds.value]
+            : undefined
 
         await api.chat.send(
             conversationId,
