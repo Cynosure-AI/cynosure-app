@@ -58,12 +58,6 @@ export interface PrepareExecutionInput {
     memorySpaceOverrides?: { id: string; name: string }[]
 }
 
-export interface MemorySource {
-    text: string
-    source: string
-    score: number
-}
-
 export interface PreparedExecution {
     /** Tool definitions ready for the executor */
     tools: ToolDefinition[]
@@ -73,8 +67,6 @@ export interface PreparedExecution {
     model: string
     /** System messages to prepend to conversation history (order: system prompt, then memory context) */
     systemMessages: ChatMessage[]
-    /** Retrieved memory sources for UI metadata (null if none) */
-    retrievedMemorySources: MemorySource[] | null
     /** Whether sub-agent delegation tools were added */
     hasSubAgents: boolean
 }
@@ -177,7 +169,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         providerId: resolvedProviderId,
         model,
         systemMessages,
-        retrievedMemorySources: null,
         hasSubAgents,
     }
 }

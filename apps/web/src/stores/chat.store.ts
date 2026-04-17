@@ -17,12 +17,6 @@ export interface Conversation {
   updatedAt: number
 }
 
-export interface MemorySource {
-  text: string
-  source: string
-  score: number
-}
-
 export interface DisplayMessage {
   id: string
   role: 'user' | 'assistant' | 'system' | 'tool'
@@ -31,7 +25,6 @@ export interface DisplayMessage {
   imageDataUrls?: string[]
   audioDataUrls?: string[]
   fileAttachments?: { name: string }[]
-  memorySources?: MemorySource[]
   agentId?: string
   agentName?: string
   agentIconUrl?: string | null
@@ -132,7 +125,6 @@ export const useChatStore = defineStore('chat', () => {
         imageDataUrls: r.imageDataUrls || undefined,
         audioDataUrls: r.audioDataUrls || undefined,
         fileAttachments: r.fileAttachments || undefined,
-        memorySources: r.memorySources || undefined,
         agentId: r.agentId || undefined,
         agentName: r.agentName || undefined,
         agentIconUrl: r.agentIconUrl ?? undefined,
@@ -434,7 +426,6 @@ export const useChatStore = defineStore('chat', () => {
     handleSubAgentStreamImages: streaming.handleSubAgentStreamImages,
     handleSubAgentStreamEnd: streaming.handleSubAgentStreamEnd,
     handleTitleUpdated: streaming.handleTitleUpdated,
-    handleMemorySources: streaming.handleMemorySources,
     handleNewMessage: streaming.handleNewMessage,
 
     // Messages (delegated)

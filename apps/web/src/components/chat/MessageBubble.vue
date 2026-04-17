@@ -32,13 +32,13 @@ const props = defineProps<{
   imageDataUrls?: string[]
   audioDataUrls?: string[]
   fileAttachments?: { name: string }[]
-  memorySources?: { text: string; source: string; score: number }[]
   agentId?: string | null
   agentIconUrl?: string | null
   agentName?: string | null
   model?: string
   promptTokens?: number
   completionTokens?: number
+  contextTokens?: number
   latencyMs?: number
   isStreaming?: boolean
   isError?: boolean
@@ -53,7 +53,6 @@ const router = useRouter()
 const prefs = usePreferencesStore()
 
 const thinkingExpanded = ref(prefs.autoExpandSteps)
-const sourcesExpanded = ref(false)
 const copied = ref(false)
 const isEditing = ref(false)
 const editContent = ref('')
@@ -441,62 +440,18 @@ const isUser = computed(() => props.role === 'user')
         class="inline-block w-2 h-4 bg-zinc-400 animate-pulse ml-0.5"
       />
 
-      <!-- Message metadata -->
+      <!-- Message metadata (assistant) -->
       <div
         v-if="!isUser && !isStreaming && (model || promptTokens)"
         class="mt-2 pt-1.5 border-t border-zinc-700/50 flex items-center gap-3 text-xs text-zinc-500"
       >
         <span v-if="model">{{ model }}</span>
-        <span v-if="promptTokens || completionTokens">
-          {{ promptTokens }}/{{ completionTokens }} tokens
+        <span
+          v-if="contextTokens || promptTokens || completionTokens"
+          :title="`Context: ${contextTokens?.toLocaleString() ?? '–'} tokens (actual window usage)\nAccumulated: ${((promptTokens ?? 0) + (completionTokens ?? 0)).toLocaleString()} tokens (total API consumption across all rounds)\nPrompt (input): ${promptTokens?.toLocaleString() ?? '–'}\nCompletion (output): ${completionTokens?.toLocaleString() ?? '–'}`"
+        >
+          {{ contextTokens?.toLocaleString() ?? '–' }} / {{ ((promptTokens ?? 0) + (completionTokens ?? 0)).toLocaleString() }} tokens
         </span>
-      </div>
-
-      <!-- Memory sources -->
-      <div
-        v-if="!isUser && memorySources?.length"
-        class="mt-2"
-      >
-        <button
-          class="flex items-center gap-1.5 text-xs text-blue-400/70 hover:text-blue-400 transition-colors"
-          @click="sourcesExpanded = !sourcesExpanded"
-        >
-          <Icon
-            icon="lucide:book-open"
-            class="w-3 h-3"
-          />
-          <span>{{ memorySources.length }} memory source{{ memorySources.length !== 1 ? 's' : '' }} used</span>
-          <Icon
-            icon="lucide:chevron-down"
-            class="w-3 h-3 transition-transform"
-            :class="{ 'rotate-180': sourcesExpanded }"
-          />
-        </button>
-        <div
-          v-if="sourcesExpanded"
-          class="mt-1.5 space-y-1.5"
-        >
-          <div
-            v-for="(src, idx) in memorySources"
-            :key="idx"
-            class="rounded-md bg-zinc-900/80 border border-zinc-700/50 px-2.5 py-1.5"
-          >
-            <div class="flex items-center justify-between gap-2 mb-0.5">
-              <span class="text-[11px] text-zinc-500 truncate">
-                {{ src.source || 'memory' }}
-              </span>
-              <span
-                class="text-[11px] font-mono shrink-0 px-1.5 py-0.5 rounded"
-                :class="src.score >= 0.7 ? 'text-green-400 bg-green-500/10' : src.score >= 0.4 ? 'text-yellow-400 bg-yellow-500/10' : 'text-zinc-400 bg-zinc-700/50'"
-              >
-                {{ Math.round(src.score * 100) }}%
-              </span>
-            </div>
-            <p class="text-[11px] text-zinc-400 line-clamp-2">
-              {{ src.text }}
-            </p>
-          </div>
-        </div>
       </div>
     </div>
 

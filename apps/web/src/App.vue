@@ -110,7 +110,6 @@ onMounted(async () => {
     api.chat.onSubAgentStreamImages((data) => chatStore.handleSubAgentStreamImages(data)),
     api.chat.onSubAgentStreamEnd((data) => chatStore.handleSubAgentStreamEnd(data)),
     api.chat.onTitleUpdated((data) => chatStore.handleTitleUpdated(data)),
-    api.chat.onMemorySources((data) => chatStore.handleMemorySources(data)),
     api.chat.onNewMessage((data) => chatStore.handleNewMessage(data)),
     api.chat.onPostAction((data) => chatStore.handlePostAction(data)),
     // Agent event listeners
