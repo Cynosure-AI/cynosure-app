@@ -133,7 +133,8 @@ export function useChatMessages(
             subAgents,
             memorySpaceIds,
             agentConfig.sessionOverrideSubAgents.value,
-            agentConfig.sessionThinkingEnabled.value
+            agentConfig.sessionThinkingEnabled.value,
+            prefs.contextStrategy
         )
     }
 
