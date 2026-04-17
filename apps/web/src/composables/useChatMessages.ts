@@ -77,8 +77,8 @@ export function useChatMessages(
         const agent = activeAgentId.value ? agentDefs.get(activeAgentId.value) : null
         const tools = agentStore.selectedToolNames
 
-        const model = agentConfig.sessionModelOverride.value || agent?.model || undefined
-        const providerOverride = agentConfig.sessionProviderOverride.value || agent?.providerId || undefined
+        const model = agentConfig.sessionModelOverride.value || undefined
+        const providerOverride = agentConfig.sessionProviderOverride.value || undefined
         const systemPrompt = agentConfig.sessionSystemPrompt.value || agent?.systemPrompt || undefined
 
         const { usePreferencesStore } = await import('../stores/preferences.store')

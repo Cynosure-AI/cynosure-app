@@ -109,7 +109,12 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     const activeProvider = providerId
         ? gateway.getProvider(providerId) || gateway.getActiveProvider()
         : gateway.getActiveProvider()
-    const rawModel = modelOverride || agent.model || activeProvider.config.defaultModel
+    // When a provider override is active without an explicit model override,
+    // skip the agent's configured model (it belongs to a different provider)
+    // and fall through to the new provider's default model.
+    const rawModel = modelOverride
+        || (providerOverride ? undefined : agent.model)
+        || activeProvider.config.defaultModel
     const model = (!rawModel || rawModel === 'default') ? activeProvider.config.defaultModel : rawModel
 
     // Always resolve to the actual provider ID so metrics track correctly

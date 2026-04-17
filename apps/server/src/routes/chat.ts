@@ -471,22 +471,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       ).run(userMsgId, conversationId, 'user', content, imageDataUrls?.length ? JSON.stringify(imageDataUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, files?.length ? JSON.stringify(files.map(f => ({ name: f.name }))) : null, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
-      // Persist the full session config so it can be restored when navigating back.
-      const chatConfig: Record<string, unknown> = {
-        allowedTools: Array.isArray(allowedTools) ? allowedTools : [],
-        subAgents: reqSubAgents ?? [],
-        memorySpaceIds: reqMemorySpaceIds ?? [],
-        systemPrompt: systemPrompt || '',
-        model: model || '',
-        providerId: providerOverride || '',
-        overrideSubAgents: overrideSubAgents ?? false,
-        thinkingEnabled: reqThinkingEnabled ?? true,
-      }
-      db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
-        JSON.stringify(chatConfig),
-        conversationId
-      )
-
       // Build message history
       const historyRows = db
         .prepare(
@@ -669,6 +653,23 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       const streamId = nanoid()
       activeAbortControllers.set(streamId, abortController)
+
+      // Persist the full session config with RESOLVED model/provider so it can
+      // be restored correctly when navigating back to this conversation.
+      const chatConfig: Record<string, unknown> = {
+        allowedTools: Array.isArray(allowedTools) ? allowedTools : [],
+        subAgents: reqSubAgents ?? [],
+        memorySpaceIds: reqMemorySpaceIds ?? [],
+        systemPrompt: systemPrompt || '',
+        model: responseModel,
+        providerId: responseProvider,
+        overrideSubAgents: overrideSubAgents ?? false,
+        thinkingEnabled: reqThinkingEnabled ?? true,
+      }
+      db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
+        JSON.stringify(chatConfig),
+        conversationId
+      )
 
       // Fetch context window size (best-effort, non-blocking for the critical path)
       let contextWindow: number | undefined
