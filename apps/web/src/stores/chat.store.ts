@@ -179,6 +179,9 @@ export const useChatStore = defineStore('chat', () => {
       // falling back to per-message token data for completed executions.
       restoreContextUsage(lastContextTokens)
 
+      // Restore execution steps so tool calls render as grouped cards
+      await agentStore.restoreForConversation(id)
+
       // Restore session-level chat config (tools, sub-agents, memory spaces, system prompt, model/provider)
       const cfg = response.chatConfig
       if (cfg) {
