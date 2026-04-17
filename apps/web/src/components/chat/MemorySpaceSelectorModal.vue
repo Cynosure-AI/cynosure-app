@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useChatStore } from '../../stores/chat.store'
 import { api, type MemorySpace } from '../../api/client'
 import { Icon } from '@iconify/vue'
@@ -20,14 +20,14 @@ watch(visible, async (val) => {
   loading.value = false
 })
 
-const selected = chatStore.freeChatMemorySpaceIds
+const selected = computed(() => chatStore.freeChatMemorySpaceIds)
 
 function toggle(id: string) {
-  const idx = selected.indexOf(id)
+  const idx = chatStore.freeChatMemorySpaceIds.indexOf(id)
   if (idx >= 0) {
-    selected.splice(idx, 1)
+    chatStore.freeChatMemorySpaceIds.splice(idx, 1)
   } else {
-    selected.push(id)
+    chatStore.freeChatMemorySpaceIds.push(id)
   }
   chatStore.markOverridesModified()
 }

@@ -41,7 +41,7 @@ const missingTools = computed(() => {
       />
       <span
         v-if="missingTools.length"
-        class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-amber-500"
+        class="absolute -top-0.5 text-black -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold  px-1 leading-none bg-amber-500"
       >
         <Icon
           icon="lucide:alert-triangle"
