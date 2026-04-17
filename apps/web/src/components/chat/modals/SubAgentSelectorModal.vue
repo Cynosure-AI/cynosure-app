@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
-import { useChatStore } from '../../stores/chat.store'
+import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
+import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
-import { useProviderStore } from '../../stores/provider.store'
-import { useProviderLogos } from '../../composables/useProviderLogos'
+import { useProviderStore } from '../../../stores/provider.store'
+import { useProviderLogos } from '../../../composables/useProviderLogos'
 
 const agentDefs = useAgentDefinitionsStore()
 const chatStore = useChatStore()

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import McpSettings from '../../components/settings/McpSettings.vue'
+import McpSettings from '../../components/settings/mcp/McpSettings.vue'
 </script>
 
 <template>

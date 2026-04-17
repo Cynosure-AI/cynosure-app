@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
-import SystemPromptModal from '../SystemPromptModal.vue'
+import SystemPromptModal from '../modals/SystemPromptModal.vue'
 
 const chatStore = useChatStore()
 

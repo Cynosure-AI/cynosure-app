@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted } from 'vue'
-import { api, type McpRegistryServer } from '../../api/client'
+import { api, type McpRegistryServer } from '../../../api/client'
 import { Icon } from '@iconify/vue'
-import { useMcpServers } from '../../composables/useMcpServers'
+import { useMcpServers } from '../../../composables/useMcpServers'
 
 const emit = defineEmits<{
   goToInstalled: []

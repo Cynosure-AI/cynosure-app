@@ -4,7 +4,7 @@ import { useChatStore } from '../../../stores/chat.store'
 import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
-import SubAgentSelectorModal from '../SubAgentSelectorModal.vue'
+import SubAgentSelectorModal from '../modals/SubAgentSelectorModal.vue'
 
 const chatStore = useChatStore()
 const agentDefs = useAgentDefinitionsStore()

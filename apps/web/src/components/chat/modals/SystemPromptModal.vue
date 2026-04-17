@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import ModalDialog from '../shared/ModalDialog.vue'
+import ModalDialog from '../../shared/ModalDialog.vue'
 
 const props = defineProps<{
   modelValue: boolean

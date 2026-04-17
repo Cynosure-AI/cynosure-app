@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat.store'
-import { useAgentStore } from '../stores/agent.store'
+import { useAgentStore } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import ChatHeaderBar from '../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../components/chat/ChatPanel.vue'

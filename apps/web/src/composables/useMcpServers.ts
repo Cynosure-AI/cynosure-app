@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { api, type McpServerInfo } from '../api/client'
-import { useAgentStore } from '../stores/agent.store'
+import { useAgentStore } from '../stores/agent-runtime.store'
 
 // Module-level refs so state is shared between all tab components
 const servers = ref<McpServerInfo[]>([])

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { api } from '../../api/client'
-import { useAgentStore } from '../../stores/agent.store'
-import TabBar, { type TabDef } from '../shared/TabBar.vue'
-import { useMcpServers } from '../../composables/useMcpServers'
+import { api } from '../../../api/client'
+import { useAgentStore } from '../../../stores/agent-runtime.store'
+import TabBar, { type TabDef } from '../../shared/TabBar.vue'
+import { useMcpServers } from '../../../composables/useMcpServers'
 import McpBrowseTab from './McpBrowseTab.vue'
 import McpInstalledTab from './McpInstalledTab.vue'
 import McpToolsTab from './McpToolsTab.vue'
