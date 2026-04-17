@@ -329,7 +329,12 @@ export const useChatStore = defineStore('chat', () => {
     streaming.isStreaming.value = false
     streaming.currentStreamId.value = null
     streaming.lastUsage.value = null
-    // Keep model/provider — only reset when switching agents
+    // Re-sync tools, sub-agents, memory spaces, and system prompt from the
+    // agent definition so stale conversation overrides don't carry over.
+    // Model/provider overrides are intentionally kept.
+    // In free-chat mode (no active agent) this is a no-op — all session
+    // settings persist into the new chat.
+    agentConfig.syncAgentBaseline()
   }
 
   async function deleteAllConversations(): Promise<void> {
