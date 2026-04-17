@@ -6,7 +6,7 @@ import {
   type StreamChunk,
   type ModelInfo
 } from './providers/base.provider.js'
-import { ensurePricingLoaded, getModelContextLength } from '../pricing.js'
+import { ensurePricingLoaded, getModelContextLength } from '../model-dev-fetcher.js'
 import { OpenAIProvider } from './providers/openai.provider.js'
 import { AnthropicProvider } from './providers/anthropic.provider.js'
 import { GeminiProvider } from './providers/gemini.provider.js'
