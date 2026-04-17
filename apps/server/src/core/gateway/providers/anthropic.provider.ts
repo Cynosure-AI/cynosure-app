@@ -161,9 +161,9 @@ export class AnthropicProvider extends BaseLLMProvider {
       model: request.model || this.config.defaultModel,
       messages,
       max_tokens: request.maxTokens || 4096,
-      temperature: request.temperature,
       stream: false
     }
+    if (request.temperature != null) params.temperature = request.temperature
     if (system) params.system = system
     if (request.tools?.length) {
       params.tools = this.formatTools(request.tools)
@@ -216,9 +216,9 @@ export class AnthropicProvider extends BaseLLMProvider {
       model: request.model || this.config.defaultModel,
       messages,
       max_tokens: request.maxTokens || 4096,
-      temperature: request.temperature,
       stream: true
     }
+    if (request.temperature != null) params.temperature = request.temperature
     if (system) params.system = system
     if (request.tools?.length) {
       params.tools = this.formatTools(request.tools)

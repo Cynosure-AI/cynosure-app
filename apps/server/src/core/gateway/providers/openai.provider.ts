@@ -158,11 +158,11 @@ export class OpenAIProvider extends BaseLLMProvider {
     const params: Record<string, unknown> = {
       model: request.model || this.config.defaultModel,
       input,
-      temperature: request.temperature,
       max_output_tokens: request.maxTokens,
       store: false,
       stream: false
     }
+    if (request.temperature != null) params.temperature = request.temperature
     if (instructions) params.instructions = instructions
     const tools = this.formatToolsForResponses(request.tools)
     if (tools) params.tools = tools
@@ -224,10 +224,10 @@ export class OpenAIProvider extends BaseLLMProvider {
     const params: Record<string, unknown> = {
       model: request.model || this.config.defaultModel,
       input,
-      temperature: request.temperature,
       max_output_tokens: request.maxTokens,
       store: false
     }
+    if (request.temperature != null) params.temperature = request.temperature
     if (instructions) params.instructions = instructions
     const tools = this.formatToolsForResponses(request.tools)
     if (tools) params.tools = tools
