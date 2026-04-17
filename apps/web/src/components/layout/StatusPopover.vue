@@ -2,7 +2,6 @@
 import { ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProviderStore } from '../../stores/provider.store'
-import { useChatStore } from '../../stores/chat.store'
 import { api, type AgentInstance, type McpServerInfo } from '../../api/client'
 import { Icon } from '@iconify/vue'
 
@@ -18,7 +17,6 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const providerStore = useProviderStore()
-const chatStore = useChatStore()
 
 // Provider health
 interface ProviderHealth {
@@ -271,26 +269,6 @@ function goTo(path: string) {
           </div>
         </template>
       </div>
-
-      <!-- ── Token Usage (if available) ── -->
-      <template v-if="chatStore.lastUsage">
-        <div class="border-t border-zinc-800" />
-        <div class="flex items-center gap-2 px-2">
-          <Icon
-            icon="lucide:hash"
-            class="w-3.5 h-3.5 text-zinc-500"
-          />
-          <span class="text-[11px] text-zinc-500">
-            {{ chatStore.lastUsage.promptTokens }} / {{ chatStore.lastUsage.completionTokens }} tokens
-          </span>
-          <span
-            v-if="chatStore.lastUsage.model"
-            class="text-[11px] text-zinc-600 ml-auto truncate max-w-30"
-          >
-            {{ chatStore.lastUsage.model }}
-          </span>
-        </div>
-      </template>
     </div>
   </Transition>
 </template>

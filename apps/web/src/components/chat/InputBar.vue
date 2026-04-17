@@ -60,6 +60,13 @@ const selectedToolsList = computed(() =>
     agentStore.selectedToolNames.includes(`${t.namespace.id}::${t.name}`)
   )
 )
+const missingTools = computed(() => {
+  const availableNames = new Set(agentStore.availableTools.map(t => t.name))
+  const availableKeys = new Set(agentStore.availableTools.map(t => `${t.namespace.id}::${t.name}`))
+  return agentStore.selectedToolNames.filter(
+    name => !availableNames.has(name) && !availableKeys.has(name)
+  )
+})
 const selectedSubAgents = computed(() => {
   const ids = chatStore.freeChatSubAgentIds
   return agentDefs.agents.filter(a => ids.includes(a.id))
@@ -465,6 +472,16 @@ defineExpose({ processFiles })
               class="h-5 w-5"
             />
             <span
+              v-if="missingTools.length"
+              class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-amber-500"
+            >
+              <Icon
+                icon="lucide:alert-triangle"
+                class="w-2.5 h-2.5"
+              />
+            </span>
+            <span
+              v-else
               class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
             >
               {{ agentStore.selectedToolNames.length }}
@@ -474,6 +491,30 @@ defineExpose({ processFiles })
             <div class="font-medium text-zinc-300 mb-1.5">
               Tools ({{ agentStore.selectedToolNames.length }}/{{ agentStore.availableTools.length }})
             </div>
+            <template v-if="missingTools.length">
+              <div class="mb-1.5 px-1 py-1 rounded bg-amber-500/10 border border-amber-500/20">
+                <div class="flex items-center gap-1 text-amber-400 text-[10px] font-medium mb-1">
+                  <Icon
+                    icon="lucide:alert-triangle"
+                    class="w-3 h-3 shrink-0"
+                  />
+                  {{ missingTools.length }} tool{{ missingTools.length > 1 ? 's' : '' }} unavailable
+                </div>
+                <div
+                  v-for="name in missingTools.slice(0, 5)"
+                  :key="name"
+                  class="text-amber-300/70 font-mono text-[10px] truncate pl-4"
+                >
+                  {{ name }}
+                </div>
+                <div
+                  v-if="missingTools.length > 5"
+                  class="text-amber-400/50 text-[9px] pl-4"
+                >
+                  +{{ missingTools.length - 5 }} more
+                </div>
+              </div>
+            </template>
             <template v-if="selectedToolsList.length">
               <div
                 v-for="t in selectedToolsList.slice(0, 12)"
