@@ -172,7 +172,7 @@ const tabs: TabDef<'cron'>[] = [
 const effectiveProviderId = computed(() => {
   if (cronProviderOverride.value) return cronProviderOverride.value
   const agent = allAgents.value.find(a => a.id === cronAgentId.value)
-  return agent?.providerId || providerStore.activeProviderId
+  return agent?.providerId || providerStore.lastUsedProviderId
 })
 
 const effectiveDefaultModel = computed(() => {

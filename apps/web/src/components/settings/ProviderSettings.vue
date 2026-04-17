@@ -404,7 +404,7 @@ function getProviderIcon(type: string): string {
           <div class="flex items-center gap-2">
             <span class="font-medium text-zinc-200">{{ provider.name }}</span>
             <span
-              v-if="provider.id === providerStore.activeProviderId"
+              v-if="provider.id === providerStore.lastUsedProviderId"
               class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium"
             >Last used</span>
           </div>

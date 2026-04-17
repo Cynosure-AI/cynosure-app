@@ -369,8 +369,8 @@ export const api = {
     list: () => get<LLMProviderConfig[]>('/api/providers'),
     add: (config: LLMProviderConfig) => post<{ id: string }>('/api/providers', config).then((r) => r.id),
     remove: (id: string) => del<void>(`/api/providers/${encodeURIComponent(id)}`),
-    setActive: (id: string) => put<void>('/api/providers/active', { id }),
-    getActive: () => get<{ id: string }>('/api/providers/active').then((r) => r.id),
+    setLastUsed: (id: string) => put<void>('/api/providers/active', { id }),
+    getLastUsed: () => get<{ id: string }>('/api/providers/active').then((r) => r.id),
     test: (id: string) => post<{ success: boolean }>(`/api/providers/${encodeURIComponent(id)}/test`).then((r) => r.success),
     listModels: (id: string, type?: 'llm' | 'embedding') => {
       const params = type ? `?type=${type}` : ''

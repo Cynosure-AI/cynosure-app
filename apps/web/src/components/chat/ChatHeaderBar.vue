@@ -87,7 +87,7 @@ const sidebarModels = ref<string[]>([])
 const loadingModels = ref(false)
 
 const currentProviderId = computed(() =>
-  chatStore.sessionProviderOverride || selectedAgent.value?.providerId || providerStore.activeProviderId
+  chatStore.sessionProviderOverride || selectedAgent.value?.providerId || providerStore.lastUsedProviderId
 )
 
 const defaultModelLabel = computed(() => {
@@ -133,7 +133,7 @@ function onProviderOverride(providerId: string): void {
     // Free chat — set per-session override so it persists per conversation,
     // AND update the global active provider for new chats.
     chatStore.sessionProviderOverride = providerId
-    providerStore.setActive(providerId)
+    providerStore.setLastUsed(providerId)
   }
 }
 
@@ -153,7 +153,7 @@ async function onAgentChange(value: string) {
   if (agentId) {
     const agent = agentDefs.get(agentId)
     if (agent?.providerId) {
-      providerStore.setActive(agent.providerId)
+      providerStore.setLastUsed(agent.providerId)
     }
   }
 }

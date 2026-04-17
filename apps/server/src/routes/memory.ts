@@ -153,7 +153,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
           apiKey: provider.config.apiKey || 'no-key'
         })
       } else {
-        const provider = getGateway().getActiveProvider()
+        const provider = getGateway().getLastUsedProvider()
         client = new OpenAI({
           baseURL: provider.config.baseUrl,
           apiKey: provider.config.apiKey || 'no-key'

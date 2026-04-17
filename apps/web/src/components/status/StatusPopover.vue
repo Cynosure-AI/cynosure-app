@@ -212,10 +212,6 @@ function goTo(path: string) {
             class="text-[11px] truncate flex-1"
             :class="p.status === 'error' ? 'text-red-400' : 'text-zinc-400'"
           >{{ p.name }}</span>
-          <span
-            v-if="providerStore.activeProviderId === p.id"
-            class="text-[9px] text-blue-400 shrink-0"
-          >active</span>
         </div>
       </div>
 

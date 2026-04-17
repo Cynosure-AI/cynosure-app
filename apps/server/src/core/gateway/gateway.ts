@@ -19,15 +19,15 @@ import { MistralProvider } from './providers/mistral.provider.js'
 
 export class LLMGateway {
   private providers = new Map<string, BaseLLMProvider>()
-  private activeProviderId: string = ''
+  private lastUsedProviderId: string = ''
   /** Cache model info keyed by "providerId:modelId" — TTL 10 minutes */
   private modelInfoCache = new Map<string, { info: ModelInfo; ts: number }>()
 
   registerProvider(config: LLMProviderConfig): void {
     const provider = this.createProvider(config)
     this.providers.set(config.id, provider)
-    if (!this.activeProviderId) {
-      this.activeProviderId = config.id
+    if (!this.lastUsedProviderId) {
+      this.lastUsedProviderId = config.id
     }
   }
 
@@ -58,20 +58,20 @@ export class LLMGateway {
 
   removeProvider(id: string): void {
     this.providers.delete(id)
-    if (this.activeProviderId === id) {
-      this.activeProviderId = this.providers.keys().next().value || ''
+    if (this.lastUsedProviderId === id) {
+      this.lastUsedProviderId = this.providers.keys().next().value || ''
     }
   }
 
-  setActiveProvider(id: string): void {
+  setLastUsedProvider(id: string): void {
     if (!this.providers.has(id)) {
       throw new Error(`Provider ${id} not registered`)
     }
-    this.activeProviderId = id
+    this.lastUsedProviderId = id
   }
 
-  getActiveProvider(): BaseLLMProvider {
-    const provider = this.providers.get(this.activeProviderId)
+  getLastUsedProvider(): BaseLLMProvider {
+    const provider = this.providers.get(this.lastUsedProviderId)
     if (!provider) {
       throw new Error('No active provider set')
     }
@@ -82,8 +82,8 @@ export class LLMGateway {
     return this.providers.get(id)
   }
 
-  getActiveProviderId(): string {
-    return this.activeProviderId
+  getLastUsedProviderId(): string {
+    return this.lastUsedProviderId
   }
 
   getAllProviders(): Map<string, BaseLLMProvider> {
@@ -96,7 +96,7 @@ export class LLMGateway {
   ): Promise<CompletionResponse> {
     const provider = providerId
       ? this.providers.get(providerId)
-      : this.getActiveProvider()
+      : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
     return provider.complete(request)
   }
@@ -107,7 +107,7 @@ export class LLMGateway {
   ): AsyncIterable<StreamChunk> {
     const provider = providerId
       ? this.providers.get(providerId)
-      : this.getActiveProvider()
+      : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
     yield* provider.streamComplete(request)
   }
@@ -115,7 +115,7 @@ export class LLMGateway {
   async listModels(providerId?: string, type?: 'llm' | 'embedding'): Promise<string[]> {
     const provider = providerId
       ? this.providers.get(providerId)
-      : this.getActiveProvider()
+      : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
     return provider.listModels(type)
   }
@@ -128,10 +128,10 @@ export class LLMGateway {
   async getModelInfo(modelId: string, providerId?: string): Promise<ModelInfo> {
     const provider = providerId
       ? this.providers.get(providerId)
-      : this.getActiveProvider()
+      : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
 
-    const pid = providerId || this.activeProviderId
+    const pid = providerId || this.lastUsedProviderId
     const cacheKey = `${pid}:${modelId}`
     const cached = this.modelInfoCache.get(cacheKey)
     if (cached && Date.now() - cached.ts < 10 * 60 * 1000) {

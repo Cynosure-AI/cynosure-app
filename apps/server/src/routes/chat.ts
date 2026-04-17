@@ -586,10 +586,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         chatAgentIconUrl = resolvedAgent.iconUrl || null
         messages = [...prepared.systemMessages, ...messages]
 
-        const activeProvider = providerId
-          ? gateway.getProvider(providerId) || gateway.getActiveProvider()
-          : gateway.getActiveProvider()
-        responseProvider = activeProvider.config.id
+        const lastUsedProvider = providerId
+          ? gateway.getProvider(providerId) || gateway.getLastUsedProvider()
+          : gateway.getLastUsedProvider()
+        responseProvider = lastUsedProvider.config.id
         responseModel = prepared.model
       } else {
         // ── Agentless chat: manual tool + provider resolution ──
@@ -610,13 +610,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         // receive the same provider that the main executor will use.
         // In free-chat mode the frontend calls providerStore.setActive() (a server
         // API) instead of setting sessionProviderOverride, so providerOverride in
-        // the request body may be null — getActiveProvider() is the true source.
+        // the request body may be null — getLastUsedProvider() is the true source.
         providerId = providerOverride || undefined
-        const freeChatActiveProvider = providerId
-          ? gateway.getProvider(providerId) || gateway.getActiveProvider()
-          : gateway.getActiveProvider()
-        responseProvider = freeChatActiveProvider.config.id
-        responseModel = model || freeChatActiveProvider.config.defaultModel
+        const freeChatLastUsedProvider = providerId
+          ? gateway.getProvider(providerId) || gateway.getLastUsedProvider()
+          : gateway.getLastUsedProvider()
+        responseProvider = freeChatLastUsedProvider.config.id
+        responseModel = model || freeChatLastUsedProvider.config.defaultModel
 
         // Sub-agent tools from request body (MA workspace)
         if (reqSubAgents?.length) {

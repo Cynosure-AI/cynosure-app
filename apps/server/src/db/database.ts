@@ -33,7 +33,7 @@ function createTables(db: Database.Database): void {
       api_key_enc TEXT,
       default_model TEXT NOT NULL,
       config_json TEXT NOT NULL,
-      is_default INTEGER NOT NULL DEFAULT 0,
+      is_last_used INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );

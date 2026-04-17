@@ -97,7 +97,7 @@ export class EmbeddingProvider {
 
     // Fall back to active provider — works for OpenAI-compatible endpoints only
     const gateway = getGateway()
-    const provider = gateway.getActiveProvider()
+    const provider = gateway.getLastUsedProvider()
     if (provider.config.type !== 'openai' && provider.config.type !== 'lmstudio') {
       console.warn(
         `[Embedding] No embedding provider configured. Active LLM provider "${provider.config.type}" may not support OpenAI-compatible embeddings. ` +
