@@ -78,9 +78,13 @@ export function trimMessagesToContextLimit(
 
     let keptMsgs: ChatMessage[]
     let trimmedCount: number
+    let headLength = 0
 
     if (strategy === 'truncate-middle') {
-        ({ kept: keptMsgs, trimmed: trimmedCount } = truncateMiddle(nonSystemMsgs, budget))
+        const result = truncateMiddle(nonSystemMsgs, budget)
+        keptMsgs = result.kept
+        trimmedCount = result.trimmed
+        headLength = result.headLength
     } else {
         ({ kept: keptMsgs, trimmed: trimmedCount } = slidingWindow(nonSystemMsgs, budget))
     }
@@ -88,6 +92,18 @@ export function trimMessagesToContextLimit(
     if (trimmedCount === 0) return messages
 
     const trimmedTokens = totalEstimate - systemTokens - estimateTotalTokens(keptMsgs)
+
+    // For truncate-middle, prepend a gap note to the first tail message so the
+    // model knows there's a context discontinuity, without breaking role alternation.
+    if (strategy === 'truncate-middle' && headLength < keptMsgs.length) {
+        const tailMsg = keptMsgs[headLength]
+        const note = `[Note: ${trimmedCount} earlier messages were omitted from the middle of the conversation to fit the context window.]\n\n`
+        if (typeof tailMsg.content === 'string') {
+            keptMsgs[headLength] = { ...tailMsg, content: note + tailMsg.content }
+        } else if (Array.isArray(tailMsg.content)) {
+            keptMsgs[headLength] = { ...tailMsg, content: [{ type: 'text' as const, text: note }, ...tailMsg.content] }
+        }
+    }
 
     // Append the trim note to the last system message so providers that only
     // read the first system message (Anthropic, OpenAI, Gemini…) still see it.
@@ -141,7 +157,7 @@ function slidingWindow(
 function truncateMiddle(
     msgs: ChatMessage[],
     budget: number,
-): { kept: ChatMessage[]; trimmed: number } {
+): { kept: ChatMessage[]; trimmed: number; headLength: number } {
     // Allocate budget: ~40% to head, ~60% to tail (recent context is more valuable)
     const headBudget = Math.floor(budget * 0.4)
     const tailBudget = budget - headBudget
@@ -190,12 +206,5 @@ function truncateMiddle(
     const tail = msgs.slice(tailStart)
     const trimmed = msgs.length - head.length - tail.length
 
-    if (trimmed > 0 && tail.length) {
-        // Prepend a gap note to the first tail message so the model knows
-        // there's a context discontinuity, without breaking role alternation.
-        const note = `[System Note: ${trimmed} earlier messages were omitted from the middle of the conversation to fit the context window.]\n\n`
-        tail[0] = { ...tail[0], content: note + (typeof tail[0].content === 'string' ? tail[0].content : '') }
-    }
-
-    return { kept: [...head, ...tail], trimmed }
+    return { kept: [...head, ...tail], trimmed, headLength: head.length }
 }
