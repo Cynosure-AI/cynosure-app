@@ -117,7 +117,6 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
             model,
             signal,
             tools: [titleTool],
-            temperature: 0.5,
             maxTokens: 80
         }, providerId)
 

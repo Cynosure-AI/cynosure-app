@@ -157,10 +157,10 @@ export class OpenRouterProvider extends BaseLLMProvider {
         const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown> = {
             model: request.model || this.config.defaultModel,
             messages,
-            temperature: request.temperature,
             max_tokens: request.maxTokens,
             stream: false
         }
+        if (request.temperature != null) params.temperature = request.temperature
 
         // Send reasoning parameter for OpenRouter native thinking support
         if (this.supportsReasoningParam) {
@@ -234,11 +234,11 @@ export class OpenRouterProvider extends BaseLLMProvider {
         const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming & Record<string, unknown> = {
             model: request.model || this.config.defaultModel,
             messages,
-            temperature: request.temperature,
             max_tokens: request.maxTokens,
             stream: true,
             stream_options: { include_usage: true }
         }
+        if (request.temperature != null) params.temperature = request.temperature
 
         // Send reasoning parameter for OpenRouter native thinking support
         if (this.supportsReasoningParam) {

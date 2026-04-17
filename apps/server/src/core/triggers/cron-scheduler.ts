@@ -207,7 +207,6 @@ async function runCronJob(jobId: string): Promise<void> {
         broadcast,
         providerId: prepared.providerId,
         model: prepared.model,
-        temperature: 0.3,
         maxRounds: 10,
         thinkingEnabled: agent.thinkingEnabled !== false,
         streamMode: 'per-round',

@@ -145,17 +145,19 @@ export class GeminiProvider extends BaseLLMProvider {
     const start = Date.now()
     const { systemInstruction, contents } = this.formatMessages(request.messages)
 
-    const response = await this.client.models.generateContent({
-      model: request.model || this.config.defaultModel,
-      contents,
-      config: {
+    const config: Record<string, unknown> = {
         systemInstruction,
-        temperature: request.temperature,
         maxOutputTokens: request.maxTokens,
         tools: request.tools?.length
           ? [{ functionDeclarations: this.formatTools(request.tools) }]
           : undefined
-      }
+    }
+    if (request.temperature != null) config.temperature = request.temperature
+
+    const response = await this.client.models.generateContent({
+      model: request.model || this.config.defaultModel,
+      contents,
+      config
     })
 
     let content = ''
@@ -210,17 +212,19 @@ export class GeminiProvider extends BaseLLMProvider {
   ): AsyncIterable<StreamChunk> {
     const { systemInstruction, contents } = this.formatMessages(request.messages)
 
-    const stream = await this.client.models.generateContentStream({
-      model: request.model || this.config.defaultModel,
-      contents,
-      config: {
+    const streamConfig: Record<string, unknown> = {
         systemInstruction,
-        temperature: request.temperature,
         maxOutputTokens: request.maxTokens,
         tools: request.tools?.length
           ? [{ functionDeclarations: this.formatTools(request.tools) }]
           : undefined
-      }
+    }
+    if (request.temperature != null) streamConfig.temperature = request.temperature
+
+    const stream = await this.client.models.generateContentStream({
+      model: request.model || this.config.defaultModel,
+      contents,
+      config: streamConfig
     })
 
     const toolCalls: CompletionResponse['toolCalls'] = []
