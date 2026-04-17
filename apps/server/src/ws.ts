@@ -31,7 +31,12 @@ export function broadcast(event: string, data: unknown): void {
   }
 }
 
-/** Heartbeat interval — call once on startup */
+/**
+ * WebSocket keep-alive heartbeat — NOT the old agent-execution heartbeat scheduler.
+ * Pings every connected client at the given interval; terminates any that
+ * didn't respond with a pong since the last check (stale connections).
+ * Call once on startup.
+ */
 export function startHeartbeat(intervalMs = 30_000): NodeJS.Timeout {
   return setInterval(() => {
     for (const [ws, state] of clients) {
