@@ -2,7 +2,7 @@
 import { ref, watch, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../../stores/chat.store'
-import { useAgentStore } from '../../stores/agent.store'
+import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import { useProviderStore } from '../../stores/provider.store'

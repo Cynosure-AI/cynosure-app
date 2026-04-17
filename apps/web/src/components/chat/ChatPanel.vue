@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed } from 'vue'
 import { useChatStore, type DisplayMessage } from '../../stores/chat.store'
-import { useAgentStore, type ExecutionStep } from '../../stores/agent.store'
+import { useAgentStore, type ExecutionStep } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import MessageBubble from '../chat/MessageBubble.vue'
 import ToolExecutionCard from '../chat/ToolExecutionCard.vue'

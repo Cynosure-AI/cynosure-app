@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useAgentStore } from '../../../stores/agent.store'
+import { useAgentStore } from '../../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
-import ToolSelectorModal from '../ToolSelectorModal.vue'
+import ToolSelectorModal from '../modals/ToolSelectorModal.vue'
 
 const agentStore = useAgentStore()
 

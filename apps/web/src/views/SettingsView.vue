@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import ProviderSettings from '../components/settings/ProviderSettings.vue'
-import McpSettings from '../components/settings/McpSettings.vue'
+import McpSettings from '../components/settings/mcp/McpSettings.vue'
 import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import { usePreferencesStore } from '../stores/preferences.store'
 

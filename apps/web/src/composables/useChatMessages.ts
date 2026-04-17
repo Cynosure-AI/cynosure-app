@@ -1,6 +1,6 @@
 import { type Ref } from 'vue'
 import { api } from '../api/client'
-import { useAgentStore } from '../stores/agent.store'
+import { useAgentStore } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useProviderStore } from '../stores/provider.store'
 import type { DisplayMessage } from '../stores/chat.store'

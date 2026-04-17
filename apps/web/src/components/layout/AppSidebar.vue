@@ -7,7 +7,7 @@ import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { api, wsConnected, type AgentInstance } from '../../api/client'
 import { Icon } from '@iconify/vue'
 import { useSidebar } from '../../composables/useSidebar'
-import StatusPopover from './StatusPopover.vue'
+import StatusPopover from '../status/StatusPopover.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 
 const route = useRoute()

@@ -1,7 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api, type StoredMessage } from '../api/client'
-import { useAgentStore } from './agent.store'
+import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
 import { useChatStreaming } from '../composables/useChatStreaming'

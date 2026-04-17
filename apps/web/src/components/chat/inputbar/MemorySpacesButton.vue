@@ -4,7 +4,7 @@ import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import { api, type MemorySpace } from '../../../api/client'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
-import MemorySpaceSelectorModal from '../MemorySpaceSelectorModal.vue'
+import MemorySpaceSelectorModal from '../modals/MemorySpaceSelectorModal.vue'
 
 const chatStore = useChatStore()
 

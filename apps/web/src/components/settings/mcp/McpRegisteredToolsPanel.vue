@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../stores/agent.store'
+import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
 
 const agentStore = useAgentStore()

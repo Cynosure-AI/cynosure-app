@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
-import { api } from '../../api/client'
+import { api } from '../../../api/client'
 import { Icon } from '@iconify/vue'
-import ToggleSwitch from '../shared/ToggleSwitch.vue'
-import { useMcpServers } from '../../composables/useMcpServers'
-import type { McpServerInfo } from '../../api/client'
+import ToggleSwitch from '../../shared/ToggleSwitch.vue'
+import { useMcpServers } from '../../../composables/useMcpServers'
+import type { McpServerInfo } from '../../../api/client'
 
 const emit = defineEmits<{
   goToBrowse: []

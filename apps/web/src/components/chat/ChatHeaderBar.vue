@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useChatStore } from '../../stores/chat.store'
-import { useAgentStore } from '../../stores/agent.store'
+import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useProviderStore } from '../../stores/provider.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'

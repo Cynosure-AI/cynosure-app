@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useProviderStore } from './stores/provider.store'
 import { useChatStore } from './stores/chat.store'
-import { useAgentStore } from './stores/agent.store'
+import { useAgentStore } from './stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from './stores/agent-definitions.store'
 import { usePreferencesStore } from './stores/preferences.store'
 import { useNotificationStore } from './stores/notification.store'
