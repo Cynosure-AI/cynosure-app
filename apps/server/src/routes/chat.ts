@@ -616,8 +616,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           ? gateway.getProvider(providerId) || gateway.getActiveProvider()
           : gateway.getActiveProvider()
         responseProvider = freeChatActiveProvider.config.id
-        const rawModel = model || freeChatActiveProvider.config.defaultModel
-        responseModel = (!rawModel || rawModel === 'default') ? freeChatActiveProvider.config.defaultModel : rawModel
+        responseModel = model || freeChatActiveProvider.config.defaultModel
 
         // Sub-agent tools from request body (MA workspace)
         if (reqSubAgents?.length) {
