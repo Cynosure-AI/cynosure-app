@@ -2,7 +2,6 @@ import { type Ref } from 'vue'
 import { api } from '../api/client'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
-import { useProviderStore } from '../stores/provider.store'
 import type { DisplayMessage } from '../stores/chat.store'
 import type { ChatStreamingState } from './useChatStreaming'
 
@@ -33,7 +32,6 @@ export function useChatMessages(
     },
 ): ChatMessagesApi {
     const agentStore = useAgentStore()
-    const providerStore = useProviderStore()
 
     async function sendMessage(
         content: string,
@@ -79,32 +77,21 @@ export function useChatMessages(
         const agent = activeAgentId.value ? agentDefs.get(activeAgentId.value) : null
         const tools = agentStore.selectedToolNames
 
-        let model = agentConfig.sessionModelOverride.value || undefined
-        const providerOverride = agentConfig.sessionProviderOverride.value || undefined
-        if (!model && providerOverride) {
-            const provider = providerStore.providers.find(p => p.id === providerOverride)
-            model = provider?.defaultModel || undefined
-        }
+        const model = agentConfig.sessionModelOverride.value || agent?.model || undefined
+        const providerOverride = agentConfig.sessionProviderOverride.value || agent?.providerId || undefined
         const systemPrompt = agentConfig.sessionSystemPrompt.value || agent?.systemPrompt || undefined
 
         const { usePreferencesStore } = await import('../stores/preferences.store')
         const prefs = usePreferencesStore()
 
-        // Always send the current effective sub-agents and memory spaces so the
-        // server persists them in config_json.  Without this, conversations
-        // using agent defaults would never save these fields and restoring the
-        // conversation would show an empty sub-agent / memory-space list.
+        // Always send the full session config so it can be persisted and restored.
         const effectiveSubAgentIds = agentConfig.freeChatSubAgentIds.value
-        const subAgents = effectiveSubAgentIds.length
-            ? effectiveSubAgentIds.map(id => {
-                const def = agentDefs.get(id)
-                const codename = def ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent' : id
-                return { agentId: id, codename, role: def?.description || '' }
-            })
-            : undefined
-        const memorySpaceIds = agentConfig.freeChatMemorySpaceIds.value.length
-            ? [...agentConfig.freeChatMemorySpaceIds.value]
-            : undefined
+        const subAgents = effectiveSubAgentIds.map(id => {
+            const def = agentDefs.get(id)
+            const codename = def ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent' : id
+            return { agentId: id, codename, role: def?.description || '' }
+        })
+        const memorySpaceIds = [...agentConfig.freeChatMemorySpaceIds.value]
 
         await api.chat.send(
             conversationId,

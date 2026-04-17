@@ -182,35 +182,21 @@ export const useChatStore = defineStore('chat', () => {
       // Restore execution steps so tool calls render as grouped cards
       await agentStore.restoreForConversation(id)
 
-      // Restore session-level chat config (tools, sub-agents, memory spaces, system prompt, model/provider)
+      // Restore the full session config snapshot.
+      // Legacy conversations without config_json fall back to agent defaults.
       const cfg = response.chatConfig
       if (cfg) {
-        if (cfg.allowedTools?.length) agentStore.selectedToolNames = [...cfg.allowedTools]
-        // Restore sub-agents: use saved config if present, otherwise fall back
-        // to agent baseline (handles legacy conversations saved before config persistence).
-        if (cfg.subAgents?.length) {
-          agentConfig.freeChatSubAgentIds.value = cfg.subAgents.map((s: { agentId: string }) => s.agentId)
-        } else if (!('subAgents' in cfg)) {
-          // Field was never saved — sync from agent definition
-          agentConfig.syncSubAgentsFromBaseline()
-        } else {
-          agentConfig.freeChatSubAgentIds.value = []
-        }
-        if (cfg.memorySpaceIds?.length) {
-          agentConfig.freeChatMemorySpaceIds.value = [...cfg.memorySpaceIds]
-        } else if (!('memorySpaceIds' in cfg)) {
-          agentConfig.syncMemorySpacesFromBaseline()
-        } else {
-          agentConfig.freeChatMemorySpaceIds.value = []
-        }
-        if (cfg.systemPrompt != null) agentConfig.sessionSystemPrompt.value = cfg.systemPrompt
-        if (cfg.thinkingEnabled != null) agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled
+        agentStore.selectedToolNames = cfg.allowedTools?.length ? [...cfg.allowedTools] : []
+        agentConfig.freeChatSubAgentIds.value = cfg.subAgents?.length
+          ? cfg.subAgents.map((s: { agentId: string }) => s.agentId)
+          : []
+        agentConfig.freeChatMemorySpaceIds.value = cfg.memorySpaceIds?.length ? [...cfg.memorySpaceIds] : []
+        agentConfig.sessionSystemPrompt.value = cfg.systemPrompt ?? ''
+        agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled ?? true
         agentConfig.sessionModelOverride.value = cfg.model || null
         agentConfig.sessionProviderOverride.value = cfg.providerId || null
-        if (cfg.overrideSubAgents !== undefined) agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents
-        else agentConfig.sessionOverrideSubAgents.value = false
+        agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents ?? false
       } else {
-        // No config saved at all — sync everything from agent baseline
         agentConfig.syncAgentBaseline()
       }
     } finally {
@@ -340,9 +326,8 @@ export const useChatStore = defineStore('chat', () => {
     streaming.isStreaming.value = false
     streaming.currentStreamId.value = null
     streaming.lastUsage.value = null
-    // Re-sync tools, sub-agents, memory spaces, and system prompt from the
-    // agent definition so stale conversation overrides don't carry over.
-    // Model/provider overrides are intentionally kept.
+    // Reset the full session config to agent defaults (tools, sub-agents,
+    // memory spaces, system prompt, model, provider).
     // In free-chat mode (no active agent) this is a no-op — all session
     // settings persist into the new chat.
     agentConfig.syncAgentBaseline()

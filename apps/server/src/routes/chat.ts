@@ -471,18 +471,19 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       ).run(userMsgId, conversationId, 'user', content, imageDataUrls?.length ? JSON.stringify(imageDataUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, files?.length ? JSON.stringify(files.map(f => ({ name: f.name }))) : null, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
-      // Persist session-level config so it can be restored when navigating back to this conversation.
-      const chatConfig: Record<string, unknown> = {}
-      if (Array.isArray(allowedTools) && allowedTools.length) chatConfig.allowedTools = allowedTools
-      if (reqSubAgents !== undefined) chatConfig.subAgents = reqSubAgents ?? []
-      if (reqMemorySpaceIds !== undefined) chatConfig.memorySpaceIds = reqMemorySpaceIds ?? []
-      if (systemPrompt) chatConfig.systemPrompt = systemPrompt
-      if (model) chatConfig.model = model
-      if (providerOverride) chatConfig.providerId = providerOverride
-      if (overrideSubAgents !== undefined) chatConfig.overrideSubAgents = overrideSubAgents
-      if (reqThinkingEnabled !== undefined) chatConfig.thinkingEnabled = reqThinkingEnabled
+      // Persist the full session config so it can be restored when navigating back.
+      const chatConfig: Record<string, unknown> = {
+        allowedTools: Array.isArray(allowedTools) ? allowedTools : [],
+        subAgents: reqSubAgents ?? [],
+        memorySpaceIds: reqMemorySpaceIds ?? [],
+        systemPrompt: systemPrompt || '',
+        model: model || '',
+        providerId: providerOverride || '',
+        overrideSubAgents: overrideSubAgents ?? false,
+        thinkingEnabled: reqThinkingEnabled ?? true,
+      }
       db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
-        Object.keys(chatConfig).length ? JSON.stringify(chatConfig) : null,
+        JSON.stringify(chatConfig),
         conversationId
       )
 
