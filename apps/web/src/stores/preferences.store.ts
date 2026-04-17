@@ -12,6 +12,8 @@ function loadJsonArray(key: string): string[] {
 
 export type ThemeId = 'dark' | 'light' | 'arasaka' | 'midnight-purple' | 'cyberpunk'
 
+export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'none'
+
 export const usePreferencesStore = defineStore('preferences', () => {
     const theme = ref<ThemeId>(
         (localStorage.getItem('oa-theme') as ThemeId) || 'dark'
@@ -20,6 +22,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const autoExpandToolCalls = ref(localStorage.getItem('oa-auto-expand-tools') === 'true')
     const generateTitle = ref(localStorage.getItem('oa-generate-title') !== 'false')
     const sidebarCollapsed = ref(false)
+    const contextStrategy = ref<ContextStrategy>(
+        (localStorage.getItem('oa-context-strategy') as ContextStrategy) || 'sliding-window'
+    )
 
     const agentCategories = ref<string[]>(loadJsonArray('oa-agent-categories'))
     const maCategories = ref<string[]>(loadJsonArray('oa-ma-categories'))
@@ -51,6 +56,11 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     watch(generateTitle, (val) => {
         localStorage.setItem('oa-generate-title', String(val))
+        syncPrefsToElectron()
+    })
+
+    watch(contextStrategy, (val) => {
+        localStorage.setItem('oa-context-strategy', val)
         syncPrefsToElectron()
     })
 
@@ -126,6 +136,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     return {
         theme, autoExpandSteps, autoExpandToolCalls, generateTitle, sidebarCollapsed,
+        contextStrategy,
         agentCategories, maCategories,
         whisperModel, whisperEnabled, whisperQuantization, whisperLanguage,
         toggleTheme, setTheme, toggleAutoExpand,

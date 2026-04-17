@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { usePreferencesStore } from '../../stores/preferences.store'
+import { usePreferencesStore, type ContextStrategy } from '../../stores/preferences.store'
 import type { ThemeId } from '../../stores/preferences.store'
 import { Icon } from '@iconify/vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
@@ -12,6 +12,12 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
   { id: 'arasaka', label: 'Arasaka', icon: 'lucide:zap', colors: { bg: '#080405', surface: '#110a0d', accent: '#ff003c', text: '#f0dce2' } },
   { id: 'midnight-purple', label: 'Midnight', icon: 'lucide:sparkles', colors: { bg: '#08060e', surface: '#0f0a1c', accent: '#a855f7', text: '#ebe5f5' } },
   { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#060608', surface: '#16161e', accent: '#f9f002', text: '#e8e8f0' } },
+]
+
+const contextStrategyOptions: { value: ContextStrategy; label: string; description: string }[] = [
+  { value: 'sliding-window', label: 'Sliding Window', description: 'Keeps the most recent messages, trimming older ones' },
+  { value: 'truncate-middle', label: 'Truncate Middle', description: 'Keeps the first and last messages, trimming the middle' },
+  { value: 'none', label: 'No Trimming', description: 'Sends all messages — may fail if context is exceeded' },
 ]
 </script>
 
@@ -176,6 +182,39 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
             </div>
             <ToggleSwitch v-model="prefs.generateTitle" />
           </div>
+        </div>
+
+        <!-- Context Strategy -->
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-3">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+              <Icon
+                icon="lucide:scissors"
+                class="w-5 h-5 text-zinc-400"
+              />
+            </div>
+            <div>
+              <h3 class="text-sm font-medium text-zinc-200">
+                Context Strategy
+              </h3>
+              <p class="text-xs text-zinc-500 mt-0.5">
+                How to manage conversation history when it exceeds the model's context window
+              </p>
+            </div>
+          </div>
+          <select
+            :value="prefs.contextStrategy"
+            class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            @change="prefs.contextStrategy = ($event.target as HTMLSelectElement).value as ContextStrategy"
+          >
+            <option
+              v-for="opt in contextStrategyOptions"
+              :key="opt.value"
+              :value="opt.value"
+            >
+              {{ opt.label }} — {{ opt.description }}
+            </option>
+          </select>
         </div>
       </div>
     </div>

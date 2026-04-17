@@ -1,6 +1,14 @@
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
 
 /**
+ * Context window management strategy.
+ * - 'sliding-window': Keep most recent messages (default)
+ * - 'truncate-middle': Keep first + last messages, drop the middle
+ * - 'none': No trimming — send everything, let the provider reject if too long
+ */
+export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'none'
+
+/**
  * Fraction of context window to target when trimming.
  * 75% leaves 25% for thinking tokens + completion output.
  */
@@ -24,7 +32,7 @@ export function estimateTokens(msg: ChatMessage): number {
     const toolCallTokens = msg.toolCalls
         ? Math.ceil(JSON.stringify(msg.toolCalls).length / 4)
         : 0
-    return textTokens + toolCallTokens + 15
+    return textTokens + toolCallTokens + 20
 }
 
 /** Sum estimated tokens for an array of messages. */
@@ -33,23 +41,27 @@ export function estimateTotalTokens(messages: ChatMessage[]): number {
 }
 
 /**
- * Trim old messages so the prompt fits within the model's context window.
+ * Trim messages so the prompt fits within the model's context window.
  *
  * Preserves:
  *  - All system messages
- *  - The most recent messages that fit within the budget
  *  - Tool call/result groups (never split)
  *
  * Inserts a system note when history is trimmed.
+ *
+ * @param strategy - 'sliding-window' (default), 'truncate-middle', or 'none'
  */
 export function trimMessagesToContextLimit(
     messages: ChatMessage[],
     contextWindow: number,
     threshold = CONTEXT_THRESHOLD,
+    strategy: ContextStrategy = 'sliding-window',
 ): ChatMessage[] {
+    if (strategy === 'none') return messages
+
     const maxTokens = Math.floor(contextWindow * threshold)
 
-    const totalEstimate = messages.reduce((sum, m) => sum + estimateTokens(m), 0)
+    const totalEstimate = estimateTotalTokens(messages)
     if (totalEstimate <= maxTokens) return messages
 
     // Separate system messages (always preserved)
@@ -60,42 +72,26 @@ export function trimMessagesToContextLimit(
         else nonSystemMsgs.push(msg)
     }
 
-    const systemTokens = systemMsgs.reduce((sum, m) => sum + estimateTokens(m), 0)
+    const systemTokens = estimateTotalTokens(systemMsgs)
     const budget = maxTokens - systemTokens
     if (budget <= 0) return [...systemMsgs]
 
-    // Walk backward from most recent, keeping until budget exceeded
-    let running = 0
-    let cutIndex = 0
-    for (let i = nonSystemMsgs.length - 1; i >= 0; i--) {
-        running += estimateTokens(nonSystemMsgs[i])
-        if (running > budget) {
-            cutIndex = i + 1
-            break
-        }
+    let keptMsgs: ChatMessage[]
+    let trimmedCount: number
+
+    if (strategy === 'truncate-middle') {
+        ({ kept: keptMsgs, trimmed: trimmedCount } = truncateMiddle(nonSystemMsgs, budget))
+    } else {
+        ({ kept: keptMsgs, trimmed: trimmedCount } = slidingWindow(nonSystemMsgs, budget))
     }
 
-    // Don't keep orphaned tool-result messages whose parent assistant was trimmed.
-    // Tool results always follow their assistant in the array, so if the cut lands
-    // on a tool message, advance past all consecutive tool messages to trim them too.
-    while (cutIndex < nonSystemMsgs.length && nonSystemMsgs[cutIndex].role === 'tool') {
-        cutIndex++
-    }
+    if (trimmedCount === 0) return messages
 
-    // Many providers (Anthropic, Gemini) require the first non-system message to
-    // be a user message.  Advance past any leading assistant messages at the cut.
-    while (cutIndex < nonSystemMsgs.length && nonSystemMsgs[cutIndex].role !== 'user') {
-        cutIndex++
-    }
-
-    if (cutIndex === 0) return messages
-
-    const keptMsgs = nonSystemMsgs.slice(cutIndex)
-    const trimmedCount = cutIndex
+    const trimmedTokens = totalEstimate - systemTokens - estimateTotalTokens(keptMsgs)
 
     // Append the trim note to the last system message so providers that only
     // read the first system message (Anthropic, OpenAI, Gemini…) still see it.
-    const trimNote = `\n\n[Earlier conversation history (${trimmedCount} messages) was trimmed to fit the context window. Continue from the remaining context.]`
+    const trimNote = `\n\n[Earlier conversation history (${trimmedCount} messages, ~${trimmedTokens} tokens) was trimmed to fit the context window. Continue from the remaining context.]`
     const mergedSystemMsgs = systemMsgs.length
         ? systemMsgs.map((m, i) =>
             i === systemMsgs.length - 1
@@ -105,4 +101,94 @@ export function trimMessagesToContextLimit(
         : [{ role: 'system' as const, content: trimNote.trimStart() }]
 
     return [...mergedSystemMsgs, ...keptMsgs]
+}
+
+/**
+ * Sliding window: keep the most recent messages that fit the budget.
+ */
+function slidingWindow(
+    msgs: ChatMessage[],
+    budget: number,
+): { kept: ChatMessage[]; trimmed: number } {
+    let running = 0
+    let cutIndex = 0
+    for (let i = msgs.length - 1; i >= 0; i--) {
+        const cost = estimateTokens(msgs[i])
+        if (running + cost > budget) {
+            cutIndex = i + 1
+            break
+        }
+        running += cost
+    }
+
+    // Don't keep orphaned tool-result messages whose parent assistant was trimmed.
+    while (cutIndex < msgs.length && msgs[cutIndex].role === 'tool') {
+        cutIndex++
+    }
+
+    // Many providers require the first non-system message to be a user message.
+    while (cutIndex < msgs.length && msgs[cutIndex].role !== 'user') {
+        cutIndex++
+    }
+
+    return { kept: msgs.slice(cutIndex), trimmed: cutIndex }
+}
+
+/**
+ * Truncate middle: keep the first and last messages, drop from the middle.
+ * This preserves the initial conversation context and the most recent exchanges.
+ */
+function truncateMiddle(
+    msgs: ChatMessage[],
+    budget: number,
+): { kept: ChatMessage[]; trimmed: number } {
+    // Allocate budget: ~40% to head, ~60% to tail (recent context is more valuable)
+    const headBudget = Math.floor(budget * 0.4)
+    const tailBudget = budget - headBudget
+
+    // Build head (from start)
+    let headTokens = 0
+    let headEnd = 0
+    for (let i = 0; i < msgs.length; i++) {
+        const cost = estimateTokens(msgs[i])
+        if (headTokens + cost > headBudget) break
+        headTokens += cost
+        headEnd = i + 1
+    }
+
+    // Don't split tool groups at the head boundary:
+    // if headEnd lands on a tool message, back up to before the tool group
+    while (headEnd > 0 && msgs[headEnd - 1].role === 'tool') {
+        headEnd--
+    }
+    // Also back up past an assistant with toolCalls that lost its tool results
+    if (headEnd > 0 && headEnd < msgs.length && msgs[headEnd - 1].toolCalls?.length) {
+        headEnd--
+    }
+
+    // Build tail (from end)
+    let tailTokens = 0
+    let tailStart = msgs.length
+    for (let i = msgs.length - 1; i >= headEnd; i--) {
+        const cost = estimateTokens(msgs[i])
+        if (tailTokens + cost > tailBudget) break
+        tailTokens += cost
+        tailStart = i
+    }
+
+    // Don't keep orphaned tool-result messages at the tail start
+    while (tailStart < msgs.length && msgs[tailStart].role === 'tool') {
+        tailStart++
+    }
+
+    // Ensure first non-system message in tail is a user message
+    while (tailStart < msgs.length && msgs[tailStart].role !== 'user') {
+        tailStart++
+    }
+
+    const head = msgs.slice(0, headEnd)
+    const tail = msgs.slice(tailStart)
+    const trimmed = msgs.length - head.length - tail.length
+
+    return { kept: [...head, ...tail], trimmed }
 }

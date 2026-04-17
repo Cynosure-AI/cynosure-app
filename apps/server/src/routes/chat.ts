@@ -8,7 +8,7 @@ import { prepareAgentExecution } from '../core/agent/prepare-execution.js'
 import { getAgent } from '../core/agents/agent-files.js'
 import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { hydrateBuiltInTools } from '../core/tools/built-in-tools.js'
-import { trimMessagesToContextLimit, estimateTotalTokens } from '../core/agent/context-trimmer.js'
+import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
 import type { ChatMessage, ContentPart } from '../core/gateway/providers/base.provider.js'
 import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import { nanoid } from 'nanoid'
@@ -412,11 +412,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       memorySpaceIds?: string[]
       overrideSubAgents?: boolean
       thinkingEnabled?: boolean
+      contextStrategy?: 'sliding-window' | 'truncate-middle' | 'none'
     }
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy } = req.body
       const db = getDb()
 
       // Build content (text + optional images + optional audio + optional files)
@@ -675,11 +676,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         contextWindow = modelInfo.contextLength
       } catch { /* ignore — context window info is optional */ }
 
-      // Trim message history if it exceeds the model's context window (sliding window)
+      // Trim message history if it exceeds the model's context window
+      const contextStrategy = reqContextStrategy || 'sliding-window'
       let initialContextEstimate: number | undefined
       if (contextWindow) {
         initialContextEstimate = estimateTotalTokens(messages)
-        messages = trimMessagesToContextLimit(messages, contextWindow)
+        messages = trimMessagesToContextLimit(messages, contextWindow, undefined, contextStrategy)
       }
 
       const executor = new AgentExecutor({
@@ -700,6 +702,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         agentIconUrl: chatAgentIconUrl,
         contextWindow,
         initialContextEstimate,
+        contextStrategy,
       })
 
       const executionId = streamId

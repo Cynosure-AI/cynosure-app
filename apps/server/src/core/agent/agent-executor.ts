@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getHITLGate } from './hitl-gate.js'
-import { trimMessagesToContextLimit, estimateTotalTokens } from './context-trimmer.js'
+import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolCall, ToolDefinition } from '../gateway/providers/base.provider.js'
 
@@ -62,6 +62,8 @@ export interface AgentExecutorConfig {
     /** Pre-trim estimated token count from the caller.
      *  Used as starting floor so the context indicator never drops after trimming. */
     initialContextEstimate?: number
+    /** Context window management strategy (default: 'sliding-window') */
+    contextStrategy?: ContextStrategy
 }
 
 export interface AgentExecutorResult {
@@ -345,11 +347,11 @@ export class AgentExecutor {
                                 : `I denied that tool call. Please take a different approach or answer directly. Do not retry the denied tool(s).`
                         })
 
-                        // Trim context if needed (sliding window) — update display estimate first
+                        // Trim context if needed — update display estimate first
                         if (this.config.contextWindow) {
                             const est = estimateTotalTokens(currentMessages)
                             if (est > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = est
-                            currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow)
+                            currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow, undefined, this.config.contextStrategy)
                         }
 
                         // Stream LLM's revised response
@@ -422,11 +424,11 @@ export class AgentExecutor {
                     }))
                 )
 
-                // Trim context if it has grown beyond the model's window (sliding window)
+                // Trim context if it has grown beyond the model's window
                 if (this.config.contextWindow) {
                     const est = estimateTotalTokens(currentMessages)
                     if (est > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = est
-                    currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow)
+                    currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow, undefined, this.config.contextStrategy)
                 }
 
                 // Stream next LLM response
