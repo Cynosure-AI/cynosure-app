@@ -167,10 +167,6 @@ function startEditProvider(provider: LLMProviderConfig): void {
   fetchModelsForEdit(provider.id)
 }
 
-async function setDefaultProvider(id: string): Promise<void> {
-  await providerStore.setActive(id)
-}
-
 function cancelForm(): void {
   showAddForm.value = false
   editingProviderId.value = null
@@ -410,7 +406,7 @@ function getProviderIcon(type: string): string {
             <span
               v-if="provider.id === providerStore.activeProviderId"
               class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium"
-            >Default</span>
+            >Last used</span>
           </div>
           <div class="text-sm text-zinc-500 truncate">
             {{ provider.defaultModel }} · {{ provider.type }}
@@ -419,23 +415,6 @@ function getProviderIcon(type: string): string {
 
         <!-- Actions -->
         <div class="flex items-center gap-2">
-          <button
-            :disabled="provider.id === providerStore.activeProviderId"
-            class="p-1.5 rounded-md transition-colors"
-            :class="
-              provider.id === providerStore.activeProviderId
-                ? 'text-blue-400 cursor-default'
-                : 'text-zinc-500 hover:text-blue-400 hover:bg-zinc-700'
-            "
-            :title="provider.id === providerStore.activeProviderId ? 'Default provider' : 'Set as default'"
-            @click="setDefaultProvider(provider.id)"
-          >
-            <Icon
-              :icon="provider.id === providerStore.activeProviderId ? 'lucide:star' : 'lucide:star'"
-              class="w-4 h-4"
-              :class="{ 'fill-current': provider.id === providerStore.activeProviderId }"
-            />
-          </button>
           <button
             :disabled="testingId === provider.id"
             class="px-2.5 py-1 text-xs rounded-md transition-colors"
