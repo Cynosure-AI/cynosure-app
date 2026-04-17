@@ -43,6 +43,7 @@ export interface ActiveChatExecution {
   id: string
   conversationId: string
   agentId: string | null
+  model: string | null
   startedAt: number
 }
 
@@ -694,6 +695,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         id: executionId,
         conversationId,
         agentId,
+        model: responseModel,
         startedAt: Date.now()
       })
 

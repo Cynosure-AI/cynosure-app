@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed, onMounted } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent.store'
@@ -8,13 +8,13 @@ import { usePreferencesStore } from '../../stores/preferences.store'
 import { useProviderStore } from '../../stores/provider.store'
 import { useWhisper } from '../../composables/useWhisper'
 import { Icon } from '@iconify/vue'
-import { api, type MemorySpace } from '../../api/client'
-import ToolSelectorModal from './ToolSelectorModal.vue'
-import SubAgentSelectorModal from './SubAgentSelectorModal.vue'
-import MemorySpaceSelectorModal from './MemorySpaceSelectorModal.vue'
-import SystemPromptModal from './SystemPromptModal.vue'
 import ModalDialog from '../shared/ModalDialog.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
+import ToolsButton from './inputbar/ToolsButton.vue'
+import SubAgentsButton from './inputbar/SubAgentsButton.vue'
+import MemorySpacesButton from './inputbar/MemorySpacesButton.vue'
+import SystemPromptButton from './inputbar/SystemPromptButton.vue'
+import ThinkingModeButton from './inputbar/ThinkingModeButton.vue'
 
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
@@ -39,43 +39,6 @@ const contextUsage = computed(() => {
   return { used, max: ctxWindow, percent }
 })
 
-// Sub-agent / memory space counts
-const subAgentCount = computed(() =>
-  chatStore.freeChatSubAgentIds.length
-)
-const memorySpaceCount = computed(() =>
-  chatStore.freeChatMemorySpaceIds.length
-)
-
-// Memory space cache for tooltips
-const cachedMemorySpaces = ref<MemorySpace[]>([])
-onMounted(async () => {
-  try { cachedMemorySpaces.value = await api.memorySpaces.list() } catch { /* ignore */ }
-})
-
-// Tooltip helpers
-const selectedToolsList = computed(() =>
-  agentStore.availableTools.filter(t =>
-    agentStore.selectedToolNames.includes(t.name) ||
-    agentStore.selectedToolNames.includes(`${t.namespace.id}::${t.name}`)
-  )
-)
-const missingTools = computed(() => {
-  const availableNames = new Set(agentStore.availableTools.map(t => t.name))
-  const availableKeys = new Set(agentStore.availableTools.map(t => `${t.namespace.id}::${t.name}`))
-  return agentStore.selectedToolNames.filter(
-    name => !availableNames.has(name) && !availableKeys.has(name)
-  )
-})
-const selectedSubAgents = computed(() => {
-  const ids = chatStore.freeChatSubAgentIds
-  return agentDefs.agents.filter(a => ids.includes(a.id))
-})
-const selectedMemorySpaces = computed(() => {
-  const ids = chatStore.freeChatMemorySpaceIds
-  return cachedMemorySpaces.value.filter(s => ids.includes(s.id))
-})
-
 const { status: whisperStatus, progress: whisperProgress, startRecording, stopRecording } = useWhisper()
 
 const inputText = ref('')
@@ -84,10 +47,6 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<{ url: string; name: string }[]>([])
 const attachedFiles = ref<{ name: string; content: string }[]>([])
 const attachedAudio = ref<{ url: string; name: string }[]>([])
-const showToolModal = ref(false)
-const showSubAgentModal = ref(false)
-const showMemorySpaceModal = ref(false)
-const showSystemPromptModal = ref(false)
 
 async function send(): Promise<void> {
   const content = inputText.value.trim()
@@ -457,296 +416,12 @@ defineExpose({ processFiles })
           />
         </button>
 
-        <!-- Tools button -->
-        <HoverTooltip
-          v-if="agentStore.availableTools.length"
-          :max-width="280"
-        >
-          <button
-            class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-500 hover:text-zinc-300"
-            aria-label="Tool access"
-            @click="showToolModal = true"
-          >
-            <Icon
-              icon="mdi:tools"
-              class="h-5 w-5"
-            />
-            <span
-              v-if="missingTools.length"
-              class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-amber-500"
-            >
-              <Icon
-                icon="lucide:alert-triangle"
-                class="w-2.5 h-2.5"
-              />
-            </span>
-            <span
-              v-else
-              class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
-            >
-              {{ agentStore.selectedToolNames.length }}
-            </span>
-          </button>
-          <template #content>
-            <div class="font-medium text-zinc-300 mb-1.5">
-              Tools ({{ agentStore.selectedToolNames.length }}/{{ agentStore.availableTools.length }})
-            </div>
-            <template v-if="missingTools.length">
-              <div class="mb-1.5 px-1 py-1 rounded bg-amber-500/10 border border-amber-500/20">
-                <div class="flex items-center gap-1 text-amber-400 text-[10px] font-medium mb-1">
-                  <Icon
-                    icon="lucide:alert-triangle"
-                    class="w-3 h-3 shrink-0"
-                  />
-                  {{ missingTools.length }} tool{{ missingTools.length > 1 ? 's' : '' }} unavailable
-                </div>
-                <div
-                  v-for="name in missingTools.slice(0, 5)"
-                  :key="name"
-                  class="text-amber-300/70 font-mono text-[10px] truncate pl-4"
-                >
-                  {{ name }}
-                </div>
-                <div
-                  v-if="missingTools.length > 5"
-                  class="text-amber-400/50 text-[9px] pl-4"
-                >
-                  +{{ missingTools.length - 5 }} more
-                </div>
-              </div>
-            </template>
-            <template v-if="selectedToolsList.length">
-              <div
-                v-for="t in selectedToolsList.slice(0, 12)"
-                :key="t.name"
-                class="flex items-start gap-1.5 mb-1 last:mb-0"
-              >
-                <Icon
-                  icon="lucide:check"
-                  class="w-3 h-3 text-emerald-400 shrink-0 mt-0.5"
-                />
-                <div class="min-w-0">
-                  <div class="text-zinc-300 font-mono text-[11px] truncate">
-                    {{ t.name }}
-                  </div>
-                </div>
-              </div>
-              <div
-                v-if="selectedToolsList.length > 12"
-                class="text-zinc-500 text-[10px] mt-1"
-              >
-                +{{ selectedToolsList.length - 12 }} more
-              </div>
-            </template>
-            <div
-              v-else
-              class="text-zinc-500"
-            >
-              No tools selected
-            </div>
-            <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
-              Click to configure
-            </div>
-          </template>
-        </HoverTooltip>
-
-        <!-- Sub-agents button -->
-        <HoverTooltip
-          v-if="agentDefs.agents.length"
-          :max-width="260"
-        >
-          <button
-            class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-500 hover:text-zinc-300"
-            aria-label="Sub-agents"
-            @click="showSubAgentModal = true"
-          >
-            <Icon
-              icon="lucide:bot"
-              class="h-5 w-5"
-            />
-            <span
-              v-if="subAgentCount > 0"
-              class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
-            >
-              {{ subAgentCount }}
-            </span>
-          </button>
-          <template #content>
-            <div class="font-medium text-zinc-300 mb-1.5">
-              Sub-Agents ({{ subAgentCount }} selected)
-            </div>
-            <template v-if="selectedSubAgents.length">
-              <div
-                v-for="a in selectedSubAgents.slice(0, 6)"
-                :key="a.id"
-                class="flex items-start gap-1.5 mb-1 last:mb-0"
-              >
-                <img
-                  v-if="a.iconUrl"
-                  :src="a.iconUrl"
-                  :alt="a.name"
-                  class="w-3 h-3 rounded-sm shrink-0 mt-0.5 object-cover"
-                >
-                <Icon
-                  v-else
-                  icon="lucide:bot"
-                  class="w-3 h-3 text-blue-400 shrink-0 mt-0.5"
-                />
-                <div class="min-w-0">
-                  <div class="text-zinc-300 text-[11px] truncate">
-                    {{ a.name }}
-                  </div>
-                  <div
-                    v-if="a.description"
-                    class="text-zinc-500 text-[10px] truncate"
-                  >
-                    {{ a.description }}
-                  </div>
-                </div>
-              </div>
-              <div
-                v-if="selectedSubAgents.length > 6"
-                class="text-zinc-500 text-[10px] mt-1"
-              >
-                +{{ selectedSubAgents.length - 6 }} more
-              </div>
-            </template>
-            <div
-              v-else
-              class="text-zinc-500"
-            >
-              No sub-agents selected
-            </div>
-            <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
-              Click to configure
-            </div>
-          </template>
-        </HoverTooltip>
-
-        <!-- Memory spaces button -->
-        <HoverTooltip :max-width="260">
-          <button
-            class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-500 hover:text-zinc-300"
-            aria-label="Memory spaces"
-            @click="showMemorySpaceModal = true"
-          >
-            <Icon
-              icon="lucide:brain"
-              class="h-5 w-5"
-            />
-            <span
-              v-if="memorySpaceCount > 0"
-              class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
-            >
-              {{ memorySpaceCount }}
-            </span>
-          </button>
-          <template #content>
-            <div class="font-medium text-zinc-300 mb-1.5">
-              Memory Spaces ({{ memorySpaceCount }} selected)
-            </div>
-            <template v-if="selectedMemorySpaces.length">
-              <div
-                v-for="s in selectedMemorySpaces.slice(0, 6)"
-                :key="s.id"
-                class="flex items-start gap-1.5 mb-1 last:mb-0"
-              >
-                <Icon
-                  icon="lucide:database"
-                  class="w-3 h-3 text-purple-400 shrink-0 mt-0.5"
-                />
-                <div class="min-w-0">
-                  <div class="text-zinc-300 text-[11px] truncate">
-                    {{ s.name }}
-                  </div>
-                  <div class="text-zinc-500 text-[10px]">
-                    {{ s.documentCount }} docs
-                  </div>
-                </div>
-              </div>
-              <div
-                v-if="selectedMemorySpaces.length > 6"
-                class="text-zinc-500 text-[10px] mt-1"
-              >
-                +{{ selectedMemorySpaces.length - 6 }} more
-              </div>
-            </template>
-            <div
-              v-else
-              class="text-zinc-500"
-            >
-              No memory spaces selected
-            </div>
-            <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
-              Click to configure
-            </div>
-          </template>
-        </HoverTooltip>
-
-        <!-- System prompt button -->
-        <HoverTooltip :max-width="320">
-          <button
-            class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            :class="chatStore.sessionSystemPrompt.trim()
-              ? 'text-blue-400 hover:text-blue-300'
-              : 'text-zinc-500 hover:text-zinc-300'"
-            aria-label="System prompt"
-            @click="showSystemPromptModal = true"
-          >
-            <Icon
-              icon="lucide:scroll-text"
-              class="h-5 w-5"
-            />
-          </button>
-          <template #content>
-            <div class="font-medium text-zinc-300 mb-1.5">
-              System Prompt
-            </div>
-            <div
-              v-if="chatStore.sessionSystemPrompt.trim()"
-              class="text-zinc-400 text-[11px] whitespace-pre-wrap line-clamp-6 font-mono"
-            >
-              {{ chatStore.sessionSystemPrompt }}
-            </div>
-            <div
-              v-else
-              class="text-zinc-500"
-            >
-              No system prompt set
-            </div>
-            <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
-              Click to edit
-            </div>
-          </template>
-        </HoverTooltip>
-
-        <!-- Thinking mode toggle -->
-        <HoverTooltip :max-width="260">
-          <button
-            class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            :class="chatStore.sessionThinkingEnabled
-              ? 'text-blue-400 hover:text-blue-300'
-              : 'text-zinc-500 hover:text-zinc-300'"
-            aria-label="Thinking mode"
-            @click="chatStore.sessionThinkingEnabled = !chatStore.sessionThinkingEnabled"
-          >
-            <Icon
-              icon="lucide:lightbulb"
-              class="h-5 w-5"
-            />
-          </button>
-          <template #content>
-            <div class="font-medium text-zinc-300 mb-1.5">
-              Thinking Mode
-            </div>
-            <div :class="chatStore.sessionThinkingEnabled ? 'text-emerald-400' : 'text-zinc-500'">
-              {{ chatStore.sessionThinkingEnabled ? 'Enabled' : 'Disabled' }}
-            </div>
-            <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
-              Click to toggle extended reasoning
-            </div>
-          </template>
-        </HoverTooltip>
+        <!-- Action buttons (tools, sub-agents, memory, system prompt, thinking) -->
+        <ToolsButton />
+        <SubAgentsButton />
+        <MemorySpacesButton />
+        <SystemPromptButton />
+        <ThinkingModeButton />
 
         <input
           ref="fileInputRef"
@@ -930,15 +605,6 @@ defineExpose({ processFiles })
       </template>
     </HoverTooltip>
   </div>
-
-  <ToolSelectorModal v-model="showToolModal" />
-  <SubAgentSelectorModal v-model="showSubAgentModal" />
-  <MemorySpaceSelectorModal v-model="showMemorySpaceModal" />
-  <SystemPromptModal
-    v-model="showSystemPromptModal"
-    :system-prompt="chatStore.sessionSystemPrompt"
-    @update:system-prompt="(v: string) => { chatStore.sessionSystemPrompt = v; chatStore.markOverridesModified() }"
-  />
 
   <!-- Save as Agent modal -->
   <ModalDialog
