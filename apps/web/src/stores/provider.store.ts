@@ -6,24 +6,24 @@ export type { LLMProviderConfig }
 
 export const useProviderStore = defineStore('provider', () => {
   const providers = ref<LLMProviderConfig[]>([])
-  const activeProviderId = ref<string>('')
+  const lastUsedProviderId = ref<string>('')
   const connectionStatus = ref<Map<string, 'connected' | 'disconnected' | 'error'>>(new Map())
 
-  const activeProvider = computed(() =>
-    providers.value.find((p) => p.id === activeProviderId.value)
+  const lastUsedProvider = computed(() =>
+    providers.value.find((p) => p.id === lastUsedProviderId.value)
   )
 
   async function loadProviders(): Promise<void> {
     await api.provider.loadSaved()
     providers.value = await api.provider.list()
-    activeProviderId.value = await api.provider.getActive()
+    lastUsedProviderId.value = await api.provider.getLastUsed()
   }
 
   async function addProvider(config: LLMProviderConfig): Promise<string> {
     const id = await api.provider.add(config)
     providers.value = await api.provider.list()
-    if (!activeProviderId.value) {
-      activeProviderId.value = id
+    if (!lastUsedProviderId.value) {
+      lastUsedProviderId.value = id
     }
     return id
   }
@@ -31,14 +31,14 @@ export const useProviderStore = defineStore('provider', () => {
   async function removeProvider(id: string): Promise<void> {
     await api.provider.remove(id)
     providers.value = await api.provider.list()
-    if (activeProviderId.value === id) {
-      activeProviderId.value = providers.value[0]?.id || ''
+    if (lastUsedProviderId.value === id) {
+      lastUsedProviderId.value = providers.value[0]?.id || ''
     }
   }
 
-  async function setActive(id: string): Promise<void> {
-    await api.provider.setActive(id)
-    activeProviderId.value = id
+  async function setLastUsed(id: string): Promise<void> {
+    await api.provider.setLastUsed(id)
+    lastUsedProviderId.value = id
   }
 
   async function testConnection(id: string): Promise<boolean> {
@@ -53,13 +53,13 @@ export const useProviderStore = defineStore('provider', () => {
 
   return {
     providers,
-    activeProviderId,
+    lastUsedProviderId,
     connectionStatus,
-    activeProvider,
+    lastUsedProvider,
     loadProviders,
     addProvider,
     removeProvider,
-    setActive,
+    setLastUsed,
     testConnection,
     listModels
   }

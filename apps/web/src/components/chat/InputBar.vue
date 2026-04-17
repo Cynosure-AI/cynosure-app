@@ -221,10 +221,10 @@ async function saveAsNewAgent() {
   savingAgent.value = true
   try {
     // Resolve provider/model
-    const activeProvider = providerStore.activeProvider
+    const lastUsedProvider = providerStore.lastUsedProvider
     const currentAgent = chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null
-    const providerId = chatStore.sessionProviderOverride || currentAgent?.providerId || activeProvider?.id || ''
-    const model = chatStore.sessionModelOverride || currentAgent?.model || activeProvider?.defaultModel || ''
+    const providerId = chatStore.sessionProviderOverride || currentAgent?.providerId || lastUsedProvider?.id || ''
+    const model = chatStore.sessionModelOverride || currentAgent?.model || lastUsedProvider?.defaultModel || ''
 
     const subAgents = chatStore.freeChatSubAgentIds.map(id => {
       const def = agentDefs.get(id)

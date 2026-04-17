@@ -270,7 +270,7 @@ export const useChatStore = defineStore('chat', () => {
       }
     }
     if (!model || !providerId) {
-      const active = providerStore.activeProvider
+      const active = providerStore.lastUsedProvider
       if (active) {
         model = active.defaultModel
         providerId = active.id

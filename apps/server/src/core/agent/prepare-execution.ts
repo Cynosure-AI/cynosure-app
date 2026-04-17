@@ -106,18 +106,18 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     // provider to sub-agents when a model override is active.
 
     const providerId = providerOverride || agent.providerId || undefined
-    const activeProvider = providerId
-        ? gateway.getProvider(providerId) || gateway.getActiveProvider()
-        : gateway.getActiveProvider()
+    const lastUsedProvider = providerId
+        ? gateway.getProvider(providerId) || gateway.getLastUsedProvider()
+        : gateway.getLastUsedProvider()
     // When a provider override is active without an explicit model override,
     // skip the agent's configured model (it belongs to a different provider)
     // and fall through to the new provider's default model.
     const model = modelOverride
         || (providerOverride ? undefined : agent.model)
-        || activeProvider.config.defaultModel
+        || lastUsedProvider.config.defaultModel
 
     // Always resolve to the actual provider ID so metrics track correctly
-    const resolvedProviderId = activeProvider.config.id
+    const resolvedProviderId = lastUsedProvider.config.id
 
     // ── 3. Sub-agent delegation tools ──
 
@@ -134,7 +134,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             broadcast,
             signal,
             modelOverride: overrideSubAgents ? (modelOverride || undefined) : undefined,
-            providerOverride: overrideSubAgents ? (modelOverride ? activeProvider.config.id : (providerOverride || undefined)) : undefined,
+            providerOverride: overrideSubAgents ? (modelOverride ? lastUsedProvider.config.id : (providerOverride || undefined)) : undefined,
         })
         tools = [...tools, ...subAgentTools]
     }

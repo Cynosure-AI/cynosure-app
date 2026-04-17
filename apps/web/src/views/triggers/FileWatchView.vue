@@ -137,7 +137,7 @@ async function deleteConfirmed() {
 const effectiveProviderId = computed(() => {
   if (dlgProviderOverride.value) return dlgProviderOverride.value
   const agent = allAgents.value.find(a => a.id === dlgAgentId.value)
-  return agent?.providerId || providerStore.activeProviderId
+  return agent?.providerId || providerStore.lastUsedProviderId
 })
 
 async function fetchModels(): Promise<void> {

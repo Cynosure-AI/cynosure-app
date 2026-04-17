@@ -12,7 +12,7 @@ export function loadSavedProviders(): void {
     id: string
     config_json: string
     api_key_enc: string | null
-    is_default: number
+    is_last_used: number
   }[]
 
   let defaultId: string | null = null
@@ -24,13 +24,13 @@ export function loadSavedProviders(): void {
     }
     try {
       gateway.registerProvider(config)
-      if (row.is_default === 1) defaultId = row.id
+      if (row.is_last_used === 1) defaultId = row.id
     } catch {
       // Skip invalid providers
     }
   }
   // Restore the persisted default provider (overrides the first-registered fallback)
-  if (defaultId) gateway.setActiveProvider(defaultId)
+  if (defaultId) gateway.setLastUsedProvider(defaultId)
 }
 
 export async function registerProviderRoutes(app: FastifyInstance): Promise<void> {
@@ -87,18 +87,18 @@ export async function registerProviderRoutes(app: FastifyInstance): Promise<void
     return { success: true }
   })
 
-  // PUT /api/providers/active — set active provider (persisted as is_default in DB)
+  // PUT /api/providers/active — set last-used provider (persisted as is_last_used in DB)
   app.put<{ Body: { id: string } }>('/active', async (req) => {
     const db = getDb()
-    db.prepare('UPDATE providers SET is_default = 0').run()
-    db.prepare('UPDATE providers SET is_default = 1 WHERE id = ?').run(req.body.id)
-    gateway.setActiveProvider(req.body.id)
+    db.prepare('UPDATE providers SET is_last_used = 0').run()
+    db.prepare('UPDATE providers SET is_last_used = 1 WHERE id = ?').run(req.body.id)
+    gateway.setLastUsedProvider(req.body.id)
     return { success: true }
   })
 
   // GET /api/providers/active — get active provider id
   app.get('/active', async () => {
-    return { id: gateway.getActiveProviderId() }
+    return { id: gateway.getLastUsedProviderId() }
   })
 
   // POST /api/providers/:id/test — test connection

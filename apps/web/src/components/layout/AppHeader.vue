@@ -36,9 +36,9 @@ function goToChat(): void {
     <div class="flex items-center gap-2">
       <select
         v-if="providerStore.providers.length > 0"
-        :value="providerStore.activeProviderId"
+        :value="providerStore.lastUsedProviderId"
         class="bg-zinc-800 border border-zinc-700 text-zinc-300 text-sm rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        @change="providerStore.setActive(($event.target as HTMLSelectElement).value)"
+        @change="providerStore.setLastUsed(($event.target as HTMLSelectElement).value)"
       >
         <option
           v-for="p in providerStore.providers"
