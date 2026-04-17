@@ -148,7 +148,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         image_urls_json: string | null
         audio_urls_json: string | null
         file_attachments_json: string | null
-        memory_sources_json: string | null
         agent_id: string | null
         provider: string | null
         model: string | null
@@ -191,10 +190,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         try {
           audioDataUrls = row.audio_urls_json ? JSON.parse(row.audio_urls_json) : undefined
         } catch { /* malformed JSON — ignore */ }
-        let memorySources: unknown | undefined
-        try {
-          memorySources = row.memory_sources_json ? JSON.parse(row.memory_sources_json) : undefined
-        } catch { /* malformed JSON — ignore */ }
         let fileAttachments: { name: string }[] | undefined
         try {
           fileAttachments = row.file_attachments_json ? JSON.parse(row.file_attachments_json) : undefined
@@ -210,7 +205,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           imageDataUrls,
           audioDataUrls,
           fileAttachments,
-          memorySources,
           agentId: row.agent_id || undefined,
           agentName,
           agentIconUrl,
@@ -543,8 +537,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const abortController = new AbortController()
 
       const isFirstUserMessage = historyRows.filter(r => r.role === 'user').length === 1
-      let retrievedMemorySources: { text: string; source: string; score: number }[] | null = null
-
       let tools: import('../core/gateway/providers/base.provider.js').ToolDefinition[]
       let providerId: string | undefined
       let responseModel: string
@@ -591,7 +583,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         tools = prepared.tools
         providerId = prepared.providerId
         hasSubAgents = prepared.hasSubAgents
-        retrievedMemorySources = prepared.retrievedMemorySources
         chatAgentName = resolvedAgent.name
         chatAgentIconUrl = resolvedAgent.iconUrl || null
         messages = [...prepared.systemMessages, ...messages]
@@ -721,7 +712,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           result.content,
           result.thinking || null,
           result.images.length ? JSON.stringify(result.images) : null,
-          retrievedMemorySources ? JSON.stringify(retrievedMemorySources) : null,
+          null,
           agentId,
           responseProvider,
           responseModel,

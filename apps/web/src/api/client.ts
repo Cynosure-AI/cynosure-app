@@ -155,7 +155,6 @@ export interface StoredMessage {
   imageDataUrls?: string[]
   audioDataUrls?: string[]
   fileAttachments?: { name: string }[]
-  memorySources?: { text: string; source: string; score: number }[]
   agentId?: string
   agentName?: string
   agentIconUrl?: string | null
@@ -524,9 +523,6 @@ export const api = {
     onTitleUpdated: (
       cb: (data: { conversationId: string; title: string }) => void
     ) => onWsEvent('chat:title-updated', cb as WsHandler),
-    onMemorySources: (
-      cb: (data: { conversationId: string; sources: { text: string; source: string; score: number }[] }) => void
-    ) => onWsEvent('chat:memory-sources', cb as WsHandler),
     onNewMessage: (
       cb: (data: { conversationId: string; message: { id: string; conversationId: string; role: string; content: string; createdAt: number } }) => void
     ) => onWsEvent('chat:new-message', cb as WsHandler),

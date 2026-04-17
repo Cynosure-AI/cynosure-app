@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import type { DisplayMessage, MemorySource } from '../stores/chat.store'
+import type { DisplayMessage } from '../stores/chat.store'
 
 export interface TokenUsage {
     promptTokens: number
@@ -27,7 +27,7 @@ export interface ChatStreamingState {
     streamingContent: Ref<string>
     streamingThinking: Ref<string>
     lastUsage: Ref<TokenUsage | null>
-    pendingMemorySources: Ref<MemorySource[] | null>
+
     primaryStreamId: Ref<string | null>
     primaryStreamAgent: Ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>
     streamBuffers: Map<string, StreamBuffer>
@@ -47,7 +47,6 @@ export interface ChatStreamingState {
     handleSubAgentStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void
     handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void
-    handleMemorySources(data: { conversationId: string; sources: MemorySource[] }): void
     handleTitleUpdated(data: { conversationId: string; title: string }): void
     handleNewMessage(data: { conversationId: string; message: { id: string; conversationId: string; role: string; content: string; createdAt: number; agentId?: string; agentName?: string; agentIconUrl?: string | null } }): void
 }
@@ -63,7 +62,6 @@ export function useChatStreaming(
     const streamingContent = ref('')
     const streamingThinking = ref('')
     const lastUsage = ref<TokenUsage | null>(null)
-    const pendingMemorySources = ref<MemorySource[] | null>(null)
     const primaryStreamId = ref<string | null>(null)
     const primaryStreamAgent = ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>({})
     const streamBuffers = new Map<string, StreamBuffer>()
@@ -139,10 +137,6 @@ export function useChatStreaming(
             const streamingMsg = messages.value[messages.value.length - 1]
             if (streamingMsg && streamingMsg.isStreaming) {
                 currentTurnMsgs.push(streamingMsg)
-                if (pendingMemorySources.value) {
-                    streamingMsg.memorySources = pendingMemorySources.value
-                    pendingMemorySources.value = null
-                }
             }
         }
     }
@@ -275,6 +269,9 @@ export function useChatStreaming(
                 if (data.usage) {
                     streamMsg.promptTokens = data.usage.promptTokens
                     streamMsg.completionTokens = data.usage.completionTokens
+                }
+                if (data.lastRoundTotalTokens != null) {
+                    streamMsg.contextTokens = data.lastRoundTotalTokens
                 }
                 if (!data.cancelled && !streamMsg.content && !streamMsg.thinking) {
                     streamMsg.isError = true
@@ -416,16 +413,6 @@ export function useChatStreaming(
         }
     }
 
-    function handleMemorySources(data: { conversationId: string; sources: MemorySource[] }): void {
-        if (data.conversationId === activeConversationId.value) {
-            const lastMsg = messages.value[messages.value.length - 1]
-            if (lastMsg && lastMsg.role === 'assistant') {
-                lastMsg.memorySources = data.sources
-            } else {
-                pendingMemorySources.value = data.sources
-            }
-        }
-    }
 
     function handleNewMessage(data: {
         conversationId: string
@@ -452,7 +439,6 @@ export function useChatStreaming(
         streamingContent,
         streamingThinking,
         lastUsage,
-        pendingMemorySources,
         primaryStreamId,
         primaryStreamAgent,
         streamBuffers,
@@ -471,7 +457,6 @@ export function useChatStreaming(
         handleSubAgentStreamThinking,
         handleSubAgentStreamImages,
         handleSubAgentStreamEnd,
-        handleMemorySources,
         handleTitleUpdated,
         handleNewMessage,
     }
