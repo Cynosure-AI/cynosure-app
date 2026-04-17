@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
+import { useAgentStore } from '../stores/agent-runtime.store'
 import { useProviderStore } from '../stores/provider.store'
 import { usePreferencesStore } from '../stores/preferences.store'
 import { useRouter } from 'vue-router'
@@ -9,6 +10,7 @@ import ModalDialog from '../components/shared/ModalDialog.vue'
 import CategoryTabBar from '../components/shared/CategoryTabBar.vue'
 
 const agentDefs = useAgentDefinitionsStore()
+const agentStore = useAgentStore()
 const providerStore = useProviderStore()
 const prefs = usePreferencesStore()
 const router = useRouter()
@@ -46,6 +48,21 @@ const filteredAgents = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (q) agents = agents.filter(a => a.name.toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q))
   return [...agents].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+})
+
+const agentsWithIssues = computed(() => {
+  const availableNames = new Set(agentStore.availableTools.map(t => t.name))
+  const availableKeys = new Set(agentStore.availableTools.map(t => `${t.namespace.id}::${t.name}`))
+  const allAgentIds = new Set(agentDefs.agents.map(a => a.id))
+  return new Set(
+    agentDefs.agents
+      .filter(a => {
+        const hasMissingTools = a.tools.some(t => !availableNames.has(t) && !availableKeys.has(t))
+        const hasMissingSubAgents = (a.subAgents || []).some(sa => !allAgentIds.has(sa.agentId))
+        return hasMissingTools || hasMissingSubAgents
+      })
+      .map(a => a.id)
+  )
 })
 
 onMounted(() => agentDefs.load())
@@ -357,6 +374,11 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
           </div>
           <h3 class="text-sm font-medium text-zinc-100 mb-1">
             {{ agent.name }}
+            <Icon
+              v-if="agentsWithIssues.has(agent.id)"
+              icon="lucide:alert-triangle"
+              class="w-3.5 h-3.5 text-amber-400 inline-block ml-1"
+            />
           </h3>
           <p
             v-if="agent.description"
@@ -451,6 +473,11 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
           <div class="flex-1 min-w-0">
             <h3 class="text-sm font-medium text-zinc-100 truncate">
               {{ agent.name }}
+              <Icon
+                v-if="agentsWithIssues.has(agent.id)"
+                icon="lucide:alert-triangle"
+                class="w-3.5 h-3.5 text-amber-400 inline-block ml-1"
+              />
             </h3>
             <p
               v-if="agent.description"

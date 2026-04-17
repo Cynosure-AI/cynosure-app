@@ -19,6 +19,10 @@ const selectedSubAgents = computed(() => {
   const ids = chatStore.freeChatSubAgentIds
   return agentDefs.agents.filter(a => ids.includes(a.id))
 })
+
+const missingSubAgents = computed(() =>
+  chatStore.freeChatSubAgentIds.filter(id => !agentDefs.get(id))
+)
 </script>
 
 <template>
@@ -36,7 +40,16 @@ const selectedSubAgents = computed(() => {
         class="h-5 w-5"
       />
       <span
-        v-if="subAgentCount > 0"
+        v-if="missingSubAgents.length"
+        class="absolute -top-0.5 text-black -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold px-1 leading-none bg-amber-500"
+      >
+        <Icon
+          icon="lucide:alert-triangle"
+          class="w-2.5 h-2.5"
+        />
+      </span>
+      <span
+        v-else-if="subAgentCount > 0"
         class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
       >
         {{ subAgentCount }}
@@ -46,6 +59,30 @@ const selectedSubAgents = computed(() => {
       <div class="font-medium text-zinc-300 mb-1.5">
         Sub-Agents ({{ subAgentCount }} selected)
       </div>
+      <template v-if="missingSubAgents.length">
+        <div class="mb-1.5 px-1 py-1 rounded bg-amber-500/10 border border-amber-500/20">
+          <div class="flex items-center gap-1 text-amber-400 text-[10px] font-medium mb-1">
+            <Icon
+              icon="lucide:alert-triangle"
+              class="w-3 h-3 shrink-0"
+            />
+            {{ missingSubAgents.length }} sub-agent{{ missingSubAgents.length > 1 ? 's' : '' }} unavailable
+          </div>
+          <div
+            v-for="id in missingSubAgents.slice(0, 5)"
+            :key="id"
+            class="text-amber-300/70 font-mono text-[10px] truncate pl-4"
+          >
+            {{ id }}
+          </div>
+          <div
+            v-if="missingSubAgents.length > 5"
+            class="text-amber-400/50 text-[9px] pl-4"
+          >
+            +{{ missingSubAgents.length - 5 }} more
+          </div>
+        </div>
+      </template>
       <template v-if="selectedSubAgents.length">
         <div
           v-for="a in selectedSubAgents.slice(0, 6)"

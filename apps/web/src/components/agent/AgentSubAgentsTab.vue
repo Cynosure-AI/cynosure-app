@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import type { AgentDefinition, SubAgentAssignment } from '../../api/client'
 import { Icon } from '@iconify/vue'
+import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -19,6 +20,26 @@ const availableAgents = computed(() => {
   assignedIds.add(props.agent.id) // exclude self
   return agentDefs.agents.filter(a => !assignedIds.has(a.id))
 })
+
+const agentDropdownGroups = computed((): SelectOptionGroup[] => [{
+  options: availableAgents.value.map(a => ({
+    value: a.id,
+    label: a.name,
+    imgSrc: a.iconUrl || null,
+    iconName: a.iconUrl ? undefined : 'lucide:bot',
+    tooltip: a.description || undefined,
+  })),
+}])
+
+const missingSubAgents = computed(() =>
+  (props.agent.subAgents || []).filter(sa => !agentDefs.get(sa.agentId))
+)
+
+
+function removeMissing() {
+  const missingIds = new Set(missingSubAgents.value.map(sa => sa.agentId))
+  emit('update', 'subAgents', (props.agent.subAgents || []).filter(sa => !missingIds.has(sa.agentId)))
+}
 
 function toSubAgentCodename(name: string): string {
   return name
@@ -103,6 +124,50 @@ function getAgentIcon(id: string): string | null {
       </button>
     </div>
 
+    <!-- Missing sub-agents warning -->
+    <div
+      v-if="missingSubAgents.length"
+      class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3"
+    >
+      <div class="flex items-start gap-2">
+        <Icon
+          icon="lucide:alert-triangle"
+          class="w-4 h-4 text-amber-400 shrink-0 mt-0.5"
+        />
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-medium text-amber-300">
+            {{ missingSubAgents.length }} assigned sub-agent{{ missingSubAgents.length > 1 ? 's' : '' }} unavailable
+          </p>
+          <p class="text-[11px] text-amber-400/60 mt-0.5">
+            These sub-agents are assigned but no longer found in your agent library.
+          </p>
+          <div class="mt-2 flex flex-wrap gap-1.5">
+            <span
+              v-for="sa in missingSubAgents"
+              :key="sa.agentId"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 text-[10px] font-mono text-amber-300/80"
+            >
+              <Icon
+                icon="lucide:unplug"
+                class="w-3 h-3"
+              />
+              {{ sa.codename }}
+            </span>
+          </div>
+          <button
+            class="mt-2.5 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1"
+            @click="removeMissing"
+          >
+            <Icon
+              icon="lucide:trash-2"
+              class="w-3 h-3"
+            />
+            Remove unavailable sub-agents
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Sub-agents list -->
     <div
       v-if="(agent.subAgents || []).length"
@@ -111,7 +176,8 @@ function getAgentIcon(id: string): string | null {
       <div
         v-for="sa in agent.subAgents"
         :key="sa.agentId"
-        class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
+        class="rounded-xl border bg-zinc-900/50 p-4"
+        :class="agentDefs.get(sa.agentId) ? 'border-zinc-800' : 'border-amber-500/30'"
       >
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center gap-3">
@@ -133,6 +199,11 @@ function getAgentIcon(id: string): string | null {
             <div>
               <span class="text-sm font-medium text-zinc-200">{{ getAgentName(sa.agentId) }}</span>
               <span class="ml-2 text-xs text-violet-400/80 bg-violet-400/10 px-1.5 py-0.5 rounded font-mono">{{ sa.codename }}</span>
+              <Icon
+                v-if="!agentDefs.get(sa.agentId)"
+                icon="lucide:alert-triangle"
+                class="w-3.5 h-3.5 text-amber-400 ml-1.5 inline-block"
+              />
             </div>
           </div>
           <button
@@ -219,24 +290,15 @@ function getAgentIcon(id: string): string | null {
           <div class="space-y-4">
             <div>
               <label class="block text-sm text-zinc-400 mb-1.5">Agent</label>
-              <select
-                v-model="addAgentId"
-                class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option
-                  value=""
-                  disabled
-                >
-                  Select an agent
-                </option>
-                <option
-                  v-for="a in availableAgents"
-                  :key="a.id"
-                  :value="a.id"
-                >
-                  {{ a.name }}
-                </option>
-              </select>
+              <CustomSelect
+                :model-value="addAgentId"
+                :groups="agentDropdownGroups"
+                placeholder="Select an agent"
+                placeholder-icon="lucide:bot"
+                :filterable="true"
+                max-height="max-h-56"
+                @change="addAgentId = $event"
+              />
             </div>
             <div>
               <label class="block text-sm text-zinc-400 mb-1.5">Codename</label>
