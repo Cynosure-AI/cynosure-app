@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
-import { ensurePricingLoaded, getModelCost } from '../core/pricing.js'
+import { ensurePricingLoaded, getModelCost } from '../core/model-dev-fetcher.js'
 
 interface ModelUsage {
     provider: string
