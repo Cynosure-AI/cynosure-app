@@ -111,22 +111,34 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   })
 
   // GET /api/chat/conversations — list (optionally filtered by agent_id or ma_workspace_id)
-  app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string } }>('/conversations', async (req) => {
+  // Supports pagination via ?limit=N&offset=N — when limit is set, returns { items, total }
+  app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; limit?: string; offset?: string } }>('/conversations', async (req) => {
     const db = getDb()
     const { agentId, maWorkspaceId } = req.query
+    const limit = req.query.limit ? Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20)) : undefined
+    const offset = req.query.offset ? Math.max(0, parseInt(req.query.offset, 10) || 0) : 0
     const excerpt = `(SELECT SUBSTR(m.content, 1, 120) FROM messages m WHERE m.conversation_id = conversations.id AND m.role = 'user' ORDER BY m.created_at DESC LIMIT 1) AS last_user_message`
     const orderBy = 'ORDER BY pinned DESC, updated_at DESC'
+
+    let where = ''
+    const params: unknown[] = []
     if (maWorkspaceId) {
-      return db.prepare(`SELECT *, ${excerpt} FROM conversations WHERE ma_workspace_id = ? ${orderBy}`).all(maWorkspaceId)
+      where = 'WHERE ma_workspace_id = ?'
+      params.push(maWorkspaceId)
+    } else if (agentId) {
+      where = 'WHERE agent_id = ?'
+      params.push(agentId)
+    } else if (agentId === '') {
+      where = 'WHERE agent_id IS NULL AND ma_workspace_id IS NULL'
     }
-    if (agentId) {
-      return db.prepare(`SELECT *, ${excerpt} FROM conversations WHERE agent_id = ? ${orderBy}`).all(agentId)
+
+    if (limit !== undefined) {
+      const total = (db.prepare(`SELECT COUNT(*) as count FROM conversations ${where}`).get(...params) as { count: number }).count
+      const items = db.prepare(`SELECT *, ${excerpt} FROM conversations ${where} ${orderBy} LIMIT ? OFFSET ?`).all(...params, limit, offset)
+      return { items, total }
     }
-    if (agentId === '') {
-      // Explicitly empty string → conversations with no agent and no MA workspace
-      return db.prepare(`SELECT *, ${excerpt} FROM conversations WHERE agent_id IS NULL AND ma_workspace_id IS NULL ${orderBy}`).all()
-    }
-    return db.prepare(`SELECT *, ${excerpt} FROM conversations ${orderBy}`).all()
+
+    return db.prepare(`SELECT *, ${excerpt} FROM conversations ${where} ${orderBy}`).all(...params)
   })
 
   // GET /api/chat/conversations/:id/messages — get messages
