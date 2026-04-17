@@ -42,20 +42,28 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
 
         tools.push({
             name: toolName,
-            description: `Delegate a task to the "${assignment.codename}" sub-agent. Role: ${assignment.role}. Send clear, self-contained instructions describing exactly what you need done. The sub-agent has no context or state beyond what you provide and will handle tool selection independently.`,
+            description: `Delegate a task to the "${assignment.codename}" sub-agent. Role: ${assignment.role}. The sub-agent has no memory of prior conversation — provide everything it needs.`,
             parameters: {
                 type: 'object',
                 properties: {
                     instructions: {
                         type: 'string',
-                        description: 'Detailed instructions for the sub-agent. Must be fully self-contained — include all needed context, URLs, filenames, and specifics.'
+                        description: 'What the sub-agent should do. Be specific about the desired outcome.'
+                    },
+                    context: {
+                        type: 'string',
+                        description: 'Relevant background the sub-agent needs to complete the task: conversation history, prior tool outputs, URLs, filenames, data, or any other details it would not otherwise have access to.'
                     }
                 },
                 required: ['instructions']
             },
             timeout: 180_000,
             execute: async (params: unknown): Promise<ToolResult> => {
-                const { instructions } = params as { instructions: string }
+                const { instructions, context } = params as { instructions: string; context?: string }
+
+                const userMessage = context
+                    ? `## Context\n${context}\n\n## Task\n${instructions}`
+                    : instructions
 
                 // Prepare tools, provider/model via the shared builder.
                 // includeSubAgents: false prevents infinite delegation recursion.
@@ -100,7 +108,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 try {
                     const result = await executor.run([
                         ...prepared.systemMessages,
-                        { role: 'user', content: instructions },
+                        { role: 'user', content: userMessage },
                     ])
 
                     // Save sub-agent's final response as an assistant message
@@ -161,7 +169,7 @@ export function buildSubAgentPrompt(subAgents: SubAgentAssignment[]): string {
         '\n## Sub-Agents',
         'You have sub-agents you can delegate tasks to. Invoke them by calling their `delegate_to_<codename>_agent` tool.',
         'Each sub-agent is specialized — delegate tasks that match their role rather than trying to do everything yourself.',
-        'Send clear, detailed instructions. The sub-agent has no context beyond what you provide.\n',
+        'Sub-agents have no memory of your conversation. Use the `context` parameter to pass any relevant background they need, and `instructions` for the specific task.\n',
     ]
 
     for (const sa of subAgents) {
