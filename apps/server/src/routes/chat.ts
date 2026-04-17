@@ -474,8 +474,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       // Persist session-level config so it can be restored when navigating back to this conversation.
       const chatConfig: Record<string, unknown> = {}
       if (Array.isArray(allowedTools) && allowedTools.length) chatConfig.allowedTools = allowedTools
-      if (reqSubAgents?.length) chatConfig.subAgents = reqSubAgents
-      if (reqMemorySpaceIds?.length) chatConfig.memorySpaceIds = reqMemorySpaceIds
+      if (reqSubAgents !== undefined) chatConfig.subAgents = reqSubAgents ?? []
+      if (reqMemorySpaceIds !== undefined) chatConfig.memorySpaceIds = reqMemorySpaceIds ?? []
       if (systemPrompt) chatConfig.systemPrompt = systemPrompt
       if (model) chatConfig.model = model
       if (providerOverride) chatConfig.providerId = providerOverride

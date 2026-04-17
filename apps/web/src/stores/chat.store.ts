@@ -186,10 +186,23 @@ export const useChatStore = defineStore('chat', () => {
       const cfg = response.chatConfig
       if (cfg) {
         if (cfg.allowedTools?.length) agentStore.selectedToolNames = [...cfg.allowedTools]
-        if (cfg.subAgents?.length) agentConfig.freeChatSubAgentIds.value = cfg.subAgents.map(s => s.agentId)
-        else agentConfig.freeChatSubAgentIds.value = []
-        if (cfg.memorySpaceIds?.length) agentConfig.freeChatMemorySpaceIds.value = [...cfg.memorySpaceIds]
-        else agentConfig.freeChatMemorySpaceIds.value = []
+        // Restore sub-agents: use saved config if present, otherwise fall back
+        // to agent baseline (handles legacy conversations saved before config persistence).
+        if (cfg.subAgents?.length) {
+          agentConfig.freeChatSubAgentIds.value = cfg.subAgents.map((s: { agentId: string }) => s.agentId)
+        } else if (!('subAgents' in cfg)) {
+          // Field was never saved — sync from agent definition
+          agentConfig.syncSubAgentsFromBaseline()
+        } else {
+          agentConfig.freeChatSubAgentIds.value = []
+        }
+        if (cfg.memorySpaceIds?.length) {
+          agentConfig.freeChatMemorySpaceIds.value = [...cfg.memorySpaceIds]
+        } else if (!('memorySpaceIds' in cfg)) {
+          agentConfig.syncMemorySpacesFromBaseline()
+        } else {
+          agentConfig.freeChatMemorySpaceIds.value = []
+        }
         if (cfg.systemPrompt != null) agentConfig.sessionSystemPrompt.value = cfg.systemPrompt
         if (cfg.thinkingEnabled != null) agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled
         agentConfig.sessionModelOverride.value = cfg.model || null
@@ -197,10 +210,8 @@ export const useChatStore = defineStore('chat', () => {
         if (cfg.overrideSubAgents !== undefined) agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents
         else agentConfig.sessionOverrideSubAgents.value = false
       } else {
-        // No config saved — clear all session overrides
-        agentConfig.sessionModelOverride.value = null
-        agentConfig.sessionProviderOverride.value = null
-        agentConfig.sessionOverrideSubAgents.value = false
+        // No config saved at all — sync everything from agent baseline
+        agentConfig.syncAgentBaseline()
       }
     } finally {
       loadingMessages.value = false

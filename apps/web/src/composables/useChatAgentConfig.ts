@@ -24,6 +24,8 @@ export interface ChatAgentConfigApi {
     setActiveAgent(id: string | null): Promise<void>
     setSessionModel(model: string | null, providerId?: string | null): void
     syncAgentBaseline(): void
+    syncSubAgentsFromBaseline(): void
+    syncMemorySpacesFromBaseline(): void
 }
 
 export function useChatAgentConfig(
@@ -176,6 +178,26 @@ export function useChatAgentConfig(
         userModifiedOverrides.value = false
     }
 
+    /** Restore only sub-agent IDs from the agent definition (for legacy conversations). */
+    function syncSubAgentsFromBaseline(): void {
+        if (!activeAgentId.value) return
+        const agentDefs = useAgentDefinitionsStore()
+        const agent = agentDefs.get(activeAgentId.value)
+        if (!agent) return
+        const subIds = agent.subAgents?.map(s => s.agentId) ?? []
+        freeChatSubAgentIds.value = [...subIds]
+    }
+
+    /** Restore only memory space IDs from the agent definition (for legacy conversations). */
+    function syncMemorySpacesFromBaseline(): void {
+        if (!activeAgentId.value) return
+        const agentDefs = useAgentDefinitionsStore()
+        const agent = agentDefs.get(activeAgentId.value)
+        if (!agent) return
+        const memIds = agent.memorySpaces?.length ? [...agent.memorySpaces] : []
+        freeChatMemorySpaceIds.value = [...memIds]
+    }
+
     return {
         activeAgentId,
         sessionModelOverride,
@@ -196,5 +218,7 @@ export function useChatAgentConfig(
         setActiveAgent,
         setSessionModel,
         syncAgentBaseline,
+        syncSubAgentsFromBaseline,
+        syncMemorySpacesFromBaseline,
     }
 }
