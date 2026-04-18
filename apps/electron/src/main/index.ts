@@ -353,15 +353,14 @@ app.whenReady().then(async () => {
 
     registerAppProtocol()
 
-    // Wait for the server to be healthy before showing the window.
-    // Both the HTTP API proxy and WebSocket need the server running.
-    try {
-        await startServer()
-    } catch (err) {
+    // Start the server in the background — the UI handles reconnection. 
+    // If server should start first, simply await it
+    startServer().catch((err) => {
         console.error('[electron] Server failed to start:', err)
-        // Still show the window so the user can see devtools / error state
-    }
+    })
 
+    // Show the UI immediately — the web app's WebSocket logic will auto-connect
+    // once the server is ready. This avoids a blank wait while MCPs load.
     const mainWindow = createWindow()
     tray = createTray(mainWindow)
 
