@@ -210,33 +210,39 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             completion_tokens: number
         }[]
 
-        // Aggregate model breakdown by date+model (combine providers for display)
-        const modelsByDate = new Map<string, { model: string; messages: number; tokens: number }[]>()
-        for (const row of dailyModelRows) {
-            let arr = modelsByDate.get(row.date)
-            if (!arr) { arr = []; modelsByDate.set(row.date, arr) }
-            const totalTokens = row.prompt_tokens + row.completion_tokens
-            const existing = arr.find(m => m.model === row.model)
-            if (existing) {
-                existing.messages += row.messages
-                existing.tokens += totalTokens
-            } else {
-                arr.push({ model: row.model, messages: row.messages, tokens: totalTokens })
-            }
-        }
-
-        // Compute per-day estimated cost from model token breakdown
+        // Compute per-day and per-model estimated costs from model token breakdown
         const providerTypeMap = new Map<string, string>()
         for (const row of db.prepare('SELECT id, type FROM providers').all() as { id: string; type: string }[]) {
             providerTypeMap.set(row.id, row.type)
         }
+
+        // Aggregate model breakdown by date+model (combine providers for display)
+        const modelsByDate = new Map<string, { model: string; messages: number; tokens: number; estimatedCost: number | null }[]>()
         const dailyCostMap = new Map<string, number>()
         for (const row of dailyModelRows) {
+            let arr = modelsByDate.get(row.date)
+            if (!arr) { arr = []; modelsByDate.set(row.date, arr) }
+            const totalTokens = row.prompt_tokens + row.completion_tokens
+
             const providerType = providerTypeMap.get(row.provider) ?? row.provider
             const pricing = getModelCost(providerType, row.model)
-            if (pricing) {
-                const cost = (row.prompt_tokens * pricing.input + row.completion_tokens * pricing.output) / 1_000_000
+            const cost = pricing
+                ? (row.prompt_tokens * pricing.input + row.completion_tokens * pricing.output) / 1_000_000
+                : null
+
+            if (cost !== null) {
                 dailyCostMap.set(row.date, (dailyCostMap.get(row.date) ?? 0) + cost)
+            }
+
+            const existing = arr.find(m => m.model === row.model)
+            if (existing) {
+                existing.messages += row.messages
+                existing.tokens += totalTokens
+                if (cost !== null) {
+                    existing.estimatedCost = (existing.estimatedCost ?? 0) + cost
+                }
+            } else {
+                arr.push({ model: row.model, messages: row.messages, tokens: totalTokens, estimatedCost: cost })
             }
         }
 

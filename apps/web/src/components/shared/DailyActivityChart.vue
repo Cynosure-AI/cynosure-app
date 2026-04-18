@@ -5,6 +5,7 @@ interface ModelBreakdown {
   model: string
   messages: number
   tokens: number
+  estimatedCost?: number | null
 }
 
 interface DayData {
@@ -38,7 +39,7 @@ function onBarMove(e: MouseEvent) {
 }
 
 function updatePopoverPos(e: MouseEvent) {
-  const popoverWidth = 208
+  const popoverWidth = 250
   let left = e.clientX + 12
   if (left + popoverWidth > window.innerWidth - 8) left = e.clientX - popoverWidth - 12
   popoverStyle.value = {
@@ -173,7 +174,7 @@ const gridLines = computed(() => {
       <Transition name="fade">
         <div
           v-if="hoveredDay && hoveredDay.messages > 0"
-          class="w-52 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl shadow-black/40 p-2.5 text-xs pointer-events-none z-9999"
+          class="w-72 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl shadow-black/40 p-2.5 text-xs pointer-events-none z-9999"
           :style="popoverStyle"
         >
           <div class="font-medium text-zinc-300 mb-1.5">
@@ -192,26 +193,48 @@ const gridLines = computed(() => {
             v-if="hoveredDay.estimatedCost != null"
             class="flex justify-between text-zinc-400 mt-0.5"
           >
-            <span>Est. Cost</span><span class="text-amber-400">${{ hoveredDay.estimatedCost < 0.01 ? hoveredDay.estimatedCost.toFixed(4) : hoveredDay.estimatedCost.toFixed(2) }}</span>
+            <span>Est. Cost</span>
+            <span class="text-amber-400">
+              ${{ hoveredDay.estimatedCost < 0.01 ? hoveredDay.estimatedCost.toFixed(4) : hoveredDay.estimatedCost.toFixed(2) }}
+            </span>
           </div>
 
           <template v-if="hoveredDay.models?.length">
-            <div class="border-t border-zinc-800 mt-2 pt-1.5 mb-1 text-[10px] text-zinc-500 uppercase tracking-wider">
-              Models
-            </div>
-            <div
-              v-for="m in hoveredDay.models.slice(0, 6)"
-              :key="m.model"
-              class="flex justify-between text-zinc-400 mb-0.5"
-            >
-              <span class="truncate mr-2 text-zinc-300">{{ m.model }}</span>
-              <span class="shrink-0">{{ m.messages }}</span>
-            </div>
-            <div
-              v-if="hoveredDay.models.length > 6"
-              class="text-zinc-600 text-[10px]"
-            >
-              +{{ hoveredDay.models.length - 6 }} more
+            <div class="border-t border-zinc-800 mt-2 pt-1.5 mb-1">
+              <!-- header row -->
+              <div
+                class="grid text-[10px] text-zinc-500 uppercase tracking-wider mb-1"
+                style="grid-template-columns: 1fr 2.5rem 3.5rem;"
+              >
+                <span>Model</span>
+                <span class="text-right">Reqs</span>
+                <span class="text-right">Cost</span>
+              </div>
+              <!-- data rows -->
+              <div
+                v-for="m in hoveredDay.models.slice(0, 6)"
+                :key="m.model"
+                class="grid items-baseline text-zinc-400 mb-0.5"
+                style="grid-template-columns: 1fr 2.5rem 3.5rem;"
+              >
+                <span class="truncate text-zinc-300 pr-2">{{ m.model }}</span>
+                <span class="text-right tabular-nums">{{ m.messages }}</span>
+                <span
+                  class="text-right tabular-nums"
+                  :class="m.estimatedCost != null ? 'text-amber-400' : 'text-zinc-600'"
+                >
+                  <template v-if="m.estimatedCost != null">
+                    ${{ m.estimatedCost < 0.01 ? m.estimatedCost.toFixed(4) : m.estimatedCost.toFixed(2) }}
+                  </template>
+                  <template v-else>—</template>
+                </span>
+              </div>
+              <div
+                v-if="hoveredDay.models.length > 6"
+                class="text-zinc-600 text-[10px] mt-0.5"
+              >
+                +{{ hoveredDay.models.length - 6 }} more
+              </div>
             </div>
           </template>
         </div>
