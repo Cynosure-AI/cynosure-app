@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { api, type MemorySpace } from '../../api/client'
+import { api } from '../../api/client'
+import type { MemorySpace } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import MemoryDocumentModal from './MemoryDocumentModal.vue'
 

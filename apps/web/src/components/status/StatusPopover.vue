@@ -2,7 +2,8 @@
 import { ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProviderStore } from '../../stores/provider.store'
-import { api, type AgentInstance, type McpServerInfo } from '../../api/client'
+import { api } from '../../api/client'
+import type { AgentInstance, McpServerInfo } from '../../api/types'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps<{

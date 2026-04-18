@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { api, type MetricsSummary } from '../../api/client'
+import { api } from '../../api/client'
+import type { MetricsSummary } from '../../api/types'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'
 import ModalDialog from './ModalDialog.vue'

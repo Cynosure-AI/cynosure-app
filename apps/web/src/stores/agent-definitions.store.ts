@@ -1,6 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref } from 'vue'
-import { api, type AgentDefinition } from '../api/client'
+import { api } from '../api/client'
+import type { AgentDefinition } from '../api/types'
 
 export type { AgentDefinition }
 

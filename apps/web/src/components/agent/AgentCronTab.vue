@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AgentDefinition } from '../../api/client'
+import type { AgentDefinition } from '../../api/types'
 import { Icon } from '@iconify/vue'
 
 defineProps<{ agent: AgentDefinition }>()

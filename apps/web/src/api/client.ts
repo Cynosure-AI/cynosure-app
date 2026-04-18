@@ -7,15 +7,6 @@ import type {
 } from './types'
 import type { WsHandler } from './http'
 
-// Re-export everything so existing `import { … } from '../api/client'` keeps working
-export { wsConnected } from './http'
-export type {
-  LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryServer, McpRegistryResponse,
-  AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace,
-  AgentInstance, CronJob, ExecutionStepRecord, ChannelType, ChannelDefinition,
-  FileWatcher, MetricsSummary,
-} from './types'
-
 // ---- API object (same shape as window.api from preload) ----
 
 export const api = {

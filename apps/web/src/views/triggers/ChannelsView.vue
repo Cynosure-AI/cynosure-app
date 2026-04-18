@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { api, type AgentDefinition, type ChannelDefinition, type ChannelType } from '../../api/client'
+import { api } from '../../api/client'
+import type { AgentDefinition, ChannelDefinition, ChannelType } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'

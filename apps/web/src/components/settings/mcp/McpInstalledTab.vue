@@ -4,7 +4,7 @@ import { api } from '../../../api/client'
 import { Icon } from '@iconify/vue'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
-import type { McpServerInfo } from '../../../api/client'
+import type { McpServerInfo } from '../../../api/types'
 
 const emit = defineEmits<{
   goToBrowse: []

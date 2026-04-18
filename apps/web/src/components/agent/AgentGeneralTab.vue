@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useProviderStore } from '../../stores/provider.store'
-import type { AgentDefinition } from '../../api/client'
+import type { AgentDefinition } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import IconUpload from '../shared/IconUpload.vue'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'

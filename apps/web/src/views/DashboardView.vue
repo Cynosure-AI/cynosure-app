@@ -5,7 +5,8 @@ import { useAgentDefinitionsStore, type AgentDefinition } from '../stores/agent-
 import { useChatStore } from '../stores/chat.store'
 import { useProviderLogos } from '../composables/useProviderLogos'
 import { useRouter } from 'vue-router'
-import { api, wsConnected } from '../api/client'
+import { api } from '../api/client'
+import { wsConnected } from '../api/http'
 import { Icon } from '@iconify/vue'
 import AgentCarousel from '../components/dashboard/AgentCarousel.vue'
 
