@@ -1,5 +1,6 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { usePreferencesStore } from '../stores/preferences.store'
+import { SK_WHISPER_DOWNLOADED } from '../utils/storage-keys'
 
 export type WhisperStatus = 'idle' | 'loading' | 'ready' | 'recording' | 'transcribing' | 'error'
 
@@ -10,11 +11,9 @@ export interface FileDownloadProgress {
     done: boolean
 }
 
-const DOWNLOADED_KEY = 'oa-whisper-downloaded'
-
 function loadDownloadedModels(): { model: string; quantization: string }[] {
     try {
-        return JSON.parse(localStorage.getItem(DOWNLOADED_KEY) || '[]')
+        return JSON.parse(localStorage.getItem(SK_WHISPER_DOWNLOADED) || '[]')
     } catch { return [] }
 }
 
@@ -127,13 +126,13 @@ export function useWhisper() {
         const list = downloadedModels.value
         if (!list.some(d => d.model === model && d.quantization === quantization)) {
             list.push({ model, quantization })
-            localStorage.setItem(DOWNLOADED_KEY, JSON.stringify(list))
+            localStorage.setItem(SK_WHISPER_DOWNLOADED, JSON.stringify(list))
         }
     }
 
     function clearDownloadedModels(): void {
         downloadedModels.value = []
-        localStorage.removeItem(DOWNLOADED_KEY)
+        localStorage.removeItem(SK_WHISPER_DOWNLOADED)
     }
 
     function loadModel(modelOverride?: string): void {

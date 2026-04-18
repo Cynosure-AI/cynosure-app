@@ -7,7 +7,7 @@ import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
-import { useChatSidebar } from '../../composables/useChatSidebar'
+import { useChatSidebar } from '../../composables/useSidebar'
 import { useProviderLogos } from '../../composables/useProviderLogos'
 import { useRouter } from 'vue-router'
 

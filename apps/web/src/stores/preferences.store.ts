@@ -1,98 +1,45 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, watch } from 'vue'
+import { useLocalStorage } from '@vueuse/core'
 import { syncPrefsToElectron } from '@/utils/electron-prefs'
-
-function loadJsonArray(key: string): string[] {
-    try {
-        const raw = localStorage.getItem(key)
-        if (raw) return JSON.parse(raw)
-    } catch { /* ignore */ }
-    return []
-}
+import {
+    SK_THEME, SK_AUTO_EXPAND, SK_AUTO_EXPAND_TOOLS, SK_GENERATE_TITLE,
+    SK_CONTEXT_STRATEGY, SK_AGENT_CATEGORIES, SK_MA_CATEGORIES,
+    SK_WHISPER_MODEL, SK_WHISPER_ENABLED, SK_WHISPER_QUANTIZATION, SK_WHISPER_LANGUAGE,
+} from '@/utils/storage-keys'
 
 export type ThemeId = 'dark' | 'light' | 'arasaka' | 'midnight-purple' | 'cyberpunk'
 
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'none'
 
 export const usePreferencesStore = defineStore('preferences', () => {
-    const theme = ref<ThemeId>(
-        (localStorage.getItem('oa-theme') as ThemeId) || 'dark'
-    )
-    const autoExpandSteps = ref(localStorage.getItem('oa-auto-expand') === 'true')
-    const autoExpandToolCalls = ref(localStorage.getItem('oa-auto-expand-tools') === 'true')
-    const generateTitle = ref(localStorage.getItem('oa-generate-title') !== 'false')
+    const theme = useLocalStorage<ThemeId>(SK_THEME, 'dark')
+    const autoExpandSteps = useLocalStorage(SK_AUTO_EXPAND, false)
+    const autoExpandToolCalls = useLocalStorage(SK_AUTO_EXPAND_TOOLS, false)
+    const generateTitle = useLocalStorage(SK_GENERATE_TITLE, true)
     const sidebarCollapsed = ref(false)
-    const contextStrategy = ref<ContextStrategy>(
-        (localStorage.getItem('oa-context-strategy') as ContextStrategy) || 'sliding-window'
-    )
+    const contextStrategy = useLocalStorage<ContextStrategy>(SK_CONTEXT_STRATEGY, 'sliding-window')
 
-    const agentCategories = ref<string[]>(loadJsonArray('oa-agent-categories'))
-    const maCategories = ref<string[]>(loadJsonArray('oa-ma-categories'))
+    const agentCategories = useLocalStorage<string[]>(SK_AGENT_CATEGORIES, [])
+    const maCategories = useLocalStorage<string[]>(SK_MA_CATEGORIES, [])
 
-    const whisperModel = ref(localStorage.getItem('oa-whisper-model') || 'onnx-community/whisper-base')
-    const whisperEnabled = ref(localStorage.getItem('oa-whisper-enabled') !== 'false')
-    const whisperQuantization = ref(localStorage.getItem('oa-whisper-quantization') || 'q8')
-    const whisperLanguage = ref(localStorage.getItem('oa-whisper-language') || 'english')
+    const whisperModel = useLocalStorage(SK_WHISPER_MODEL, 'onnx-community/whisper-base')
+    const whisperEnabled = useLocalStorage(SK_WHISPER_ENABLED, true)
+    const whisperQuantization = useLocalStorage(SK_WHISPER_QUANTIZATION, 'q8')
+    const whisperLanguage = useLocalStorage(SK_WHISPER_LANGUAGE, 'english')
 
+    // Apply theme to <html> element
+    watch(theme, (val) => {
+        document.documentElement.dataset.theme = val
+    }, { immediate: true })
+
+    // Sync all pref changes to Electron's JSON file (single watcher)
     watch(
-        theme,
-        (val) => {
-            localStorage.setItem('oa-theme', val)
-            document.documentElement.dataset.theme = val
-            syncPrefsToElectron()
-        },
-        { immediate: true }
+        [theme, autoExpandSteps, autoExpandToolCalls, generateTitle, contextStrategy,
+            agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage],
+        () => { syncPrefsToElectron() },
+        { deep: true },
     )
-
-    watch(autoExpandSteps, (val) => {
-        localStorage.setItem('oa-auto-expand', String(val))
-        syncPrefsToElectron()
-    })
-
-    watch(autoExpandToolCalls, (val) => {
-        localStorage.setItem('oa-auto-expand-tools', String(val))
-        syncPrefsToElectron()
-    })
-
-    watch(generateTitle, (val) => {
-        localStorage.setItem('oa-generate-title', String(val))
-        syncPrefsToElectron()
-    })
-
-    watch(contextStrategy, (val) => {
-        localStorage.setItem('oa-context-strategy', val)
-        syncPrefsToElectron()
-    })
-
-    watch(agentCategories, (val) => {
-        localStorage.setItem('oa-agent-categories', JSON.stringify(val))
-        syncPrefsToElectron()
-    }, { deep: true })
-
-    watch(maCategories, (val) => {
-        localStorage.setItem('oa-ma-categories', JSON.stringify(val))
-        syncPrefsToElectron()
-    }, { deep: true })
-
-    watch(whisperModel, (val) => {
-        localStorage.setItem('oa-whisper-model', val)
-        syncPrefsToElectron()
-    })
-
-    watch(whisperEnabled, (val) => {
-        localStorage.setItem('oa-whisper-enabled', String(val))
-        syncPrefsToElectron()
-    })
-
-    watch(whisperQuantization, (val) => {
-        localStorage.setItem('oa-whisper-quantization', val)
-        syncPrefsToElectron()
-    })
-
-    watch(whisperLanguage, (val) => {
-        localStorage.setItem('oa-whisper-language', val)
-        syncPrefsToElectron()
-    })
 
     function toggleTheme() {
         theme.value = theme.value === 'dark' ? 'light' : 'dark'

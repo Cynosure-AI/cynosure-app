@@ -1,5 +1,5 @@
 /**
- * Composable to convert cron expressions to human-readable text
+ * Utility functions to convert cron expressions to human-readable text
  * and build cron expressions from structured schedule options.
  */
 
