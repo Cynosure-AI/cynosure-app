@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useProviderStore } from '../stores/provider.store'
 import { useAgentDefinitionsStore, type AgentDefinition } from '../stores/agent-definitions.store'
 import { useChatStore } from '../stores/chat.store'
@@ -28,12 +28,21 @@ interface RecentConversation {
 
 const recentConvos = ref<RecentConversation[]>([])
 
-onMounted(async () => {
-  agentDefs.load()
+async function loadRecentConvos() {
   try {
     const all = await api.chat.listConversations()
     recentConvos.value = all.slice(0, 8)
   } catch { /* ignore */ }
+}
+
+onMounted(() => {
+  agentDefs.load()
+  loadRecentConvos()
+})
+
+// Refetch when server connection (re-)establishes
+watch(wsConnected, (connected) => {
+  if (connected) loadRecentConvos()
 })
 
 async function startChat(agent: AgentDefinition): Promise<void> {
