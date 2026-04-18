@@ -10,11 +10,12 @@ files:
   - out/**/*
 
 # Bundle the pre-built server and web alongside the app
+# Server node_modules comes from .server-deps/ (flat, no pnpm symlinks)
 extraResources:
   - from: ../server/dist
     to: server/dist
     filter: "**/*"
-  - from: ../server/node_modules
+  - from: .server-deps/node_modules
     to: server/node_modules
     filter:
       - "**/*"

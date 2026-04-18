@@ -5,6 +5,7 @@ node_modules/
 dist/
 out/
 build/
+.server-deps/
 
 #But allow the electron build folder for the icons
 !apps/electron/build/

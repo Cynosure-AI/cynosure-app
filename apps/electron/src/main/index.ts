@@ -79,10 +79,18 @@ function resolveNodeBinary(): { bin: string; useElectronAsNode: boolean } {
         return { bin: 'node', useElectronAsNode: false }
     }
 
+    // Use the full login-shell PATH so nvm / fnm / volta-managed Node is found
+    // even when the app is launched from a desktop shortcut (minimal PATH).
+    const fullPath = getFullPath()
+
     // Try system node first — native modules are compiled against it
     try {
         const cmd = process.platform === 'win32' ? 'where.exe node' : 'which node'
-        const nodePath = execSync(cmd, { encoding: 'utf-8', timeout: 5000 }).trim().split(/\r?\n/)[0]
+        const nodePath = execSync(cmd, {
+            encoding: 'utf-8',
+            timeout: 5000,
+            env: { ...process.env, PATH: fullPath }
+        }).trim().split(/\r?\n/)[0]
         if (nodePath && existsSync(nodePath)) {
             console.log('[electron] Found system node at', nodePath)
             return { bin: nodePath, useElectronAsNode: false }
