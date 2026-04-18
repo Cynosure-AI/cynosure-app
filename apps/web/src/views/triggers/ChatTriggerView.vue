@@ -4,7 +4,7 @@ import ChatHeaderBar from '../../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import InputBar from '../../components/chat/InputBar.vue'
 import { ref } from 'vue'
-import { useChatSidebar } from '../../composables/useChatSidebar'
+import { useChatSidebar } from '../../composables/useSidebar'
 
 const { chatSidebarOpen, toggle } = useChatSidebar()
 const inputBarRef = ref<InstanceType<typeof InputBar> | null>(null)

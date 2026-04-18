@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import CategoryTabBar from '../components/shared/CategoryTabBar.vue'
+import { SK_AGENTS_VIEW_MODE } from '../utils/storage-keys'
 
 const agentDefs = useAgentDefinitionsStore()
 const agentStore = useAgentStore()
@@ -17,11 +18,10 @@ const router = useRouter()
 
 // View mode toggle (grid / list) — persisted in localStorage
 type ViewMode = 'grid' | 'list'
-const STORAGE_KEY = 'agents-view-mode'
-const viewMode = ref<ViewMode>((localStorage.getItem(STORAGE_KEY) as ViewMode) || 'grid')
+const viewMode = ref<ViewMode>((localStorage.getItem(SK_AGENTS_VIEW_MODE) as ViewMode) || 'grid')
 function setViewMode(mode: ViewMode) {
   viewMode.value = mode
-  localStorage.setItem(STORAGE_KEY, mode)
+  localStorage.setItem(SK_AGENTS_VIEW_MODE, mode)
 }
 
 const showCreateDialog = ref(false)

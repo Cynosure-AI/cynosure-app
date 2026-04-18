@@ -12,7 +12,7 @@ import {
   parseCronExpr, buildCronExpr, cronToHuman,
   WEEKDAYS, HOUR_OPTIONS, MINUTE_OPTIONS, INTERVAL_MINUTES, FREQUENCY_OPTIONS,
   type CronFrequency
-} from '../../composables/useCronHuman'
+} from '../../utils/cron-helpers'
 
 const cronJobs = ref<CronJob[]>([])
 const allAgents = ref<AgentDefinition[]>([])

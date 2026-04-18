@@ -2,7 +2,6 @@
 import { useAgentStore } from '../../../stores/agent-runtime.store'
 import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
-import { watch } from 'vue'
 import ToolSelector from '../../shared/ToolSelector.vue'
 
 const agentStore = useAgentStore()
@@ -28,7 +27,7 @@ function onToolsUpdate(tools: string[]) {
       @click.self="closeModal"
     >
       <div
-        class="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-[560px] max-h-[70vh] flex flex-col"
+        class="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-140 max-h-[70vh] flex flex-col"
       >
         <!-- Header -->
         <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-800">

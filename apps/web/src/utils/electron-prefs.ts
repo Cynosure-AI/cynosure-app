@@ -14,19 +14,7 @@
  * from that file before Vue/Pinia initialise so stores always see the correct values.
  */
 
-const PREF_KEYS = [
-    'oa-theme',
-    'oa-auto-expand',
-    'oa-auto-expand-tools',
-    'oa-generate-title',
-    'oa-agent-categories',
-    'oa-ma-categories',
-    'oa-whisper-model',
-    'oa-whisper-enabled',
-    'oa-whisper-quantization',
-    'oa-whisper-language',
-    'chat-sidebar-open',
-] as const
+import { ELECTRON_SYNCED_KEYS } from './storage-keys'
 
 type ElectronApi = {
     getUiPrefs: () => Record<string, string>
@@ -45,7 +33,7 @@ export function syncPrefsToElectron(): void {
     if (!el) return
 
     const prefs: Record<string, string> = {}
-    for (const key of PREF_KEYS) {
+    for (const key of ELECTRON_SYNCED_KEYS) {
         const v = localStorage.getItem(key)
         if (v !== null) prefs[key] = v
     }

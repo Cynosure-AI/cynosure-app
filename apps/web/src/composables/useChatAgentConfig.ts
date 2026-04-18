@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import type { Conversation, DisplayMessage } from '../stores/chat.store'
+import { SK_ACTIVE_AGENT } from '../utils/storage-keys'
 
 export interface ChatAgentConfigApi {
     activeAgentId: Ref<string | null>
@@ -35,7 +36,7 @@ export function useChatAgentConfig(
     const agentStore = useAgentStore()
 
     const activeAgentId = ref<string | null>(
-        localStorage.getItem('oa-active-agent') || null
+        localStorage.getItem(SK_ACTIVE_AGENT) || null
     )
     const sessionModelOverride = ref<string | null>(null)
     const sessionProviderOverride = ref<string | null>(null)
@@ -118,7 +119,7 @@ export function useChatAgentConfig(
         activeAgentId.value = id
         userModifiedOverrides.value = false
         if (id) {
-            localStorage.setItem('oa-active-agent', id)
+            localStorage.setItem(SK_ACTIVE_AGENT, id)
             const agentDefs = useAgentDefinitionsStore()
             const agent = agentDefs.get(id)
             const tools = agent?.tools?.length ? [...agent.tools] : []
@@ -134,7 +135,7 @@ export function useChatAgentConfig(
             agentOriginalSystemPrompt.value = agent?.systemPrompt || ''
             sessionThinkingEnabled.value = agent?.thinkingEnabled !== false
         } else {
-            localStorage.removeItem('oa-active-agent')
+            localStorage.removeItem(SK_ACTIVE_AGENT)
             agentStore.clearSelectedTools()
             freeChatSubAgentIds.value = []
             freeChatMemorySpaceIds.value = []

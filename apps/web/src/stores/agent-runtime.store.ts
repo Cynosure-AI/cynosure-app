@@ -65,6 +65,19 @@ export const useAgentStore = defineStore('agent', () => {
   const stepsPerConversation = new Map<string, ExecutionStep[]>()
   const eventsPerConversation = new Map<string, EventLogEntry[]>()
 
+  /** Keep Maps bounded to avoid memory leaks in long-lived sessions. */
+  const MAX_CACHED_CONVERSATIONS = 50
+  function pruneConversationCache(): void {
+    for (const map of [stepsPerConversation, eventsPerConversation]) {
+      while (map.size > MAX_CACHED_CONVERSATIONS) {
+        // Maps iterate in insertion order — delete the oldest entry
+        const oldest = map.keys().next().value
+        if (oldest !== undefined) map.delete(oldest)
+        else break
+      }
+    }
+  }
+
   const hasSteps = computed(() => executionSteps.value.length > 0)
 
   async function loadToolApprovals(): Promise<void> {
@@ -192,6 +205,7 @@ export const useAgentStore = defineStore('agent', () => {
         if (convId || executionConversationId.value) {
           const cid = convId || executionConversationId.value!
           stepsPerConversation.set(cid, [...executionSteps.value])
+          pruneConversationCache()
         }
         break
 
