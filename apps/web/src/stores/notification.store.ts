@@ -1,6 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
-import { api, type AppNotification } from '../api/client'
+import { api } from '../api/client'
+import type { AppNotification } from '../api/types'
 
 export const useNotificationStore = defineStore('notifications', () => {
     const notifications = ref<AppNotification[]>([])

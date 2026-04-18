@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { api, type AgentDefinition, type CronJob } from '../../api/client'
+import { api } from '../../api/client'
+import type { AgentDefinition, CronJob } from '../../api/types'
 import { useProviderStore } from '../../stores/provider.store'
 import { Icon } from '@iconify/vue'
 import TabBar, { type TabDef } from '../../components/shared/TabBar.vue'

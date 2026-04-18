@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { AgentDefinition } from '../../api/client'
+import type { AgentDefinition } from '../../api/types'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
 import ToolSelector from '../shared/ToolSelector.vue'

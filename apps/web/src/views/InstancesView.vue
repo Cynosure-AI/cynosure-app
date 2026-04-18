@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { api, type AgentInstance } from '../api/client'
+import { api } from '../api/client'
+import type { AgentInstance } from '../api/types'
 import { useChatStore } from '../stores/chat.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'

@@ -1,6 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
-import { api, type LLMProviderConfig } from '../api/client'
+import { api } from '../api/client'
+import type { LLMProviderConfig } from '../api/types'
 
 export type { LLMProviderConfig }
 

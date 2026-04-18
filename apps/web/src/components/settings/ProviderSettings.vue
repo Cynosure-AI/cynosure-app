@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch, computed } from 'vue'
 import { useProviderStore } from '../../stores/provider.store'
-import type { LLMProviderConfig } from '../../api/client'
+import type { LLMProviderConfig } from '../../api/types'
 import { useProviderLogos } from '../../composables/useProviderLogos'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
 import { Icon } from '@iconify/vue'

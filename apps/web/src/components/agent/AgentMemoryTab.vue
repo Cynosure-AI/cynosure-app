@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
-import type { AgentDefinition, MemorySpace } from '../../api/client'
+import type { AgentDefinition, MemorySpace } from '../../api/types'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted } from 'vue'
-import { api, type McpRegistryServer } from '../../../api/client'
+import { api } from '../../../api/client'
+import type { McpRegistryServer } from '../../../api/types'
 import { Icon } from '@iconify/vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
 

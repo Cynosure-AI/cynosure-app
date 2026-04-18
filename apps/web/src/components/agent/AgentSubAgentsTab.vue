@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
-import type { AgentDefinition, SubAgentAssignment } from '../../api/client'
+import type { AgentDefinition, SubAgentAssignment } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
 

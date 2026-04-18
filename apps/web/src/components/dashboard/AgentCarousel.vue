@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { AgentDefinition } from '../../api/client'
+import type { AgentDefinition } from '../../api/types'
 import { useProviderStore } from '../../stores/provider.store'
 import { useChatStore } from '../../stores/chat.store'
 import { useProviderLogos } from '../../composables/useProviderLogos'

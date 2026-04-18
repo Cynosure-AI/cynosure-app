@@ -1,6 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
-import { api, type ExecutionStepRecord } from '../api/client'
+import { api } from '../api/client'
+import type { ExecutionStepRecord } from '../api/types'
 
 export interface ToolNamespace {
   id: string

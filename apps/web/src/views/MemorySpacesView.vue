@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { api } from '../api/client'
-import type { MemorySpace } from '../api/client'
+import type { MemorySpace } from '../api/types'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import MemoryDocumentList from '../components/memory/MemoryDocumentList.vue'

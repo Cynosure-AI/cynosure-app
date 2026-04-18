@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
-import { api, type MemorySpace } from '../../../api/client'
+import { api } from '../../../api/client'
+import type { MemorySpace } from '../../../api/types'
 import { Icon } from '@iconify/vue'
 
 const chatStore = useChatStore()
