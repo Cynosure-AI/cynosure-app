@@ -70,37 +70,20 @@ function getDataDir(): string {
 }
 
 // ── Node binary resolution ─────────────────────────────────────────────────────
-// The server's native modules (better-sqlite3 etc.) are compiled against the
-// system Node. Using Electron's embedded Node would cause ABI mismatches.
-// Prefer system `node`; only fall back to ELECTRON_RUN_AS_NODE as last resort.
+// Native modules in the bundled server are rebuilt for Electron's ABI at
+// package time (via @electron/rebuild). This makes the app fully self-contained
+// — no system Node is required on the end-user's machine.
+// We use Electron's own binary with ELECTRON_RUN_AS_NODE=1.
 
 function resolveNodeBinary(): { bin: string; useElectronAsNode: boolean } {
     if (is.dev) {
+        // In dev, native modules are compiled against the system Node
         return { bin: 'node', useElectronAsNode: false }
     }
 
-    // Use the full login-shell PATH so nvm / fnm / volta-managed Node is found
-    // even when the app is launched from a desktop shortcut (minimal PATH).
-    const fullPath = getFullPath()
-
-    // Try system node first — native modules are compiled against it
-    try {
-        const cmd = process.platform === 'win32' ? 'where.exe node' : 'which node'
-        const nodePath = execSync(cmd, {
-            encoding: 'utf-8',
-            timeout: 5000,
-            env: { ...process.env, PATH: fullPath }
-        }).trim().split(/\r?\n/)[0]
-        if (nodePath && existsSync(nodePath)) {
-            console.log('[electron] Found system node at', nodePath)
-            return { bin: nodePath, useElectronAsNode: false }
-        }
-    } catch {
-        // node not on PATH
-    }
-
-    // Fallback: Electron's own binary as a Node runtime
-    console.warn('[electron] System node not found — using Electron binary with ELECTRON_RUN_AS_NODE')
+    // Production: use Electron's own binary as a Node runtime.
+    // Native modules have been rebuilt for Electron's ABI during packaging.
+    console.log('[electron] Using Electron binary with ELECTRON_RUN_AS_NODE')
     return { bin: process.execPath, useElectronAsNode: true }
 }
 

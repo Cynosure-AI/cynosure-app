@@ -20,6 +20,9 @@ importers:
       '@electron-toolkit/tsconfig':
         specifier: ^2.0.0
         version: 2.0.0(@types/node@24.12.2)
+      '@electron/rebuild':
+        specifier: ^4.0.0
+        version: 4.0.3
       concurrently:
         specifier: ^9.2.1
         version: 9.2.1
