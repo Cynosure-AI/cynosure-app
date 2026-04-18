@@ -3,8 +3,6 @@ import { ref, reactive } from 'vue'
 import { api } from '../../api/client'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
-import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
-import { usePreferencesStore } from '../../stores/preferences.store'
 
 // ── Export state ──
 const exportModules = reactive({
@@ -97,17 +95,8 @@ async function doImport(): Promise<void> {
     const res = await api.backup.importBackup(importFile.value, selected)
     importResults.value = res.results
 
-    // Reconstruct agent categories from restored agents
-    if (selected.includes('agents')) {
-      const agentDefs = useAgentDefinitionsStore()
-      const prefs = usePreferencesStore()
-      await agentDefs.load()
-      for (const agent of agentDefs.agents) {
-        if (agent.category && !prefs.agentCategories.includes(agent.category)) {
-          prefs.addAgentCategory(agent.category)
-        }
-      }
-    }
+    // Reload the entire app so all stores pick up restored data
+    setTimeout(() => window.location.reload(), 1500)
   } catch (e) {
     importError.value = (e as Error).message
   } finally {
