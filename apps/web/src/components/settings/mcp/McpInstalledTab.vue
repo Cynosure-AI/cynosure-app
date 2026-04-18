@@ -569,7 +569,7 @@ defineExpose({ loadServers })
 
               <!-- Info -->
               <div class="flex-1 min-w-0 pt-0.5">
-                <span class="font-medium text-sm text-zinc-200">{{ server.serverInfo?.title || server.name }}</span>
+                <span class="font-medium text-sm text-zinc-200">{{ server.name || server.serverInfo?.title }}</span>
                 <div
                   v-if="server.serverInfo?.description"
                   class="text-xs text-zinc-400 mt-0.5"
