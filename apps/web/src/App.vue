@@ -169,7 +169,7 @@ onUnmounted(() => {
             class="w-5 h-5"
           />
         </button>
-        <span class="text-sm font-semibold text-zinc-200">OpenAgent</span>
+        <span class="text-sm font-semibold text-zinc-200">Cynosure</span>
       </div>
       <main class="flex-1 overflow-hidden bg-zinc-900 ring-1 ring-black/5 dark:ring-white/10 rounded-xl relative flex flex-col shadow-2xl ml-2 md:ml-0">
         <RouterView />

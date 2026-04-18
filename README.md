@@ -1,4 +1,4 @@
-# OpenAgent
+# Cynosure
 
 Open-source AI agent platform with tool use, memory, multi-provider LLM support, and messaging channel integrations. Run it in the browser or as a self-contained desktop app.
 

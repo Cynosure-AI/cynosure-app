@@ -1,6 +1,6 @@
-appId: com.openagent.desktop
-productName: OpenAgent
-copyright: Copyright © 2024-2026 OpenAgent
+appId: com.cynosure.desktop
+productName: Cynosure
+copyright: Copyright © 2024-2026 Cynosure
 
 directories:
   buildResources: build

@@ -8,7 +8,7 @@ let db: Database.Database | null = null
 function getDbPath(): string {
   const dbDir = join(getAppDataDir(), 'sqlite')
   mkdirSync(dbDir, { recursive: true })
-  return join(dbDir, 'openagent.db')
+  return join(dbDir, 'cynosure.db')
 }
 
 export function getDb(): Database.Database {

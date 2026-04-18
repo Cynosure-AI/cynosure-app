@@ -151,7 +151,7 @@ export class McpManager {
             })
         })
 
-        const client = new Client({ name: 'open-agent', version: '1.0.0' })
+        const client = new Client({ name: 'cynosure', version: '1.0.0' })
         const transport = new StreamableHTTPClientTransport(new URL(remoteUrl), {
             authProvider: provider
         })
@@ -270,7 +270,7 @@ export class McpManager {
         }
 
         const client = new Client({
-            name: 'open-agent',
+            name: 'cynosure',
             version: '1.0.0'
         })
 
