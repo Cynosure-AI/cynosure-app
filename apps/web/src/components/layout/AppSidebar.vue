@@ -499,7 +499,7 @@ const settingsItems: NavItem[] = [
           }"
         />
         <span class="text-[11px] text-zinc-400 truncate flex-1">
-          <template v-if="!wsConnected">Reconnecting...</template>
+          <template v-if="!wsConnected">Connecting...</template>
           <template v-else-if="hasAwaitingApproval">Needs Attention</template>
           <template v-else-if="instances.length > 0">Agents Running...</template>
           <template v-else-if="!providerStore.providers.length">No providers</template>

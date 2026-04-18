@@ -5,7 +5,7 @@ import { useAgentDefinitionsStore, type AgentDefinition } from '../stores/agent-
 import { useChatStore } from '../stores/chat.store'
 import { useProviderLogos } from '../composables/useProviderLogos'
 import { useRouter } from 'vue-router'
-import { api } from '../api/client'
+import { api, wsConnected } from '../api/client'
 import { Icon } from '@iconify/vue'
 import AgentCarousel from '../components/dashboard/AgentCarousel.vue'
 
@@ -93,6 +93,23 @@ function navigate(route: string) {
         </h1>
         <p class="text-sm text-zinc-500 mt-1">
           Quick actions and system overview
+        </p>
+      </div>
+
+      <!-- Initializing banner (server not yet ready) -->
+      <div
+        v-if="!wsConnected"
+        class="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 flex flex-col items-center justify-center gap-3"
+      >
+        <Icon
+          icon="lucide:loader-2"
+          class="w-8 h-8 text-blue-400 animate-spin"
+        />
+        <p class="text-sm text-zinc-300 font-medium">
+          Initializing server…
+        </p>
+        <p class="text-xs text-zinc-500">
+          Loading MCPs and preparing your workspace
         </p>
       </div>
 
