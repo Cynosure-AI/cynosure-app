@@ -485,7 +485,7 @@ defineExpose({ loadServers })
                         >*</span>
                         <span
                           v-if="hint.description"
-                          class="text-zinc-600"
+                          class="text-zinc-400/70 font-normal"
                         >— {{ hint.description }}</span>
                       </label>
                       <input
