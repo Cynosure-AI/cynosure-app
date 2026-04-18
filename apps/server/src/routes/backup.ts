@@ -99,7 +99,7 @@ function getChannelRows(): unknown[] {
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function registerBackupRoutes(app: FastifyInstance): Promise<void> {
-    await app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } })
+    await app.register(multipart, { limits: { fileSize: 1024 * 1024 * 1024 } }) // 1 GB limit
 
     // ── GET /api/backup/export?modules=agents,providers,mcp,settings ────────
     app.get<{ Querystring: { modules?: string } }>(
