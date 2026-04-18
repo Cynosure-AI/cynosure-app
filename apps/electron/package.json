@@ -12,7 +12,6 @@
         "dev": "concurrently -k -n web,electron -c blue,green \"cd ../web && pnpm dev\" \"wait-on http://localhost:5173 && electron-vite dev\"",
         "build": "electron-vite build",
         "prebuild:deps": "pnpm --filter open-agent-server build && pnpm --filter open-agent-web build",
-        "postinstall": "electron-builder install-app-deps",
         "package": "pnpm run prebuild:deps && pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --config electron-builder.yml",
         "package:linux": "pnpm run prebuild:deps && pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --linux --config electron-builder.yml",
         "package:win": "pnpm run prebuild:deps && pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --win --config electron-builder.yml",
