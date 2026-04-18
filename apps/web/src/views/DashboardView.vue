@@ -18,6 +18,36 @@ const { logoUrl } = useProviderLogos()
 
 const carouselAgents = computed(() => agentDefs.agents.filter(a => a.showInCarousel !== false))
 
+// ── Onboarding state ───────────────────────────────────────────────────────────
+const hasProviders = computed(() => providerStore.providers.length > 0)
+const hasAgents = computed(() => agentDefs.agents.length > 0)
+const showOnboarding = computed(() => !hasProviders.value || !hasAgents.value)
+
+const onboardingSteps = computed(() => [
+  {
+    label: 'Add a provider',
+    description: 'Connect an LLM provider like OpenAI, Anthropic, or Ollama',
+    icon: 'lucide:key',
+    route: '/settings/providers',
+    done: hasProviders.value,
+  },
+  {
+    label: 'Configure tools',
+    description: 'Add MCP tool servers to give your agents superpowers',
+    icon: 'lucide:plug',
+    route: '/settings/mcp',
+    done: false, // optional step — always shown as available
+    optional: true,
+  },
+  {
+    label: 'Create an agent',
+    description: 'Set up an AI agent with a system prompt, model, and tools',
+    icon: 'lucide:bot',
+    route: '/agents',
+    done: hasAgents.value,
+  },
+])
+
 interface RecentConversation {
   id: string
   title: string
@@ -42,7 +72,10 @@ onMounted(() => {
 
 // Refetch when server connection (re-)establishes
 watch(wsConnected, (connected) => {
-  if (connected) loadRecentConvos()
+  if (connected) {
+    loadRecentConvos()
+    agentDefs.load()
+  }
 })
 
 async function startChat(agent: AgentDefinition): Promise<void> {
@@ -121,6 +154,71 @@ function navigate(route: string) {
         <p class="text-xs text-zinc-500">
           Loading MCPs and preparing your workspace
         </p>
+      </div>
+
+      <!-- Getting Started (shown when no providers or no agents) -->
+      <div
+        v-if="showOnboarding && wsConnected"
+        class="mb-8"
+      >
+        <h2 class="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-3">
+          Getting Started
+        </h2>
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+          <p class="text-sm text-zinc-300 mb-4">
+            Welcome to Cynosure! Follow these steps to get up and running.
+          </p>
+          <ol class="space-y-3">
+            <li
+              v-for="(step, i) in onboardingSteps"
+              :key="i"
+              class="flex items-start gap-3 group cursor-pointer rounded-lg p-2.5 -mx-1 transition-colors"
+              :class="step.done ? 'opacity-60' : 'hover:bg-zinc-800/60'"
+              @click="navigate(step.route)"
+            >
+              <!-- Step number / check -->
+              <div
+                class="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-semibold transition-colors"
+                :class="step.done
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : 'bg-zinc-800 text-zinc-400 group-hover:bg-blue-500/20 group-hover:text-blue-400'"
+              >
+                <Icon
+                  v-if="step.done"
+                  icon="lucide:check"
+                  class="w-3.5 h-3.5"
+                />
+                <span v-else>{{ i + 1 }}</span>
+              </div>
+
+              <!-- Text -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <Icon
+                    :icon="step.icon"
+                    class="w-4 h-4 text-zinc-500 shrink-0"
+                  />
+                  <span
+                    class="text-sm font-medium transition-colors"
+                    :class="step.done ? 'text-zinc-500 line-through' : 'text-zinc-200 group-hover:text-zinc-100'"
+                  >{{ step.label }}</span>
+                  <span
+                    v-if="step.optional"
+                    class="text-[10px] text-zinc-600 uppercase tracking-wide"
+                  >optional</span>
+                </div>
+                <p class="text-xs text-zinc-500 mt-0.5">
+                  {{ step.description }}
+                </p>
+              </div>
+
+              <Icon
+                icon="lucide:chevron-right"
+                class="w-3.5 h-3.5 text-zinc-700 group-hover:text-zinc-500 shrink-0 mt-1.5 transition-colors"
+              />
+            </li>
+          </ol>
+        </div>
       </div>
 
       <!-- Agent Carousel -->
