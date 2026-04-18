@@ -1,6 +1,19 @@
 # OpenAgent
 
-Open-source AI agent platform with tool use, memory, multi-provider LLM support, and messaging channel integrations.
+Open-source AI agent platform with tool use, memory, multi-provider LLM support, and messaging channel integrations. Run it in the browser or as a self-contained desktop app.
+
+## Features
+
+- **Multi-provider LLM support** — OpenAI, Anthropic, Google Gemini, Groq, Grok, Ollama, LM Studio, OpenRouter, Mistral
+- **Streaming chat** — Real-time token streaming with image/file attachments and voice input (local Whisper STT)
+- **Tool system** — Built-in tools + [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) servers, discoverable via a built-in registry browser
+- **Agents** — Reusable AI presets with custom system prompts, model selection, tool access, and sub-agent orchestration
+- **Memory spaces** — RAG-powered knowledge retrieval with configurable embedding models, chunking, and OCR
+- **Messaging channels** — Telegram, Discord, and Slack integrations so agents can respond remotely
+- **Triggers** — Cron jobs and file watchers for automated, unattended agent execution
+- **Human-in-the-loop** — Granular approval gates for tool execution (per-tool, per-session, or always)
+- **Desktop app** — Electron wrapper that bundles the server and UI into a single self-contained package (AppImage, deb, exe)
+- **Backup & restore** — Export/import your entire configuration (agents, providers, memory, channels, etc.)
 
 ## Monorepo Structure
 
@@ -9,6 +22,7 @@ apps/
   server/    — Fastify API server: agent execution, tools, memory, channels
   web/       — Vue 3 SPA: chat UI, agent management, settings
   electron/  — Electron wrapper: bundles server + web as a desktop app
+mcps/        — Built-in MCP tool servers (media converter, diagrams, weather, etc.)
 ```
 
 ## Prerequisites
@@ -57,12 +71,14 @@ pnpm package:win
 pnpm package:mac
 ```
 
-## Features
+> **Electron packaging** runs a prepare script (`scripts/prepare-server-deps.mjs`) that
+> resolves a flat copy of the server's native dependencies and rebuilds them against
+> Electron's Node ABI. This makes the desktop app fully self-contained — no system
+> Node.js installation is required.
 
-- **Multi-provider LLM gateway** — OpenAI, Anthropic, Google Gemini, Groq, Grok, Ollama, LM Studio, OpenRouter
-- **Tool system** — Built-in tools + MCP server support (Smithery, Glama, custom)
-- **Agent memory** — RAG-based long-term memory with LanceDB embeddings
-- **Messaging channels** — Telegram, Discord, Slack
-- **Triggers** — Cron jobs, file watchers, channel messages
-- **Human-in-the-loop** — Approval gates for tool execution
-- **Desktop app** — Electron wrapper for local deployment
+> **After packaging** the native modules in the workspace may be built against Electron's
+> ABI. To switch back to development, run:
+>
+> ```bash
+> cd apps/server && npm run rebuild:native
+> ```
