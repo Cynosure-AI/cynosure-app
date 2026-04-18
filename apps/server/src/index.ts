@@ -38,8 +38,8 @@ import { startFileWatcherService, stopFileWatcherService } from './core/triggers
 import { registerBuiltInTools } from './core/tools/built-in-tools.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
 
-const APP_NAME = 'open-agent-server'
-const APP_VERSION = process.env.OPENAGENT_VERSION || '1.0.0'
+const APP_NAME = 'cynosure-server'
+const APP_VERSION = process.env.CYNOSURE_VERSION || '1.0.0'
 const DEFAULT_PORT = 3099
 
 const executionEvents = [
@@ -161,7 +161,7 @@ Options:
   -v, --version          Show the CLI version
   --host <host>          Bind to a specific host (default: env HOST or all interfaces)
   --port <port>          Bind to a specific port (default: env PORT or ${DEFAULT_PORT})
-  --data-dir <path>      Override OPENAGENT_DATA_DIR for SQLite, LanceDB, and logs
+  --data-dir <path>      Override CYNOSURE_DATA_DIR for SQLite, LanceDB, and logs
 
 Examples:
   ${executable}
@@ -189,7 +189,7 @@ function formatListenAddress(host: string | undefined, port: number): string {
 
 async function startServer(options: StartServerOptions): Promise<RunningServer> {
   if (options.dataDir) {
-    process.env.OPENAGENT_DATA_DIR = options.dataDir
+    process.env.CYNOSURE_DATA_DIR = options.dataDir
   }
 
   const app = Fastify({ bodyLimit: 50 * 1024 * 1024 })
@@ -201,7 +201,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   await app.register(fastifySwagger, {
     openapi: {
       info: {
-        title: 'OpenAgent API',
+        title: 'Cynosure API',
         version: APP_VERSION,
         description: 'LLM orchestrator with tools, agents, and memory'
       }
@@ -349,7 +349,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
   await app.listen({ port: options.port, host: options.host || '0.0.0.0' })
 
-  console.log(`OpenAgent server listening on ${formatListenAddress(options.host, options.port)}`)
+  console.log(`Cynosure server listening on ${formatListenAddress(options.host, options.port)}`)
 
   let isClosed = false
 

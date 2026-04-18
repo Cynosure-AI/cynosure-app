@@ -33,7 +33,7 @@ async function doExport(): Promise<void> {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `openagent-backup-${new Date().toISOString().slice(0, 10)}.zip`
+    a.download = `cynosure-backup-${new Date().toISOString().slice(0, 10)}.zip`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -421,7 +421,7 @@ async function doReset(): Promise<void> {
       </h3>
       <div class="bg-zinc-800 border border-red-500/20 rounded-xl p-4 space-y-4">
         <p class="text-xs text-zinc-400">
-          Permanently delete all data and reset OpenAgent to a clean state. This removes all agents, providers,
+          Permanently delete all data and reset Cynosure to a clean state. This removes all agents, providers,
           conversations, memory spaces, MCP servers, channels, and settings.
         </p>
 

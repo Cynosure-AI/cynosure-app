@@ -10,7 +10,7 @@ import BackupSettings from '../../components/settings/BackupSettings.vue'
           Backup & Restore
         </h1>
         <p class="text-sm text-zinc-500 mt-1">
-          Export your OpenAgent configuration as a zip file, or restore from a previous backup
+          Export your Cynosure configuration as a zip file, or restore from a previous backup
         </p>
       </div>
       <BackupSettings />

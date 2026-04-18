@@ -1,23 +1,23 @@
 {
-  "name": "openagent",
+  "name": "cynosure",
   "version": "1.0.0",
   "private": true,
-  "description": "OpenAgent monorepo — server, web UI, and Electron desktop app",
+  "description": "Cynosure monorepo — server, web UI, and Electron desktop app",
   "scripts": {
-    "dev:server": "pnpm --filter open-agent-server dev",
-    "dev:web": "pnpm --filter open-agent-web dev",
-    "dev:electron": "pnpm --filter openagent-desktop dev",
-    "dev": "pnpm --filter open-agent-server dev & pnpm --filter open-agent-web dev",
-    "build:server": "pnpm --filter open-agent-server build",
-    "build:web": "pnpm --filter open-agent-web build",
-    "build:electron": "pnpm --filter openagent-desktop build",
-    "build": "pnpm --filter open-agent-server build && pnpm --filter open-agent-web build",
+    "dev:server": "pnpm --filter cynosure-server dev",
+    "dev:web": "pnpm --filter cynosure-web dev",
+    "dev:electron": "pnpm --filter cynosure-desktop dev",
+    "dev": "pnpm --filter cynosure-server dev & pnpm --filter cynosure-web dev",
+    "build:server": "pnpm --filter cynosure-server build",
+    "build:web": "pnpm --filter cynosure-web build",
+    "build:electron": "pnpm --filter cynosure-desktop build",
+    "build": "pnpm --filter cynosure-server build && pnpm --filter cynosure-web build",
     "lint": "pnpm -r lint",
     "lint:fix": "pnpm -r lint:fix",
-    "package:electron": "pnpm --filter openagent-desktop package",
-    "package:linux": "pnpm --filter openagent-desktop package:linux",
-    "package:win": "pnpm --filter openagent-desktop package:win",
-    "package:mac": "pnpm --filter openagent-desktop package:mac"
+    "package:electron": "pnpm --filter cynosure-desktop package",
+    "package:linux": "pnpm --filter cynosure-desktop package:linux",
+    "package:win": "pnpm --filter cynosure-desktop package:win",
+    "package:mac": "pnpm --filter cynosure-desktop package:mac"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

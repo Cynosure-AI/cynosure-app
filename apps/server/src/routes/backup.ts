@@ -269,7 +269,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             await archiveFinished
 
             const buffer = Buffer.concat(chunks)
-            const filename = `openagent-backup-${new Date().toISOString().slice(0, 10)}.zip`
+            const filename = `cynosure-backup-${new Date().toISOString().slice(0, 10)}.zip`
 
             return reply
                 .header('Content-Type', 'application/zip')

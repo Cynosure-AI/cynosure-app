@@ -1,17 +1,17 @@
 {
-    "name": "openagent-desktop",
+    "name": "cynosure-desktop",
     "version": "1.0.0",
-    "description": "OpenAgent Desktop — Electron wrapper for OpenAgent server + web UI",
+    "description": "Cynosure Desktop — Electron wrapper for Cynosure server + web UI",
     "author": {
-        "name": "OpenAgent",
-        "email": "dev@openagent.app"
+        "name": "Cynosure",
+        "email": "dev@cynosure.app"
     },
-    "homepage": "https://github.com/OpenAgent/OpenAgent",
+    "homepage": "https://github.com/Cynosure/Cynosure",
     "main": "./out/main/index.js",
     "scripts": {
         "dev": "concurrently -k -n web,electron -c blue,green \"cd ../web && pnpm dev\" \"wait-on http://localhost:5173 && electron-vite dev\"",
         "build": "electron-vite build",
-        "prebuild:deps": "pnpm --filter open-agent-server build && pnpm --filter open-agent-web build",
+        "prebuild:deps": "pnpm --filter cynosure-server build && pnpm --filter cynosure-web build",
         "package": "pnpm run prebuild:deps && pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --config electron-builder.yml",
         "package:linux": "pnpm run prebuild:deps && pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --linux --config electron-builder.yml",
         "package:win": "pnpm run prebuild:deps && pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --win --config electron-builder.yml",

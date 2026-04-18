@@ -2,30 +2,30 @@ import { join } from 'path'
 import { homedir } from 'os'
 
 /**
- * Returns the root config directory for OpenAgent.
+ * Returns the root config directory for Cynosure.
  *
  * Resolution order:
- * 1. OPENAGENT_DATA_DIR environment variable (set via --data-dir or .env)
+ * 1. CYNOSURE_DATA_DIR environment variable (set via --data-dir or .env)
  * 2. Platform-specific config directory:
- *    - Linux:   ~/.config/open-agent
- *    - macOS:   ~/Library/Application Support/open-agent
- *    - Windows: %APPDATA%/open-agent
+ *    - Linux:   ~/.config/cynosure-server
+ *    - macOS:   ~/Library/Application Support/cynosure-server
+ *    - Windows: %APPDATA%/cynosure-server
  */
 export function getDataDir(): string {
-    if (process.env.OPENAGENT_DATA_DIR) {
-        return process.env.OPENAGENT_DATA_DIR
+    if (process.env.CYNOSURE_DATA_DIR) {
+        return process.env.CYNOSURE_DATA_DIR
     }
 
     const home = homedir()
 
     switch (process.platform) {
         case 'darwin':
-            return join(home, 'Library', 'Application Support', 'open-agent')
+            return join(home, 'Library', 'Application Support', 'cynosure-server')
         case 'win32':
-            return join(process.env.APPDATA || join(home, 'AppData', 'Roaming'), 'open-agent')
+            return join(process.env.APPDATA || join(home, 'AppData', 'Roaming'), 'cynosure-server')
         default:
             // Linux and other Unix — follow XDG convention
-            return join(process.env.XDG_CONFIG_HOME || join(home, '.config'), 'open-agent')
+            return join(process.env.XDG_CONFIG_HOME || join(home, '.config'), 'cynosure-server')
     }
 }
 

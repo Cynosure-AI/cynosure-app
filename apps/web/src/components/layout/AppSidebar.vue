@@ -146,7 +146,7 @@ const settingsItems: NavItem[] = [
           class="w-4 h-4 text-white"
         />
       </div>
-      <span class="text-sm font-semibold text-zinc-100 tracking-tight flex-1">OpenAgent</span>
+      <span class="text-sm font-semibold text-zinc-100 tracking-tight flex-1">Cynosure</span>
 
       <!-- Notification Bell -->
       <div class="relative">

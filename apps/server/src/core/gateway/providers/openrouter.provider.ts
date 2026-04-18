@@ -32,8 +32,8 @@ export class OpenRouterProvider extends BaseLLMProvider {
             apiKey: config.apiKey || 'not-set',
             baseURL: config.baseUrl || 'https://openrouter.ai/api/v1',
             defaultHeaders: {
-                'HTTP-Referer': 'https://openagent.app',
-                'X-OpenRouter-Title': 'OpenAgent'
+                'HTTP-Referer': 'https://cynosure.app',
+                'X-OpenRouter-Title': 'Cynosure'
             }
         })
     }

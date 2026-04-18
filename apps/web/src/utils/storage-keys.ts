@@ -4,25 +4,25 @@
  */
 
 // ── UI preferences (synced to Electron JSON file) ──────────────────────────────
-export const SK_THEME = 'oa-theme'
-export const SK_AUTO_EXPAND = 'oa-auto-expand'
-export const SK_AUTO_EXPAND_TOOLS = 'oa-auto-expand-tools'
-export const SK_GENERATE_TITLE = 'oa-generate-title'
-export const SK_CONTEXT_STRATEGY = 'oa-context-strategy'
-export const SK_AGENT_CATEGORIES = 'oa-agent-categories'
-export const SK_MA_CATEGORIES = 'oa-ma-categories'
+export const SK_THEME = 'cy-theme'
+export const SK_AUTO_EXPAND = 'cy-auto-expand'
+export const SK_AUTO_EXPAND_TOOLS = 'cy-auto-expand-tools'
+export const SK_GENERATE_TITLE = 'cy-generate-title'
+export const SK_CONTEXT_STRATEGY = 'cy-context-strategy'
+export const SK_AGENT_CATEGORIES = 'cy-agent-categories'
+export const SK_MA_CATEGORIES = 'cy-ma-categories'
 
 // ── Whisper / STT ──────────────────────────────────────────────────────────────
-export const SK_WHISPER_MODEL = 'oa-whisper-model'
-export const SK_WHISPER_ENABLED = 'oa-whisper-enabled'
-export const SK_WHISPER_QUANTIZATION = 'oa-whisper-quantization'
-export const SK_WHISPER_LANGUAGE = 'oa-whisper-language'
-export const SK_WHISPER_DOWNLOADED = 'oa-whisper-downloaded'
+export const SK_WHISPER_MODEL = 'cy-whisper-model'
+export const SK_WHISPER_ENABLED = 'cy-whisper-enabled'
+export const SK_WHISPER_QUANTIZATION = 'cy-whisper-quantization'
+export const SK_WHISPER_LANGUAGE = 'cy-whisper-language'
+export const SK_WHISPER_DOWNLOADED = 'cy-whisper-downloaded'
 
 // ── Layout state ───────────────────────────────────────────────────────────────
 export const SK_SIDEBAR_COLLAPSED = 'sidebar-collapsed'
 export const SK_CHAT_SIDEBAR_OPEN = 'chat-sidebar-open'
-export const SK_ACTIVE_AGENT = 'oa-active-agent'
+export const SK_ACTIVE_AGENT = 'cy-active-agent'
 export const SK_AGENTS_VIEW_MODE = 'agents-view-mode'
 
 /**

@@ -132,7 +132,7 @@ function startServer(): Promise<void> {
         const env: Record<string, string | undefined> = {
             ...process.env,
             PATH: getFullPath(),
-            OPENAGENT_DATA_DIR: getDataDir(),
+            CYNOSURE_DATA_DIR: getDataDir(),
             NODE_ENV: is.dev ? 'development' : 'production'
         }
 
@@ -251,7 +251,7 @@ function createTray(win: BrowserWindow): Tray {
         }
     ])
 
-    newTray.setToolTip('OpenAgent')
+    newTray.setToolTip('Cynosure')
     newTray.setContextMenu(contextMenu)
     newTray.on('click', () => {
         win.show()
@@ -268,7 +268,7 @@ function createWindow(): BrowserWindow {
         minWidth: 800,
         minHeight: 600,
         show: false,
-        title: 'OpenAgent',
+        title: 'Cynosure',
         autoHideMenuBar: true,
         icon: appIcon,
         webPreferences: {
@@ -302,7 +302,7 @@ function createWindow(): BrowserWindow {
         win.loadURL(devUrl)
         //win.webContents.openDevTools({ mode: 'detach' })
     } else {
-        win.loadURL('app://openagent/')
+        win.loadURL('app://cynosure/')
     }
 
     // F12 / Ctrl+Shift+I to toggle DevTools
@@ -318,7 +318,7 @@ function createWindow(): BrowserWindow {
 // ── App lifecycle ──────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-    electronApp.setAppUserModelId('com.openagent.desktop')
+    electronApp.setAppUserModelId('com.cynosure.desktop')
 
     app.on('browser-window-created', (_, window) => {
         optimizer.watchWindowShortcuts(window)
