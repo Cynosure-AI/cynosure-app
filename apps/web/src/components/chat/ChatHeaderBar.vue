@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 import { useChatStore } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useProviderStore } from '../../stores/provider.store'
@@ -103,6 +103,38 @@ async function newChat(): Promise<void> {
   chatStore.startNewChat()
   agentStore.clearExecution()
 }
+
+// ── Inline title editing ──
+const isEditingTitle = ref(false)
+const editingTitleValue = ref('')
+const titleInputRef = ref<HTMLInputElement | null>(null)
+
+function startEditTitle(): void {
+  if (!chatStore.activeConversation) return
+  editingTitleValue.value = chatStore.activeConversation.title
+  isEditingTitle.value = true
+  nextTick(() => {
+    titleInputRef.value?.select()
+  })
+}
+
+async function commitTitleEdit(): Promise<void> {
+  if (!isEditingTitle.value) return
+  isEditingTitle.value = false
+  const id = chatStore.activeConversationId
+  if (id && editingTitleValue.value.trim()) {
+    await chatStore.renameConversation(id, editingTitleValue.value)
+  }
+}
+
+function cancelTitleEdit(): void {
+  isEditingTitle.value = false
+}
+
+function onTitleKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Enter') commitTitleEdit()
+  else if (e.key === 'Escape') cancelTitleEdit()
+}
 </script>
 
 <template>
@@ -167,9 +199,19 @@ async function newChat(): Promise<void> {
 
     <!-- Centered conversation title + origin badge -->
     <div class="flex-1 min-w-0 flex items-center justify-center gap-2">
+      <input
+        v-if="isEditingTitle"
+        ref="titleInputRef"
+        v-model="editingTitleValue"
+        class="text-sm font-medium text-zinc-300 bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 max-w-xs w-full focus:outline-none focus:border-blue-500"
+        @blur="commitTitleEdit"
+        @keydown="onTitleKeydown"
+      >
       <span
-        v-if="conversationTitle"
-        class="text-sm font-medium text-zinc-300 truncate"
+        v-else-if="conversationTitle"
+        class="text-sm font-medium text-zinc-300 truncate cursor-default select-none"
+        title="Double-click to rename"
+        @dblclick="startEditTitle"
       >
         {{ conversationTitle }}
       </span>
