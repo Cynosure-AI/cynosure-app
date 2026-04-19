@@ -1,12 +1,8 @@
 import cron, { type ScheduledTask } from 'node-cron'
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
-import { getGateway } from '../gateway/gateway.js'
 import { getAgent } from '../agents/agent-files.js'
-import { getEventBus } from '../telemetry/event-bus.js'
-import { AgentExecutor } from '../agent/agent-executor.js'
-import { prepareAgentExecution } from '../agent/prepare-execution.js'
-import type { ChatMessage } from '../gateway/providers/base.provider.js'
+import { runTriggerExecution } from './trigger-runner.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -154,81 +150,33 @@ async function runCronJob(jobId: string): Promise<void> {
     const agent = getAgent(job.agentId)
     if (!agent) return
 
-    const gateway = getGateway()
-    const db = getDb()
-
-    const now = new Date()
-    const conversationId = nanoid()
-    const title = `Cron Job ${now.toLocaleString()}`
-    db.prepare(
-        'INSERT INTO conversations (id, title, agent_id, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(conversationId, title, job.agentId, 'cron', Date.now(), Date.now())
-
-    activeCronRuns.set(jobId, { jobId, agentId: job.agentId, conversationId, startedAt: Date.now() })
+    activeCronRuns.set(jobId, { jobId, agentId: job.agentId, conversationId: '', startedAt: Date.now() })
 
     const abortController = new AbortController()
     activeCronAbortControllers.set(jobId, abortController)
 
-    // Build user message: timestamp line + job-specific prompt (or generic fallback)
+    const now = new Date()
     const userContent = job.prompt
         ? `Scheduled cron job triggered at ${now.toISOString()}.\n\n${job.prompt}`
         : `Scheduled cron job triggered at ${now.toISOString()}. Execute your scheduled task as described in your instructions.`
 
-    // Prepare execution: tools, memory, system prompt, provider/model
-    const prepared = await prepareAgentExecution({
-        agent,
-        conversationId,
-        broadcast,
-        providerOverride: job.providerOverride || undefined,
-        modelOverride: job.modelOverride || undefined,
-        systemPromptSuffix: '\nUse your tools to perform the scheduled task.',
-        userQuery: userContent,
-        isFirstMessage: true,
-    })
-
-    const messages: ChatMessage[] = [
-        ...prepared.systemMessages,
-        { role: 'user', content: userContent }
-    ]
-
-    const triggerMsgId = nanoid()
-    db.prepare(
-        'INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(triggerMsgId, conversationId, 'user', userContent, Date.now())
-
-    broadcast('chat:new-message', {
-        conversationId,
-        message: { id: triggerMsgId, conversationId, role: 'user', content: userContent, createdAt: Date.now() }
-    })
-
-    const executor = new AgentExecutor({
-        gateway,
-        tools: prepared.tools,
-        conversationId,
-        broadcast,
-        providerId: prepared.providerId,
-        model: prepared.model,
-        maxRounds: 10,
-        thinkingEnabled: agent.thinkingEnabled !== false,
-        streamMode: 'per-round',
-        hitl: !agent.autoApproveTools,
-        agentId: job.agentId,
-        agentName: agent.name,
-        agentIconUrl: agent.iconUrl || null,
-        signal: abortController.signal,
-    })
-
     try {
-        const startMs = Date.now()
-        const result = await executor.run(messages)
-
-        const assistantMsgId = nanoid()
-        const now = Date.now()
-        db.prepare(
-            'INSERT INTO messages (id, conversation_id, role, content, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(assistantMsgId, conversationId, 'assistant', result.content, prepared.providerId || null, prepared.model || null, result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null, result.contextTokens ?? null, now - startMs, now)
-
-        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(Date.now(), conversationId)
+        const { conversationId } = await runTriggerExecution({
+            agent,
+            userContent,
+            origin: 'cron',
+            title: `Cron Job ${now.toLocaleString()}`,
+            systemPromptSuffix: '\nUse your tools to perform the scheduled task.',
+            providerOverride: job.providerOverride || undefined,
+            modelOverride: job.modelOverride || undefined,
+            broadcast,
+            signal: abortController.signal,
+            logPrefix: '[cron]',
+            onConversationCreated: (id) => {
+                const run = activeCronRuns.get(jobId)
+                if (run) run.conversationId = id
+            },
+        })
 
         // If one-off, disable the cron job after successful execution
         if (job.oneOff) {
@@ -236,13 +184,8 @@ async function runCronJob(jobId: string): Promise<void> {
             unscheduleCronJob(jobId)
         }
     } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
-            console.error(`[cron] Error running cron job ${jobId} for agent ${job.agentId}:`, (err as Error).message)
-            try {
-                const eventBus = getEventBus()
-                eventBus.emit('task:error', { taskId: '', conversationId, error: (err as Error).message })
-            } catch { /* ignore */ }
-        }
+        if ((err as Error).name === 'AbortError') return
+        // Error already logged by trigger-runner
     } finally {
         activeCronRuns.delete(jobId)
         activeCronAbortControllers.delete(jobId)

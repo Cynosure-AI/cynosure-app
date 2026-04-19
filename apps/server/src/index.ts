@@ -15,9 +15,9 @@ import { type ApprovalResult, getHITLGate } from './core/agent/hitl-gate.js'
 import { getRAGStore } from './core/memory/rag.js'
 import { getEventBus } from './core/telemetry/event-bus.js'
 
-import { registerAgentRoutes } from './routes/agent.js'
 import { registerAgentDefinitionRoutes } from './routes/agents.js'
 import { registerChatRoutes } from './routes/chat.js'
+import { registerConversationRoutes } from './routes/conversations.js'
 import { registerMemoryRoutes } from './routes/memory.js'
 import { registerMcpRoutes, loadSavedMcpServers } from './routes/mcp.js'
 import { registerProviderRoutes, loadSavedProviders } from './routes/providers.js'
@@ -313,7 +313,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
   app.register(registerProviderRoutes, { prefix: '/api/providers' })
   app.register(async (instance) => registerChatRoutes(instance, broadcast), { prefix: '/api/chat' })
-  app.register(registerAgentRoutes, { prefix: '/api/agent' })
+  app.register(registerConversationRoutes, { prefix: '/api/chat' })
   app.register(registerAgentDefinitionRoutes, { prefix: '/api/agents' })
   app.register(async (instance) => registerMemoryRoutes(instance, broadcast), { prefix: '/api/memory' })
   app.register(registerMcpRoutes, { prefix: '/api/mcp' })
