@@ -49,7 +49,7 @@ const defaultModelLabel = computed(() => {
   const isProviderOverridden = chatStore.sessionProviderOverride &&
     chatStore.sessionProviderOverride !== selectedAgent.value?.providerId
   const effectiveDefault = isProviderOverridden ? providerDefault : (agentModel || providerDefault)
-  return effectiveDefault ? `Default (${effectiveDefault})` : 'Provider default'
+  return effectiveDefault ? `${effectiveDefault} (Default)` : 'Provider default'
 })
 
 const modelDropdownGroups = computed((): SelectOptionGroup[] => [{
