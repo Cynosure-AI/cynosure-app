@@ -1,0 +1,42 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Midnight Purple Theme
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Variable overrides: deep indigo/purple tints ── */
+[data-theme="midnight-purple"] {
+  --color-zinc-950: #130f1b;
+  --color-zinc-900: #1a1528;
+  --color-zinc-800: #24203c;
+  --color-zinc-700: #30284c;
+  --color-zinc-600: #3d2e5e;
+  --color-zinc-500: #5c4880;
+  --color-zinc-400: #8270a8;
+  --color-zinc-300: #a898c8;
+  --color-zinc-200: #ccc0e2;
+  --color-zinc-100: #ebe5f5;
+
+  /* Accent: violet replaces blue */
+  --color-blue-50: #faf5ff;
+  --color-blue-100: #f3e8ff;
+  --color-blue-200: #e9d5ff;
+  --color-blue-300: #d8b4fe;
+  --color-blue-400: #c084fc;
+  --color-blue-500: #a855f7;
+  --color-blue-600: #9333ea;
+  --color-blue-700: #7e22ce;
+  --color-blue-800: #6b21a8;
+  --color-blue-900: #581c87;
+  --color-blue-950: #3b0764;
+
+  /* Theme effects */
+  --theme-glow: 0 0 12px #a855f720;
+  --theme-glow-strong: 0 0 24px #a855f738;
+  --theme-accent-rgb: 168, 85, 247;
+
+  color-scheme: dark;
+}
+
+/* ── Focus glow ── */
+[data-theme="midnight-purple"] :is(button, a):focus-visible {
+  box-shadow: var(--theme-glow-strong);
+}

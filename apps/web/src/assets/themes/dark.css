@@ -1,0 +1,12 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dark Theme
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Variable overrides: slightly lighter than default Tailwind zinc ── */
+[data-theme="dark"] {
+  --color-zinc-950: #141417;
+  --color-zinc-900: #202024;
+  --color-zinc-800: #2f2f33;
+  --color-zinc-700: #47474e;
+  color-scheme: dark;
+}
