@@ -365,6 +365,14 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  async function renameConversation(id: string, title: string): Promise<void> {
+    const trimmed = title.trim()
+    if (!trimmed) return
+    await api.chat.updateTitle(id, trimmed)
+    const conv = conversations.value.find(c => c.id === id)
+    if (conv) conv.title = trimmed
+  }
+
   // ── Post-actions ──
 
   function handlePostAction(data: { conversationId: string; action: string; status: 'started' | 'completed' }): void {
@@ -468,6 +476,7 @@ export const useChatStore = defineStore('chat', () => {
     deleteConversation,
     deleteAllConversations,
     pinConversation,
+    renameConversation,
     startNewChat,
     handlePostAction,
   }
