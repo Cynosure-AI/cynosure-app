@@ -195,16 +195,16 @@ const isUser = computed(() => props.role === 'user')
 
 <template>
   <div
-    class="flex gap-4 px-1 md:px-4 py-3 group/msg transition-all duration-300"
+    class="flex gap-4 px-3 md:px-4 py-3 group/msg transition-all duration-300"
     :class="isUser ? 'justify-end' : 'justify-start'"
   >
     <!-- Avatar -->
     <div
       v-if="!isUser"
-      class="shrink-0 mt-0.5 flex flex-col items-center gap-0.5"
+      class="shrink-0 mt-0.5 hidden md:flex flex-col items-center gap-0.5"
     >
       <div
-        class="w-8 h-8 rounded-full hidden md:flex items-center justify-center text-xs font-semibold overflow-hidden shadow-sm ring-1 ring-zinc-700/50 transition-opacity"
+        class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold overflow-hidden shadow-sm ring-1 ring-zinc-700/50 transition-opacity"
         :class="[
           agentIconUrl ? 'bg-zinc-800' : 'bg-linear-to-br from-zinc-700 to-zinc-900 text-zinc-300',
           agentId ? 'cursor-pointer hover:opacity-80' : ''

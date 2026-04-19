@@ -120,7 +120,7 @@ async function newChat(): Promise<void> {
     </button>
 
     <!-- Agent selector -->
-    <div class="w-44 shrink-0">
+    <div class="w-32 sm:w-44 shrink-0">
       <CustomSelect
         :model-value="agentDropdownValue"
         :groups="agentDropdownGroups"
