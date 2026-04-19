@@ -58,7 +58,7 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
     })
 
     // PUT /api/cron-jobs/:id — update a cron job
-    app.put<{ Params: { id: string }; Body: { name?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string } }>('/:id', async (req, reply) => {
+    app.put<{ Params: { id: string }; Body: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string } }>('/:id', async (req, reply) => {
         const job = updateCronJob(req.params.id, req.body)
         if (!job) {
             reply.code(404)

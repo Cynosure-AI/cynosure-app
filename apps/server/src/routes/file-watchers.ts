@@ -70,6 +70,7 @@ export async function registerFileWatcherRoutes(app: FastifyInstance): Promise<v
         Params: { id: string }
         Body: {
             name?: string
+            agentId?: string
             paths?: string[]
             ignorePatterns?: string[]
             prompt?: string

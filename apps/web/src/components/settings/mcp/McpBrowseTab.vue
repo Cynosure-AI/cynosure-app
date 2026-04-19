@@ -109,6 +109,11 @@ async function addFromRegistry(srv: McpRegistryServer): Promise<void> {
       env: Object.keys(env).length ? env : undefined,
       icon_url: iconUrl,
       origin: originLabel,
+      env_hints: install.envVars.length ? install.envVars.map(v => ({
+        name: v.name,
+        description: v.description,
+        required: v.required,
+      })) : undefined,
     })
 
     // Server is always created in the DB, even if initial connection fails.

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import type { AgentDefinition, FileWatcher } from '../../api/types'
 import { useProviderStore } from '../../stores/provider.store'
@@ -10,6 +11,7 @@ import CustomSelect, { type SelectOptionGroup } from '../../components/shared/Cu
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import { useProviderLogos } from '../../composables/useProviderLogos'
 
+const router = useRouter()
 const { logoUrl } = useProviderLogos()
 
 const watchers = ref<FileWatcher[]>([])
@@ -20,19 +22,12 @@ let pollTimer: ReturnType<typeof setInterval> | undefined
 
 const providerStore = useProviderStore()
 
-// Dialog state
+// Dialog state — simplified creation dialog
 const showDialog = ref(false)
-const editingId = ref<string | null>(null)
 const dlgName = ref('')
 const dlgAgentId = ref('')
 const dlgPaths = ref('')
-const dlgIgnorePatterns = ref('node_modules/**\n.git/**')
 const dlgPrompt = ref('')
-const dlgDebounceMs = ref(5)
-const dlgModelOverride = ref('')
-const dlgProviderOverride = ref('')
-const dlgModels = ref<string[]>([])
-const loadingModels = ref(false)
 const saving = ref(false)
 
 // Delete confirm
@@ -41,16 +36,10 @@ const pendingDeleteId = ref<string | null>(null)
 const pendingDeleteName = ref('')
 
 function resetDlg() {
-  editingId.value = null
   dlgName.value = ''
   dlgAgentId.value = ''
   dlgPaths.value = ''
-  dlgIgnorePatterns.value = 'node_modules/**\n.git/**'
   dlgPrompt.value = ''
-  dlgDebounceMs.value = 5
-  dlgModelOverride.value = ''
-  dlgProviderOverride.value = ''
-  dlgModels.value = []
 }
 
 async function openAddDialog() {
@@ -59,56 +48,23 @@ async function openAddDialog() {
   showDialog.value = true
 }
 
-async function openEditDialog(w: FileWatcher) {
-  allAgents.value = await api.agents.list()
-  resetDlg()
-  editingId.value = w.id
-  dlgName.value = w.name || ''
-  dlgAgentId.value = w.agentId
-  dlgPaths.value = w.paths.join('\n')
-  dlgIgnorePatterns.value = w.ignorePatterns.join('\n')
-  dlgPrompt.value = w.prompt || ''
-  dlgDebounceMs.value = Math.round(w.debounceMs / 1000)
-  dlgModelOverride.value = w.modelOverride || ''
-  dlgProviderOverride.value = w.providerOverride || ''
-  showDialog.value = true
-}
-
 async function save() {
   const paths = dlgPaths.value.split('\n').map(p => p.trim()).filter(Boolean)
-  if (!paths.length) return
+  if (!paths.length || !dlgAgentId.value) return
 
   saving.value = true
   try {
-    const ignorePatterns = dlgIgnorePatterns.value.split('\n').map(p => p.trim()).filter(Boolean)
-    const debounceMs = Math.max(1000, dlgDebounceMs.value * 1000)
-
-    if (editingId.value) {
-      await api.fileWatchers.update(editingId.value, {
-        name: dlgName.value.trim(),
-        paths,
-        ignorePatterns,
-        prompt: dlgPrompt.value,
-        debounceMs,
-        modelOverride: dlgModelOverride.value,
-        providerOverride: dlgProviderOverride.value,
-      })
-    } else {
-      if (!dlgAgentId.value) return
-      await api.fileWatchers.create({
-        name: dlgName.value.trim(),
-        agentId: dlgAgentId.value,
-        paths,
-        ignorePatterns,
-        prompt: dlgPrompt.value,
-        debounceMs,
-        enabled: true,
-        modelOverride: dlgModelOverride.value,
-        providerOverride: dlgProviderOverride.value,
-      })
-    }
+    const created = await api.fileWatchers.create({
+      name: dlgName.value.trim(),
+      agentId: dlgAgentId.value,
+      paths,
+      ignorePatterns: ['node_modules/**', '.git/**'],
+      prompt: dlgPrompt.value,
+      debounceMs: 5000,
+      enabled: true,
+    })
     showDialog.value = false
-    await loadWatchers()
+    router.push(`/triggers/file-watchers/${created.id}`)
   } finally {
     saving.value = false
   }
@@ -133,40 +89,6 @@ async function deleteConfirmed() {
   await loadWatchers()
 }
 
-// ─── Model override helpers ──────────────────────────────
-
-const effectiveProviderId = computed(() => {
-  if (dlgProviderOverride.value) return dlgProviderOverride.value
-  const agent = allAgents.value.find(a => a.id === dlgAgentId.value)
-  return agent?.providerId || providerStore.lastUsedProviderId
-})
-
-async function fetchModels(): Promise<void> {
-  const pid = dlgProviderOverride.value || effectiveProviderId.value
-  if (!pid) { dlgModels.value = []; return }
-  loadingModels.value = true
-  try {
-    dlgModels.value = await providerStore.listModels(pid, 'llm')
-  } catch {
-    dlgModels.value = []
-  } finally {
-    loadingModels.value = false
-  }
-}
-
-function onProviderChange(pid: string): void {
-  dlgProviderOverride.value = pid
-  dlgModelOverride.value = ''
-  dlgModels.value = []
-  if (pid) fetchModels()
-}
-
-watch(showDialog, (open) => {
-  if (open && (dlgProviderOverride.value || effectiveProviderId.value)) {
-    fetchModels()
-  }
-})
-
 // ─── CustomSelect groups ─────────────────────────────────
 
 const agentGroups = computed((): SelectOptionGroup[] => [{
@@ -178,24 +100,6 @@ const agentGroups = computed((): SelectOptionGroup[] => [{
     }
     return { value: a.id, label: a.name, imgSrc }
   })
-}])
-
-const providerGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Use agent default', iconName: 'lucide:settings' },
-    ...providerStore.providers.map(p => ({
-      value: p.id,
-      label: p.name,
-      imgSrc: logoUrl(p.type),
-    }))
-  ]
-}])
-
-const modelGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Use agent default', iconName: 'lucide:settings' },
-    ...dlgModels.value.map(m => ({ value: m, label: m }))
-  ]
 }])
 
 // ─── Tabs ────────────────────────────────────────────────
@@ -299,7 +203,8 @@ onUnmounted(() => {
         <div
           v-for="w in watchers"
           :key="w.id"
-          class="bg-zinc-800/60 border border-zinc-700/60 rounded-xl p-4 flex items-start gap-4"
+          class="bg-zinc-800/60 border rounded-xl p-4 flex items-start gap-4"
+          :class="w.enabled ? 'border-zinc-700/60' : 'border-zinc-700/30 opacity-60'"
         >
           <!-- Agent icon -->
           <div class="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 overflow-hidden mt-0.5">
@@ -370,7 +275,7 @@ onUnmounted(() => {
             <button
               class="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
               title="Edit"
-              @click="openEditDialog(w)"
+              @click="router.push(`/triggers/file-watchers/${w.id}`)"
             >
               <Icon
                 icon="lucide:pencil"
@@ -392,108 +297,55 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Create/Edit Dialog -->
+    <!-- Create Dialog (simplified) -->
     <ModalDialog
       :show="showDialog"
-      :title="editingId ? 'Edit File Watcher' : 'New File Watcher'"
-      max-width="max-w-3xl"
+      title="New File Watcher"
       @close="showDialog = false"
     >
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-        <!-- Left column -->
-        <div class="space-y-4">
-          <!-- Name -->
-          <div>
-            <label class="block text-xs text-zinc-400 mb-1">Name</label>
-            <input
-              v-model="dlgName"
-              type="text"
-              placeholder="My Watcher"
-              class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-          </div>
-
-          <!-- Agent (only for new) -->
-          <div v-if="!editingId">
-            <label class="block text-xs text-zinc-400 mb-1">Agent</label>
-            <CustomSelect
-              v-model="dlgAgentId"
-              :groups="agentGroups"
-              placeholder="Select an agent…"
-              placeholder-icon="lucide:bot"
-            />
-          </div>
-
-          <!-- Paths -->
-          <div>
-            <label class="block text-xs text-zinc-400 mb-1">Paths to watch (one per line)</label>
-            <textarea
-              v-model="dlgPaths"
-              rows="4"
-              placeholder="/home/user/project/src&#10;/home/user/project/config"
-              class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-            />
-          </div>
-
-          <!-- Ignore patterns -->
-          <div>
-            <label class="block text-xs text-zinc-400 mb-1">Ignore patterns (one glob per line)</label>
-            <textarea
-              v-model="dlgIgnorePatterns"
-              rows="3"
-              placeholder="node_modules/**&#10;.git/**"
-              class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-            />
-          </div>
+      <div class="space-y-4">
+        <!-- Name -->
+        <div>
+          <label class="block text-xs text-zinc-400 mb-1">Name</label>
+          <input
+            v-model="dlgName"
+            type="text"
+            placeholder="My Watcher"
+            class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
         </div>
 
-        <!-- Right column -->
-        <div class="space-y-4">
-          <!-- Prompt -->
-          <div>
-            <label class="block text-xs text-zinc-400 mb-1">Prompt (optional instructions for the agent)</label>
-            <textarea
-              v-model="dlgPrompt"
-              rows="7"
-              placeholder="Analyze the changes and update the documentation…"
-              class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-            />
-          </div>
+        <!-- Agent -->
+        <div>
+          <label class="block text-xs text-zinc-400 mb-1">Agent</label>
+          <CustomSelect
+            v-model="dlgAgentId"
+            :groups="agentGroups"
+            placeholder="Select an agent…"
+            placeholder-icon="lucide:bot"
+          />
+        </div>
 
-          <!-- Debounce -->
-          <div>
-            <label class="block text-xs text-zinc-400 mb-1">Debounce (seconds after last change)</label>
-            <input
-              v-model.number="dlgDebounceMs"
-              type="number"
-              min="1"
-              max="300"
-              class="w-32 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-          </div>
+        <!-- Paths -->
+        <div>
+          <label class="block text-xs text-zinc-400 mb-1">Paths to watch (one per line)</label>
+          <textarea
+            v-model="dlgPaths"
+            rows="4"
+            placeholder="/home/user/project/src&#10;/home/user/project/config"
+            class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+          />
+        </div>
 
-          <!-- Provider override -->
-          <div>
-            <label class="block text-xs text-zinc-400 mb-1">Provider override (optional)</label>
-            <CustomSelect
-              :model-value="dlgProviderOverride"
-              :groups="providerGroups"
-              placeholder="Use agent default"
-              placeholder-icon="lucide:settings"
-              @change="onProviderChange"
-            />
-          </div>
-
-          <!-- Model override -->
-          <div>
-            <label class="block text-xs text-zinc-400 mb-1">Model override (optional)</label>
-            <CustomSelect
-              v-model="dlgModelOverride"
-              :groups="modelGroups"
-              placeholder="Use agent default"
-              placeholder-icon="lucide:settings"
-            />
-          </div>
+        <!-- Prompt -->
+        <div>
+          <label class="block text-xs text-zinc-400 mb-1">Prompt (optional)</label>
+          <textarea
+            v-model="dlgPrompt"
+            rows="3"
+            placeholder="Analyze the changes and update the documentation…"
+            class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+          />
         </div>
       </div>
 
@@ -507,10 +359,10 @@ onUnmounted(() => {
           </button>
           <button
             class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
-            :disabled="saving || !dlgPaths.trim() || (!editingId && !dlgAgentId)"
+            :disabled="saving || !dlgPaths.trim() || !dlgAgentId"
             @click="save"
           >
-            {{ saving ? 'Saving…' : (editingId ? 'Update' : 'Create') }}
+            {{ saving ? 'Creating…' : 'Create' }}
           </button>
         </div>
       </template>

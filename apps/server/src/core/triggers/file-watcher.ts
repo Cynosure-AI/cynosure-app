@@ -128,6 +128,7 @@ export function createFileWatcher(input: {
 
 export function updateFileWatcher(id: string, input: {
     name?: string
+    agentId?: string
     paths?: string[]
     ignorePatterns?: string[]
     prompt?: string
@@ -141,9 +142,10 @@ export function updateFileWatcher(id: string, input: {
     if (!existing) return undefined
     const now = Date.now()
     db.prepare(
-        `UPDATE file_watchers SET name = ?, paths_json = ?, ignore_patterns_json = ?, prompt = ?, debounce_ms = ?, enabled = ?, model_override = ?, provider_override = ?, updated_at = ? WHERE id = ?`
+        `UPDATE file_watchers SET name = ?, agent_id = ?, paths_json = ?, ignore_patterns_json = ?, prompt = ?, debounce_ms = ?, enabled = ?, model_override = ?, provider_override = ?, updated_at = ? WHERE id = ?`
     ).run(
         input.name !== undefined ? input.name : existing.name,
+        input.agentId !== undefined ? input.agentId : existing.agent_id,
         input.paths !== undefined ? JSON.stringify(input.paths) : existing.paths_json,
         input.ignorePatterns !== undefined ? (input.ignorePatterns.length ? JSON.stringify(input.ignorePatterns) : null) : existing.ignore_patterns_json,
         input.prompt !== undefined ? input.prompt : existing.prompt,

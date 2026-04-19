@@ -78,9 +78,56 @@ interface McpbUserConfigEntry {
     sensitive?: boolean
 }
 
+/** Parse env hints from a server.json (official MCP registry format) */
+interface ServerJsonEnvVar {
+    name: string
+    description?: string
+    isRequired?: boolean
+    format?: string
+    isSecret?: boolean
+}
+
+interface ServerJson {
+    packages?: Array<{
+        environmentVariables?: ServerJsonEnvVar[]
+    }>
+    icons?: Array<{ src: string; mimeType?: string }>
+}
+
+function parseServerJson(content: string): { hints: McpEnvHint[] | null; iconUrl: string | null } {
+    try {
+        const serverJson = JSON.parse(content) as ServerJson
+        let hints: McpEnvHint[] | null = null
+        let iconUrl: string | null = null
+
+        // Extract env hints from the first package
+        const pkg = serverJson.packages?.[0]
+        if (pkg?.environmentVariables?.length) {
+            hints = pkg.environmentVariables.map(ev => ({
+                name: ev.name,
+                description: ev.description,
+                required: ev.isRequired ?? false,
+                sensitive: ev.isSecret,
+            }))
+        }
+
+        // Extract icon URL
+        if (serverJson.icons?.length) {
+            iconUrl = serverJson.icons[0].src
+        }
+
+        return { hints, iconUrl }
+    } catch {
+        return { hints: null, iconUrl: null }
+    }
+}
+
 /**
- * Try to find a `manifest.json` next to the MCP server's entry file.
- * Supports MCPB `user_config` (preferred) and legacy `envVars`.
+ * Try to find a `manifest.json` or `server.json` next to the MCP server's entry file.
+ * Supports:
+ *   - Official MCP registry `server.json` (preferred)
+ *   - MCPB `user_config` in `manifest.json`
+ *   - Legacy `envVars` in `manifest.json`
  * Returns parsed env var hints if found.
  */
 function findManifest(command: string, argsJson: string): McpEnvHint[] | null {
@@ -90,6 +137,14 @@ function findManifest(command: string, argsJson: string): McpEnvHint[] | null {
 
     let dir = dirname(resolve(entryPath))
     for (let i = 0; i < 3 && dir.length > 1; i++) {
+        // Check server.json first (official MCP registry format)
+        const sj = join(dir, 'server.json')
+        if (existsSync(sj)) {
+            const { hints } = parseServerJson(readFileSync(sj, 'utf-8'))
+            if (hints) return hints
+        }
+
+        // Fall back to manifest.json (legacy format)
         const p = join(dir, 'manifest.json')
         if (existsSync(p)) {
             try {
@@ -108,6 +163,26 @@ function findManifest(command: string, argsJson: string): McpEnvHint[] | null {
                 }
                 return manifest.envVars || null
             } catch { return null }
+        }
+        dir = dirname(dir)
+    }
+    return null
+}
+
+/**
+ * Try to find the icon URL from server.json in the MCP server's folder.
+ */
+function findServerJsonIconUrl(command: string, argsJson: string): string | null {
+    const args = JSON.parse(argsJson) as string[]
+    const entryPath = args.find(a => isAbsolute(a) && !a.startsWith('-'))
+    if (!entryPath) return null
+
+    let dir = dirname(resolve(entryPath))
+    for (let i = 0; i < 3 && dir.length > 1; i++) {
+        const sj = join(dir, 'server.json')
+        if (existsSync(sj)) {
+            const { iconUrl } = parseServerJson(readFileSync(sj, 'utf-8'))
+            if (iconUrl) return iconUrl
         }
         dir = dirname(dir)
     }
@@ -167,6 +242,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
             enabled: number
             icon_url: string | null
             origin: string | null
+            env_hints_json: string | null
             created_at: number
             updated_at: number
         }[]
@@ -174,21 +250,38 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
         const manager = getMcpManager()
         const pendingAuths = manager.getPendingAuths()
 
-        return rows.map((row) => ({
-            id: row.id,
-            name: row.name,
-            command: row.command,
-            args: JSON.parse(row.args_json) as string[],
-            env: JSON.parse(row.env_json) as Record<string, string>,
-            enabled: row.enabled === 1,
-            icon_url: row.icon_url || (findMcpIcon(row.command, row.args_json) ? `/api/mcp/servers/${row.id}/icon` : null),
-            origin: row.origin,
-            connected: manager.isConnected(row.id),
-            toolCount: manager.getTools(row.id).length,
-            pendingAuthUrl: pendingAuths[row.id] || null,
-            envHints: findManifest(row.command, row.args_json),
-            serverInfo: manager.getServerInfo(row.id) || null,
-        }))
+        return rows.map((row) => {
+            // Resolve icon: explicit icon_url > local icon file > server.json remote icon
+            const iconUrl = row.icon_url
+                || (findMcpIcon(row.command, row.args_json) ? `/api/mcp/servers/${row.id}/icon` : null)
+                || findServerJsonIconUrl(row.command, row.args_json)
+
+            // Resolve env hints: filesystem manifest/server.json > stored DB hints
+            const liveHints = findManifest(row.command, row.args_json)
+            const storedHints = row.env_hints_json ? JSON.parse(row.env_hints_json) as McpEnvHint[] : null
+
+            // Sync live hints back to DB so npx packages stay up-to-date
+            if (liveHints && JSON.stringify(liveHints) !== row.env_hints_json) {
+                db.prepare('UPDATE mcp_servers SET env_hints_json = ? WHERE id = ?')
+                    .run(JSON.stringify(liveHints), row.id)
+            }
+
+            return {
+                id: row.id,
+                name: row.name,
+                command: row.command,
+                args: JSON.parse(row.args_json) as string[],
+                env: JSON.parse(row.env_json) as Record<string, string>,
+                enabled: row.enabled === 1,
+                icon_url: iconUrl,
+                origin: row.origin,
+                connected: manager.isConnected(row.id),
+                toolCount: manager.getTools(row.id).length,
+                pendingAuthUrl: pendingAuths[row.id] || null,
+                envHints: liveHints || storedHints,
+                serverInfo: manager.getServerInfo(row.id) || null,
+            }
+        })
     })
 
     // GET /api/mcp/servers/:id/icon — serve icon from MCP folder
@@ -220,9 +313,10 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
             enabled?: boolean
             icon_url?: string
             origin?: string
+            env_hints?: McpEnvHint[]
         }
     }>('/servers', async (req, reply) => {
-        const { name, command, args, env, enabled, icon_url, origin } = req.body
+        const { name, command, args, env, enabled, icon_url, origin, env_hints } = req.body
 
         if (!name || !command) {
             return reply.status(400).send({ error: 'name and command are required' })
@@ -232,10 +326,11 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
         const id = nanoid()
         const now = Date.now()
         const isEnabled = enabled !== false
+        const envHintsJson = env_hints?.length ? JSON.stringify(env_hints) : null
 
         db.prepare(
-            `INSERT INTO mcp_servers (id, name, command, args_json, env_json, enabled, icon_url, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).run(id, name, command, JSON.stringify(args || []), JSON.stringify(env || {}), isEnabled ? 1 : 0, icon_url || null, origin || null, now, now)
+            `INSERT INTO mcp_servers (id, name, command, args_json, env_json, enabled, icon_url, origin, env_hints_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(id, name, command, JSON.stringify(args || []), JSON.stringify(env || {}), isEnabled ? 1 : 0, icon_url || null, origin || null, envHintsJson, now, now)
 
         const config: McpServerConfig = {
             id,

@@ -28,6 +28,11 @@ const router = createRouter({
       component: () => import('@/views/triggers/CronView.vue')
     },
     {
+      path: '/triggers/cron/:id',
+      name: 'cron-detail',
+      component: () => import('@/views/triggers/CronDetailView.vue')
+    },
+    {
       path: '/triggers/channels',
       name: 'triggers-channels',
       component: () => import('@/views/triggers/ChannelsView.vue')
@@ -36,6 +41,11 @@ const router = createRouter({
       path: '/triggers/file-watchers',
       name: 'triggers-file-watchers',
       component: () => import('@/views/triggers/FileWatchView.vue')
+    },
+    {
+      path: '/triggers/file-watchers/:id',
+      name: 'file-watcher-detail',
+      component: () => import('@/views/triggers/FileWatchDetailView.vue')
     },
     // Instances
     {
