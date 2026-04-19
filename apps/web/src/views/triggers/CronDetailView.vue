@@ -12,6 +12,7 @@ import {
   WEEKDAYS, HOUR_OPTIONS, MINUTE_OPTIONS, INTERVAL_MINUTES, FREQUENCY_OPTIONS,
   type CronFrequency
 } from '../../utils/cron-helpers'
+import ToggleSwitch from '@/components/shared/ToggleSwitch.vue'
 
 const route = useRoute()
 const router = useRouter()
