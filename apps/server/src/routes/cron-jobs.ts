@@ -11,7 +11,7 @@ import {
     getActiveCronRuns,
     type CronJobData,
 } from '../core/triggers/cron-scheduler.js'
-import { getAgent } from '../core/agents/agent-files.js'
+import { getAgent } from '../core/agents/agent-store.js'
 
 function getNextRunAt(schedule: string): number | null {
     try {

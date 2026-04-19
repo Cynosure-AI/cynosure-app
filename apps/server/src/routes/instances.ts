@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getActiveCronRuns, cancelCronRun } from '../core/triggers/cron-scheduler.js'
-import { getAgent } from '../core/agents/agent-files.js'
+import { getAgent } from '../core/agents/agent-store.js'
 import { getActiveChatExecutions, cancelChatExecution } from './chat.js'
 import { cancelPostActions } from '../core/agent/post-execution.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'

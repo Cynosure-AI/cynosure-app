@@ -1,5 +1,5 @@
 import { getGateway } from '../gateway/gateway.js'
-import { getAgent, type SubAgentAssignment } from '../agents/agent-files.js'
+import { getAgent, type SubAgentAssignment } from '../agents/agent-store.js'
 import { AgentExecutor } from './agent-executor.js'
 import { prepareAgentExecution } from './prepare-execution.js'
 import { getDb } from '../../db/database.js'
