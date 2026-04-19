@@ -4,7 +4,7 @@ import { getGateway } from '../gateway/gateway.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { AgentExecutor, type AgentExecutorResult } from '../agent/agent-executor.js'
 import { prepareAgentExecution } from '../agent/prepare-execution.js'
-import type { AgentData } from '../agents/agent-files.js'
+import type { AgentData } from '../agents/agent-store.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
 
 type BroadcastFn = (event: string, data: unknown) => void

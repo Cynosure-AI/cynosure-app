@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
-import { getAgent } from '../core/agents/agent-files.js'
+import { getAgent } from '../core/agents/agent-store.js'
 import { nanoid } from 'nanoid'
 import { unlinkSync } from 'fs'
 

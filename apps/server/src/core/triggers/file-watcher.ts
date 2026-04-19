@@ -2,7 +2,7 @@ import chokidar, { type FSWatcher } from 'chokidar'
 import { nanoid } from 'nanoid'
 import { relative } from 'path'
 import { getDb } from '../../db/database.js'
-import { getAgent } from '../agents/agent-files.js'
+import { getAgent } from '../agents/agent-store.js'
 import { runTriggerExecution } from './trigger-runner.js'
 
 type BroadcastFn = (event: string, data: unknown) => void

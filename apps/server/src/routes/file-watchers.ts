@@ -11,7 +11,7 @@ import {
     getActiveWatcherRuns,
     isWatcherActive,
 } from '../core/triggers/file-watcher.js'
-import { getAgent } from '../core/agents/agent-files.js'
+import { getAgent } from '../core/agents/agent-store.js'
 
 export async function registerFileWatcherRoutes(app: FastifyInstance): Promise<void> {
     // GET /api/file-watchers — list all file watchers with agent info

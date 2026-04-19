@@ -10,7 +10,7 @@ import {
     getIconData,
     type CreateAgentInput,
     type UpdateAgentInput,
-} from '../core/agents/agent-files.js'
+} from '../core/agents/agent-store.js'
 import { unscheduleAllForAgent, getCronJobsForAgent, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'

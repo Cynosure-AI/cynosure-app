@@ -10,7 +10,7 @@
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import { hydrateBuiltInTools } from '../tools/built-in-tools.js'
-import type { AgentData, SubAgentAssignment } from '../agents/agent-files.js'
+import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ChatMessage, ToolDefinition } from '../gateway/providers/base.provider.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
