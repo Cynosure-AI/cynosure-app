@@ -1,27 +1,10 @@
 import type { FastifyInstance } from 'fastify'
-import type { ToolDefinition } from '../core/gateway/providers/base.provider.js'
-import { getDb } from '../db/database.js'
-import { getMcpManager, McpManager, type McpServerConfig } from '../core/tools/mcp/mcp-manager.js'
-import { getToolRegistry, type ToolNamespace, type ToolRegistry } from '../core/tools/tool-registry.js'
+import { getDb } from '../../db/database.js'
+import { getMcpManager, McpManager, type McpServerConfig } from '../../core/tools/mcp/mcp-manager.js'
+import { getToolRegistry, type ToolNamespace } from '../../core/tools/tool-registry.js'
 import { nanoid } from 'nanoid'
-import { existsSync, readFileSync } from 'fs'
-import { dirname, join, isAbsolute, resolve } from 'path'
-
-/**
- * Register MCP tools into the registry under their bare names.
- * Collision resolution is deferred to execution time via
- * registry.resolveForExecution(), which adds a slug prefix only
- * when two same-named tools are both selected by the same agent.
- */
-function registerMcpTools(
-    tools: ToolDefinition[],
-    ns: ToolNamespace,
-    registry: ToolRegistry
-): void {
-    for (const tool of tools) {
-        registry.register(tool, ns)
-    }
-}
+import { readFileSync } from 'fs'
+import { registerMcpTools, findMcpIcon, findEnvHints, type McpEnvHint } from './utils.js'
 
 /** Set up the auth-complete callback so background OAuth completions auto-register tools. */
 function setupAuthCompleteCallback(): void {
@@ -32,93 +15,6 @@ function setupAuthCompleteCallback(): void {
         const ns: ToolNamespace = { id: `mcp:${serverId}`, label: config.name }
         registerMcpTools(tools, ns, registry)
     })
-}
-
-const ICON_EXTS = ['png', 'jpg', 'jpeg', 'svg', 'webp'] as const
-const MIME_MAP: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml', webp: 'image/webp' }
-
-/**
- * Try to find an icon file (icon.png, icon.jpg, etc.) in the MCP server's folder.
- * Derives the folder from the first path-like argument.
- */
-function findMcpIcon(command: string, argsJson: string): { path: string; mime: string } | null {
-    const args = JSON.parse(argsJson) as string[]
-    // Find the first argument that looks like a file path
-    const entryPath = args.find(a => isAbsolute(a) && !a.startsWith('-'))
-    if (!entryPath) return null
-
-    // Walk up from the entry file directory (e.g. dist/index.js -> project root)
-    let dir = dirname(resolve(entryPath))
-    const root = dirname(dir) // stop after two levels up
-    for (let i = 0; i < 3 && dir.length > 1; i++) {
-        for (const ext of ICON_EXTS) {
-            const p = join(dir, `icon.${ext}`)
-            if (existsSync(p)) return { path: p, mime: MIME_MAP[ext] }
-        }
-        if (dir === root) break
-        dir = dirname(dir)
-    }
-    return null
-}
-
-interface McpEnvHint {
-    name: string
-    description?: string
-    required: boolean
-    sensitive?: boolean
-}
-
-interface ServerJsonEnvVar {
-    name: string
-    description?: string
-    isRequired?: boolean
-    format?: string
-    isSecret?: boolean
-}
-
-interface ServerJson {
-    packages?: Array<{
-        environmentVariables?: ServerJsonEnvVar[]
-    }>
-}
-
-/** Parse env hints from a server.json (official MCP registry format) */
-function parseServerJsonHints(content: string): McpEnvHint[] | null {
-    try {
-        const serverJson = JSON.parse(content) as ServerJson
-        const pkg = serverJson.packages?.[0]
-        if (!pkg?.environmentVariables?.length) return null
-
-        return pkg.environmentVariables.map(ev => ({
-            name: ev.name,
-            description: ev.description,
-            required: ev.isRequired ?? false,
-            sensitive: ev.isSecret,
-        }))
-    } catch {
-        return null
-    }
-}
-
-/**
- * Try to find a `server.json` next to the MCP server's entry file
- * and extract env var hints from it.
- */
-function findEnvHints(command: string, argsJson: string): McpEnvHint[] | null {
-    const args = JSON.parse(argsJson) as string[]
-    const entryPath = args.find(a => isAbsolute(a) && !a.startsWith('-'))
-    if (!entryPath) return null
-
-    let dir = dirname(resolve(entryPath))
-    for (let i = 0; i < 3 && dir.length > 1; i++) {
-        const sj = join(dir, 'server.json')
-        if (existsSync(sj)) {
-            const hints = parseServerJsonHints(readFileSync(sj, 'utf-8'))
-            if (hints) return hints
-        }
-        dir = dirname(dir)
-    }
-    return null
 }
 
 /** Load saved MCP servers from DB and connect enabled ones */
@@ -160,7 +56,7 @@ export async function loadSavedMcpServers(): Promise<void> {
     )
 }
 
-export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
+export async function registerMcpServerRoutes(app: FastifyInstance): Promise<void> {
     // GET /api/mcp/servers — list all MCP server configs
     app.get('/servers', async () => {
         const db = getDb()
@@ -292,6 +188,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
 
         return { id, connected: false }
     })
+
     // POST /api/mcp/servers/:id/toggle — enable/disable a server
     app.post<{ Params: { id: string } }>('/servers/:id/toggle', async (req, reply) => {
         const { id } = req.params
@@ -568,152 +465,4 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
             }
         }
     )
-
-    // GET /api/mcp/registry — proxy to MCP registries (official, smithery, glama)
-    app.get<{
-        Querystring: { search?: string; cursor?: string; limit?: string; registry?: string; }
-    }>('/registry', async (req, reply) => {
-        const { search, cursor, limit, registry: registrySource } = req.query
-        const targetLimit = parseInt(limit || '20', 10)
-        let currentCursor = cursor || ''
-        const collectedServers: any[] = []
-
-        try {
-            if (registrySource === 'smithery') {
-                const params = new URLSearchParams()
-                if (search) params.set('q', search)
-                const pageNum = parseInt(currentCursor || '1', 10)
-                params.set('page', pageNum.toString())
-
-                const url = `https://api.smithery.ai/servers?${params}`
-                const res = await fetch(url)
-
-                if (!res.ok) return reply.status(res.status).send({ error: `Smithery Registry returned ${res.status}` })
-
-                const data = await res.json()
-                if (data.servers && Array.isArray(data.servers)) {
-                    for (const s of data.servers) {
-                        if (s.remote && !s.isDeployed && !s.name) continue;
-                        collectedServers.push({
-                            server: {
-                                name: s.qualifiedName,
-                                title: s.displayName,
-                                description: s.description || (s.remote ? "[Remote/Hosted Tool - See Documentation]" : ""),
-                                version: 'latest',
-                                websiteUrl: s.homepage,
-                                icons: s.iconUrl ? [{ src: s.iconUrl, mimeType: 'image/png' }] : undefined,
-                                isRemote: !!s.remote,
-                                packages: [{
-                                    registryType: 'smithery',
-                                    identifier: s.qualifiedName,
-                                    command: 'npx',
-                                    env: []
-                                }]
-                            }
-                        })
-                    }
-                }
-
-                let next = undefined;
-                if (data.pagination && data.pagination.currentPage < data.pagination.totalPages) {
-                    next = (data.pagination.currentPage + 1).toString();
-                }
-
-                return { servers: collectedServers, metadata: { nextCursor: next, count: collectedServers.length } }
-            }
-
-            // ── Glama.ai registry ──
-            if (registrySource === 'glama') {
-                const params = new URLSearchParams()
-                params.set('first', String(targetLimit))
-                if (search) params.set('query', search)
-                if (currentCursor) params.set('after', currentCursor)
-
-                const url = `https://glama.ai/api/mcp/v1/servers?${params}`
-                const res = await fetch(url)
-
-                if (!res.ok) return reply.status(res.status).send({ error: `Glama Registry returned ${res.status}` })
-
-                const data = await res.json()
-                if (data.servers && Array.isArray(data.servers)) {
-                    for (const s of data.servers) {
-                        const isRemote = (s.attributes || []).some((a: string) => a === 'hosting:remote-capable')
-                        const isLocal = (s.attributes || []).some((a: string) => a === 'hosting:local-only')
-
-                        // Build env vars from JSON Schema
-                        const envVars: { name: string; description?: string; isRequired: boolean }[] = []
-                        if (s.environmentVariablesJsonSchema?.properties) {
-                            const schema = s.environmentVariablesJsonSchema
-                            const required: string[] = schema.required || []
-                            for (const [name, prop] of Object.entries(schema.properties as Record<string, { description?: string }>)) {
-                                envVars.push({
-                                    name,
-                                    description: prop.description,
-                                    isRequired: required.includes(name)
-                                })
-                            }
-                        }
-
-                        collectedServers.push({
-                            server: {
-                                name: `${s.namespace}/${s.slug}`,
-                                title: s.name,
-                                description: s.description || '',
-                                version: 'latest',
-                                repository: s.repository,
-                                websiteUrl: s.url,
-                                isRemote,
-                                isLocal,
-                                packages: [{
-                                    registryType: 'npm',
-                                    identifier: s.slug,
-                                    version: 'latest',
-                                    transport: { type: 'stdio' },
-                                    environmentVariables: envVars
-                                }]
-                            }
-                        })
-                    }
-                }
-
-                const nextCursor = data.pageInfo?.hasNextPage ? data.pageInfo.endCursor : undefined
-                return { servers: collectedServers, metadata: { nextCursor, count: collectedServers.length } }
-            }
-
-            // ── Official MCP registry (default) ──
-            while (collectedServers.length < targetLimit) {
-                const params = new URLSearchParams()
-                params.set('limit', '50')
-                if (search) params.set('search', search)
-                if (currentCursor) params.set('cursor', currentCursor)
-
-                const url = `https://registry.modelcontextprotocol.io/v0/servers?${params}`
-                const res = await fetch(url)
-
-                if (!res.ok) return reply.status(res.status).send({ error: `Registry returned ${res.status}` })
-
-                const data = await res.json()
-                if (!data.servers || !Array.isArray(data.servers)) break
-
-                for (const s of data.servers) {
-                    const isLatest = s._meta?.['io.modelcontextprotocol.registry/official']?.isLatest !== false
-                    const hasPackages = s.server?.packages && Array.isArray(s.server.packages) && s.server.packages.length > 0
-                    if (isLatest && hasPackages) {
-                        const name = s.server?.name
-                        if (name && !collectedServers.find(x => x.server?.name === name)) {
-                            collectedServers.push(s)
-                            if (collectedServers.length >= targetLimit) break
-                        }
-                    }
-                }
-
-                currentCursor = data.nextCursor
-                if (!currentCursor) break
-            }
-
-            return { servers: collectedServers, metadata: { nextCursor: currentCursor, count: collectedServers.length } }
-        } catch (err) {
-            return reply.status(502).send({ error: (err as Error).message })
-        }
-    })
 }
