@@ -15,7 +15,6 @@ import { dirname, join, isAbsolute, resolve } from 'path'
  */
 function registerMcpTools(
     tools: ToolDefinition[],
-    _slug: string,
     ns: ToolNamespace,
     registry: ToolRegistry
 ): void {
@@ -30,9 +29,8 @@ function setupAuthCompleteCallback(): void {
     const registry = getToolRegistry()
 
     manager.setOnAuthComplete((serverId, tools, config) => {
-        const slug = manager.getSlug(serverId)
         const ns: ToolNamespace = { id: `mcp:${serverId}`, label: config.name }
-        registerMcpTools(tools, slug, ns, registry)
+        registerMcpTools(tools, ns, registry)
     })
 }
 
@@ -70,15 +68,6 @@ interface McpEnvHint {
     sensitive?: boolean
 }
 
-interface McpbUserConfigEntry {
-    type?: string
-    title?: string
-    description?: string
-    required?: boolean
-    sensitive?: boolean
-}
-
-/** Parse env hints from a server.json (official MCP registry format) */
 interface ServerJsonEnvVar {
     name: string
     description?: string
@@ -91,98 +80,41 @@ interface ServerJson {
     packages?: Array<{
         environmentVariables?: ServerJsonEnvVar[]
     }>
-    icons?: Array<{ src: string; mimeType?: string }>
 }
 
-function parseServerJson(content: string): { hints: McpEnvHint[] | null; iconUrl: string | null } {
+/** Parse env hints from a server.json (official MCP registry format) */
+function parseServerJsonHints(content: string): McpEnvHint[] | null {
     try {
         const serverJson = JSON.parse(content) as ServerJson
-        let hints: McpEnvHint[] | null = null
-        let iconUrl: string | null = null
-
-        // Extract env hints from the first package
         const pkg = serverJson.packages?.[0]
-        if (pkg?.environmentVariables?.length) {
-            hints = pkg.environmentVariables.map(ev => ({
-                name: ev.name,
-                description: ev.description,
-                required: ev.isRequired ?? false,
-                sensitive: ev.isSecret,
-            }))
-        }
+        if (!pkg?.environmentVariables?.length) return null
 
-        // Extract icon URL
-        if (serverJson.icons?.length) {
-            iconUrl = serverJson.icons[0].src
-        }
-
-        return { hints, iconUrl }
+        return pkg.environmentVariables.map(ev => ({
+            name: ev.name,
+            description: ev.description,
+            required: ev.isRequired ?? false,
+            sensitive: ev.isSecret,
+        }))
     } catch {
-        return { hints: null, iconUrl: null }
+        return null
     }
 }
 
 /**
- * Try to find a `manifest.json` or `server.json` next to the MCP server's entry file.
- * Supports:
- *   - Official MCP registry `server.json` (preferred)
- *   - MCPB `user_config` in `manifest.json`
- *   - Legacy `envVars` in `manifest.json`
- * Returns parsed env var hints if found.
+ * Try to find a `server.json` next to the MCP server's entry file
+ * and extract env var hints from it.
  */
-function findManifest(command: string, argsJson: string): McpEnvHint[] | null {
+function findEnvHints(command: string, argsJson: string): McpEnvHint[] | null {
     const args = JSON.parse(argsJson) as string[]
     const entryPath = args.find(a => isAbsolute(a) && !a.startsWith('-'))
     if (!entryPath) return null
 
     let dir = dirname(resolve(entryPath))
     for (let i = 0; i < 3 && dir.length > 1; i++) {
-        // Check server.json first (official MCP registry format)
         const sj = join(dir, 'server.json')
         if (existsSync(sj)) {
-            const { hints } = parseServerJson(readFileSync(sj, 'utf-8'))
+            const hints = parseServerJsonHints(readFileSync(sj, 'utf-8'))
             if (hints) return hints
-        }
-
-        // Fall back to manifest.json (legacy format)
-        const p = join(dir, 'manifest.json')
-        if (existsSync(p)) {
-            try {
-                const manifest = JSON.parse(readFileSync(p, 'utf-8')) as {
-                    user_config?: Record<string, McpbUserConfigEntry>
-                    envVars?: McpEnvHint[]
-                }
-                if (manifest.user_config) {
-                    const hints = Object.entries(manifest.user_config).map(([name, cfg]) => ({
-                        name,
-                        description: cfg.description,
-                        required: cfg.required ?? false,
-                        sensitive: cfg.sensitive,
-                    }))
-                    return hints.length ? hints : null
-                }
-                return manifest.envVars || null
-            } catch { return null }
-        }
-        dir = dirname(dir)
-    }
-    return null
-}
-
-/**
- * Try to find the icon URL from server.json in the MCP server's folder.
- */
-function findServerJsonIconUrl(command: string, argsJson: string): string | null {
-    const args = JSON.parse(argsJson) as string[]
-    const entryPath = args.find(a => isAbsolute(a) && !a.startsWith('-'))
-    if (!entryPath) return null
-
-    let dir = dirname(resolve(entryPath))
-    for (let i = 0; i < 3 && dir.length > 1; i++) {
-        const sj = join(dir, 'server.json')
-        if (existsSync(sj)) {
-            const { iconUrl } = parseServerJson(readFileSync(sj, 'utf-8'))
-            if (iconUrl) return iconUrl
         }
         dir = dirname(dir)
     }
@@ -219,9 +151,8 @@ export async function loadSavedMcpServers(): Promise<void> {
         configs.map(async (config) => {
             try {
                 const tools = await manager.connect(config)
-                const slug = manager.getSlug(config.id)
                 const ns: ToolNamespace = { id: `mcp:${config.id}`, label: config.name }
-                registerMcpTools(tools, slug, ns, registry)
+                registerMcpTools(tools, ns, registry)
             } catch (err) {
                 console.error(`Failed to connect MCP server '${config.name}':`, (err as Error).message)
             }
@@ -251,13 +182,15 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
         const pendingAuths = manager.getPendingAuths()
 
         return rows.map((row) => {
-            // Resolve icon: explicit icon_url > local icon file > server.json remote icon
-            const iconUrl = row.icon_url
-                || (findMcpIcon(row.command, row.args_json) ? `/api/mcp/servers/${row.id}/icon` : null)
-                || findServerJsonIconUrl(row.command, row.args_json)
+            const srvInfo = manager.getServerInfo(row.id) || null
 
-            // Resolve env hints: filesystem manifest/server.json > stored DB hints
-            const liveHints = findManifest(row.command, row.args_json)
+            // Resolve icon: explicit icon_url > protocol-native icons > local icon file
+            const iconUrl = row.icon_url
+                || srvInfo?.icons?.[0]?.src
+                || (findMcpIcon(row.command, row.args_json) ? `/api/mcp/servers/${row.id}/icon` : null)
+
+            // Resolve env hints: local server.json > stored DB hints
+            const liveHints = findEnvHints(row.command, row.args_json)
             const storedHints = row.env_hints_json ? JSON.parse(row.env_hints_json) as McpEnvHint[] : null
 
             // Sync live hints back to DB so npx packages stay up-to-date
@@ -279,7 +212,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
                 toolCount: manager.getTools(row.id).length,
                 pendingAuthUrl: pendingAuths[row.id] || null,
                 envHints: liveHints || storedHints,
-                serverInfo: manager.getServerInfo(row.id) || null,
+                serverInfo: srvInfo,
             }
         })
     })
@@ -348,7 +281,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
                 const registry = getToolRegistry()
                 const tools = await manager.connect(config)
                 const ns: ToolNamespace = { id: `mcp:${id}`, label: name }
-                registerMcpTools(tools, manager.getSlug(id), ns, registry)
+                registerMcpTools(tools, ns, registry)
                 return { id, connected: true, toolCount: tools.length }
             } catch (err) {
                 const manager = getMcpManager()
@@ -398,7 +331,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
             try {
                 const tools = await manager.connect(config)
                 const ns: ToolNamespace = { id: `mcp:${id}`, label: row.name }
-                registerMcpTools(tools, manager.getSlug(id), ns, registry)
+                registerMcpTools(tools, ns, registry)
                 return { enabled: true, connected: true, toolCount: tools.length }
             } catch (err) {
                 return { enabled: true, connected: false, error: (err as Error).message }
@@ -480,7 +413,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
             try {
                 const tools = await manager.connect(config)
                 const ns: ToolNamespace = { id: `mcp:${id}`, label: updatedName }
-                registerMcpTools(tools, manager.getSlug(id), ns, registry)
+                registerMcpTools(tools, ns, registry)
                 return { success: true, connected: true, toolCount: tools.length }
             } catch (err) {
                 return { success: true, connected: false, error: (err as Error).message }
@@ -524,7 +457,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
         try {
             const tools = await manager.connect(config)
             const ns: ToolNamespace = { id: `mcp:${id}`, label: row.name }
-            registerMcpTools(tools, manager.getSlug(id), ns, registry)
+            registerMcpTools(tools, ns, registry)
             return { connected: true, toolCount: tools.length }
         } catch (err) {
             return { connected: false, error: (err as Error).message }
@@ -568,7 +501,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
         try {
             const tools = await manager.connect(config)
             const ns: ToolNamespace = { id: `mcp:${id}`, label: row.name }
-            registerMcpTools(tools, manager.getSlug(id), ns, registry)
+            registerMcpTools(tools, ns, registry)
             return { connected: true, toolCount: tools.length, clearedTokenFiles: cleared }
         } catch (err) {
             // Expected when auth is required — the process stays alive for OAuth
@@ -613,7 +546,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
                 const row = db.prepare('SELECT name FROM mcp_servers WHERE id = ?').get(serverId) as { name: string } | undefined
                 if (row) {
                     const ns: ToolNamespace = { id: `mcp:${serverId}`, label: row.name }
-                    registerMcpTools(tools, manager.getSlug(serverId), ns, registry)
+                    registerMcpTools(tools, ns, registry)
                 }
 
                 return reply.type('text/html').send(`
