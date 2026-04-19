@@ -198,13 +198,13 @@ export const api = {
       return Promise.resolve()
     },
     getToolApprovals: () =>
-      get<Record<string, boolean>>('/api/agent/tool-approvals'),
+      get<Record<string, boolean>>('/api/agents/tool-approvals'),
     setToolApproval: (toolName: string, autoApprove: boolean) =>
-      put<{ success: boolean }>(`/api/agent/tool-approvals/${encodeURIComponent(toolName)}`, { autoApprove }),
+      put<{ success: boolean }>(`/api/agents/tool-approvals/${encodeURIComponent(toolName)}`, { autoApprove }),
     setToolApprovalsBulk: (approvals: Record<string, boolean>) =>
-      put<{ success: boolean }>('/api/agent/tool-approvals', approvals),
+      put<{ success: boolean }>('/api/agents/tool-approvals', approvals),
     listTools: () =>
-      get<{ name: string; description: string; autoApprove: boolean; namespace: { id: string; label: string } }[]>('/api/agent/tools'),
+      get<{ name: string; description: string; autoApprove: boolean; namespace: { id: string; label: string } }[]>('/api/agents/tools'),
     onExecutionUpdate: (cb: (data: unknown) => void) =>
       onWsEvent('agent:execution-update', cb)
   },

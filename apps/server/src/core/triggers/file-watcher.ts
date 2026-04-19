@@ -2,12 +2,8 @@ import chokidar, { type FSWatcher } from 'chokidar'
 import { nanoid } from 'nanoid'
 import { relative } from 'path'
 import { getDb } from '../../db/database.js'
-import { getGateway } from '../gateway/gateway.js'
 import { getAgent } from '../agents/agent-files.js'
-import { getEventBus } from '../telemetry/event-bus.js'
-import { AgentExecutor } from '../agent/agent-executor.js'
-import { prepareAgentExecution } from '../agent/prepare-execution.js'
-import type { ChatMessage } from '../gateway/providers/base.provider.js'
+import { runTriggerExecution } from './trigger-runner.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -306,87 +302,33 @@ async function runFileWatcher(
     agent: ReturnType<typeof getAgent> & {},
     changes: GroupedChanges
 ): Promise<void> {
-    const gateway = getGateway()
-    const db = getDb()
-
-    const conversationId = nanoid()
-    const now = new Date()
-    const title = `File Watch ${now.toLocaleString()}`
-    db.prepare(
-        'INSERT INTO conversations (id, title, agent_id, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(conversationId, title, watcher.agentId, 'file-watcher', Date.now(), Date.now())
-
-    activeRuns.set(watcher.id, { watcherId: watcher.id, agentId: watcher.agentId, conversationId, startedAt: Date.now() })
+    activeRuns.set(watcher.id, { watcherId: watcher.id, agentId: watcher.agentId, conversationId: '', startedAt: Date.now() })
 
     const abortController = new AbortController()
     activeAbortControllers.set(watcher.id, abortController)
 
-    // Build user message with change summary
     const userContent = buildChangeMessage(changes, watcher.prompt)
 
-    // Prepare execution: tools, memory, system prompt, provider/model
-    const prepared = await prepareAgentExecution({
-        agent,
-        conversationId,
-        broadcast,
-        providerOverride: watcher.providerOverride || undefined,
-        modelOverride: watcher.modelOverride || undefined,
-        systemPromptSuffix: '\nUse your tools to handle the file system changes.',
-        userQuery: userContent,
-        isFirstMessage: true,
-    })
-
-    const messages: ChatMessage[] = [
-        ...prepared.systemMessages,
-        { role: 'user', content: userContent }
-    ]
-
-    const triggerMsgId = nanoid()
-    db.prepare(
-        'INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(triggerMsgId, conversationId, 'user', userContent, Date.now())
-
-    broadcast('chat:new-message', {
-        conversationId,
-        message: { id: triggerMsgId, conversationId, role: 'user', content: userContent, createdAt: Date.now() }
-    })
-
-    const executor = new AgentExecutor({
-        gateway,
-        tools: prepared.tools,
-        conversationId,
-        broadcast,
-        providerId: prepared.providerId,
-        model: prepared.model,
-        maxRounds: 10,
-        thinkingEnabled: agent.thinkingEnabled !== false,
-        streamMode: 'per-round',
-        hitl: !agent.autoApproveTools,
-        agentId: watcher.agentId,
-        agentName: agent.name,
-        agentIconUrl: agent.iconUrl || null,
-        signal: abortController.signal,
-    })
-
     try {
-        const startMs = Date.now()
-        const result = await executor.run(messages)
-
-        const assistantMsgId = nanoid()
-        const now = Date.now()
-        db.prepare(
-            'INSERT INTO messages (id, conversation_id, role, content, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(assistantMsgId, conversationId, 'assistant', result.content, prepared.providerId || null, prepared.model || null, result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null, result.contextTokens ?? null, now - startMs, now)
-
-        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(Date.now(), conversationId)
+        const { conversationId } = await runTriggerExecution({
+            agent,
+            userContent,
+            origin: 'file-watcher',
+            title: `File Watch ${new Date().toLocaleString()}`,
+            systemPromptSuffix: '\nUse your tools to handle the file system changes.',
+            providerOverride: watcher.providerOverride || undefined,
+            modelOverride: watcher.modelOverride || undefined,
+            broadcast,
+            signal: abortController.signal,
+            logPrefix: '[file-watcher]',
+            onConversationCreated: (id) => {
+                const run = activeRuns.get(watcher.id)
+                if (run) run.conversationId = id
+            },
+        })
     } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
-            console.error(`[file-watcher] Error running watcher ${watcher.id} for agent ${watcher.agentId}:`, (err as Error).message)
-            try {
-                const eventBus = getEventBus()
-                eventBus.emit('task:error', { taskId: '', conversationId, error: (err as Error).message })
-            } catch { /* ignore */ }
-        }
+        if ((err as Error).name === 'AbortError') return
+        // Error already logged by trigger-runner
     } finally {
         activeRuns.delete(watcher.id)
         activeAbortControllers.delete(watcher.id)
