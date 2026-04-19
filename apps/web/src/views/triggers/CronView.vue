@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import type { AgentDefinition, CronJob } from '../../api/types'
-import { useProviderStore } from '../../stores/provider.store'
 import { Icon } from '@iconify/vue'
 import TabBar, { type TabDef } from '../../components/shared/TabBar.vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
-import CustomSelect, { type SelectOptionGroup } from '../../components/shared/CustomSelect.vue'
-import { useProviderLogos } from '../../composables/useProviderLogos'
 import {
-  parseCronExpr, buildCronExpr, cronToHuman,
+  buildCronExpr, cronToHuman,
   WEEKDAYS, HOUR_OPTIONS, MINUTE_OPTIONS, INTERVAL_MINUTES, FREQUENCY_OPTIONS,
   type CronFrequency
 } from '../../utils/cron-helpers'
+
+const router = useRouter()
 
 const cronJobs = ref<CronJob[]>([])
 const allAgents = ref<AgentDefinition[]>([])
@@ -21,19 +21,12 @@ const loading = ref(true)
 const activeTab = ref<'cron'>('cron')
 let pollTimer: ReturnType<typeof setInterval> | undefined
 
-const providerStore = useProviderStore()
-
-// Dialog state
+// Simplified dialog state — name, agent, schedule only
 const showAddCron = ref(false)
 const cronName = ref('')
 const cronAgentId = ref('')
-const cronOneOff = ref(false)
 const cronPrompt = ref('')
 const cronSaving = ref(false)
-const cronModelOverride = ref('')
-const cronProviderOverride = ref('')
-const cronModels = ref<string[]>([])
-const loadingModels = ref(false)
 
 // Schedule builder refs
 const dlgFrequency = ref<CronFrequency>('daily')
@@ -43,9 +36,6 @@ const dlgAtHour = ref(9)
 const dlgWeekday = ref(1)
 const dlgMonthDay = ref(1)
 const dlgCustomExpr = ref('')
-
-// Edit mode — stores the cron job ID being edited
-const editingJobId = ref<string | null>(null)
 
 const dlgParts = computed(() => ({
   frequency: dlgFrequency.value, everyMinutes: dlgEveryMinutes.value,
@@ -58,6 +48,7 @@ const dlgHumanReadable = computed(() => cronToHuman(dlgParts.value))
 function resetDlg() {
   cronName.value = ''
   cronAgentId.value = ''
+  cronPrompt.value = ''
   dlgFrequency.value = 'daily'
   dlgEveryMinutes.value = 30
   dlgAtMinute.value = 0
@@ -65,23 +56,6 @@ function resetDlg() {
   dlgWeekday.value = 1
   dlgMonthDay.value = 1
   dlgCustomExpr.value = ''
-  cronOneOff.value = false
-  cronPrompt.value = ''
-  editingJobId.value = null
-  cronModelOverride.value = ''
-  cronProviderOverride.value = ''
-  cronModels.value = []
-}
-
-function loadDlgFromExpr(expr: string) {
-  const p = parseCronExpr(expr)
-  dlgFrequency.value = p.frequency
-  dlgEveryMinutes.value = p.everyMinutes
-  dlgAtMinute.value = p.atMinute
-  dlgAtHour.value = p.atHour
-  dlgWeekday.value = p.weekday
-  dlgMonthDay.value = p.monthDay
-  dlgCustomExpr.value = p.customExpr
 }
 
 async function openAddCronDialog() {
@@ -90,51 +64,20 @@ async function openAddCronDialog() {
   showAddCron.value = true
 }
 
-async function openEditCronDialog(job: CronJob) {
-  allAgents.value = await api.agents.list()
-  resetDlg()
-  editingJobId.value = job.id
-  cronName.value = job.name || ''
-  cronAgentId.value = job.agentId
-  loadDlgFromExpr(job.schedule)
-  cronOneOff.value = job.oneOff
-  cronPrompt.value = job.prompt || ''
-  cronModelOverride.value = job.modelOverride || ''
-  cronProviderOverride.value = job.providerOverride || ''
-  showAddCron.value = true
-}
-
 async function saveCronJob() {
   const expr = dlgGeneratedExpr.value
-  if (!expr.trim()) return
+  if (!expr.trim() || !cronAgentId.value) return
   cronSaving.value = true
   try {
-    if (editingJobId.value) {
-      // Update existing
-      await api.cronJobs.update(editingJobId.value, {
-        name: cronName.value.trim(),
-        schedule: expr.trim(),
-        prompt: cronPrompt.value,
-        oneOff: cronOneOff.value,
-        modelOverride: cronModelOverride.value,
-        providerOverride: cronProviderOverride.value,
-      })
-    } else {
-      // Create new
-      if (!cronAgentId.value) return
-      await api.cronJobs.create({
-        name: cronName.value.trim(),
-        agentId: cronAgentId.value,
-        schedule: expr.trim(),
-        prompt: cronPrompt.value,
-        enabled: true,
-        oneOff: cronOneOff.value,
-        modelOverride: cronModelOverride.value,
-        providerOverride: cronProviderOverride.value,
-      })
-    }
+    const created = await api.cronJobs.create({
+      name: cronName.value.trim(),
+      agentId: cronAgentId.value,
+      schedule: expr.trim(),
+      prompt: cronPrompt.value,
+      enabled: true,
+    })
     showAddCron.value = false
-    await loadSchedules()
+    router.push(`/triggers/cron/${created.id}`)
   } finally {
     cronSaving.value = false
   }
@@ -142,14 +85,6 @@ async function saveCronJob() {
 
 async function toggleCronJob(jobId: string, enabled: boolean) {
   await api.cronJobs.update(jobId, { enabled })
-  await loadSchedules()
-}
-
-async function deleteCronJobConfirmed() {
-  if (!pendingDeleteId.value) return
-  await api.cronJobs.delete(pendingDeleteId.value)
-  showDeleteConfirm.value = false
-  pendingDeleteId.value = null
   await loadSchedules()
 }
 
@@ -163,72 +98,17 @@ function confirmDeleteCron(job: CronJob) {
   showDeleteConfirm.value = true
 }
 
+async function deleteCronJobConfirmed() {
+  if (!pendingDeleteId.value) return
+  await api.cronJobs.delete(pendingDeleteId.value)
+  showDeleteConfirm.value = false
+  pendingDeleteId.value = null
+  await loadSchedules()
+}
+
 const tabs: TabDef<'cron'>[] = [
   { value: 'cron', label: 'Cron Jobs', icon: 'lucide:clock' }
 ]
-
-// ─── Model override helpers ──────────────────────────────
-
-/** Resolve the effective provider ID for the currently selected agent */
-const effectiveProviderId = computed(() => {
-  if (cronProviderOverride.value) return cronProviderOverride.value
-  const agent = allAgents.value.find(a => a.id === cronAgentId.value)
-  return agent?.providerId || providerStore.lastUsedProviderId
-})
-
-const effectiveDefaultModel = computed(() => {
-  const agent = allAgents.value.find(a => a.id === cronAgentId.value)
-  const agentModel = agent?.model
-  const provider = providerStore.providers.find(p => p.id === effectiveProviderId.value)
-  return agentModel || provider?.defaultModel || ''
-})
-
-async function fetchCronModels(): Promise<void> {
-  const pid = cronProviderOverride.value || effectiveProviderId.value
-  if (!pid) { cronModels.value = []; return }
-  loadingModels.value = true
-  try {
-    cronModels.value = await providerStore.listModels(pid, 'llm')
-  } catch {
-    cronModels.value = []
-  } finally {
-    loadingModels.value = false
-  }
-}
-
-function onCronProviderChange(pid: string): void {
-  cronProviderOverride.value = pid
-  cronModelOverride.value = ''
-  cronModels.value = []
-  if (pid) fetchCronModels()
-}
-
-const { logoUrl } = useProviderLogos()
-
-const cronProviderGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Agent default', iconName: 'lucide:settings' },
-    ...providerStore.providers.map(p => ({
-      value: p.id,
-      label: p.name,
-      imgSrc: logoUrl(p.type),
-    })),
-  ],
-}])
-
-const cronModelGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: effectiveDefaultModel.value ? `Default (${effectiveDefaultModel.value})` : 'Provider default', iconName: 'lucide:settings' },
-    ...cronModels.value.map(m => ({ value: m, label: m })),
-  ],
-}])
-
-// When dialog opens with an existing provider override, fetch its models
-watch(showAddCron, (open) => {
-  if (open && (cronProviderOverride.value || effectiveProviderId.value)) {
-    fetchCronModels()
-  }
-})
 
 const tabsWithBadges = computed(() =>
   tabs.map(t => ({
@@ -363,100 +243,81 @@ onUnmounted(() => {
           <div
             v-for="job in cronJobs"
             :key="job.id"
-            class="flex items-center gap-4 px-5 py-4 rounded-xl border bg-zinc-900/50 group"
+            class="flex items-start gap-4 px-5 py-4 rounded-xl border bg-zinc-900/50 group"
             :class="job.enabled ? 'border-zinc-800' : 'border-zinc-800/50 opacity-60'"
           >
-            <div class="shrink-0">
+            <div class="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 overflow-hidden mt-0.5">
               <img
                 v-if="job.agentIconUrl"
                 :src="job.agentIconUrl"
                 :alt="job.agentName"
-                class="w-10 h-10 rounded-xl object-cover"
+                class="w-full h-full object-cover"
               >
-              <div
+              <Icon
                 v-else
-                class="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center"
-              >
-                <Icon
-                  icon="lucide:bot"
-                  class="w-5 h-5 text-zinc-500"
-                />
-              </div>
+                icon="lucide:bot"
+                class="w-5 h-5 text-zinc-400"
+              />
             </div>
             <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 mb-0.5">
-                <span class="text-sm font-medium text-zinc-200 truncate">{{ job.name || job.agentName }}</span>
+              <div class="flex items-center gap-2 mb-1">
+                <span class="font-medium text-zinc-100 truncate">{{ job.name || 'Unnamed job' }}</span>
                 <span
-                  v-if="job.name"
-                  class="text-xs text-zinc-500 truncate"
-                >
-                  {{ job.agentName }}
-                </span>
+                  v-if="job.isRunning"
+                  class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-400"
+                >EXECUTING</span>
+                <span
+                  v-else-if="job.enabled"
+                  class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-sky-500/20 text-sky-400"
+                >SCHEDULED</span>
+                <span
+                  v-else
+                  class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-zinc-500/20 text-zinc-500"
+                >PAUSED</span>
                 <span
                   v-if="job.oneOff"
-                  class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 shrink-0"
-                >
-                  One-off
-                </span>
-                <span
-                  v-if="job.modelOverride"
-                  class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 shrink-0 truncate max-w-35"
-                  :title="job.modelOverride"
-                >
-                  {{ job.modelOverride }}
-                </span>
+                  class="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/10 text-amber-400"
+                >One-off</span>
               </div>
-              <div class="flex items-center gap-2 text-xs text-zinc-500">
-                <Icon
-                  icon="lucide:clock"
-                  class="w-3 h-3"
-                  :class="job.enabled ? 'text-sky-400' : 'text-zinc-600'"
-                />
-                <span>{{ cronToHuman(job.schedule) }}</span>
 
-                <template v-if="job.enabled && job.nextRunAt && !job.isRunning">
-                  <span class="text-zinc-700">·</span>
-                  <span class="text-emerald-400/80 tabular-nums">
-                    <Icon
-                      icon="lucide:timer"
-                      class="w-3 h-3 inline -mt-px mr-0.5"
-                    />{{ formatCountdown(job.nextRunAt) }}
-                  </span>
-                </template>
-              </div>
-              <div
-                v-if="job.prompt"
-                class="text-xs text-zinc-600 mt-0.5 truncate max-w-sm"
-              >
-                {{ job.prompt }}
+              <div class="text-xs text-zinc-400 space-y-0.5">
+                <div class="flex items-center gap-1.5">
+                  <Icon
+                    icon="lucide:bot"
+                    class="w-3 h-3"
+                  />
+                  <span>{{ job.agentName }}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <Icon
+                    icon="lucide:clock"
+                    class="w-3 h-3"
+                    :class="job.enabled ? 'text-sky-400' : ''"
+                  />
+                  <span>{{ cronToHuman(job.schedule) }}</span>
+                  <template v-if="job.enabled && job.nextRunAt && !job.isRunning">
+                    <span class="text-zinc-700">·</span>
+                    <span class="text-emerald-400/80 tabular-nums">
+                      <Icon
+                        icon="lucide:timer"
+                        class="w-3 h-3 inline -mt-px mr-0.5"
+                      />{{ formatCountdown(job.nextRunAt) }}
+                    </span>
+                  </template>
+                </div>
+                <div
+                  v-if="job.prompt"
+                  class="flex items-center gap-1.5 text-zinc-500"
+                >
+                  <Icon
+                    icon="lucide:message-square"
+                    class="w-3 h-3"
+                  />
+                  <span class="truncate">{{ job.prompt }}</span>
+                </div>
               </div>
             </div>
-            <div class="shrink-0 flex items-center gap-3">
-              <!-- Edit / Delete (visible on hover) -->
-              <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  class="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors"
-                  title="Edit"
-                  @click="openEditCronDialog(job)"
-                >
-                  <Icon
-                    icon="lucide:pencil"
-                    class="w-3.5 h-3.5"
-                  />
-                </button>
-                <button
-                  class="p-1.5 rounded-lg hover:bg-red-500/10 text-zinc-500 hover:text-red-400 transition-colors"
-                  title="Delete"
-                  @click="confirmDeleteCron(job)"
-                >
-                  <Icon
-                    icon="lucide:trash-2"
-                    class="w-3.5 h-3.5"
-                  />
-                </button>
-              </div>
-
-              <!-- Enable/Disable toggle -->
+            <div class="flex items-center gap-1 shrink-0">
               <ToggleSwitch
                 :model-value="job.enabled"
                 size="sm"
@@ -464,56 +325,62 @@ onUnmounted(() => {
                 :title="job.enabled ? 'Pause cron job' : 'Enable cron job'"
                 @update:model-value="toggleCronJob(job.id, !job.enabled)"
               />
-
-              <!-- Status -->
-              <template v-if="job.isRunning">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span class="text-xs text-emerald-400">Executing</span>
-              </template>
-              <template v-else-if="job.enabled">
-                <span class="w-2 h-2 rounded-full bg-sky-500" />
-                <span class="text-xs text-sky-400">Scheduled</span>
-              </template>
-              <template v-else>
-                <span class="w-2 h-2 rounded-full bg-zinc-600" />
-                <span class="text-xs text-zinc-500">Paused</span>
-              </template>
+              <button
+                class="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                title="Edit"
+                @click="router.push(`/triggers/cron/${job.id}`)"
+              >
+                <Icon
+                  icon="lucide:pencil"
+                  class="w-4 h-4"
+                />
+              </button>
+              <button
+                class="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                title="Delete"
+                @click="confirmDeleteCron(job)"
+              >
+                <Icon
+                  icon="lucide:trash-2"
+                  class="w-4 h-4"
+                />
+              </button>
             </div>
           </div>
         </div>
       </template>
     </div>
 
-    <!-- Add Cron Job Dialog -->
+    <!-- Add Cron Job Dialog (simplified) -->
     <Teleport to="body">
       <div
         v-if="showAddCron"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
         @click.self="showAddCron = false"
       >
-        <div class="w-full max-w-lg md:max-w-4xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <div class="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
           <h2 class="text-lg font-semibold text-zinc-100 mb-4">
-            {{ editingJobId ? 'Edit Cron Job' : 'Add Cron Job' }}
+            New Cron Job
           </h2>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-0">
-            <!-- ═══ Left column: Identity + Schedule ═══ -->
+          <div class="space-y-4">
+            <!-- Job name -->
             <div>
-              <!-- Job name -->
               <label class="block text-sm text-zinc-400 mb-1">Name</label>
               <input
                 v-model="cronName"
                 type="text"
                 placeholder="e.g. Daily health check"
-                class="w-full px-3 py-2 mb-4 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
+            </div>
 
-              <!-- Agent picker -->
+            <!-- Agent picker -->
+            <div>
               <label class="block text-sm text-zinc-400 mb-1">Agent</label>
               <select
                 v-model="cronAgentId"
-                :disabled="!!editingJobId"
-                class="w-full px-3 py-2 mb-4 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option
                   value=""
@@ -529,8 +396,10 @@ onUnmounted(() => {
                   {{ a.name }}
                 </option>
               </select>
+            </div>
 
-              <!-- Schedule builder -->
+            <!-- Schedule builder -->
+            <div>
               <label class="block text-sm text-zinc-400 mb-2">Schedule</label>
               <div class="grid grid-cols-3 gap-1.5 mb-3">
                 <button
@@ -734,7 +603,7 @@ onUnmounted(() => {
               </div>
 
               <!-- Schedule summary -->
-              <div class="flex items-center gap-2 px-3 py-2 mb-4 rounded-lg bg-zinc-800/50 border border-zinc-800">
+              <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-800/50 border border-zinc-800">
                 <Icon
                   icon="lucide:calendar-clock"
                   class="w-3.5 h-3.5 text-sky-400 shrink-0"
@@ -742,75 +611,22 @@ onUnmounted(() => {
                 <span class="text-xs text-zinc-300">{{ dlgHumanReadable }}</span>
                 <code class="ml-auto text-[11px] text-zinc-600 font-mono">{{ dlgGeneratedExpr }}</code>
               </div>
-
-              <!-- One-off -->
-              <label class="flex items-center gap-2 mb-4 md:mb-0 cursor-pointer select-none">
-                <ToggleSwitch
-                  v-model="cronOneOff"
-                  size="md"
-                  color="amber"
-                />
-                <span class="text-sm text-zinc-300">One-off (auto-disable after first run)</span>
-              </label>
             </div>
 
-            <!-- ═══ Right column: Model Override + Prompt ═══ -->
-            <div class="flex flex-col">
-              <!-- Model / Provider Override -->
-              <label class="block text-sm text-zinc-400 mb-1">Model Override</label>
-              <p class="text-[11px] text-zinc-600 mb-2">
-                Override the agent's default provider or model for this cron job.
-              </p>
-              <div class="grid grid-cols-2 gap-2 mb-4">
-                <div>
-                  <label class="block text-[11px] text-zinc-500 mb-0.5">Provider</label>
-                  <CustomSelect
-                    :model-value="cronProviderOverride"
-                    :groups="cronProviderGroups"
-                    placeholder="Agent default"
-                    placeholder-icon="lucide:settings"
-                    @update:model-value="onCronProviderChange($event)"
-                  />
-                </div>
-                <div>
-                  <label class="block text-[11px] text-zinc-500 mb-0.5">Model</label>
-                  <div class="flex items-center gap-1">
-                    <div class="flex-1 min-w-0">
-                      <CustomSelect
-                        v-model="cronModelOverride"
-                        :groups="cronModelGroups"
-                        :placeholder="effectiveDefaultModel ? `Default (${effectiveDefaultModel})` : 'Provider default'"
-                        placeholder-icon="lucide:settings"
-                      />
-                    </div>
-                    <button
-                      :disabled="loadingModels"
-                      class="p-1.5 text-zinc-500 hover:text-zinc-300 disabled:opacity-40 rounded-lg transition-colors shrink-0"
-                      title="Refresh available models"
-                      @click="fetchCronModels"
-                    >
-                      <Icon
-                        :icon="loadingModels ? 'lucide:loader-2' : 'lucide:refresh-cw'"
-                        class="w-3.5 h-3.5"
-                        :class="{ 'animate-spin': loadingModels }"
-                      />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Cron prompt -->
-              <label class="block text-sm text-zinc-400 mb-1">Cron Prompt</label>
+            <!-- Prompt -->
+            <div>
+              <label class="block text-sm text-zinc-400 mb-1">Prompt (optional)</label>
               <textarea
                 v-model="cronPrompt"
+                rows="3"
                 placeholder="Describe what the agent should do on each cron trigger…"
-                class="w-full px-3 py-2 mb-4 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y font-mono flex-1 min-h-32"
+                class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
               />
             </div>
           </div>
 
-          <!-- Actions (full width) -->
-          <div class="flex justify-end gap-3">
+          <!-- Actions -->
+          <div class="flex justify-end gap-3 mt-6">
             <button
               class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
               @click="showAddCron = false"
@@ -818,11 +634,11 @@ onUnmounted(() => {
               Cancel
             </button>
             <button
-              :disabled="!(editingJobId || cronAgentId) || !dlgGeneratedExpr.trim() || cronSaving"
+              :disabled="!cronAgentId || !dlgGeneratedExpr.trim() || cronSaving"
               class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
               @click="saveCronJob"
             >
-              {{ cronSaving ? 'Saving…' : editingJobId ? 'Save Changes' : 'Save & Enable' }}
+              {{ cronSaving ? 'Creating…' : 'Create' }}
             </button>
           </div>
         </div>

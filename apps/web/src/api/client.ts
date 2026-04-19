@@ -309,7 +309,7 @@ export const api = {
   mcp: {
     listServers: () =>
       get<McpServerInfo[]>('/api/mcp/servers'),
-    addServer: (config: { name: string; command: string; args?: string[]; env?: Record<string, string>; enabled?: boolean; icon_url?: string; origin?: string }) =>
+    addServer: (config: { name: string; command: string; args?: string[]; env?: Record<string, string>; enabled?: boolean; icon_url?: string; origin?: string; env_hints?: { name: string; description?: string; required: boolean; sensitive?: boolean }[] }) =>
       post<{ id: string; connected: boolean; toolCount?: number; error?: string; pendingAuthUrl?: string }>('/api/mcp/servers', config),
     updateServer: (id: string, config: { name?: string; command?: string; args?: string[]; env?: Record<string, string> }) =>
       put<{ success: boolean; connected: boolean; toolCount?: number; error?: string }>(`/api/mcp/servers/${encodeURIComponent(id)}`, config),
@@ -367,7 +367,7 @@ export const api = {
       get<CronJob[]>('/api/cron-jobs'),
     create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string }) =>
       post<CronJob>('/api/cron-jobs', input),
-    update: (id: string, input: { name?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string }) =>
+    update: (id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string }) =>
       put<CronJob>(`/api/cron-jobs/${encodeURIComponent(id)}`, input),
     delete: (id: string) =>
       del<{ success: boolean }>(`/api/cron-jobs/${encodeURIComponent(id)}`),
@@ -423,7 +423,7 @@ export const api = {
       get<FileWatcher[]>('/api/file-watchers'),
     create: (input: { name?: string; agentId: string; paths: string[]; ignorePatterns?: string[]; prompt?: string; debounceMs?: number; enabled?: boolean; modelOverride?: string; providerOverride?: string }) =>
       post<FileWatcher>('/api/file-watchers', input),
-    update: (id: string, input: { name?: string; paths?: string[]; ignorePatterns?: string[]; prompt?: string; debounceMs?: number; enabled?: boolean; modelOverride?: string; providerOverride?: string }) =>
+    update: (id: string, input: { name?: string; agentId?: string; paths?: string[]; ignorePatterns?: string[]; prompt?: string; debounceMs?: number; enabled?: boolean; modelOverride?: string; providerOverride?: string }) =>
       put<FileWatcher>(`/api/file-watchers/${encodeURIComponent(id)}`, input),
     delete: (id: string) =>
       del<{ success: boolean }>(`/api/file-watchers/${encodeURIComponent(id)}`),

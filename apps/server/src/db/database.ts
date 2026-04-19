@@ -128,6 +128,7 @@ function createTables(db: Database.Database): void {
       enabled INTEGER NOT NULL DEFAULT 1,
       icon_url TEXT,
       origin TEXT,
+      env_hints_json TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -245,6 +246,7 @@ function createTables(db: Database.Database): void {
     try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`) } catch { /* column already exists */ }
   }
   addColumnIfMissing('memory_spaces', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('mcp_servers', 'env_hints_json', 'TEXT')
 }
 
 export function closeDb(): void {

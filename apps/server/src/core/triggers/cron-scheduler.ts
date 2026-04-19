@@ -92,15 +92,16 @@ export function createCronJob(input: { name?: string; agentId: string; schedule:
     return getCronJob(id)!
 }
 
-export function updateCronJob(id: string, input: { name?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string }): CronJobData | undefined {
+export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string }): CronJobData | undefined {
     const db = getDb()
     const existing = db.prepare('SELECT * FROM cron_jobs WHERE id = ?').get(id) as CronJobRow | undefined
     if (!existing) return undefined
     const now = Date.now()
     db.prepare(
-        'UPDATE cron_jobs SET name = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, model_override = ?, provider_override = ?, updated_at = ? WHERE id = ?'
+        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, model_override = ?, provider_override = ?, updated_at = ? WHERE id = ?'
     ).run(
         input.name !== undefined ? input.name : existing.name,
+        input.agentId !== undefined ? input.agentId : existing.agent_id,
         input.schedule !== undefined ? input.schedule : existing.schedule,
         input.prompt !== undefined ? input.prompt : existing.prompt,
         input.enabled !== undefined ? (input.enabled ? 1 : 0) : existing.enabled,
