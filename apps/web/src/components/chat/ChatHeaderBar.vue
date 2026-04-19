@@ -2,10 +2,13 @@
 import { computed } from 'vue'
 import { useChatStore } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
+import { useProviderStore } from '../../stores/provider.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'
+import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import { useChatSidebar } from '../../composables/useSidebar'
+import { useProviderLogos } from '../../composables/useProviderLogos'
 import { useRouter } from 'vue-router'
 
 withDefaults(defineProps<{
@@ -28,8 +31,10 @@ withDefaults(defineProps<{
 })
 
 const router = useRouter()
+const { logoUrl } = useProviderLogos()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
+const providerStore = useProviderStore()
 const agentDefs = useAgentDefinitionsStore()
 const { chatSidebarOpen, toggle: toggleSidebar } = useChatSidebar()
 
@@ -39,6 +44,70 @@ const selectedAgent = computed(() =>
 
 const conversationTitle = computed(() => chatStore.activeConversation?.title || '')
 
+const agentDropdownValue = computed(() => chatStore.activeAgentId || '')
+
+const agentDropdownGroups = computed((): SelectOptionGroup[] => {
+  const base: SelectOptionGroup = {
+    options: [{ value: '', label: 'Default', iconName: 'lucide:message-square' }],
+  }
+  if (!agentDefs.agents.length) return [base]
+  const sorted = [...agentDefs.agents].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+  return [
+    base,
+    {
+      label: 'Agents',
+      options: sorted.map((a) => {
+        let imgSrc: string | null = a.iconUrl || null
+        if (!imgSrc) {
+          const prov = providerStore.providers.find((p) => p.id === a.providerId)
+          if (prov) imgSrc = logoUrl(prov.type)
+        }
+        return {
+          value: a.id,
+          label: a.name,
+          imgSrc,
+          tooltip: a.description || undefined,
+          tag: a.subAgents?.length ? `+${a.subAgents.length}` : undefined,
+        }
+      }),
+    },
+  ]
+})
+
+const providerDropdownGroups = computed((): SelectOptionGroup[] => [{
+  options: providerStore.providers.map((p) => ({
+    value: p.id,
+    label: p.name,
+    imgSrc: logoUrl(p.type),
+  })),
+}])
+
+const currentProviderId = computed(() =>
+  chatStore.sessionProviderOverride || selectedAgent.value?.providerId || providerStore.lastUsedProviderId
+)
+
+function onProviderOverride(providerId: string): void {
+  chatStore.sessionModelOverride = null
+  if (chatStore.activeAgentId) {
+    chatStore.sessionProviderOverride =
+      providerId !== selectedAgent.value?.providerId ? providerId : null
+  } else {
+    chatStore.sessionProviderOverride = providerId
+    providerStore.setLastUsed(providerId)
+  }
+}
+
+async function onAgentChange(value: string) {
+  const agentId = value || null
+  await chatStore.setActiveAgent(agentId)
+  if (agentId) {
+    const agent = agentDefs.get(agentId)
+    if (agent?.providerId) {
+      providerStore.setLastUsed(agent.providerId)
+    }
+  }
+}
+
 async function newChat(): Promise<void> {
   chatStore.startNewChat()
   agentStore.clearExecution()
@@ -47,11 +116,11 @@ async function newChat(): Promise<void> {
 
 <template>
   <div class="shrink-0 border-b border-zinc-800/60 px-3 py-2 flex items-center gap-2">
-    <!-- ── Chat mode: sidebar toggle + title ── -->
+    <!-- ── Chat mode: sidebar toggle + agent/provider + centered title ── -->
     <template v-if="mode === 'chat'">
       <!-- Sidebar toggle -->
       <button
-        class="p-1.5 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300"
+        class="p-1.5 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300 shrink-0"
         title="Toggle chat history"
         @click="toggleSidebar"
       >
@@ -61,46 +130,33 @@ async function newChat(): Promise<void> {
         />
       </button>
 
-      <!-- Agent icon (when an agent is selected) -->
-      <img
-        v-if="selectedAgent?.iconUrl"
-        :src="selectedAgent.iconUrl"
-        alt=""
-        class="w-6 h-6 rounded-lg object-cover shrink-0"
-      >
-      <div
-        v-else-if="selectedAgent"
-        class="w-6 h-6 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0"
-      >
-        <Icon
-          icon="lucide:bot"
-          class="w-3.5 h-3.5 text-zinc-500"
+      <!-- Agent selector -->
+      <div class="w-44 shrink-0">
+        <CustomSelect
+          :model-value="agentDropdownValue"
+          :groups="agentDropdownGroups"
+          placeholder="Default"
+          placeholder-icon="lucide:message-square"
+          max-height="max-h-96"
+          :filterable="true"
+          @change="onAgentChange"
         />
       </div>
 
-      <!-- Conversation / agent title -->
-      <div class="min-w-0 flex-1">
-        <span
-          v-if="conversationTitle"
-          class="text-sm font-medium text-zinc-200 truncate block"
-        >
-          {{ conversationTitle }}
-        </span>
-        <span
-          v-else-if="selectedAgent"
-          class="text-sm font-medium text-zinc-300 truncate block"
-        >
-          {{ selectedAgent.name }}
-        </span>
-        <span
-          v-else
-          class="text-sm text-zinc-500 truncate block"
-        >
-          New conversation
-        </span>
+      <!-- Provider selector -->
+      <div
+        v-if="providerStore.providers.length > 1"
+        class="w-36 shrink-0 hidden sm:block"
+      >
+        <CustomSelect
+          :model-value="currentProviderId"
+          :groups="providerDropdownGroups"
+          max-height="max-h-96"
+          @change="onProviderOverride"
+        />
       </div>
 
-      <!-- Sub-agent override toggle -->
+      <!-- Sub-agent override toggle (next to provider) -->
       <label
         v-if="(chatStore.sessionModelOverride || chatStore.sessionProviderOverride) && (selectedAgent?.subAgents?.length || chatStore.freeChatSubAgentIds?.length)"
         class="items-center gap-1.5 hidden md:flex cursor-pointer select-none shrink-0"
@@ -119,6 +175,16 @@ async function newChat(): Promise<void> {
           Apply to All agents
         </span>
       </label>
+
+      <!-- Centered conversation title -->
+      <div class="flex-1 min-w-0 text-center">
+        <span
+          v-if="conversationTitle"
+          class="text-sm font-medium text-zinc-300 truncate inline-block max-w-full"
+        >
+          {{ conversationTitle }}
+        </span>
+      </div>
     </template>
 
     <!-- ── Instance mode: back button + agent info ── -->
