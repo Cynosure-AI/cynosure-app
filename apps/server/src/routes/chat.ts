@@ -357,6 +357,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         contextWindow = modelInfo.contextLength
       } catch { /* ignore — context window info is optional */ }
 
+      // If the agent defines a hard max-context-token limit, use the lower of
+      // the model's context window and the agent's cap as the effective window.
+      const agentMaxCtx = resolvedAgent?.maxContextTokens
+      if (typeof agentMaxCtx === 'number' && agentMaxCtx > 0) {
+        contextWindow = contextWindow
+          ? Math.min(contextWindow, agentMaxCtx)
+          : agentMaxCtx
+      }
+
       // Trim message history if it exceeds the model's context window
       const contextStrategy = reqContextStrategy || 'sliding-window'
       let initialContextEstimate: number | undefined

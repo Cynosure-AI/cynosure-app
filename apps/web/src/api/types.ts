@@ -118,6 +118,7 @@ export interface AgentDefinition {
     generateTitle: boolean
     showInCarousel: boolean
     thinkingEnabled: boolean
+    maxContextTokens: number | null
     sortOrder: number
     memorySpaces: string[]
     createdAt: number

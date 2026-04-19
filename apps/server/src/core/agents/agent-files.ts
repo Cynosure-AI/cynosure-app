@@ -23,6 +23,7 @@ export interface AgentConfig {
     autoApproveTools: boolean
     showInCarousel: boolean
     thinkingEnabled: boolean
+    maxContextTokens: number | null
     sortOrder: number
     createdAt: number
     updatedAt: number
@@ -50,6 +51,7 @@ export type CreateAgentInput = {
     autoApproveTools?: boolean
     showInCarousel?: boolean
     thinkingEnabled?: boolean
+    maxContextTokens?: number | null
     sortOrder?: number
 }
 
@@ -162,6 +164,7 @@ function readAgentFromDir(agentDir: string, id: string): AgentData | null {
         autoApproveTools: config.autoApproveTools === true,
         showInCarousel: config.showInCarousel !== false,
         thinkingEnabled: config.thinkingEnabled !== false,
+        maxContextTokens: typeof config.maxContextTokens === 'number' ? config.maxContextTokens : null,
         sortOrder: typeof config.sortOrder === 'number' ? config.sortOrder : 0,
         createdAt: config.createdAt || 0,
         updatedAt: config.updatedAt || 0,
@@ -216,6 +219,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
         autoApproveTools: input.autoApproveTools === true,
         showInCarousel: input.showInCarousel !== false,
         thinkingEnabled: input.thinkingEnabled !== false,
+        maxContextTokens: typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null,
         sortOrder: typeof input.sortOrder === 'number' ? input.sortOrder : 0,
         createdAt: now,
         updatedAt: now,
@@ -264,6 +268,9 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         autoApproveTools: input.autoApproveTools !== undefined ? input.autoApproveTools : (existing.autoApproveTools === true),
         showInCarousel: input.showInCarousel !== undefined ? input.showInCarousel : (existing.showInCarousel !== false),
         thinkingEnabled: input.thinkingEnabled !== undefined ? input.thinkingEnabled : (existing.thinkingEnabled !== false),
+        maxContextTokens: input.maxContextTokens !== undefined
+            ? (typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null)
+            : (typeof existing.maxContextTokens === 'number' ? existing.maxContextTokens : null),
         sortOrder: input.sortOrder !== undefined ? input.sortOrder : (typeof existing.sortOrder === 'number' ? existing.sortOrder : 0),
         createdAt: existing.createdAt,
         updatedAt: now,
