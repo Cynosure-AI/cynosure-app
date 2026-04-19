@@ -83,6 +83,7 @@ const { status: whisperStatus, progress: whisperProgress, startRecording, stopRe
 const inputText = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const showMobileDrawer = ref(false)
 const attachedImages = ref<{ url: string; name: string }[]>([])
 const attachedFiles = ref<{ name: string; content: string }[]>([])
 const attachedAudio = ref<{ url: string; name: string }[]>([])
@@ -461,6 +462,27 @@ defineExpose({ processFiles })
           @paste="onPaste"
         />
 
+        <!-- Mobile settings drawer -->
+        <Transition
+          enter-active-class="transition-all duration-200 ease-out"
+          leave-active-class="transition-all duration-150 ease-in"
+          enter-from-class="opacity-0 translate-y-2"
+          enter-to-class="opacity-100 translate-y-0"
+          leave-from-class="opacity-100 translate-y-0"
+          leave-to-class="opacity-0 translate-y-2"
+        >
+          <div
+            v-if="showMobileDrawer"
+            class="sm:hidden flex items-center gap-1 px-2 py-1.5 border-b border-zinc-700/50"
+          >
+            <ToolsButton />
+            <SubAgentsButton />
+            <MemorySpacesButton />
+            <SystemPromptButton />
+            <ThinkingModeButton />
+          </div>
+        </Transition>
+
         <!-- Bottom toolbar -->
         <div class="flex items-center gap-1 px-2 pb-2 pt-0.5">
           <!-- Left: action buttons -->
@@ -477,11 +499,28 @@ defineExpose({ processFiles })
             />
           </button>
 
-          <ToolsButton />
-          <SubAgentsButton />
-          <MemorySpacesButton />
-          <SystemPromptButton />
-          <ThinkingModeButton />
+          <!-- Mobile: single tune button to open drawer -->
+          <button
+            class="sm:hidden p-1.5 rounded-lg transition-colors shrink-0 focus:outline-none"
+            :class="showMobileDrawer ? 'text-blue-400 bg-zinc-700/50' : 'text-zinc-500 hover:text-zinc-300'"
+            title="Chat settings"
+            aria-label="Chat settings"
+            @click="showMobileDrawer = !showMobileDrawer"
+          >
+            <Icon
+              icon="material-symbols:tune"
+              class="h-4 w-4"
+            />
+          </button>
+
+          <!-- Desktop: inline buttons -->
+          <span class="hidden sm:contents">
+            <ToolsButton />
+            <SubAgentsButton />
+            <MemorySpacesButton />
+            <SystemPromptButton />
+            <ThinkingModeButton />
+          </span>
 
           <div class="flex-1" />
 
@@ -490,7 +529,7 @@ defineExpose({ processFiles })
             v-if="currentProviderId"
             class="flex items-center gap-1 shrink-0"
           >
-            <div class="w-44">
+            <div class="w-28 sm:w-44">
               <CustomSelect
                 :model-value="chatStore.sessionModelOverride || ''"
                 :groups="modelDropdownGroups"
@@ -498,6 +537,7 @@ defineExpose({ processFiles })
                 dropdown-width="min-w-full"
                 :filterable="true"
                 :drop-up="true"
+                align="center"
                 @change="onModelChange"
               />
             </div>
@@ -608,7 +648,9 @@ defineExpose({ processFiles })
     </div>
 
     <!-- Context window usage ring — pinned to the far right of the bar -->
-    <ContextRing />
+    <div class="hidden sm:block">
+      <ContextRing />
+    </div>
   </div>
 
   <!-- Save as Agent modal -->

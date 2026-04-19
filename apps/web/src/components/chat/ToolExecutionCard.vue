@@ -123,7 +123,7 @@ const maContext = computed(() => {
 
 <template>
   <div class="px-4 py-1.5">
-    <div class="max-w-[80%] ml-10">
+    <div class="max-w-[80%] ml-3 md:ml-10">
       <!-- Compact header — always visible -->
       <button
         class="w-full flex items-center gap-2 px-3 py-2 rounded-2xl text-[13px] font-medium transition-all group shadow-sm"

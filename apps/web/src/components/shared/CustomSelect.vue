@@ -32,6 +32,8 @@ const props = withDefaults(
     dropdownWidth?: string
     /** When true the dropdown opens above the trigger instead of below */
     dropUp?: boolean
+    /** Text alignment for the trigger label: 'left' | 'center' | 'right' */
+    align?: 'left' | 'center' | 'right'
   }>(),
   {
     placeholder: 'Select...',
@@ -39,6 +41,7 @@ const props = withDefaults(
     maxHeight: 'max-h-56',
     dropdownWidth: 'w-full',
     dropUp: false,
+    align: 'left',
   },
 )
 
@@ -206,7 +209,11 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
       ref="listRef"
       role="listbox"
       class="absolute z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
-      :class="[dropdownWidth, dropUp ? 'bottom-full mb-1' : 'top-full mt-1']"
+      :class="[
+        dropdownWidth,
+        dropUp ? 'bottom-full mb-1' : 'top-full mt-1',
+        align === 'right' ? 'right-0' : align === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0',
+      ]"
     >
       <!-- Filter input -->
       <div
