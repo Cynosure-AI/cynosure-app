@@ -9,28 +9,7 @@ import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import { useChatSidebar } from '../../composables/useSidebar'
 import { useProviderLogos } from '../../composables/useProviderLogos'
-import { useRouter } from 'vue-router'
 
-withDefaults(defineProps<{
-  /** 'chat' = full selectors + sidebar toggle; 'instance' = read-only + back button */
-  mode?: 'chat' | 'instance'
-  /** Route for the back button (instance mode only) */
-  backRoute?: string
-  /** Instance type label (instance mode) */
-  instanceType?: string
-  /** Instance type icon (instance mode) */
-  instanceIcon?: string
-  /** Instance type color class (instance mode) */
-  instanceColor?: string
-}>(), {
-  mode: 'chat',
-  backRoute: '/instances',
-  instanceType: '',
-  instanceIcon: 'lucide:message-circle',
-  instanceColor: 'text-blue-400',
-})
-
-const router = useRouter()
 const { logoUrl } = useProviderLogos()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
@@ -108,6 +87,18 @@ async function onAgentChange(value: string) {
   }
 }
 
+const originConfig: Record<string, { icon: string; color: string; label: string }> = {
+  cron: { icon: 'lucide:clock', color: 'text-sky-400', label: 'Cron' },
+  channel: { icon: 'lucide:send', color: 'text-teal-400', label: 'Channel' },
+  'file-watcher': { icon: 'lucide:eye', color: 'text-orange-400', label: 'File Watch' },
+  'multi-agent': { icon: 'lucide:network', color: 'text-purple-400', label: 'Multi-Agent' },
+}
+
+const activeOrigin = computed(() => {
+  const origin = chatStore.activeConversation?.origin
+  return origin && origin !== 'chat' ? originConfig[origin] ?? null : null
+})
+
 async function newChat(): Promise<void> {
   chatStore.startNewChat()
   agentStore.clearExecution()
@@ -116,161 +107,95 @@ async function newChat(): Promise<void> {
 
 <template>
   <div class="shrink-0 border-b border-zinc-800/60 px-3 py-2 flex items-center gap-2">
-    <!-- ── Chat mode: sidebar toggle + agent/provider + centered title ── -->
-    <template v-if="mode === 'chat'">
-      <!-- Sidebar toggle -->
-      <button
-        class="p-1.5 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300 shrink-0"
-        title="Toggle chat history"
-        @click="toggleSidebar"
+    <!-- Sidebar toggle -->
+    <button
+      class="p-1.5 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300 shrink-0"
+      title="Toggle chat history"
+      @click="toggleSidebar"
+    >
+      <Icon
+        :icon="chatSidebarOpen ? 'lucide:panel-left-close' : 'lucide:panel-left-open'"
+        class="w-4 h-4"
+      />
+    </button>
+
+    <!-- Agent selector -->
+    <div class="w-44 shrink-0">
+      <CustomSelect
+        :model-value="agentDropdownValue"
+        :groups="agentDropdownGroups"
+        placeholder="Default"
+        placeholder-icon="lucide:message-square"
+        max-height="max-h-96"
+        :filterable="true"
+        @change="onAgentChange"
+      />
+    </div>
+
+    <!-- Provider selector -->
+    <div
+      v-if="providerStore.providers.length > 1"
+      class="w-36 shrink-0 hidden sm:block"
+    >
+      <CustomSelect
+        :model-value="currentProviderId"
+        :groups="providerDropdownGroups"
+        max-height="max-h-96"
+        @change="onProviderOverride"
+      />
+    </div>
+
+    <!-- Sub-agent override toggle (next to provider) -->
+    <label
+      v-if="(chatStore.sessionModelOverride || chatStore.sessionProviderOverride) && (selectedAgent?.subAgents?.length || chatStore.freeChatSubAgentIds?.length)"
+      class="items-center gap-1.5 hidden md:flex cursor-pointer select-none shrink-0"
+      :title="chatStore.sessionOverrideSubAgents ? 'Override applies to all sub-agents — click to restrict to main agent only' : 'Override applies to main agent only — click to propagate to sub-agents'"
+    >
+      <ToggleSwitch
+        :model-value="chatStore.sessionOverrideSubAgents"
+        size="sm"
+        color="amber"
+        @update:model-value="chatStore.sessionOverrideSubAgents = $event"
+      />
+      <span
+        class="text-[10px]"
+        :class="chatStore.sessionOverrideSubAgents ? 'text-amber-400' : 'text-zinc-500'"
       >
-        <Icon
-          :icon="chatSidebarOpen ? 'lucide:panel-left-close' : 'lucide:panel-left-open'"
-          class="w-4 h-4"
-        />
-      </button>
+        Apply to All agents
+      </span>
+    </label>
 
-      <!-- Agent selector -->
-      <div class="w-44 shrink-0">
-        <CustomSelect
-          :model-value="agentDropdownValue"
-          :groups="agentDropdownGroups"
-          placeholder="Default"
-          placeholder-icon="lucide:message-square"
-          max-height="max-h-96"
-          :filterable="true"
-          @change="onAgentChange"
-        />
-      </div>
-
-      <!-- Provider selector -->
-      <div
-        v-if="providerStore.providers.length > 1"
-        class="w-36 shrink-0 hidden sm:block"
-      >
-        <CustomSelect
-          :model-value="currentProviderId"
-          :groups="providerDropdownGroups"
-          max-height="max-h-96"
-          @change="onProviderOverride"
-        />
-      </div>
-
-      <!-- Sub-agent override toggle (next to provider) -->
-      <label
-        v-if="(chatStore.sessionModelOverride || chatStore.sessionProviderOverride) && (selectedAgent?.subAgents?.length || chatStore.freeChatSubAgentIds?.length)"
-        class="items-center gap-1.5 hidden md:flex cursor-pointer select-none shrink-0"
-        :title="chatStore.sessionOverrideSubAgents ? 'Override applies to all sub-agents — click to restrict to main agent only' : 'Override applies to main agent only — click to propagate to sub-agents'"
-      >
-        <ToggleSwitch
-          :model-value="chatStore.sessionOverrideSubAgents"
-          size="sm"
-          color="amber"
-          @update:model-value="chatStore.sessionOverrideSubAgents = $event"
-        />
-        <span
-          class="text-[10px]"
-          :class="chatStore.sessionOverrideSubAgents ? 'text-amber-400' : 'text-zinc-500'"
-        >
-          Apply to All agents
-        </span>
-      </label>
-
-      <!-- Centered conversation title -->
-      <div class="flex-1 min-w-0 text-center">
-        <span
-          v-if="conversationTitle"
-          class="text-sm font-medium text-zinc-300 truncate inline-block max-w-full"
-        >
-          {{ conversationTitle }}
-        </span>
-      </div>
-    </template>
-
-    <!-- ── Instance mode: back button + agent info ── -->
-    <template v-else>
-      <!-- Back button -->
-      <button
-        class="p-1.5 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300"
-        @click="router.push(backRoute)"
-      >
-        <Icon
-          icon="lucide:arrow-left"
-          class="w-4 h-4"
-        />
-      </button>
-
-      <!-- Agent icon -->
-      <img
-        v-if="selectedAgent?.iconUrl"
-        :src="selectedAgent.iconUrl"
-        alt=""
-        class="w-7 h-7 rounded-lg object-cover shrink-0"
-      >
-      <div
-        v-else
-        class="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0"
-      >
-        <Icon
-          icon="lucide:bot"
-          class="w-4 h-4 text-zinc-500"
-        />
-      </div>
-
-      <!-- Agent name + instance type -->
-      <div class="min-w-0">
-        <div class="text-sm font-medium text-zinc-200 truncate">
-          {{ selectedAgent?.name || 'Agent' }}
-        </div>
-        <div
-          v-if="instanceType"
-          class="text-xs text-zinc-500 flex items-center gap-1.5"
-        >
-          <Icon
-            :icon="instanceIcon"
-            class="w-3 h-3"
-            :class="instanceColor"
-          />
-          {{ instanceType }}
-        </div>
-      </div>
-
-      <!-- Conversation title -->
+    <!-- Centered conversation title + origin badge -->
+    <div class="flex-1 min-w-0 flex items-center justify-center gap-2">
       <span
         v-if="conversationTitle"
-        class="text-xs text-zinc-500 truncate hidden sm:inline"
+        class="text-sm font-medium text-zinc-300 truncate"
       >
-        — {{ conversationTitle }}
+        {{ conversationTitle }}
       </span>
-
-      <!-- Execution status -->
-      <div class="flex items-center gap-1.5 ml-auto shrink-0">
-        <span
-          class="w-2 h-2 rounded-full"
-          :class="agentStore.isExecuting ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'"
-        />
-        <span
-          class="text-xs"
-          :class="agentStore.isExecuting ? 'text-emerald-400' : 'text-zinc-500'"
-        >{{ agentStore.isExecuting ? 'Running' : 'Idle' }}</span>
-      </div>
-    </template>
-
-    <!-- ── Right section (chat mode only) ── -->
-    <template v-if="mode === 'chat'">
-      <div class="flex-1" />
-
-      <!-- New Chat button -->
-      <button
-        class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition-colors shrink-0"
-        @click="newChat"
+      <span
+        v-if="activeOrigin"
+        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-800 shrink-0"
+        :class="activeOrigin.color"
       >
         <Icon
-          icon="lucide:plus"
-          class="w-3.5 h-3.5"
+          :icon="activeOrigin.icon"
+          class="w-3 h-3"
         />
-        <span class="hidden sm:inline">New Chat</span>
-      </button>
-    </template>
+        {{ activeOrigin.label }}
+      </span>
+    </div>
+
+    <!-- New Chat button -->
+    <button
+      class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition-colors shrink-0"
+      @click="newChat"
+    >
+      <Icon
+        icon="lucide:plus"
+        class="w-3.5 h-3.5"
+      />
+      <span class="hidden sm:inline">New Chat</span>
+    </button>
   </div>
 </template>

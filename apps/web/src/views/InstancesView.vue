@@ -119,24 +119,12 @@ const typeConfig: Record<string, { icon: string; color: string; bg: string; labe
   'file-watcher': { icon: 'lucide:eye', color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'File Watch' }
 }
 
-function openInstance(instance: AgentInstance) {
-  if (!instance.agentId) {
-    // Default/agentless chat — open the conversation directly
-    if (instance.conversationId) {
-      chatStore.activeAgentId = null
-      chatStore.activeConversationId = instance.conversationId
-      router.push('/triggers/chat')
-    }
-    return
+async function openInstance(instance: AgentInstance) {
+  await chatStore.setActiveAgent(instance.agentId || null)
+  if (instance.conversationId) {
+    await chatStore.selectConversation(instance.conversationId)
   }
-  router.push({
-    name: 'instance-detail',
-    params: { agentId: instance.agentId },
-    query: {
-      ...(instance.conversationId ? { conversation: instance.conversationId } : {}),
-      type: instance.type
-    }
-  })
+  router.push('/triggers/chat')
 }
 
 async function openConversation(item: HistoryItem) {

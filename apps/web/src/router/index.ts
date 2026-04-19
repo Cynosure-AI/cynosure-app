@@ -53,11 +53,6 @@ const router = createRouter({
       name: 'instances',
       component: () => import('@/views/InstancesView.vue')
     },
-    {
-      path: '/instances/:agentId',
-      name: 'instance-detail',
-      component: () => import('@/views/InstanceDetailView.vue')
-    },
     // Agents
     {
       path: '/agents',
