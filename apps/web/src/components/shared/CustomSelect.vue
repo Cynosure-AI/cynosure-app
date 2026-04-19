@@ -30,12 +30,15 @@ const props = withDefaults(
     filterable?: boolean
     /** Width class(es) for the dropdown panel (default: 'w-full'). Use e.g. 'min-w-full' to auto-expand to contents. */
     dropdownWidth?: string
+    /** When true the dropdown opens above the trigger instead of below */
+    dropUp?: boolean
   }>(),
   {
     placeholder: 'Select...',
     placeholderIcon: 'lucide:chevrons-up-down',
     maxHeight: 'max-h-56',
     dropdownWidth: 'w-full',
+    dropUp: false,
   },
 )
 
@@ -202,8 +205,8 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
       v-if="isOpen"
       ref="listRef"
       role="listbox"
-      class="absolute z-50 top-full mt-1 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
-      :class="dropdownWidth"
+      class="absolute z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
+      :class="[dropdownWidth, dropUp ? 'bottom-full mb-1' : 'top-full mt-1']"
     >
       <!-- Filter input -->
       <div

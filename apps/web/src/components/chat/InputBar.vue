@@ -7,8 +7,10 @@ import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import { useProviderStore } from '../../stores/provider.store'
 import { useWhisper } from '../../composables/useWhisper'
+import { useProviderLogos } from '../../composables/useProviderLogos'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
+import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
 import ToolsButton from './inputbar/ToolsButton.vue'
 import SubAgentsButton from './inputbar/SubAgentsButton.vue'
 import MemorySpacesButton from './inputbar/MemorySpacesButton.vue'
@@ -22,9 +24,121 @@ const agentDefs = useAgentDefinitionsStore()
 const prefs = usePreferencesStore()
 const providerStore = useProviderStore()
 const router = useRouter()
+const { logoUrl } = useProviderLogos()
 
 // Override detection
 const hasOverrides = computed(() => chatStore.hasAgentOverrides)
+
+// ─── Agent / Provider / Model selectors ──────────────────
+const selectedAgent = computed(() =>
+  chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null
+)
+
+const agentDropdownValue = computed(() => chatStore.activeAgentId || '')
+
+const agentDropdownGroups = computed((): SelectOptionGroup[] => {
+  const base: SelectOptionGroup = {
+    options: [{ value: '', label: 'Default', iconName: 'lucide:message-square' }],
+  }
+  if (!agentDefs.agents.length) return [base]
+  const sorted = [...agentDefs.agents].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+  return [
+    base,
+    {
+      label: 'Agents',
+      options: sorted.map((a) => {
+        let imgSrc: string | null = a.iconUrl || null
+        if (!imgSrc) {
+          const prov = providerStore.providers.find((p) => p.id === a.providerId)
+          if (prov) imgSrc = logoUrl(prov.type)
+        }
+        return {
+          value: a.id,
+          label: a.name,
+          imgSrc,
+          tooltip: a.description || undefined,
+          tag: a.subAgents?.length ? `+${a.subAgents.length}` : undefined,
+        }
+      }),
+    },
+  ]
+})
+
+const currentProviderId = computed(() =>
+  chatStore.sessionProviderOverride || selectedAgent.value?.providerId || providerStore.lastUsedProviderId
+)
+
+const providerDropdownGroups = computed((): SelectOptionGroup[] => [{
+  options: providerStore.providers.map((p) => ({
+    value: p.id,
+    label: p.name,
+    imgSrc: logoUrl(p.type),
+  })),
+}])
+
+const sidebarModels = ref<string[]>([])
+const loadingModels = ref(false)
+
+const defaultModelLabel = computed(() => {
+  const agentModel = selectedAgent.value?.model
+  const provider = providerStore.providers.find(p => p.id === currentProviderId.value)
+  const providerDefault = provider?.defaultModel
+  const isProviderOverridden = chatStore.sessionProviderOverride &&
+    chatStore.sessionProviderOverride !== selectedAgent.value?.providerId
+  const effectiveDefault = isProviderOverridden ? providerDefault : (agentModel || providerDefault)
+  return effectiveDefault ? `Default (${effectiveDefault})` : 'Provider default'
+})
+
+const modelDropdownGroups = computed((): SelectOptionGroup[] => [{
+  options: [
+    { value: '', label: defaultModelLabel.value },
+    ...sidebarModels.value.map((m) => ({ value: m, label: m })),
+  ],
+}])
+
+async function fetchSidebarModels(): Promise<void> {
+  const providerId = currentProviderId.value
+  if (!providerId) return
+  loadingModels.value = true
+  try {
+    sidebarModels.value = await providerStore.listModels(providerId, 'llm')
+  } catch {
+    sidebarModels.value = []
+  } finally {
+    loadingModels.value = false
+  }
+}
+
+async function onAgentChange(value: string) {
+  const agentId = value || null
+  await chatStore.setActiveAgent(agentId)
+  if (agentId) {
+    const agent = agentDefs.get(agentId)
+    if (agent?.providerId) {
+      providerStore.setLastUsed(agent.providerId)
+    }
+  }
+}
+
+function onModelChange(value: string): void {
+  chatStore.sessionModelOverride = value || null
+}
+
+function onProviderOverride(providerId: string): void {
+  chatStore.sessionModelOverride = null
+  if (chatStore.activeAgentId) {
+    chatStore.sessionProviderOverride =
+      providerId !== selectedAgent.value?.providerId ? providerId : null
+  } else {
+    chatStore.sessionProviderOverride = providerId
+    providerStore.setLastUsed(providerId)
+  }
+}
+
+watch(currentProviderId, (newId, oldId) => {
+  if (newId !== oldId) sidebarModels.value = []
+  if (newId) fetchSidebarModels()
+}, { immediate: true })
 
 const { status: whisperStatus, progress: whisperProgress, startRecording, stopRecording } = useWhisper()
 
@@ -386,30 +500,8 @@ defineExpose({ processFiles })
         </button>
       </div>
 
-      <!-- Controls row -->
-      <div class="flex items-end gap-2">
-        <!-- File attach button -->
-        <button
-          class="p-2.5 text-zinc-500 hover:text-zinc-300 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          title="Attach file"
-          :disabled="chatStore.isStreaming"
-          aria-label="Attach file"
-          :aria-disabled="chatStore.isStreaming"
-          @click="openFilePicker"
-        >
-          <Icon
-            icon="streamline-ultimate:attachment"
-            class="h-5 w-5"
-          />
-        </button>
-
-        <!-- Action buttons (tools, sub-agents, memory, system prompt, thinking) -->
-        <ToolsButton />
-        <SubAgentsButton />
-        <MemorySpacesButton />
-        <SystemPromptButton />
-        <ThinkingModeButton />
-
+      <!-- Input area: textarea + bottom bar inside a unified container -->
+      <div class="rounded-xl border border-zinc-700 bg-zinc-800 focus-within:ring-1 focus-within:ring-blue-500">
         <input
           ref="fileInputRef"
           type="file"
@@ -424,101 +516,184 @@ defineExpose({ processFiles })
           v-model="inputText"
           placeholder="Type a message..."
           rows="1"
-          class="flex-1 min-w-0 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-500"
+          class="w-full bg-transparent text-zinc-100 px-4 pt-3 pb-2 text-sm resize-none focus:outline-none placeholder-zinc-500"
           aria-label="Type a message"
           @keydown="onKeydown"
           @input="autoResize"
           @paste="onPaste"
         />
 
-        <!-- Mic / voice input button -->
-        <button
-          v-if="prefs.whisperEnabled"
-          class="relative p-2.5 rounded-xl transition-all duration-300 shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          :class="whisperStatus === 'recording'
-            ? 'bg-red-600 text-white hover:bg-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.5)]'
-            : whisperStatus === 'transcribing'
-              ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.4)] animate-whisper-glow cursor-wait'
-              : whisperStatus === 'loading'
-                ? 'text-amber-400 cursor-wait'
-                : 'text-zinc-500 hover:text-zinc-300'"
-          :title="whisperStatus === 'recording'
-            ? 'Stop recording'
-            : whisperStatus === 'loading'
-              ? `Loading model (${whisperProgress}%)`
-              : whisperStatus === 'transcribing'
-                ? 'Transcribing…'
-                : 'Voice input'"
-          :disabled="whisperStatus === 'transcribing'"
-          aria-label="Voice input"
-          @click="toggleMic"
-        >
-          <Icon
-            :icon="whisperStatus === 'recording'
-              ? 'mdi:stop'
-              : whisperStatus === 'transcribing'
-                ? 'lucide:audio-waveform'
-                : 'mdi:microphone'"
-            class="h-5 w-5"
-            :class="whisperStatus === 'transcribing' ? 'animate-pulse' : ''"
-          />
-          <!-- Loading progress ring -->
-          <svg
-            v-if="whisperStatus === 'loading'"
-            class="absolute inset-0 w-full h-full -rotate-90"
-            viewBox="0 0 36 36"
+        <!-- Bottom toolbar -->
+        <div class="flex items-center gap-1 px-2 pb-2 pt-0.5">
+          <!-- Left: action buttons -->
+          <button
+            class="p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg transition-colors shrink-0 focus:outline-none"
+            title="Attach file"
+            :disabled="chatStore.isStreaming"
+            aria-label="Attach file"
+            @click="openFilePicker"
           >
-            <circle
-              cx="18"
-              cy="18"
-              r="15"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-dasharray="94.2"
-              :stroke-dashoffset="94.2 - (94.2 * whisperProgress) / 100"
-              class="text-amber-400 transition-all duration-300"
+            <Icon
+              icon="streamline-ultimate:attachment"
+              class="h-4 w-4"
             />
-          </svg>
-          <!-- Transcribing badge with animated dots -->
-          <span
-            v-if="whisperStatus === 'transcribing'"
-            class="absolute -top-1.5 -right-1.5 flex h-4 min-w-14 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-black tracking-wide"
-          >
-            <span class="inline-flex">
-              <span class="animate-dot1">.</span>
-              <span class="animate-dot2">.</span>
-              <span class="animate-dot3">.</span>
-            </span>
-          </span>
-        </button>
+          </button>
 
-        <button
-          v-if="chatStore.isStreaming || chatStore.activePostActions.size > 0"
-          class="p-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-red-500"
-          title="Cancel"
-          aria-label="Cancel"
-          @click="chatStore.isStreaming ? chatStore.cancelStream() : chatStore.cancelPostActions()"
-        >
-          <Icon
-            icon="mdi:stop-circle"
-            class="h-5 w-5"
-          />
-        </button>
-        <button
-          v-else
-          :disabled="!inputText.trim()"
-          class="p-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          title="Send"
-          aria-label="Send message"
-          :aria-disabled="!inputText.trim()"
-          @click="send"
-        >
-          <Icon
-            icon="mdi:send"
-            class="h-5 w-5"
-          />
-        </button>
+          <ToolsButton />
+          <SubAgentsButton />
+          <MemorySpacesButton />
+          <SystemPromptButton />
+          <ThinkingModeButton />
+
+          <!-- Agent selector -->
+          <div class="w-40 shrink-0 ml-1">
+            <CustomSelect
+              :model-value="agentDropdownValue"
+              :groups="agentDropdownGroups"
+              placeholder="Default"
+              placeholder-icon="lucide:message-square"
+              max-height="max-h-96"
+              :filterable="true"
+              :drop-up="true"
+              @change="onAgentChange"
+            />
+          </div>
+
+          <!-- Provider selector (only when multiple providers) -->
+          <div
+            v-if="providerStore.providers.length > 1"
+            class="w-32 shrink-0 hidden sm:block"
+          >
+            <CustomSelect
+              :model-value="currentProviderId"
+              :groups="providerDropdownGroups"
+              max-height="max-h-96"
+              :drop-up="true"
+              @change="onProviderOverride"
+            />
+          </div>
+
+          <!-- Model selector -->
+          <div
+            v-if="currentProviderId"
+            class="flex items-center gap-1 shrink-0"
+          >
+            <div class="w-44">
+              <CustomSelect
+                :model-value="chatStore.sessionModelOverride || ''"
+                :groups="modelDropdownGroups"
+                max-height="max-h-96"
+                dropdown-width="min-w-full"
+                :filterable="true"
+                :drop-up="true"
+                @change="onModelChange"
+              />
+            </div>
+            <button
+              :disabled="loadingModels"
+              class="p-1 text-zinc-500 hover:text-zinc-300 disabled:opacity-40 rounded-lg transition-colors shrink-0"
+              title="Refresh models"
+              @click="fetchSidebarModels"
+            >
+              <Icon
+                :icon="loadingModels ? 'lucide:loader-2' : 'lucide:refresh-cw'"
+                class="w-3 h-3"
+                :class="{ 'animate-spin': loadingModels }"
+              />
+            </button>
+          </div>
+
+          <div class="flex-1" />
+
+          <!-- Mic / voice input button -->
+          <button
+            v-if="prefs.whisperEnabled"
+            class="relative p-1.5 rounded-lg transition-all duration-300 shrink-0 focus:outline-none"
+            :class="whisperStatus === 'recording'
+              ? 'bg-red-600 text-white hover:bg-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.5)]'
+              : whisperStatus === 'transcribing'
+                ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.4)] animate-whisper-glow cursor-wait'
+                : whisperStatus === 'loading'
+                  ? 'text-amber-400 cursor-wait'
+                  : 'text-zinc-500 hover:text-zinc-300'"
+            :title="whisperStatus === 'recording'
+              ? 'Stop recording'
+              : whisperStatus === 'loading'
+                ? `Loading model (${whisperProgress}%)`
+                : whisperStatus === 'transcribing'
+                  ? 'Transcribing…'
+                  : 'Voice input'"
+            :disabled="whisperStatus === 'transcribing'"
+            aria-label="Voice input"
+            @click="toggleMic"
+          >
+            <Icon
+              :icon="whisperStatus === 'recording'
+                ? 'mdi:stop'
+                : whisperStatus === 'transcribing'
+                  ? 'lucide:audio-waveform'
+                  : 'mdi:microphone'"
+              class="h-4 w-4"
+              :class="whisperStatus === 'transcribing' ? 'animate-pulse' : ''"
+            />
+            <!-- Loading progress ring -->
+            <svg
+              v-if="whisperStatus === 'loading'"
+              class="absolute inset-0 w-full h-full -rotate-90"
+              viewBox="0 0 36 36"
+            >
+              <circle
+                cx="18"
+                cy="18"
+                r="15"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-dasharray="94.2"
+                :stroke-dashoffset="94.2 - (94.2 * whisperProgress) / 100"
+                class="text-amber-400 transition-all duration-300"
+              />
+            </svg>
+            <!-- Transcribing badge with animated dots -->
+            <span
+              v-if="whisperStatus === 'transcribing'"
+              class="absolute -top-1.5 -right-1.5 flex h-4 min-w-14 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-black tracking-wide"
+            >
+              <span class="inline-flex">
+                <span class="animate-dot1">.</span>
+                <span class="animate-dot2">.</span>
+                <span class="animate-dot3">.</span>
+              </span>
+            </span>
+          </button>
+
+          <!-- Send / Cancel -->
+          <button
+            v-if="chatStore.isStreaming || chatStore.activePostActions.size > 0"
+            class="p-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
+            title="Cancel"
+            aria-label="Cancel"
+            @click="chatStore.isStreaming ? chatStore.cancelStream() : chatStore.cancelPostActions()"
+          >
+            <Icon
+              icon="mdi:stop-circle"
+              class="h-4 w-4"
+            />
+          </button>
+          <button
+            v-else
+            :disabled="!inputText.trim()"
+            class="p-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
+            title="Send"
+            aria-label="Send message"
+            @click="send"
+          >
+            <Icon
+              icon="mdi:send"
+              class="h-4 w-4"
+            />
+          </button>
+        </div>
       </div>
     </div>
 
