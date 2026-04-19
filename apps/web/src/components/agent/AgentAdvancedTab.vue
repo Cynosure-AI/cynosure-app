@@ -147,8 +147,8 @@ function onMaxCtxBlur() {
             <input
               v-model.number="maxCtxInput"
               type="number"
-              min="1024"
-              step="1024"
+              min="2048"
+              step="2048"
               placeholder="e.g. 16384"
               class="w-40 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/50"
               @blur="onMaxCtxBlur"
