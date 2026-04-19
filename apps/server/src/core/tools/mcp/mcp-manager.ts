@@ -51,7 +51,7 @@ interface McpConnection {
     config: McpServerConfig
     tools: ToolDefinition[]
     slug: string
-    serverInfo?: { title?: string; description?: string; websiteUrl?: string }
+    serverInfo?: { title?: string; description?: string; websiteUrl?: string; icons?: Array<{ src: string; mimeType?: string }> }
     /** Whether this connection uses HTTP transport (vs stdio). */
     isHttp?: boolean
     /** OAuth provider for HTTP connections (needed for re-auth). */
@@ -174,7 +174,7 @@ export class McpManager {
         const tools = this.buildToolDefinitions(mcpTools, client, config)
 
         const ver = client.getServerVersion()
-        const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl } : undefined
+        const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl, icons: ver.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
 
         this.connections.set(config.id, { client, transport, config, tools, slug, serverInfo, isHttp: true, oauthProvider: provider })
         return tools
@@ -203,7 +203,7 @@ export class McpManager {
         const tools = this.buildToolDefinitions(mcpTools, pending.client, pending.config)
 
         const ver = pending.client.getServerVersion()
-        const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl } : undefined
+        const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl, icons: ver.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
 
         this.connections.set(serverId, {
             client: pending.client, transport, config: pending.config,
@@ -305,7 +305,7 @@ export class McpManager {
 
         // Capture server-declared metadata (title, description, websiteUrl)
         const ver = client.getServerVersion()
-        const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl } : undefined
+        const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl, icons: ver.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
 
         this.connections.set(config.id, { client, transport, config, tools, slug, serverInfo })
         return tools
@@ -425,7 +425,7 @@ export class McpManager {
         return this.connections.has(serverId)
     }
 
-    getServerInfo(serverId: string): { title?: string; description?: string; websiteUrl?: string } | undefined {
+    getServerInfo(serverId: string): { title?: string; description?: string; websiteUrl?: string; icons?: Array<{ src: string; mimeType?: string }> } | undefined {
         return this.connections.get(serverId)?.serverInfo
     }
 
@@ -476,7 +476,7 @@ export class McpManager {
                 slug,
                 serverInfo: (() => {
                     const v = pending.client.getServerVersion()
-                    return v ? { title: v.title, description: v.description, websiteUrl: v.websiteUrl } : undefined
+                    return v ? { title: v.title, description: v.description, websiteUrl: v.websiteUrl, icons: v.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
                 })()
             })
 
