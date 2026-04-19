@@ -1,0 +1,89 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Light Theme
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Variable overrides: remap zinc scale to light tones ── */
+[data-theme="light"] {
+  --color-zinc-950: #ffffff;
+  --color-zinc-900: #f9fafb;
+  --color-zinc-800: #e5e7eb;
+  --color-zinc-700: #d1d5db;
+  --color-zinc-600: #9ca3af;
+  --color-zinc-500: #6b7280;
+  --color-zinc-400: #4b5563;
+  --color-zinc-300: #374151;
+  --color-zinc-200: #1f2937;
+  --color-zinc-100: #111827;
+  color-scheme: light;
+}
+
+/* ── Text selection ── */
+[data-theme="light"] ::selection {
+  background: rgba(59, 130, 246, 0.25);
+  color: #111827;
+}
+
+/* ── Markdown rendering overrides ── */
+[data-theme="light"] .msg-markdown :not(pre) > code {
+  background: rgba(229, 231, 235, 0.6);
+  color: #2563eb;
+}
+[data-theme="light"] .msg-markdown strong {
+  color: rgba(24, 24, 27, 1);
+}
+[data-theme="light"] .code-header {
+  background: rgba(246, 248, 250, 0.95);
+  border-color: rgba(209, 213, 219, 0.5);
+  color: rgba(107, 114, 128, 0.9);
+}
+[data-theme="light"] .code-copy-btn {
+  color: rgba(107, 114, 128, 0.6);
+}
+[data-theme="light"] .code-copy-btn:hover {
+  color: rgba(24, 24, 27, 0.9);
+  background: rgba(209, 213, 219, 0.5);
+}
+
+/* ── Syntax highlighting overrides ──
+   atom-one-dark.css is imported globally (works for dark/cyberpunk/midnight).
+   Override key colours so code blocks remain readable on light backgrounds. */
+[data-theme="light"] .hljs {
+  background: #f6f8fa;
+  color: #24292e;
+}
+[data-theme="light"] .hljs-keyword,
+[data-theme="light"] .hljs-selector-tag,
+[data-theme="light"] .hljs-literal,
+[data-theme="light"] .hljs-section,
+[data-theme="light"] .hljs-link {
+  color: #d73a49;
+}
+[data-theme="light"] .hljs-string,
+[data-theme="light"] .hljs-title,
+[data-theme="light"] .hljs-name,
+[data-theme="light"] .hljs-type,
+[data-theme="light"] .hljs-attribute,
+[data-theme="light"] .hljs-symbol,
+[data-theme="light"] .hljs-bullet,
+[data-theme="light"] .hljs-addition,
+[data-theme="light"] .hljs-variable,
+[data-theme="light"] .hljs-template-tag,
+[data-theme="light"] .hljs-template-variable {
+  color: #032f62;
+}
+[data-theme="light"] .hljs-comment,
+[data-theme="light"] .hljs-quote,
+[data-theme="light"] .hljs-deletion,
+[data-theme="light"] .hljs-meta {
+  color: #6a737d;
+}
+[data-theme="light"] .hljs-built_in,
+[data-theme="light"] .hljs-doctag,
+[data-theme="light"] .hljs-number,
+[data-theme="light"] .hljs-params {
+  color: #005cc5;
+}
+[data-theme="light"] .hljs-title.class_,
+[data-theme="light"] .hljs-class .hljs-title {
+  color: #6f42c1;
+}

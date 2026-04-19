@@ -1,0 +1,290 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Cyberpunk (Entropism) Theme — Yellow/Green industrial aesthetic
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Variable overrides ── */
+[data-theme="cyberpunk"] {
+  /* Base: cold dark industrial tones */
+  --color-zinc-950: #111114;
+  --color-zinc-900: #181819;
+  --color-zinc-800: #202028;
+  --color-zinc-700: #2c2c38;
+  --color-zinc-600: #383848;
+  --color-zinc-500: #55556a;
+  --color-zinc-400: #7a7a92;
+  --color-zinc-300: #a0a0b4;
+  --color-zinc-200: #c4c4d0;
+  --color-zinc-100: #e8e8f0;
+
+  /* Accent: Cyberpunk 2077 yellow mapped onto the blue scale */
+  --color-blue-50: #fffef0;
+  --color-blue-100: #fefce8;
+  --color-blue-200: #fef9c3;
+  --color-blue-300: #fef08a;
+  --color-blue-400: #fde047;
+  --color-blue-500: #f9f002;
+  --color-blue-600: #d4c800;
+  --color-blue-700: #a89e00;
+  --color-blue-800: #827a00;
+  --color-blue-900: #5c5700;
+  --color-blue-950: #363300;
+
+  /* Cyberpunk palette vars */
+  --cp-yellow: #f9f002;
+  --cp-yellow-dim: rgba(249, 240, 2, 0.2);
+  --cp-yellow-glow: rgba(249, 240, 2, 0.1);
+  --cp-green: #8ae66e;
+  --cp-green-dim: rgba(138, 230, 110, 0.15);
+  --cp-green-glow: rgba(138, 230, 110, 0.1);
+
+  /* Sharp edges — industrial, no rounding */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 2px;
+  --radius-3xl: 3px;
+  --radius-4xl: 4px;
+
+  /* Theme effects */
+  --theme-glow: 0 0 6px var(--cp-yellow-glow), 0 0 20px rgba(249, 240, 2, 0.04);
+  --theme-glow-strong:
+    0 0 10px rgba(249, 240, 2, 0.22), 0 0 30px rgba(249, 240, 2, 0.07);
+  --theme-accent-rgb: 249, 240, 2;
+
+  /* Oxanium font – geometric, techy */
+  font-family: "Oxanium", "Barlow", "Advent Pro", sans-serif;
+  letter-spacing: 0.02em;
+
+  color-scheme: dark;
+}
+
+/* ── Focus glow ── */
+[data-theme="cyberpunk"] :is(button, a):focus-visible {
+  box-shadow: var(--theme-glow-strong);
+  outline: 1px solid var(--cp-yellow-dim);
+}
+
+/* ── Green border accent on structural panels ── */
+[data-theme="cyberpunk"] .rounded-xl,
+[data-theme="cyberpunk"] .rounded-lg {
+  border-style: solid;
+  border-color: var(--cp-green-dim);
+}
+
+/* ── Yellow text glow on headings + uppercase industrial style ── */
+[data-theme="cyberpunk"] h1,
+[data-theme="cyberpunk"] h2 {
+  text-shadow: 0 0 8px var(--cp-yellow-glow);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ── Decorative underline on h1/h2 — cyberpunk bar ── */
+[data-theme="cyberpunk"] h1::after,
+[data-theme="cyberpunk"] h2::after {
+  content: "";
+  display: block;
+  margin-top: 4px;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--cp-yellow) 0%,
+    var(--cp-yellow) 60%,
+    transparent 60%,
+    transparent 61%,
+    var(--cp-green) 61%,
+    var(--cp-green) 80%,
+    transparent 80%
+  );
+}
+
+/* ── Input focus: yellow border + inner glow ── */
+[data-theme="cyberpunk"] input:focus,
+[data-theme="cyberpunk"] textarea:focus,
+[data-theme="cyberpunk"] select:focus {
+  box-shadow:
+    0 0 8px var(--cp-yellow-glow),
+    inset 0 0 4px rgba(249, 240, 2, 0.03);
+  border-color: rgba(249, 240, 2, 0.4) !important;
+  outline: none;
+}
+
+/* ── Button hover glow ── */
+[data-theme="cyberpunk"] button:hover {
+  text-shadow: 0 0 5px var(--cp-yellow-glow);
+}
+
+/* ── Black text on yellow accent backgrounds (blue→yellow remap) ── */
+[data-theme="cyberpunk"] .bg-blue-600,
+[data-theme="cyberpunk"] .bg-blue-500,
+[data-theme="cyberpunk"] .bg-blue-400 {
+  color: #060608;
+}
+[data-theme="cyberpunk"] .bg-blue-600 .text-white,
+[data-theme="cyberpunk"] .bg-blue-500 .text-white,
+[data-theme="cyberpunk"] .bg-blue-400 .text-white,
+[data-theme="cyberpunk"] .text-white.bg-blue-600,
+[data-theme="cyberpunk"] .text-white.bg-blue-500,
+[data-theme="cyberpunk"] .text-white.bg-blue-400 {
+  color: #060608;
+}
+/* Gradient backgrounds (from-blue-* to-blue-*) — force dark icon/text */
+[data-theme="cyberpunk"] .from-blue-500 .text-white,
+[data-theme="cyberpunk"] .from-blue-400 .text-white {
+  color: #060608;
+}
+
+/* ── Clipped-edge buttons — Entropism industrial cut ──
+   Only clip buttons with enough padding (actual action buttons),
+   skip tiny icon buttons, badge pills, and round close buttons */
+[data-theme="cyberpunk"]
+  button:is(.px-3, .px-4, .px-5, .px-6, .py-2, .py-2\.5, .py-3),
+[data-theme="cyberpunk"] .btn-clip {
+  clip-path: polygon(
+    0% 0%,
+    calc(100% - 10px) 0%,
+    100% 10px,
+    100% 100%,
+    10px 100%,
+    0% calc(100% - 10px)
+  );
+}
+
+/* ── Green accent border-right on primary buttons ── */
+[data-theme="cyberpunk"] button.bg-blue-600,
+[data-theme="cyberpunk"] button.bg-blue-500 {
+  border-right: 2px solid var(--cp-green);
+}
+
+/* ── Glitch effect on clipped buttons (hover) ── */
+/*Currently disabled since I'm not sure if users will like it.
+  But it gives us the option to quickly return to it */
+
+/*
+[data-theme="cyberpunk"]
+  button:is(.px-3, .px-4, .px-5, .px-6, .py-2, .py-2\.5, .py-3),
+[data-theme="cyberpunk"] .btn-clip {
+  position: relative;
+  overflow: visible;
+}
+
+[data-theme="cyberpunk"]
+  button:is(.px-3, .px-4, .px-5, .px-6, .py-2, .py-2\.5, .py-3)::after,
+[data-theme="cyberpunk"] .btn-clip::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  background: inherit;
+  clip-path: polygon(0 0, 0 0, 0 0, 0 0);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+[data-theme="cyberpunk"]
+  button:is(.px-3, .px-4, .px-5, .px-6, .py-2, .py-2\.5, .py-3):hover::after,
+[data-theme="cyberpunk"] .btn-clip:hover::after {
+  opacity: 1;
+  animation: cp-glitch 400ms steps(2, jump-none) 1;
+}
+
+@keyframes cp-glitch {
+  0% {
+    clip-path: polygon(0 2%, 100% 2%, 100% 5%, 0 5%);
+    transform: translate(4px, 0);
+  }
+  10% {
+    clip-path: polygon(0 78%, 100% 78%, 100% 100%, 0 100%);
+    transform: translate(-4px, 0);
+  }
+  20% {
+    clip-path: polygon(0 44%, 100% 44%, 100% 54%, 0 54%);
+    transform: translate(4px, 0);
+  }
+  30% {
+    clip-path: polygon(0 0, 0 0, 0 0, 0 0);
+    transform: translate(0, 0);
+  }
+  40% {
+    clip-path: polygon(0 60%, 100% 60%, 100% 85%, 0 85%);
+    transform: translate(-3px, 0);
+  }
+  50% {
+    clip-path: polygon(0 60%, 100% 60%, 100% 85%, 0 85%);
+    transform: translate(3px, 0);
+  }
+  60% {
+    clip-path: polygon(0 10%, 100% 10%, 100% 30%, 0 30%);
+    transform: translate(4px, 0);
+  }
+  70% {
+    clip-path: polygon(0 0, 0 0, 0 0, 0 0);
+    transform: translate(0, 0);
+  }
+  80% {
+    clip-path: polygon(0 63%, 100% 63%, 100% 80%, 0 80%);
+    transform: translate(-4px, 0);
+  }
+  90% {
+    clip-path: polygon(0 63%, 100% 63%, 100% 80%, 0 80%);
+    transform: translate(4px, 0);
+  }
+  100% {
+    clip-path: polygon(0 0, 0 0, 0 0, 0 0);
+    transform: translate(0, 0);
+  }
+}
+*/
+
+/* ── Subtle scan-line overlay ── */
+[data-theme="cyberpunk"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 3px
+  );
+  pointer-events: none;
+  z-index: 10000;
+}
+
+/* ── Scrollbar styling ── */
+[data-theme="cyberpunk"] ::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+[data-theme="cyberpunk"] ::-webkit-scrollbar-track {
+  background: #181819;
+}
+[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb {
+  background: rgba(249, 240, 2, 0.18);
+  border: 1px solid var(--cp-green-dim);
+}
+[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(249, 240, 2, 0.32);
+}
+
+/* ── Selection highlight ── */
+[data-theme="cyberpunk"] ::selection {
+  background: rgba(249, 240, 2, 0.25);
+  color: #e8e8f0;
+}
+
+/* ── Active sidebar nav item: Entropism corner cuts ── */
+[data-theme="cyberpunk"] .nav-item.active {
+  position: relative;
+  background-color: rgba(249, 240, 2, 0.06) !important;
+  box-shadow: none !important;
+  border: 1px solid rgba(249, 240, 2, 0.12);
+  border-radius: 0 !important;
+  border-right: 2px solid var(--cp-green);
+  transition:
+    color 150ms ease,
+    background-color 150ms ease !important;
+}
