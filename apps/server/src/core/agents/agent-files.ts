@@ -1,7 +1,5 @@
-import { join } from 'path'
-import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, rmSync, statSync, cpSync } from 'fs'
 import { nanoid } from 'nanoid'
-import { getAppDataDir } from '../data-dir.js'
+import { getDb } from '../../db/database.js'
 
 // ---- Types ----
 
@@ -59,12 +57,6 @@ export type UpdateAgentInput = Partial<Omit<CreateAgentInput, 'codename'> & { co
 
 // ---- Helpers ----
 
-function getAgentsDir(): string {
-    const dir = join(getAppDataDir(), 'agents')
-    mkdirSync(dir, { recursive: true })
-    return dir
-}
-
 function toCodename(name: string): string {
     return name
         .toLowerCase()
@@ -87,265 +79,250 @@ export function toSubAgentCodename(name: string): string {
         + '_agent'
 }
 
-const ICON_EXTENSIONS = ['png', 'jpg', 'jpeg', 'svg', 'webp'] as const
-
-function findIconFile(agentDir: string): string | null {
-    for (const ext of ICON_EXTENSIONS) {
-        const p = join(agentDir, `icon.${ext}`)
-        if (existsSync(p)) return p
-    }
-    return null
+/** DB row type matching the agents table */
+interface AgentRow {
+    id: string
+    name: string
+    description: string
+    provider_id: string | null
+    model: string
+    system_prompt: string
+    tools_json: string
+    icon_url: string | null
+    codename: string
+    category: string
+    sub_agents_json: string
+    auto_approve_tools: number
+    show_in_carousel: number
+    thinking_enabled: number
+    max_context_tokens: number | null
+    sort_order: number
+    cron_prompt: string
+    icon_data: Buffer | null
+    icon_mime: string | null
+    created_at: number
+    updated_at: number
 }
 
-function removeExistingIcons(agentDir: string): void {
-    for (const ext of ICON_EXTENSIONS) {
-        const p = join(agentDir, `icon.${ext}`)
-        if (existsSync(p)) rmSync(p)
-    }
-}
-
-function mimeToExt(mime: string): string {
-    const map: Record<string, string> = {
-        'image/png': 'png',
-        'image/jpeg': 'jpg',
-        'image/svg+xml': 'svg',
-        'image/webp': 'webp',
-    }
-    return map[mime] || 'png'
-}
-
-function saveIconFromDataUrl(agentDir: string, dataUrl: string): void {
-    const match = dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/)
-    if (!match) return
-    const ext = mimeToExt(match[1])
-    const buffer = Buffer.from(match[2], 'base64')
-    removeExistingIcons(agentDir)
-    writeFileSync(join(agentDir, `icon.${ext}`), buffer)
-}
-
-function readAgentFromDir(agentDir: string, id: string): AgentData | null {
-    const configPath = join(agentDir, 'agent.json')
-    if (!existsSync(configPath)) return null
-
-    let config: AgentConfig
-    try {
-        config = JSON.parse(readFileSync(configPath, 'utf-8'))
-    } catch {
-        return null
-    }
-
-    let systemPrompt = ''
-    const promptPath = join(agentDir, 'SYSTEM_PROMPT.md')
-    if (existsSync(promptPath)) {
-        systemPrompt = readFileSync(promptPath, 'utf-8')
-    }
-
-    let cronPrompt = ''
-    const cronPath = join(agentDir, 'CRON.md')
-    if (existsSync(cronPath)) {
-        cronPrompt = readFileSync(cronPath, 'utf-8')
-    }
-
-    const hasIcon = findIconFile(agentDir) !== null
-
+function rowToAgentData(row: AgentRow): AgentData {
+    const hasIcon = row.icon_data !== null || (row.icon_url !== null && row.icon_url !== '')
     return {
-        id,
-        name: config.name,
-        codename: config.codename || toCodename(config.name),
-        description: config.description || '',
-        category: config.category || '',
-        iconUrl: hasIcon ? `/api/agents/${encodeURIComponent(id)}/icon?t=${config.updatedAt}` : null,
-        providerId: config.providerId || '',
-        model: config.model || '',
-        systemPrompt,
-        cronPrompt,
-        tools: config.tools || [],
-        subAgents: config.subAgents || [],
-        autoApproveTools: config.autoApproveTools === true,
-        showInCarousel: config.showInCarousel !== false,
-        thinkingEnabled: config.thinkingEnabled !== false,
-        maxContextTokens: typeof config.maxContextTokens === 'number' ? config.maxContextTokens : null,
-        sortOrder: typeof config.sortOrder === 'number' ? config.sortOrder : 0,
-        createdAt: config.createdAt || 0,
-        updatedAt: config.updatedAt || 0,
+        id: row.id,
+        name: row.name,
+        codename: row.codename || toCodename(row.name),
+        description: row.description || '',
+        category: row.category || '',
+        iconUrl: hasIcon ? `/api/agents/${encodeURIComponent(row.id)}/icon?t=${row.updated_at}` : null,
+        providerId: row.provider_id || '',
+        model: row.model || '',
+        systemPrompt: row.system_prompt || '',
+        cronPrompt: row.cron_prompt || '',
+        tools: JSON.parse(row.tools_json || '[]'),
+        subAgents: JSON.parse(row.sub_agents_json || '[]'),
+        autoApproveTools: row.auto_approve_tools === 1,
+        showInCarousel: row.show_in_carousel !== 0,
+        thinkingEnabled: row.thinking_enabled !== 0,
+        maxContextTokens: typeof row.max_context_tokens === 'number' ? row.max_context_tokens : null,
+        sortOrder: typeof row.sort_order === 'number' ? row.sort_order : 0,
+        createdAt: row.created_at || 0,
+        updatedAt: row.updated_at || 0,
     }
+}
+
+function parseIconDataUrl(dataUrl: string): { data: Buffer; mime: string } | null {
+    const match = dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/)
+    if (!match) return null
+    return { data: Buffer.from(match[2], 'base64'), mime: match[1] }
 }
 
 // ---- Public API ----
 
 export function listAgents(): AgentData[] {
-    const agentsDir = getAgentsDir()
-    let entries: string[]
-    try {
-        entries = readdirSync(agentsDir)
-    } catch {
-        return []
-    }
-
-    const agents: AgentData[] = []
-    for (const entry of entries) {
-        const fullPath = join(agentsDir, entry)
-        if (!statSync(fullPath).isDirectory()) continue
-        const agent = readAgentFromDir(fullPath, entry)
-        if (agent) agents.push(agent)
-    }
-
-    return agents.sort((a, b) => b.createdAt - a.createdAt)
+    const db = getDb()
+    const rows = db.prepare('SELECT * FROM agents ORDER BY created_at DESC').all() as AgentRow[]
+    return rows.map(rowToAgentData)
 }
 
 export function getAgent(id: string): AgentData | null {
-    const agentsDir = getAgentsDir()
-    const agentDir = join(agentsDir, id)
-    if (!existsSync(agentDir)) return null
-    return readAgentFromDir(agentDir, id)
+    const db = getDb()
+    const row = db.prepare('SELECT * FROM agents WHERE id = ?').get(id) as AgentRow | undefined
+    if (!row) return null
+    return rowToAgentData(row)
 }
 
 export function createAgent(input: CreateAgentInput): AgentData {
-    const agentsDir = getAgentsDir()
+    const db = getDb()
     const id = nanoid()
-    const agentDir = join(agentsDir, id)
-    mkdirSync(agentDir, { recursive: true })
-
     const now = Date.now()
-    const config: AgentConfig = {
-        name: input.name,
-        codename: input.codename?.trim() || toCodename(input.name),
-        description: input.description || '',
-        category: input.category || '',
-        providerId: input.providerId || '',
-        model: input.model || '',
-        tools: input.tools || [],
-        subAgents: input.subAgents || [],
-        autoApproveTools: input.autoApproveTools === true,
-        showInCarousel: input.showInCarousel !== false,
-        thinkingEnabled: input.thinkingEnabled !== false,
-        maxContextTokens: typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null,
-        sortOrder: typeof input.sortOrder === 'number' ? input.sortOrder : 0,
-        createdAt: now,
-        updatedAt: now,
-    }
+    const codename = input.codename?.trim() || toCodename(input.name)
 
-    writeFileSync(join(agentDir, 'agent.json'), JSON.stringify(config, null, 2) + '\n')
-    writeFileSync(join(agentDir, 'SYSTEM_PROMPT.md'), input.systemPrompt || '')
-    if (input.cronPrompt) {
-        writeFileSync(join(agentDir, 'CRON.md'), input.cronPrompt)
-    }
-
+    let iconData: Buffer | null = null
+    let iconMime: string | null = null
     if (input.iconUrl && input.iconUrl.startsWith('data:')) {
-        saveIconFromDataUrl(agentDir, input.iconUrl)
+        const parsed = parseIconDataUrl(input.iconUrl)
+        if (parsed) {
+            iconData = parsed.data
+            iconMime = parsed.mime
+        }
     }
 
-    return readAgentFromDir(agentDir, id)!
+    db.prepare(
+        `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
+         category, sub_agents_json, auto_approve_tools, show_in_carousel, thinking_enabled, max_context_tokens,
+         sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+        id,
+        input.name,
+        input.description || '',
+        input.providerId || null,
+        input.model || '',
+        input.systemPrompt || '',
+        JSON.stringify(input.tools || []),
+        null, // icon_url - not used for new agents; icon_data/icon_mime used instead
+        codename,
+        input.category || '',
+        JSON.stringify(input.subAgents || []),
+        input.autoApproveTools === true ? 1 : 0,
+        input.showInCarousel !== false ? 1 : 0,
+        input.thinkingEnabled !== false ? 1 : 0,
+        typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null,
+        typeof input.sortOrder === 'number' ? input.sortOrder : 0,
+        input.cronPrompt || '',
+        iconData,
+        iconMime,
+        now,
+        now
+    )
+
+    return getAgent(id)!
 }
 
 export function updateAgent(id: string, input: UpdateAgentInput): AgentData | null {
-    const agentsDir = getAgentsDir()
-    const agentDir = join(agentsDir, id)
-    const configPath = join(agentDir, 'agent.json')
-    if (!existsSync(configPath)) return null
-
-    let existing: AgentConfig
-    try {
-        existing = JSON.parse(readFileSync(configPath, 'utf-8'))
-    } catch {
-        return null
-    }
+    const db = getDb()
+    const existing = db.prepare('SELECT * FROM agents WHERE id = ?').get(id) as AgentRow | undefined
+    if (!existing) return null
 
     const now = Date.now()
-
-    // Always derive codename from the (possibly updated) name
     const resolvedCodename = toCodename(input.name ?? existing.name)
 
-    const config: AgentConfig = {
-        name: input.name ?? existing.name,
-        codename: resolvedCodename,
-        description: input.description ?? existing.description,
-        category: input.category !== undefined ? input.category : (existing.category || ''),
-        providerId: input.providerId !== undefined ? (input.providerId || '') : existing.providerId,
-        model: input.model ?? existing.model,
-        tools: input.tools !== undefined ? input.tools : existing.tools,
-        subAgents: input.subAgents !== undefined ? input.subAgents : (existing.subAgents || []),
-        autoApproveTools: input.autoApproveTools !== undefined ? input.autoApproveTools : (existing.autoApproveTools === true),
-        showInCarousel: input.showInCarousel !== undefined ? input.showInCarousel : (existing.showInCarousel !== false),
-        thinkingEnabled: input.thinkingEnabled !== undefined ? input.thinkingEnabled : (existing.thinkingEnabled !== false),
-        maxContextTokens: input.maxContextTokens !== undefined
-            ? (typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null)
-            : (typeof existing.maxContextTokens === 'number' ? existing.maxContextTokens : null),
-        sortOrder: input.sortOrder !== undefined ? input.sortOrder : (typeof existing.sortOrder === 'number' ? existing.sortOrder : 0),
-        createdAt: existing.createdAt,
-        updatedAt: now,
-    }
+    const updatedName = input.name ?? existing.name
+    const updatedDescription = input.description ?? existing.description
+    const updatedCategory = input.category !== undefined ? input.category : (existing.category || '')
+    const updatedProviderId = input.providerId !== undefined ? (input.providerId || null) : existing.provider_id
+    const updatedModel = input.model ?? existing.model
+    const updatedSystemPrompt = input.systemPrompt !== undefined ? input.systemPrompt : existing.system_prompt
+    const updatedCronPrompt = input.cronPrompt !== undefined ? (input.cronPrompt || '') : existing.cron_prompt
+    const updatedTools = input.tools !== undefined ? input.tools : JSON.parse(existing.tools_json || '[]')
+    const updatedSubAgents = input.subAgents !== undefined ? input.subAgents : JSON.parse(existing.sub_agents_json || '[]')
+    const updatedAutoApprove = input.autoApproveTools !== undefined ? input.autoApproveTools : (existing.auto_approve_tools === 1)
+    const updatedShowInCarousel = input.showInCarousel !== undefined ? input.showInCarousel : (existing.show_in_carousel !== 0)
+    const updatedThinkingEnabled = input.thinkingEnabled !== undefined ? input.thinkingEnabled : (existing.thinking_enabled !== 0)
+    const updatedMaxContextTokens = input.maxContextTokens !== undefined
+        ? (typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null)
+        : existing.max_context_tokens
+    const updatedSortOrder = input.sortOrder !== undefined ? input.sortOrder : (existing.sort_order || 0)
 
-    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n')
-
-    if (input.systemPrompt !== undefined) {
-        writeFileSync(join(agentDir, 'SYSTEM_PROMPT.md'), input.systemPrompt)
-    }
-
-    if (input.cronPrompt !== undefined) {
-        const cronPath = join(agentDir, 'CRON.md')
-        if (input.cronPrompt) {
-            writeFileSync(cronPath, input.cronPrompt)
-        } else if (existsSync(cronPath)) {
-            rmSync(cronPath)
-        }
-    }
-
+    // Handle icon update
+    let iconData: Buffer | null = existing.icon_data
+    let iconMime: string | null = existing.icon_mime
     if (input.iconUrl !== undefined) {
         if (input.iconUrl && input.iconUrl.startsWith('data:')) {
-            saveIconFromDataUrl(agentDir, input.iconUrl)
+            const parsed = parseIconDataUrl(input.iconUrl)
+            if (parsed) {
+                iconData = parsed.data
+                iconMime = parsed.mime
+            }
         } else if (input.iconUrl === null || input.iconUrl === '') {
-            removeExistingIcons(agentDir)
+            iconData = null
+            iconMime = null
         }
     }
 
-    return readAgentFromDir(agentDir, id)!
+    db.prepare(
+        `UPDATE agents SET name = ?, description = ?, provider_id = ?, model = ?, system_prompt = ?, tools_json = ?,
+         codename = ?, category = ?, sub_agents_json = ?, auto_approve_tools = ?, show_in_carousel = ?,
+         thinking_enabled = ?, max_context_tokens = ?, sort_order = ?, cron_prompt = ?,
+         icon_data = ?, icon_mime = ?, updated_at = ?
+         WHERE id = ?`
+    ).run(
+        updatedName,
+        updatedDescription,
+        updatedProviderId,
+        updatedModel,
+        updatedSystemPrompt,
+        JSON.stringify(updatedTools),
+        resolvedCodename,
+        updatedCategory,
+        JSON.stringify(updatedSubAgents),
+        updatedAutoApprove ? 1 : 0,
+        updatedShowInCarousel ? 1 : 0,
+        updatedThinkingEnabled ? 1 : 0,
+        updatedMaxContextTokens,
+        updatedSortOrder,
+        updatedCronPrompt,
+        iconData,
+        iconMime,
+        now,
+        id
+    )
+
+    return getAgent(id)!
 }
 
 export function deleteAgent(id: string): boolean {
-    const agentsDir = getAgentsDir()
-    const agentDir = join(agentsDir, id)
-    if (!existsSync(agentDir)) return false
-    rmSync(agentDir, { recursive: true })
-    return true
+    const db = getDb()
+    const result = db.prepare('DELETE FROM agents WHERE id = ?').run(id)
+    return result.changes > 0
 }
 
 export function duplicateAgent(id: string): AgentData | null {
-    const agentsDir = getAgentsDir()
-    const srcDir = join(agentsDir, id)
-    if (!existsSync(srcDir)) return null
+    const db = getDb()
+    const existing = db.prepare('SELECT * FROM agents WHERE id = ?').get(id) as AgentRow | undefined
+    if (!existing) return null
 
     const newId = nanoid()
-    const destDir = join(agentsDir, newId)
-
-    // Copy entire folder
-    cpSync(srcDir, destDir, { recursive: true })
-
-    // Update config: new name, new timestamps
-    const configPath = join(destDir, 'agent.json')
-    let config: AgentConfig
-    try {
-        config = JSON.parse(readFileSync(configPath, 'utf-8'))
-    } catch {
-        rmSync(destDir, { recursive: true })
-        return null
-    }
-
     const now = Date.now()
-    config.name = `${config.name} (copy)`
-    config.codename = toCodename(config.name)
-    config.createdAt = now
-    config.updatedAt = now
-    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n')
+    const newName = `${existing.name} (copy)`
+    const newCodename = toCodename(newName)
 
-    return readAgentFromDir(destDir, newId)!
+    db.prepare(
+        `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
+         category, sub_agents_json, auto_approve_tools, show_in_carousel, thinking_enabled, max_context_tokens,
+         sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+        newId,
+        newName,
+        existing.description,
+        existing.provider_id,
+        existing.model,
+        existing.system_prompt,
+        existing.tools_json,
+        existing.icon_url,
+        newCodename,
+        existing.category,
+        existing.sub_agents_json,
+        existing.auto_approve_tools,
+        existing.show_in_carousel,
+        existing.thinking_enabled,
+        existing.max_context_tokens,
+        existing.sort_order,
+        existing.cron_prompt,
+        existing.icon_data,
+        existing.icon_mime,
+        now,
+        now
+    )
+
+    return getAgent(newId)!
 }
 
-export function getIconPath(id: string): { path: string; ext: string } | null {
-    const agentsDir = getAgentsDir()
-    const agentDir = join(agentsDir, id)
-    const iconPath = findIconFile(agentDir)
-    if (!iconPath) return null
-    const ext = iconPath.split('.').pop()!
-    return { path: iconPath, ext }
+export function getIconData(id: string): { data: Buffer; mime: string } | null {
+    const db = getDb()
+    const row = db.prepare('SELECT icon_data, icon_mime FROM agents WHERE id = ?').get(id) as {
+        icon_data: Buffer | null; icon_mime: string | null
+    } | undefined
+    if (!row?.icon_data || !row.icon_mime) return null
+    return { data: row.icon_data, mime: row.icon_mime }
 }

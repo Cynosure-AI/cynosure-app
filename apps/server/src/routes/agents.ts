@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify'
-import { readFileSync } from 'fs'
 import { getDb } from '../db/database.js'
 import {
     listAgents,
@@ -8,7 +7,7 @@ import {
     updateAgent,
     deleteAgent,
     duplicateAgent,
-    getIconPath,
+    getIconData,
     type CreateAgentInput,
     type UpdateAgentInput,
 } from '../core/agents/agent-files.js'
@@ -46,22 +45,14 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
 
     // GET /api/agents/:id/icon — serve agent icon
     app.get<{ Params: { id: string } }>('/:id/icon', async (req, reply) => {
-        const icon = getIconPath(req.params.id)
+        const icon = getIconData(req.params.id)
         if (!icon) {
             reply.code(404)
             return { error: 'No icon' }
         }
-        const mimeMap: Record<string, string> = {
-            png: 'image/png',
-            jpg: 'image/jpeg',
-            jpeg: 'image/jpeg',
-            svg: 'image/svg+xml',
-            webp: 'image/webp',
-        }
-        const contentType = mimeMap[icon.ext] || 'application/octet-stream'
-        reply.header('Content-Type', contentType)
+        reply.header('Content-Type', icon.mime)
         reply.header('Cache-Control', 'public, max-age=3600')
-        return readFileSync(icon.path)
+        return icon.data
     })
 
     // POST /api/agents — create

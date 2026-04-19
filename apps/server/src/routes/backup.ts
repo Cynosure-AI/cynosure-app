@@ -15,11 +15,7 @@ import { getEmbeddingProvider } from '../core/memory/embedding.js'
 import { join } from 'path'
 import {
     existsSync,
-    readdirSync,
-    readFileSync,
-    writeFileSync,
     mkdirSync,
-    statSync,
     rmSync
 } from 'fs'
 import type { LLMProviderConfig } from '../core/gateway/providers/base.provider.js'
@@ -126,31 +122,28 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
 
             // --- Agents ---
             if (requested.includes('agents')) {
-                const agentsDir = join(getAppDataDir(), 'agents')
-                let count = 0
-                if (existsSync(agentsDir)) {
-                    const dirs = readdirSync(agentsDir, { withFileTypes: true }).filter(
-                        (d) => d.isDirectory()
-                    )
-                    for (const dir of dirs) {
-                        const agentPath = join(agentsDir, dir.name)
-                        const files = readdirSync(agentPath)
-                        for (const file of files) {
-                            const filePath = join(agentPath, file)
-                            if (statSync(filePath).isFile()) {
-                                archive.file(filePath, { name: `agents/${dir.name}/${file}` })
-                            }
-                        }
-                        count++
-                    }
-                }
-                // Also export agent rows from DB (contain provider_id, model, tools, etc.)
                 const db = getDb()
-                const agentRows = db.prepare('SELECT * FROM agents ORDER BY created_at').all()
-                archive.append(JSON.stringify(agentRows, null, 2), {
-                    name: 'agents/_db_agents.json'
-                })
-                manifest.modules.agents = { count }
+                const agentRows = db.prepare(
+                    `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
+                     category, sub_agents_json, auto_approve_tools, show_in_carousel, thinking_enabled,
+                     max_context_tokens, sort_order, cron_prompt, icon_mime, created_at, updated_at
+                     FROM agents ORDER BY created_at`
+                ).all() as Record<string, unknown>[]
+
+                // Export icon BLOBs as base64 data URLs alongside the rows
+                const agentIcons: Record<string, string> = {}
+                const iconRows = db.prepare('SELECT id, icon_data, icon_mime FROM agents WHERE icon_data IS NOT NULL').all() as {
+                    id: string; icon_data: Buffer; icon_mime: string
+                }[]
+                for (const row of iconRows) {
+                    agentIcons[row.id] = `data:${row.icon_mime};base64,${row.icon_data.toString('base64')}`
+                }
+
+                archive.append(JSON.stringify(agentRows, null, 2), { name: 'agents/_db_agents.json' })
+                if (Object.keys(agentIcons).length > 0) {
+                    archive.append(JSON.stringify(agentIcons, null, 2), { name: 'agents/_db_agent_icons.json' })
+                }
+                manifest.modules.agents = { count: agentRows.length }
             }
 
             // --- Providers ---
@@ -318,54 +311,69 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         if (requestedModules.includes('agents') && manifest.modules.agents) {
             const res = { restored: 0, errors: [] as string[] }
             try {
-                // Restore DB rows first
+                // Restore DB rows
                 const dbEntry = zip.getEntry('agents/_db_agents.json')
                 if (dbEntry) {
                     const agentRows = JSON.parse(
                         dbEntry.getData().toString('utf-8')
                     ) as Record<string, unknown>[]
+
+                    // Load icon data URLs if present
+                    let agentIcons: Record<string, string> = {}
+                    const iconsEntry = zip.getEntry('agents/_db_agent_icons.json')
+                    if (iconsEntry) {
+                        agentIcons = JSON.parse(iconsEntry.getData().toString('utf-8'))
+                    }
+
                     for (const row of agentRows) {
                         try {
+                            // Parse icon data URL if available
+                            let iconData: Buffer | null = null
+                            let iconMime: string | null = (row.icon_mime as string) || null
+                            const iconDataUrl = agentIcons[row.id as string]
+                            if (iconDataUrl) {
+                                const match = iconDataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/)
+                                if (match) {
+                                    iconMime = match[1]
+                                    iconData = Buffer.from(match[2], 'base64')
+                                }
+                            }
+
                             db.prepare(
-                                `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, temperature, memory_enabled, icon_url, codename, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json,
+                                 icon_url, codename, category, sub_agents_json, auto_approve_tools, show_in_carousel,
+                                 thinking_enabled, max_context_tokens, sort_order, cron_prompt, icon_data, icon_mime,
+                                 created_at, updated_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 row.id,
-                                row.name,
+                                row.name || '',
                                 row.description || '',
                                 row.provider_id || null,
                                 row.model || '',
                                 row.system_prompt || '',
                                 row.tools_json || '[]',
-                                row.temperature ?? null,
-                                row.memory_enabled ?? 1,
                                 row.icon_url || null,
                                 row.codename || '',
+                                row.category || '',
+                                row.sub_agents_json || '[]',
+                                row.auto_approve_tools ?? 0,
+                                row.show_in_carousel ?? 1,
+                                row.thinking_enabled ?? 1,
+                                row.max_context_tokens ?? null,
+                                row.sort_order ?? 0,
+                                row.cron_prompt || '',
+                                iconData,
+                                iconMime,
                                 row.created_at || Date.now(),
                                 row.updated_at || Date.now()
                             )
+                            res.restored++
                         } catch (e) {
                             res.errors.push(`Agent DB row ${row.id}: ${(e as Error).message}`)
                         }
                     }
                 }
-
-                // Restore agent files
-                const agentsDir = join(getAppDataDir(), 'agents')
-                const agentEntries = zip.getEntries().filter(
-                    (e) =>
-                        e.entryName.startsWith('agents/') &&
-                        !e.isDirectory &&
-                        e.entryName !== 'agents/_db_agents.json'
-                )
-                for (const entry of agentEntries) {
-                    const relative = entry.entryName.slice('agents/'.length) // e.g. "abc123/agent.json"
-                    const targetPath = join(agentsDir, relative)
-                    const targetDir = join(targetPath, '..')
-                    mkdirSync(targetDir, { recursive: true })
-                    writeFileSync(targetPath, entry.getData())
-                }
-                res.restored = manifest.modules.agents.count
             } catch (e) {
                 res.errors.push((e as Error).message)
             }
@@ -802,13 +810,6 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         ]
         for (const table of tables) {
             try { db.prepare(`DELETE FROM ${table}`).run() } catch { /* table may not exist */ }
-        }
-
-        // Remove agent files on disk
-        const agentsDir = join(getAppDataDir(), 'agents')
-        if (existsSync(agentsDir)) {
-            rmSync(agentsDir, { recursive: true, force: true })
-            mkdirSync(agentsDir, { recursive: true })
         }
 
         // Clear LanceDB (vector memory)
