@@ -366,6 +366,7 @@ async function manualClearDb() {
         <p class="text-xs text-zinc-500">
           Controls how documents are split before embedding. Larger chunks retain more context,
           smaller chunks improve retrieval precision. Overlap ensures context isn't lost at chunk boundaries.
+          Sections and headings are also taken into account to avoid splitting in the middle of important content.
         </p>
       </div>
 
