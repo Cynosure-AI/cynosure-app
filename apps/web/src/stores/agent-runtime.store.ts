@@ -95,11 +95,8 @@ export const useAgentStore = defineStore('agent', () => {
     }
     toolApprovals.value = approvalMap
 
-    const availableNames = new Set(availableTools.value.map((tool) => tool.name))
     const availableKeys = new Set(availableTools.value.map((tool) => `${tool.namespace.id}::${tool.name}`))
-    const filtered = selectedToolNames.value.filter(
-      (name) => availableNames.has(name) || availableKeys.has(name)
-    )
+    const filtered = selectedToolNames.value.filter((name) => availableKeys.has(name))
 
     // Keep only previously selected tools that still exist; default to none.
     selectedToolNames.value = filtered

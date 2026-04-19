@@ -17,11 +17,8 @@ const selectedToolsList = computed(() =>
 )
 
 const missingTools = computed(() => {
-  const availableNames = new Set(agentStore.availableTools.map(t => t.name))
   const availableKeys = new Set(agentStore.availableTools.map(t => `${t.namespace.id}::${t.name}`))
-  return agentStore.selectedToolNames.filter(
-    name => !availableNames.has(name) && !availableKeys.has(name)
-  )
+  return agentStore.selectedToolNames.filter(name => !name.includes('::') || !availableKeys.has(name))
 })
 </script>
 

@@ -11,11 +11,8 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 const agentStore = useAgentStore()
 
 const missingTools = computed(() => {
-  const availableNames = new Set(agentStore.availableTools.map(t => t.name))
   const availableKeys = new Set(agentStore.availableTools.map(t => `${t.namespace.id}::${t.name}`))
-  return props.agent.tools.filter(
-    name => !availableNames.has(name) && !availableKeys.has(name)
-  )
+  return props.agent.tools.filter(name => !name.includes('::') || !availableKeys.has(name))
 })
 
 function removeMissing() {
