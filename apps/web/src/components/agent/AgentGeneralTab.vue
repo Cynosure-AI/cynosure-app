@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useProviderStore } from '../../stores/provider.store'
 import type { AgentDefinition } from '../../api/types'
 import { Icon } from '@iconify/vue'
@@ -14,6 +14,7 @@ const providerStore = useProviderStore()
 const { logoUrl } = useProviderLogos()
 const fetchedModels = ref<string[]>([])
 const loadingModels = ref(false)
+const systemPromptRef = ref<HTMLTextAreaElement | null>(null)
 
 const providerGroups = computed((): SelectOptionGroup[] => [{
   options: providerStore.providers.map(p => ({
@@ -44,6 +45,19 @@ async function fetchModelsForProvider(providerId: string) {
     loadingModels.value = false
   }
 }
+
+function autoResize(e: Event) {
+  const el = e.target as HTMLTextAreaElement
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
+
+onMounted(() => nextTick(() => {
+  if (systemPromptRef.value) {
+    systemPromptRef.value.style.height = 'auto'
+    systemPromptRef.value.style.height = systemPromptRef.value.scrollHeight + 'px'
+  }
+}))
 
 // Fetch models on mount if provider is set
 if (props.agent.providerId) {
@@ -144,10 +158,13 @@ watch(() => props.agent.providerId, (newId) => {
         Prepended as a system message alongside the built-in agentic instructions — does not replace them.
       </p>
       <textarea
+        ref="systemPromptRef"
         :value="agent.systemPrompt"
         placeholder="Optional system instructions..."
-        class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y h-64 font-mono"
+        class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none font-mono min-h-64"
+        style="field-sizing: content"
         @change="emit('update', 'systemPrompt', ($event.target as HTMLTextAreaElement).value)"
+        @input="autoResize"
       />
     </div>
   </div>
