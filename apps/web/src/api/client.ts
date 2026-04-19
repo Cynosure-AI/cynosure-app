@@ -99,7 +99,9 @@ export const api = {
       memorySpaceIds?: string[],
       overrideSubAgents?: boolean,
       thinkingEnabled?: boolean,
-      contextStrategy?: string
+      contextStrategy?: string,
+      titleProviderId?: string,
+      titleModel?: string
     ) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, {
         content,
@@ -116,7 +118,9 @@ export const api = {
         memorySpaceIds,
         overrideSubAgents,
         thinkingEnabled,
-        contextStrategy
+        contextStrategy,
+        titleProviderId: titleProviderId || undefined,
+        titleModel: titleModel || undefined
       }),
     truncateFrom: (conversationId: string, messageId: string) =>
       post<{ success: boolean; deleted: number }>(
