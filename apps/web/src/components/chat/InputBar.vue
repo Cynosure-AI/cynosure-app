@@ -7,7 +7,6 @@ import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import { useProviderStore } from '../../stores/provider.store'
 import { useWhisper } from '../../composables/useWhisper'
-import { useProviderLogos } from '../../composables/useProviderLogos'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
@@ -24,57 +23,18 @@ const agentDefs = useAgentDefinitionsStore()
 const prefs = usePreferencesStore()
 const providerStore = useProviderStore()
 const router = useRouter()
-const { logoUrl } = useProviderLogos()
 
 // Override detection
 const hasOverrides = computed(() => chatStore.hasAgentOverrides)
 
-// ─── Agent / Provider / Model selectors ──────────────────
+// ─── Model selector ──────────────────
 const selectedAgent = computed(() =>
   chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null
 )
 
-const agentDropdownValue = computed(() => chatStore.activeAgentId || '')
-
-const agentDropdownGroups = computed((): SelectOptionGroup[] => {
-  const base: SelectOptionGroup = {
-    options: [{ value: '', label: 'Default', iconName: 'lucide:message-square' }],
-  }
-  if (!agentDefs.agents.length) return [base]
-  const sorted = [...agentDefs.agents].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-  return [
-    base,
-    {
-      label: 'Agents',
-      options: sorted.map((a) => {
-        let imgSrc: string | null = a.iconUrl || null
-        if (!imgSrc) {
-          const prov = providerStore.providers.find((p) => p.id === a.providerId)
-          if (prov) imgSrc = logoUrl(prov.type)
-        }
-        return {
-          value: a.id,
-          label: a.name,
-          imgSrc,
-          tooltip: a.description || undefined,
-          tag: a.subAgents?.length ? `+${a.subAgents.length}` : undefined,
-        }
-      }),
-    },
-  ]
-})
-
 const currentProviderId = computed(() =>
   chatStore.sessionProviderOverride || selectedAgent.value?.providerId || providerStore.lastUsedProviderId
 )
-
-const providerDropdownGroups = computed((): SelectOptionGroup[] => [{
-  options: providerStore.providers.map((p) => ({
-    value: p.id,
-    label: p.name,
-    imgSrc: logoUrl(p.type),
-  })),
-}])
 
 const sidebarModels = ref<string[]>([])
 const loadingModels = ref(false)
@@ -109,30 +69,8 @@ async function fetchSidebarModels(): Promise<void> {
   }
 }
 
-async function onAgentChange(value: string) {
-  const agentId = value || null
-  await chatStore.setActiveAgent(agentId)
-  if (agentId) {
-    const agent = agentDefs.get(agentId)
-    if (agent?.providerId) {
-      providerStore.setLastUsed(agent.providerId)
-    }
-  }
-}
-
 function onModelChange(value: string): void {
   chatStore.sessionModelOverride = value || null
-}
-
-function onProviderOverride(providerId: string): void {
-  chatStore.sessionModelOverride = null
-  if (chatStore.activeAgentId) {
-    chatStore.sessionProviderOverride =
-      providerId !== selectedAgent.value?.providerId ? providerId : null
-  } else {
-    chatStore.sessionProviderOverride = providerId
-    providerStore.setLastUsed(providerId)
-  }
 }
 
 watch(currentProviderId, (newId, oldId) => {
@@ -545,35 +483,9 @@ defineExpose({ processFiles })
           <SystemPromptButton />
           <ThinkingModeButton />
 
-          <!-- Agent selector -->
-          <div class="w-40 shrink-0 ml-1">
-            <CustomSelect
-              :model-value="agentDropdownValue"
-              :groups="agentDropdownGroups"
-              placeholder="Default"
-              placeholder-icon="lucide:message-square"
-              max-height="max-h-96"
-              :filterable="true"
-              :drop-up="true"
-              @change="onAgentChange"
-            />
-          </div>
+          <div class="flex-1" />
 
-          <!-- Provider selector (only when multiple providers) -->
-          <div
-            v-if="providerStore.providers.length > 1"
-            class="w-32 shrink-0 hidden sm:block"
-          >
-            <CustomSelect
-              :model-value="currentProviderId"
-              :groups="providerDropdownGroups"
-              max-height="max-h-96"
-              :drop-up="true"
-              @change="onProviderOverride"
-            />
-          </div>
-
-          <!-- Model selector -->
+          <!-- Model selector (right-aligned) -->
           <div
             v-if="currentProviderId"
             class="flex items-center gap-1 shrink-0"
@@ -602,8 +514,6 @@ defineExpose({ processFiles })
               />
             </button>
           </div>
-
-          <div class="flex-1" />
 
           <!-- Mic / voice input button -->
           <button
