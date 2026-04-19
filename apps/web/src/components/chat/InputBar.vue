@@ -29,14 +29,24 @@ const hasOverrides = computed(() => chatStore.hasAgentOverrides)
 // Context window usage
 const contextUsage = computed(() => {
   const usage = chatStore.lastUsage
-  const ctxWindow = chatStore.contextWindow
+  let ctxWindow = chatStore.contextWindow
   if (!ctxWindow) return null
-  if (!usage) return { used: 0, max: ctxWindow, percent: 0 }
+
+  // If the active agent has a hard max-context-token limit, cap the effective
+  // context window so the ring reflects the tighter budget.
+  const activeAgent = chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null
+  const agentCap = activeAgent?.maxContextTokens
+  const hasHardLimit = typeof agentCap === 'number' && agentCap > 0
+  if (hasHardLimit) {
+    ctxWindow = Math.min(ctxWindow, agentCap!)
+  }
+
+  if (!usage) return { used: 0, max: ctxWindow, percent: 0, hardLimit: hasHardLimit }
   // Use last round's total tokens (prompt + completion = true context utilization) when available,
   // otherwise fall back to total accumulated tokens
   const used = usage.lastRoundTotalTokens ?? usage.totalTokens
   const percent = (used / ctxWindow) * 100
-  return { used, max: ctxWindow, percent }
+  return { used, max: ctxWindow, percent, hardLimit: hasHardLimit }
 })
 
 const { status: whisperStatus, progress: whisperProgress, startRecording, stopRecording } = useWhisper()
@@ -555,7 +565,7 @@ defineExpose({ processFiles })
             fill="none"
             stroke="currentColor"
             stroke-width="2.5"
-            class="text-zinc-700/50"
+            :class="contextUsage.hardLimit ? 'text-amber-900/50' : 'text-zinc-700/50'"
           />
           <!-- Progress arc -->
           <circle
@@ -585,6 +595,10 @@ defineExpose({ processFiles })
         >
           <div class="font-medium text-zinc-300 mb-1.5">
             Context Window
+            <span
+              v-if="contextUsage.hardLimit"
+              class="ml-1 text-[10px] text-amber-400 font-normal"
+            >(agent limit)</span>
           </div>
           <div class="flex justify-between text-zinc-400 mb-0.5">
             <span>Used</span><span class="text-zinc-300">{{ contextUsage.used.toLocaleString() }}</span>
@@ -599,7 +613,7 @@ defineExpose({ processFiles })
             >{{ Math.round(contextUsage.percent) }}%</span>
           </div>
           <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
-            Tokens used in current conversation
+            {{ contextUsage.hardLimit ? 'Capped by agent max context token limit' : 'Tokens used in current conversation' }}
           </div>
         </div>
       </template>
