@@ -247,6 +247,18 @@ function createTables(db: Database.Database): void {
   }
   addColumnIfMissing('memory_spaces', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('mcp_servers', 'env_hints_json', 'TEXT')
+
+  // Agent table: add columns for DB-only storage (migrating away from filesystem)
+  addColumnIfMissing('agents', 'category', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('agents', 'sub_agents_json', "TEXT NOT NULL DEFAULT '[]'")
+  addColumnIfMissing('agents', 'auto_approve_tools', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('agents', 'show_in_carousel', 'INTEGER NOT NULL DEFAULT 1')
+  addColumnIfMissing('agents', 'thinking_enabled', 'INTEGER NOT NULL DEFAULT 1')
+  addColumnIfMissing('agents', 'max_context_tokens', 'INTEGER')
+  addColumnIfMissing('agents', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('agents', 'cron_prompt', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('agents', 'icon_data', 'BLOB')
+  addColumnIfMissing('agents', 'icon_mime', 'TEXT')
 }
 
 export function closeDb(): void {
