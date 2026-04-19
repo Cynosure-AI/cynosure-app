@@ -138,14 +138,11 @@ const settingsItems: NavItem[] = [
   >
     <!-- Brand -->
     <div class="brand-area px-5 p-3 mt-2 mb-2 flex items-center gap-3 shrink-0">
-      <div
-        class="w-7 h-7 bg-linear-to-br from-blue-500 to-blue-700 rounded-lg flex items-center justify-center"
+      <img
+        src="../../assets/cynosure-logo.png"
+        alt="Cynosure Logo"
+        class="w-8 h-8"
       >
-        <Icon
-          icon="lucide:bot"
-          class="w-4 h-4 text-white"
-        />
-      </div>
       <span class="text-sm font-semibold text-zinc-100 tracking-tight flex-1">Cynosure</span>
 
       <!-- Notification Bell -->
