@@ -72,7 +72,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         isFirstMessage: true,
     })
 
-    // Persist session config so InstanceDetailView can restore the correct model/provider
+    // Persist session config so the chat view can restore the correct model/provider
     const chatConfig = JSON.stringify({
         model: prepared.model,
         providerId: prepared.providerId,

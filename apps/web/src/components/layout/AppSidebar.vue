@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useProviderStore } from '../../stores/provider.store'
 import { useNotificationStore } from '../../stores/notification.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
+import { useChatStore } from '../../stores/chat.store'
 import { api } from '../../api/client'
 import { wsConnected } from '../../api/http'
 import type { AgentInstance } from '../../api/types'
@@ -17,6 +18,7 @@ const router = useRouter()
 const providerStore = useProviderStore()
 const notificationStore = useNotificationStore()
 const agentDefs = useAgentDefinitionsStore()
+const chatStore = useChatStore()
 const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar()
 
 const showStatusPopover = ref(false)
@@ -47,17 +49,14 @@ async function loadInstances() {
   }
 }
 
-function navigateToInstance(instance: AgentInstance) {
+async function navigateToInstance(instance: AgentInstance) {
   showStatusPopover.value = false
   closeSidebar()
-  router.push({
-    name: 'instance-detail',
-    params: { agentId: instance.agentId },
-    query: {
-      ...(instance.conversationId ? { conversation: instance.conversationId } : {}),
-      type: instance.type
-    }
-  })
+  await chatStore.setActiveAgent(instance.agentId || null)
+  if (instance.conversationId) {
+    await chatStore.selectConversation(instance.conversationId)
+  }
+  router.push('/triggers/chat')
 }
 
 onMounted(() => {
