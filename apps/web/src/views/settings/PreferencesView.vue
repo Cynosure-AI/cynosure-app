@@ -1,10 +1,17 @@
 <script setup lang="ts">
+import { ref, computed, watch } from 'vue'
 import { usePreferencesStore, type ContextStrategy } from '../../stores/preferences.store'
 import type { ThemeId } from '../../stores/preferences.store'
+import { useProviderStore } from '../../stores/provider.store'
+import { useProviderLogos } from '../../composables/useProviderLogos'
 import { Icon } from '@iconify/vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
+import CustomSelect from '../../components/shared/CustomSelect.vue'
+import type { SelectOptionGroup } from '../../components/shared/CustomSelect.vue'
 
 const prefs = usePreferencesStore()
+const providerStore = useProviderStore()
+const { logoUrl } = useProviderLogos()
 
 const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#09090b', surface: '#18181b', accent: '#3b82f6', text: '#f4f4f5' } },
@@ -19,6 +26,42 @@ const contextStrategyOptions: { value: ContextStrategy; label: string; descripti
   { value: 'truncate-middle', label: 'Truncate Middle', description: 'Keeps the first and last messages, trimming the middle' },
   { value: 'none', label: 'No Trimming', description: 'Sends all messages — may fail if context is exceeded' },
 ]
+
+// ── Title generation provider/model ───────────────────────────────────────────
+const titleModels = ref<string[]>([])
+const titleLoadingModels = ref(false)
+
+const titleProviderGroups = computed((): SelectOptionGroup[] => [{
+  options: [
+    { value: '', label: 'Use chat provider', iconName: 'lucide:settings' },
+    ...providerStore.providers.map(p => ({
+      value: p.id,
+      label: p.name,
+      imgSrc: logoUrl(p.type),
+    })),
+  ],
+}])
+
+const titleModelGroups = computed((): SelectOptionGroup[] => [{
+  options: [
+    { value: '', label: 'Use provider default', iconName: 'lucide:settings' },
+    ...titleModels.value.map(m => ({ value: m, label: m })),
+  ],
+}])
+
+async function fetchTitleModels(providerId: string) {
+  if (!providerId) { titleModels.value = []; return }
+  titleLoadingModels.value = true
+  try {
+    titleModels.value = await providerStore.listModels(providerId, 'llm')
+  } catch { titleModels.value = [] }
+  titleLoadingModels.value = false
+}
+
+watch(() => prefs.titleProviderId, (id) => {
+  prefs.titleModel = ''
+  fetchTitleModels(id)
+}, { immediate: true })
 </script>
 
 <template>
@@ -162,7 +205,7 @@ const contextStrategyOptions: { value: ContextStrategy; label: string; descripti
         </div>
 
         <!-- Generate Chat Titles -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
@@ -181,6 +224,31 @@ const contextStrategyOptions: { value: ContextStrategy; label: string; descripti
               </div>
             </div>
             <ToggleSwitch v-model="prefs.generateTitle" />
+          </div>
+
+          <div
+            v-if="prefs.generateTitle"
+            class="grid grid-cols-2 gap-3 pt-1 border-t border-zinc-800"
+          >
+            <div>
+              <label class="block text-xs text-zinc-400 mb-1.5">Provider</label>
+              <CustomSelect
+                v-model="prefs.titleProviderId"
+                :groups="titleProviderGroups"
+                placeholder="Use chat provider"
+                placeholder-icon="lucide:settings"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-400 mb-1.5">Model</label>
+              <CustomSelect
+                v-model="prefs.titleModel"
+                :groups="titleModelGroups"
+                placeholder="Use provider default"
+                placeholder-icon="lucide:settings"
+                filterable
+              />
+            </div>
           </div>
         </div>
 

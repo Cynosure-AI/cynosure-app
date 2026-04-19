@@ -8,6 +8,8 @@ export const SK_THEME = 'cy-theme'
 export const SK_AUTO_EXPAND = 'cy-auto-expand'
 export const SK_AUTO_EXPAND_TOOLS = 'cy-auto-expand-tools'
 export const SK_GENERATE_TITLE = 'cy-generate-title'
+export const SK_TITLE_PROVIDER = 'cy-title-provider'
+export const SK_TITLE_MODEL = 'cy-title-model'
 export const SK_CONTEXT_STRATEGY = 'cy-context-strategy'
 export const SK_AGENT_CATEGORIES = 'cy-agent-categories'
 export const SK_MA_CATEGORIES = 'cy-ma-categories'
@@ -34,6 +36,8 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_AUTO_EXPAND,
     SK_AUTO_EXPAND_TOOLS,
     SK_GENERATE_TITLE,
+    SK_TITLE_PROVIDER,
+    SK_TITLE_MODEL,
     SK_AGENT_CATEGORIES,
     SK_MA_CATEGORIES,
     SK_WHISPER_MODEL,

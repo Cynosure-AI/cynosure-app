@@ -93,11 +93,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       overrideSubAgents?: boolean
       thinkingEnabled?: boolean
       contextStrategy?: 'sliding-window' | 'truncate-middle' | 'none'
+      titleProviderId?: string
+      titleModel?: string
     }
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
       const db = getDb()
 
       // Build content (text + optional images + optional audio + optional files)
@@ -434,7 +436,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
         if (conv && conv.title === 'New Chat') {
           if (generateTitlePref !== false) {
-            generateTitle({ conversationId, userMessage: content, assistantResponse: result.content, broadcast, providerId, model: responseModel }).catch(() => { })
+            generateTitle({ conversationId, userMessage: content, assistantResponse: result.content, broadcast, providerId: titleProviderIdPref || providerId, model: titleModelPref || responseModel }).catch(() => { })
           } else {
             // Fallback: first few words of the user message
             const words = content.split(/\s+/).slice(0, 6).join(' ')

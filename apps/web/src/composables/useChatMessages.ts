@@ -109,7 +109,9 @@ export function useChatMessages(
             memorySpaceIds,
             agentConfig.sessionOverrideSubAgents.value,
             agentConfig.sessionThinkingEnabled.value,
-            prefs.contextStrategy
+            prefs.contextStrategy,
+            prefs.titleProviderId || undefined,
+            prefs.titleModel || undefined
         )
     }
 
