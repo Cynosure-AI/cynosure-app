@@ -318,6 +318,10 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function startNewChat(): void {
+    // Always re-sync agent config when pressing "New Chat" so edited settings (sub-agents, tools, etc.)
+    // take effect even when we're already on a blank chat and we reset it to it's original state.
+    agentConfig.syncAgentBaseline()
+
     if (!activeConversationId.value && messages.value.length === 0) return
 
     activeConversationId.value = null
@@ -327,11 +331,6 @@ export const useChatStore = defineStore('chat', () => {
     streaming.isStreaming.value = false
     streaming.currentStreamId.value = null
     streaming.lastUsage.value = null
-    // Reset the full session config to agent defaults (tools, sub-agents,
-    // memory spaces, system prompt, model, provider).
-    // In free-chat mode (no active agent) this is a no-op — all session
-    // settings persist into the new chat.
-    agentConfig.syncAgentBaseline()
   }
 
   async function deleteAllConversations(): Promise<void> {
