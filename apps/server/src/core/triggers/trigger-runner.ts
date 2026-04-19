@@ -72,6 +72,14 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         isFirstMessage: true,
     })
 
+    // Persist session config so InstanceDetailView can restore the correct model/provider
+    const chatConfig = JSON.stringify({
+        model: prepared.model,
+        providerId: prepared.providerId,
+        thinkingEnabled: agent.thinkingEnabled !== false,
+    })
+    db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(chatConfig, conversationId)
+
     const messages: ChatMessage[] = [
         ...prepared.systemMessages,
         { role: 'user', content: userContent }
