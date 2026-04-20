@@ -157,6 +157,9 @@ const gridLines = computed(() => {
 
 
 
+          <!-- Tick mark -->
+          <div class="absolute w-px bg-zinc-700/50 h-full bottom-0 left-0" />
+
           <!-- Date label -->
           <span
             v-if="i % labelInterval === 0 || i === filledData.length - 1"
