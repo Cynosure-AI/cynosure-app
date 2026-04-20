@@ -156,8 +156,8 @@ function onWheel(e: WheelEvent): void {
           <p
             class="font-semibold truncate agent-name"
             :class="card.isActive
-              ? 'text-zinc-900 dark:text-zinc-100'
-              : 'text-zinc-500 dark:text-zinc-400'"
+              ? 'text-zinc-100'
+              : 'text-zinc-400'"
           >
             {{ card.agent.name }}
           </p>
