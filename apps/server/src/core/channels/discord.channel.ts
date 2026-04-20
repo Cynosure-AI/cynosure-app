@@ -16,7 +16,7 @@ import { prepareAgentExecution } from '../agent/prepare-execution.js'
 import { generateTitle } from '../agent/post-execution.js'
 import { getAgent, listAgents } from '../agents/agent-store.js'
 import { getEventBus } from '../telemetry/event-bus.js'
-import type { ChatMessage } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, ContentPart } from '../gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 
 interface DiscordConfig {
@@ -49,6 +49,8 @@ export class DiscordChannel implements ChannelProvider {
     private channelLocks = new Map<string, Promise<void>>()
     /** Per-conversation send queue for ordering HITL messages after tool details */
     private conversationSendQueue = new Map<string, (fn: () => Promise<void>) => void>()
+    /** Buffered attachments for channels where media was sent without text */
+    private pendingAttachments = new Map<string, { imageDataUrls: string[]; audioDataUrls: string[] }>()
     /** EventBus unsubscribe for hitl:request */
     private hitlUnsub?: () => void
 
@@ -157,11 +159,15 @@ export class DiscordChannel implements ChannelProvider {
         if (msg.author.id === this.client.user?.id) return
         // Ignore bot messages
         if (msg.author.bot) return
-        // Require text content
-        if (!msg.content?.trim()) return
+
+        const hasAttachments = msg.attachments.size > 0
+        const hasText = !!msg.content?.trim()
+
+        // Require either text content or attachments
+        if (!hasText && !hasAttachments) return
 
         const discordChannelId = msg.channel.id
-        const text = msg.content.trim()
+        const text = (msg.content || '').trim()
 
         // Handle bang commands immediately — bypass the channel lock so
         // !stop, !new, agent switches etc. can execute without waiting
@@ -170,6 +176,23 @@ export class DiscordChannel implements ChannelProvider {
             const handled = await this.handleCommand(msg, text)
             if (handled) return
             // Unknown command → fall through to process as a regular message
+        }
+
+        // Attachment-only message (no text) → buffer for the next text message
+        if (hasAttachments && !hasText) {
+            try {
+                const { imageDataUrls, audioDataUrls } = await this.extractAttachments(msg)
+                if (imageDataUrls.length || audioDataUrls.length) {
+                    const existing = this.pendingAttachments.get(discordChannelId) || { imageDataUrls: [], audioDataUrls: [] }
+                    existing.imageDataUrls.push(...imageDataUrls)
+                    existing.audioDataUrls.push(...audioDataUrls)
+                    this.pendingAttachments.set(discordChannelId, existing)
+                    await msg.reply('📎 Attachment received. Send a message to use it with the agent.').catch(() => { })
+                }
+            } catch {
+                await msg.reply('⚠️ Failed to process attachment.').catch(() => { })
+            }
+            return
         }
 
         // Serialize messages per channel
@@ -189,13 +212,51 @@ export class DiscordChannel implements ChannelProvider {
 
     private async processMessage(msg: Message): Promise<void> {
         const discordChannelId = msg.channel.id
-        const userText = msg.content.trim()
+        const userText = (msg.content || '').trim()
         const senderName = msg.author.displayName || msg.author.username
 
         // ── Handle commands ──
         if (userText.startsWith('!')) {
             const handled = await this.handleCommand(msg, userText)
             if (handled) return
+        }
+
+        // ── Extract attachments from this message + any buffered ones ──
+        let imageDataUrls: string[] = []
+        let audioDataUrls: string[] = []
+
+        // Collect buffered attachments from previous media-only messages
+        const buffered = this.pendingAttachments.get(discordChannelId)
+        if (buffered) {
+            imageDataUrls.push(...buffered.imageDataUrls)
+            audioDataUrls.push(...buffered.audioDataUrls)
+            this.pendingAttachments.delete(discordChannelId)
+        }
+
+        // Extract attachments from the current message
+        if (msg.attachments.size > 0) {
+            try {
+                const extracted = await this.extractAttachments(msg)
+                imageDataUrls.push(...extracted.imageDataUrls)
+                audioDataUrls.push(...extracted.audioDataUrls)
+            } catch (err) {
+                console.warn('[Discord] Failed to extract attachments:', (err as Error).message)
+            }
+        }
+
+        const hasAttachments = imageDataUrls.length > 0 || audioDataUrls.length > 0
+
+        // Build multimodal content if there are attachments
+        let userContent: string | ContentPart[] = userText
+        if (hasAttachments) {
+            const parts: ContentPart[] = [{ type: 'text', text: userText || '(attached media)' }]
+            for (const url of imageDataUrls) {
+                parts.push({ type: 'image_url', image_url: { url } })
+            }
+            for (const url of audioDataUrls) {
+                parts.push({ type: 'audio_url', audio_url: { url } })
+            }
+            userContent = parts
         }
 
         const effectiveAgentId = this.channelAgentOverride.get(discordChannelId) || this.agentId
@@ -212,16 +273,27 @@ export class DiscordChannel implements ChannelProvider {
         const db = getDb()
         const now = Date.now()
 
-        // Save user message
+        // Save user message (with attachment references if present)
         const userMsgId = nanoid()
         db.prepare(
-            'INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
-        ).run(userMsgId, conversationId, 'user', userText, now)
+            'INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).run(
+            userMsgId, conversationId, 'user', userText || '(attached media)',
+            imageDataUrls.length ? JSON.stringify(imageDataUrls) : null,
+            audioDataUrls.length ? JSON.stringify(audioDataUrls) : null,
+            now
+        )
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
         this.broadcast('chat:new-message', {
             conversationId,
-            message: { id: userMsgId, conversationId, role: 'user', content: userText, createdAt: now }
+            message: {
+                id: userMsgId, conversationId, role: 'user',
+                content: userText || '(attached media)',
+                imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined,
+                audioDataUrls: audioDataUrls.length ? audioDataUrls : undefined,
+                createdAt: now
+            }
         })
 
         // Build history
@@ -235,6 +307,12 @@ export class DiscordChannel implements ChannelProvider {
             toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
             toolCallId: row.tool_call_id || undefined
         }))
+
+        // Replace last user message with multimodal content if attachments are present
+        if (hasAttachments && messages.length > 0) {
+            const lastIdx = messages.length - 1
+            messages[lastIdx] = { ...messages[lastIdx], content: userContent }
+        }
 
         const resolvedAgent = getAgent(effectiveAgentId)
         if (!resolvedAgent) {
@@ -736,5 +814,36 @@ export class DiscordChannel implements ChannelProvider {
         if (!match) return { buffer: Buffer.alloc(0), ext: 'png' }
         const ext = match[1] === 'jpeg' ? 'jpg' : match[1]
         return { buffer: Buffer.from(match[2], 'base64'), ext }
+    }
+
+    /** Extract image and audio attachments from a Discord message, downloading them as data URLs. */
+    private async extractAttachments(msg: Message): Promise<{ imageDataUrls: string[]; audioDataUrls: string[] }> {
+        const imageDataUrls: string[] = []
+        const audioDataUrls: string[] = []
+
+        for (const [, attachment] of msg.attachments) {
+            const mime = attachment.contentType || ''
+            if (mime.startsWith('image/')) {
+                try {
+                    const res = await fetch(attachment.url)
+                    if (res.ok) {
+                        const buffer = Buffer.from(await res.arrayBuffer())
+                        const dataUrl = `data:${mime};base64,${buffer.toString('base64')}`
+                        imageDataUrls.push(dataUrl)
+                    }
+                } catch { /* skip failed downloads */ }
+            } else if (mime.startsWith('audio/')) {
+                try {
+                    const res = await fetch(attachment.url)
+                    if (res.ok) {
+                        const buffer = Buffer.from(await res.arrayBuffer())
+                        const dataUrl = `data:${mime};base64,${buffer.toString('base64')}`
+                        audioDataUrls.push(dataUrl)
+                    }
+                } catch { /* skip failed downloads */ }
+            }
+        }
+
+        return { imageDataUrls, audioDataUrls }
     }
 }
