@@ -166,6 +166,7 @@ async function toggleMic(): Promise<void> {
           :filterable="true"
           :drop-up="true"
           align="center"
+          size="sm"
           @change="onModelChange"
         />
       </div>

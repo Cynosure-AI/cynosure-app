@@ -16,6 +16,7 @@ const props = withDefaults(
     dropUp?: boolean
     align?: 'left' | 'center' | 'right'
     dropdownWidth?: string
+    size?: 'sm' | 'md'
   }>(),
   {
     includeDefault: false,
@@ -26,6 +27,7 @@ const props = withDefaults(
     dropUp: false,
     align: 'left',
     dropdownWidth: 'w-full',
+    size: 'md',
   },
 )
 
@@ -60,6 +62,7 @@ const groups = computed((): SelectOptionGroup[] => {
     :drop-up="dropUp"
     :align="align"
     :dropdown-width="dropdownWidth"
+    :size="size"
     @update:model-value="emit('update:modelValue', $event)"
     @change="emit('change', $event)"
   />
