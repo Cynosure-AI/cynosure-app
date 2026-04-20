@@ -21,6 +21,7 @@ import { nanoid } from 'nanoid'
 
 interface DiscordConfig {
     botToken: string
+    allowedAgentIds?: string[]
 }
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -53,6 +54,8 @@ export class DiscordChannel implements ChannelProvider {
     private pendingAttachments = new Map<string, { imageDataUrls: string[]; audioDataUrls: string[] }>()
     /** EventBus unsubscribe for hitl:request */
     private hitlUnsub?: () => void
+    /** Optional whitelist of agent IDs exposed via commands. Empty = all agents. */
+    private allowedAgentIds: string[]
 
     constructor(
         channelId: string,
@@ -64,6 +67,7 @@ export class DiscordChannel implements ChannelProvider {
         this.agentId = agentId
         this.botToken = config.botToken
         this.broadcast = broadcast
+        this.allowedAgentIds = config.allowedAgentIds ?? []
         this.client = new Client({
             intents: [
                 GatewayIntentBits.Guilds,
@@ -72,6 +76,14 @@ export class DiscordChannel implements ChannelProvider {
                 GatewayIntentBits.DirectMessages
             ]
         })
+    }
+
+    /** Return the list of agents available for this channel (filtered by allowedAgentIds). */
+    private getAvailableAgents() {
+        const all = listAgents()
+        if (this.allowedAgentIds.length === 0) return all
+        const allowed = new Set(this.allowedAgentIds)
+        return all.filter(a => allowed.has(a.id))
     }
 
     async start(): Promise<void> {
@@ -619,7 +631,7 @@ export class DiscordChannel implements ChannelProvider {
         }
 
         // Try to match an agent codename
-        const agents = listAgents()
+        const agents = this.getAvailableAgents()
         const matchedAgent = agents.find(a => {
             const lc = a.codename.toLowerCase()
             const agentCmd = lc.replace(/[^a-z0-9_]/g, '_')
