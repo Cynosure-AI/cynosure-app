@@ -58,8 +58,9 @@ async function fetchTitleModels(providerId: string) {
   titleLoadingModels.value = false
 }
 
-watch(() => prefs.titleProviderId, (id) => {
-  prefs.titleModel = ''
+watch(() => prefs.titleProviderId, (id, oldId) => {
+  // Only reset the model when the provider actually changes, not on initial load
+  if (oldId !== undefined) prefs.titleModel = ''
   fetchTitleModels(id)
 }, { immediate: true })
 </script>
