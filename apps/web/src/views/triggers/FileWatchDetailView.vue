@@ -5,13 +5,13 @@ import { api } from '../../api/client'
 import type { AgentDefinition, FileWatcher } from '../../api/types'
 import { useProviderStore } from '../../stores/provider.store'
 import { Icon } from '@iconify/vue'
-import CustomSelect, { type SelectOptionGroup } from '../../components/shared/CustomSelect.vue'
-import { useProviderLogos } from '../../composables/useProviderLogos'
+import AgentSelect from '../../components/shared/AgentSelect.vue'
+import ProviderSelect from '../../components/shared/ProviderSelect.vue'
+import ModelSelect from '../../components/shared/ModelSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
 const providerStore = useProviderStore()
-const { logoUrl } = useProviderLogos()
 
 const watcher = ref<FileWatcher | null>(null)
 const allAgents = ref<AgentDefinition[]>([])
@@ -141,35 +141,6 @@ watch(() => watcher.value, (w) => {
   }
 })
 
-// ─── CustomSelect groups ─────────────────────────────────
-
-const agentGroups = computed((): SelectOptionGroup[] => [{
-  options: allAgents.value.map(a => ({
-    value: a.id,
-    label: a.name,
-    imgSrc: a.iconUrl || undefined,
-    iconName: a.iconUrl ? undefined : 'lucide:bot',
-  }))
-}])
-
-const providerGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Use agent default', iconName: 'lucide:settings' },
-    ...providerStore.providers.map(p => ({
-      value: p.id,
-      label: p.name,
-      imgSrc: logoUrl(p.type),
-    }))
-  ]
-}])
-
-const modelGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Use agent default', iconName: 'lucide:settings' },
-    ...dlgModels.value.map(m => ({ value: m, label: m }))
-  ]
-}])
-
 onMounted(loadWatcher)
 watch(dlgPrompt, resizePrompt, { immediate: true })
 </script>
@@ -263,11 +234,10 @@ watch(dlgPrompt, resizePrompt, { immediate: true })
           <!-- Agent -->
           <div>
             <label class="block text-xs text-zinc-400 mb-1">Agent</label>
-            <CustomSelect
+            <AgentSelect
               v-model="dlgAgentId"
-              :groups="agentGroups"
+              :agents="allAgents"
               placeholder="Select an agent…"
-              placeholder-icon="lucide:bot"
             />
           </div>
 
@@ -309,21 +279,23 @@ watch(dlgPrompt, resizePrompt, { immediate: true })
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-xs text-zinc-400 mb-1">Provider override</label>
-              <CustomSelect
+              <ProviderSelect
                 :model-value="dlgProviderOverride"
-                :groups="providerGroups"
+                :providers="providerStore.providers"
+                include-default
+                default-label="Use agent default"
                 placeholder="Use agent default"
-                placeholder-icon="lucide:settings"
                 @change="onProviderChange"
               />
             </div>
             <div>
               <label class="block text-xs text-zinc-400 mb-1">Model override</label>
-              <CustomSelect
+              <ModelSelect
                 v-model="dlgModelOverride"
-                :groups="modelGroups"
+                :models="dlgModels"
+                include-default
+                default-label="Use agent default"
                 placeholder="Use agent default"
-                placeholder-icon="lucide:settings"
               />
             </div>
           </div>

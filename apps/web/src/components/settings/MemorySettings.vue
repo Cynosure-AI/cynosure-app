@@ -5,13 +5,10 @@ import { api } from '../../api/client'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
 import MultiSelect from '../shared/MultiSelect.vue'
-import CustomSelect from '../shared/CustomSelect.vue'
+import ProviderSelect from '../shared/ProviderSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
-import { useProviderLogos } from '../../composables/useProviderLogos'
-import type { SelectOptionGroup } from '../shared/CustomSelect.vue'
 
 const providerStore = useProviderStore()
-const { logoUrl } = useProviderLogos()
 
 // Embedding state
 const embProviderId = ref('')
@@ -20,16 +17,6 @@ const embDimensions = ref(1536)
 const embModels = ref<string[]>([])
 const embLoadingModels = ref(false)
 
-const embProviderGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Use active provider (fallback)', iconName: 'lucide:settings' },
-    ...providerStore.providers.map(p => ({
-      value: p.id,
-      label: p.name,
-      imgSrc: logoUrl(p.type),
-    })),
-  ],
-}])
 const embSaving = ref(false)
 const embDirty = ref(false)
 const embProbing = ref(false)
@@ -273,11 +260,12 @@ async function manualClearDb() {
       <div class="space-y-3">
         <div>
           <label class="block text-xs text-zinc-400 mb-1">Provider</label>
-          <CustomSelect
+          <ProviderSelect
             v-model="embProviderId"
-            :groups="embProviderGroups"
+            :providers="providerStore.providers"
+            include-default
+            default-label="Use active provider (fallback)"
             placeholder="Use active provider (fallback)"
-            placeholder-icon="lucide:settings"
           />
         </div>
 

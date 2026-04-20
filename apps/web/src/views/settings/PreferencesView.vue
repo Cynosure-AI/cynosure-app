@@ -3,16 +3,14 @@ import { ref, computed, watch } from 'vue'
 import { usePreferencesStore, type ContextStrategy } from '../../stores/preferences.store'
 import type { ThemeId } from '../../stores/preferences.store'
 import { useProviderStore } from '../../stores/provider.store'
-import { useProviderLogos } from '../../composables/useProviderLogos'
 import { Icon } from '@iconify/vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
-import CustomSelect from '../../components/shared/CustomSelect.vue'
+import ProviderSelect from '../../components/shared/ProviderSelect.vue'
+import ModelSelect from '../../components/shared/ModelSelect.vue'
 import BaseCard from '../../components/shared/BaseCard.vue'
-import type { SelectOptionGroup } from '../../components/shared/CustomSelect.vue'
 
 const prefs = usePreferencesStore()
 const providerStore = useProviderStore()
-const { logoUrl } = useProviderLogos()
 
 const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#09090b', surface: '#18181b', accent: '#3b82f6', text: '#f4f4f5' } },
@@ -31,24 +29,6 @@ const contextStrategyOptions: { value: ContextStrategy; label: string; descripti
 // ── Title generation provider/model ───────────────────────────────────────────
 const titleModels = ref<string[]>([])
 const titleLoadingModels = ref(false)
-
-const titleProviderGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Use chat provider', iconName: 'lucide:settings' },
-    ...providerStore.providers.map(p => ({
-      value: p.id,
-      label: p.name,
-      imgSrc: logoUrl(p.type),
-    })),
-  ],
-}])
-
-const titleModelGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Use provider default', iconName: 'lucide:settings' },
-    ...titleModels.value.map(m => ({ value: m, label: m })),
-  ],
-}])
 
 async function fetchTitleModels(providerId: string) {
   if (!providerId) { titleModels.value = []; return }
@@ -234,21 +214,23 @@ watch(() => prefs.titleProviderId, (id, oldId) => {
           >
             <div>
               <label class="block text-xs text-zinc-400 mb-1.5">Provider</label>
-              <CustomSelect
+              <ProviderSelect
                 v-model="prefs.titleProviderId"
-                :groups="titleProviderGroups"
+                :providers="providerStore.providers"
+                include-default
+                default-label="Use chat provider"
                 placeholder="Use chat provider"
-                placeholder-icon="lucide:settings"
               />
             </div>
             <div>
               <label class="block text-xs text-zinc-400 mb-1.5">Model</label>
-              <CustomSelect
+              <ModelSelect
                 v-model="prefs.titleModel"
-                :groups="titleModelGroups"
+                :models="titleModels"
+                include-default
+                default-label="Use provider default"
                 placeholder="Use provider default"
-                placeholder-icon="lucide:settings"
-                filterable
+                :filterable="true"
               />
             </div>
           </div>

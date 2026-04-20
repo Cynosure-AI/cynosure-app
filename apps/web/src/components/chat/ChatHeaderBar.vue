@@ -5,12 +5,11 @@ import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useProviderStore } from '../../stores/provider.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'
-import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
+import AgentSelect from '../shared/AgentSelect.vue'
+import ProviderSelect from '../shared/ProviderSelect.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import { useChatSidebar } from '../../composables/useSidebar'
-import { useProviderLogos } from '../../composables/useProviderLogos'
 
-const { logoUrl } = useProviderLogos()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const providerStore = useProviderStore()
@@ -24,42 +23,6 @@ const selectedAgent = computed(() =>
 const conversationTitle = computed(() => chatStore.activeConversation?.title || '')
 
 const agentDropdownValue = computed(() => chatStore.activeAgentId || '')
-
-const agentDropdownGroups = computed((): SelectOptionGroup[] => {
-  const base: SelectOptionGroup = {
-    options: [{ value: '', label: 'Default', iconName: 'lucide:message-square' }],
-  }
-  if (!agentDefs.agents.length) return [base]
-  const sorted = [...agentDefs.agents].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-  return [
-    base,
-    {
-      label: 'Agents',
-      options: sorted.map((a) => {
-        let imgSrc: string | null = a.iconUrl || null
-        if (!imgSrc) {
-          const prov = providerStore.providers.find((p) => p.id === a.providerId)
-          if (prov) imgSrc = logoUrl(prov.type)
-        }
-        return {
-          value: a.id,
-          label: a.name,
-          imgSrc,
-          tooltip: a.description || undefined,
-          tag: a.subAgents?.length ? `+${a.subAgents.length}` : undefined,
-        }
-      }),
-    },
-  ]
-})
-
-const providerDropdownGroups = computed((): SelectOptionGroup[] => [{
-  options: providerStore.providers.map((p) => ({
-    value: p.id,
-    label: p.name,
-    imgSrc: logoUrl(p.type),
-  })),
-}])
 
 const currentProviderId = computed(() =>
   chatStore.sessionProviderOverride || selectedAgent.value?.providerId || providerStore.lastUsedProviderId
@@ -153,13 +116,15 @@ function onTitleKeydown(e: KeyboardEvent): void {
 
     <!-- Agent selector -->
     <div class="w-32 sm:w-44 shrink-0">
-      <CustomSelect
+      <AgentSelect
         :model-value="agentDropdownValue"
-        :groups="agentDropdownGroups"
+        :agents="agentDefs.agents"
+        include-default
+        default-label="Default"
+        default-icon="lucide:message-square"
+        agents-group-label="Agents"
         placeholder="Default"
-        placeholder-icon="lucide:message-square"
         max-height="max-h-96"
-        :filterable="true"
         @change="onAgentChange"
       />
     </div>
@@ -169,9 +134,9 @@ function onTitleKeydown(e: KeyboardEvent): void {
       v-if="providerStore.providers.length > 1"
       class="w-36 shrink-0 hidden sm:block"
     >
-      <CustomSelect
+      <ProviderSelect
         :model-value="currentProviderId"
-        :groups="providerDropdownGroups"
+        :providers="providerStore.providers"
         max-height="max-h-96"
         @change="onProviderOverride"
       />
