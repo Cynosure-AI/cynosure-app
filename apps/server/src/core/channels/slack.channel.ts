@@ -561,6 +561,10 @@ export class SlackChannel implements ChannelProvider {
             this.cancelExecutionsForChannel(slackChannelId)
             const prevAgentId = this.channelAgentOverride.get(slackChannelId) || this.agentId
             this.archiveConversation(slackChannelId, prevAgentId)
+            // Also archive any existing conversation for the target agent so we always start fresh
+            if (matchedAgent.id !== prevAgentId) {
+                this.archiveConversation(slackChannelId, matchedAgent.id)
+            }
             this.channelAgentOverride.set(slackChannelId, matchedAgent.id)
             await client.chat.postMessage({
                 channel: slackChannelId,

@@ -552,6 +552,10 @@ export class DiscordChannel implements ChannelProvider {
             this.cancelExecutionsForChannel(discordChannelId)
             const prevAgentId = this.channelAgentOverride.get(discordChannelId) || this.agentId
             this.archiveConversation(discordChannelId, prevAgentId)
+            // Also archive any existing conversation for the target agent so we always start fresh
+            if (matchedAgent.id !== prevAgentId) {
+                this.archiveConversation(discordChannelId, matchedAgent.id)
+            }
             this.channelAgentOverride.set(discordChannelId, matchedAgent.id)
             await msg.reply(`🔀 Switched to **${matchedAgent.name}**. Starting a fresh conversation.\n\nUse \`!start\` to switch back.`).catch(() => { })
             return true
