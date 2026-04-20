@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { api } from '../../api/client'
 import type { AgentDefinition, ChannelDefinition, ChannelType } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
+import BaseCard from '../../components/shared/BaseCard.vue'
+import AgentSelect from '../../components/shared/AgentSelect.vue'
+import MultiSelect from '../../components/shared/MultiSelect.vue'
+import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 
 const channels = ref<ChannelDefinition[]>([])
 const allAgents = ref<AgentDefinition[]>([])
@@ -23,6 +27,11 @@ const dlgEnabled = ref(true)
 const dlgSaving = ref(false)
 const dlgTesting = ref(false)
 const dlgTestResult = ref<{ success: boolean; username?: string; error?: string } | null>(null)
+const dlgAllowedAgentIds = ref<string[]>([])
+
+const agentOptions = computed<MultiSelectOption[]>(() =>
+  allAgents.value.map(a => ({ value: a.id, label: a.name }))
+)
 
 // Delete confirm
 const showDeleteConfirm = ref(false)
@@ -51,6 +60,7 @@ function resetDialog() {
   dlgAppToken.value = ''
   dlgEnabled.value = true
   dlgTestResult.value = null
+  dlgAllowedAgentIds.value = []
   editingId.value = null
 }
 
@@ -69,18 +79,24 @@ async function openEditDialog(ch: ChannelDefinition) {
   dlgAgentId.value = ch.agentId
   dlgBotToken.value = (ch.config.botToken as string) || ''
   dlgAppToken.value = (ch.config.appToken as string) || ''
+  dlgAllowedAgentIds.value = (ch.config.allowedAgentIds as string[]) || []
   dlgEnabled.value = ch.enabled
   showAddDialog.value = true
 }
 
 function buildConfig(): Record<string, unknown> {
+  const config: Record<string, unknown> = {}
   if (dlgType.value === 'telegram' || dlgType.value === 'discord') {
-    return { botToken: dlgBotToken.value.trim() }
+    config.botToken = dlgBotToken.value.trim()
   }
   if (dlgType.value === 'slack') {
-    return { botToken: dlgBotToken.value.trim(), appToken: dlgAppToken.value.trim() }
+    config.botToken = dlgBotToken.value.trim()
+    config.appToken = dlgAppToken.value.trim()
   }
-  return {}
+  if (dlgAllowedAgentIds.value.length > 0) {
+    config.allowedAgentIds = dlgAllowedAgentIds.value
+  }
+  return config
 }
 
 async function testConnection() {
@@ -190,9 +206,9 @@ onUnmounted(() => {
       </div>
 
       <!-- Loading -->
-      <div
+      <BaseCard
         v-if="loading"
-        class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center"
+        class="p-12 text-center"
       >
         <Icon
           icon="lucide:loader-2"
@@ -201,12 +217,12 @@ onUnmounted(() => {
         <p class="text-sm text-zinc-500">
           Loading channels…
         </p>
-      </div>
+      </BaseCard>
 
       <!-- Empty state -->
-      <div
+      <BaseCard
         v-else-if="channels.length === 0"
-        class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center"
+        class="p-12 text-center"
       >
         <div class="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mx-auto mb-4">
           <Icon
@@ -230,7 +246,7 @@ onUnmounted(() => {
           />
           Add Channel
         </button>
-      </div>
+      </BaseCard>
 
       <!-- Channel list -->
       <div
@@ -240,8 +256,8 @@ onUnmounted(() => {
         <div
           v-for="ch in channels"
           :key="ch.id"
-          class="flex items-center gap-4 px-5 py-4 rounded-xl border bg-zinc-900/50 group"
-          :class="ch.enabled ? 'border-zinc-800' : 'border-zinc-800/50 opacity-60'"
+          class="flex items-center gap-4 px-5 py-4 rounded-xl border bg-zinc-800/60 group"
+          :class="ch.enabled ? 'border-zinc-700' : 'border-zinc-700/50 opacity-60'"
         >
           <!-- Channel type icon -->
           <div class="shrink-0">
@@ -403,24 +419,28 @@ onUnmounted(() => {
           <label class="block text-sm text-zinc-400 mb-1">
             Agent
           </label>
-          <select
-            v-model="dlgAgentId"
-            class="w-full px-3 py-2 mb-4 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option
-              value=""
-              disabled
-            >
-              Select an agent…
-            </option>
-            <option
-              v-for="a in allAgents"
-              :key="a.id"
-              :value="a.id"
-            >
-              {{ a.name }}
-            </option>
-          </select>
+          <div class="mb-4">
+            <AgentSelect
+              v-model="dlgAgentId"
+              :agents="allAgents"
+              placeholder="Select an agent…"
+            />
+          </div>
+
+          <!-- Allowed agents -->
+          <label class="block text-sm text-zinc-400 mb-1">
+            Allowed Agents
+          </label>
+          <p class="text-[11px] text-zinc-600 mb-1.5">
+            Restrict which agents can be switched to via commands. Leave empty to allow all.
+          </p>
+          <div class="mb-4">
+            <MultiSelect
+              v-model="dlgAllowedAgentIds"
+              :options="agentOptions"
+              placeholder="All agents"
+            />
+          </div>
 
           <!-- Telegram-specific config -->
           <template v-if="dlgType === 'telegram'">

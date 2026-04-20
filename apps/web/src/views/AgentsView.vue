@@ -6,6 +6,7 @@ import { useProviderStore } from '../stores/provider.store'
 import { usePreferencesStore } from '../stores/preferences.store'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
+import BaseCard from '../components/shared/BaseCard.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import CategoryTabBar from '../components/shared/CategoryTabBar.vue'
 import { SK_AGENTS_VIEW_MODE } from '../utils/storage-keys'
@@ -311,9 +312,9 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
           v-for="agent in filteredAgents"
           :key="agent.id"
           draggable="true"
-          class="group relative rounded-xl border bg-zinc-900/50 p-5 hover:border-zinc-700 transition-all cursor-pointer"
+          class="group relative rounded-xl border bg-zinc-800/60 p-5 hover:border-zinc-600 transition-all cursor-pointer"
           :class="[
-            dragReorderId === agent.id ? 'border-blue-500/60 opacity-50' : 'border-zinc-800',
+            dragReorderId === agent.id ? 'border-blue-500/60 opacity-50' : 'border-zinc-700',
             dropTargetId === agent.id && dropPosition === 'before' ? 'ring-l-2 ring-blue-500' : '',
             dropTargetId === agent.id && dropPosition === 'after' ? 'ring-r-2 ring-blue-500' : ''
           ]"
@@ -434,8 +435,8 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
           v-for="agent in filteredAgents"
           :key="agent.id"
           draggable="true"
-          class="group relative flex items-center gap-4 rounded-xl border bg-zinc-900/50 px-4 py-3 hover:border-zinc-700 transition-all cursor-pointer"
-          :class="dragReorderId === agent.id ? 'border-blue-500/60 opacity-50' : 'border-zinc-800'"
+          class="group relative flex items-center gap-4 rounded-xl border bg-zinc-800/60 px-4 py-3 hover:border-zinc-600 transition-all cursor-pointer"
+          :class="dragReorderId === agent.id ? 'border-blue-500/60 opacity-50' : 'border-zinc-700'"
           @click="router.push(`/agents/${agent.id}`)"
           @dragstart="onReorderDragStart($event, agent.id)"
           @dragover="onReorderDragOver($event, agent.id)"
@@ -551,9 +552,9 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
       </div>
 
       <!-- Empty State -->
-      <div
+      <BaseCard
         v-if="!filteredAgents.length"
-        class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center"
+        class="p-12 text-center"
       >
         <div
           class="w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center mx-auto mb-4"
@@ -584,7 +585,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
           />
           Create Agent
         </button>
-      </div>
+      </BaseCard>
 
       <!-- Create Dialog -->
       <Teleport to="body">

@@ -12,6 +12,7 @@ import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy }
 import type { ChatMessage, ContentPart } from '../core/gateway/providers/base.provider.js'
 import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import { nanoid } from 'nanoid'
+import { getChannelManager } from '../core/channels/channel-manager.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -473,6 +474,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       if (controller) {
         controller.abort()
         activeAbortControllers.delete(streamId)
+      } else {
+        // Try cancelling a channel execution (Telegram/Discord/Slack)
+        getChannelManager().cancelExecution(streamId)
       }
     }
     // Fallback: cancel by conversationId (handles post-reload or sub-agent-only streaming)

@@ -64,7 +64,7 @@ async function doExport(): Promise<void> {
         v-for="(meta, key) in moduleLabels"
         :key="key"
         class="flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer"
-        :class="exportModules[key as keyof typeof exportModules] ? 'border-blue-500/40 bg-blue-500/5' : 'border-zinc-700 bg-zinc-900/50 hover:border-zinc-600'"
+        :class="exportModules[key as keyof typeof exportModules] ? 'border-blue-500/40 bg-blue-500/5' : 'border-zinc-700 bg-zinc-900 hover:border-zinc-600'"
       >
         <input
           v-model="exportModules[key as keyof typeof exportModules]"

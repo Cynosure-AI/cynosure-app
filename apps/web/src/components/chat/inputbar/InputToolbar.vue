@@ -6,7 +6,7 @@ import { usePreferencesStore } from '../../../stores/preferences.store'
 import { useProviderStore } from '../../../stores/provider.store'
 import { useWhisper } from '../../../composables/useWhisper'
 import { Icon } from '@iconify/vue'
-import CustomSelect, { type SelectOptionGroup } from '../../shared/CustomSelect.vue'
+import ModelSelect from '../../shared/ModelSelect.vue'
 import ToolsButton from './ToolsButton.vue'
 import SubAgentsButton from './SubAgentsButton.vue'
 import MemorySpacesButton from './MemorySpacesButton.vue'
@@ -51,13 +51,6 @@ const defaultModelLabel = computed(() => {
   const effectiveDefault = isProviderOverridden ? providerDefault : (agentModel || providerDefault)
   return effectiveDefault ? `${effectiveDefault} (Default)` : 'Provider default'
 })
-
-const modelDropdownGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: defaultModelLabel.value },
-    ...sidebarModels.value.map((m) => ({ value: m, label: m })),
-  ],
-}])
 
 async function fetchSidebarModels(): Promise<void> {
   const providerId = currentProviderId.value
@@ -163,14 +156,17 @@ async function toggleMic(): Promise<void> {
       class="flex items-center gap-1 shrink-0"
     >
       <div class="w-44">
-        <CustomSelect
+        <ModelSelect
           :model-value="chatStore.sessionModelOverride || ''"
-          :groups="modelDropdownGroups"
+          :models="sidebarModels"
+          include-default
+          :default-label="defaultModelLabel"
           max-height="max-h-96"
           dropdown-width="min-w-full"
           :filterable="true"
           :drop-up="true"
           align="center"
+          size="sm"
           @change="onModelChange"
         />
       </div>
