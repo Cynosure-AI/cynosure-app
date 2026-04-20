@@ -286,6 +286,13 @@ export class SlackChannel implements ChannelProvider {
         let thinkingEditQueued = false
         const THINKING_EDIT_INTERVAL_MS = 2000
 
+        // ── Message send queue: ensures all Slack messages for this execution
+        //    are sent in order, preventing tool results from appearing after the final response ──
+        let sendChain = Promise.resolve()
+        const enqueueSend = (fn: () => Promise<void>): void => {
+            sendChain = sendChain.then(fn, fn)
+        }
+
         // Live thinking updates → edit the thinking message periodically
         unsubs.push(eventBus.on('step:thinking', (...args: unknown[]) => {
             const data = args[0] as { conversationId: string; thinking: string }
@@ -324,7 +331,7 @@ export class SlackChannel implements ChannelProvider {
                     : `\`${tc.name}\``
             })
             const text = `🔧 Round ${data.iteration}:\n${toolLines.join('\n')}`
-            client.chat.postMessage({ channel: slackChannelId, text: text.slice(0, 3000), thread_ts: msg.ts }).catch(() => { })
+            enqueueSend(() => client.chat.postMessage({ channel: slackChannelId, text: text.slice(0, 3000), thread_ts: msg.ts }).catch(() => { }) as Promise<any>)
         }))
 
         // Tool execution results → threaded reply with return text + images
@@ -336,19 +343,19 @@ export class SlackChannel implements ChannelProvider {
                 const preview = r.output.length > 200 ? r.output.slice(0, 200) + '…' : r.output
                 return `${icon} \`${r.name}\`: ${preview}`
             })
-                ; (async () => {
-                    await client.chat.postMessage({ channel: slackChannelId, text: lines.join('\n').slice(0, 3000), thread_ts: msg.ts }).catch(() => { })
-                    // Upload tool-result images
-                    for (const r of data.results) {
-                        if (r.imageDataUrls?.length) {
-                            for (let i = 0; i < r.imageDataUrls.length; i++) {
-                                await this.uploadImage(client, slackChannelId, r.imageDataUrls[i], `tool_${r.name}_${i + 1}`, msg.ts).catch(e =>
-                                    console.warn('[Slack] Failed to upload tool image:', (e as Error).message)
-                                )
-                            }
+            enqueueSend(async () => {
+                await client.chat.postMessage({ channel: slackChannelId, text: lines.join('\n').slice(0, 3000), thread_ts: msg.ts }).catch(() => { })
+                // Upload tool-result images
+                for (const r of data.results) {
+                    if (r.imageDataUrls?.length) {
+                        for (let i = 0; i < r.imageDataUrls.length; i++) {
+                            await this.uploadImage(client, slackChannelId, r.imageDataUrls[i], `tool_${r.name}_${i + 1}`, msg.ts).catch(e =>
+                                console.warn('[Slack] Failed to upload tool image:', (e as Error).message)
+                            )
                         }
                     }
-                })()
+                }
+            })
         }))
 
         // Live response content streaming
@@ -392,6 +399,10 @@ export class SlackChannel implements ChannelProvider {
 
         try {
             const result = await executor.run(messages)
+
+            // Wait for all queued tool-result messages to finish sending
+            // before sending the final response — ensures correct ordering
+            await sendChain
 
             // Save assistant message
             const assistantMsgId = nanoid()
@@ -477,6 +488,7 @@ export class SlackChannel implements ChannelProvider {
         }
 
         if (command === 'new') {
+            this.cancelExecutionsForChannel(slackChannelId)
             const effectiveAgentId = this.channelAgentOverride.get(slackChannelId) || this.agentId
             this.archiveConversation(slackChannelId, effectiveAgentId)
             const agent = getAgent(effectiveAgentId)
@@ -485,6 +497,7 @@ export class SlackChannel implements ChannelProvider {
         }
 
         if (command === 'start') {
+            this.cancelExecutionsForChannel(slackChannelId)
             const prevAgentId = this.channelAgentOverride.get(slackChannelId) || this.agentId
             this.channelAgentOverride.delete(slackChannelId)
             this.archiveConversation(slackChannelId, prevAgentId)
@@ -496,11 +509,13 @@ export class SlackChannel implements ChannelProvider {
         // Try to match an agent codename
         const agents = listAgents()
         const matchedAgent = agents.find(a => {
-            const agentCmd = a.codename.replace(/[^a-z0-9-]/g, '').replace(/-/g, '_')
-            return agentCmd === command || a.codename === command
+            const lc = a.codename.toLowerCase()
+            const agentCmd = lc.replace(/[^a-z0-9_]/g, '_')
+            return agentCmd === command || lc === command
         })
 
         if (matchedAgent) {
+            this.cancelExecutionsForChannel(slackChannelId)
             const prevAgentId = this.channelAgentOverride.get(slackChannelId) || this.agentId
             this.archiveConversation(slackChannelId, prevAgentId)
             this.channelAgentOverride.set(slackChannelId, matchedAgent.id)
@@ -633,6 +648,17 @@ export class SlackChannel implements ChannelProvider {
             db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?')
                 .run(archivedTitle, Date.now(), existing.id)
             this.conversationToChannel.delete(existing.id)
+        }
+    }
+
+    /** Cancel all active executions whose conversationId maps to the given Slack channelId. */
+    private cancelExecutionsForChannel(slackChannelId: string): void {
+        for (const [id, entry] of this.activeExecutions) {
+            const execChannelId = this.conversationToChannel.get(entry.exec.conversationId)
+            if (execChannelId === slackChannelId) {
+                entry.controller.abort()
+                this.activeExecutions.delete(id)
+            }
         }
     }
 

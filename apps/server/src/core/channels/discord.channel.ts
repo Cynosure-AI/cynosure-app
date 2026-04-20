@@ -277,6 +277,13 @@ export class DiscordChannel implements ChannelProvider {
         let thinkingEditQueued = false
         const THINKING_EDIT_INTERVAL_MS = 2000
 
+        // ── Message send queue: ensures all Discord messages for this execution
+        //    are sent in order, preventing tool results from appearing after the final response ──
+        let sendChain = Promise.resolve()
+        const enqueueSend = (fn: () => Promise<void>): void => {
+            sendChain = sendChain.then(fn, fn)
+        }
+
         if (thinkingMsg) {
             // Live thinking updates → edit the thinking message periodically
             unsubs.push(eventBus.on('step:thinking', (...args: unknown[]) => {
@@ -312,7 +319,7 @@ export class DiscordChannel implements ChannelProvider {
                         : `\`${tc.name}\``
                 })
                 const text = `🔧 Round ${data.iteration}:\n${toolLines.join('\n')}`
-                thinkingMsg!.reply(text.slice(0, 2000)).catch(() => { })
+                enqueueSend(() => thinkingMsg!.reply(text.slice(0, 2000)).catch(() => { }) as Promise<any>)
             }))
 
             // Tool execution results → reply with return text + images
@@ -324,21 +331,21 @@ export class DiscordChannel implements ChannelProvider {
                     const preview = r.output.length > 150 ? r.output.slice(0, 150) + '…' : r.output
                     return `${icon} \`${r.name}\`: ${preview}`
                 })
-                    ; (async () => {
-                        await thinkingMsg!.reply(lines.join('\n').slice(0, 2000)).catch(() => { })
-                        // Send tool-result images
-                        for (const r of data.results) {
-                            if (r.imageDataUrls?.length && 'send' in discordChannel) {
-                                const files = r.imageDataUrls.map((dataUrl, i) => {
-                                    const { buffer, ext } = this.dataUrlToBuffer(dataUrl)
-                                    return { attachment: buffer, name: `tool_${r.name}_${i + 1}.${ext}` }
-                                })
-                                await (discordChannel as { send: Function }).send({ files }).catch((e: Error) =>
-                                    console.warn('[Discord] Failed to send tool image:', e.message)
-                                )
-                            }
+                enqueueSend(async () => {
+                    await thinkingMsg!.reply(lines.join('\n').slice(0, 2000)).catch(() => { })
+                    // Send tool-result images
+                    for (const r of data.results) {
+                        if (r.imageDataUrls?.length && 'send' in discordChannel) {
+                            const files = r.imageDataUrls.map((dataUrl, i) => {
+                                const { buffer, ext } = this.dataUrlToBuffer(dataUrl)
+                                return { attachment: buffer, name: `tool_${r.name}_${i + 1}.${ext}` }
+                            })
+                            await (discordChannel as { send: Function }).send({ files }).catch((e: Error) =>
+                                console.warn('[Discord] Failed to send tool image:', e.message)
+                            )
                         }
-                    })()
+                    }
+                })
             }))
 
             // Typing indicator
@@ -380,6 +387,10 @@ export class DiscordChannel implements ChannelProvider {
 
         try {
             const result = await executor.run(messages)
+
+            // Wait for all queued tool-result messages to finish sending
+            // before sending the final response — ensures correct ordering
+            await sendChain
 
             // Save assistant message
             const assistantMsgId = nanoid()
@@ -468,6 +479,7 @@ export class DiscordChannel implements ChannelProvider {
         }
 
         if (command === 'new') {
+            this.cancelExecutionsForChannel(discordChannelId)
             const effectiveAgentId = this.channelAgentOverride.get(discordChannelId) || this.agentId
             this.archiveConversation(discordChannelId, effectiveAgentId)
             const agent = getAgent(effectiveAgentId)
@@ -476,6 +488,7 @@ export class DiscordChannel implements ChannelProvider {
         }
 
         if (command === 'start') {
+            this.cancelExecutionsForChannel(discordChannelId)
             const prevAgentId = this.channelAgentOverride.get(discordChannelId) || this.agentId
             this.channelAgentOverride.delete(discordChannelId)
             this.archiveConversation(discordChannelId, prevAgentId)
@@ -487,11 +500,13 @@ export class DiscordChannel implements ChannelProvider {
         // Try to match an agent codename
         const agents = listAgents()
         const matchedAgent = agents.find(a => {
-            const agentCmd = a.codename.replace(/[^a-z0-9-]/g, '').replace(/-/g, '_')
-            return agentCmd === command || a.codename === command
+            const lc = a.codename.toLowerCase()
+            const agentCmd = lc.replace(/[^a-z0-9_]/g, '_')
+            return agentCmd === command || lc === command
         })
 
         if (matchedAgent) {
+            this.cancelExecutionsForChannel(discordChannelId)
             const prevAgentId = this.channelAgentOverride.get(discordChannelId) || this.agentId
             this.archiveConversation(discordChannelId, prevAgentId)
             this.channelAgentOverride.set(discordChannelId, matchedAgent.id)
@@ -606,6 +621,17 @@ export class DiscordChannel implements ChannelProvider {
             db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?')
                 .run(archivedTitle, Date.now(), existing.id)
             this.conversationToChannel.delete(existing.id)
+        }
+    }
+
+    /** Cancel all active executions whose conversationId maps to the given Discord channelId. */
+    private cancelExecutionsForChannel(discordChannelId: string): void {
+        for (const [id, entry] of this.activeExecutions) {
+            const execChannelId = this.conversationToChannel.get(entry.exec.conversationId)
+            if (execChannelId === discordChannelId) {
+                entry.controller.abort()
+                this.activeExecutions.delete(id)
+            }
         }
     }
 
