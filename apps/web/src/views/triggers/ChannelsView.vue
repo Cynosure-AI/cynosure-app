@@ -6,6 +6,7 @@ import { Icon } from '@iconify/vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import BaseCard from '../../components/shared/BaseCard.vue'
+import CustomSelect, { type SelectOptionGroup } from '../../components/shared/CustomSelect.vue'
 import MultiSelect from '../../components/shared/MultiSelect.vue'
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 
@@ -31,6 +32,15 @@ const dlgAllowedAgentIds = ref<string[]>([])
 const agentOptions = computed<MultiSelectOption[]>(() =>
   allAgents.value.map(a => ({ value: a.id, label: a.name }))
 )
+
+const agentGroups = computed<SelectOptionGroup[]>(() => [{
+  options: allAgents.value.map(a => ({
+    value: a.id,
+    label: a.name,
+    imgSrc: a.iconUrl || undefined,
+    tooltip: a.description || undefined,
+  })),
+}])
 
 // Delete confirm
 const showDeleteConfirm = ref(false)
@@ -418,24 +428,16 @@ onUnmounted(() => {
           <label class="block text-sm text-zinc-400 mb-1">
             Agent
           </label>
-          <select
-            v-model="dlgAgentId"
-            class="w-full px-3 py-2 mb-4 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option
-              value=""
-              disabled
-            >
-              Select an agent…
-            </option>
-            <option
-              v-for="a in allAgents"
-              :key="a.id"
-              :value="a.id"
-            >
-              {{ a.name }}
-            </option>
-          </select>
+          <div class="mb-4">
+            <CustomSelect
+              v-model="dlgAgentId"
+              :groups="agentGroups"
+              placeholder="Select an agent…"
+              placeholder-icon="lucide:bot"
+              max-height="max-h-80"
+              :filterable="true"
+            />
+          </div>
 
           <!-- Allowed agents -->
           <label class="block text-sm text-zinc-400 mb-1">
