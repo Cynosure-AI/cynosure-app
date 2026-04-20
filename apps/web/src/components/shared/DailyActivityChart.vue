@@ -158,7 +158,7 @@ const gridLines = computed(() => {
 
 
           <!-- Tick mark -->
-          <div class="absolute w-px bg-zinc-700/50 h-full bottom-0 left-0" />
+          <div class="absolute w-px bg-zinc-700/80 h-full bottom-0 left-0" />
 
           <!-- Date label -->
           <span
