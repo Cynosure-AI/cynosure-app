@@ -5,6 +5,7 @@ import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { AgentExecutor } from '../agent/agent-executor.js'
 import { prepareAgentExecution } from '../agent/prepare-execution.js'
+import { generateTitle } from '../agent/post-execution.js'
 import { getAgent, listAgents } from '../agents/agent-store.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
@@ -426,6 +427,22 @@ export class SlackChannel implements ChannelProvider {
                 Date.now() - now, Date.now()
             )
 
+            // ── Auto-generate conversation title on first exchange (fire-and-forget) ──
+            const convMeta = db.prepare("SELECT json_extract(config_json, '$.titleGenerated') as tg FROM conversations WHERE id = ?")
+                .get(conversationId) as { tg: number | null } | undefined
+            if (!convMeta?.tg) {
+                db.prepare("UPDATE conversations SET config_json = json_set(COALESCE(config_json, '{}'), '$.titleGenerated', 1) WHERE id = ?")
+                    .run(conversationId)
+                generateTitle({
+                    conversationId,
+                    userMessage: userText,
+                    assistantResponse: result.content,
+                    broadcast: this.broadcast,
+                    providerId: prepared.providerId,
+                    model: prepared.model
+                }).catch(() => { })
+            }
+
             const responseText = result.content || '(no response)'
             if (thinkingTs) {
                 const durationSec = Math.round((Date.now() - now) / 1000)
@@ -627,34 +644,51 @@ export class SlackChannel implements ChannelProvider {
     private getOrCreateConversation(slackChannelId: string, senderName: string, agentId?: string): string {
         const db = getDb()
         const resolvedAgentId = agentId || this.agentId
-        const lookupKey = `slack:${this.channelId}:${slackChannelId}`
+        const channelKey = `slack:${this.channelId}:${slackChannelId}`
 
+        // Look up by channelKey stored in config_json (new approach)
         const existing = db
-            .prepare('SELECT id FROM conversations WHERE origin = ? AND agent_id = ? AND title LIKE ? AND title NOT LIKE ?')
-            .get('channel', resolvedAgentId, `${lookupKey}%`, '%|archived:%') as { id: string } | undefined
+            .prepare("SELECT id FROM conversations WHERE origin = 'channel' AND agent_id = ? AND json_extract(config_json, '$.channelKey') = ? AND json_extract(config_json, '$.archived') IS NULL")
+            .get(resolvedAgentId, channelKey) as { id: string } | undefined
 
         if (existing) return existing.id
 
+        // Fallback: check legacy title-based lookup for pre-migration conversations
+        const legacy = db
+            .prepare('SELECT id FROM conversations WHERE origin = ? AND agent_id = ? AND title LIKE ? AND title NOT LIKE ?')
+            .get('channel', resolvedAgentId, `${channelKey}%`, '%|archived:%') as { id: string } | undefined
+
+        if (legacy) return legacy.id
+
         const id = nanoid()
         const now = Date.now()
-        const title = `${lookupKey}|${senderName}`
+        const configJson = JSON.stringify({ channelKey })
         db.prepare(
-            'INSERT INTO conversations (id, title, agent_id, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(id, title, resolvedAgentId, 'channel', now, now)
+            'INSERT INTO conversations (id, title, agent_id, origin, config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, senderName, resolvedAgentId, 'channel', configJson, now, now)
 
         return id
     }
 
     private archiveConversation(slackChannelId: string, agentId: string): void {
         const db = getDb()
-        const lookupKey = `slack:${this.channelId}:${slackChannelId}`
-        const existing = db
-            .prepare('SELECT id, title FROM conversations WHERE origin = ? AND agent_id = ? AND title LIKE ? AND title NOT LIKE ?')
-            .get('channel', agentId, `${lookupKey}%`, '%|archived:%') as { id: string; title: string } | undefined
+        const channelKey = `slack:${this.channelId}:${slackChannelId}`
+
+        // Try new config_json-based lookup first
+        let existing = db
+            .prepare("SELECT id FROM conversations WHERE origin = 'channel' AND agent_id = ? AND json_extract(config_json, '$.channelKey') = ? AND json_extract(config_json, '$.archived') IS NULL")
+            .get(agentId, channelKey) as { id: string } | undefined
+
+        // Fallback to legacy title-based lookup
+        if (!existing) {
+            existing = db
+                .prepare('SELECT id FROM conversations WHERE origin = ? AND agent_id = ? AND title LIKE ? AND title NOT LIKE ?')
+                .get('channel', agentId, `${channelKey}%`, '%|archived:%') as { id: string } | undefined
+        }
+
         if (existing) {
-            const archivedTitle = `${existing.title}|archived:${Date.now()}`
-            db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?')
-                .run(archivedTitle, Date.now(), existing.id)
+            db.prepare("UPDATE conversations SET config_json = json_set(COALESCE(config_json, '{}'), '$.archived', ?), updated_at = ? WHERE id = ?")
+                .run(Date.now(), Date.now(), existing.id)
             this.conversationToChannel.delete(existing.id)
         }
     }
