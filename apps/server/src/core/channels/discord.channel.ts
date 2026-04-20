@@ -47,6 +47,8 @@ export class DiscordChannel implements ChannelProvider {
     private conversationToChannel = new Map<string, string>()
     /** Per-channel message lock to prevent concurrent processing */
     private channelLocks = new Map<string, Promise<void>>()
+    /** Per-conversation send queue for ordering HITL messages after tool details */
+    private conversationSendQueue = new Map<string, (fn: () => Promise<void>) => void>()
     /** EventBus unsubscribe for hitl:request */
     private hitlUnsub?: () => void
 
@@ -294,6 +296,8 @@ export class DiscordChannel implements ChannelProvider {
         const enqueueSend = (fn: () => Promise<void>): void => {
             sendChain = sendChain.then(fn, fn)
         }
+        // Register so subscribeToHITL can route approval messages through the same queue
+        this.conversationSendQueue.set(conversationId, enqueueSend)
 
         if (thinkingMsg) {
             // Live thinking updates → edit the thinking message periodically
@@ -407,6 +411,9 @@ export class DiscordChannel implements ChannelProvider {
             // Prevent any pending content-edit timers from firing after we send the final response
             executionFinished = true
             if (contentEditTimer) { clearTimeout(contentEditTimer); contentEditTimer = null }
+
+            // Clean up the per-conversation send queue
+            this.conversationSendQueue.delete(conversationId)
 
             // Wait for all queued tool-result messages to finish sending
             // before sending the final response — ensures correct ordering
@@ -584,15 +591,25 @@ export class DiscordChannel implements ChannelProvider {
                     .setEmoji('❌')
             )
 
-                ; (channel as { send: Function }).send({ content: text, components: [row] })
-                    .then((sentMsg: Message) => {
-                        this.pendingHITL.set(data.taskId, {
-                            discordChannelId,
-                            messageId: sentMsg.id,
-                            resolve: data.resolve
-                        })
+            const sendHITL = async (): Promise<void> => {
+                try {
+                    const sentMsg = await (channel as { send: Function }).send({ content: text, components: [row] }) as Message
+                    this.pendingHITL.set(data.taskId, {
+                        discordChannelId,
+                        messageId: sentMsg.id,
+                        resolve: data.resolve
                     })
-                    .catch(() => { })
+                } catch { /* ignore send failures */ }
+            }
+
+            // Route through the per-execution send queue so the approval gate
+            // always appears AFTER the tool-details message from step:tools-chosen
+            const enqueue = this.conversationSendQueue.get(data.conversationId)
+            if (enqueue) {
+                enqueue(sendHITL)
+            } else {
+                sendHITL()
+            }
         })
     }
 

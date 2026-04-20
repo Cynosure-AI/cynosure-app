@@ -62,6 +62,8 @@ export class TelegramChannel implements ChannelProvider {
     private conversationToChat = new Map<string, number>()
     /** Per-chat message lock to prevent concurrent processing races */
     private chatLocks = new Map<number, Promise<void>>()
+    /** Per-conversation send queue for ordering HITL messages after tool details */
+    private conversationSendQueue = new Map<string, (fn: () => Promise<void>) => void>()
     /** EventBus unsubscribe for hitl:request */
     private hitlUnsub?: () => void
 
@@ -360,6 +362,8 @@ export class TelegramChannel implements ChannelProvider {
         const enqueueSend = (fn: () => Promise<void>): void => {
             sendChain = sendChain.then(fn, fn)
         }
+        // Register so subscribeToHITL can route approval messages through the same queue
+        this.conversationSendQueue.set(conversationId, enqueueSend)
 
         if (thinkingMsgId) {
             // Live thinking updates → edit the thinking message periodically
@@ -472,6 +476,9 @@ export class TelegramChannel implements ChannelProvider {
             // Prevent any pending content-edit timers from firing after we send the final response
             executionFinished = true
             if (contentEditTimer) { clearTimeout(contentEditTimer); contentEditTimer = null }
+
+            // Clean up the per-conversation send queue
+            this.conversationSendQueue.delete(conversationId)
 
             // Wait for all queued tool-result messages to finish sending
             // before sending the final response — ensures correct ordering
@@ -651,17 +658,18 @@ export class TelegramChannel implements ChannelProvider {
                 ]]
             }
 
-            fetch(`${TELEGRAM_API}/bot${this.botToken}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: chatId,
-                    text,
-                    parse_mode: 'Markdown',
-                    reply_markup: keyboard
-                })
-            })
-                .then(async (res) => {
+            const sendHITL = async (): Promise<void> => {
+                try {
+                    const res = await fetch(`${TELEGRAM_API}/bot${this.botToken}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: chatId,
+                            text,
+                            parse_mode: 'Markdown',
+                            reply_markup: keyboard
+                        })
+                    })
                     const body = await res.json() as { ok: boolean; result?: { message_id: number } }
                     if (body.ok && body.result) {
                         this.pendingHITL.set(data.taskId, {
@@ -670,8 +678,17 @@ export class TelegramChannel implements ChannelProvider {
                             resolve: data.resolve
                         })
                     }
-                })
-                .catch(() => { })
+                } catch { /* ignore send failures */ }
+            }
+
+            // Route through the per-execution send queue so the approval gate
+            // always appears AFTER the tool-details message from step:tools-chosen
+            const enqueue = this.conversationSendQueue.get(data.conversationId)
+            if (enqueue) {
+                enqueue(sendHITL)
+            } else {
+                sendHITL()
+            }
         })
     }
 
