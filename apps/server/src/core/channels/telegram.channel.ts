@@ -225,11 +225,13 @@ export class TelegramChannel implements ChannelProvider {
         const chatId = msg.chat.id
         const text = msg.text || ''
 
-        // Handle /stop immediately — bypass the chat lock so it can
-        // cancel an in-flight execution without waiting for it to finish
-        if (text.startsWith('/stop')) {
-            await this.handleCommand(chatId, text)
-            return
+        // Handle slash commands immediately — bypass the chat lock so
+        // /stop, /new, agent switches etc. can execute without waiting
+        // for a running execution to finish
+        if (text.startsWith('/')) {
+            const handled = await this.handleCommand(chatId, text)
+            if (handled) return
+            // Unknown command → fall through to process as a regular message
         }
 
         // Serialize messages per chat to prevent race conditions

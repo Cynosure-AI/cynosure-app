@@ -165,11 +165,13 @@ export class SlackChannel implements ChannelProvider {
         const slackChannelId = msg.channel
         const text = (msg.text || '').trim()
 
-        // Handle !stop immediately — bypass the channel lock so it can
-        // cancel an in-flight execution without waiting for it to finish
-        if (text.startsWith('!stop')) {
-            await this.handleCommand(slackChannelId, text, client, msg.ts)
-            return
+        // Handle bang commands immediately — bypass the channel lock so
+        // !stop, !new, agent switches etc. can execute without waiting
+        // for a running execution to finish
+        if (text.startsWith('!')) {
+            const handled = await this.handleCommand(slackChannelId, text, client, msg.ts)
+            if (handled) return
+            // Unknown command → fall through to process as a regular message
         }
 
         const prev = this.channelLocks.get(slackChannelId) || Promise.resolve()

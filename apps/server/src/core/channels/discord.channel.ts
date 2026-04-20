@@ -161,11 +161,13 @@ export class DiscordChannel implements ChannelProvider {
         const discordChannelId = msg.channel.id
         const text = msg.content.trim()
 
-        // Handle !stop immediately — bypass the channel lock so it can
-        // cancel an in-flight execution without waiting for it to finish
-        if (text.startsWith('!stop')) {
-            await this.handleCommand(msg, text)
-            return
+        // Handle bang commands immediately — bypass the channel lock so
+        // !stop, !new, agent switches etc. can execute without waiting
+        // for a running execution to finish
+        if (text.startsWith('!')) {
+            const handled = await this.handleCommand(msg, text)
+            if (handled) return
+            // Unknown command → fall through to process as a regular message
         }
 
         // Serialize messages per channel
