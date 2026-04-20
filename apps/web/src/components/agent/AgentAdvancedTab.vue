@@ -17,7 +17,7 @@ watch(() => props.agent.maxContextTokens, (v) => {
 
 function onMaxCtxToggle(enabled: boolean) {
   if (enabled) {
-    const val = Number(maxCtxInput.value) || 32000
+    const val = Number(maxCtxInput.value) || 30720 // default to 30k if enabling without a value
     maxCtxInput.value = val
     emit('update', 'maxContextTokens', val)
   } else {
