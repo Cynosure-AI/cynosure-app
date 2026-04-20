@@ -9,6 +9,7 @@ import { api } from '../api/client'
 import { wsConnected } from '../api/http'
 import { Icon } from '@iconify/vue'
 import AgentCarousel from '../components/dashboard/AgentCarousel.vue'
+import BaseCard from '../components/shared/BaseCard.vue'
 
 const providerStore = useProviderStore()
 const agentDefs = useAgentDefinitionsStore()
@@ -140,9 +141,9 @@ function navigate(route: string) {
       </div>
 
       <!-- Initializing banner (server not yet ready) -->
-      <div
+      <BaseCard
         v-if="!wsConnected"
-        class="mb-8 rounded-xl border border-zinc-700 bg-zinc-800 p-6 flex flex-col items-center justify-center gap-3"
+        class="mb-8 p-6 flex flex-col items-center justify-center gap-3"
       >
         <Icon
           icon="lucide:loader-2"
@@ -154,7 +155,7 @@ function navigate(route: string) {
         <p class="text-xs text-zinc-500">
           Loading MCPs and preparing your workspace
         </p>
-      </div>
+      </BaseCard>
 
       <!-- Getting Started (shown when no providers or no agents) -->
       <div
@@ -164,7 +165,7 @@ function navigate(route: string) {
         <h2 class="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-3">
           Getting Started
         </h2>
-        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
+        <BaseCard class="p-5">
           <p class="text-sm text-zinc-300 mb-4">
             Welcome to Cynosure! Follow these steps to get up and running.
           </p>
@@ -218,7 +219,7 @@ function navigate(route: string) {
               />
             </li>
           </ol>
-        </div>
+        </BaseCard>
       </div>
 
       <!-- Agent Carousel -->
@@ -229,12 +230,12 @@ function navigate(route: string) {
         <h2 class="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-3">
           Your Agents
         </h2>
-        <div class="rounded-xl border border-zinc-700 bg-zinc-800 py-4 overflow-hidden">
+        <BaseCard class="py-4 overflow-hidden">
           <AgentCarousel
             :agents="carouselAgents"
             @select="startChat"
           />
-        </div>
+        </BaseCard>
       </div>
 
       <!-- Quick Actions -->
@@ -265,7 +266,7 @@ function navigate(route: string) {
         <h2 class="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-3">
           Recent Conversations
         </h2>
-        <div class="rounded-xl border border-zinc-700 bg-zinc-800 divide-y divide-zinc-700">
+        <BaseCard class="divide-y divide-zinc-700">
           <button
             v-for="convo in recentConvos"
             :key="convo.id"
@@ -308,7 +309,7 @@ function navigate(route: string) {
               class="w-3.5 h-3.5 text-zinc-700 group-hover:text-zinc-500 shrink-0 transition-colors"
             />
           </button>
-        </div>
+        </BaseCard>
       </div>
     </div>
   </div>

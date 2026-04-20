@@ -5,6 +5,7 @@ import { useWhisper } from '../../composables/useWhisper'
 import { Icon } from '@iconify/vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import CustomSelect from '../../components/shared/CustomSelect.vue'
+import BaseCard from '../../components/shared/BaseCard.vue'
 import type { SelectOptionGroup } from '../../components/shared/CustomSelect.vue'
 
 const prefs = usePreferencesStore()
@@ -154,7 +155,7 @@ function modelLabel(modelId: string): string {
 
       <div class="space-y-4">
         <!-- Enable/Disable -->
-        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
+        <BaseCard class="p-5">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
@@ -174,10 +175,10 @@ function modelLabel(modelId: string): string {
             </div>
             <ToggleSwitch v-model="prefs.whisperEnabled" />
           </div>
-        </div>
+        </BaseCard>
 
         <!-- Model & Quantization -->
-        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4">
+        <BaseCard class="p-5 space-y-4">
           <div class="flex items-center gap-3">
             <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
@@ -232,10 +233,10 @@ function modelLabel(modelId: string): string {
               </span>
             </div>
           </div>
-        </div>
+        </BaseCard>
 
         <!-- Language -->
-        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4">
+        <BaseCard class="p-5 space-y-4">
           <div class="flex items-center gap-3">
             <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
@@ -258,10 +259,10 @@ function modelLabel(modelId: string): string {
             :groups="languageGroups"
             placeholder="Select language…"
           />
-        </div>
+        </BaseCard>
 
         <!-- Download & Cache -->
-        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4">
+        <BaseCard class="p-5 space-y-4">
           <div class="flex items-center gap-3">
             <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
@@ -407,10 +408,10 @@ function modelLabel(modelId: string): string {
               </span>
             </div>
           </div>
-        </div>
+        </BaseCard>
 
         <!-- How it works -->
-        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-3">
+        <BaseCard class="p-5 space-y-3">
           <div class="flex items-center gap-3">
             <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
@@ -440,7 +441,7 @@ function modelLabel(modelId: string): string {
               background thread so the UI stays responsive.
             </p>
           </div>
-        </div>
+        </BaseCard>
       </div>
     </div>
   </div>

@@ -4,6 +4,7 @@ import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import type { AgentDefinition, SubAgentAssignment } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
+import BaseCard from '../shared/BaseCard.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -242,9 +243,9 @@ function getAgentIcon(id: string): string | null {
     </div>
 
     <!-- Empty state -->
-    <div
+    <BaseCard
       v-else
-      class="rounded-xl border border-zinc-700 bg-zinc-800 p-8 text-center"
+      class="p-8 text-center"
     >
       <Icon
         icon="lucide:users"
@@ -256,10 +257,10 @@ function getAgentIcon(id: string): string | null {
       <p class="text-xs text-zinc-600 max-w-sm mx-auto">
         Add agents from your library and assign them codenames. The orchestrator will plan tasks and delegate to sub-agents automatically.
       </p>
-    </div>
+    </BaseCard>
 
     <!-- How it works -->
-    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
+    <BaseCard class="p-5">
       <h3 class="text-sm font-medium text-zinc-300 mb-2 flex items-center gap-2">
         <Icon
           icon="lucide:info"
@@ -274,7 +275,7 @@ function getAgentIcon(id: string): string | null {
         <li>If a sub-agent encounters an obstacle, it <strong class="text-zinc-400">escalates</strong> back to the orchestrator</li>
         <li>Once all steps are complete, the orchestrator synthesizes the final result</li>
       </ol>
-    </div>
+    </BaseCard>
 
     <!-- Add Sub-Agent Dialog -->
     <Teleport to="body">

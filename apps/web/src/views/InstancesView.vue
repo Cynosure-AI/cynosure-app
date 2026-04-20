@@ -7,6 +7,7 @@ import { useChatStore } from '../stores/chat.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'
 import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
+import BaseCard from '../components/shared/BaseCard.vue'
 
 const router = useRouter()
 const chatStore = useChatStore()
@@ -191,9 +192,9 @@ onUnmounted(() => {
       <!-- ═══════════════ Running Tab ═══════════════ -->
       <template v-if="activeTab === 'running'">
         <!-- Loading -->
-        <div
+        <BaseCard
           v-if="loading"
-          class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
+          class="p-12 text-center"
         >
           <Icon
             icon="lucide:loader-2"
@@ -202,12 +203,12 @@ onUnmounted(() => {
           <p class="text-sm text-zinc-500">
             Loading instances…
           </p>
-        </div>
+        </BaseCard>
 
         <!-- Empty state -->
-        <div
+        <BaseCard
           v-else-if="instances.length === 0"
-          class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
+          class="p-12 text-center"
         >
           <div class="w-16 h-16 rounded-2xl bg-zinc-800 flex items-center justify-center mx-auto mb-4">
             <Icon
@@ -222,7 +223,7 @@ onUnmounted(() => {
             Instances appear here when agents have active cron jobs or other triggers.
             Configure a cron schedule on an agent to get started.
           </p>
-        </div>
+        </BaseCard>
 
         <!-- Instance list -->
         <div
@@ -325,9 +326,9 @@ onUnmounted(() => {
       <!-- ═══════════════ History Tab ═══════════════ -->
       <template v-else>
         <!-- Loading -->
-        <div
+        <BaseCard
           v-if="historyLoading && historyItems.length === 0"
-          class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
+          class="p-12 text-center"
         >
           <Icon
             icon="lucide:loader-2"
@@ -336,12 +337,12 @@ onUnmounted(() => {
           <p class="text-sm text-zinc-500">
             Loading history…
           </p>
-        </div>
+        </BaseCard>
 
         <!-- Empty state -->
-        <div
+        <BaseCard
           v-else-if="historyItems.length === 0"
-          class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
+          class="p-12 text-center"
         >
           <div class="w-16 h-16 rounded-2xl bg-zinc-800 flex items-center justify-center mx-auto mb-4">
             <Icon
@@ -355,7 +356,7 @@ onUnmounted(() => {
           <p class="text-sm text-zinc-500 max-w-md mx-auto">
             Past conversations will appear here once you start chatting.
           </p>
-        </div>
+        </BaseCard>
 
         <!-- History list -->
         <template v-else>

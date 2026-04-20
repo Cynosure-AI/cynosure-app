@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AgentDefinition } from '../../api/types'
 import { Icon } from '@iconify/vue'
+import BaseCard from '../shared/BaseCard.vue'
 
 defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -9,7 +10,7 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 <template>
   <div class="space-y-5">
     <!-- Cron Prompt -->
-    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
+    <BaseCard class="p-5">
       <div class="flex items-center gap-2 mb-1">
         <Icon
           icon="lucide:file-clock"
@@ -31,7 +32,7 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
         class="w-full px-3 py-2 bg-zinc-900 border border-zinc-600 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none h-48 font-mono"
         @change="emit('update', 'cronPrompt', ($event.target as HTMLTextAreaElement).value)"
       />
-    </div>
+    </BaseCard>
 
     <!-- Info -->
     <div class="rounded-xl border border-zinc-700/50 bg-zinc-800/30 p-4">
