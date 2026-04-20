@@ -162,6 +162,14 @@ export class SlackChannel implements ChannelProvider {
         client: WebClient
     ): Promise<void> {
         const slackChannelId = msg.channel
+        const text = (msg.text || '').trim()
+
+        // Handle !stop immediately — bypass the channel lock so it can
+        // cancel an in-flight execution without waiting for it to finish
+        if (text.startsWith('!stop')) {
+            await this.handleCommand(slackChannelId, text, client, msg.ts)
+            return
+        }
 
         const prev = this.channelLocks.get(slackChannelId) || Promise.resolve()
         let unlock: () => void

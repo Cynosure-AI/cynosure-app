@@ -222,6 +222,14 @@ export class TelegramChannel implements ChannelProvider {
     private async handleMessage(update: TelegramUpdate): Promise<void> {
         const msg = update.message!
         const chatId = msg.chat.id
+        const text = msg.text || ''
+
+        // Handle /stop immediately — bypass the chat lock so it can
+        // cancel an in-flight execution without waiting for it to finish
+        if (text.startsWith('/stop')) {
+            await this.handleCommand(chatId, text)
+            return
+        }
 
         // Serialize messages per chat to prevent race conditions
         const prev = this.chatLocks.get(chatId) || Promise.resolve()
