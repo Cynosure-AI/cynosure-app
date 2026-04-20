@@ -154,10 +154,10 @@ function modelLabel(modelId: string): string {
 
       <div class="space-y-4">
         <!-- Enable/Disable -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+              <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
                 <Icon
                   icon="lucide:mic"
                   class="w-5 h-5 text-zinc-400"
@@ -177,9 +177,9 @@ function modelLabel(modelId: string): string {
         </div>
 
         <!-- Model & Quantization -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4">
           <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
                 icon="lucide:brain-circuit"
                 class="w-5 h-5 text-zinc-400"
@@ -235,9 +235,9 @@ function modelLabel(modelId: string): string {
         </div>
 
         <!-- Language -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4">
           <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
                 icon="lucide:languages"
                 class="w-5 h-5 text-zinc-400"
@@ -261,9 +261,9 @@ function modelLabel(modelId: string): string {
         </div>
 
         <!-- Download & Cache -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4">
           <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
                 icon="lucide:download"
                 class="w-5 h-5 text-zinc-400"
@@ -379,7 +379,7 @@ function modelLabel(modelId: string): string {
           <!-- Cached models list -->
           <div
             v-if="downloadedModels.length > 0"
-            class="border-t border-zinc-800 pt-4 space-y-2"
+            class="border-t border-zinc-700 pt-4 space-y-2"
           >
             <h4 class="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
               Cached Models
@@ -410,9 +410,9 @@ function modelLabel(modelId: string): string {
         </div>
 
         <!-- How it works -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-3">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-3">
           <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
                 icon="lucide:help-circle"
                 class="w-5 h-5 text-zinc-400"

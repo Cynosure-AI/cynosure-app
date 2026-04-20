@@ -164,7 +164,7 @@ async function doReset(): Promise<void> {
             v-for="(meta, key) in moduleLabels"
             :key="key"
             class="flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer"
-            :class="exportModules[key as keyof typeof exportModules] ? 'border-blue-500/40 bg-blue-500/5' : 'border-zinc-700 bg-zinc-900/50 hover:border-zinc-600'"
+            :class="exportModules[key as keyof typeof exportModules] ? 'border-blue-500/40 bg-blue-500/5' : 'border-zinc-700 bg-zinc-900 hover:border-zinc-600'"
           >
             <input
               v-model="exportModules[key as keyof typeof exportModules]"
@@ -280,7 +280,7 @@ async function doReset(): Promise<void> {
               v-for="(info, key) in previewData.modules"
               :key="key"
               class="flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer"
-              :class="importModules[key] ? 'border-green-500/40 bg-green-500/5' : 'border-zinc-700 bg-zinc-900/50 hover:border-zinc-600'"
+              :class="importModules[key] ? 'border-green-500/40 bg-green-500/5' : 'border-zinc-700 bg-zinc-900 hover:border-zinc-600'"
             >
               <input
                 v-model="importModules[key]"
@@ -341,7 +341,7 @@ async function doReset(): Promise<void> {
             <div
               v-for="(res, key) in importResults"
               :key="key"
-              class="flex items-center gap-3 p-3 rounded-lg bg-zinc-900/50 border border-zinc-700"
+              class="flex items-center gap-3 p-3 rounded-lg bg-zinc-900 border border-zinc-700"
             >
               <Icon
                 :icon="moduleLabels[key]?.icon || 'lucide:package'"

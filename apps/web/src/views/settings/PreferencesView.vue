@@ -79,9 +79,9 @@ watch(() => prefs.titleProviderId, (id, oldId) => {
 
       <div class="space-y-4">
         <!-- Theme -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4">
           <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
                 icon="lucide:palette"
                 class="w-5 h-5 text-zinc-400"
@@ -160,10 +160,10 @@ watch(() => prefs.titleProviderId, (id, oldId) => {
         </div>
 
         <!-- Auto-expand Thinking -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+              <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
                 <Icon
                   icon="lucide:list-tree"
                   class="w-5 h-5 text-zinc-400"
@@ -183,10 +183,10 @@ watch(() => prefs.titleProviderId, (id, oldId) => {
         </div>
 
         <!-- Auto-expand Tool Calls -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+              <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
                 <Icon
                   icon="lucide:terminal"
                   class="w-5 h-5 text-zinc-400"
@@ -206,10 +206,10 @@ watch(() => prefs.titleProviderId, (id, oldId) => {
         </div>
 
         <!-- Generate Chat Titles -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+              <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
                 <Icon
                   icon="lucide:heading"
                   class="w-5 h-5 text-zinc-400"
@@ -229,7 +229,7 @@ watch(() => prefs.titleProviderId, (id, oldId) => {
 
           <div
             v-if="prefs.generateTitle"
-            class="grid grid-cols-2 gap-3 pt-1 border-t border-zinc-800"
+            class="grid grid-cols-2 gap-3 pt-1 border-t border-zinc-700"
           >
             <div>
               <label class="block text-xs text-zinc-400 mb-1.5">Provider</label>
@@ -254,9 +254,9 @@ watch(() => prefs.titleProviderId, (id, oldId) => {
         </div>
 
         <!-- Context Strategy -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-3">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-3">
           <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
                 icon="lucide:scissors"
                 class="w-5 h-5 text-zinc-400"
@@ -273,7 +273,7 @@ watch(() => prefs.titleProviderId, (id, oldId) => {
           </div>
           <select
             :value="prefs.contextStrategy"
-            class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
             @change="prefs.contextStrategy = ($event.target as HTMLSelectElement).value as ContextStrategy"
           >
             <option

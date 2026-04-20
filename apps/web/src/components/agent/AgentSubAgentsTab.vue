@@ -176,8 +176,8 @@ function getAgentIcon(id: string): string | null {
       <div
         v-for="sa in agent.subAgents"
         :key="sa.agentId"
-        class="rounded-xl border bg-zinc-900/50 p-4"
-        :class="agentDefs.get(sa.agentId) ? 'border-zinc-800' : 'border-amber-500/30'"
+        class="rounded-xl border bg-zinc-800/60 p-4"
+        :class="agentDefs.get(sa.agentId) ? 'border-zinc-700' : 'border-amber-500/30'"
       >
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center gap-3">
@@ -223,7 +223,7 @@ function getAgentIcon(id: string): string | null {
             <input
               :value="sa.codename"
               type="text"
-              class="w-full px-2.5 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-200 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-600 rounded-lg text-xs text-zinc-200 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
               @change="updateSubAgentCodename(sa.agentId, ($event.target as HTMLInputElement).value)"
             >
           </div>
@@ -233,7 +233,7 @@ function getAgentIcon(id: string): string | null {
               :value="sa.role"
               type="text"
               placeholder="What this agent specializes in"
-              class="w-full px-2.5 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-600 rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
               @change="updateSubAgentRole(sa.agentId, ($event.target as HTMLInputElement).value)"
             >
           </div>
@@ -244,7 +244,7 @@ function getAgentIcon(id: string): string | null {
     <!-- Empty state -->
     <div
       v-else
-      class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center"
+      class="rounded-xl border border-zinc-700 bg-zinc-800 p-8 text-center"
     >
       <Icon
         icon="lucide:users"
@@ -259,7 +259,7 @@ function getAgentIcon(id: string): string | null {
     </div>
 
     <!-- How it works -->
-    <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
       <h3 class="text-sm font-medium text-zinc-300 mb-2 flex items-center gap-2">
         <Icon
           icon="lucide:info"

@@ -127,8 +127,8 @@ function toggleNamespaceCollapse(namespaceId: string): void {
 </script>
 
 <template>
-  <div class="flex flex-col h-full rounded-xl border border-zinc-800 bg-zinc-900/50">
-    <div class="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 shrink-0">
+  <div class="flex flex-col h-full rounded-xl border border-zinc-700 bg-zinc-800">
+    <div class="flex items-center justify-between px-4 py-2.5 border-b border-zinc-700 shrink-0">
       <span class="text-[10px] text-zinc-500">
         {{ modelValue.length }}/{{ agentStore.availableTools.length }} enabled
       </span>

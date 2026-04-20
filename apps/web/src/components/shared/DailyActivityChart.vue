@@ -113,7 +113,7 @@ const gridLines = computed(() => {
 </script>
 
 <template>
-  <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 mb-6">
+  <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-4 mb-6">
     <h3 class="text-xs font-medium text-zinc-400 mb-3">
       Daily Activity
     </h3>

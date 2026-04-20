@@ -192,7 +192,7 @@ onUnmounted(() => {
       <!-- Loading -->
       <div
         v-if="loading"
-        class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center"
+        class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
       >
         <Icon
           icon="lucide:loader-2"
@@ -206,7 +206,7 @@ onUnmounted(() => {
       <!-- Empty state -->
       <div
         v-else-if="channels.length === 0"
-        class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center"
+        class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
       >
         <div class="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mx-auto mb-4">
           <Icon
@@ -240,8 +240,8 @@ onUnmounted(() => {
         <div
           v-for="ch in channels"
           :key="ch.id"
-          class="flex items-center gap-4 px-5 py-4 rounded-xl border bg-zinc-900/50 group"
-          :class="ch.enabled ? 'border-zinc-800' : 'border-zinc-800/50 opacity-60'"
+          class="flex items-center gap-4 px-5 py-4 rounded-xl border bg-zinc-800/60 group"
+          :class="ch.enabled ? 'border-zinc-700' : 'border-zinc-700/50 opacity-60'"
         >
           <!-- Channel type icon -->
           <div class="shrink-0">

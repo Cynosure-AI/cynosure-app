@@ -142,7 +142,7 @@ function navigate(route: string) {
       <!-- Initializing banner (server not yet ready) -->
       <div
         v-if="!wsConnected"
-        class="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 flex flex-col items-center justify-center gap-3"
+        class="mb-8 rounded-xl border border-zinc-700 bg-zinc-800 p-6 flex flex-col items-center justify-center gap-3"
       >
         <Icon
           icon="lucide:loader-2"
@@ -164,7 +164,7 @@ function navigate(route: string) {
         <h2 class="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-3">
           Getting Started
         </h2>
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
           <p class="text-sm text-zinc-300 mb-4">
             Welcome to Cynosure! Follow these steps to get up and running.
           </p>
@@ -229,7 +229,7 @@ function navigate(route: string) {
         <h2 class="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-3">
           Your Agents
         </h2>
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 py-4 overflow-hidden">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 py-4 overflow-hidden">
           <AgentCarousel
             :agents="carouselAgents"
             @select="startChat"
@@ -246,7 +246,7 @@ function navigate(route: string) {
           <button
             v-for="action in quickActions"
             :key="action.label"
-            class="flex items-center gap-3 p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/80 hover:border-zinc-700 transition-all text-left group"
+            class="flex items-center gap-3 p-4 rounded-xl border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-600 transition-all text-left group"
             @click="navigate(action.route)"
           >
             <Icon
@@ -265,7 +265,7 @@ function navigate(route: string) {
         <h2 class="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-3">
           Recent Conversations
         </h2>
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 divide-y divide-zinc-800">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 divide-y divide-zinc-700">
           <button
             v-for="convo in recentConvos"
             :key="convo.id"
