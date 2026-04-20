@@ -382,39 +382,21 @@ export class TelegramChannel implements ChannelProvider {
                 }
             }))
 
-            // Tool calls chosen → send thread reply with tool name + parameters
+            // Tool calls chosen → send compact tool name list (no parameters/results)
             unsubs.push(eventBus.on('step:tools-chosen', (...args: unknown[]) => {
                 const data = args[0] as { conversationId: string; iteration: number; toolCalls: { name: string; arguments: string }[]; maCodename?: string }
                 if (data.conversationId !== conversationId) return
                 const prefix = data.maCodename ? `🤖 [${data.maCodename}] ` : ''
-                const toolLines = data.toolCalls.map(tc => {
-                    let params = ''
-                    try {
-                        const parsed = JSON.parse(tc.arguments)
-                        params = Object.entries(parsed).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n')
-                    } catch { params = tc.arguments }
-                    return params
-                        ? `\`${tc.name}\`:\n\`\`\`\n${params}\n\`\`\``
-                        : `\`${tc.name}\``
-                })
-                const text = `${prefix}🔧 Round ${data.iteration}:\n${toolLines.join('\n')}`
+                const names = data.toolCalls.map(tc => `\`${tc.name}\``).join(', ')
+                const text = `${prefix}🔧 ${names}`
                 enqueueSend(() => this.sendReply(chatId, thinkingMsgId, text.slice(0, 4000)).catch(() => { }))
             }))
 
-            // Tool execution results → send thread reply with return text + images
+            // Tool execution results → only send images (omit text results for cleaner output)
             unsubs.push(eventBus.on('step:executed', (...args: unknown[]) => {
                 const data = args[0] as { conversationId: string; iteration: number; results: { name: string; success: boolean; output: string; imageDataUrls?: string[] }[]; maCodename?: string }
                 if (data.conversationId !== conversationId) return
-                const prefix = data.maCodename ? `🤖 [${data.maCodename}] ` : ''
-                const lines = data.results.map(r => {
-                    const icon = r.success ? '✅' : '❌'
-                    const preview = r.output.length > 200 ? r.output.slice(0, 200) + '…' : r.output
-                    return `${icon} \`${r.name}\`: ${preview}`
-                })
-                const text = `${prefix}${lines.join('\n')}`
                 enqueueSend(async () => {
-                    await this.sendReply(chatId, thinkingMsgId!, text.slice(0, 4000)).catch(() => { })
-                    // Send tool-result images
                     for (const r of data.results) {
                         if (r.imageDataUrls?.length) {
                             for (const dataUrl of r.imageDataUrls) {
@@ -438,6 +420,8 @@ export class TelegramChannel implements ChannelProvider {
         let accumulatedContent = ''
         let responseMsgId: number | null = null
         let contentEditQueued = false
+        let contentEditTimer: ReturnType<typeof setTimeout> | null = null
+        let executionFinished = false
         const CONTENT_EDIT_INTERVAL_MS = 1500
 
         unsubs.push(eventBus.on('step:content', (...args: unknown[]) => {
@@ -445,10 +429,12 @@ export class TelegramChannel implements ChannelProvider {
             if (data.conversationId !== conversationId) return
             accumulatedContent += data.content
 
-            if (!contentEditQueued) {
+            if (!contentEditQueued && !executionFinished) {
                 contentEditQueued = true
-                setTimeout(async () => {
+                contentEditTimer = setTimeout(async () => {
+                    contentEditTimer = null
                     contentEditQueued = false
+                    if (executionFinished) return
                     const MAX_LEN = 4000
                     const display = accumulatedContent.length > MAX_LEN
                         ? accumulatedContent.slice(0, MAX_LEN) + '…'
@@ -464,6 +450,10 @@ export class TelegramChannel implements ChannelProvider {
 
         try {
             const result = await executor.run(messages)
+
+            // Prevent any pending content-edit timers from firing after we send the final response
+            executionFinished = true
+            if (contentEditTimer) { clearTimeout(contentEditTimer); contentEditTimer = null }
 
             // Wait for all queued tool-result messages to finish sending
             // before sending the final response — ensures correct ordering
