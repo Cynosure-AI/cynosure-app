@@ -626,6 +626,10 @@ export class TelegramChannel implements ChannelProvider {
             this.cancelExecutionsForChat(chatId)
             const prevAgentId = this.chatAgentOverride.get(chatId) || this.agentId
             this.archiveConversation(chatId, prevAgentId)
+            // Also archive any existing conversation for the target agent so we always start fresh
+            if (matchedAgent.id !== prevAgentId) {
+                this.archiveConversation(chatId, matchedAgent.id)
+            }
             this.chatAgentOverride.set(chatId, matchedAgent.id)
             await this.sendMessage(chatId, `🔀 Switched to *${matchedAgent.name}*. Starting a fresh conversation.\n\nUse /start to switch back to the default agent.`)
             return true
