@@ -96,6 +96,7 @@ export const useChatStore = defineStore('chat', () => {
     })
     activeConversationId.value = conv.id
     messages.value = []
+    agentStore.setActiveViewConversation(conv.id)
     agentStore.clearExecution()
     return conv.id
   }
@@ -113,6 +114,7 @@ export const useChatStore = defineStore('chat', () => {
 
   async function selectConversation(id: string): Promise<void> {
     activeConversationId.value = id
+    agentStore.setActiveViewConversation(id)
     loadingMessages.value = true
     try {
       const response = await api.chat.getMessages(id)
@@ -326,6 +328,7 @@ export const useChatStore = defineStore('chat', () => {
 
     activeConversationId.value = null
     messages.value = []
+    agentStore.setActiveViewConversation(null)
     streaming.streamingContent.value = ''
     streaming.streamingThinking.value = ''
     streaming.isStreaming.value = false
@@ -343,6 +346,7 @@ export const useChatStore = defineStore('chat', () => {
       await selectConversation(pinned[0].id)
     } else {
       activeConversationId.value = null
+      agentStore.setActiveViewConversation(null)
       messages.value = []
     }
     streaming.streamingContent.value = ''

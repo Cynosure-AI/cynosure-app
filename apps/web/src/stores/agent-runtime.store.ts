@@ -63,6 +63,8 @@ export const useAgentStore = defineStore('agent', () => {
 
   // Per-conversation execution state for background support
   const executionConversationId = ref<string | null>(null)
+  /** The conversation the user is currently viewing — used to filter live events. */
+  const activeViewConversationId = ref<string | null>(null)
   const stepsPerConversation = new Map<string, ExecutionStep[]>()
   const eventsPerConversation = new Map<string, EventLogEntry[]>()
 
@@ -161,17 +163,24 @@ export const useAgentStore = defineStore('agent', () => {
     const taskId = eventData.taskId as string | undefined
     const convId = eventData.conversationId as string | undefined
 
-    // Log events
-    eventLog.value.push({
-      timestamp: Date.now(),
-      event: data.event,
-      data: eventData
-    })
-    if (eventLog.value.length > 200) {
-      eventLog.value = eventLog.value.slice(-200)
+    // Determine if this event belongs to the conversation the user is currently viewing.
+    // Events for other conversations are cached but NOT applied to the visible executionSteps.
+    const viewingConvId = activeViewConversationId.value
+    const isForActiveView = !convId || !viewingConvId || convId === viewingConvId
+
+    // Log events globally only for the active view
+    if (isForActiveView) {
+      eventLog.value.push({
+        timestamp: Date.now(),
+        event: data.event,
+        data: eventData
+      })
+      if (eventLog.value.length > 200) {
+        eventLog.value = eventLog.value.slice(-200)
+      }
     }
 
-    // Also log to per-conversation events
+    // Always log to per-conversation events (for background caching)
     if (convId) {
       if (!eventsPerConversation.has(convId)) eventsPerConversation.set(convId, [])
       eventsPerConversation.get(convId)!.push({
@@ -185,8 +194,10 @@ export const useAgentStore = defineStore('agent', () => {
       case 'task:started':
         // Sub-agent task:started should NOT reset overall execution state
         if (eventData.maCodename) break
-        isExecuting.value = true
-        activeTaskId.value = taskId || null
+        if (isForActiveView) {
+          isExecuting.value = true
+          activeTaskId.value = taskId || null
+        }
         if (convId) {
           executionConversationId.value = convId
         }
@@ -198,33 +209,56 @@ export const useAgentStore = defineStore('agent', () => {
       case 'task:error':
         // Sub-agent completion doesn't stop overall execution
         if (eventData.maCodename) break
-        isExecuting.value = false
-        activeTaskId.value = null
+        if (isForActiveView) {
+          isExecuting.value = false
+          activeTaskId.value = null
+        }
         if (convId || executionConversationId.value) {
           const cid = convId || executionConversationId.value!
-          stepsPerConversation.set(cid, [...executionSteps.value])
+          if (isForActiveView) {
+            stepsPerConversation.set(cid, [...executionSteps.value])
+          }
           pruneConversationCache()
         }
         break
 
       case 'step:status':
-        executionSteps.value.push({
-          iteration: eventData.iteration as number,
-          status: eventData.status as string,
-          message: eventData.message as string,
-          timestamp: Date.now(),
-          taskId: taskId || undefined,
-          maCodename: (eventData.maCodename as string) || undefined,
-          maAgentName: (eventData.maAgentName as string) || undefined,
-        })
+        if (isForActiveView) {
+          executionSteps.value.push({
+            iteration: eventData.iteration as number,
+            status: eventData.status as string,
+            message: eventData.message as string,
+            timestamp: Date.now(),
+            taskId: taskId || undefined,
+            maCodename: (eventData.maCodename as string) || undefined,
+            maAgentName: (eventData.maAgentName as string) || undefined,
+          })
+        }
         if (convId || executionConversationId.value) {
           const cid = convId || executionConversationId.value!
-          stepsPerConversation.set(cid, [...executionSteps.value])
+          if (isForActiveView) {
+            stepsPerConversation.set(cid, [...executionSteps.value])
+          } else {
+            // Cache step for a background conversation
+            const bgSteps = stepsPerConversation.get(cid) || []
+            bgSteps.push({
+              iteration: eventData.iteration as number,
+              status: eventData.status as string,
+              message: eventData.message as string,
+              timestamp: Date.now(),
+              taskId: taskId || undefined,
+              maCodename: (eventData.maCodename as string) || undefined,
+              maAgentName: (eventData.maAgentName as string) || undefined,
+            })
+            stepsPerConversation.set(cid, bgSteps)
+          }
         }
         break
 
       case 'step:choosing-chunk':
-        appendToLastStepByTask(taskId, 'streamingChoosing', eventData.chunk as string)
+        if (isForActiveView) {
+          appendToLastStepByTask(taskId, 'streamingChoosing', eventData.chunk as string)
+        }
         break
 
       case 'step:tools-chosen': {
@@ -237,18 +271,24 @@ export const useAgentStore = defineStore('agent', () => {
           name: tc.function?.name || tc.name || '',
           arguments: tc.function?.arguments || tc.arguments || ''
         }))
-        updateLastStepByTask(taskId, { toolCalls: mapped })
+        if (isForActiveView) {
+          updateLastStepByTask(taskId, { toolCalls: mapped })
+        }
         break
       }
 
       case 'step:executed':
-        updateLastStepByTask(taskId, {
-          results: eventData.results as ExecutionStep['results']
-        })
+        if (isForActiveView) {
+          updateLastStepByTask(taskId, {
+            results: eventData.results as ExecutionStep['results']
+          })
+        }
         break
 
       case 'step:hitl-denied':
-        updateLastStepByTask(taskId, { status: 'denied' })
+        if (isForActiveView) {
+          updateLastStepByTask(taskId, { status: 'denied' })
+        }
         break
 
     }
@@ -281,6 +321,12 @@ export const useAgentStore = defineStore('agent', () => {
     activeTaskId.value = null
     pendingHITL.value = null
     executionConversationId.value = null
+  }
+
+  /** Set which conversation the user is currently viewing.
+   * Execution events for other conversations will be cached but not shown. */
+  function setActiveViewConversation(conversationId: string | null): void {
+    activeViewConversationId.value = conversationId
   }
 
   /** Reset execution control state without wiping accumulated step history.
@@ -378,6 +424,7 @@ export const useAgentStore = defineStore('agent', () => {
     clearExecution,
     clearExecutionState,
     restoreForConversation,
+    setActiveViewConversation,
   }
 })
 

@@ -163,7 +163,7 @@ export class TelegramChannel implements ChannelProvider {
             { command: 'new', description: 'Start a fresh conversation with the current agent' }
         ]
         for (const agent of agents) {
-            const cmd = agent.codename.replace(/[^a-z0-9_]/g, '_').slice(0, 32)
+            const cmd = agent.codename.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 32)
             if (cmd) {
                 commands.push({ command: cmd, description: `Switch to ${agent.name}` })
             }
@@ -343,6 +343,13 @@ export class TelegramChannel implements ChannelProvider {
         let thinkingEditQueued = false
         const THINKING_EDIT_INTERVAL_MS = 2000
 
+        // ── Message send queue: ensures all Telegram messages for this execution
+        //    are sent in order, preventing tool results from appearing after the final response ──
+        let sendChain = Promise.resolve()
+        const enqueueSend = (fn: () => Promise<void>): void => {
+            sendChain = sendChain.then(fn, fn)
+        }
+
         if (thinkingMsgId) {
             // Live thinking updates → edit the thinking message periodically
             unsubs.push(eventBus.on('step:thinking', (...args: unknown[]) => {
@@ -380,7 +387,7 @@ export class TelegramChannel implements ChannelProvider {
                         : `\`${tc.name}\``
                 })
                 const text = `${prefix}🔧 Round ${data.iteration}:\n${toolLines.join('\n')}`
-                this.sendReply(chatId, thinkingMsgId, text.slice(0, 4000)).catch(() => { })
+                enqueueSend(() => this.sendReply(chatId, thinkingMsgId, text.slice(0, 4000)).catch(() => { }))
             }))
 
             // Tool execution results → send thread reply with return text + images
@@ -394,19 +401,19 @@ export class TelegramChannel implements ChannelProvider {
                     return `${icon} \`${r.name}\`: ${preview}`
                 })
                 const text = `${prefix}${lines.join('\n')}`
-                    ; (async () => {
-                        await this.sendReply(chatId, thinkingMsgId!, text.slice(0, 4000)).catch(() => { })
-                        // Send tool-result images
-                        for (const r of data.results) {
-                            if (r.imageDataUrls?.length) {
-                                for (const dataUrl of r.imageDataUrls) {
-                                    await this.sendPhoto(chatId, dataUrl, thinkingMsgId!).catch(e =>
-                                        console.warn('[Telegram] Failed to send tool image:', (e as Error).message)
-                                    )
-                                }
+                enqueueSend(async () => {
+                    await this.sendReply(chatId, thinkingMsgId!, text.slice(0, 4000)).catch(() => { })
+                    // Send tool-result images
+                    for (const r of data.results) {
+                        if (r.imageDataUrls?.length) {
+                            for (const dataUrl of r.imageDataUrls) {
+                                await this.sendPhoto(chatId, dataUrl, thinkingMsgId!).catch(e =>
+                                    console.warn('[Telegram] Failed to send tool image:', (e as Error).message)
+                                )
                             }
                         }
-                    })()
+                    }
+                })
             }))
 
             // Keep sending typing indicator during execution
@@ -446,6 +453,10 @@ export class TelegramChannel implements ChannelProvider {
 
         try {
             const result = await executor.run(messages)
+
+            // Wait for all queued tool-result messages to finish sending
+            // before sending the final response — ensures correct ordering
+            await sendChain
 
             // Save assistant message
             const assistantMsgId = nanoid()
@@ -537,6 +548,8 @@ export class TelegramChannel implements ChannelProvider {
         }
 
         if (command === 'new') {
+            // Cancel any active executions for this chat before archiving
+            this.cancelExecutionsForChat(chatId)
             // Archive current conversation, start a fresh one with the same agent
             const effectiveAgentId = this.chatAgentOverride.get(chatId) || this.agentId
             this.archiveConversation(chatId, effectiveAgentId)
@@ -546,6 +559,8 @@ export class TelegramChannel implements ChannelProvider {
         }
 
         if (command === 'start') {
+            // Cancel any active executions for this chat before archiving
+            this.cancelExecutionsForChat(chatId)
             // Reset to the default channel agent — archive old conversation, start fresh
             const prevAgentId = this.chatAgentOverride.get(chatId) || this.agentId
             this.chatAgentOverride.delete(chatId)
@@ -559,12 +574,14 @@ export class TelegramChannel implements ChannelProvider {
         const agents = listAgents()
         const normalizedCmd = command.replace(/_/g, '-')
         const matchedAgent = agents.find(a => {
-            const agentCmd = a.codename.replace(/[^a-z0-9-]/g, '').replace(/-/g, '_')
-            return agentCmd === command || a.codename === normalizedCmd
+            const lc = a.codename.toLowerCase()
+            const agentCmd = lc.replace(/[^a-z0-9_]/g, '_')
+            return agentCmd === command || lc === normalizedCmd || lc === command
         })
 
         if (matchedAgent) {
-            // Archive the current conversation before switching
+            // Cancel any active executions and archive the current conversation before switching
+            this.cancelExecutionsForChat(chatId)
             const prevAgentId = this.chatAgentOverride.get(chatId) || this.agentId
             this.archiveConversation(chatId, prevAgentId)
             this.chatAgentOverride.set(chatId, matchedAgent.id)
@@ -703,6 +720,17 @@ export class TelegramChannel implements ChannelProvider {
             db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?')
                 .run(archivedTitle, Date.now(), existing.id)
             this.conversationToChat.delete(existing.id)
+        }
+    }
+
+    /** Cancel all active executions whose conversationId maps to the given Telegram chatId. */
+    private cancelExecutionsForChat(chatId: number): void {
+        for (const [id, entry] of this.activeExecutions) {
+            const execChatId = this.conversationToChat.get(entry.exec.conversationId)
+            if (execChatId === chatId) {
+                entry.controller.abort()
+                this.activeExecutions.delete(id)
+            }
         }
     }
 
