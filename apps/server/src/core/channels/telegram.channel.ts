@@ -13,6 +13,7 @@ const TELEGRAM_API = 'https://api.telegram.org'
 
 interface TelegramConfig {
     botToken: string
+    allowedAgentIds?: string[]
 }
 
 interface TelegramUpdate {
@@ -75,6 +76,8 @@ export class TelegramChannel implements ChannelProvider {
     private pendingAttachments = new Map<number, { imageDataUrls: string[]; audioDataUrls: string[] }>()
     /** EventBus unsubscribe for hitl:request */
     private hitlUnsub?: () => void
+    /** Optional whitelist of agent IDs exposed via commands. Empty = all agents. */
+    private allowedAgentIds: string[]
 
     constructor(
         channelId: string,
@@ -86,6 +89,15 @@ export class TelegramChannel implements ChannelProvider {
         this.agentId = agentId
         this.botToken = config.botToken
         this.broadcast = broadcast
+        this.allowedAgentIds = config.allowedAgentIds ?? []
+    }
+
+    /** Return the list of agents available for this channel (filtered by allowedAgentIds). */
+    private getAvailableAgents() {
+        const all = listAgents()
+        if (this.allowedAgentIds.length === 0) return all
+        const allowed = new Set(this.allowedAgentIds)
+        return all.filter(a => allowed.has(a.id))
     }
 
     async start(): Promise<void> {
@@ -169,7 +181,7 @@ export class TelegramChannel implements ChannelProvider {
 
     /** Register Telegram bot commands from the agent list for slash-command autocompletion. */
     private async registerBotCommands(): Promise<void> {
-        const agents = listAgents()
+        const agents = this.getAvailableAgents()
         const commands: { command: string; description: string }[] = [
             { command: 'stop', description: 'Cancel the currently running execution' },
             { command: 'new', description: 'Start a fresh conversation with the current agent' }
@@ -696,7 +708,7 @@ export class TelegramChannel implements ChannelProvider {
         }
 
         // Try to match an agent codename
-        const agents = listAgents()
+        const agents = this.getAvailableAgents()
         const normalizedCmd = command.replace(/_/g, '-')
         const matchedAgent = agents.find(a => {
             const lc = a.codename.toLowerCase()

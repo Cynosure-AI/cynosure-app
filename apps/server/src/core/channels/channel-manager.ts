@@ -123,21 +123,21 @@ class ChannelManager {
                 return new TelegramChannel(
                     channel.id,
                     channel.agentId,
-                    channel.config as { botToken: string },
+                    channel.config as { botToken: string; allowedAgentIds?: string[] },
                     this.broadcast
                 )
             case 'discord':
                 return new DiscordChannel(
                     channel.id,
                     channel.agentId,
-                    channel.config as { botToken: string },
+                    channel.config as { botToken: string; allowedAgentIds?: string[] },
                     this.broadcast
                 )
             case 'slack':
                 return new SlackChannel(
                     channel.id,
                     channel.agentId,
-                    channel.config as { botToken: string; appToken: string },
+                    channel.config as { botToken: string; appToken: string; allowedAgentIds?: string[] },
                     this.broadcast
                 )
             default:
