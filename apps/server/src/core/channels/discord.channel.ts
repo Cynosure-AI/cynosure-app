@@ -315,20 +315,37 @@ export class DiscordChannel implements ChannelProvider {
                 }
             }))
 
-            // Tool calls chosen → compact tool name list
+            // Tool calls chosen → tool names with arguments
             unsubs.push(eventBus.on('step:tools-chosen', (...args: unknown[]) => {
                 const data = args[0] as { conversationId: string; iteration: number; toolCalls: { name: string; arguments: string }[] }
                 if (data.conversationId !== conversationId) return
-                const names = data.toolCalls.map(tc => `\`${tc.name}\``).join(', ')
-                const text = `🔧 ${names}`
+                const toolLines = data.toolCalls.map(tc => {
+                    let params = ''
+                    try {
+                        const parsed = JSON.parse(tc.arguments)
+                        params = Object.entries(parsed).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n')
+                    } catch { params = tc.arguments }
+                    return params
+                        ? `\`${tc.name}\`:\n\`\`\`\n${params}\n\`\`\``
+                        : `\`${tc.name}\``
+                })
+                const text = `🔧 ${toolLines.join('\n')}`
                 enqueueSend(() => thinkingMsg!.reply(text.slice(0, 2000)).catch(() => { }) as Promise<any>)
             }))
 
-            // Tool execution results → only send images (omit text results)
+            // Tool execution results → only show failures and images
             unsubs.push(eventBus.on('step:executed', (...args: unknown[]) => {
                 const data = args[0] as { conversationId: string; iteration: number; results: { name: string; success: boolean; output: string; imageDataUrls?: string[] }[] }
                 if (data.conversationId !== conversationId) return
+                const failures = data.results.filter(r => !r.success)
                 enqueueSend(async () => {
+                    if (failures.length) {
+                        const lines = failures.map(r => {
+                            const preview = r.output.length > 150 ? r.output.slice(0, 150) + '…' : r.output
+                            return `❌ \`${r.name}\`: ${preview}`
+                        })
+                        await thinkingMsg!.reply(lines.join('\n').slice(0, 2000)).catch(() => { })
+                    }
                     for (const r of data.results) {
                         if (r.imageDataUrls?.length && 'send' in discordChannel) {
                             const files = r.imageDataUrls.map((dataUrl, i) => {

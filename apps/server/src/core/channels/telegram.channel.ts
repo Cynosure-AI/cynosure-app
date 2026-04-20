@@ -382,21 +382,39 @@ export class TelegramChannel implements ChannelProvider {
                 }
             }))
 
-            // Tool calls chosen → send compact tool name list (no parameters/results)
+            // Tool calls chosen → tool names with arguments
             unsubs.push(eventBus.on('step:tools-chosen', (...args: unknown[]) => {
                 const data = args[0] as { conversationId: string; iteration: number; toolCalls: { name: string; arguments: string }[]; maCodename?: string }
                 if (data.conversationId !== conversationId) return
-                const prefix = data.maCodename ? `🤖 [${data.maCodename}] ` : ''
-                const names = data.toolCalls.map(tc => `\`${tc.name}\``).join(', ')
-                const text = `${prefix}🔧 ${names}`
+                const prefix = data.maCodename ? `🤖 *[${data.maCodename}]* ` : ''
+                const toolLines = data.toolCalls.map(tc => {
+                    let params = ''
+                    try {
+                        const parsed = JSON.parse(tc.arguments)
+                        params = Object.entries(parsed).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n')
+                    } catch { params = tc.arguments }
+                    return params
+                        ? `\`${tc.name}\`:\n\`\`\`\n${params}\n\`\`\``
+                        : `\`${tc.name}\``
+                })
+                const text = `${prefix}🔧 ${toolLines.join('\n')}`
                 enqueueSend(() => this.sendReply(chatId, thinkingMsgId, text.slice(0, 4000)).catch(() => { }))
             }))
 
-            // Tool execution results → only send images (omit text results for cleaner output)
+            // Tool execution results → only show failures and images
             unsubs.push(eventBus.on('step:executed', (...args: unknown[]) => {
                 const data = args[0] as { conversationId: string; iteration: number; results: { name: string; success: boolean; output: string; imageDataUrls?: string[] }[]; maCodename?: string }
                 if (data.conversationId !== conversationId) return
+                const prefix = data.maCodename ? `🤖 *[${data.maCodename}]* ` : ''
+                const failures = data.results.filter(r => !r.success)
                 enqueueSend(async () => {
+                    if (failures.length) {
+                        const lines = failures.map(r => {
+                            const preview = r.output.length > 200 ? r.output.slice(0, 200) + '…' : r.output
+                            return `❌ \`${r.name}\`: ${preview}`
+                        })
+                        await this.sendReply(chatId, thinkingMsgId!, `${prefix}${lines.join('\n')}`.slice(0, 4000)).catch(() => { })
+                    }
                     for (const r of data.results) {
                         if (r.imageDataUrls?.length) {
                             for (const dataUrl of r.imageDataUrls) {
