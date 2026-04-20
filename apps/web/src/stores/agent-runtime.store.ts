@@ -273,6 +273,13 @@ export const useAgentStore = defineStore('agent', () => {
         }))
         if (isForActiveView) {
           updateLastStepByTask(taskId, { toolCalls: mapped })
+        } else if (convId) {
+          // Cache for background conversations so tool pills render when the user switches to them
+          const bgSteps = stepsPerConversation.get(convId)
+          if (bgSteps?.length) {
+            const step = findLastStepInArray(bgSteps, taskId)
+            if (step) step.toolCalls = mapped
+          }
         }
         break
       }
@@ -282,16 +289,36 @@ export const useAgentStore = defineStore('agent', () => {
           updateLastStepByTask(taskId, {
             results: eventData.results as ExecutionStep['results']
           })
+        } else if (convId) {
+          const bgSteps = stepsPerConversation.get(convId)
+          if (bgSteps?.length) {
+            const step = findLastStepInArray(bgSteps, taskId)
+            if (step) step.results = eventData.results as ExecutionStep['results']
+          }
         }
         break
 
       case 'step:hitl-denied':
         if (isForActiveView) {
           updateLastStepByTask(taskId, { status: 'denied' })
+        } else if (convId) {
+          const bgSteps = stepsPerConversation.get(convId)
+          if (bgSteps?.length) {
+            const step = findLastStepInArray(bgSteps, taskId)
+            if (step) step.status = 'denied'
+          }
         }
         break
 
     }
+  }
+
+  /** Find the last step matching a taskId in an arbitrary steps array (for background caching). */
+  function findLastStepInArray(steps: ExecutionStep[], taskId: string | undefined): ExecutionStep | undefined {
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (taskId ? steps[i].taskId === taskId : !steps[i].taskId) return steps[i]
+    }
+    return steps.length ? steps[steps.length - 1] : undefined
   }
 
   /** Find the last step matching the given taskId (or last step with no taskId when taskId is undefined). */
