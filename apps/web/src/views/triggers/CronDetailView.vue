@@ -5,8 +5,9 @@ import { api } from '../../api/client'
 import type { AgentDefinition, CronJob } from '../../api/types'
 import { useProviderStore } from '../../stores/provider.store'
 import { Icon } from '@iconify/vue'
-import CustomSelect, { type SelectOptionGroup } from '../../components/shared/CustomSelect.vue'
-import { useProviderLogos } from '../../composables/useProviderLogos'
+import AgentSelect from '../../components/shared/AgentSelect.vue'
+import ProviderSelect from '../../components/shared/ProviderSelect.vue'
+import ModelSelect from '../../components/shared/ModelSelect.vue'
 import {
   parseCronExpr, buildCronExpr, cronToHuman,
   WEEKDAYS, HOUR_OPTIONS, MINUTE_OPTIONS, INTERVAL_MINUTES, FREQUENCY_OPTIONS,
@@ -17,7 +18,6 @@ import ToggleSwitch from '@/components/shared/ToggleSwitch.vue'
 const route = useRoute()
 const router = useRouter()
 const providerStore = useProviderStore()
-const { logoUrl } = useProviderLogos()
 
 const job = ref<CronJob | null>(null)
 const allAgents = ref<AgentDefinition[]>([])
@@ -172,35 +172,6 @@ watch(() => job.value, (j) => {
   }
 })
 
-// ─── CustomSelect groups ─────────────────────────────────
-
-const agentGroups = computed((): SelectOptionGroup[] => [{
-  options: allAgents.value.map(a => ({
-    value: a.id,
-    label: a.name,
-    imgSrc: a.iconUrl || undefined,
-    iconName: a.iconUrl ? undefined : 'lucide:bot',
-  }))
-}])
-
-const providerGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Agent default', iconName: 'lucide:settings' },
-    ...providerStore.providers.map(p => ({
-      value: p.id,
-      label: p.name,
-      imgSrc: logoUrl(p.type),
-    })),
-  ],
-}])
-
-const modelGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: effectiveDefaultModel.value ? `Default (${effectiveDefaultModel.value})` : 'Provider default', iconName: 'lucide:settings' },
-    ...cronModels.value.map(m => ({ value: m, label: m })),
-  ],
-}])
-
 onMounted(loadJob)
 watch(cronPrompt, resizePrompt, { immediate: true })
 </script>
@@ -294,11 +265,10 @@ watch(cronPrompt, resizePrompt, { immediate: true })
           <!-- Agent -->
           <div>
             <label class="block text-xs text-zinc-400 mb-1">Agent</label>
-            <CustomSelect
+            <AgentSelect
               v-model="cronAgentId"
-              :groups="agentGroups"
+              :agents="allAgents"
               placeholder="Select an agent…"
-              placeholder-icon="lucide:bot"
             />
           </div>
 
@@ -531,11 +501,12 @@ watch(cronPrompt, resizePrompt, { immediate: true })
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-xs text-zinc-400 mb-1">Provider override</label>
-              <CustomSelect
+              <ProviderSelect
                 :model-value="cronProviderOverride"
-                :groups="providerGroups"
+                :providers="providerStore.providers"
+                include-default
+                default-label="Agent default"
                 placeholder="Agent default"
-                placeholder-icon="lucide:settings"
                 @update:model-value="onProviderChange($event)"
               />
             </div>
@@ -543,11 +514,12 @@ watch(cronPrompt, resizePrompt, { immediate: true })
               <label class="block text-xs text-zinc-400 mb-1">Model override</label>
               <div class="flex items-center gap-1">
                 <div class="flex-1 min-w-0">
-                  <CustomSelect
+                  <ModelSelect
                     v-model="cronModelOverride"
-                    :groups="modelGroups"
+                    :models="cronModels"
+                    include-default
+                    :default-label="effectiveDefaultModel ? `Default (${effectiveDefaultModel})` : 'Provider default'"
                     :placeholder="effectiveDefaultModel ? `Default (${effectiveDefaultModel})` : 'Provider default'"
-                    placeholder-icon="lucide:settings"
                   />
                 </div>
                 <button

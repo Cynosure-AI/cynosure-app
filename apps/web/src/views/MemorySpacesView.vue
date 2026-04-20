@@ -263,7 +263,7 @@ onMounted(() => loadSpaces())
             :class="[
               selectedSpaceId === space.id
                 ? 'border-blue-500/50 bg-blue-500/10'
-                : 'border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/60',
+                : 'border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800',
               dropTargetSpaceId === space.id ? 'ring-2 ring-blue-400 border-blue-400/50 bg-blue-500/15' : '',
               draggedSpaceId === space.id ? 'opacity-40' : '',
               dragOverSpaceId === space.id && draggedSpaceId !== space.id ? 'ring-2 ring-indigo-400 border-indigo-400/50' : ''

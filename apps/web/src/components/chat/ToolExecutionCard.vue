@@ -123,7 +123,7 @@ const maContext = computed(() => {
 
 <template>
   <div class="px-4 py-1.5">
-    <div class="max-w-[80%] ml-3 md:ml-10">
+    <div class="max-w-[80%] ml-3 md:ml-12">
       <!-- Compact header — always visible -->
       <button
         class="w-full flex items-center gap-2 px-3 py-2 rounded-2xl text-[13px] font-medium transition-all group shadow-sm"
@@ -136,11 +136,11 @@ const maContext = computed(() => {
       >
         <!-- Status icon -->
         <Icon
-          :icon="currentPhase.label === 'Denied' ? 'lucide:shield-x' : toolNames.length && !results.length ? 'svg-spinners:ring-resize' : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
+          :icon="currentPhase.label === 'Denied' ? 'lucide:shield-x' : toolNames.length && !results.length ? (isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash') : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
           class="w-3.5 h-3.5 shrink-0"
           :class="[
             currentPhase.label === 'Denied' ? 'text-red-400' :
-            toolNames.length && !results.length ? 'text-blue-400' :
+            toolNames.length && !results.length ? (isActive ? 'text-blue-400' : 'text-zinc-500') :
             allSuccess ? 'text-emerald-400' :
             anyFailed ? 'text-red-400' :
             currentPhase.color

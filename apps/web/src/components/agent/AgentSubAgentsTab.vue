@@ -3,7 +3,8 @@ import { ref, computed, watch } from 'vue'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import type { AgentDefinition, SubAgentAssignment } from '../../api/types'
 import { Icon } from '@iconify/vue'
-import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
+import AgentSelect from '../shared/AgentSelect.vue'
+import BaseCard from '../shared/BaseCard.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -20,16 +21,6 @@ const availableAgents = computed(() => {
   assignedIds.add(props.agent.id) // exclude self
   return agentDefs.agents.filter(a => !assignedIds.has(a.id))
 })
-
-const agentDropdownGroups = computed((): SelectOptionGroup[] => [{
-  options: availableAgents.value.map(a => ({
-    value: a.id,
-    label: a.name,
-    imgSrc: a.iconUrl || null,
-    iconName: a.iconUrl ? undefined : 'lucide:bot',
-    tooltip: a.description || undefined,
-  })),
-}])
 
 const missingSubAgents = computed(() =>
   (props.agent.subAgents || []).filter(sa => !agentDefs.get(sa.agentId))
@@ -176,8 +167,8 @@ function getAgentIcon(id: string): string | null {
       <div
         v-for="sa in agent.subAgents"
         :key="sa.agentId"
-        class="rounded-xl border bg-zinc-900/50 p-4"
-        :class="agentDefs.get(sa.agentId) ? 'border-zinc-800' : 'border-amber-500/30'"
+        class="rounded-xl border bg-zinc-800/60 p-4"
+        :class="agentDefs.get(sa.agentId) ? 'border-zinc-700' : 'border-amber-500/30'"
       >
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center gap-3">
@@ -223,7 +214,7 @@ function getAgentIcon(id: string): string | null {
             <input
               :value="sa.codename"
               type="text"
-              class="w-full px-2.5 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-200 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-600 rounded-lg text-xs text-zinc-200 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
               @change="updateSubAgentCodename(sa.agentId, ($event.target as HTMLInputElement).value)"
             >
           </div>
@@ -233,7 +224,7 @@ function getAgentIcon(id: string): string | null {
               :value="sa.role"
               type="text"
               placeholder="What this agent specializes in"
-              class="w-full px-2.5 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-600 rounded-lg text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
               @change="updateSubAgentRole(sa.agentId, ($event.target as HTMLInputElement).value)"
             >
           </div>
@@ -242,9 +233,9 @@ function getAgentIcon(id: string): string | null {
     </div>
 
     <!-- Empty state -->
-    <div
+    <BaseCard
       v-else
-      class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center"
+      class="p-8 text-center"
     >
       <Icon
         icon="lucide:users"
@@ -256,10 +247,10 @@ function getAgentIcon(id: string): string | null {
       <p class="text-xs text-zinc-600 max-w-sm mx-auto">
         Add agents from your library and assign them codenames. The orchestrator will plan tasks and delegate to sub-agents automatically.
       </p>
-    </div>
+    </BaseCard>
 
     <!-- How it works -->
-    <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+    <BaseCard class="p-5">
       <h3 class="text-sm font-medium text-zinc-300 mb-2 flex items-center gap-2">
         <Icon
           icon="lucide:info"
@@ -274,7 +265,7 @@ function getAgentIcon(id: string): string | null {
         <li>If a sub-agent encounters an obstacle, it <strong class="text-zinc-400">escalates</strong> back to the orchestrator</li>
         <li>Once all steps are complete, the orchestrator synthesizes the final result</li>
       </ol>
-    </div>
+    </BaseCard>
 
     <!-- Add Sub-Agent Dialog -->
     <Teleport to="body">
@@ -290,12 +281,10 @@ function getAgentIcon(id: string): string | null {
           <div class="space-y-4">
             <div>
               <label class="block text-sm text-zinc-400 mb-1.5">Agent</label>
-              <CustomSelect
+              <AgentSelect
                 :model-value="addAgentId"
-                :groups="agentDropdownGroups"
+                :agents="availableAgents"
                 placeholder="Select an agent"
-                placeholder-icon="lucide:bot"
-                :filterable="true"
                 max-height="max-h-56"
                 @change="addAgentId = $event"
               />

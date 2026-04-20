@@ -3,15 +3,14 @@ import { ref, computed, watch } from 'vue'
 import { usePreferencesStore, type ContextStrategy } from '../../stores/preferences.store'
 import type { ThemeId } from '../../stores/preferences.store'
 import { useProviderStore } from '../../stores/provider.store'
-import { useProviderLogos } from '../../composables/useProviderLogos'
 import { Icon } from '@iconify/vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
-import CustomSelect from '../../components/shared/CustomSelect.vue'
-import type { SelectOptionGroup } from '../../components/shared/CustomSelect.vue'
+import ProviderSelect from '../../components/shared/ProviderSelect.vue'
+import ModelSelect from '../../components/shared/ModelSelect.vue'
+import BaseCard from '../../components/shared/BaseCard.vue'
 
 const prefs = usePreferencesStore()
 const providerStore = useProviderStore()
-const { logoUrl } = useProviderLogos()
 
 const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#09090b', surface: '#18181b', accent: '#3b82f6', text: '#f4f4f5' } },
@@ -31,24 +30,6 @@ const contextStrategyOptions: { value: ContextStrategy; label: string; descripti
 const titleModels = ref<string[]>([])
 const titleLoadingModels = ref(false)
 
-const titleProviderGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Use chat provider', iconName: 'lucide:settings' },
-    ...providerStore.providers.map(p => ({
-      value: p.id,
-      label: p.name,
-      imgSrc: logoUrl(p.type),
-    })),
-  ],
-}])
-
-const titleModelGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Use provider default', iconName: 'lucide:settings' },
-    ...titleModels.value.map(m => ({ value: m, label: m })),
-  ],
-}])
-
 async function fetchTitleModels(providerId: string) {
   if (!providerId) { titleModels.value = []; return }
   titleLoadingModels.value = true
@@ -58,8 +39,9 @@ async function fetchTitleModels(providerId: string) {
   titleLoadingModels.value = false
 }
 
-watch(() => prefs.titleProviderId, (id) => {
-  prefs.titleModel = ''
+watch(() => prefs.titleProviderId, (id, oldId) => {
+  // Only reset the model when the provider actually changes, not on initial load
+  if (oldId !== undefined) prefs.titleModel = ''
   fetchTitleModels(id)
 }, { immediate: true })
 </script>
@@ -78,9 +60,9 @@ watch(() => prefs.titleProviderId, (id) => {
 
       <div class="space-y-4">
         <!-- Theme -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
+        <BaseCard class="p-5 space-y-4">
           <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
                 icon="lucide:palette"
                 class="w-5 h-5 text-zinc-400"
@@ -156,13 +138,13 @@ watch(() => prefs.titleProviderId, (id) => {
               </div>
             </button>
           </div>
-        </div>
+        </BaseCard>
 
         <!-- Auto-expand Thinking -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+        <BaseCard class="p-5">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+              <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
                 <Icon
                   icon="lucide:list-tree"
                   class="w-5 h-5 text-zinc-400"
@@ -179,13 +161,13 @@ watch(() => prefs.titleProviderId, (id) => {
             </div>
             <ToggleSwitch v-model="prefs.autoExpandSteps" />
           </div>
-        </div>
+        </BaseCard>
 
         <!-- Auto-expand Tool Calls -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+        <BaseCard class="p-5">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+              <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
                 <Icon
                   icon="lucide:terminal"
                   class="w-5 h-5 text-zinc-400"
@@ -202,13 +184,13 @@ watch(() => prefs.titleProviderId, (id) => {
             </div>
             <ToggleSwitch v-model="prefs.autoExpandToolCalls" />
           </div>
-        </div>
+        </BaseCard>
 
         <!-- Generate Chat Titles -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-4">
+        <BaseCard class="p-5 space-y-4">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+              <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
                 <Icon
                   icon="lucide:heading"
                   class="w-5 h-5 text-zinc-400"
@@ -228,34 +210,36 @@ watch(() => prefs.titleProviderId, (id) => {
 
           <div
             v-if="prefs.generateTitle"
-            class="grid grid-cols-2 gap-3 pt-1 border-t border-zinc-800"
+            class="grid grid-cols-2 gap-3 pt-1 border-t border-zinc-700"
           >
             <div>
               <label class="block text-xs text-zinc-400 mb-1.5">Provider</label>
-              <CustomSelect
+              <ProviderSelect
                 v-model="prefs.titleProviderId"
-                :groups="titleProviderGroups"
+                :providers="providerStore.providers"
+                include-default
+                default-label="Use chat provider"
                 placeholder="Use chat provider"
-                placeholder-icon="lucide:settings"
               />
             </div>
             <div>
               <label class="block text-xs text-zinc-400 mb-1.5">Model</label>
-              <CustomSelect
+              <ModelSelect
                 v-model="prefs.titleModel"
-                :groups="titleModelGroups"
+                :models="titleModels"
+                include-default
+                default-label="Use provider default"
                 placeholder="Use provider default"
-                placeholder-icon="lucide:settings"
-                filterable
+                :filterable="true"
               />
             </div>
           </div>
-        </div>
+        </BaseCard>
 
         <!-- Context Strategy -->
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-3">
+        <BaseCard class="p-5 space-y-3">
           <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
               <Icon
                 icon="lucide:scissors"
                 class="w-5 h-5 text-zinc-400"
@@ -272,7 +256,7 @@ watch(() => prefs.titleProviderId, (id) => {
           </div>
           <select
             :value="prefs.contextStrategy"
-            class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
             @change="prefs.contextStrategy = ($event.target as HTMLSelectElement).value as ContextStrategy"
           >
             <option
@@ -283,7 +267,7 @@ watch(() => prefs.titleProviderId, (id) => {
               {{ opt.label }} — {{ opt.description }}
             </option>
           </select>
-        </div>
+        </BaseCard>
       </div>
     </div>
   </div>

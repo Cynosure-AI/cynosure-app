@@ -7,6 +7,7 @@ import { Icon } from '@iconify/vue'
 import TabBar, { type TabDef } from '../../components/shared/TabBar.vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
+import BaseCard from '../../components/shared/BaseCard.vue'
 import {
   buildCronExpr, cronToHuman,
   WEEKDAYS, HOUR_OPTIONS, MINUTE_OPTIONS, INTERVAL_MINUTES, FREQUENCY_OPTIONS,
@@ -192,9 +193,9 @@ onUnmounted(() => {
       />
 
       <!-- Loading -->
-      <div
+      <BaseCard
         v-if="loading"
-        class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center"
+        class="p-12 text-center"
       >
         <Icon
           icon="lucide:loader-2"
@@ -203,14 +204,12 @@ onUnmounted(() => {
         <p class="text-sm text-zinc-500">
           Loading schedules…
         </p>
-      </div>
-
-      <!-- ====================== CRON TAB ====================== -->
+      </BaseCard>
       <template v-else-if="activeTab === 'cron'">
         <!-- Empty -->
-        <div
+        <BaseCard
           v-if="cronJobs.length === 0"
-          class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center"
+          class="p-12 text-center"
         >
           <div class="w-16 h-16 rounded-2xl bg-zinc-800 flex items-center justify-center mx-auto mb-4">
             <Icon
@@ -234,7 +233,7 @@ onUnmounted(() => {
             />
             Add Cron Job
           </button>
-        </div>
+        </BaseCard>
 
         <div
           v-else
@@ -243,8 +242,8 @@ onUnmounted(() => {
           <div
             v-for="job in cronJobs"
             :key="job.id"
-            class="flex items-start gap-4 px-5 py-4 rounded-xl border bg-zinc-900/50 group"
-            :class="job.enabled ? 'border-zinc-800' : 'border-zinc-800/50 opacity-60'"
+            class="flex items-start gap-4 px-5 py-4 rounded-xl border bg-zinc-800/60 group"
+            :class="job.enabled ? 'border-zinc-700' : 'border-zinc-700/50 opacity-60'"
           >
             <div class="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 overflow-hidden mt-0.5">
               <img

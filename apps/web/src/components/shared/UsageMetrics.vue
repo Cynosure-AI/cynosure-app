@@ -7,6 +7,7 @@ import { Icon } from '@iconify/vue'
 import ModalDialog from './ModalDialog.vue'
 import DailyActivityChart from './DailyActivityChart.vue'
 import HoverTooltip from './HoverTooltip.vue'
+import BaseCard from './BaseCard.vue'
 
 const agentDefs = useAgentDefinitionsStore()
 
@@ -164,14 +165,14 @@ async function confirmReset(): Promise<void> {
     <!-- Summary Cards -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
       <HoverTooltip>
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+        <BaseCard class="p-4 w-full">
           <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
             Conversations
           </div>
           <div class="text-xl font-semibold text-zinc-100">
             {{ formatNumber(metrics.totals.conversations) }}
           </div>
-        </div>
+        </BaseCard>
         <template #content>
           <div class="font-medium text-zinc-300 mb-1">
             Conversations
@@ -185,14 +186,14 @@ async function confirmReset(): Promise<void> {
         </template>
       </HoverTooltip>
       <HoverTooltip>
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+        <BaseCard class="p-4 w-full">
           <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
             Messages
           </div>
           <div class="text-xl font-semibold text-zinc-100">
             {{ formatNumber(metrics.totals.messages) }}
           </div>
-        </div>
+        </BaseCard>
         <template #content>
           <div class="font-medium text-zinc-300 mb-1">
             Messages
@@ -206,7 +207,7 @@ async function confirmReset(): Promise<void> {
         </template>
       </HoverTooltip>
       <HoverTooltip>
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+        <BaseCard class="p-4 w-full">
           <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
             Total Tokens
           </div>
@@ -216,7 +217,7 @@ async function confirmReset(): Promise<void> {
           <div class="text-[10px] text-zinc-600 mt-0.5">
             {{ formatNumber(metrics.totals.promptTokens) }} in · {{ formatNumber(metrics.totals.completionTokens) }} out
           </div>
-        </div>
+        </BaseCard>
         <template #content>
           <div class="font-medium text-zinc-300 mb-1">
             Token Usage
@@ -233,7 +234,7 @@ async function confirmReset(): Promise<void> {
         </template>
       </HoverTooltip>
       <HoverTooltip>
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+        <BaseCard class="p-4 w-full">
           <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
             Est. Cost
           </div>
@@ -246,7 +247,7 @@ async function confirmReset(): Promise<void> {
           <div class="text-[10px] text-zinc-600 mt-0.5">
             {{ metrics.totals.avgLatencyMs.toLocaleString() }}ms avg latency
           </div>
-        </div>
+        </BaseCard>
         <template #content>
           <div class="font-medium text-zinc-300 mb-1">
             Cost &amp; Latency
@@ -289,7 +290,7 @@ async function confirmReset(): Promise<void> {
     <!-- Two-column: Models + Tools -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
       <!-- Model Usage -->
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <BaseCard class="p-4">
         <h3 class="text-xs font-medium text-zinc-400 mb-3">
           Model Usage
         </h3>
@@ -326,10 +327,10 @@ async function confirmReset(): Promise<void> {
             </div>
           </div>
         </div>
-      </div>
+      </BaseCard>
 
       <!-- Tool Usage -->
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <BaseCard class="p-4">
         <h3 class="text-xs font-medium text-zinc-400 mb-3">
           Tool Usage
         </h3>
@@ -359,13 +360,13 @@ async function confirmReset(): Promise<void> {
             </div>
           </div>
         </div>
-      </div>
+      </BaseCard>
     </div>
 
     <!-- Two-column: Agents + Origins -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <!-- Agent Usage -->
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <BaseCard class="p-4">
         <h3 class="text-xs font-medium text-zinc-400 mb-3">
           Agent Usage
         </h3>
@@ -391,10 +392,10 @@ async function confirmReset(): Promise<void> {
             </div>
           </div>
         </div>
-      </div>
+      </BaseCard>
 
       <!-- Origin Breakdown -->
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <BaseCard class="p-4">
         <h3 class="text-xs font-medium text-zinc-400 mb-3">
           Trigger Origins
         </h3>
@@ -430,7 +431,7 @@ async function confirmReset(): Promise<void> {
             <span class="text-xs text-zinc-500">{{ formatNumber(o.count) }}</span>
           </div>
         </div>
-      </div>
+      </BaseCard>
     </div>
   </template>
 </template>

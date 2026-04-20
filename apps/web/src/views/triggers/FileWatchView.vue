@@ -3,24 +3,19 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import type { AgentDefinition, FileWatcher } from '../../api/types'
-import { useProviderStore } from '../../stores/provider.store'
 import { Icon } from '@iconify/vue'
 import TabBar, { type TabDef } from '../../components/shared/TabBar.vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
-import CustomSelect, { type SelectOptionGroup } from '../../components/shared/CustomSelect.vue'
+import AgentSelect from '../../components/shared/AgentSelect.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
-import { useProviderLogos } from '../../composables/useProviderLogos'
 
 const router = useRouter()
-const { logoUrl } = useProviderLogos()
 
 const watchers = ref<FileWatcher[]>([])
 const allAgents = ref<AgentDefinition[]>([])
 const loading = ref(true)
 const activeTab = ref<'file-watchers'>('file-watchers')
 let pollTimer: ReturnType<typeof setInterval> | undefined
-
-const providerStore = useProviderStore()
 
 // Dialog state — simplified creation dialog
 const showDialog = ref(false)
@@ -88,19 +83,6 @@ async function deleteConfirmed() {
   pendingDeleteId.value = null
   await loadWatchers()
 }
-
-// ─── CustomSelect groups ─────────────────────────────────
-
-const agentGroups = computed((): SelectOptionGroup[] => [{
-  options: allAgents.value.map(a => {
-    let imgSrc: string | null = a.iconUrl || null
-    if (!imgSrc) {
-      const prov = providerStore.providers.find(p => p.id === a.providerId)
-      if (prov) imgSrc = logoUrl(prov.type)
-    }
-    return { value: a.id, label: a.name, imgSrc }
-  })
-}])
 
 // ─── Tabs ────────────────────────────────────────────────
 
@@ -318,11 +300,10 @@ onUnmounted(() => {
         <!-- Agent -->
         <div>
           <label class="block text-xs text-zinc-400 mb-1">Agent</label>
-          <CustomSelect
+          <AgentSelect
             v-model="dlgAgentId"
-            :groups="agentGroups"
+            :agents="allAgents"
             placeholder="Select an agent…"
-            placeholder-icon="lucide:bot"
           />
         </div>
 

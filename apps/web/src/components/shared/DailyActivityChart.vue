@@ -17,6 +17,8 @@ interface DayData {
   models: ModelBreakdown[]
 }
 
+import BaseCard from './BaseCard.vue'
+
 const props = defineProps<{
   data: DayData[]
   days: number
@@ -113,7 +115,7 @@ const gridLines = computed(() => {
 </script>
 
 <template>
-  <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 mb-6">
+  <BaseCard class="p-4 mb-6">
     <h3 class="text-xs font-medium text-zinc-400 mb-3">
       Daily Activity
     </h3>
@@ -240,7 +242,7 @@ const gridLines = computed(() => {
         </div>
       </Transition>
     </Teleport>
-  </div>
+  </BaseCard>
 </template>
 
 <style scoped>

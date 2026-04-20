@@ -38,9 +38,9 @@ function onMaxCtxBlur() {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-4">
     <!-- Auto-approve tools -->
-    <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+    <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
@@ -68,7 +68,7 @@ function onMaxCtxBlur() {
     </div>
 
     <!-- Show in dashboard carousel -->
-    <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+    <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
@@ -95,7 +95,7 @@ function onMaxCtxBlur() {
     </div>
 
     <!-- Thinking / Reasoning -->
-    <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+    <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
@@ -123,7 +123,7 @@ function onMaxCtxBlur() {
     </div>
 
     <!-- Max Context Tokens -->
-    <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+    <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
@@ -150,7 +150,7 @@ function onMaxCtxBlur() {
               min="2048"
               step="2048"
               placeholder="e.g. 16384"
-              class="w-40 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/50"
+              class="w-40 bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/50"
               @blur="onMaxCtxBlur"
             >
             <span class="ml-2 text-xs text-zinc-600">tokens</span>
