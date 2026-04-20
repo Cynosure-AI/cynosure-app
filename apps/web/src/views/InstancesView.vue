@@ -193,7 +193,7 @@ onUnmounted(() => {
         <!-- Loading -->
         <div
           v-if="loading"
-          class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center"
+          class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
         >
           <Icon
             icon="lucide:loader-2"
@@ -207,7 +207,7 @@ onUnmounted(() => {
         <!-- Empty state -->
         <div
           v-else-if="instances.length === 0"
-          class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center"
+          class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
         >
           <div class="w-16 h-16 rounded-2xl bg-zinc-800 flex items-center justify-center mx-auto mb-4">
             <Icon
@@ -234,7 +234,7 @@ onUnmounted(() => {
             :key="inst.id"
             role="button"
             tabindex="0"
-            class="w-full flex items-center gap-4 px-5 py-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/80 hover:border-zinc-700 transition-all text-left group cursor-pointer"
+            class="w-full flex items-center gap-4 px-5 py-4 rounded-xl border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-600 transition-all text-left group cursor-pointer"
             @click="openInstance(inst)"
             @keydown.enter.prevent="openInstance(inst)"
             @keydown.space.prevent="openInstance(inst)"
@@ -327,7 +327,7 @@ onUnmounted(() => {
         <!-- Loading -->
         <div
           v-if="historyLoading && historyItems.length === 0"
-          class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center"
+          class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
         >
           <Icon
             icon="lucide:loader-2"
@@ -341,7 +341,7 @@ onUnmounted(() => {
         <!-- Empty state -->
         <div
           v-else-if="historyItems.length === 0"
-          class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center"
+          class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
         >
           <div class="w-16 h-16 rounded-2xl bg-zinc-800 flex items-center justify-center mx-auto mb-4">
             <Icon
@@ -365,7 +365,7 @@ onUnmounted(() => {
               :key="item.id"
               role="button"
               tabindex="0"
-              class="w-full flex items-center gap-4 px-5 py-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/80 hover:border-zinc-700 transition-all text-left group cursor-pointer"
+              class="w-full flex items-center gap-4 px-5 py-4 rounded-xl border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-600 transition-all text-left group cursor-pointer"
               @click="openConversation(item)"
               @keydown.enter.prevent="openConversation(item)"
               @keydown.space.prevent="openConversation(item)"

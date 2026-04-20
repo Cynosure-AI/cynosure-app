@@ -5,8 +5,12 @@ import { api } from '../../api/client'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
 import MultiSelect from '../shared/MultiSelect.vue'
+import CustomSelect from '../shared/CustomSelect.vue'
+import { useProviderLogos } from '../../composables/useProviderLogos'
+import type { SelectOptionGroup } from '../shared/CustomSelect.vue'
 
 const providerStore = useProviderStore()
+const { logoUrl } = useProviderLogos()
 
 // Embedding state
 const embProviderId = ref('')
@@ -14,6 +18,17 @@ const embModel = ref('')
 const embDimensions = ref(1536)
 const embModels = ref<string[]>([])
 const embLoadingModels = ref(false)
+
+const embProviderGroups = computed((): SelectOptionGroup[] => [{
+  options: [
+    { value: '', label: 'Use active provider (fallback)', iconName: 'lucide:settings' },
+    ...providerStore.providers.map(p => ({
+      value: p.id,
+      label: p.name,
+      imgSrc: logoUrl(p.type),
+    })),
+  ],
+}])
 const embSaving = ref(false)
 const embDirty = ref(false)
 const embProbing = ref(false)
@@ -239,7 +254,7 @@ async function manualClearDb() {
 <template>
   <div>
     <!-- Embedding Model -->
-    <div class="rounded-lg border border-zinc-700 bg-zinc-800 p-4 space-y-4 mb-4">
+    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4 mb-4">
       <div>
         <h3 class="text-sm font-medium text-zinc-200 mb-1">
           Embedding Model
@@ -257,21 +272,12 @@ async function manualClearDb() {
       <div class="space-y-3">
         <div>
           <label class="block text-xs text-zinc-400 mb-1">Provider</label>
-          <select
+          <CustomSelect
             v-model="embProviderId"
-            class="w-full px-3 py-2 bg-zinc-900 border border-zinc-600 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">
-              Use active provider (fallback)
-            </option>
-            <option
-              v-for="p in providerStore.providers"
-              :key="p.id"
-              :value="p.id"
-            >
-              {{ p.name }}
-            </option>
-          </select>
+            :groups="embProviderGroups"
+            placeholder="Use active provider (fallback)"
+            placeholder-icon="lucide:settings"
+          />
         </div>
 
         <div>
@@ -358,7 +364,7 @@ async function manualClearDb() {
     </div>
 
     <!-- Chunking -->
-    <div class="rounded-lg border border-zinc-700 bg-zinc-800 p-4 space-y-4 mb-4">
+    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4 mb-4">
       <div>
         <h3 class="text-sm font-medium text-zinc-200 mb-1">
           Chunking
@@ -406,7 +412,7 @@ async function manualClearDb() {
     </div>
 
     <!-- Document Parsing – OCR -->
-    <div class="rounded-lg border border-zinc-700 bg-zinc-800 p-4 space-y-4 mb-4">
+    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4 mb-4">
       <div class="flex items-start justify-between gap-4">
         <div>
           <h3 class="text-sm font-medium text-zinc-200 mb-1">
@@ -445,7 +451,7 @@ async function manualClearDb() {
     </div>
 
     <!-- Danger Zone -->
-    <div class="rounded-lg mt-4 border border-red-900/50 bg-zinc-800 p-4 space-y-3">
+    <div class="rounded-xl mt-4 border border-red-900/50 bg-zinc-800 p-5 space-y-3">
       <div>
         <h3 class="text-sm font-medium text-zinc-200 mb-1">
           Danger Zone

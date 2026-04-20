@@ -164,7 +164,7 @@ async function confirmReset(): Promise<void> {
     <!-- Summary Cards -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
       <HoverTooltip>
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-4 w-full">
           <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
             Conversations
           </div>
@@ -185,7 +185,7 @@ async function confirmReset(): Promise<void> {
         </template>
       </HoverTooltip>
       <HoverTooltip>
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-4 w-full">
           <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
             Messages
           </div>
@@ -206,7 +206,7 @@ async function confirmReset(): Promise<void> {
         </template>
       </HoverTooltip>
       <HoverTooltip>
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-4 w-full">
           <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
             Total Tokens
           </div>
@@ -233,7 +233,7 @@ async function confirmReset(): Promise<void> {
         </template>
       </HoverTooltip>
       <HoverTooltip>
-        <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 w-full">
+        <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-4 w-full">
           <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
             Est. Cost
           </div>
@@ -289,7 +289,7 @@ async function confirmReset(): Promise<void> {
     <!-- Two-column: Models + Tools -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
       <!-- Model Usage -->
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-4">
         <h3 class="text-xs font-medium text-zinc-400 mb-3">
           Model Usage
         </h3>
@@ -329,7 +329,7 @@ async function confirmReset(): Promise<void> {
       </div>
 
       <!-- Tool Usage -->
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-4">
         <h3 class="text-xs font-medium text-zinc-400 mb-3">
           Tool Usage
         </h3>
@@ -365,7 +365,7 @@ async function confirmReset(): Promise<void> {
     <!-- Two-column: Agents + Origins -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <!-- Agent Usage -->
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-4">
         <h3 class="text-xs font-medium text-zinc-400 mb-3">
           Agent Usage
         </h3>
@@ -394,7 +394,7 @@ async function confirmReset(): Promise<void> {
       </div>
 
       <!-- Origin Breakdown -->
-      <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-4">
         <h3 class="text-xs font-medium text-zinc-400 mb-3">
           Trigger Origins
         </h3>

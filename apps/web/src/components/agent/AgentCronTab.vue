@@ -9,7 +9,7 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 <template>
   <div class="space-y-5">
     <!-- Cron Prompt -->
-    <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
       <div class="flex items-center gap-2 mb-1">
         <Icon
           icon="lucide:file-clock"
@@ -28,13 +28,13 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
       <textarea
         :value="agent.cronPrompt"
         placeholder="Example: Query the production API health endpoint. If any service returns a non-200 status, notify the user with the service name and error."
-        class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none h-48 font-mono"
+        class="w-full px-3 py-2 bg-zinc-900 border border-zinc-600 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none h-48 font-mono"
         @change="emit('update', 'cronPrompt', ($event.target as HTMLTextAreaElement).value)"
       />
     </div>
 
     <!-- Info -->
-    <div class="rounded-xl border border-zinc-800/50 bg-zinc-900/30 p-4">
+    <div class="rounded-xl border border-zinc-700/50 bg-zinc-800/30 p-4">
       <div class="flex gap-3">
         <Icon
           icon="lucide:lightbulb"

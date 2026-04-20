@@ -58,7 +58,7 @@ onMounted(() => loadSpaces())
 <template>
   <div class="space-y-4">
     <!-- Memory Spaces -->
-    <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
       <div class="flex items-center justify-between mb-1">
         <div class="flex items-center gap-2">
           <Icon
@@ -104,7 +104,7 @@ onMounted(() => loadSpaces())
       <!-- Assigned spaces list -->
       <div
         v-if="assignedSpaces.length === 0"
-        class="text-center py-6 border-2 border-dashed border-zinc-800 rounded-lg"
+        class="text-center py-6 border-2 border-dashed border-zinc-700 rounded-lg"
       >
         <Icon
           icon="lucide:brain"
@@ -125,7 +125,7 @@ onMounted(() => loadSpaces())
         <div
           v-for="space in assignedSpaces"
           :key="space.id"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-zinc-800 bg-zinc-800/30 hover:bg-zinc-800/50 transition-colors group"
+          class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-zinc-600 bg-zinc-900/40 hover:bg-zinc-900/60 transition-colors group"
         >
           <Icon
             icon="lucide:database"
