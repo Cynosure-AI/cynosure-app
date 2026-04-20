@@ -125,6 +125,7 @@ function onTitleKeydown(e: KeyboardEvent): void {
         agents-group-label="Agents"
         placeholder="Default"
         max-height="max-h-96"
+        size="sm"
         @change="onAgentChange"
       />
     </div>
@@ -138,6 +139,7 @@ function onTitleKeydown(e: KeyboardEvent): void {
         :model-value="currentProviderId"
         :providers="providerStore.providers"
         max-height="max-h-96"
+        size="sm"
         @change="onProviderOverride"
       />
     </div>

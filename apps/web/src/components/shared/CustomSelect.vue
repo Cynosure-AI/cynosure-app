@@ -34,6 +34,12 @@ const props = withDefaults(
     dropUp?: boolean
     /** Text alignment for the trigger label: 'left' | 'center' | 'right' */
     align?: 'left' | 'center' | 'right'
+    /**
+     * Trigger button size:
+     * - 'sm' — compact (text-xs, py-1.5, px-2.5) for toolbars/headers
+     * - 'md' — standard form size (text-sm, py-2, px-3)
+     */
+    size?: 'sm' | 'md'
   }>(),
   {
     placeholder: 'Select...',
@@ -42,6 +48,7 @@ const props = withDefaults(
     dropdownWidth: 'w-full',
     dropUp: false,
     align: 'left',
+    size: 'sm',
   },
 )
 
@@ -166,7 +173,8 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
       role="combobox"
       :aria-expanded="isOpen"
       tabindex="0"
-      class="w-full flex items-center gap-2 bg-zinc-900 border border-zinc-600 text-zinc-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer select-none"
+      class="w-full flex items-center gap-2 bg-zinc-900 border border-zinc-600 text-zinc-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer select-none"
+      :class="size === 'md' ? 'text-sm px-3 py-2' : 'text-xs px-2.5 py-1.5'"
       @click="toggle"
       @keydown="handleKeydown"
     >
