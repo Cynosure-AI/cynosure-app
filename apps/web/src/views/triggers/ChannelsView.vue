@@ -5,6 +5,7 @@ import type { AgentDefinition, ChannelDefinition, ChannelType } from '../../api/
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
+import BaseCard from '../../components/shared/BaseCard.vue'
 
 const channels = ref<ChannelDefinition[]>([])
 const allAgents = ref<AgentDefinition[]>([])
@@ -190,9 +191,9 @@ onUnmounted(() => {
       </div>
 
       <!-- Loading -->
-      <div
+      <BaseCard
         v-if="loading"
-        class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
+        class="p-12 text-center"
       >
         <Icon
           icon="lucide:loader-2"
@@ -201,12 +202,12 @@ onUnmounted(() => {
         <p class="text-sm text-zinc-500">
           Loading channels…
         </p>
-      </div>
+      </BaseCard>
 
       <!-- Empty state -->
-      <div
+      <BaseCard
         v-else-if="channels.length === 0"
-        class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
+        class="p-12 text-center"
       >
         <div class="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mx-auto mb-4">
           <Icon
@@ -230,7 +231,7 @@ onUnmounted(() => {
           />
           Add Channel
         </button>
-      </div>
+      </BaseCard>
 
       <!-- Channel list -->
       <div

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import type { AgentDefinition, MemorySpace } from '../../api/types'
 import { Icon } from '@iconify/vue'
+import BaseCard from '../shared/BaseCard.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -58,7 +59,7 @@ onMounted(() => loadSpaces())
 <template>
   <div class="space-y-4">
     <!-- Memory Spaces -->
-    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5">
+    <BaseCard class="p-5">
       <div class="flex items-center justify-between mb-1">
         <div class="flex items-center gap-2">
           <Icon
@@ -216,6 +217,6 @@ onMounted(() => loadSpaces())
           </div>
         </div>
       </div>
-    </div>
+    </BaseCard>
   </div>
 </template>

@@ -6,6 +6,7 @@ import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
 import MultiSelect from '../shared/MultiSelect.vue'
 import CustomSelect from '../shared/CustomSelect.vue'
+import BaseCard from '../shared/BaseCard.vue'
 import { useProviderLogos } from '../../composables/useProviderLogos'
 import type { SelectOptionGroup } from '../shared/CustomSelect.vue'
 
@@ -254,7 +255,7 @@ async function manualClearDb() {
 <template>
   <div>
     <!-- Embedding Model -->
-    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4 mb-4">
+    <BaseCard class="p-5 space-y-4 mb-4">
       <div>
         <h3 class="text-sm font-medium text-zinc-200 mb-1">
           Embedding Model
@@ -361,10 +362,10 @@ async function manualClearDb() {
         <span v-if="embSaving">Saving...</span>
         <span v-else>Save Embedding Config</span>
       </button>
-    </div>
+    </BaseCard>
 
     <!-- Chunking -->
-    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4 mb-4">
+    <BaseCard class="p-5 space-y-4 mb-4">
       <div>
         <h3 class="text-sm font-medium text-zinc-200 mb-1">
           Chunking
@@ -409,10 +410,10 @@ async function manualClearDb() {
         <span v-if="chunkSaving">Saving...</span>
         <span v-else>Save Chunking Config</span>
       </button>
-    </div>
+    </BaseCard>
 
     <!-- Document Parsing – OCR -->
-    <div class="rounded-xl border border-zinc-700 bg-zinc-800 p-5 space-y-4 mb-4">
+    <BaseCard class="p-5 space-y-4 mb-4">
       <div class="flex items-start justify-between gap-4">
         <div>
           <h3 class="text-sm font-medium text-zinc-200 mb-1">
@@ -448,7 +449,7 @@ async function manualClearDb() {
           @update:model-value="onOcrLangsUpdate"
         />
       </div>
-    </div>
+    </BaseCard>
 
     <!-- Danger Zone -->
     <div class="rounded-xl mt-4 border border-red-900/50 bg-zinc-800 p-5 space-y-3">

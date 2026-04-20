@@ -6,6 +6,7 @@ import { useProviderStore } from '../stores/provider.store'
 import { usePreferencesStore } from '../stores/preferences.store'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
+import BaseCard from '../components/shared/BaseCard.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import CategoryTabBar from '../components/shared/CategoryTabBar.vue'
 import { SK_AGENTS_VIEW_MODE } from '../utils/storage-keys'
@@ -551,9 +552,9 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
       </div>
 
       <!-- Empty State -->
-      <div
+      <BaseCard
         v-if="!filteredAgents.length"
-        class="rounded-xl border border-zinc-700 bg-zinc-800 p-12 text-center"
+        class="p-12 text-center"
       >
         <div
           class="w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center mx-auto mb-4"
@@ -584,7 +585,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
           />
           Create Agent
         </button>
-      </div>
+      </BaseCard>
 
       <!-- Create Dialog -->
       <Teleport to="body">
