@@ -6,7 +6,7 @@ import { prepareAgentExecution } from '../agent/prepare-execution.js'
 import { generateTitle } from '../agent/post-execution.js'
 import { getAgent, listAgents } from '../agents/agent-store.js'
 import { getEventBus } from '../telemetry/event-bus.js'
-import type { ChatMessage } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, ContentPart } from '../gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 
 const TELEGRAM_API = 'https://api.telegram.org'
@@ -23,6 +23,13 @@ interface TelegramUpdate {
         chat: { id: number; type: string; title?: string; first_name?: string }
         date: number
         text?: string
+        caption?: string
+        photo?: { file_id: string; file_unique_id: string; width: number; height: number; file_size?: number }[]
+        document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number }
+        audio?: { file_id: string; file_name?: string; mime_type?: string; duration: number; file_size?: number }
+        voice?: { file_id: string; mime_type?: string; duration: number; file_size?: number }
+        video?: { file_id: string; file_name?: string; mime_type?: string; duration: number; width: number; height: number; file_size?: number }
+        video_note?: { file_id: string; duration: number; length: number; file_size?: number }
     }
     callback_query?: {
         id: string
@@ -64,6 +71,8 @@ export class TelegramChannel implements ChannelProvider {
     private chatLocks = new Map<number, Promise<void>>()
     /** Per-conversation send queue for ordering HITL messages after tool details */
     private conversationSendQueue = new Map<string, (fn: () => Promise<void>) => void>()
+    /** Buffered attachments for chats where media was sent without text */
+    private pendingAttachments = new Map<number, { imageDataUrls: string[]; audioDataUrls: string[] }>()
     /** EventBus unsubscribe for hitl:request */
     private hitlUnsub?: () => void
 
@@ -200,7 +209,7 @@ export class TelegramChannel implements ChannelProvider {
                         this.lastUpdateId = update.update_id
                         if (update.callback_query) {
                             this.handleCallbackQuery(update.callback_query).catch(() => { })
-                        } else if (update.message?.text) {
+                        } else if (update.message?.text || update.message?.photo || update.message?.document || update.message?.audio || update.message?.voice || update.message?.video || update.message?.video_note) {
                             this.handleMessage(update).catch((err) => {
                                 console.error(`[Telegram] Error handling message: ${(err as Error).message}`)
                             })
@@ -225,7 +234,7 @@ export class TelegramChannel implements ChannelProvider {
     private async handleMessage(update: TelegramUpdate): Promise<void> {
         const msg = update.message!
         const chatId = msg.chat.id
-        const text = msg.text || ''
+        const text = msg.text || msg.caption || ''
 
         // Handle slash commands immediately — bypass the chat lock so
         // /stop, /new, agent switches etc. can execute without waiting
@@ -234,6 +243,24 @@ export class TelegramChannel implements ChannelProvider {
             const handled = await this.handleCommand(chatId, text)
             if (handled) return
             // Unknown command → fall through to process as a regular message
+        }
+
+        // Check if this message has media attachments
+        const hasMedia = !!(msg.photo || msg.document || msg.audio || msg.voice || msg.video || msg.video_note)
+
+        // Media-only message (no caption/text) → buffer the attachment for the next text message
+        if (hasMedia && !text) {
+            try {
+                const { imageDataUrls, audioDataUrls } = await this.extractAttachments(msg)
+                const existing = this.pendingAttachments.get(chatId) || { imageDataUrls: [], audioDataUrls: [] }
+                existing.imageDataUrls.push(...imageDataUrls)
+                existing.audioDataUrls.push(...audioDataUrls)
+                this.pendingAttachments.set(chatId, existing)
+                await this.sendMessage(chatId, '📎 Attachment received. Send a message to use it with the agent.')
+            } catch {
+                await this.sendMessage(chatId, '⚠️ Failed to process attachment.')
+            }
+            return
         }
 
         // Serialize messages per chat to prevent race conditions
@@ -254,13 +281,52 @@ export class TelegramChannel implements ChannelProvider {
     private async processMessage(update: TelegramUpdate): Promise<void> {
         const msg = update.message!
         const chatId = msg.chat.id
-        const userText = msg.text!
+        const userText = msg.text || msg.caption || ''
         const senderName = msg.from?.first_name || 'User'
 
         // ── Handle slash commands ──
         if (userText.startsWith('/')) {
             const handled = await this.handleCommand(chatId, userText)
             if (handled) return
+        }
+
+        // ── Extract attachments from this message + any buffered ones ──
+        const hasMedia = !!(msg.photo || msg.document || msg.audio || msg.voice || msg.video || msg.video_note)
+        let imageDataUrls: string[] = []
+        let audioDataUrls: string[] = []
+
+        // Collect buffered attachments from previous media-only messages
+        const buffered = this.pendingAttachments.get(chatId)
+        if (buffered) {
+            imageDataUrls.push(...buffered.imageDataUrls)
+            audioDataUrls.push(...buffered.audioDataUrls)
+            this.pendingAttachments.delete(chatId)
+        }
+
+        // Extract attachments from the current message
+        if (hasMedia) {
+            try {
+                const extracted = await this.extractAttachments(msg)
+                imageDataUrls.push(...extracted.imageDataUrls)
+                audioDataUrls.push(...extracted.audioDataUrls)
+            } catch (err) {
+                console.warn('[Telegram] Failed to extract attachments:', (err as Error).message)
+            }
+        }
+
+        const hasAttachments = imageDataUrls.length > 0 || audioDataUrls.length > 0
+
+        // Build multimodal content if there are attachments
+        let userContent: string | ContentPart[] = userText
+        if (hasAttachments) {
+            const parts: ContentPart[] = [{ type: 'text', text: userText || '(attached media)' }]
+            for (const url of imageDataUrls) {
+                parts.push({ type: 'image_url', image_url: { url } })
+            }
+            for (const url of audioDataUrls) {
+                parts.push({ type: 'audio_url', audio_url: { url } })
+            }
+            userContent = parts
         }
 
         // Resolve which agent to use (override or default)
@@ -275,19 +341,30 @@ export class TelegramChannel implements ChannelProvider {
 
         const db = getDb()
 
-        // Save user message
+        // Save user message (with attachment references if present)
         const userMsgId = nanoid()
         const now = Date.now()
         db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, created_at)
-       VALUES (?, ?, ?, ?, ?)`
-        ).run(userMsgId, conversationId, 'user', userText, now)
+            `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+            userMsgId, conversationId, 'user', userText || '(attached media)',
+            imageDataUrls.length ? JSON.stringify(imageDataUrls) : null,
+            audioDataUrls.length ? JSON.stringify(audioDataUrls) : null,
+            now
+        )
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
         // Broadcast to UI
         this.broadcast('chat:new-message', {
             conversationId,
-            message: { id: userMsgId, conversationId, role: 'user', content: userText, createdAt: now }
+            message: {
+                id: userMsgId, conversationId, role: 'user',
+                content: userText || '(attached media)',
+                imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined,
+                audioDataUrls: audioDataUrls.length ? audioDataUrls : undefined,
+                createdAt: now
+            }
         })
 
         // Build history
@@ -301,6 +378,12 @@ export class TelegramChannel implements ChannelProvider {
             toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
             toolCallId: row.tool_call_id || undefined
         }))
+
+        // Replace last user message with multimodal content if attachments are present
+        if (hasAttachments && messages.length > 0) {
+            const lastIdx = messages.length - 1
+            messages[lastIdx] = { ...messages[lastIdx], content: userContent }
+        }
 
         // Resolve agent
         const resolvedAgent = getAgent(effectiveAgentId)
@@ -890,6 +973,73 @@ export class TelegramChannel implements ChannelProvider {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chat_id: chatId, action })
         })
+    }
+
+    /** Download a file from Telegram by file_id and return it as a base64 data URL. */
+    private async downloadTelegramFile(fileId: string): Promise<{ dataUrl: string; mimeType: string }> {
+        const fileRes = await fetch(`${TELEGRAM_API}/bot${this.botToken}/getFile`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file_id: fileId })
+        })
+        const fileData = await fileRes.json() as { ok: boolean; result?: { file_path: string } }
+        if (!fileData.ok || !fileData.result?.file_path) {
+            throw new Error('Failed to get file path from Telegram')
+        }
+        const downloadUrl = `${TELEGRAM_API}/file/bot${this.botToken}/${fileData.result.file_path}`
+        const downloadRes = await fetch(downloadUrl)
+        if (!downloadRes.ok) throw new Error(`Failed to download file: ${downloadRes.status}`)
+        const buffer = Buffer.from(await downloadRes.arrayBuffer())
+
+        // Determine MIME type from file path
+        const ext = fileData.result.file_path.split('.').pop()?.toLowerCase() || ''
+        const mimeMap: Record<string, string> = {
+            jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
+            mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4',
+            mp4: 'video/mp4', webm: 'video/webm',
+        }
+        const mimeType = mimeMap[ext] || 'application/octet-stream'
+        const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`
+        return { dataUrl, mimeType }
+    }
+
+    /** Extract image and audio attachments from a Telegram message, downloading them as data URLs. */
+    private async extractAttachments(msg: NonNullable<TelegramUpdate['message']>): Promise<{ imageDataUrls: string[]; audioDataUrls: string[] }> {
+        const imageDataUrls: string[] = []
+        const audioDataUrls: string[] = []
+
+        // Photos — Telegram sends multiple sizes, pick the largest
+        if (msg.photo?.length) {
+            const largest = msg.photo[msg.photo.length - 1]
+            const { dataUrl } = await this.downloadTelegramFile(largest.file_id)
+            imageDataUrls.push(dataUrl)
+        }
+
+        // Documents — treat images as image attachments, others as unsupported for now
+        if (msg.document) {
+            const mime = msg.document.mime_type || ''
+            if (mime.startsWith('image/')) {
+                const { dataUrl } = await this.downloadTelegramFile(msg.document.file_id)
+                imageDataUrls.push(dataUrl)
+            }
+        }
+
+        // Video / video notes → treat as images (first frame won't be extracted, but the model can often handle video)
+        if (msg.video) {
+            // Videos are too large for data URLs in most cases — skip for now
+        }
+
+        // Audio / voice messages
+        if (msg.audio) {
+            const { dataUrl } = await this.downloadTelegramFile(msg.audio.file_id)
+            audioDataUrls.push(dataUrl)
+        }
+        if (msg.voice) {
+            const { dataUrl } = await this.downloadTelegramFile(msg.voice.file_id)
+            audioDataUrls.push(dataUrl)
+        }
+
+        return { imageDataUrls, audioDataUrls }
     }
 
     /** Send a base64 data-URL image as a photo to a Telegram chat. */

@@ -8,7 +8,7 @@ import { prepareAgentExecution } from '../agent/prepare-execution.js'
 import { generateTitle } from '../agent/post-execution.js'
 import { getAgent, listAgents } from '../agents/agent-store.js'
 import { getEventBus } from '../telemetry/event-bus.js'
-import type { ChatMessage } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, ContentPart } from '../gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 
 interface SlackConfig {
@@ -44,6 +44,8 @@ export class SlackChannel implements ChannelProvider {
     private channelLocks = new Map<string, Promise<void>>()
     /** Per-conversation send queue for ordering HITL messages after tool details */
     private conversationSendQueue = new Map<string, (fn: () => Promise<void>) => void>()
+    /** Buffered attachments for channels where media was sent without text */
+    private pendingAttachments = new Map<string, { imageDataUrls: string[]; audioDataUrls: string[] }>()
     /** EventBus unsubscribe for hitl:request */
     private hitlUnsub?: () => void
 
@@ -79,8 +81,10 @@ export class SlackChannel implements ChannelProvider {
         this.app.message(async ({ message, client }) => {
             // Only handle regular user messages (not bot messages, not edits)
             if (message.subtype) return
-            const msg = message as { text?: string; user?: string; channel: string; ts: string; subtype?: string }
-            if (!msg.text?.trim() || !msg.user) return
+            const msg = message as { text?: string; user?: string; channel: string; ts: string; subtype?: string; files?: { id: string; name?: string; mimetype?: string; url_private_download?: string; url_private?: string }[] }
+            if (!msg.user) return
+            // Require either text content or file attachments
+            if (!msg.text?.trim() && !msg.files?.length) return
 
             this.handleMessage(msg, client).catch((err) => {
                 console.error(`[Slack] Error handling message: ${(err as Error).message}`)
@@ -161,11 +165,12 @@ export class SlackChannel implements ChannelProvider {
     // ─── Private ──────────────────────────────────────────────
 
     private async handleMessage(
-        msg: { text?: string; user?: string; channel: string; ts: string; subtype?: string },
+        msg: { text?: string; user?: string; channel: string; ts: string; subtype?: string; files?: { id: string; name?: string; mimetype?: string; url_private_download?: string; url_private?: string }[] },
         client: WebClient
     ): Promise<void> {
         const slackChannelId = msg.channel
         const text = (msg.text || '').trim()
+        const hasFiles = !!(msg.files?.length)
 
         // Handle bang commands immediately — bypass the channel lock so
         // !stop, !new, agent switches etc. can execute without waiting
@@ -174,6 +179,23 @@ export class SlackChannel implements ChannelProvider {
             const handled = await this.handleCommand(slackChannelId, text, client, msg.ts)
             if (handled) return
             // Unknown command → fall through to process as a regular message
+        }
+
+        // File-only message (no text) → buffer for the next text message
+        if (hasFiles && !text) {
+            try {
+                const { imageDataUrls, audioDataUrls } = await this.extractAttachments(msg.files!)
+                if (imageDataUrls.length || audioDataUrls.length) {
+                    const existing = this.pendingAttachments.get(slackChannelId) || { imageDataUrls: [], audioDataUrls: [] }
+                    existing.imageDataUrls.push(...imageDataUrls)
+                    existing.audioDataUrls.push(...audioDataUrls)
+                    this.pendingAttachments.set(slackChannelId, existing)
+                    await client.chat.postMessage({ channel: slackChannelId, text: '📎 Attachment received. Send a message to use it with the agent.', thread_ts: msg.ts }).catch(() => { })
+                }
+            } catch {
+                await client.chat.postMessage({ channel: slackChannelId, text: '⚠️ Failed to process attachment.', thread_ts: msg.ts }).catch(() => { })
+            }
+            return
         }
 
         const prev = this.channelLocks.get(slackChannelId) || Promise.resolve()
@@ -191,17 +213,55 @@ export class SlackChannel implements ChannelProvider {
     }
 
     private async processMessage(
-        msg: { text?: string; user?: string; channel: string; ts: string; subtype?: string },
+        msg: { text?: string; user?: string; channel: string; ts: string; subtype?: string; files?: { id: string; name?: string; mimetype?: string; url_private_download?: string; url_private?: string }[] },
         client: WebClient
     ): Promise<void> {
         const slackChannelId = msg.channel
-        const userText = msg.text!.trim()
+        const userText = (msg.text || '').trim()
         const senderName = msg.user || 'User'
 
         // ── Handle commands ──
         if (userText.startsWith('!')) {
             const handled = await this.handleCommand(slackChannelId, userText, client, msg.ts)
             if (handled) return
+        }
+
+        // ── Extract attachments from this message + any buffered ones ──
+        let imageDataUrls: string[] = []
+        let audioDataUrls: string[] = []
+
+        // Collect buffered attachments from previous file-only messages
+        const buffered = this.pendingAttachments.get(slackChannelId)
+        if (buffered) {
+            imageDataUrls.push(...buffered.imageDataUrls)
+            audioDataUrls.push(...buffered.audioDataUrls)
+            this.pendingAttachments.delete(slackChannelId)
+        }
+
+        // Extract attachments from the current message
+        if (msg.files?.length) {
+            try {
+                const extracted = await this.extractAttachments(msg.files)
+                imageDataUrls.push(...extracted.imageDataUrls)
+                audioDataUrls.push(...extracted.audioDataUrls)
+            } catch (err) {
+                console.warn('[Slack] Failed to extract attachments:', (err as Error).message)
+            }
+        }
+
+        const hasAttachments = imageDataUrls.length > 0 || audioDataUrls.length > 0
+
+        // Build multimodal content if there are attachments
+        let userContent: string | ContentPart[] = userText
+        if (hasAttachments) {
+            const parts: ContentPart[] = [{ type: 'text', text: userText || '(attached media)' }]
+            for (const url of imageDataUrls) {
+                parts.push({ type: 'image_url', image_url: { url } })
+            }
+            for (const url of audioDataUrls) {
+                parts.push({ type: 'audio_url', audio_url: { url } })
+            }
+            userContent = parts
         }
 
         const effectiveAgentId = this.channelAgentOverride.get(slackChannelId) || this.agentId
@@ -223,16 +283,27 @@ export class SlackChannel implements ChannelProvider {
         const db = getDb()
         const now = Date.now()
 
-        // Save user message
+        // Save user message (with attachment references if present)
         const userMsgId = nanoid()
         db.prepare(
-            'INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
-        ).run(userMsgId, conversationId, 'user', userText, now)
+            'INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).run(
+            userMsgId, conversationId, 'user', userText || '(attached media)',
+            imageDataUrls.length ? JSON.stringify(imageDataUrls) : null,
+            audioDataUrls.length ? JSON.stringify(audioDataUrls) : null,
+            now
+        )
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
         this.broadcast('chat:new-message', {
             conversationId,
-            message: { id: userMsgId, conversationId, role: 'user', content: userText, createdAt: now }
+            message: {
+                id: userMsgId, conversationId, role: 'user',
+                content: userText || '(attached media)',
+                imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined,
+                audioDataUrls: audioDataUrls.length ? audioDataUrls : undefined,
+                createdAt: now
+            }
         })
 
         // Build history
@@ -246,6 +317,12 @@ export class SlackChannel implements ChannelProvider {
             toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
             toolCallId: row.tool_call_id || undefined
         }))
+
+        // Replace last user message with multimodal content if attachments are present
+        if (hasAttachments && messages.length > 0) {
+            const lastIdx = messages.length - 1
+            messages[lastIdx] = { ...messages[lastIdx], content: userContent }
+        }
 
         const resolvedAgent = getAgent(effectiveAgentId)
         if (!resolvedAgent) {
@@ -797,5 +874,36 @@ export class SlackChannel implements ChannelProvider {
         if (threadTs) uploadArgs.thread_ts = threadTs
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await client.filesUploadV2(uploadArgs as any)
+    }
+
+    /** Extract image and audio attachments from Slack file objects, downloading them as data URLs. */
+    private async extractAttachments(files: { id: string; name?: string; mimetype?: string; url_private_download?: string; url_private?: string }[]): Promise<{ imageDataUrls: string[]; audioDataUrls: string[] }> {
+        const imageDataUrls: string[] = []
+        const audioDataUrls: string[] = []
+
+        for (const file of files) {
+            const downloadUrl = file.url_private_download || file.url_private
+            if (!downloadUrl) continue
+
+            const mime = file.mimetype || ''
+            if (!mime.startsWith('image/') && !mime.startsWith('audio/')) continue
+
+            try {
+                const res = await fetch(downloadUrl, {
+                    headers: { Authorization: `Bearer ${this.botToken}` }
+                })
+                if (!res.ok) continue
+                const buffer = Buffer.from(await res.arrayBuffer())
+                const dataUrl = `data:${mime};base64,${buffer.toString('base64')}`
+
+                if (mime.startsWith('image/')) {
+                    imageDataUrls.push(dataUrl)
+                } else if (mime.startsWith('audio/')) {
+                    audioDataUrls.push(dataUrl)
+                }
+            } catch { /* skip failed downloads */ }
+        }
+
+        return { imageDataUrls, audioDataUrls }
     }
 }
