@@ -6,7 +6,7 @@ import { Icon } from '@iconify/vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import BaseCard from '../../components/shared/BaseCard.vue'
-import CustomSelect, { type SelectOptionGroup } from '../../components/shared/CustomSelect.vue'
+import AgentSelect from '../../components/shared/AgentSelect.vue'
 import MultiSelect from '../../components/shared/MultiSelect.vue'
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 
@@ -32,15 +32,6 @@ const dlgAllowedAgentIds = ref<string[]>([])
 const agentOptions = computed<MultiSelectOption[]>(() =>
   allAgents.value.map(a => ({ value: a.id, label: a.name }))
 )
-
-const agentGroups = computed<SelectOptionGroup[]>(() => [{
-  options: allAgents.value.map(a => ({
-    value: a.id,
-    label: a.name,
-    imgSrc: a.iconUrl || undefined,
-    tooltip: a.description || undefined,
-  })),
-}])
 
 // Delete confirm
 const showDeleteConfirm = ref(false)
@@ -429,13 +420,10 @@ onUnmounted(() => {
             Agent
           </label>
           <div class="mb-4">
-            <CustomSelect
+            <AgentSelect
               v-model="dlgAgentId"
-              :groups="agentGroups"
+              :agents="allAgents"
               placeholder="Select an agent…"
-              placeholder-icon="lucide:bot"
-              max-height="max-h-80"
-              :filterable="true"
             />
           </div>
 

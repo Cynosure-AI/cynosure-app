@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import type { AgentDefinition, SubAgentAssignment } from '../../api/types'
 import { Icon } from '@iconify/vue'
-import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
+import AgentSelect from '../shared/AgentSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
@@ -21,16 +21,6 @@ const availableAgents = computed(() => {
   assignedIds.add(props.agent.id) // exclude self
   return agentDefs.agents.filter(a => !assignedIds.has(a.id))
 })
-
-const agentDropdownGroups = computed((): SelectOptionGroup[] => [{
-  options: availableAgents.value.map(a => ({
-    value: a.id,
-    label: a.name,
-    imgSrc: a.iconUrl || null,
-    iconName: a.iconUrl ? undefined : 'lucide:bot',
-    tooltip: a.description || undefined,
-  })),
-}])
 
 const missingSubAgents = computed(() =>
   (props.agent.subAgents || []).filter(sa => !agentDefs.get(sa.agentId))
@@ -291,12 +281,10 @@ function getAgentIcon(id: string): string | null {
           <div class="space-y-4">
             <div>
               <label class="block text-sm text-zinc-400 mb-1.5">Agent</label>
-              <CustomSelect
+              <AgentSelect
                 :model-value="addAgentId"
-                :groups="agentDropdownGroups"
+                :agents="availableAgents"
                 placeholder="Select an agent"
-                placeholder-icon="lucide:bot"
-                :filterable="true"
                 max-height="max-h-56"
                 @change="addAgentId = $event"
               />

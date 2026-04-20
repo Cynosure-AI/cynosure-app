@@ -4,32 +4,16 @@ import { useProviderStore } from '../../stores/provider.store'
 import type { AgentDefinition } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import IconUpload from '../shared/IconUpload.vue'
-import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
-import { useProviderLogos } from '../../composables/useProviderLogos'
+import ProviderSelect from '../shared/ProviderSelect.vue'
+import ModelSelect from '../shared/ModelSelect.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 
 const providerStore = useProviderStore()
-const { logoUrl } = useProviderLogos()
 const fetchedModels = ref<string[]>([])
 const loadingModels = ref(false)
 const systemPromptRef = ref<HTMLTextAreaElement | null>(null)
-
-const providerGroups = computed((): SelectOptionGroup[] => [{
-  options: providerStore.providers.map(p => ({
-    value: p.id,
-    label: p.name,
-    imgSrc: logoUrl(p.type),
-  })),
-}])
-
-const modelGroups = computed((): SelectOptionGroup[] => [{
-  options: [
-    { value: '', label: 'Use provider default', iconName: 'lucide:settings' },
-    ...fetchedModels.value.map(m => ({ value: m, label: m })),
-  ],
-}])
 
 async function fetchModelsForProvider(providerId: string) {
   if (!providerId) {
@@ -107,11 +91,10 @@ watch(() => props.agent.providerId, (newId) => {
 
     <div>
       <label class="block text-sm text-zinc-400 mb-1.5">LLM Provider</label>
-      <CustomSelect
+      <ProviderSelect
         :model-value="agent.providerId"
-        :groups="providerGroups"
+        :providers="providerStore.providers"
         placeholder="Select provider"
-        placeholder-icon="lucide:cpu"
         @update:model-value="emit('update', 'providerId', $event)"
       />
     </div>
@@ -123,12 +106,13 @@ watch(() => props.agent.providerId, (newId) => {
       </p>
       <div class="flex gap-2">
         <div class="flex-1">
-          <CustomSelect
+          <ModelSelect
             :model-value="agent.model || ''"
-            :groups="modelGroups"
+            :models="fetchedModels"
+            include-default
+            default-label="Use provider default"
             placeholder="Use provider default"
-            placeholder-icon="lucide:settings"
-            filterable
+            :filterable="true"
             @update:model-value="emit('update', 'model', $event)"
           />
         </div>
