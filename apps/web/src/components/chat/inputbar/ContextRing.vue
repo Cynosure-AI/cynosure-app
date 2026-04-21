@@ -22,7 +22,7 @@ const contextUsage = computed(() => {
   }
 
   if (!usage) return { used: 0, max: ctxWindow, percent: 0, hardLimit: hasHardLimit }
-  const used = usage.lastRoundTotalTokens ?? usage.totalTokens
+  const used = usage.contextTokens ?? usage.totalTokens
   const percent = (used / ctxWindow) * 100
   return { used, max: ctxWindow, percent, hardLimit: hasHardLimit }
 })

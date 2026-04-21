@@ -149,12 +149,13 @@ export const api = {
         usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
         model?: string
         contextWindow?: number
+        contextTokens?: number
       }) => void
     ) => onWsEvent('chat:stream-end', cb as WsHandler),
     onStreamReset: (cb: (data: { streamId: string; conversationId: string }) => void) =>
       onWsEvent('chat:stream-reset', cb as WsHandler),
     onStreamUsage: (
-      cb: (data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number }) => void
+      cb: (data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number }) => void
     ) => onWsEvent('chat:stream-usage', cb as WsHandler),
     onStreamError: (
       cb: (data: { streamId: string; conversationId: string; error: string }) => void
@@ -375,6 +376,10 @@ export const api = {
       put<CronJob>(`/api/cron-jobs/${encodeURIComponent(id)}`, input),
     delete: (id: string) =>
       del<{ success: boolean }>(`/api/cron-jobs/${encodeURIComponent(id)}`),
+  },
+
+  system: {
+    health: () => get<{ status: string; name: string; version: string; timestamp: string; uptimeSeconds: number }>('/api/health'),
   },
 
   backup: {

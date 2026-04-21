@@ -80,7 +80,7 @@ async function fetchStatus(force = false) {
   // Load MCP servers
   try {
     mcpServers.value = await api.mcp.listServers()
-  } catch { /* ignore */ }
+  } catch { /* non-critical */ }
   mcpLoaded.value = true
 
   lastFetchedAt = Date.now()
