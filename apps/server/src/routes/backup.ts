@@ -821,12 +821,6 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         }
         await ragStore.initialize()
 
-        // Clear MCP images
-        const mcpImagesDir = join(getAppDataDir(), 'mcp-images')
-        if (existsSync(mcpImagesDir)) {
-            rmSync(mcpImagesDir, { recursive: true, force: true })
-        }
-
         // Clear logs
         const logsDir = join(getAppDataDir(), 'logs')
         if (existsSync(logsDir)) {
