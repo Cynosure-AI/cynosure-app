@@ -6,8 +6,8 @@ export interface TokenUsage {
     completionTokens: number
     totalTokens: number
     model?: string
-    /** Total tokens from the last LLM round (for accurate context window display) */
-    lastRoundTotalTokens?: number
+    /** Cumulative context token count from the server (updated every LLM round) */
+    contextTokens?: number
 }
 
 interface StreamBuffer {
@@ -38,8 +38,8 @@ export interface ChatStreamingState {
     handleStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void
     handleStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleStreamReset(data: { streamId: string; conversationId: string }): void
-    handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundTotalTokens?: number }): void
-    handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundTotalTokens?: number; images?: string[] }): void
+    handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number }): void
+    handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number; images?: string[] }): void
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
     handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void
@@ -238,9 +238,9 @@ export function useChatStreaming(
         }
     }
 
-    function handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundTotalTokens?: number }): void {
+    function handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number }): void {
         if (data.conversationId !== activeConversationId.value) return
-        lastUsage.value = { ...data.usage, model: data.model, lastRoundTotalTokens: data.lastRoundTotalTokens }
+        lastUsage.value = { ...data.usage, model: data.model, contextTokens: data.contextTokens }
         if (data.contextWindow) {
             contextWindow.value = data.contextWindow
         }
@@ -249,7 +249,7 @@ export function useChatStreaming(
     function handleStreamEnd(data: {
         streamId: string; conversationId: string; cancelled?: boolean
         usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number
-        lastRoundTotalTokens?: number; images?: string[]
+        contextTokens?: number; images?: string[]
     }): void {
         streamBuffers.delete(data.conversationId)
 
@@ -270,8 +270,8 @@ export function useChatStreaming(
                     streamMsg.promptTokens = data.usage.promptTokens
                     streamMsg.completionTokens = data.usage.completionTokens
                 }
-                if (data.lastRoundTotalTokens != null) {
-                    streamMsg.contextTokens = data.lastRoundTotalTokens
+                if (data.contextTokens != null) {
+                    streamMsg.contextTokens = data.contextTokens
                 }
                 if (data.images?.length) {
                     streamMsg.imageDataUrls = [...(streamMsg.imageDataUrls || []), ...data.images]
@@ -292,7 +292,7 @@ export function useChatStreaming(
             currentTurnMsgs.length = 0
 
             if (data.usage) {
-                lastUsage.value = { ...data.usage, model: data.model, lastRoundTotalTokens: data.lastRoundTotalTokens }
+                lastUsage.value = { ...data.usage, model: data.model, contextTokens: data.contextTokens }
             }
             if (data.contextWindow) {
                 contextWindow.value = data.contextWindow

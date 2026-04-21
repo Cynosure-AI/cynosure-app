@@ -96,11 +96,13 @@ interface ToolCallResult {
     imageDataUrls?: string[]
 }
 
-/** Accumulate token usage across multiple LLM rounds (tool-calling loop). */
-function accumulateUsage(
-    prev: AgentExecutorResult['usage'],
-    next: AgentExecutorResult['usage']
-): AgentExecutorResult['usage'] {
+type Usage = AgentExecutorResult['usage']
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function accumulateUsage(prev: Usage, next: Usage): Usage {
     if (!next) return prev
     if (!prev) return next
     return {
@@ -109,6 +111,17 @@ function accumulateUsage(
         totalTokens: prev.totalTokens + next.totalTokens,
     }
 }
+
+/** Returns `candidate` if it exceeds `current`, otherwise returns `current`. */
+function maxTokens(current: number | undefined, candidate: number | undefined): number | undefined {
+    if (candidate == null) return current
+    if (current == null) return candidate
+    return candidate > current ? candidate : current
+}
+
+// ---------------------------------------------------------------------------
+// AgentExecutor
+// ---------------------------------------------------------------------------
 
 /**
  * Shared agent execution engine.
@@ -120,57 +133,10 @@ function accumulateUsage(
 export class AgentExecutor {
     private config: Required<Pick<AgentExecutorConfig, 'hitl' | 'maxRounds' | 'saveMessages' | 'streamMode' | 'emitEvents'>> & AgentExecutorConfig
     private _streamId: string
+    private _sp: string
+
     /** The primary streamId (useful for callers that need it for cancel/error handling). */
     get streamId(): string { return this._streamId }
-
-    /**
-     * Limit images in the conversation context to only the last N occurrences.
-     * Older image_url parts are replaced with a short text placeholder so the
-     * LLM still knows an image was there. This keeps token usage manageable
-     * while preserving recent visual context.
-     */
-    private static trimOldImages(messages: ChatMessage[], keep = 3): ChatMessage[] {
-        // First pass: count total images
-        let totalImages = 0
-        for (const msg of messages) {
-            if (Array.isArray(msg.content)) {
-                for (const part of msg.content) {
-                    if (part.type === 'image_url') totalImages++
-                }
-            }
-        }
-        if (totalImages <= keep) return messages
-
-        // Second pass (reverse): keep the last `keep` images, replace rest with placeholder
-        let kept = 0
-        const result: ChatMessage[] = [...messages]
-        for (let i = result.length - 1; i >= 0; i--) {
-            const msg = result[i]
-            if (!Array.isArray(msg.content)) continue
-
-            let modified = false
-            const newParts: ContentPart[] = []
-            // Walk parts in reverse so we keep the last ones encountered
-            for (let j = msg.content.length - 1; j >= 0; j--) {
-                const part = msg.content[j]
-                if (part.type === 'image_url') {
-                    if (kept < keep) {
-                        newParts.unshift(part)
-                        kept++
-                    } else {
-                        newParts.unshift({ type: 'text', text: '[image omitted from context]' })
-                        modified = true
-                    }
-                } else {
-                    newParts.unshift(part)
-                }
-            }
-            if (modified) {
-                result[i] = { ...msg, content: newParts }
-            }
-        }
-        return result
-    }
 
     constructor(config: AgentExecutorConfig) {
         this.config = {
@@ -179,32 +145,15 @@ export class AgentExecutor {
             saveMessages: true,
             streamMode: 'single',
             emitEvents: true,
-            ...config
+            ...config,
         }
-        this._streamId = config.streamId || nanoid()
-        this._sp = config.streamEventPrefix || 'chat:stream'
+        this._streamId = config.streamId ?? nanoid()
+        this._sp = config.streamEventPrefix ?? 'chat:stream'
     }
 
-    /** Resolved stream event prefix (e.g. 'chat:stream' or 'chat:subagent-stream') */
-    private _sp: string
-
-    /** Emit an EventBus event if emission is enabled, merging eventMeta if configured. */
-    private emit(event: string, payload: Record<string, unknown>): void {
-        if (!this.config.emitEvents) return
-        const meta = this.config.eventMeta
-        getEventBus().emit(event, meta ? { ...payload, ...meta } : payload)
-    }
-
-    /** Persist the current context token count on the conversation row so it
-     *  survives chat switches and page reloads mid-execution.
-     *  Only the main-agent executor persists — sub-agents share the conversationId
-     *  but should not overwrite the main agent's context usage. */
-    private persistContextTokens(conversationId: string, tokens: number): void {
-        if (this._sp !== 'chat:stream') return
-        try {
-            getDb().prepare('UPDATE conversations SET last_context_tokens = ? WHERE id = ?').run(tokens, conversationId)
-        } catch { /* best-effort — don't crash the execution loop */ }
-    }
+    // -------------------------------------------------------------------------
+    // Public entry point
+    // -------------------------------------------------------------------------
 
     /**
      * Run the agent execution loop.
@@ -212,7 +161,7 @@ export class AgentExecutor {
      * until the LLM responds without tool calls or max rounds is reached.
      */
     async run(messages: ChatMessage[]): Promise<AgentExecutorResult> {
-        const { gateway, tools, conversationId, broadcast, providerId, model, signal, temperature, thinkingEnabled } = this.config
+        const { conversationId } = this.config
         const taskId = nanoid()
 
         let currentMessages = [...messages]
@@ -220,41 +169,26 @@ export class AgentExecutor {
         let fullThinking = ''
         let lastRoundThinking = ''
         const collectedImages: string[] = []
-        let usage: AgentExecutorResult['usage']
-        let lastRoundTotalTokens: number | undefined = this.config.initialContextEstimate
+        let usage: Usage
+        let contextTokens = this.config.initialContextEstimate
         let pendingToolCalls: ToolCall[] | undefined
         let toolRounds = 0
 
-        // --- Phase 1: Initial LLM streaming response ---
         const primaryStreamId = this._streamId
         let activeStreamId = primaryStreamId
 
-        broadcast(`${this._sp}-start`, {
-            streamId: activeStreamId,
-            conversationId,
-            agentId: this.config.agentId,
-            agentName: this.config.agentName,
-            agentIconUrl: this.config.agentIconUrl
-        })
+        // --- Phase 1: Initial LLM streaming response ---
+        this.broadcastStreamStart(activeStreamId)
 
-        const initialStream = gateway.streamComplete(
-            {
-                messages: AgentExecutor.trimOldImages(currentMessages),
-                model,
-                tools: tools.length ? tools : undefined,
-                temperature,
-                thinkingEnabled,
-                signal
-            },
-            providerId
+        const initialResult = await this.consumeStream(
+            this.createStream(currentMessages),
+            activeStreamId,
         )
 
-        const initialResult = await this.consumeStream(initialStream, activeStreamId, conversationId)
         if (initialResult.error) {
-            // Always close the stream on the client before re-throwing, otherwise
-            // the frontend's streaming message is left open and a subsequent
-            // stream-reset for the outer agent will reuse it (wrong icon/identity).
-            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, cancelled: signal?.aborted })
+            // Always close the stream before re-throwing so the frontend's
+            // streaming message isn't left open for the next stream to reuse.
+            this.broadcastStreamEnd(activeStreamId, { cancelled: this.config.signal?.aborted })
             throw initialResult.error
         }
 
@@ -264,21 +198,18 @@ export class AgentExecutor {
         collectedImages.push(...initialResult.images)
         pendingToolCalls = initialResult.toolCalls
         usage = initialResult.usage
-        if ((usage?.totalTokens ?? 0) > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = usage?.totalTokens
+        contextTokens = maxTokens(contextTokens, usage?.totalTokens)
+        this.maybeUpdateContextTokens(conversationId, contextTokens)
 
-        // Persist context tokens so switching chats mid-execution shows correct values
-        if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
-
-        // No tool calls → done after Phase 1
+        // No tool calls → done
         if (!pendingToolCalls?.length) {
-            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow, lastRoundTotalTokens })
-            return { content: fullContent, usage, contextTokens: lastRoundTotalTokens, toolRounds: 0, images: collectedImages, thinking: lastRoundThinking, provider: providerId, model }
+            this.broadcastStreamEnd(activeStreamId, { usage, model: this.config.model, contextTokens })
+            return this.buildResult(fullContent, fullThinking, usage, contextTokens, 0, collectedImages)
         }
 
         // --- Phase 2: Tool-calling loop ---
-        // End Phase 1 stream if per-round mode
         if (this.config.streamMode === 'per-round') {
-            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId })
+            this.broadcastStreamEnd(activeStreamId)
         }
 
         this.emit('task:started', { taskId, conversationId })
@@ -287,186 +218,247 @@ export class AgentExecutor {
 
         try {
             for (let round = 0; round < this.config.maxRounds && pendingToolCalls?.length; round++) {
-                if (signal?.aborted) break
+                if (this.config.signal?.aborted) break
                 toolRounds = round + 1
 
-                // Emit tool calls
-                this.emit('step:status', {
-                    taskId, conversationId,
-                    iteration: round + 1,
-                    status: 'choosing-tools',
-                    message: 'Selecting tools...'
-                })
+                this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'choosing-tools', message: 'Selecting tools...' })
                 this.emit('step:tools-chosen', {
-                    taskId, conversationId,
-                    iteration: round + 1,
-                    toolCalls: pendingToolCalls.map(tc => ({
-                        name: tc.function.name,
-                        arguments: tc.function.arguments
-                    }))
+                    taskId, conversationId, iteration: round + 1,
+                    toolCalls: pendingToolCalls.map(tc => ({ name: tc.function.name, arguments: tc.function.arguments }))
                 })
 
-                // HITL approval (if enabled)
+                // HITL approval
                 if (hitlGate) {
-                    this.emit('step:status', {
-                        taskId, conversationId,
-                        iteration: round + 1,
-                        status: 'awaiting-approval',
-                        message: 'Checking tool approvals...'
-                    })
-
-                    const approval = await hitlGate.requestApproval(taskId, pendingToolCalls, signal, conversationId)
-
-                    if (!approval.approved) {
-                        this.emit('step:hitl-denied', {
-                            taskId, conversationId,
-                            iteration: round + 1,
-                            reason: approval.reason
-                        })
-
-                        const denialReason = approval.reason?.trim()
-
-                        // Tool messages tell the LLM what "the tool returned"
-                        currentMessages.push(
-                            { role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls },
-                            ...pendingToolCalls.map(tc => ({
-                                role: 'tool' as const,
-                                content: denialReason
-                                    ? `[DENIED] User rejected this tool call. Reason: "${denialReason}"`
-                                    : `[DENIED] User rejected this tool call.`,
-                                toolCallId: tc.id
-                            }))
-                        )
-
-                        // A follow-up user message is far more directive for the LLM than a tool message.
-                        // It tells the model exactly what to do next rather than just reporting a failure.
-                        currentMessages.push({
-                            role: 'user' as const,
-                            content: denialReason
-                                ? `I denied that action because: ${denialReason}. Please take a completely different approach that respects this constraint, or answer directly from what you already know. Do not retry the denied tool(s).`
-                                : `I denied that tool call. Please take a different approach or answer directly. Do not retry the denied tool(s).`
-                        })
-
-                        // Trim context if needed — update display estimate first
-                        if (this.config.contextWindow) {
-                            const est = estimateTotalTokens(currentMessages)
-                            if (est > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = est
-                            currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow, undefined, this.config.contextStrategy)
-                        }
-
-                        // Stream LLM's revised response
-                        const result = await this.streamLLMRound(currentMessages, activeStreamId, round)
-                        fullContent = result.content
-                        fullThinking += result.thinking
-                        lastRoundThinking = result.thinking
-                        collectedImages.push(...result.images)
-                        pendingToolCalls = result.toolCalls
-                        if (result.usage?.totalTokens && result.usage.totalTokens > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = result.usage.totalTokens
-                        usage = accumulateUsage(usage, result.usage)
-                        if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
-                        if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
+                    const roundResult = await this.handleHITL(hitlGate, taskId, pendingToolCalls, currentMessages, activeStreamId, round, fullContent, usage, contextTokens, collectedImages)
+                    if (roundResult) {
+                        // HITL was denied — update state and continue to the next round
+                        ; ({ fullContent, lastRoundThinking, pendingToolCalls, usage, contextTokens, activeStreamId } = roundResult)
+                        fullThinking += roundResult.lastRoundThinking
+                        collectedImages.push(...roundResult.images)
+                        this.maybeUpdateContextTokens(conversationId, contextTokens)
                         continue
                     }
+                    // If roundResult is null, approval was granted — fall through to execution
                 }
 
-                // Save the assistant message (thinking + tool calls) BEFORE executing tools
-                // so it gets an earlier timestamp than sub-agent messages produced during execution.
+                // Save assistant message (thinking + tool calls) before executing tools
+                // so timestamps precede any sub-agent messages produced during execution.
                 if (this.config.saveMessages) {
                     this.saveAssistantToolCallMessage(conversationId, fullContent, lastRoundThinking, pendingToolCalls)
                 }
 
-                // Execute tool calls
-                this.emit('step:status', {
-                    taskId, conversationId,
-                    iteration: round + 1,
-                    status: 'executing',
-                    message: `Executing ${pendingToolCalls.length} tool(s)...`
-                })
+                this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'executing', message: `Executing ${pendingToolCalls.length} tool(s)...` })
 
-                const toolCallResults = await this.executeToolCalls(pendingToolCalls)
+                const toolResults = await this.executeToolCalls(pendingToolCalls)
 
-                // Collect tool result images (base64 data-URLs) so they are
-                // available in the final AgentExecutorResult for channel adapters.
-                for (const tr of toolCallResults) {
+                for (const tr of toolResults) {
                     if (tr.imageDataUrls?.length) collectedImages.push(...tr.imageDataUrls)
                 }
 
-                // Emit results
                 this.emit('step:executed', {
-                    taskId, conversationId,
-                    iteration: round + 1,
-                    results: toolCallResults.map(tr => ({
-                        name: tr.name,
-                        success: tr.success,
-                        output: tr.output,
-                        images: tr.images,
-                        imageDataUrls: tr.imageDataUrls
-                    }))
+                    taskId, conversationId, iteration: round + 1,
+                    results: toolResults.map(tr => ({ name: tr.name, success: tr.success, output: tr.output, images: tr.images, imageDataUrls: tr.imageDataUrls }))
                 })
 
-                // Save tool result messages AFTER execution
                 if (this.config.saveMessages) {
-                    this.saveToolResultMessages(conversationId, toolCallResults)
+                    this.saveToolResultMessages(conversationId, toolResults)
                 }
 
-                // Append to conversation context (include images as multimodal content for LLM vision)
+                // Append tool results to context (with multimodal content for LLM vision)
                 currentMessages.push(
                     { role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls },
-                    ...toolCallResults.map(tr => ({
+                    ...toolResults.map(tr => ({
                         role: 'tool' as const,
                         content: tr.imageDataUrls?.length
                             ? [
                                 { type: 'text' as const, text: tr.output },
-                                ...tr.imageDataUrls.map(url => ({ type: 'image_url' as const, image_url: { url } }))
+                                ...tr.imageDataUrls.map(url => ({ type: 'image_url' as const, image_url: { url } })),
                             ]
                             : tr.output,
-                        toolCallId: tr.toolCallId
+                        toolCallId: tr.toolCallId,
                     }))
                 )
 
-                // Trim context if it has grown beyond the model's window
-                if (this.config.contextWindow) {
-                    const est = estimateTotalTokens(currentMessages)
-                    if (est > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = est
-                    currentMessages = trimMessagesToContextLimit(currentMessages, this.config.contextWindow, undefined, this.config.contextStrategy)
-                }
+                currentMessages = this.maybeTrimContext(currentMessages, contextTokens)
+                contextTokens = maxTokens(contextTokens, estimateTotalTokens(currentMessages))
 
-                // Stream next LLM response
-                const result = await this.streamLLMRound(currentMessages, activeStreamId, round)
-                fullContent = result.content
-                fullThinking += result.thinking
-                lastRoundThinking = result.thinking
-                collectedImages.push(...result.images)
-                pendingToolCalls = result.toolCalls
-                if (result.usage?.totalTokens && result.usage.totalTokens > (lastRoundTotalTokens ?? 0)) lastRoundTotalTokens = result.usage.totalTokens
-                usage = accumulateUsage(usage, result.usage)
-                if (this.config.streamMode === 'per-round') activeStreamId = result.streamId
+                const roundResult = await this.streamLLMRound(currentMessages, activeStreamId, round)
+                fullContent = roundResult.content
+                fullThinking += roundResult.thinking
+                lastRoundThinking = roundResult.thinking
+                collectedImages.push(...roundResult.images)
+                pendingToolCalls = roundResult.toolCalls
+                contextTokens = maxTokens(contextTokens, roundResult.usage?.totalTokens)
+                usage = accumulateUsage(usage, roundResult.usage)
+                if (this.config.streamMode === 'per-round') activeStreamId = roundResult.streamId
 
-                // Broadcast accumulated usage after each tool round so the client
-                // can update the context circle without waiting for the full turn to end.
+                // Broadcast accumulated usage after each round so the client can update
+                // the context circle without waiting for the full turn to end.
                 if (usage) {
-                    broadcast(`${this._sp}-usage`, {
-                        conversationId, usage, model, contextWindow: this.config.contextWindow,
-                        lastRoundTotalTokens
+                    this.config.broadcast(`${this._sp}-usage`, {
+                        conversationId, usage, model: this.config.model,
+                        contextWindow: this.config.contextWindow, contextTokens,
                     })
                 }
-                if (lastRoundTotalTokens != null) this.persistContextTokens(conversationId, lastRoundTotalTokens)
+                this.maybeUpdateContextTokens(conversationId, contextTokens)
             }
         } finally {
-            // Guarantee stream-end is always sent, even if an error escapes the loop
-            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow, lastRoundTotalTokens, images: collectedImages.length ? collectedImages : undefined })
+            // Guarantee stream-end is always sent even if an error escapes the loop
+            this.broadcastStreamEnd(activeStreamId, {
+                usage, model: this.config.model, contextTokens,
+                images: collectedImages.length ? collectedImages : undefined,
+            })
             this.emit('task:completed', { taskId, conversationId })
         }
 
+        return this.buildResult(fullContent || '(completed)', lastRoundThinking, usage, contextTokens, toolRounds, collectedImages)
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    private buildResult(
+        content: string,
+        thinking: string,
+        usage: Usage,
+        contextTokens: number | undefined,
+        toolRounds: number,
+        images: string[],
+    ): AgentExecutorResult {
+        return { content, usage, contextTokens, toolRounds, images, thinking, provider: this.config.providerId, model: this.config.model }
+    }
+
+    /** Emit an EventBus event if emission is enabled, merging eventMeta if configured. */
+    private emit(event: string, payload: Record<string, unknown>): void {
+        if (!this.config.emitEvents) return
+        const meta = this.config.eventMeta
+        getEventBus().emit(event, meta ? { ...payload, ...meta } : payload)
+    }
+
+    private broadcastStreamStart(streamId: string): void {
+        this.config.broadcast(`${this._sp}-start`, {
+            streamId,
+            conversationId: this.config.conversationId,
+            agentId: this.config.agentId,
+            agentName: this.config.agentName,
+            agentIconUrl: this.config.agentIconUrl,
+        })
+    }
+
+    private broadcastStreamEnd(streamId: string, extra: Record<string, unknown> = {}): void {
+        this.config.broadcast(`${this._sp}-end`, {
+            streamId,
+            conversationId: this.config.conversationId,
+            contextWindow: this.config.contextWindow,
+            ...extra,
+        })
+    }
+
+    /**
+     * Persist the current context token count on the conversation row so it
+     * survives chat switches and page reloads mid-execution.
+     * Only the main-agent executor persists — sub-agents share the conversationId
+     * but should not overwrite the main agent's context usage.
+     */
+    private maybeUpdateContextTokens(conversationId: string, tokens: number | undefined): void {
+        if (tokens == null || this._sp !== 'chat:stream') return
+        try {
+            getDb().prepare('UPDATE conversations SET last_context_tokens = ? WHERE id = ?').run(tokens, conversationId)
+        } catch { /* best-effort — don't crash the execution loop */ }
+    }
+
+    /**
+     * Trim context messages if a context window limit is configured.
+     * Updates `contextTokens` floor from the pre-trim estimate before trimming.
+     */
+    private maybeTrimContext(messages: ChatMessage[], contextTokens: number | undefined): ChatMessage[] {
+        if (!this.config.contextWindow) return messages
+        return trimMessagesToContextLimit(messages, this.config.contextWindow, undefined, this.config.contextStrategy)
+    }
+
+    /**
+     * Create a gateway stream from the current messages, with old images trimmed.
+     */
+    private createStream(messages: ChatMessage[]) {
+        const { gateway, tools, model, temperature, thinkingEnabled, signal, providerId } = this.config
+        return gateway.streamComplete(
+            {
+                messages: AgentExecutor.trimOldImages(messages),
+                model,
+                tools: tools.length ? tools : undefined,
+                temperature,
+                thinkingEnabled,
+                signal,
+            },
+            providerId
+        )
+    }
+
+    /**
+     * Handle HITL approval for a round's pending tool calls.
+     * Returns updated round state if approval was denied (so the loop can `continue`),
+     * or `null` if approved (so execution proceeds normally).
+     */
+    private async handleHITL(
+        hitlGate: ReturnType<typeof getHITLGate>,
+        taskId: string,
+        pendingToolCalls: ToolCall[],
+        currentMessages: ChatMessage[],
+        activeStreamId: string,
+        round: number,
+        fullContent: string,
+        usage: Usage,
+        contextTokens: number | undefined,
+        collectedImages: string[],
+    ): Promise<{
+        fullContent: string
+        lastRoundThinking: string
+        pendingToolCalls: ToolCall[] | undefined
+        usage: Usage
+        contextTokens: number | undefined
+        activeStreamId: string
+        images: string[]
+    } | null> {
+        const { conversationId, signal } = this.config
+
+        this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'awaiting-approval', message: 'Checking tool approvals...' })
+
+        const approval = await hitlGate.requestApproval(taskId, pendingToolCalls, signal, conversationId)
+        if (approval.approved) return null
+
+        this.emit('step:hitl-denied', { taskId, conversationId, iteration: round + 1, reason: approval.reason })
+
+        const reason = approval.reason?.trim()
+        currentMessages.push(
+            { role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls },
+            ...pendingToolCalls.map(tc => ({
+                role: 'tool' as const,
+                content: reason
+                    ? `[DENIED] User rejected this tool call. Reason: "${reason}"`
+                    : `[DENIED] User rejected this tool call.`,
+                toolCallId: tc.id,
+            })),
+            {
+                role: 'user' as const,
+                content: reason
+                    ? `I denied that action because: ${reason}. Please take a completely different approach that respects this constraint, or answer directly from what you already know. Do not retry the denied tool(s).`
+                    : `I denied that tool call. Please take a different approach or answer directly. Do not retry the denied tool(s).`,
+            }
+        )
+
+        const updatedContextTokens = maxTokens(contextTokens, estimateTotalTokens(currentMessages))
+        const trimmedMessages = this.maybeTrimContext(currentMessages, updatedContextTokens)
+
+        const result = await this.streamLLMRound(trimmedMessages, activeStreamId, round)
         return {
-            content: fullContent || '(completed)',
-            usage,
-            contextTokens: lastRoundTotalTokens,
-            toolRounds,
-            images: collectedImages,
-            thinking: lastRoundThinking,
-            provider: providerId,
-            model
+            fullContent: result.content,
+            lastRoundThinking: result.thinking,
+            pendingToolCalls: result.toolCalls,
+            usage: accumulateUsage(usage, result.usage),
+            contextTokens: maxTokens(updatedContextTokens, result.usage?.totalTokens),
+            activeStreamId: this.config.streamMode === 'per-round' ? result.streamId : activeStreamId,
+            images: result.images,
         }
     }
 
@@ -478,21 +470,20 @@ export class AgentExecutor {
     private async consumeStream(
         stream: AsyncIterable<import('../gateway/providers/base.provider.js').StreamChunk>,
         streamId: string,
-        conversationId: string
     ): Promise<{
         content: string
         thinking: string
         images: string[]
         toolCalls: ToolCall[] | undefined
-        usage: AgentExecutorResult['usage']
+        usage: Usage
         error?: Error
     }> {
-        const { broadcast } = this.config
+        const { broadcast, conversationId } = this.config
         let content = ''
         let thinking = ''
         const images: string[] = []
         let toolCalls: ToolCall[] | undefined
-        let usage: AgentExecutorResult['usage']
+        let usage: Usage
 
         try {
             for await (const chunk of stream) {
@@ -510,9 +501,7 @@ export class AgentExecutor {
                     images.push(...chunk.images)
                     broadcast(`${this._sp}-images`, { streamId, conversationId, images: chunk.images })
                 }
-                if (chunk.toolCalls?.length) {
-                    toolCalls = chunk.toolCalls
-                }
+                if (chunk.toolCalls?.length) toolCalls = chunk.toolCalls
                 if (chunk.usage) usage = chunk.usage
                 if (chunk.done) break
             }
@@ -531,129 +520,124 @@ export class AgentExecutor {
     private async streamLLMRound(
         messages: ChatMessage[],
         currentStreamId: string,
-        round: number
+        round: number,
     ): Promise<{
         content: string
         thinking: string
         images: string[]
         toolCalls: ToolCall[] | undefined
-        usage: AgentExecutorResult['usage']
+        usage: Usage
         streamId: string
     }> {
-        const { gateway, tools, conversationId, broadcast, providerId, model, signal, temperature, thinkingEnabled } = this.config
+        const { conversationId } = this.config
 
         let streamId = currentStreamId
         if (this.config.streamMode === 'per-round') {
             streamId = nanoid()
-            broadcast(`${this._sp}-start`, {
-                streamId,
-                conversationId,
-                agentId: this.config.agentId,
-                agentName: this.config.agentName,
-                agentIconUrl: this.config.agentIconUrl
-            })
+            this.broadcastStreamStart(streamId)
         } else {
-            broadcast(`${this._sp}-reset`, { streamId, conversationId })
+            this.config.broadcast(`${this._sp}-reset`, { streamId, conversationId })
         }
 
-        const stream = gateway.streamComplete(
-            {
-                messages: AgentExecutor.trimOldImages(messages),
-                model,
-                tools: tools.length ? tools : undefined,
-                temperature,
-                thinkingEnabled,
-                signal
-            },
-            providerId
-        )
-
-        const result = await this.consumeStream(stream, streamId, conversationId)
+        const result = await this.consumeStream(this.createStream(messages), streamId)
 
         if (result.error) {
-            // If the user cancelled, re-throw so the caller can handle it
-            if (signal?.aborted) throw result.error
-            // Transient stream failure (timeout, connection drop, provider error).
-            // Return partial content so the executor loop exits gracefully.
-            if (!result.content) {
-                result.content = `[Stream interrupted: ${result.error.message}]`
-            }
+            if (this.config.signal?.aborted) throw result.error
+            // Transient stream failure — return partial content so the loop exits gracefully
+            if (!result.content) result.content = `[Stream interrupted: ${result.error.message}]`
         }
 
-        // In per-round mode, end the stream for this round
         if (this.config.streamMode === 'per-round') {
-            broadcast(`${this._sp}-end`, { streamId, conversationId })
+            this.broadcastStreamEnd(streamId)
         }
 
         return { content: result.content, thinking: result.thinking, images: result.images, toolCalls: result.toolCalls, usage: result.usage, streamId }
     }
 
+    /**
+     * Limit images in the conversation context to only the last N occurrences.
+     * Older `image_url` parts are replaced with a short text placeholder so the
+     * LLM still knows an image was present. This keeps token usage manageable
+     * while preserving recent visual context.
+     *
+     * BUG FIX: The original walked messages in reverse but counted `kept` from the
+     * end, which caused the *earliest* images to be kept rather than the latest.
+     * The fix is a simple forward pass: collect all image positions, then replace
+     * any that fall outside the last `keep` slots.
+     */
+    private static trimOldImages(messages: ChatMessage[], keep = 3): ChatMessage[] {
+        // Collect all (messageIndex, partIndex) positions of image_url parts
+        type ImagePos = { msgIdx: number; partIdx: number }
+        const positions: ImagePos[] = []
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i]
+            if (!Array.isArray(msg.content)) continue
+            for (let j = 0; j < msg.content.length; j++) {
+                if (msg.content[j].type === 'image_url') positions.push({ msgIdx: i, partIdx: j })
+            }
+        }
+
+        if (positions.length <= keep) return messages
+
+        // The positions to replace are all but the last `keep`
+        const toReplace = new Set(positions.slice(0, positions.length - keep).map(p => `${p.msgIdx}:${p.partIdx}`))
+
+        return messages.map((msg, i) => {
+            if (!Array.isArray(msg.content)) return msg
+            const newParts = msg.content.map((part, j) =>
+                toReplace.has(`${i}:${j}`) ? { type: 'text' as const, text: '[image omitted from context]' } : part
+            )
+            // Avoid allocating a new message object if nothing changed
+            return newParts === msg.content ? msg : { ...msg, content: newParts }
+        })
+    }
+
     /** Execute an array of tool calls concurrently and return results in original order. */
     private async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolCallResult[]> {
+        return Promise.all(toolCalls.map(tc => this.executeSingleToolCall(tc)))
+    }
+
+    private async executeSingleToolCall(tc: ToolCall): Promise<ToolCallResult> {
         const { signal } = this.config
-        const promises = toolCalls.map(async (tc): Promise<ToolCallResult> => {
-            let output: string
-            let success = true
-            let images: string[] | undefined
-            let imageDataUrls: string[] | undefined
-            try {
-                const args = JSON.parse(tc.function.arguments)
-                const tool = this.config.tools.find(t => t.name === tc.function.name)
-                if (tool) {
-                    // Enforce tool timeout: combine tool's own timeout with the
-                    // parent abort signal so both cancellation and timeouts work.
-                    const toolTimeout = tool.timeout > 0 ? tool.timeout : 0
-                    let execPromise = tool.execute(args)
+        try {
+            const args = JSON.parse(tc.function.arguments)
+            const tool = this.config.tools.find(t => t.name === tc.function.name)
 
-                    if (toolTimeout > 0) {
-                        const timeoutSignal = AbortSignal.timeout(toolTimeout)
-                        const combinedSignal = signal
-                            ? AbortSignal.any([signal, timeoutSignal])
-                            : timeoutSignal
-
-                        execPromise = Promise.race([
-                            execPromise,
-                            new Promise<never>((_, reject) => {
-                                combinedSignal.addEventListener('abort', () => {
-                                    reject(new Error(
-                                        signal?.aborted
-                                            ? 'Tool execution cancelled'
-                                            : `Tool "${tc.function.name}" timed out after ${Math.round(toolTimeout / 1000)}s`
-                                    ))
-                                }, { once: true })
-                                // If already aborted, reject immediately
-                                if (combinedSignal.aborted) {
-                                    reject(new Error(
-                                        signal?.aborted
-                                            ? 'Tool execution cancelled'
-                                            : `Tool "${tc.function.name}" timed out after ${Math.round(toolTimeout / 1000)}s`
-                                    ))
-                                }
-                            })
-                        ])
-                    }
-
-                    const res = await execPromise
-                    if (typeof res === 'string') {
-                        output = res
-                    } else {
-                        output = res?.output || JSON.stringify(res)
-                        if (res?.success === false) success = false
-                        images = res?.images
-                        imageDataUrls = res?.imageDataUrls
-                    }
-                } else {
-                    output = `Error: Unknown tool "${tc.function.name}"`
-                    success = false
-                }
-            } catch (err) {
-                output = `Error: ${(err as Error).message}`
-                success = false
+            if (!tool) {
+                return { toolCallId: tc.id, name: tc.function.name, output: `Error: Unknown tool "${tc.function.name}"`, success: false }
             }
-            return { toolCallId: tc.id, name: tc.function.name, output, success, images, imageDataUrls }
-        })
 
-        return Promise.all(promises)
+            let execPromise = tool.execute(args)
+            const timeoutSignal = AbortSignal.timeout(tool.timeout)
+            const combined = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+            execPromise = Promise.race([
+                execPromise,
+                new Promise<never>((_, reject) => {
+                    const onAbort = () => reject(new Error(
+                        signal?.aborted
+                            ? 'Tool execution cancelled'
+                            : `Tool "${tc.function.name}" timed out after ${Math.round(tool.timeout / 1000)}s`
+                    ))
+                    if (combined.aborted) { onAbort(); return }
+                    combined.addEventListener('abort', onAbort, { once: true })
+                })
+            ])
+
+            const res = await execPromise
+            if (typeof res === 'string') {
+                return { toolCallId: tc.id, name: tc.function.name, output: res, success: true }
+            }
+            return {
+                toolCallId: tc.id,
+                name: tc.function.name,
+                output: res?.output ?? JSON.stringify(res),
+                success: res?.success !== false,
+                images: res?.images,
+                imageDataUrls: res?.imageDataUrls,
+            }
+        } catch (err) {
+            return { toolCallId: tc.id, name: tc.function.name, output: `Error: ${(err as Error).message}`, success: false }
+        }
     }
 
     /** Save the assistant's tool-calling message (thinking + content + tool_calls) to DB. */
@@ -661,39 +645,33 @@ export class AgentExecutor {
         conversationId: string,
         assistantContent: string,
         thinking: string,
-        toolCalls: ToolCall[]
+        toolCalls: ToolCall[],
     ): void {
-        const db = getDb()
-        const assistantMsgId = nanoid()
-        db.prepare(
+        const { agentId, providerId, model } = this.config
+        getDb().prepare(
             'INSERT INTO messages (id, conversation_id, role, content, thinking, tool_calls_json, agent_id, provider, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(assistantMsgId, conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(toolCalls), this.config.agentId || null, this.config.providerId || null, this.config.model || null, Date.now())
+        ).run(nanoid(), conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(toolCalls), agentId || null, providerId || null, model || null, Date.now())
     }
 
     /** Save tool result messages to DB and broadcast them to the UI. */
-    private saveToolResultMessages(
-        conversationId: string,
-        results: ToolCallResult[]
-    ): void {
+    private saveToolResultMessages(conversationId: string, results: ToolCallResult[]): void {
+        const { broadcast, agentId, agentName, agentIconUrl } = this.config
         const db = getDb()
-        const { broadcast } = this.config
-
         for (const tr of results) {
             const toolMsgId = nanoid()
-            const toolNow = Date.now()
-            const imageUrlsJson = tr.images?.length ? JSON.stringify(tr.images) : null
+            const now = Date.now()
             db.prepare(
                 'INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-            ).run(toolMsgId, conversationId, 'tool', tr.output, tr.toolCallId, imageUrlsJson, toolNow)
+            ).run(toolMsgId, conversationId, 'tool', tr.output, tr.toolCallId, tr.images?.length ? JSON.stringify(tr.images) : null, now)
 
             broadcast('chat:new-message', {
                 conversationId,
                 message: {
                     id: toolMsgId, conversationId, role: 'tool', content: tr.output,
-                    agentId: this.config.agentId, agentName: this.config.agentName, agentIconUrl: this.config.agentIconUrl,
+                    agentId, agentName, agentIconUrl,
                     imageDataUrls: tr.images,
-                    createdAt: toolNow
-                }
+                    createdAt: now,
+                },
             })
         }
     }
