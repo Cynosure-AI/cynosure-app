@@ -229,11 +229,17 @@ export class McpManager {
 
     /** Connect using stdio transport (child process). */
     private async connectStdio(config: McpServerConfig): Promise<ToolDefinition[]> {
+        // Spawn the MCP process from the user home directory so npm/npx doesn't
+        // inherit workspace-level .npmrc, pnpm config, or package.json settings
+        // that can interfere with on-demand package installation.
+        const spawnCwd = homedir()
+
         const transport = new StdioClientTransport({
             command: config.command,
             args: config.args,
             env: { ...process.env, ...(config.env || {}) } as Record<string, string>,
-            stderr: 'pipe'
+            stderr: 'pipe',
+            cwd: spawnCwd,
         })
 
         // Reject the connect race immediately when auth is detected in stderr,
@@ -295,7 +301,11 @@ export class McpManager {
             }
             console.error(`Failed to connect to MCP server ${config.name}:`, e)
             try { await transport.close() } catch { }
-            throw e
+            const stderrHint = stderrBuffer.trim()
+                ? ` Process output: ${stderrBuffer.trim().slice(0, 500)}`
+                : ''
+            const base = e instanceof Error ? e : new Error(String(e))
+            throw new Error(`${base.message}${stderrHint}`)
         }
 
         const { tools: mcpTools } = await client.listTools()
