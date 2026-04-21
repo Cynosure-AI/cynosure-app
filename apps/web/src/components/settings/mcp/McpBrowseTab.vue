@@ -105,8 +105,17 @@ async function addFromRegistry(srv: McpRegistryServer): Promise<void> {
 
   const id = entryId(srv.server)
   const requiredVars = install.envVars.filter(v => v.required)
-  if (requiredVars.length > 0 && requiredVars.some(v => !registryEnv[v.name])) {
+
+  // Always show the configuration form on the first click if the server has any
+  // env vars (required or optional). This gives users time to enter credentials
+  // before the connection attempt starts instead of connecting immediately.
+  if (install.envVars.length > 0 && addingRegistryId.value !== id) {
     addingRegistryId.value = id
+    return
+  }
+
+  // Safety guard: don't connect if required vars are still empty
+  if (requiredVars.some(v => !registryEnv[v.name])) {
     return
   }
 
