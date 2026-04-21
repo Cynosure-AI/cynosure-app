@@ -4,8 +4,8 @@ export const BASE_URL = import.meta.env.VITE_API_URL || ''
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 
-export async function get<T>(path: string): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`)
+export async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+    const res = await fetch(`${BASE_URL}${path}`, signal ? { signal } : undefined)
     if (!res.ok) throw new Error(`GET ${path}: ${res.statusText}`)
     return res.json() as Promise<T>
 }
