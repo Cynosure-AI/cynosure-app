@@ -325,14 +325,14 @@ export const api = {
       post<{ connected: boolean; toolCount?: number; error?: string }>(`/api/mcp/servers/${encodeURIComponent(id)}/reconnect`),
     reauthServer: (id: string) =>
       post<{ connected: boolean; authRequired?: boolean; toolCount?: number; error?: string; clearedTokenFiles?: number }>(`/api/mcp/servers/${encodeURIComponent(id)}/reauth`),
-    searchRegistry: (opts?: { search?: string; cursor?: string; limit?: number; registry?: string }) => {
+    searchRegistry: (opts?: { search?: string; cursor?: string; limit?: number; registry?: string; signal?: AbortSignal }) => {
       const params = new URLSearchParams()
       if (opts?.search) params.set('search', opts.search)
       if (opts?.cursor) params.set('cursor', opts.cursor)
       if (opts?.limit) params.set('limit', String(opts.limit))
       if (opts?.registry) params.set('registry', opts.registry)
       const qs = params.toString()
-      return get<McpRegistryResponse>(`/api/mcp/registry${qs ? `?${qs}` : ''}`)
+      return get<McpRegistryResponse>(`/api/mcp/registry${qs ? `?${qs}` : ''}`, opts?.signal)
     },
     onAuthNeeded: (cb: (data: { serverId: string; serverName: string; authUrl: string }) => void) =>
       onWsEvent('mcp-auth-needed', cb as WsHandler),

@@ -22,7 +22,16 @@ const addingRegistryId = ref<string | null>(null)
 const registryEnv = reactive<Record<string, string>>({})
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
-watch([registrySearch, registrySource], () => {
+let currentAbortController: AbortController | null = null
+
+function resetRegistry(): void {
+  if (searchTimer) { clearTimeout(searchTimer); searchTimer = null }
+  registryServers.value = []
+  registryCursor.value = undefined
+  registryHasMore.value = true
+}
+
+watch(registrySearch, () => {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
     registryServers.value = []
@@ -32,8 +41,16 @@ watch([registrySearch, registrySource], () => {
   }, 400)
 })
 
+watch(registrySource, () => {
+  resetRegistry()
+  loadRegistry()
+})
+
 async function loadRegistry(): Promise<void> {
-  if (registryLoading.value) return
+  currentAbortController?.abort()
+  currentAbortController = new AbortController()
+  const { signal } = currentAbortController
+
   registryLoading.value = true
   try {
     const data = await api.mcp.searchRegistry({
@@ -41,14 +58,17 @@ async function loadRegistry(): Promise<void> {
       cursor: registryCursor.value,
       limit: 20,
       registry: registrySource.value,
+      signal,
     })
+    if (signal.aborted) return
     registryServers.value.push(...data.servers)
     registryCursor.value = data.metadata.nextCursor
     registryHasMore.value = !!data.metadata.nextCursor && data.metadata.count >= 20
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') return
     registryHasMore.value = false
   } finally {
-    registryLoading.value = false
+    if (!signal.aborted) registryLoading.value = false
   }
 }
 
