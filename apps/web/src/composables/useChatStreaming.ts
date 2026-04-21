@@ -39,7 +39,7 @@ export interface ChatStreamingState {
     handleStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleStreamReset(data: { streamId: string; conversationId: string }): void
     handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundTotalTokens?: number }): void
-    handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundTotalTokens?: number }): void
+    handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; lastRoundTotalTokens?: number; images?: string[] }): void
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
     handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void
@@ -249,7 +249,7 @@ export function useChatStreaming(
     function handleStreamEnd(data: {
         streamId: string; conversationId: string; cancelled?: boolean
         usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number
-        lastRoundTotalTokens?: number
+        lastRoundTotalTokens?: number; images?: string[]
     }): void {
         streamBuffers.delete(data.conversationId)
 
@@ -272,6 +272,9 @@ export function useChatStreaming(
                 }
                 if (data.lastRoundTotalTokens != null) {
                     streamMsg.contextTokens = data.lastRoundTotalTokens
+                }
+                if (data.images?.length) {
+                    streamMsg.imageDataUrls = [...(streamMsg.imageDataUrls || []), ...data.images]
                 }
                 if (!data.cancelled && !streamMsg.content && !streamMsg.thinking) {
                     streamMsg.isError = true

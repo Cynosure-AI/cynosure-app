@@ -454,7 +454,7 @@ export class AgentExecutor {
             }
         } finally {
             // Guarantee stream-end is always sent, even if an error escapes the loop
-            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow, lastRoundTotalTokens })
+            broadcast(`${this._sp}-end`, { streamId: activeStreamId, conversationId, usage, model, contextWindow: this.config.contextWindow, lastRoundTotalTokens, images: collectedImages.length ? collectedImages : undefined })
             this.emit('task:completed', { taskId, conversationId })
         }
 
