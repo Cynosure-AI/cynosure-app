@@ -13,6 +13,9 @@ build/
 # Electron release artifacts
 apps/electron/release/
 
+# MCPs (separate repository)
+mcps/
+
 # OS files
 .DS_Store
 Thumbs.db
@@ -36,8 +39,6 @@ apps/server/data/
 .env.local
 .env.*.local
 
-# MCPs (separate repository)
-mcps/
 
 # TypeScript build cache
 *.tsbuildinfo
