@@ -48,6 +48,7 @@ export interface TelegramCtx {
     allowedAgentIds: string[]
     activeExecutions: Map<string, { exec: ActiveChannelExecution; controller: AbortController }>
     chatAgentOverride: Map<number, string>
+    chatLastUsedAgent: Map<number, string>
     pendingHITL: Map<string, PendingHITL>
     conversationToChat: Map<string, number>
     chatLocks: Map<number, Promise<void>>

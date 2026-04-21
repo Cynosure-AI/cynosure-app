@@ -35,7 +35,13 @@ export async function handleCommand(
 
     if (command === 'new') {
         cancelExecutionsForChannel(ctx, slackChannelId)
-        const effectiveAgentId = ctx.channelAgentOverride.get(slackChannelId) || ctx.agentId
+        const effectiveAgentId = ctx.channelLastUsedAgent.get(slackChannelId) || ctx.channelAgentOverride.get(slackChannelId) || ctx.agentId
+        if (effectiveAgentId === ctx.agentId) {
+            ctx.channelAgentOverride.delete(slackChannelId)
+        } else {
+            ctx.channelAgentOverride.set(slackChannelId, effectiveAgentId)
+        }
+        ctx.channelLastUsedAgent.set(slackChannelId, effectiveAgentId)
         archiveConversation(ctx, slackChannelId, effectiveAgentId)
         const agent = getAgent(effectiveAgentId)
         await client.chat.postMessage({ channel: slackChannelId, text: `🆕 Starting a fresh conversation with *${agent?.name || 'Unknown'}*.` }).catch(() => { })
@@ -45,6 +51,9 @@ export async function handleCommand(
     if (command === 'start') {
         cancelExecutionsForChannel(ctx, slackChannelId)
         const prevAgentId = ctx.channelAgentOverride.get(slackChannelId) || ctx.agentId
+        if (prevAgentId !== ctx.agentId || !ctx.channelLastUsedAgent.has(slackChannelId)) {
+            ctx.channelLastUsedAgent.set(slackChannelId, prevAgentId)
+        }
         ctx.channelAgentOverride.delete(slackChannelId)
         archiveConversation(ctx, slackChannelId, prevAgentId)
         const agent = getAgent(ctx.agentId)
@@ -70,6 +79,7 @@ Starting a fresh conversation.` }).catch(() => { })
             archiveConversation(ctx, slackChannelId, matchedAgent.id)
         }
         ctx.channelAgentOverride.set(slackChannelId, matchedAgent.id)
+        ctx.channelLastUsedAgent.set(slackChannelId, matchedAgent.id)
         await client.chat.postMessage({
             channel: slackChannelId,
             text: `🔀 Switched to *${matchedAgent.name}*. Starting a fresh conversation.\n\nUse \`!start\` to switch back.`

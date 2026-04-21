@@ -12,6 +12,7 @@ export class TelegramChannel implements ChannelProvider {
     allowedAgentIds: string[]
     activeExecutions = new Map<string, { exec: ActiveChannelExecution; controller: AbortController }>()
     chatAgentOverride = new Map<number, string>()
+    chatLastUsedAgent = new Map<number, string>()
     pendingHITL = new Map<string, PendingHITL>()
     conversationToChat = new Map<string, number>()
     chatLocks = new Map<number, Promise<void>>()

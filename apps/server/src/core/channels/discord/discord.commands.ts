@@ -30,7 +30,13 @@ export async function handleCommand(ctx: DiscordCtx, msg: import('discord.js').M
 
     if (command === 'new') {
         cancelExecutionsForChannel(ctx, discordChannelId)
-        const effectiveAgentId = ctx.channelAgentOverride.get(discordChannelId) || ctx.agentId
+        const effectiveAgentId = ctx.channelLastUsedAgent.get(discordChannelId) || ctx.channelAgentOverride.get(discordChannelId) || ctx.agentId
+        if (effectiveAgentId === ctx.agentId) {
+            ctx.channelAgentOverride.delete(discordChannelId)
+        } else {
+            ctx.channelAgentOverride.set(discordChannelId, effectiveAgentId)
+        }
+        ctx.channelLastUsedAgent.set(discordChannelId, effectiveAgentId)
         archiveConversation(ctx, discordChannelId, effectiveAgentId)
         const agent = getAgent(effectiveAgentId)
         await msg.reply(`🆕 Starting a fresh conversation with **${agent?.name || 'Unknown'}**.`).catch(() => { })
@@ -40,6 +46,9 @@ export async function handleCommand(ctx: DiscordCtx, msg: import('discord.js').M
     if (command === 'start') {
         cancelExecutionsForChannel(ctx, discordChannelId)
         const prevAgentId = ctx.channelAgentOverride.get(discordChannelId) || ctx.agentId
+        if (prevAgentId !== ctx.agentId || !ctx.channelLastUsedAgent.has(discordChannelId)) {
+            ctx.channelLastUsedAgent.set(discordChannelId, prevAgentId)
+        }
         ctx.channelAgentOverride.delete(discordChannelId)
         archiveConversation(ctx, discordChannelId, prevAgentId)
         const agent = getAgent(ctx.agentId)
@@ -62,6 +71,7 @@ export async function handleCommand(ctx: DiscordCtx, msg: import('discord.js').M
             archiveConversation(ctx, discordChannelId, matchedAgent.id)
         }
         ctx.channelAgentOverride.set(discordChannelId, matchedAgent.id)
+        ctx.channelLastUsedAgent.set(discordChannelId, matchedAgent.id)
         await msg.reply(`🔀 Switched to **${matchedAgent.name}**. Starting a fresh conversation.\n\nUse \`!start\` to switch back.`).catch(() => { })
         return true
     }
