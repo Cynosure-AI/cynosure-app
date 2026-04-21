@@ -12,6 +12,7 @@ export class DiscordChannel implements ChannelProvider {
     allowedAgentIds: string[]
     activeExecutions = new Map<string, { exec: ActiveChannelExecution; controller: AbortController }>()
     channelAgentOverride = new Map<string, string>()
+    channelLastUsedAgent = new Map<string, string>()
     pendingHITL = new Map<string, { discordChannelId: string; messageId: string; resolve: (result: { approved: boolean; reason?: string }) => void }>()
     conversationToChannel = new Map<string, string>()
     channelLocks = new Map<string, Promise<void>>()

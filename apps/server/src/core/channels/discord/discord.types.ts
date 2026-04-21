@@ -25,6 +25,7 @@ export interface DiscordCtx {
     allowedAgentIds: string[]
     activeExecutions: Map<string, { exec: ActiveChannelExecution; controller: AbortController }>
     channelAgentOverride: Map<string, string>
+    channelLastUsedAgent: Map<string, string>
     pendingHITL: Map<string, PendingHITL>
     conversationToChannel: Map<string, string>
     channelLocks: Map<string, Promise<void>>

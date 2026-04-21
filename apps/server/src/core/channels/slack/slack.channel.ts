@@ -15,6 +15,7 @@ export class SlackChannel implements ChannelProvider {
     botUserId?: string
     activeExecutions = new Map<string, { exec: ActiveChannelExecution; controller: AbortController }>()
     channelAgentOverride = new Map<string, string>()
+    channelLastUsedAgent = new Map<string, string>()
     pendingHITL = new Map<string, { slackChannelId: string; messageTs: string; resolve: (result: { approved: boolean; reason?: string }) => void }>()
     conversationToChannel = new Map<string, string>()
     channelLocks = new Map<string, Promise<void>>()

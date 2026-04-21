@@ -16,8 +16,9 @@ export function getAvailableAgents(ctx: TelegramCtx) {
 export async function registerBotCommands(ctx: TelegramCtx): Promise<void> {
     const agents = getAvailableAgents(ctx)
     const commands: { command: string; description: string }[] = [
+        { command: 'start', description: 'Start a fresh conversation with the default agent' },
         { command: 'stop', description: 'Cancel the currently running execution' },
-        { command: 'new', description: 'Start a fresh conversation with the current agent' }
+        { command: 'new', description: 'Start a fresh conversation with the last used agent' }
     ]
     for (const agent of agents) {
         const cmd = agent.codename.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 32)
@@ -53,7 +54,13 @@ export async function handleCommand(ctx: TelegramCtx, chatId: number, text: stri
 
     if (command === 'new') {
         cancelExecutionsForChat(ctx, chatId)
-        const effectiveAgentId = ctx.chatAgentOverride.get(chatId) || ctx.agentId
+        const effectiveAgentId = ctx.chatLastUsedAgent.get(chatId) || ctx.chatAgentOverride.get(chatId) || ctx.agentId
+        if (effectiveAgentId === ctx.agentId) {
+            ctx.chatAgentOverride.delete(chatId)
+        } else {
+            ctx.chatAgentOverride.set(chatId, effectiveAgentId)
+        }
+        ctx.chatLastUsedAgent.set(chatId, effectiveAgentId)
         archiveConversation(ctx, chatId, effectiveAgentId)
         const agent = getAgent(effectiveAgentId)
         await sendMessage(ctx, chatId, `🆕 Starting a fresh conversation with *${agent?.name || 'Unknown'}*.`)
@@ -63,6 +70,9 @@ export async function handleCommand(ctx: TelegramCtx, chatId: number, text: stri
     if (command === 'start') {
         cancelExecutionsForChat(ctx, chatId)
         const prevAgentId = ctx.chatAgentOverride.get(chatId) || ctx.agentId
+        if (prevAgentId !== ctx.agentId || !ctx.chatLastUsedAgent.has(chatId)) {
+            ctx.chatLastUsedAgent.set(chatId, prevAgentId)
+        }
         ctx.chatAgentOverride.delete(chatId)
         archiveConversation(ctx, chatId, prevAgentId)
         const agent = getAgent(ctx.agentId)
@@ -87,6 +97,7 @@ export async function handleCommand(ctx: TelegramCtx, chatId: number, text: stri
             archiveConversation(ctx, chatId, matchedAgent.id)
         }
         ctx.chatAgentOverride.set(chatId, matchedAgent.id)
+        ctx.chatLastUsedAgent.set(chatId, matchedAgent.id)
         await sendMessage(ctx, chatId, `🔀 Switched to *${matchedAgent.name}*. Starting a fresh conversation.\n\nUse /start to switch back to the default agent.`)
         return true
     }
