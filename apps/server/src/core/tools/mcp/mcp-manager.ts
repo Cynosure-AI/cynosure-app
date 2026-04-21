@@ -8,13 +8,13 @@ import { McpOAuthProvider } from './oauth-provider.js'
 import { writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, rmSync } from 'fs'
 import { join, extname } from 'path'
 import { createHash } from 'crypto'
-import { homedir } from 'os'
+import { homedir, tmpdir } from 'os'
 import { getAppDataDir } from '../../data-dir.js'
 import { nanoid } from 'nanoid'
 
-/** Directory for MCP tool-generated images */
+/** Directory for caching inline base64 image payloads returned by MCP tools */
 function getMcpImagesDir(): string {
-    const dir = join(getAppDataDir(), 'mcp-images')
+    const dir = join(tmpdir(), 'cynosure-mcp', 'images')
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     return dir
 }
@@ -351,9 +351,8 @@ export class McpManager {
                         .map((c) => c.text || '')
                         .join('\n')
 
-                    // Save base64 image content to managed mcp-images directory.
-                    // This avoids passing huge data URLs through WebSocket/LLM context
-                    // and gives us a durable copy we control (cleanup on conversation delete).
+                    // Save inline base64 image content to a temp file so the LLM
+                    // receives a compact /api/files URL instead of a huge data URL.
                     const imageUrls: string[] = []
                     const imageDataUrls: string[] = []
                     for (const c of parts) {
