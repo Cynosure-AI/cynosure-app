@@ -192,6 +192,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
     process.env.CYNOSURE_DATA_DIR = options.dataDir
   }
 
+  const startedAt = new Date().toISOString()
   const app = Fastify({ bodyLimit: 50 * 1024 * 1024 })
 
   await app.register(fastifyCors)
@@ -208,6 +209,24 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
     }
   })
   await app.register(fastifySwaggerUi, { routePrefix: '/docs' })
+
+  app.get('/', async () => {
+    return {
+      name: APP_NAME,
+      version: APP_VERSION,
+      status: 'ok',
+      description: 'Cynosure server is running.',
+      timestamp: new Date().toISOString(),
+      startedAt,
+      uptimeSeconds: Math.floor(process.uptime()),
+      endpoints: {
+        health: '/api/health',
+        docs: '/docs',
+        websocket: '/ws',
+        api: '/api'
+      }
+    }
+  })
 
   const pendingHITLResolvers = new Map<string, (result: ApprovalResult) => void>()
 
@@ -328,7 +347,13 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerFileRoutes, { prefix: '/api/files' })
 
   app.get('/api/health', async () => {
-    return { status: 'ok' }
+    return {
+      status: 'ok',
+      name: APP_NAME,
+      version: APP_VERSION,
+      timestamp: new Date().toISOString(),
+      uptimeSeconds: Math.floor(process.uptime())
+    }
   })
 
   loadSavedProviders()
