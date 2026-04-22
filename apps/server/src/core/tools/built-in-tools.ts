@@ -29,7 +29,7 @@ type BroadcastFn = (event: string, data: unknown) => void
 // ─── Built-in tool names (selectable by agents) ────────────
 
 export const BUILTIN_TOOL_NAMES = [
-    'create_notification',
+    'create_app_notification',
     'memory_list_documents',
     'memory_retrieve_chunks',
     'memory_semantic_search',
@@ -53,7 +53,7 @@ export function registerBuiltInTools(): void {
 
     registry.register(
         {
-            name: 'create_notification',
+            name: 'create_app_notification',
             description:
                 'Create a notification for the user. Use this when you find something noteworthy — e.g. completed tasks, new findings, errors, or anything the user should be aware of.',
             parameters: {
@@ -197,7 +197,7 @@ export function hydrateBuiltInTools(
 
     return tools.map((t) => {
         switch (t.name) {
-            case 'create_notification':
+            case 'create_app_notification':
                 return makeNotificationTool({ agentId: ctx.agentId || '', conversationId: ctx.conversationId, broadcast: ctx.broadcast })
             case 'memory_list_documents':
                 return makeMemoryListDocumentsTool({ spaceFilter })
