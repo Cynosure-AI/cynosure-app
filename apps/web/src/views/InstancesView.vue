@@ -24,6 +24,7 @@ const tabs = computed<TabDef<Tab>[]>(() => [
 
 // ── Running instances ──
 const instances = ref<AgentInstance[]>([])
+const sortedInstances = computed(() => [...instances.value].sort((a, b) => b.startedAt - a.startedAt))
 const loading = ref(true)
 const now = ref(Date.now())
 let pollTimer: ReturnType<typeof setInterval> | undefined
@@ -231,7 +232,7 @@ onUnmounted(() => {
           class="space-y-2"
         >
           <div
-            v-for="inst in instances"
+            v-for="inst in sortedInstances"
             :key="inst.id"
             role="button"
             tabindex="0"
