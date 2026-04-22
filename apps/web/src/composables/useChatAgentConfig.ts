@@ -40,7 +40,7 @@ export function useChatAgentConfig(
     )
     const sessionModelOverride = ref<string | null>(null)
     const sessionProviderOverride = ref<string | null>(null)
-    const sessionOverrideSubAgents = ref<boolean>(true)
+    const sessionOverrideSubAgents = ref<boolean>(false)
     const sessionSystemPrompt = ref<string>('')
     const sessionThinkingEnabled = ref<boolean>(true)
     const agentOriginalSystemPrompt = ref<string>('')
@@ -176,6 +176,7 @@ export function useChatAgentConfig(
         agentOriginalSystemPrompt.value = agent.systemPrompt || ''
         sessionModelOverride.value = null
         sessionProviderOverride.value = null
+        sessionOverrideSubAgents.value = false
         userModifiedOverrides.value = false
     }
 
