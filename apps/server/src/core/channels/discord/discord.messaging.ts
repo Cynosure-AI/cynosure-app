@@ -195,9 +195,10 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
 
     const eventBus = getEventBus()
     const unsubs: Array<() => void> = []
-    let accumulatedThinking = ''
-    let thinkingEditQueued = false
-    const THINKING_EDIT_INTERVAL_MS = 2000
+    // Thinking display is disabled
+    // let accumulatedThinking = ''
+    // let thinkingEditQueued = false
+    // const THINKING_EDIT_INTERVAL_MS = 2000
 
     let sendChain = Promise.resolve()
     const enqueueSend = (fn: () => Promise<void>): void => {
@@ -206,27 +207,28 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
     ctx.conversationSendQueue.set(conversationId, enqueueSend)
 
     if (thinkingMsg) {
-        unsubs.push(eventBus.on('step:thinking', (...args: unknown[]) => {
-            const data = args[0] as { conversationId: string; thinking: string }
-            if (data.conversationId !== conversationId) return
-            accumulatedThinking += data.thinking
-
-            if (!thinkingEditQueued) {
-                thinkingEditQueued = true
-                setTimeout(() => {
-                    thinkingEditQueued = false
-                    const MAX_THINKING = 1900
-                    const display = accumulatedThinking.length > MAX_THINKING
-                        ? '…' + accumulatedThinking.slice(-MAX_THINKING)
-                        : accumulatedThinking
-                    thinkingMsg!.edit(`💭 **Thinking**\n\n${display}`).catch(() => { })
-                }, THINKING_EDIT_INTERVAL_MS)
-            }
-        }))
+        // Thinking display is disabled — live thinking updates are omitted
+        // unsubs.push(eventBus.on('step:thinking', (...args: unknown[]) => {
+        //     const data = args[0] as { conversationId: string; thinking: string }
+        //     if (data.conversationId !== conversationId) return
+        //     accumulatedThinking += data.thinking
+        //     if (!thinkingEditQueued) {
+        //         thinkingEditQueued = true
+        //         setTimeout(() => {
+        //             thinkingEditQueued = false
+        //             const MAX_THINKING = 1900
+        //             const display = accumulatedThinking.length > MAX_THINKING
+        //                 ? '…' + accumulatedThinking.slice(-MAX_THINKING)
+        //                 : accumulatedThinking
+        //             thinkingMsg!.edit(`💭 **Thinking**\n\n${display}`).catch(() => { })
+        //         }, THINKING_EDIT_INTERVAL_MS)
+        //     }
+        // }))
 
         unsubs.push(eventBus.on('step:tools-chosen', (...args: unknown[]) => {
-            const data = args[0] as { conversationId: string; iteration: number; toolCalls: { name: string; arguments: string }[] }
+            const data = args[0] as { conversationId: string; iteration: number; toolCalls: { name: string; arguments: string }[]; maCodename?: string }
             if (data.conversationId !== conversationId) return
+            const prefix = data.maCodename ? `🤖 **[${data.maCodename}]** ` : ''
             const toolLines = data.toolCalls.map(tc => {
                 let params = ''
                 try {
@@ -237,7 +239,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
                     ? `\`${tc.name}\`:\n\`\`\`\n${params}\n\`\`\``
                     : `\`${tc.name}\``
             })
-            const text = `🔧 ${toolLines.join('\n')}`
+            const text = `${prefix}🔧 ${toolLines.join('\n')}`
             enqueueSend(() => thinkingMsg!.reply(text.slice(0, 2000)).catch(() => { }) as Promise<any>)
         }))
 
@@ -280,9 +282,39 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
     let executionFinished = false
     const CONTENT_EDIT_INTERVAL_MS = 1500
 
+    // Per-sub-agent streaming content buffers
+    const subAgentContent = new Map<string, { content: string; msg: Message | null; timer: ReturnType<typeof setTimeout> | null }>()
+
     unsubs.push(eventBus.on('step:content', (...args: unknown[]) => {
-        const data = args[0] as { conversationId: string; content: string }
+        const data = args[0] as { conversationId: string; content: string; maCodename?: string }
         if (data.conversationId !== conversationId) return
+
+        if (data.maCodename) {
+            // Sub-agent content — stream as a separate message per sub-agent
+            const codename = data.maCodename
+            if (!subAgentContent.has(codename)) {
+                subAgentContent.set(codename, { content: '', msg: null, timer: null })
+            }
+            const sa = subAgentContent.get(codename)!
+            sa.content += data.content
+            if (sa.timer) clearTimeout(sa.timer)
+            if (!executionFinished) {
+                sa.timer = setTimeout(async () => {
+                    sa.timer = null
+                    const prefix = `🤖 **[${codename}]**\n\n`
+                    const MAX_LEN = 1900
+                    const raw = prefix + sa.content
+                    const display = raw.length > MAX_LEN ? raw.slice(0, MAX_LEN) + '…' : raw
+                    if (!sa.msg && 'send' in msg.channel) {
+                        try { sa.msg = await (msg.channel as { send: Function }).send(display + ' ▍') as Message } catch { }
+                    } else if (sa.msg) {
+                        await sa.msg.edit(display + ' ▍').catch(() => { })
+                    }
+                }, CONTENT_EDIT_INTERVAL_MS)
+            }
+            return
+        }
+
         accumulatedContent += data.content
 
         if (!contentEditQueued && !executionFinished) {
@@ -312,6 +344,25 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         if (contentEditTimer) { clearTimeout(contentEditTimer); contentEditTimer = null }
         ctx.conversationSendQueue.delete(conversationId)
         await sendChain
+
+        // Finalize sub-agent messages
+        for (const [codename, sa] of subAgentContent.entries()) {
+            if (sa.timer) { clearTimeout(sa.timer); sa.timer = null }
+            if (sa.content) {
+                const prefix = `🤖 **[${codename}]**\n\n`
+                const text = prefix + sa.content
+                if (sa.msg) {
+                    if (text.length <= 2000) {
+                        await sa.msg.edit(text).catch(() => { })
+                    } else {
+                        await sa.msg.edit(text.slice(0, 2000)).catch(() => { })
+                        if ('send' in msg.channel) await sendLongMessage(msg.channel as { send: Function }, text.slice(2000))
+                    }
+                } else if ('send' in msg.channel) {
+                    await sendLongMessage(msg.channel as { send: Function }, text)
+                }
+            }
+        }
 
         const assistantMsgId = nanoid()
         db.prepare(
@@ -347,15 +398,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
             const summary = result.toolRounds
                 ? `✅ Done (${result.toolRounds} tool round${result.toolRounds > 1 ? 's' : ''}, ${durationSec}s)`
                 : `✅ Done (${durationSec}s)`
-            if (accumulatedThinking) {
-                const MAX_THINKING = 1900
-                const thinking = accumulatedThinking.length > MAX_THINKING
-                    ? '…' + accumulatedThinking.slice(-MAX_THINKING)
-                    : accumulatedThinking
-                await thinkingMsg.edit(`💭 **Thinking**\n\n${thinking}\n\n${summary}`).catch(() => { })
-            } else {
-                await thinkingMsg.edit(summary).catch(() => { })
-            }
+            await thinkingMsg.edit(summary).catch(() => { })
         }
 
         if (responseState.msg) {
