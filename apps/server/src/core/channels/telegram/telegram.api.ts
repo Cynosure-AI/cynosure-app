@@ -1,10 +1,11 @@
 import { TELEGRAM_API, type TelegramCtx, type TelegramUpdate } from './telegram.types.js'
+import { formatTelegramMessage } from './telegram.format.js'
 
 export async function sendMessage(ctx: TelegramCtx, chatId: number, text: string): Promise<void> {
     await fetch(`${TELEGRAM_API}/bot${ctx.botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' })
+        body: JSON.stringify({ chat_id: chatId, text: formatTelegramMessage(text), parse_mode: 'MarkdownV2' })
     })
 }
 
@@ -37,7 +38,7 @@ export async function sendMessageReturningId(ctx: TelegramCtx, chatId: number, t
         const res = await fetch(`${TELEGRAM_API}/bot${ctx.botToken}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' })
+            body: JSON.stringify({ chat_id: chatId, text: formatTelegramMessage(text), parse_mode: 'MarkdownV2' })
         })
         const data = await res.json() as { ok: boolean; result?: { message_id: number } }
         return data.ok ? data.result?.message_id ?? null : null
@@ -52,9 +53,9 @@ export async function sendReply(ctx: TelegramCtx, chatId: number, replyToMsgId: 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             chat_id: chatId,
-            text,
+            text: formatTelegramMessage(text),
             reply_to_message_id: replyToMsgId,
-            parse_mode: 'Markdown'
+            parse_mode: 'MarkdownV2'
         })
     }).catch(() => { })
 }
@@ -67,8 +68,8 @@ export async function editMessage(ctx: TelegramCtx, chatId: number, messageId: n
             body: JSON.stringify({
                 chat_id: chatId,
                 message_id: messageId,
-                text,
-                parse_mode: 'Markdown'
+                text: formatTelegramMessage(text),
+                parse_mode: 'MarkdownV2'
             })
         })
         const data = await res.json() as { ok: boolean }
