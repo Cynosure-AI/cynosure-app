@@ -146,9 +146,9 @@ function onTitleKeydown(e: KeyboardEvent): void {
 
     <!-- Sub-agent override toggle (next to provider) -->
     <label
-      v-if="(chatStore.sessionModelOverride || chatStore.sessionProviderOverride) && (selectedAgent?.subAgents?.length || chatStore.freeChatSubAgentIds?.length)"
+      v-if="selectedAgent?.subAgents?.length || chatStore.freeChatSubAgentIds?.length"
       class="items-center gap-1.5 hidden md:flex cursor-pointer select-none shrink-0"
-      :title="chatStore.sessionOverrideSubAgents ? 'Override applies to all sub-agents — click to restrict to main agent only' : 'Override applies to main agent only — click to propagate to sub-agents'"
+      :title="chatStore.sessionOverrideSubAgents ? 'Model applies to all sub-agents — click to restrict to main agent only' : 'Model applies to main agent only — click to propagate to sub-agents'"
     >
       <ToggleSwitch
         :model-value="chatStore.sessionOverrideSubAgents"
