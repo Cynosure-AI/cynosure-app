@@ -422,13 +422,14 @@ const isUser = computed(() => props.role === 'user')
       <!-- Model-generated images (assistant) -->
       <div
         v-if="!isUser && imageDataUrls?.length"
-        class="flex gap-2 mt-2 flex-wrap"
+        class="mt-2"
+        :class="imageDataUrls.length > 1 ? 'grid grid-cols-2 md:grid-cols-3 gap-2' : ''"
       >
         <img
           v-for="(url, idx) in imageDataUrls"
           :key="idx"
           :src="url"
-          class="max-w-full rounded-lg border border-zinc-600 cursor-pointer hover:opacity-80 transition-opacity"
+          class="w-full rounded-lg border border-zinc-600 cursor-pointer hover:opacity-80 transition-opacity object-cover"
           title="Click to enlarge"
           @click="lightboxSrc = url"
         >
