@@ -209,9 +209,10 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
     const eventBus = getEventBus()
     const unsubs: Array<() => void> = []
 
-    let accumulatedThinking = ''
-    let thinkingEditQueued = false
-    const THINKING_EDIT_INTERVAL_MS = 2000
+    // Thinking display is disabled
+    // let accumulatedThinking = ''
+    // let thinkingEditQueued = false
+    // const THINKING_EDIT_INTERVAL_MS = 2000
 
     let sendChain = Promise.resolve()
     const enqueueSend = (fn: () => Promise<void>): void => {
@@ -219,27 +220,28 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
     }
     ctx.conversationSendQueue.set(conversationId, enqueueSend)
 
-    unsubs.push(eventBus.on('step:thinking', (...args: unknown[]) => {
-        const data = args[0] as { conversationId: string; thinking: string }
-        if (data.conversationId !== conversationId) return
-        accumulatedThinking += data.thinking
-
-        if (!thinkingEditQueued && thinkingTs) {
-            thinkingEditQueued = true
-            setTimeout(() => {
-                thinkingEditQueued = false
-                const MAX_THINKING = 2900
-                const display = accumulatedThinking.length > MAX_THINKING
-                    ? '…' + accumulatedThinking.slice(-MAX_THINKING)
-                    : accumulatedThinking
-                client.chat.update({ channel: slackChannelId, ts: thinkingTs!, text: `💭 *Thinking*\n\n${display}` }).catch(() => { })
-            }, THINKING_EDIT_INTERVAL_MS)
-        }
-    }))
+    // Thinking display is disabled — live thinking updates are omitted
+    // unsubs.push(eventBus.on('step:thinking', (...args: unknown[]) => {
+    //     const data = args[0] as { conversationId: string; thinking: string }
+    //     if (data.conversationId !== conversationId) return
+    //     accumulatedThinking += data.thinking
+    //     if (!thinkingEditQueued && thinkingTs) {
+    //         thinkingEditQueued = true
+    //         setTimeout(() => {
+    //             thinkingEditQueued = false
+    //             const MAX_THINKING = 2900
+    //             const display = accumulatedThinking.length > MAX_THINKING
+    //                 ? '…' + accumulatedThinking.slice(-MAX_THINKING)
+    //                 : accumulatedThinking
+    //             client.chat.update({ channel: slackChannelId, ts: thinkingTs!, text: `💭 *Thinking*\n\n${display}` }).catch(() => { })
+    //         }, THINKING_EDIT_INTERVAL_MS)
+    //     }
+    // }))
 
     unsubs.push(eventBus.on('step:tools-chosen', (...args: unknown[]) => {
-        const data = args[0] as { conversationId: string; iteration: number; toolCalls: { name: string; arguments: string }[] }
+        const data = args[0] as { conversationId: string; iteration: number; toolCalls: { name: string; arguments: string }[]; maCodename?: string }
         if (data.conversationId !== conversationId) return
+        const prefix = data.maCodename ? `🤖 *[${data.maCodename}]* ` : ''
         const toolLines = data.toolCalls.map(tc => {
             let params = ''
             try {
@@ -252,7 +254,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
                 ? `\`${tc.name}\`:\n\`\`\`\n${params}\n\`\`\``
                 : `\`${tc.name}\``
         })
-        const text = `🔧 ${toolLines.join('\n')}`
+        const text = `${prefix}🔧 ${toolLines.join('\n')}`
         enqueueSend(async () => {
             await client.chat.postMessage({ channel: slackChannelId, text: text.slice(0, 3000), thread_ts: msg.ts }).catch(() => { })
         })
@@ -289,9 +291,42 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
     let executionFinished = false
     const CONTENT_EDIT_INTERVAL_MS = 1500
 
+    // Per-sub-agent streaming content buffers
+    const subAgentContent = new Map<string, { content: string; ts: string | null; timer: ReturnType<typeof setTimeout> | null }>()
+
     unsubs.push(eventBus.on('step:content', (...args: unknown[]) => {
-        const data = args[0] as { conversationId: string; content: string }
+        const data = args[0] as { conversationId: string; content: string; maCodename?: string }
         if (data.conversationId !== conversationId) return
+
+        if (data.maCodename) {
+            // Sub-agent content — stream as a separate message per sub-agent
+            const codename = data.maCodename
+            if (!subAgentContent.has(codename)) {
+                subAgentContent.set(codename, { content: '', ts: null, timer: null })
+            }
+            const sa = subAgentContent.get(codename)!
+            sa.content += data.content
+            if (sa.timer) clearTimeout(sa.timer)
+            if (!executionFinished) {
+                sa.timer = setTimeout(async () => {
+                    sa.timer = null
+                    const prefix = `🤖 *[${codename}]*\n\n`
+                    const MAX_LEN = 3000
+                    const raw = prefix + sa.content
+                    const display = raw.length > MAX_LEN ? raw.slice(0, MAX_LEN) + '…' : raw
+                    if (!sa.ts) {
+                        try {
+                            const res = await client.chat.postMessage({ channel: slackChannelId, text: display + ' ▍', thread_ts: msg.ts })
+                            sa.ts = res.ts || null
+                        } catch { }
+                    } else {
+                        await client.chat.update({ channel: slackChannelId, ts: sa.ts, text: display + ' ▍' }).catch(() => { })
+                    }
+                }, CONTENT_EDIT_INTERVAL_MS)
+            }
+            return
+        }
+
         accumulatedContent += data.content
 
         if (!contentEditQueued && !executionFinished) {
@@ -330,6 +365,25 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         ctx.conversationSendQueue.delete(conversationId)
         await sendChain
 
+        // Finalize sub-agent messages
+        for (const [codename, sa] of subAgentContent.entries()) {
+            if (sa.timer) { clearTimeout(sa.timer); sa.timer = null }
+            if (sa.content) {
+                const prefix = `🤖 *[${codename}]*\n\n`
+                const text = prefix + sa.content
+                if (sa.ts) {
+                    if (text.length <= 3000) {
+                        await client.chat.update({ channel: slackChannelId, ts: sa.ts, text }).catch(() => { })
+                    } else {
+                        await client.chat.update({ channel: slackChannelId, ts: sa.ts, text: text.slice(0, 3000) }).catch(() => { })
+                        await sendLongSlackMessage(client, slackChannelId, text.slice(3000), msg.ts)
+                    }
+                } else {
+                    await sendLongSlackMessage(client, slackChannelId, text, msg.ts)
+                }
+            }
+        }
+
         const assistantMsgId = nanoid()
         db.prepare(
             `INSERT INTO messages (id, conversation_id, role, content, thinking, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
@@ -364,15 +418,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
             const summary = result.toolRounds
                 ? `✅ Done (${result.toolRounds} tool round${result.toolRounds > 1 ? 's' : ''}, ${durationSec}s)`
                 : `✅ Done (${durationSec}s)`
-            if (accumulatedThinking) {
-                const MAX_THINKING = 2900
-                const thinking = accumulatedThinking.length > MAX_THINKING
-                    ? '…' + accumulatedThinking.slice(-MAX_THINKING)
-                    : accumulatedThinking
-                await client.chat.update({ channel: slackChannelId, ts: thinkingTs, text: `💭 *Thinking*\n\n${thinking}\n\n${summary}` }).catch(() => { })
-            } else {
-                await client.chat.update({ channel: slackChannelId, ts: thinkingTs, text: summary }).catch(() => { })
-            }
+            await client.chat.update({ channel: slackChannelId, ts: thinkingTs, text: summary }).catch(() => { })
         }
 
         if (responseTs) {
