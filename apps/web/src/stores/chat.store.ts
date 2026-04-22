@@ -319,6 +319,14 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function resetStreaming(): void {
+    streaming.streamingContent.value = ''
+    streaming.streamingThinking.value = ''
+    streaming.isStreaming.value = false
+    streaming.currentStreamId.value = null
+    streaming.lastUsage.value = null
+  }
+
   function startNewChat(): void {
     // Always re-sync agent config when pressing "New Chat" so edited settings (sub-agents, tools, etc.)
     // take effect even when we're already on a blank chat and we reset it to it's original state.
@@ -329,11 +337,7 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId.value = null
     messages.value = []
     agentStore.setActiveViewConversation(null)
-    streaming.streamingContent.value = ''
-    streaming.streamingThinking.value = ''
-    streaming.isStreaming.value = false
-    streaming.currentStreamId.value = null
-    streaming.lastUsage.value = null
+    resetStreaming()
   }
 
   async function deleteAllConversations(): Promise<void> {
@@ -341,6 +345,7 @@ export const useChatStore = defineStore('chat', () => {
     // Keep pinned conversations in the local list
     const pinned = conversations.value.filter(c => c.pinned)
     conversations.value = pinned
+    resetStreaming()
     if (pinned.length > 0) {
       activeConversationId.value = pinned[0].id
       await selectConversation(pinned[0].id)
@@ -349,11 +354,6 @@ export const useChatStore = defineStore('chat', () => {
       agentStore.setActiveViewConversation(null)
       messages.value = []
     }
-    streaming.streamingContent.value = ''
-    streaming.streamingThinking.value = ''
-    streaming.isStreaming.value = false
-    streaming.currentStreamId.value = null
-    streaming.lastUsage.value = null
   }
 
   async function pinConversation(id: string, pinned: boolean): Promise<void> {
