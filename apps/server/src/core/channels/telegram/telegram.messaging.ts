@@ -106,6 +106,8 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
 
     const effectiveAgentId = ctx.chatAgentOverride.get(chatId) || ctx.agentId
     const thinkingMsgId = await sendMessageReturningId(ctx, chatId, '🤔 Thinking...')
+    let thinkingSeconds = 0
+    let thinkingTimer: ReturnType<typeof setInterval> | null = null
     const conversationId = getOrCreateConversation(ctx, chatId, senderName, effectiveAgentId)
     ctx.conversationToChat.set(conversationId, chatId)
 
@@ -211,6 +213,12 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
     ctx.conversationSendQueue.set(conversationId, enqueueSend)
 
     if (thinkingMsgId) {
+        thinkingTimer = setInterval(() => {
+            thinkingSeconds++
+            editMessage(ctx, chatId, thinkingMsgId!, `🤔 Thinking (${thinkingSeconds}s)`).catch(() => { })
+        }, 1000)
+        unsubs.push(() => { if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null } })
+
         // Thinking display is disabled — live thinking updates are omitted
         // unsubs.push(eventBus.on('step:thinking', (...args: unknown[]) => {
         //     const data = args[0] as { conversationId: string; thinking: string }
@@ -344,6 +352,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
         const result = await executor.run(messages)
 
         executionFinished = true
+        if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
         if (contentEditTimer) { clearTimeout(contentEditTimer); contentEditTimer = null }
         ctx.conversationSendQueue.delete(conversationId)
         await sendChain
@@ -400,10 +409,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
         // Finalize thinking message
         if (thinkingMsgId) {
             const durationSec = Math.round((Date.now() - now) / 1000)
-            const summary = result.toolRounds
-                ? `✅ Done (${result.toolRounds} tool round${result.toolRounds > 1 ? 's' : ''}, ${durationSec}s)`
-                : `✅ Done (${durationSec}s)`
-            await editMessage(ctx, chatId, thinkingMsgId, summary)
+            await editMessage(ctx, chatId, thinkingMsgId, `✅ Done thinking (${durationSec}s)`)
         }
 
         // Send final response
@@ -427,6 +433,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
             }
         }
     } catch (err) {
+        if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
         const errorMsg = (err as Error).message || 'Unknown error'
         console.error(`[Telegram] Agent execution error: ${errorMsg}`)
         if (thinkingMsgId) {
