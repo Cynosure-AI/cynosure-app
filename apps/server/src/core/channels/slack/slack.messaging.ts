@@ -117,6 +117,8 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
     } catch {
         // ignore failures posting thinking indicator
     }
+    let thinkingSeconds = 0
+    let thinkingTimer: ReturnType<typeof setInterval> | null = null
 
     const conversationId = getOrCreateConversation(ctx, slackChannelId, senderName, effectiveAgentId)
     ctx.conversationToChannel.set(conversationId, slackChannelId)
@@ -219,6 +221,14 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         sendChain = sendChain.then(fn, fn)
     }
     ctx.conversationSendQueue.set(conversationId, enqueueSend)
+
+    if (thinkingTs) {
+        thinkingTimer = setInterval(() => {
+            thinkingSeconds++
+            client.chat.update({ channel: slackChannelId, ts: thinkingTs!, text: `🤔 Thinking (${thinkingSeconds}s)` }).catch(() => { })
+        }, 1000)
+        unsubs.push(() => { if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null } })
+    }
 
     // Thinking display is disabled — live thinking updates are omitted
     // unsubs.push(eventBus.on('step:thinking', (...args: unknown[]) => {
@@ -361,6 +371,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         const result = await executor.run(messages)
 
         executionFinished = true
+        if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
         if (contentEditTimer) { clearTimeout(contentEditTimer); contentEditTimer = null }
         ctx.conversationSendQueue.delete(conversationId)
         await sendChain
@@ -415,10 +426,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         const responseText = result.content || '(no response)'
         if (thinkingTs) {
             const durationSec = Math.round((Date.now() - now) / 1000)
-            const summary = result.toolRounds
-                ? `✅ Done (${result.toolRounds} tool round${result.toolRounds > 1 ? 's' : ''}, ${durationSec}s)`
-                : `✅ Done (${durationSec}s)`
-            await client.chat.update({ channel: slackChannelId, ts: thinkingTs, text: summary }).catch(() => { })
+            await client.chat.update({ channel: slackChannelId, ts: thinkingTs, text: `✅ Done thinking (${durationSec}s)` }).catch(() => { })
         }
 
         if (responseTs) {
@@ -440,6 +448,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
             }
         }
     } catch (err) {
+        if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
         const errorMsg = (err as Error).message || 'Unknown error'
         console.error(`[Slack] Agent execution error: ${errorMsg}`)
         await postOrUpdate(client, slackChannelId, thinkingTs, `⚠️ Error: ${errorMsg.slice(0, 2900)}`, msg.ts)
