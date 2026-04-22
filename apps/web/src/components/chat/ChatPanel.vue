@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import { useChatStore, type DisplayMessage } from '../../stores/chat.store'
 import { useAgentStore, type ExecutionStep } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
@@ -152,6 +152,14 @@ watch(() => chatStore.messages.length, scrollToBottom)
 watch(() => chatStore.messages[chatStore.messages.length - 1]?.content, scrollToBottomIfNear)
 watch(() => agentStore.executionSteps.length, scrollToBottomIfNear)
 watch(() => agentStore.pendingHITL, scrollToBottomIfNear)
+// When loading finishes the spinner is replaced by rendered messages — scroll then
+watch(() => chatStore.loadingMessages, (isLoading) => {
+  if (!isLoading) scrollToBottom()
+})
+
+// Scroll to bottom when mounting into an already-loaded conversation
+// (e.g. navigating here from InstancesView after selectConversation was called)
+onMounted(() => scrollToBottom())
 </script>
 
 <template>
