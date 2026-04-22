@@ -142,6 +142,11 @@ const filteredConversations = computed(() => {
               {{ displayTitle(conv) }}
             </span>
             <span
+              v-if="agentStore.awaitingHITLConvIds.has(conv.id)"
+              class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"
+              title="Awaiting tool confirmation"
+            />
+            <span
               v-if="conv.origin && conv.origin !== 'chat'"
               class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full"
               :class="{

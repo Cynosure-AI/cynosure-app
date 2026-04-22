@@ -60,6 +60,11 @@ export const useAgentStore = defineStore('agent', () => {
   const activeViewConversationId = ref<string | null>(null)
   const stepsPerConversation = new Map<string, ExecutionStep[]>()
 
+  /** Set of conversation IDs currently blocking on a HITL tool-approval request. */
+  const awaitingHITLConvIds = ref<Set<string>>(new Set())
+  /** Maps taskId → conversationId so we can clear the set when HITL is resolved by taskId. */
+  const hitlTaskToConv = new Map<string, string>()
+
   /** Keep Maps bounded to avoid memory leaks in long-lived sessions. */
   const MAX_CACHED_CONVERSATIONS = 50
   function pruneConversationCache(): void {
@@ -127,23 +132,46 @@ export const useAgentStore = defineStore('agent', () => {
 
   function handleHITLRequest(data: HITLRequest): void {
     pendingHITL.value = data
+    if (data.conversationId) {
+      awaitingHITLConvIds.value = new Set([...awaitingHITLConvIds.value, data.conversationId])
+      if (data.taskId) hitlTaskToConv.set(data.taskId, data.conversationId)
+    }
   }
 
   function dismissHITL(): void {
     pendingHITL.value = null
   }
 
+  /** Clear the awaiting-HITL indicator for a conversation resolved by taskId. */
+  function dismissHITLByTaskId(taskId?: string): void {
+    if (!taskId) return
+    const convId = hitlTaskToConv.get(taskId)
+    if (convId) {
+      awaitingHITLConvIds.value.delete(convId)
+      awaitingHITLConvIds.value = new Set(awaitingHITLConvIds.value)
+      hitlTaskToConv.delete(taskId)
+    }
+  }
+
   async function respondHITL(approved: boolean, reason?: string, approvalType?: 'once' | 'session' | 'always', overrideToolNames?: string[]): Promise<void> {
     if (!pendingHITL.value) return
     const toolNames = overrideToolNames || [...new Set(pendingHITL.value.toolCalls.map(tc => tc.name))]
+    const convId = pendingHITL.value.conversationId
+    const taskId = pendingHITL.value.taskId
     await api.agent.respondHITL(
-      pendingHITL.value.taskId,
+      taskId,
       approved,
       reason,
       approvalType,
-      pendingHITL.value.conversationId,
+      convId,
       toolNames
     )
+    // Clear awaiting-HITL indicator immediately on UI-side response
+    if (convId) {
+      awaitingHITLConvIds.value.delete(convId)
+      awaitingHITLConvIds.value = new Set(awaitingHITLConvIds.value)
+    }
+    if (taskId) hitlTaskToConv.delete(taskId)
     pendingHITL.value = null
   }
 
@@ -193,6 +221,11 @@ export const useAgentStore = defineStore('agent', () => {
     if (isForActiveView) {
       isExecuting.value = false
       activeTaskId.value = null
+    }
+    // Clear any awaiting-HITL indicator for this conversation
+    if (convId && awaitingHITLConvIds.value.has(convId)) {
+      awaitingHITLConvIds.value.delete(convId)
+      awaitingHITLConvIds.value = new Set(awaitingHITLConvIds.value)
     }
     if (convId || executionConversationId.value) {
       const cid = convId || executionConversationId.value!
@@ -392,7 +425,9 @@ export const useAgentStore = defineStore('agent', () => {
     isToolAutoApproved,
     handleHITLRequest,
     dismissHITL,
+    dismissHITLByTaskId,
     respondHITL,
+    awaitingHITLConvIds,
     handleExecutionUpdate,
     clearExecution,
     clearExecutionState,
