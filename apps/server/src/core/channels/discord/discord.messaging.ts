@@ -240,7 +240,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
                     : `\`${tc.name}\``
             })
             const text = `${prefix}🔧 ${toolLines.join('\n')}`
-            enqueueSend(() => thinkingMsg!.reply(text.slice(0, 2000)).catch(() => { }) as Promise<any>)
+            enqueueSend(() => ('send' in msg.channel ? (msg.channel as { send: Function }).send(text.slice(0, 2000)) : Promise.resolve()).catch(() => { }) as Promise<any>)
         }))
 
         unsubs.push(eventBus.on('step:executed', (...args: unknown[]) => {
@@ -253,7 +253,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
                         const preview = r.output.length > 150 ? r.output.slice(0, 150) + '…' : r.output
                         return `❌ \`${r.name}\`: ${preview}`
                     })
-                    await thinkingMsg!.reply(lines.join('\n').slice(0, 2000)).catch(() => { })
+                    if ('send' in msg.channel) await (msg.channel as { send: Function }).send(lines.join('\n').slice(0, 2000)).catch(() => { })
                 }
                 for (const r of data.results) {
                     if (r.imageDataUrls?.length && 'send' in msg.channel) {

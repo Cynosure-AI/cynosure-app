@@ -9,7 +9,7 @@ import type { ChatMessage, ContentPart } from '../../gateway/providers/base.prov
 import { nanoid } from 'nanoid'
 import type { TelegramCtx, TelegramUpdate } from './telegram.types.js'
 import { handleCommand } from './telegram.commands.js'
-import { sendMessage, sendMessageReturningId, sendReply, editMessage, sendLongMessage, sendChatAction, sendPhoto, answerCallbackQuery } from './telegram.api.js'
+import { sendMessage, sendMessageReturningId, editMessage, sendLongMessage, sendChatAction, sendPhoto, answerCallbackQuery } from './telegram.api.js'
 import { extractAttachments } from './telegram.attachments.js'
 
 export async function handleMessage(ctx: TelegramCtx, update: TelegramUpdate): Promise<void> {
@@ -244,7 +244,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
                     : `\`${tc.name}\``
             })
             const text = `${prefix}🔧 ${toolLines.join('\n')}`
-            enqueueSend(() => sendReply(ctx, chatId, thinkingMsgId, text.slice(0, 4000)).catch(() => { }))
+            enqueueSend(() => sendMessage(ctx, chatId, text.slice(0, 4000)).catch(() => { }))
         }))
 
         unsubs.push(eventBus.on('step:executed', (...args: unknown[]) => {
@@ -258,7 +258,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
                         const preview = r.output.length > 200 ? r.output.slice(0, 200) + '…' : r.output
                         return `❌ \`${r.name}\`: ${preview}`
                     })
-                    await sendReply(ctx, chatId, thinkingMsgId!, `${prefix}${lines.join('\n')}`.slice(0, 4000)).catch(() => { })
+                    await sendMessage(ctx, chatId, `${prefix}${lines.join('\n')}`.slice(0, 4000)).catch(() => { })
                 }
                 for (const r of data.results) {
                     if (r.imageDataUrls?.length) {
