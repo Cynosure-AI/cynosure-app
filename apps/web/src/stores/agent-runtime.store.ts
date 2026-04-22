@@ -44,12 +44,6 @@ export interface ExecutionStep {
   maPhase?: string
 }
 
-export interface EventLogEntry {
-  timestamp: number
-  event: string
-  data: Record<string, unknown>
-}
-
 export const useAgentStore = defineStore('agent', () => {
   const isExecuting = ref(false)
   const activeTaskId = ref<string | null>(null)
@@ -57,7 +51,6 @@ export const useAgentStore = defineStore('agent', () => {
   const executionSteps = ref<ExecutionStep[]>([])
   const toolApprovals = ref<Record<string, boolean>>({})
 
-  const eventLog = ref<EventLogEntry[]>([])
   const availableTools = ref<ToolInfo[]>([])
   const selectedToolNames = ref<string[]>([])
 
@@ -66,18 +59,14 @@ export const useAgentStore = defineStore('agent', () => {
   /** The conversation the user is currently viewing — used to filter live events. */
   const activeViewConversationId = ref<string | null>(null)
   const stepsPerConversation = new Map<string, ExecutionStep[]>()
-  const eventsPerConversation = new Map<string, EventLogEntry[]>()
 
   /** Keep Maps bounded to avoid memory leaks in long-lived sessions. */
   const MAX_CACHED_CONVERSATIONS = 50
   function pruneConversationCache(): void {
-    for (const map of [stepsPerConversation, eventsPerConversation]) {
-      while (map.size > MAX_CACHED_CONVERSATIONS) {
-        // Maps iterate in insertion order — delete the oldest entry
-        const oldest = map.keys().next().value
-        if (oldest !== undefined) map.delete(oldest)
-        else break
-      }
+    while (stepsPerConversation.size > MAX_CACHED_CONVERSATIONS) {
+      const oldest = stepsPerConversation.keys().next().value
+      if (oldest !== undefined) stepsPerConversation.delete(oldest)
+      else break
     }
   }
 
@@ -158,102 +147,108 @@ export const useAgentStore = defineStore('agent', () => {
     pendingHITL.value = null
   }
 
+  /** Build an ExecutionStep from a raw WS event payload. */
+  function buildStep(eventData: Record<string, unknown>, taskId?: string): ExecutionStep {
+    return {
+      iteration: eventData.iteration as number,
+      status: eventData.status as string,
+      message: eventData.message as string,
+      timestamp: Date.now(),
+      taskId: taskId || undefined,
+      maCodename: (eventData.maCodename as string) || undefined,
+      maAgentName: (eventData.maAgentName as string) || undefined,
+    }
+  }
+
+  /** Find the last step matching a taskId in an arbitrary steps array (for background caching). */
+  function findLastStepInArray(steps: ExecutionStep[], taskId: string | undefined): ExecutionStep | undefined {
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (taskId ? steps[i].taskId === taskId : !steps[i].taskId) return steps[i]
+    }
+    return steps.length ? steps[steps.length - 1] : undefined
+  }
+
+  /** Find the last step matching the given taskId (or last step with no taskId when taskId is undefined). */
+  function findLastStepByTask(taskId: string | undefined): ExecutionStep | undefined {
+    const steps = executionSteps.value
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (taskId ? steps[i].taskId === taskId : !steps[i].taskId) return steps[i]
+    }
+    return steps.length ? steps[steps.length - 1] : undefined
+  }
+
+  function updateLastStepByTask(taskId: string | undefined, patch: Partial<ExecutionStep>): void {
+    const step = findLastStepByTask(taskId)
+    if (step) Object.assign(step, patch)
+  }
+
+  function appendToLastStepByTask(taskId: string | undefined, field: 'streamingChoosing', chunk: string): void {
+    const step = findLastStepByTask(taskId)
+    if (step) step[field] = (step[field] || '') + chunk
+  }
+
+  /** Shared logic for task completion / error events. */
+  function onTaskEnd(isForActiveView: boolean, convId: string | undefined, maCodename: string | undefined): void {
+    if (maCodename) return // Sub-agent completion doesn't stop overall execution
+    if (isForActiveView) {
+      isExecuting.value = false
+      activeTaskId.value = null
+    }
+    if (convId || executionConversationId.value) {
+      const cid = convId || executionConversationId.value!
+      if (isForActiveView) {
+        stepsPerConversation.set(cid, [...executionSteps.value])
+      }
+      pruneConversationCache()
+    }
+  }
+
+  /** Apply a step patch to the last step of a background conversation. */
+  function patchBgStep(convId: string, taskId: string | undefined, patch: Partial<ExecutionStep>): void {
+    const bgSteps = stepsPerConversation.get(convId)
+    if (!bgSteps?.length) return
+    const step = findLastStepInArray(bgSteps, taskId)
+    if (step) Object.assign(step, patch)
+  }
+
   function handleExecutionUpdate(data: { event: string; data: Record<string, unknown> }): void {
     const eventData = data.data
     const taskId = eventData.taskId as string | undefined
     const convId = eventData.conversationId as string | undefined
 
-    // Determine if this event belongs to the conversation the user is currently viewing.
-    // Events for other conversations are cached but NOT applied to the visible executionSteps.
     const viewingConvId = activeViewConversationId.value
     const isForActiveView = !convId || !viewingConvId || convId === viewingConvId
 
-    // Log events globally only for the active view
-    if (isForActiveView) {
-      eventLog.value.push({
-        timestamp: Date.now(),
-        event: data.event,
-        data: eventData
-      })
-      if (eventLog.value.length > 200) {
-        eventLog.value = eventLog.value.slice(-200)
-      }
-    }
-
-    // Always log to per-conversation events (for background caching)
-    if (convId) {
-      if (!eventsPerConversation.has(convId)) eventsPerConversation.set(convId, [])
-      eventsPerConversation.get(convId)!.push({
-        timestamp: Date.now(),
-        event: data.event,
-        data: eventData
-      })
-    }
-
     switch (data.event) {
       case 'task:started':
-        // Sub-agent task:started should NOT reset overall execution state
         if (eventData.maCodename) break
         if (isForActiveView) {
           isExecuting.value = true
           activeTaskId.value = taskId || null
         }
-        if (convId) {
-          executionConversationId.value = convId
-        }
-        // Don't clear executionSteps — pre-task steps (e.g. memory-retrieved) should survive.
-        // Steps are cleared at message-send time instead.
+        if (convId) executionConversationId.value = convId
         break
 
       case 'task:completed':
       case 'task:error':
-        // Sub-agent completion doesn't stop overall execution
-        if (eventData.maCodename) break
-        if (isForActiveView) {
-          isExecuting.value = false
-          activeTaskId.value = null
-        }
-        if (convId || executionConversationId.value) {
-          const cid = convId || executionConversationId.value!
-          if (isForActiveView) {
-            stepsPerConversation.set(cid, [...executionSteps.value])
-          }
-          pruneConversationCache()
-        }
+        onTaskEnd(isForActiveView, convId, eventData.maCodename as string | undefined)
         break
 
-      case 'step:status':
-        if (isForActiveView) {
-          executionSteps.value.push({
-            iteration: eventData.iteration as number,
-            status: eventData.status as string,
-            message: eventData.message as string,
-            timestamp: Date.now(),
-            taskId: taskId || undefined,
-            maCodename: (eventData.maCodename as string) || undefined,
-            maAgentName: (eventData.maAgentName as string) || undefined,
-          })
-        }
-        if (convId || executionConversationId.value) {
-          const cid = convId || executionConversationId.value!
+      case 'step:status': {
+        const step = buildStep(eventData, taskId)
+        if (isForActiveView) executionSteps.value.push(step)
+        const cid = convId || executionConversationId.value
+        if (cid) {
           if (isForActiveView) {
             stepsPerConversation.set(cid, [...executionSteps.value])
           } else {
-            // Cache step for a background conversation
             const bgSteps = stepsPerConversation.get(cid) || []
-            bgSteps.push({
-              iteration: eventData.iteration as number,
-              status: eventData.status as string,
-              message: eventData.message as string,
-              timestamp: Date.now(),
-              taskId: taskId || undefined,
-              maCodename: (eventData.maCodename as string) || undefined,
-              maAgentName: (eventData.maAgentName as string) || undefined,
-            })
+            bgSteps.push(step)
             stepsPerConversation.set(cid, bgSteps)
           }
         }
         break
+      }
 
       case 'step:choosing-chunk':
         if (isForActiveView) {
@@ -274,27 +269,16 @@ export const useAgentStore = defineStore('agent', () => {
         if (isForActiveView) {
           updateLastStepByTask(taskId, { toolCalls: mapped })
         } else if (convId) {
-          // Cache for background conversations so tool pills render when the user switches to them
-          const bgSteps = stepsPerConversation.get(convId)
-          if (bgSteps?.length) {
-            const step = findLastStepInArray(bgSteps, taskId)
-            if (step) step.toolCalls = mapped
-          }
+          patchBgStep(convId, taskId, { toolCalls: mapped })
         }
         break
       }
 
       case 'step:executed':
         if (isForActiveView) {
-          updateLastStepByTask(taskId, {
-            results: eventData.results as ExecutionStep['results']
-          })
+          updateLastStepByTask(taskId, { results: eventData.results as ExecutionStep['results'] })
         } else if (convId) {
-          const bgSteps = stepsPerConversation.get(convId)
-          if (bgSteps?.length) {
-            const step = findLastStepInArray(bgSteps, taskId)
-            if (step) step.results = eventData.results as ExecutionStep['results']
-          }
+          patchBgStep(convId, taskId, { results: eventData.results as ExecutionStep['results'] })
         }
         break
 
@@ -302,48 +286,14 @@ export const useAgentStore = defineStore('agent', () => {
         if (isForActiveView) {
           updateLastStepByTask(taskId, { status: 'denied' })
         } else if (convId) {
-          const bgSteps = stepsPerConversation.get(convId)
-          if (bgSteps?.length) {
-            const step = findLastStepInArray(bgSteps, taskId)
-            if (step) step.status = 'denied'
-          }
+          patchBgStep(convId, taskId, { status: 'denied' })
         }
         break
-
     }
-  }
-
-  /** Find the last step matching a taskId in an arbitrary steps array (for background caching). */
-  function findLastStepInArray(steps: ExecutionStep[], taskId: string | undefined): ExecutionStep | undefined {
-    for (let i = steps.length - 1; i >= 0; i--) {
-      if (taskId ? steps[i].taskId === taskId : !steps[i].taskId) return steps[i]
-    }
-    return steps.length ? steps[steps.length - 1] : undefined
-  }
-
-  /** Find the last step matching the given taskId (or last step with no taskId when taskId is undefined). */
-  function findLastStepByTask(taskId: string | undefined): ExecutionStep | undefined {
-    const steps = executionSteps.value
-    for (let i = steps.length - 1; i >= 0; i--) {
-      if (taskId ? steps[i].taskId === taskId : !steps[i].taskId) return steps[i]
-    }
-    // Fallback to absolute last step
-    return steps.length ? steps[steps.length - 1] : undefined
-  }
-
-  function updateLastStepByTask(taskId: string | undefined, patch: Partial<ExecutionStep>): void {
-    const step = findLastStepByTask(taskId)
-    if (step) Object.assign(step, patch)
-  }
-
-  function appendToLastStepByTask(taskId: string | undefined, field: 'streamingChoosing', chunk: string): void {
-    const step = findLastStepByTask(taskId)
-    if (step) step[field] = (step[field] || '') + chunk
   }
 
   function clearExecution(): void {
     executionSteps.value = []
-    eventLog.value = []
     isExecuting.value = false
     activeTaskId.value = null
     pendingHITL.value = null
@@ -368,17 +318,14 @@ export const useAgentStore = defineStore('agent', () => {
 
   async function restoreForConversation(conversationId: string): Promise<void> {
     const savedSteps = stepsPerConversation.get(conversationId)
-    const savedEvents = eventsPerConversation.get(conversationId)
 
     if (savedSteps?.length) {
       executionSteps.value = [...savedSteps]
-      eventLog.value = savedEvents ? [...savedEvents] : []
       isExecuting.value =
         executionConversationId.value === conversationId && isExecuting.value
     } else {
       // Try loading from DB (survives page reload)
       executionSteps.value = []
-      eventLog.value = []
       isExecuting.value = false
       await loadStepsFromApi(conversationId)
     }
@@ -432,7 +379,6 @@ export const useAgentStore = defineStore('agent', () => {
     pendingHITL,
     executionSteps,
     toolApprovals,
-    eventLog,
     availableTools,
     selectedToolNames,
     hasSteps,

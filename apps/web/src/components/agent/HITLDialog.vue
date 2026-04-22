@@ -202,15 +202,18 @@ function toggleExpand(index: number): void {
             </button>
             <button
               class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-zinc-700/50"
-              @click="approveAllToolsSession"
-            >
-              Allow All Tools in this Session
-            </button>
-            <button
-              class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-zinc-700/50"
               @click="approveAll"
             >
               {{ approveAllLabel }}
+            </button>
+
+            <!--Separator-->
+            <span class="block h-px bg-zinc-600 my-1" />
+            <button
+              class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-zinc-700/50"
+              @click="approveAllToolsSession"
+            >
+              Allow All Tools in this Session
             </button>
           </div>
           <!-- Backdrop to close dropdown -->
