@@ -158,6 +158,7 @@ export const useChatStore = defineStore('chat', () => {
       if (buf?.active) {
         streaming.isStreaming.value = true
         streaming.currentStreamId.value = buf.streamId
+        streaming.primaryStreamId.value = buf.streamId
         streaming.streamingContent.value = buf.content
         streaming.streamingThinking.value = buf.thinking
         messages.value.push({
@@ -174,6 +175,7 @@ export const useChatStore = defineStore('chat', () => {
       } else {
         streaming.isStreaming.value = false
         streaming.currentStreamId.value = null
+        streaming.primaryStreamId.value = null
         streaming.streamingContent.value = ''
         streaming.streamingThinking.value = ''
       }
@@ -324,6 +326,7 @@ export const useChatStore = defineStore('chat', () => {
     streaming.streamingThinking.value = ''
     streaming.isStreaming.value = false
     streaming.currentStreamId.value = null
+    streaming.primaryStreamId.value = null
     streaming.lastUsage.value = null
   }
 
