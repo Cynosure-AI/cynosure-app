@@ -68,7 +68,7 @@ execSync('npm install --production', {
 // Rebuild native modules (better-sqlite3 etc.) for Electron's ABI
 console.log('[prepare-server-deps] Rebuilding native modules for Electron …')
 execSync(
-    `npx @electron/rebuild --force --module-dir "${targetDir}" --electron-version ${electronVersion}`,
+    `npx @electron/rebuild --force --module-dir "${targetDir}" --version ${electronVersion}`,
     { cwd: electronDir, stdio: 'inherit' },
 )
 
