@@ -100,9 +100,18 @@ function toggleExpand(index: number): void {
     <div class="w-full max-w-[85%] rounded-xl border border-amber-500/30 bg-zinc-800 shadow-lg shadow-black/20 overflow-hidden flex flex-col">
       <div class="flex items-center justify-between px-4 py-2.5 bg-amber-500/5 border-b border-zinc-700/50">
         <span class="text-sm font-semibold text-amber-500 tracking-wide uppercase text-[11px]">Action Required</span>
-        <span class="text-xs font-medium text-zinc-400 bg-zinc-900/50 px-2 py-0.5 rounded-full border border-zinc-700/50">
-          {{ agentStore.pendingHITL.toolCalls.length }} tool{{ agentStore.pendingHITL.toolCalls.length > 1 ? 's' : '' }} requested
-        </span>
+        <div class="flex items-center gap-2">
+          <span
+            v-if="agentStore.hitlQueue.length > 1"
+            class="text-[10px] font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20"
+            :title="`${agentStore.hitlQueue.length} approval requests queued`"
+          >
+            1 of {{ agentStore.hitlQueue.length }}
+          </span>
+          <span class="text-xs font-medium text-zinc-400 bg-zinc-900/50 px-2 py-0.5 rounded-full border border-zinc-700/50">
+            {{ agentStore.pendingHITL.toolCalls.length }} tool{{ agentStore.pendingHITL.toolCalls.length > 1 ? 's' : '' }} requested
+          </span>
+        </div>
       </div>
 
       <div class="px-4 py-3 space-y-3">

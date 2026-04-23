@@ -68,7 +68,7 @@ export const api = {
     getExecutionSteps: (conversationId: string) =>
       get<ExecutionStepRecord[]>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/steps`),
     getPendingHITL: (conversationId: string) =>
-      get<{ taskId: string; toolCalls: { name: string; arguments: string }[] } | null>(
+      get<{ taskId: string; toolCalls: { name: string; arguments: string }[] }[]>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/hitl`
       ),
     deleteConversation: (conversationId: string) =>

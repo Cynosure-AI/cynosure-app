@@ -115,7 +115,7 @@ onMounted(async () => {
     api.chat.onPostAction((data) => chatStore.handlePostAction(data)),
     // Agent event listeners
     api.agent.onHITLRequest((data) => agentStore.handleHITLRequest(data as any)),
-    api.agent.onHITLResolved((data) => { agentStore.dismissHITL(); agentStore.dismissHITLByTaskId((data as any)?.taskId) }),
+    api.agent.onHITLResolved((data) => { agentStore.dismissHITLByTaskId((data as any)?.taskId) }),
     api.agent.onExecutionUpdate((data) => agentStore.handleExecutionUpdate(data as any)),
     api.mcp.onAuthNeeded(handleMcpAuth),
     api.mcp.onAuthComplete(handleMcpAuthComplete),

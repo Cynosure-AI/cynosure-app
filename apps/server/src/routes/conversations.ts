@@ -203,17 +203,17 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }))
     })
 
-    // GET /api/chat/conversations/:id/hitl — return the pending HITL request for this conversation, if any
+    // GET /api/chat/conversations/:id/hitl — return all pending HITL requests for this conversation
     app.get<{ Params: { id: string } }>('/conversations/:id/hitl', async (req) => {
         const db = getDb()
-        const row = db
-            .prepare('SELECT task_id, tool_calls_json FROM pending_hitl WHERE conversation_id = ?')
-            .get(req.params.id) as { task_id: string; tool_calls_json: string } | undefined
-        if (!row) return null
-        return {
+        const rows = db
+            .prepare('SELECT task_id, tool_calls_json FROM pending_hitl WHERE conversation_id = ? ORDER BY created_at ASC')
+            .all(req.params.id) as { task_id: string; tool_calls_json: string }[]
+        if (!rows.length) return []
+        return rows.map(row => ({
             taskId: row.task_id,
             toolCalls: JSON.parse(row.tool_calls_json) as { name: string; arguments: string }[]
-        }
+        }))
     })
 
     // PATCH /api/chat/conversations/:id/pin — toggle pinned state
