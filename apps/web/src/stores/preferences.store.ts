@@ -72,6 +72,17 @@ export const usePreferencesStore = defineStore('preferences', () => {
         agentCategories.value = agentCategories.value.map(c => c === oldName ? trimmed : c)
     }
 
+    function reorderAgentCategory(fromName: string, toName: string, insertBefore: boolean) {
+        const updated = [...agentCategories.value]
+        const fromIdx = updated.indexOf(fromName)
+        if (fromIdx === -1) return
+        updated.splice(fromIdx, 1)
+        const toIdx = updated.indexOf(toName)
+        if (toIdx === -1) return
+        updated.splice(insertBefore ? toIdx : toIdx + 1, 0, fromName)
+        agentCategories.value = updated
+    }
+
     function addMACategory(name: string) {
         const trimmed = name.trim()
         if (trimmed && !maCategories.value.includes(trimmed)) {
@@ -89,7 +100,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
         agentCategories, maCategories,
         whisperModel, whisperEnabled, whisperQuantization, whisperLanguage,
         toggleTheme, setTheme, toggleAutoExpand,
-        addAgentCategory, removeAgentCategory, renameAgentCategory,
+        addAgentCategory, removeAgentCategory, renameAgentCategory, reorderAgentCategory,
         addMACategory, removeMACategory,
     }
 })

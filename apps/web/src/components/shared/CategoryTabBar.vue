@@ -14,6 +14,7 @@ const emit = defineEmits<{
   'remove': [name: string]
   'rename': [payload: { oldName: string; newName: string }]
   'drop': [payload: { itemId: string; category: string }]
+  'reorder': [payload: { from: string; to: string; before: boolean }]
 }>()
 
 const showAddInput = ref(false)
@@ -23,6 +24,11 @@ const dragOverTab = ref<string | null>(null)
 const editingTab = ref<string | null>(null)
 const editingName = ref('')
 const editInputRef = ref<HTMLInputElement | null>(null)
+
+// Category-tab reorder DnD state
+const catReorderFrom = ref<string | null>(null)
+const catDropTarget = ref<string | null>(null)
+const catDropPos = ref<'before' | 'after'>('before')
 
 function startRename(cat: string) {
   editingTab.value = cat
@@ -59,20 +65,55 @@ function cancelAdd() {
 function onDragOver(e: DragEvent, tab: string) {
   e.preventDefault()
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  dragOverTab.value = tab
+  if (e.dataTransfer?.types.includes('text/x-cat-reorder')) {
+    if (catReorderFrom.value && catReorderFrom.value !== tab) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      catDropPos.value = e.clientX < rect.left + rect.width / 2 ? 'before' : 'after'
+      catDropTarget.value = tab
+    }
+  } else {
+    dragOverTab.value = tab
+  }
 }
 
-function onDragLeave(tab: string) {
-  if (dragOverTab.value === tab) dragOverTab.value = null
+function onDragLeave(e: DragEvent, tab: string) {
+  const related = e.relatedTarget as HTMLElement | null
+  const current = e.currentTarget as HTMLElement
+  if (!related || !current.contains(related)) {
+    if (dragOverTab.value === tab) dragOverTab.value = null
+    if (catDropTarget.value === tab) catDropTarget.value = null
+  }
 }
 
 function onDrop(e: DragEvent, category: string) {
   e.preventDefault()
   dragOverTab.value = null
+  catDropTarget.value = null
+  if (e.dataTransfer?.types.includes('text/x-cat-reorder')) {
+    const from = e.dataTransfer.getData('text/x-cat-reorder')
+    catReorderFrom.value = null
+    if (from && from !== category) {
+      emit('reorder', { from, to: category, before: catDropPos.value === 'before' })
+    }
+    return
+  }
   const itemId = e.dataTransfer?.getData('text/plain')
   if (itemId) {
     emit('drop', { itemId, category })
   }
+}
+
+function onCatDragStart(e: DragEvent, cat: string) {
+  catReorderFrom.value = cat
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/x-cat-reorder', cat)
+  }
+}
+
+function onCatDragEnd() {
+  catReorderFrom.value = null
+  catDropTarget.value = null
 }
 </script>
 
@@ -86,7 +127,7 @@ function onDrop(e: DragEvent, category: string) {
         : 'text-zinc-500 border-transparent hover:text-zinc-300'"
       @click="emit('update:modelValue', '')"
       @dragover="onDragOver($event, '')"
-      @dragleave="onDragLeave('')"
+      @dragleave="onDragLeave($event, '')"
       @drop="onDrop($event, '')"
     >
       <Icon
@@ -105,7 +146,7 @@ function onDrop(e: DragEvent, category: string) {
         : 'text-zinc-500 border-transparent hover:text-zinc-300'"
       @click="emit('update:modelValue', '__uncategorized__')"
       @dragover="onDragOver($event, '')"
-      @dragleave="onDragLeave('')"
+      @dragleave="onDragLeave($event, '')"
       @drop="onDrop($event, '')"
     >
       <Icon
@@ -120,7 +161,20 @@ function onDrop(e: DragEvent, category: string) {
       v-for="cat in categories"
       :key="cat"
       class="group relative flex items-center shrink-0"
+      @dragover="onDragOver($event, cat)"
+      @dragleave="onDragLeave($event, cat)"
+      @drop="onDrop($event, cat)"
     >
+      <!-- Drop indicator: left edge (before) -->
+      <div
+        v-if="catDropTarget === cat && catDropPos === 'before'"
+        class="absolute inset-y-1 left-0 w-0.5 rounded-full bg-blue-400 z-10 pointer-events-none"
+      />
+      <!-- Drop indicator: right edge (after) -->
+      <div
+        v-if="catDropTarget === cat && catDropPos === 'after'"
+        class="absolute inset-y-1 right-0 w-0.5 rounded-full bg-blue-400 z-10 pointer-events-none"
+      />
       <!-- Inline rename input -->
       <div
         v-if="editingTab === cat"
@@ -139,18 +193,19 @@ function onDrop(e: DragEvent, category: string) {
       <!-- Normal tab button -->
       <button
         v-else
-        class="flex items-center gap-1.5 px-4 py-2.5 text-sm transition-all border-b-2 -mb-px whitespace-nowrap"
+        draggable="true"
+        class="flex items-center gap-1.5 px-4 py-2.5 text-sm transition-all border-b-2 -mb-px whitespace-nowrap cursor-grab active:cursor-grabbing"
         :class="[
           modelValue === cat
             ? 'text-blue-400 border-blue-400'
             : 'text-zinc-500 border-transparent hover:text-zinc-300',
-          dragOverTab === cat ? 'bg-blue-500/10 text-blue-400' : ''
+          dragOverTab === cat ? 'bg-blue-500/10 text-blue-400' : '',
+          catReorderFrom === cat ? 'opacity-40' : ''
         ]"
         @click="emit('update:modelValue', cat)"
         @dblclick.stop="startRename(cat)"
-        @dragover="onDragOver($event, cat)"
-        @dragleave="onDragLeave(cat)"
-        @drop="onDrop($event, cat)"
+        @dragstart.stop="onCatDragStart($event, cat)"
+        @dragend.stop="onCatDragEnd"
       >
         {{ cat }}
       </button>
