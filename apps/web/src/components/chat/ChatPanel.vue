@@ -130,7 +130,55 @@ const unifiedTimeline = computed(() => {
   // appear BELOW the agent message that triggered them.
   entries.sort((a, b) => a.ts - b.ts)
 
-  return entries
+  // ── Group sub-agent entries by codename ─────────────────────────────────
+  // Build a display-name → codename map from execution step metadata so we
+  // can bucket sub-agent *messages* (which only carry agentName) together
+  // with their corresponding tool-group cards.
+  const agentNameToCodename = new Map<string, string>()
+  for (const step of agentStore.executionSteps) {
+    if (step.maCodename && step.maAgentName) {
+      agentNameToCodename.set(step.maAgentName, step.maCodename)
+    }
+  }
+
+  function codenameOf(entry: TimelineEntry): string | null {
+    if (!entry.isSubAgent) return null
+    if (entry.type === 'tool-group') return entry.group.steps[0]?.maCodename ?? null
+    if (entry.type === 'message' && entry.msg.agentName) {
+      return agentNameToCodename.get(entry.msg.agentName) ?? entry.msg.agentName
+    }
+    return null
+  }
+
+  // Collect consecutive runs of sub-agent entries and reorder them so all
+  // entries sharing the same codename appear together (grouped by first seen).
+  const result: TimelineEntry[] = []
+  let subBatch: TimelineEntry[] = []
+
+  const flushBatch = () => {
+    if (!subBatch.length) return
+    const byCodename = new Map<string, TimelineEntry[]>()
+    const order: string[] = []
+    for (const e of subBatch) {
+      const key = codenameOf(e) ?? '__unknown__'
+      if (!byCodename.has(key)) { byCodename.set(key, []); order.push(key) }
+      byCodename.get(key)!.push(e)
+    }
+    for (const key of order) result.push(...byCodename.get(key)!)
+    subBatch = []
+  }
+
+  for (const entry of entries) {
+    if (entry.isSubAgent) {
+      subBatch.push(entry)
+    } else {
+      flushBatch()
+      result.push(entry)
+    }
+  }
+  flushBatch()
+
+  return result
 })
 
 /** Key of the last tool-group entry — only this one can show as "active" */
