@@ -39,12 +39,12 @@ const activeCategory = ref('')
 const searchQuery = ref('')
 
 const hasUncategorized = computed(() =>
-  agentDefs.agents.some(a => !a.category)
+  agentDefs.agents.some(a => !a.category || !prefs.agentCategories.includes(a.category))
 )
 
 const filteredAgents = computed(() => {
   let agents = agentDefs.agents
-  if (activeCategory.value === '__uncategorized__') agents = agents.filter(a => !a.category)
+  if (activeCategory.value === '__uncategorized__') agents = agents.filter(a => !a.category || !prefs.agentCategories.includes(a.category))
   else if (activeCategory.value) agents = agents.filter(a => (a.category || '') === activeCategory.value)
   const q = searchQuery.value.trim().toLowerCase()
   if (q) agents = agents.filter(a => a.name.toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q))
