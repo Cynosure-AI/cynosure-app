@@ -89,12 +89,14 @@ export function useChatAgentConfig(
             updates.tools = [...agentStore.selectedToolNames]
         }
         if (!arraysEqual(freeChatSubAgentIds.value, agentOriginalSubAgentIds.value)) {
+            const existingAgent = agentDefs.get(activeAgentId.value!)
             updates.subAgents = freeChatSubAgentIds.value.map(id => {
                 const def = agentDefs.get(id)
-                const codename = def
-                    ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent'
-                    : id
-                return { agentId: id, codename, role: def?.description || '' }
+                // Preserve the custom codename for existing assignments; auto-generate for new ones.
+                const existing = existingAgent?.subAgents?.find(s => s.agentId === id)
+                const codename = existing?.codename
+                    || (def ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent' : id)
+                return { agentId: id, codename, role: existing?.role || def?.description || '' }
             })
         }
         if (!arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value)) {
