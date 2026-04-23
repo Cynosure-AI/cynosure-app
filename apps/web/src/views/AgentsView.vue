@@ -213,6 +213,10 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
   }
   if (activeCategory.value === payload.oldName) activeCategory.value = payload.newName
 }
+
+function handleReorderCategory(payload: { from: string; to: string; before: boolean }) {
+  prefs.reorderAgentCategory(payload.from, payload.to, payload.before)
+}
 </script>
 
 <template>
@@ -249,6 +253,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
         @remove="handleRemoveCategory"
         @rename="handleRenameCategory"
         @drop="onCategoryDrop"
+        @reorder="handleReorderCategory"
       />
 
       <!-- Search Bar + View Toggle -->
