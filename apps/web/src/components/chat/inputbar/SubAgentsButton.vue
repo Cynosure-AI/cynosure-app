@@ -85,7 +85,7 @@ const missingSubAgents = computed(() =>
       </template>
       <template v-if="selectedSubAgents.length">
         <div
-          v-for="a in selectedSubAgents.slice(0, 6)"
+          v-for="a in selectedSubAgents.slice(0, 9)"
           :key="a.id"
           class="flex items-start gap-1.5 mb-1 last:mb-0"
         >
@@ -113,10 +113,10 @@ const missingSubAgents = computed(() =>
           </div>
         </div>
         <div
-          v-if="selectedSubAgents.length > 6"
+          v-if="selectedSubAgents.length > 9"
           class="text-zinc-500 text-[10px] mt-1"
         >
-          +{{ selectedSubAgents.length - 6 }} more
+          +{{ selectedSubAgents.length - 9 }} more
         </div>
       </template>
       <div
