@@ -201,17 +201,24 @@ function startServer(): Promise<void> {
 function registerAppProtocol(): void {
     const webDist = resolveWebDist()
 
-    protocol.handle('app', (request) => {
+    protocol.handle('app', async (request) => {
         const url = new URL(request.url)
         let pathname = decodeURIComponent(url.pathname)
 
         // Proxy /api/ requests to the embedded server
         if (pathname.startsWith('/api/')) {
             const serverUrl = `http://127.0.0.1:${serverPort}${pathname}${url.search}`
+
+            // On Windows, passing request.body (a ReadableStream) directly to
+            // net.fetch is unreliable — the body can be silently dropped.
+            // Buffer it first so POST/PUT/PATCH bodies are always forwarded.
+            const hasBody = request.body !== null && request.method !== 'GET' && request.method !== 'HEAD'
+            const body = hasBody ? Buffer.from(await request.arrayBuffer()) : undefined
+
             return net.fetch(serverUrl, {
                 method: request.method,
                 headers: request.headers,
-                body: request.body
+                body
             })
         }
 

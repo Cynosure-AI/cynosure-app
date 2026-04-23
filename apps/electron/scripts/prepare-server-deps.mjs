@@ -11,7 +11,7 @@
  *      Node required on the end-user's machine.
  */
 
-import { mkdirSync, copyFileSync, existsSync, rmSync, readFileSync } from 'fs'
+import { mkdirSync, copyFileSync, existsSync, rmSync, readFileSync, readdirSync } from 'fs'
 import { execSync } from 'child_process'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -28,13 +28,14 @@ function getElectronVersion() {
         join(electronDir, 'node_modules/electron/package.json'),
         join(electronDir, '../../node_modules/electron/package.json'),
     ]
-    // Also check pnpm .pnpm directory
+    // Also check pnpm .pnpm directory (cross-platform)
     const rootNM = join(electronDir, '../../node_modules/.pnpm')
     if (existsSync(rootNM)) {
         try {
-            const entries = execSync(`ls -d ${rootNM}/electron@*/node_modules/electron/package.json 2>/dev/null`, {
-                encoding: 'utf-8',
-            }).trim().split('\n').filter(Boolean)
+            const entries = readdirSync(rootNM)
+                .filter(name => name.startsWith('electron@'))
+                .map(name => join(rootNM, name, 'node_modules/electron/package.json'))
+                .filter(p => existsSync(p))
             candidates.push(...entries)
         } catch { /* ignore */ }
     }
