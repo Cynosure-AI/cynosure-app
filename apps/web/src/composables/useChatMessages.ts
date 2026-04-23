@@ -86,10 +86,15 @@ export function useChatMessages(
 
         // Always send the full session config so it can be persisted and restored.
         const effectiveSubAgentIds = agentConfig.freeChatSubAgentIds.value
+        const parentAgent = activeAgentId.value ? agentDefs.get(activeAgentId.value) : null
         const subAgents = effectiveSubAgentIds.map(id => {
             const def = agentDefs.get(id)
-            const codename = def ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent' : id
-            return { agentId: id, codename, role: def?.description || '' }
+            // Prefer the custom codename set on the parent agent's sub-agent assignment;
+            // fall back to auto-generating from the sub-agent's display name.
+            const assignment = parentAgent?.subAgents?.find(s => s.agentId === id)
+            const codename = assignment?.codename
+                || (def ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent' : id)
+            return { agentId: id, codename, role: assignment?.role || def?.description || '' }
         })
         const memorySpaceIds = [...agentConfig.freeChatMemorySpaceIds.value]
 
