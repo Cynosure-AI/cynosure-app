@@ -27,6 +27,7 @@ function confirmDeleteSpace(space: MemorySpace) {
 // --- Drag-and-drop reorder ---
 const draggedSpaceId = ref<string | null>(null)
 const dragOverSpaceId = ref<string | null>(null)
+const dropPosition = ref<'before' | 'after'>('before')
 
 function onSpaceDragStart(e: DragEvent, spaceId: string) {
   draggedSpaceId.value = spaceId
@@ -40,15 +41,22 @@ function onSpaceDragOver(e: DragEvent, spaceId: string) {
   if (!draggedSpaceId.value || draggedSpaceId.value === spaceId) return
   e.preventDefault()
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  dropPosition.value = e.clientX < rect.left + rect.width / 2 ? 'before' : 'after'
   dragOverSpaceId.value = spaceId
 }
 
-function onSpaceDragLeave(_e: DragEvent, spaceId: string) {
-  if (dragOverSpaceId.value === spaceId) dragOverSpaceId.value = null
+function onSpaceDragLeave(e: DragEvent, spaceId: string) {
+  const related = e.relatedTarget as HTMLElement | null
+  const current = e.currentTarget as HTMLElement
+  if (!related || !current.contains(related)) {
+    if (dragOverSpaceId.value === spaceId) dragOverSpaceId.value = null
+  }
 }
 
 async function onSpaceDrop(e: DragEvent, targetSpaceId: string) {
   e.preventDefault()
+  const pos = dropPosition.value
   dragOverSpaceId.value = null
   const srcId = draggedSpaceId.value
   draggedSpaceId.value = null
@@ -56,10 +64,13 @@ async function onSpaceDrop(e: DragEvent, targetSpaceId: string) {
 
   const list = [...spaces.value]
   const srcIdx = list.findIndex(s => s.id === srcId)
-  const tgtIdx = list.findIndex(s => s.id === targetSpaceId)
+  let tgtIdx = list.findIndex(s => s.id === targetSpaceId)
   if (srcIdx === -1 || tgtIdx === -1) return
 
   const [moved] = list.splice(srcIdx, 1)
+  // Adjust target index after removal
+  if (srcIdx < tgtIdx) tgtIdx--
+  if (pos === 'after') tgtIdx++
   list.splice(tgtIdx, 0, moved)
   spaces.value = list
 
@@ -259,14 +270,13 @@ onMounted(() => loadSpaces())
             v-for="space in spaces"
             :key="space.id"
             draggable="true"
-            class="rounded-xl border px-4 py-3 text-left transition-all min-w-0 relative"
+            class="rounded-xl border px-4 py-3 text-left transition-all min-w-0 relative cursor-grab active:cursor-grabbing"
             :class="[
               selectedSpaceId === space.id
                 ? 'border-blue-500/50 bg-blue-500/10'
                 : 'border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800',
               dropTargetSpaceId === space.id ? 'ring-2 ring-blue-400 border-blue-400/50 bg-blue-500/15' : '',
-              draggedSpaceId === space.id ? 'opacity-40' : '',
-              dragOverSpaceId === space.id && draggedSpaceId !== space.id ? 'ring-2 ring-indigo-400 border-indigo-400/50' : ''
+              draggedSpaceId === space.id ? 'opacity-40' : ''
             ]"
             @click="selectedSpaceId = space.id"
             @dragstart="onSpaceDragStart($event, space.id)"
@@ -276,6 +286,16 @@ onMounted(() => loadSpaces())
             @dragend="onSpaceDragEnd"
             @dragenter.stop="onDragEnter($event, space.id)"
           >
+            <!-- Drop indicator: left edge (before) -->
+            <div
+              v-if="dragOverSpaceId === space.id && dropPosition === 'before'"
+              class="absolute inset-y-2 left-0 w-0.5 rounded-full bg-blue-400 pointer-events-none z-10"
+            />
+            <!-- Drop indicator: right edge (after) -->
+            <div
+              v-if="dragOverSpaceId === space.id && dropPosition === 'after'"
+              class="absolute inset-y-2 right-0 w-0.5 rounded-full bg-blue-400 pointer-events-none z-10"
+            />
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:database"
