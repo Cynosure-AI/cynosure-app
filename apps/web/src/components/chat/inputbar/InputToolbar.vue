@@ -125,6 +125,9 @@ async function toggleMic(): Promise<void> {
       />
     </button>
 
+    <!--Vertical separator-->
+    <div class="hidden md:block w-px h-6 bg-zinc-700/80" />
+
     <!-- Mobile: single tune button to open drawer -->
     <button
       class="md:hidden p-1.5 rounded-lg transition-colors shrink-0 focus:outline-none"
