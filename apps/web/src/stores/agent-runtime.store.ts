@@ -47,7 +47,10 @@ export interface ExecutionStep {
 export const useAgentStore = defineStore('agent', () => {
   const isExecuting = ref(false)
   const activeTaskId = ref<string | null>(null)
-  const pendingHITL = ref<HITLRequest | null>(null)
+  /** Queue of pending HITL requests. Multiple subagents can each enqueue one simultaneously. */
+  const hitlQueue = ref<HITLRequest[]>([])
+  /** The first (oldest) pending HITL request — drives the approval dialog. */
+  const pendingHITL = computed<HITLRequest | null>(() => hitlQueue.value[0] ?? null)
   const executionSteps = ref<ExecutionStep[]>([])
   const toolApprovals = ref<Record<string, boolean>>({})
 
@@ -131,24 +134,27 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   function handleHITLRequest(data: HITLRequest): void {
-    pendingHITL.value = data
+    // Avoid duplicate entries for the same taskId
+    if (!hitlQueue.value.some(h => h.taskId === data.taskId)) {
+      hitlQueue.value = [...hitlQueue.value, data]
+    }
     if (data.conversationId) {
       awaitingHITLConvIds.value = new Set([...awaitingHITLConvIds.value, data.conversationId])
       if (data.taskId) hitlTaskToConv.set(data.taskId, data.conversationId)
     }
   }
 
-  function dismissHITL(): void {
-    pendingHITL.value = null
-  }
-
-  /** Clear the awaiting-HITL indicator for a conversation resolved by taskId. */
+  /** Remove a HITL request by taskId — used when resolved externally or via WS event. */
   function dismissHITLByTaskId(taskId?: string): void {
     if (!taskId) return
+    hitlQueue.value = hitlQueue.value.filter(h => h.taskId !== taskId)
     const convId = hitlTaskToConv.get(taskId)
     if (convId) {
-      awaitingHITLConvIds.value.delete(convId)
-      awaitingHITLConvIds.value = new Set(awaitingHITLConvIds.value)
+      // Only clear the awaiting indicator if no remaining requests exist for this conversation
+      if (!hitlQueue.value.some(h => h.conversationId === convId)) {
+        awaitingHITLConvIds.value.delete(convId)
+        awaitingHITLConvIds.value = new Set(awaitingHITLConvIds.value)
+      }
       hitlTaskToConv.delete(taskId)
     }
   }
@@ -166,13 +172,14 @@ export const useAgentStore = defineStore('agent', () => {
       convId,
       toolNames
     )
-    // Clear awaiting-HITL indicator immediately on UI-side response
-    if (convId) {
+    // Remove this specific request from the queue
+    hitlQueue.value = hitlQueue.value.filter(h => h.taskId !== taskId)
+    if (taskId) hitlTaskToConv.delete(taskId)
+    // Only clear awaitingHITLConvIds for this conversation if no more requests remain for it
+    if (convId && !hitlQueue.value.some(h => h.conversationId === convId)) {
       awaitingHITLConvIds.value.delete(convId)
       awaitingHITLConvIds.value = new Set(awaitingHITLConvIds.value)
     }
-    if (taskId) hitlTaskToConv.delete(taskId)
-    pendingHITL.value = null
   }
 
   /** Build an ExecutionStep from a raw WS event payload. */
@@ -329,7 +336,7 @@ export const useAgentStore = defineStore('agent', () => {
     executionSteps.value = []
     isExecuting.value = false
     activeTaskId.value = null
-    pendingHITL.value = null
+    hitlQueue.value = []
     executionConversationId.value = null
   }
 
@@ -345,7 +352,7 @@ export const useAgentStore = defineStore('agent', () => {
   function clearExecutionState(): void {
     isExecuting.value = false
     activeTaskId.value = null
-    pendingHITL.value = null
+    hitlQueue.value = []
     executionConversationId.value = null
   }
 
@@ -363,18 +370,27 @@ export const useAgentStore = defineStore('agent', () => {
       await loadStepsFromApi(conversationId)
     }
 
-    // Always check DB for a pending HITL request — needed after a hard reload
-    // (the live WS event will have been lost, but the DB entry persists until resolved)
-    if (!pendingHITL.value) {
+    // Always check DB for pending HITL requests — needed after a hard reload
+    // (live WS events are lost on reload, but DB entries persist until resolved)
+    if (!hitlQueue.value.some(h => h.conversationId === conversationId)) {
       loadHITLFromApi(conversationId)
     }
   }
 
   async function loadHITLFromApi(conversationId: string): Promise<void> {
     try {
-      const pending = await api.chat.getPendingHITL(conversationId)
-      if (pending) {
-        pendingHITL.value = { taskId: pending.taskId, toolCalls: pending.toolCalls }
+      const rows = await api.chat.getPendingHITL(conversationId)
+      if (!rows.length) return
+      let changed = false
+      for (const pending of rows) {
+        if (!hitlQueue.value.some(h => h.taskId === pending.taskId)) {
+          hitlQueue.value = [...hitlQueue.value, { taskId: pending.taskId, toolCalls: pending.toolCalls, conversationId }]
+          if (pending.taskId) hitlTaskToConv.set(pending.taskId, conversationId)
+          changed = true
+        }
+      }
+      if (changed) {
+        awaitingHITLConvIds.value = new Set([...awaitingHITLConvIds.value, conversationId])
       }
     } catch {
       // ignore
@@ -409,6 +425,7 @@ export const useAgentStore = defineStore('agent', () => {
   return {
     isExecuting,
     activeTaskId,
+    hitlQueue,
     pendingHITL,
     executionSteps,
     toolApprovals,
@@ -424,7 +441,6 @@ export const useAgentStore = defineStore('agent', () => {
     setToolApproval,
     isToolAutoApproved,
     handleHITLRequest,
-    dismissHITL,
     dismissHITLByTaskId,
     respondHITL,
     awaitingHITLConvIds,
