@@ -43,6 +43,7 @@ export function useChatAgentConfig(
     const sessionOverrideSubAgents = ref<boolean>(false)
     const sessionSystemPrompt = ref<string>('')
     const sessionThinkingEnabled = ref<boolean>(true)
+    const agentOriginalThinkingEnabled = ref<boolean>(true)
     const agentOriginalSystemPrompt = ref<string>('')
     const freeChatSubAgentIds = ref<string[]>([])
     const freeChatMemorySpaceIds = ref<string[]>([])
@@ -64,7 +65,8 @@ export function useChatAgentConfig(
             !arraysEqual(agentStore.selectedToolNames, agentOriginalTools.value) ||
             !arraysEqual(freeChatSubAgentIds.value, agentOriginalSubAgentIds.value) ||
             !arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value) ||
-            sessionSystemPrompt.value !== agentOriginalSystemPrompt.value
+            sessionSystemPrompt.value !== agentOriginalSystemPrompt.value ||
+            sessionThinkingEnabled.value !== agentOriginalThinkingEnabled.value
         )
     })
 
@@ -77,6 +79,7 @@ export function useChatAgentConfig(
         freeChatSubAgentIds.value = [...agentOriginalSubAgentIds.value]
         freeChatMemorySpaceIds.value = [...agentOriginalMemorySpaceIds.value]
         sessionSystemPrompt.value = agentOriginalSystemPrompt.value
+        sessionThinkingEnabled.value = agentOriginalThinkingEnabled.value
         userModifiedOverrides.value = false
     }
 
@@ -107,6 +110,10 @@ export function useChatAgentConfig(
             updates.systemPrompt = sessionSystemPrompt.value
         }
 
+        if (sessionThinkingEnabled.value !== agentOriginalThinkingEnabled.value) {
+            updates.thinkingEnabled = sessionThinkingEnabled.value
+        }
+
         if (Object.keys(updates).length === 0) return
         await agentDefs.update(activeAgentId.value, updates)
 
@@ -114,6 +121,7 @@ export function useChatAgentConfig(
         agentOriginalSubAgentIds.value = [...freeChatSubAgentIds.value]
         agentOriginalMemorySpaceIds.value = [...freeChatMemorySpaceIds.value]
         agentOriginalSystemPrompt.value = sessionSystemPrompt.value
+        agentOriginalThinkingEnabled.value = sessionThinkingEnabled.value
         userModifiedOverrides.value = false
     }
 
@@ -136,6 +144,7 @@ export function useChatAgentConfig(
             sessionSystemPrompt.value = agent?.systemPrompt || ''
             agentOriginalSystemPrompt.value = agent?.systemPrompt || ''
             sessionThinkingEnabled.value = agent?.thinkingEnabled !== false
+            agentOriginalThinkingEnabled.value = sessionThinkingEnabled.value
         } else {
             localStorage.removeItem(SK_ACTIVE_AGENT)
             agentStore.clearSelectedTools()
@@ -147,6 +156,7 @@ export function useChatAgentConfig(
             sessionSystemPrompt.value = ''
             agentOriginalSystemPrompt.value = ''
             sessionThinkingEnabled.value = true
+            agentOriginalThinkingEnabled.value = true
         }
         sessionModelOverride.value = null
         sessionProviderOverride.value = null
@@ -176,6 +186,9 @@ export function useChatAgentConfig(
         agentOriginalMemorySpaceIds.value = [...memIds]
         sessionSystemPrompt.value = agent.systemPrompt || ''
         agentOriginalSystemPrompt.value = agent.systemPrompt || ''
+        const thinking = agent.thinkingEnabled !== false
+        sessionThinkingEnabled.value = thinking
+        agentOriginalThinkingEnabled.value = thinking
         sessionModelOverride.value = null
         sessionProviderOverride.value = null
         sessionOverrideSubAgents.value = false
