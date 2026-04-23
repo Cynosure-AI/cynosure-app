@@ -270,7 +270,7 @@ function createWindow(): BrowserWindow {
         show: false,
         title: 'Cynosure',
         autoHideMenuBar: true,
-        icon: appIcon,
+        icon: nativeImage.createFromPath(appIcon),
         webPreferences: {
             preload: join(__dirname, '../preload/index.js'),
             sandbox: false
