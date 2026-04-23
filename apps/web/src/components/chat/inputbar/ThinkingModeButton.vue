@@ -14,7 +14,7 @@ const chatStore = useChatStore()
         ? 'text-blue-400 hover:text-blue-300'
         : 'text-zinc-500 hover:text-zinc-300'"
       aria-label="Thinking mode"
-      @click="chatStore.sessionThinkingEnabled = !chatStore.sessionThinkingEnabled"
+      @click="chatStore.sessionThinkingEnabled = !chatStore.sessionThinkingEnabled; chatStore.markOverridesModified()"
     >
       <Icon
         icon="lucide:lightbulb"
