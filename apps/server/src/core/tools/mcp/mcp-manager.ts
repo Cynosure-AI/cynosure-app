@@ -78,6 +78,8 @@ export type AuthCompleteCallback = (serverId: string, tools: ToolDefinition[], c
 
 /** How long to keep the child process alive while waiting for OAuth (5 minutes). */
 const AUTH_WAIT_TIMEOUT_MS = 5 * 60 * 1000
+/** How long to wait for a standard MCP server to connect before timing out (60 seconds) */
+const STANDARD_TIMEOUT_MS = 60 * 1000
 
 export class McpManager {
     private connections = new Map<string, McpConnection>()
@@ -288,7 +290,7 @@ export class McpManager {
             await Promise.race([
                 connectPromise,
                 authNotice,
-                new Promise((_, reject) => setTimeout(() => reject(new Error('MCP connection timeout')), 30000))
+                new Promise((_, reject) => setTimeout(() => reject(new Error('MCP connection timeout')), STANDARD_TIMEOUT_MS))
             ])
         } catch (e) {
             if (this.pendingAuths.has(config.id)) {
