@@ -113,6 +113,33 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
         })
     })
 
+    // GET /api/mcp/servers/:id/tools — list tools for a specific connected MCP server
+    app.get<{ Params: { id: string } }>('/servers/:id/tools', async (req, reply) => {
+        const { id } = req.params
+        const db = getDb()
+        const row = db.prepare('SELECT id, name FROM mcp_servers WHERE id = ?').get(id) as {
+            id: string
+            name: string
+        } | undefined
+
+        if (!row) {
+            return reply.status(404).send({ error: 'Server not found' })
+        }
+
+        const manager = getMcpManager()
+        if (!manager.isConnected(id)) {
+            return reply.status(409).send({ error: 'Server is not connected' })
+        }
+
+        const tools = manager.getTools(id)
+        return tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            serverId: row.id,
+            serverName: row.name,
+        }))
+    })
+
     // GET /api/mcp/servers/:id/icon — serve icon from MCP folder
     app.get<{ Params: { id: string } }>('/servers/:id/icon', async (req, reply) => {
         const { id } = req.params
