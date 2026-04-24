@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
 import { usePreferencesStore } from '../../../stores/preferences.store'
@@ -88,53 +88,6 @@ async function toggleMic(): Promise<void> {
   } else {
     await startRecording(prefs.whisperMicDeviceId || undefined)
   }
-}
-
-// ─── Microphone device selection ──────────────────
-interface MicDevice { deviceId: string; label: string }
-const micDevices = ref<MicDevice[]>([])
-const showMicDropdown = ref(false)
-
-async function enumerateMics(): Promise<void> {
-  try {
-    // Need permission to get labels
-    await navigator.mediaDevices.getUserMedia({ audio: true })
-    const devices = await navigator.mediaDevices.enumerateDevices()
-    micDevices.value = devices
-      .filter(d => d.kind === 'audioinput')
-      .map(d => ({ deviceId: d.deviceId, label: d.label || `Microphone ${micDevices.value.length + 1}` }))
-  } catch {
-    micDevices.value = []
-  }
-}
-
-function selectMic(deviceId: string): void {
-  prefs.whisperMicDeviceId = deviceId
-  showMicDropdown.value = false
-}
-
-const currentMicLabel = computed(() => {
-  if (!prefs.whisperMicDeviceId) return 'Default'
-  const found = micDevices.value.find(d => d.deviceId === prefs.whisperMicDeviceId)
-  return found?.label || 'Selected mic'
-})
-
-onMounted(() => {
-  if (prefs.whisperEnabled) enumerateMics()
-})
-
-// Close mic dropdown on outside click
-function handleClickOutside(e: MouseEvent): void {
-  if (showMicDropdown.value) {
-    const target = e.target as HTMLElement
-    if (!target.closest('[aria-label="Select microphone"]') && !target.closest('.mic-dropdown-panel')) {
-      showMicDropdown.value = false
-    }
-  }
-}
-
-if (typeof document !== 'undefined') {
-  document.addEventListener('click', handleClickOutside)
 }
 </script>
 
@@ -328,76 +281,6 @@ if (typeof document !== 'undefined') {
           </span>
         </span>
       </button>
-
-      <!-- Microphone selector dropdown (only when multiple mics available) -->
-      <div
-        v-if="micDevices.length > 1"
-        class="relative ml-0.5"
-      >
-        <button
-          class="p-1 text-zinc-500 hover:text-zinc-300 rounded-lg transition-colors shrink-0"
-          title="Select microphone"
-          aria-label="Select microphone"
-          @click="showMicDropdown = !showMicDropdown"
-        >
-          <Icon
-            icon="mdi:chevron-down"
-            class="h-3 w-3"
-          />
-        </button>
-
-        <div
-          v-if="showMicDropdown"
-          class="mic-dropdown-panel absolute bottom-full right-0 mb-1 w-56 rounded-lg border border-zinc-700 bg-zinc-800 shadow-xl shadow-black/40 overflow-hidden z-50"
-        >
-          <div class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-700">
-            Microphone
-          </div>
-          <button
-            class="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
-            :class="{ 'bg-zinc-700/50': !prefs.whisperMicDeviceId }"
-            @click="selectMic('')"
-          >
-            <Icon
-              v-if="!prefs.whisperMicDeviceId"
-              icon="mdi:check"
-              class="h-3.5 w-3.5 text-blue-400 shrink-0"
-            />
-            <span
-              v-else
-              class="w-3.5 shrink-0"
-            />
-            <span>Default</span>
-          </button>
-          <button
-            v-for="dev in micDevices"
-            :key="dev.deviceId"
-            class="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
-            :class="{ 'bg-zinc-700/50': prefs.whisperMicDeviceId === dev.deviceId }"
-            @click="selectMic(dev.deviceId)"
-          >
-            <Icon
-              v-if="prefs.whisperMicDeviceId === dev.deviceId"
-              icon="mdi:check"
-              class="h-3.5 w-3.5 text-blue-400 shrink-0"
-            />
-            <span
-              v-else
-              class="w-3.5 shrink-0"
-            />
-            <span class="truncate">{{ dev.label }}</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Current mic indicator -->
-      <span
-        v-if="micDevices.length > 1 && prefs.whisperMicDeviceId"
-        class="ml-1 text-[10px] text-zinc-500 truncate max-w-24"
-        :title="currentMicLabel"
-      >
-        {{ currentMicLabel }}
-      </span>
     </div>
 
     <!-- Send / Cancel -->
