@@ -104,7 +104,7 @@ async function toggleMic(): Promise<void> {
   >
     <div
       v-if="showMobileDrawer"
-      class="sm:hidden flex items-center gap-1 px-2 py-1.5 border-b border-zinc-700/50"
+      class="lg:hidden flex items-center gap-1 px-2 py-1.5 border-b border-zinc-700/50"
     >
       <ToolsButton />
       <SubAgentsButton />
@@ -136,7 +136,7 @@ async function toggleMic(): Promise<void> {
 
     <!-- Mobile: single tune button to open drawer -->
     <button
-      class="md:hidden p-1.5 rounded-lg transition-colors shrink-0 focus:outline-none"
+      class="lg:hidden p-1.5 rounded-lg transition-colors shrink-0 focus:outline-none"
       :class="showMobileDrawer ? 'text-blue-400 bg-zinc-700/50' : 'text-zinc-500 hover:text-zinc-300'"
       title="Chat settings"
       aria-label="Chat settings"
@@ -149,7 +149,7 @@ async function toggleMic(): Promise<void> {
     </button>
 
     <!-- Desktop: inline buttons -->
-    <span class="hidden md:contents">
+    <span class="hidden lg:contents">
       <ToolsButton />
       <SubAgentsButton />
       <MemorySpacesButton />
@@ -162,7 +162,7 @@ async function toggleMic(): Promise<void> {
     <!-- Model selector (desktop only, right-aligned) -->
     <div
       v-if="currentProviderId"
-      class="hidden md:flex items-center gap-1 shrink-0"
+      class="hidden lg:flex items-center gap-1 shrink-0"
     >
       <div class="w-44">
         <ModelSelect
