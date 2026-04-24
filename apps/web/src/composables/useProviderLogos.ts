@@ -18,7 +18,7 @@ import mistralLogo from '../assets/img/provider-logos/mistral.png'
 const providerLogos: Record<string, { light: string; dark: string }> = {
     openai: { light: openaiLogo, dark: openaiLogoDark },
     anthropic: { light: anthropicLogo, dark: anthropicLogoDark },
-    gemini: { light: geminiLogo, dark: geminiLogo },
+    google: { light: geminiLogo, dark: geminiLogo },
     lmstudio: { light: lmstudioLogo, dark: lmstudioLogo },
     grok: { light: grokLogo, dark: grokLogoDark },
     ollama: { light: ollamaLogo, dark: ollamaLogoDark },
