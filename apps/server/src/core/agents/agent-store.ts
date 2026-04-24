@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
+import { getToolRegistry } from '../tools/tool-registry.js'
 
 // ---- Types ----
 
@@ -63,6 +64,67 @@ function toCodename(name: string): string {
         .trim()
         .replace(/[^a-z0-9]+/g, '_')
         .replace(/^_|_$/g, '')
+}
+
+/**
+ * Normalise tool names into stable composite keys before persisting an agent.
+ *
+ * Handles three input styles the LLM may emit:
+ * 1. Already-qualified composite keys (`mcp:<serverId>::toolName`) – kept as-is
+ * 2. Bare names (`toolName`) – resolved via the ToolRegistry.  Built-in tools
+ *    are stored bare; MCP tools are stored as `mcp:<serverId>::toolName`.
+ * 3. Collision-prefixed names (`slug__toolName`) – slug stripped, then
+ *    resolved the same way as bare names.
+ *
+ * Unknown / unresolvable names are dropped with a console warning so the
+ * agent definition stays valid even when MCP servers change.
+ */
+function normalizeAgentTools(toolNames: string[]): string[] {
+    const registry = getToolRegistry()
+    const result: string[] = []
+    const seen = new Set<string>()
+
+    for (const raw of toolNames) {
+        const name = raw.trim()
+        if (!name) continue
+
+        // 1. Already a composite key?
+        if (name.includes('::')) {
+            if (registry.has(name)) {
+                if (!seen.has(name)) {
+                    seen.add(name)
+                    result.push(name)
+                }
+            } else {
+                console.warn(`[normalizeAgentTools] Dropping unknown composite key: ${name}`)
+            }
+            continue
+        }
+
+        // 2. Strip collision prefix if present (slug__toolName → toolName)
+        let bareName = name
+        const prefixMatch = name.match(/^([^_]+)__(.+)$/)
+        if (prefixMatch) {
+            bareName = prefixMatch[2]
+        }
+
+        // 3. Try to resolve via registry
+        const tool = registry.get(bareName)
+        if (!tool) {
+            console.warn(`[normalizeAgentTools] Dropping unresolvable tool: ${name} (bare: ${bareName})`)
+            continue
+        }
+
+        const ns = registry.getNamespace(bareName)
+        const compositeKey = ns ? `${ns.id}::${tool.name}` : tool.name
+
+        if (!seen.has(compositeKey)) {
+            seen.add(compositeKey)
+            result.push(compositeKey)
+        }
+    }
+
+    return result
 }
 
 /**
@@ -166,6 +228,8 @@ export function createAgent(input: CreateAgentInput): AgentData {
         }
     }
 
+    const normalizedTools = normalizeAgentTools(input.tools || [])
+
     db.prepare(
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
          category, sub_agents_json, auto_approve_tools, show_in_carousel, thinking_enabled, max_context_tokens,
@@ -178,7 +242,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
         input.providerId || null,
         input.model || '',
         input.systemPrompt || '',
-        JSON.stringify(input.tools || []),
+        JSON.stringify(normalizedTools),
         null, // icon_url - not used for new agents; icon_data/icon_mime used instead
         codename,
         input.category || '',
@@ -213,7 +277,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     const updatedModel = input.model ?? existing.model
     const updatedSystemPrompt = input.systemPrompt !== undefined ? input.systemPrompt : existing.system_prompt
     const updatedCronPrompt = input.cronPrompt !== undefined ? (input.cronPrompt || '') : existing.cron_prompt
-    const updatedTools = input.tools !== undefined ? input.tools : JSON.parse(existing.tools_json || '[]')
+    const updatedTools = input.tools !== undefined ? normalizeAgentTools(input.tools) : JSON.parse(existing.tools_json || '[]')
     const updatedSubAgents = input.subAgents !== undefined ? input.subAgents : JSON.parse(existing.sub_agents_json || '[]')
     const updatedAutoApprove = input.autoApproveTools !== undefined ? input.autoApproveTools : (existing.auto_approve_tools === 1)
     const updatedShowInCarousel = input.showInCarousel !== undefined ? input.showInCarousel : (existing.show_in_carousel !== 0)
