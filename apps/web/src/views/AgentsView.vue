@@ -388,11 +388,11 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
           </h3>
           <p
             v-if="agent.description"
-            class="text-xs text-zinc-500 mb-3 line-clamp-2"
+            class="text-xs text-zinc-400 mb-3 line-clamp-2"
           >
             {{ agent.description }}
           </p>
-          <div class="flex items-center gap-3 text-xs text-zinc-600 flex-wrap">
+          <div class="flex items-center gap-3 text-xs text-zinc-500 flex-wrap">
             <span
               v-if="agent.model"
               class="flex items-center gap-1"
