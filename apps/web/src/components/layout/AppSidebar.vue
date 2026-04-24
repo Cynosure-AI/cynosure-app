@@ -138,7 +138,7 @@ const settingsItems: NavItem[] = [
     <!-- Brand -->
     <div class="brand-area px-5 p-3 mt-2 mb-2 flex items-center gap-3 shrink-0">
       <img
-        src="../../assets/cynosure-logo.png"
+        src="../../assets/img/cynosure-logo.png"
         alt="Cynosure Logo"
         class="w-8 h-8"
       >
