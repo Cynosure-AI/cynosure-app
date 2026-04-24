@@ -23,7 +23,7 @@ function onToolsUpdate(tools: string[]) {
   <ModalDialog
     :show="visible"
     title="Tool Access"
-    icon="lucide:tools"
+    icon="mdi:tools"
     icon-color="blue"
     max-width="max-w-xl"
     @close="closeModal"

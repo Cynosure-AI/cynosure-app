@@ -27,12 +27,12 @@ const emit = defineEmits<{
       @click.self="emit('close')"
     >
       <div
-        class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden w-full"
+        class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden w-full flex flex-col max-h-[90vh]"
         :class="maxWidth || 'max-w-md'"
       >
-        <div class="p-6">
+        <div class="p-6 flex flex-col min-h-0 flex-1">
           <!-- Header -->
-          <div class="flex items-center gap-3 mb-4">
+          <div class="flex items-center gap-3 mb-4 flex-shrink-0">
             <div
               v-if="icon"
               class="p-2 rounded-lg"
@@ -53,12 +53,14 @@ const emit = defineEmits<{
           </div>
 
           <!-- Body slot -->
-          <slot />
+          <div class="overflow-y-auto min-h-0 flex-1">
+            <slot />
+          </div>
 
           <!-- Actions slot -->
           <div
             v-if="$slots.actions"
-            class="flex flex-col gap-3 mt-6"
+            class="flex flex-col gap-3 mt-6 flex-shrink-0"
           >
             <slot name="actions" />
           </div>
