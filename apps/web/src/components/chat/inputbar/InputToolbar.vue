@@ -13,6 +13,7 @@ import SubAgentsButton from './SubAgentsButton.vue'
 import MemorySpacesButton from './MemorySpacesButton.vue'
 import SystemPromptButton from './SystemPromptButton.vue'
 import ThinkingModeButton from './ThinkingModeButton.vue'
+import ModelButton from './ModelButton.vue'
 
 const props = defineProps<{
   canSend: boolean
@@ -110,6 +111,7 @@ async function toggleMic(): Promise<void> {
       <MemorySpacesButton />
       <SystemPromptButton />
       <ThinkingModeButton />
+      <ModelButton />
     </div>
   </Transition>
 
@@ -157,10 +159,10 @@ async function toggleMic(): Promise<void> {
 
     <div class="flex-1" />
 
-    <!-- Model selector (right-aligned) -->
+    <!-- Model selector (desktop only, right-aligned) -->
     <div
       v-if="currentProviderId"
-      class="flex items-center gap-1 shrink-0"
+      class="hidden md:flex items-center gap-1 shrink-0"
     >
       <div class="w-44">
         <ModelSelect
