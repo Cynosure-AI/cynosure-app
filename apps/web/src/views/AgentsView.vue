@@ -52,9 +52,9 @@ const filteredAgents = computed(() => {
 })
 
 const agentsWithIssues = computed(() => {
-  const availableKeys = new Set(agentStore.availableTools.map(t => `${t.namespace.id}::${t.name}`))
+  const availableKeys = new Set(agentStore.availableTools.map(t => t.key))
   const allAgentIds = new Set(agentDefs.agents.map(a => a.id))
-  const isToolMissing = (t: string) => !t.includes('::') || !availableKeys.has(t)
+  const isToolMissing = (t: string) => !availableKeys.has(t)
   return new Set(
     agentDefs.agents
       .filter(a => {

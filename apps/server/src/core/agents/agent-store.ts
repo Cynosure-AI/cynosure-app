@@ -67,17 +67,11 @@ function toCodename(name: string): string {
 }
 
 /**
- * Normalise tool names into stable composite keys before persisting an agent.
+ * Normalize selected tools into stable registry keys before persisting an agent.
  *
- * Handles three input styles the LLM may emit:
- * 1. Already-qualified composite keys (`mcp:<serverId>::toolName`) – kept as-is
- * 2. Bare names (`toolName`) – resolved via the ToolRegistry.  Built-in tools
- *    are stored bare; MCP tools are stored as `mcp:<serverId>::toolName`.
- * 3. Collision-prefixed names (`slug__toolName`) – slug stripped, then
- *    resolved the same way as bare names.
- *
- * Unknown / unresolvable names are dropped with a console warning so the
- * agent definition stays valid even when MCP servers change.
+ * The application stores only registry keys (`namespaceId::toolName`) in agent
+ * definitions. Raw/bare tool names are intentionally rejected so tool selection
+ * remains deterministic when multiple MCP servers expose the same tool name.
  */
 function normalizeAgentTools(toolNames: string[]): string[] {
     const registry = getToolRegistry()
@@ -88,39 +82,14 @@ function normalizeAgentTools(toolNames: string[]): string[] {
         const name = raw.trim()
         if (!name) continue
 
-        // 1. Already a composite key?
-        if (name.includes('::')) {
-            if (registry.has(name)) {
-                if (!seen.has(name)) {
-                    seen.add(name)
-                    result.push(name)
-                }
-            } else {
-                console.warn(`[normalizeAgentTools] Dropping unknown composite key: ${name}`)
-            }
+        if (!registry.hasKey(name)) {
+            console.warn(`[normalizeAgentTools] Dropping unknown tool key: ${name}`)
             continue
         }
 
-        // 2. Strip collision prefix if present (slug__toolName → toolName)
-        let bareName = name
-        const prefixMatch = name.match(/^([^_]+)__(.+)$/)
-        if (prefixMatch) {
-            bareName = prefixMatch[2]
-        }
-
-        // 3. Try to resolve via registry
-        const tool = registry.get(bareName)
-        if (!tool) {
-            console.warn(`[normalizeAgentTools] Dropping unresolvable tool: ${name} (bare: ${bareName})`)
-            continue
-        }
-
-        const ns = registry.getNamespace(bareName)
-        const compositeKey = ns ? `${ns.id}::${tool.name}` : tool.name
-
-        if (!seen.has(compositeKey)) {
-            seen.add(compositeKey)
-            result.push(compositeKey)
+        if (!seen.has(name)) {
+            seen.add(name)
+            result.push(name)
         }
     }
 

@@ -209,7 +209,7 @@ export const api = {
     setToolApprovalsBulk: (approvals: Record<string, boolean>) =>
       put<{ success: boolean }>('/api/agents/tool-approvals', approvals),
     listTools: () =>
-      get<{ name: string; description: string; autoApprove: boolean; namespace: { id: string; label: string } }[]>('/api/agents/tools'),
+      get<{ key: string; name: string; executionName: string; description: string; autoApprove: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools'),
     onExecutionUpdate: (cb: (data: unknown) => void) =>
       onWsEvent('agent:execution-update', cb)
   },

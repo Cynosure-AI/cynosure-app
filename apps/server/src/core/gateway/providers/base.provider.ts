@@ -42,6 +42,12 @@ export interface ToolDefinition {
   description: string
   parameters: Record<string, unknown> // JSON Schema
   timeout: number
+  /** Stable registry key, when this tool came from the global registry. */
+  registryKey?: string
+  /** Original bare tool name before any collision-safe execution alias was applied. */
+  originalName?: string
+  /** Namespace ID, when this tool came from the global registry. */
+  namespaceId?: string
   execute: (params: unknown) => Promise<ToolResult>
 }
 
