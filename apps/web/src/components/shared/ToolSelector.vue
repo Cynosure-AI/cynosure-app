@@ -28,7 +28,7 @@ const selectedSet = computed(() => new Set(props.modelValue))
  * Format matches the server-side ToolRegistry composite key: "namespaceId::toolName"
  */
 function toolKey(tool: ToolInfo): string {
-  return `${tool.namespace.id}::${tool.name}`
+  return tool.key
 }
 
 function isSelected(tool: ToolInfo): boolean {
@@ -87,6 +87,10 @@ const groupedTools = computed<NamespaceGroup[]>(() => {
 
 function displayToolName(tool: ToolInfo): string {
   return tool.name
+}
+
+function approvalName(tool: ToolInfo): string {
+  return tool.executionName
 }
 
 function displayToolDescription(tool: ToolInfo): string {
@@ -246,22 +250,22 @@ function toggleNamespaceCollapse(namespaceId: string): void {
                   v-if="showApprovals"
                   class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] transition-colors"
                   :class="
-                    agentStore.isToolAutoApproved(tool.name)
+                    agentStore.isToolAutoApproved(approvalName(tool))
                       ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
                       : 'bg-amber-500/10 text-amber-400/80 hover:bg-amber-500/20'
                   "
                   :title="
-                    agentStore.isToolAutoApproved(tool.name)
+                    agentStore.isToolAutoApproved(approvalName(tool))
                       ? 'Auto-approved — click to require confirmation'
                       : 'Requires confirmation — click to auto-approve'
                   "
-                  @click.stop.prevent="agentStore.setToolApproval(tool.name, !agentStore.isToolAutoApproved(tool.name))"
+                  @click.stop.prevent="agentStore.setToolApproval(approvalName(tool), !agentStore.isToolAutoApproved(approvalName(tool)))"
                 >
                   <Icon
-                    :icon="agentStore.isToolAutoApproved(tool.name) ? 'mdi:shield-check' : 'mdi:alert-outline'"
+                    :icon="agentStore.isToolAutoApproved(approvalName(tool)) ? 'mdi:shield-check' : 'mdi:alert-outline'"
                     class="w-3 h-3"
                   />
-                  {{ agentStore.isToolAutoApproved(tool.name) ? 'auto' : 'confirm' }}
+                  {{ agentStore.isToolAutoApproved(approvalName(tool)) ? 'auto' : 'confirm' }}
                 </button>
               </label>
             </div>

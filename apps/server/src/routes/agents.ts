@@ -156,12 +156,15 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
         const registry = getToolRegistry()
         const gate = getHITLGate()
         const approvals = gate.getAllApprovals()
-        const items = registry.getAllWithNamespaces()
-        return items.map(({ tool: t, namespace: ns }) => ({
-            name: t.name,
-            description: t.description,
-            autoApprove: approvals[t.name] ?? false,
-            namespace: ns
+        const items = registry.listRegisteredTools()
+        return items.map((tool) => ({
+            key: tool.key,
+            name: tool.name,
+            executionName: tool.executionName,
+            description: tool.description,
+            autoApprove: approvals[tool.executionName] ?? false,
+            namespace: tool.namespace,
+            ambiguous: tool.ambiguous,
         }))
     })
 }

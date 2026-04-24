@@ -196,19 +196,19 @@ export function hydrateBuiltInTools(
     const spaceFilter = buildMemorySpaceFilter(assignedSpaces)
 
     return tools.map((t) => {
-        switch (t.name) {
+        switch (t.originalName ?? t.name) {
             case 'create_app_notification':
-                return makeNotificationTool({ agentId: ctx.agentId || '', conversationId: ctx.conversationId, broadcast: ctx.broadcast })
+                return { ...makeNotificationTool({ agentId: ctx.agentId || '', conversationId: ctx.conversationId, broadcast: ctx.broadcast }), name: t.name, registryKey: t.registryKey, originalName: t.originalName, namespaceId: t.namespaceId }
             case 'memory_list_documents':
-                return makeMemoryListDocumentsTool({ spaceFilter })
+                return { ...makeMemoryListDocumentsTool({ spaceFilter }), name: t.name, registryKey: t.registryKey, originalName: t.originalName, namespaceId: t.namespaceId }
             case 'memory_retrieve_chunks':
-                return makeMemoryRetrieveChunksTool({ spaceFilter })
+                return { ...makeMemoryRetrieveChunksTool({ spaceFilter }), name: t.name, registryKey: t.registryKey, originalName: t.originalName, namespaceId: t.namespaceId }
             case 'memory_semantic_search':
-                return makeMemorySearchTool({ spaceFilter })
+                return { ...makeMemorySearchTool({ spaceFilter }), name: t.name, registryKey: t.registryKey, originalName: t.originalName, namespaceId: t.namespaceId }
             case 'memory_create':
-                return makeMemoryCreateTool({ assignedSpaces })
+                return { ...makeMemoryCreateTool({ assignedSpaces }), name: t.name, registryKey: t.registryKey, originalName: t.originalName, namespaceId: t.namespaceId }
             case 'memory_update':
-                return makeMemoryUpdateTool({ spaceFilter, assignedSpaces })
+                return { ...makeMemoryUpdateTool({ spaceFilter, assignedSpaces }), name: t.name, registryKey: t.registryKey, originalName: t.originalName, namespaceId: t.namespaceId }
             default:
                 return t
         }

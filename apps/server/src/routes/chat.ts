@@ -283,7 +283,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const toolRegistry = getToolRegistry()
         const hasToolAllowlist = Array.isArray(allowedTools)
         const selectedToolNames = hasToolAllowlist
-          ? Array.from(new Set(allowedTools)).filter((name) => toolRegistry.has(name))
+          ? Array.from(new Set(allowedTools)).filter((name) => toolRegistry.hasKey(name))
           : undefined
         tools = hasToolAllowlist
           ? toolRegistry.resolveForExecution(selectedToolNames || [])

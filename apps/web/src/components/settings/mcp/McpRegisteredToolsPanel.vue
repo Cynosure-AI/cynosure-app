@@ -66,29 +66,33 @@ function isAutoApproved(name: string): boolean {
   return agentStore.isToolAutoApproved(name)
 }
 
+function approvalName(tool: ToolInfo): string {
+  return tool.executionName
+}
+
 async function toggleApproval(name: string): Promise<void> {
   await agentStore.setToolApproval(name, !isAutoApproved(name))
 }
 
 async function setAllInNamespace(group: NamespaceGroup, autoApprove: boolean): Promise<void> {
   for (const tool of group.tools) {
-    await agentStore.setToolApproval(tool.name, autoApprove)
+    await agentStore.setToolApproval(approvalName(tool), autoApprove)
   }
 }
 
 const autoApprovedCount = computed(() =>
-  mcpTools.value.filter((t) => isAutoApproved(t.name)).length
+  mcpTools.value.filter((t) => isAutoApproved(approvalName(t))).length
 )
 
 async function confirmAll(): Promise<void> {
   for (const tool of mcpTools.value) {
-    await agentStore.setToolApproval(tool.name, true)
+    await agentStore.setToolApproval(approvalName(tool), true)
   }
 }
 
 async function askAll(): Promise<void> {
   for (const tool of mcpTools.value) {
-    await agentStore.setToolApproval(tool.name, false)
+    await agentStore.setToolApproval(approvalName(tool), false)
   }
 }
 
@@ -152,7 +156,7 @@ function toggleCollapse(nsId: string): void {
               {{ group.namespace.label }}
             </span>
             <span class="text-[10px] text-zinc-600">
-              {{ group.tools.filter((t) => isAutoApproved(t.name)).length }}/{{ group.tools.length }} auto
+              {{ group.tools.filter((t) => isAutoApproved(approvalName(t))).length }}/{{ group.tools.length }} auto
             </span>
           </button>
 
@@ -198,22 +202,22 @@ function toggleCollapse(nsId: string): void {
             <button
               class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors"
               :class="
-                isAutoApproved(tool.name)
+                isAutoApproved(approvalName(tool))
                   ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
                   : 'bg-amber-500/10 text-amber-400/80 hover:bg-amber-500/20'
               "
               :title="
-                isAutoApproved(tool.name)
+                isAutoApproved(approvalName(tool))
                   ? 'Auto-confirmed — click to require approval'
                   : 'Requires approval — click to auto-confirm'
               "
-              @click="toggleApproval(tool.name)"
+              @click="toggleApproval(approvalName(tool))"
             >
               <Icon
-                :icon="isAutoApproved(tool.name) ? 'mdi:shield-check' : 'mdi:alert-outline'"
+                :icon="isAutoApproved(approvalName(tool)) ? 'mdi:shield-check' : 'mdi:alert-outline'"
                 class="w-3 h-3"
               />
-              {{ isAutoApproved(tool.name) ? 'auto' : 'ask' }}
+              {{ isAutoApproved(approvalName(tool)) ? 'auto' : 'ask' }}
             </button>
           </div>
         </div>

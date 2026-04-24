@@ -9,10 +9,13 @@ export interface ToolNamespace {
 }
 
 export interface ToolInfo {
+  key: string
   name: string
+  executionName: string
   description: string
   autoApprove: boolean
   namespace: ToolNamespace
+  ambiguous: boolean
 }
 
 export interface ToolCallDisplay {
@@ -90,11 +93,11 @@ export const useAgentStore = defineStore('agent', () => {
     // Sync approval state from server
     const approvalMap: Record<string, boolean> = {}
     for (const tool of availableTools.value) {
-      approvalMap[tool.name] = tool.autoApprove
+      approvalMap[tool.executionName] = tool.autoApprove
     }
     toolApprovals.value = approvalMap
 
-    const availableKeys = new Set(availableTools.value.map((tool) => `${tool.namespace.id}::${tool.name}`))
+    const availableKeys = new Set(availableTools.value.map((tool) => tool.key))
     const filtered = selectedToolNames.value.filter((name) => availableKeys.has(name))
 
     // Keep only previously selected tools that still exist; default to none.
@@ -102,7 +105,7 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   function toggleTool(name: string): void {
-    if (!availableTools.value.some((tool) => tool.name === name)) return
+    if (!availableTools.value.some((tool) => tool.key === name)) return
 
     if (selectedToolNames.value.includes(name)) {
       selectedToolNames.value = selectedToolNames.value.filter((n) => n !== name)
@@ -113,7 +116,7 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   function selectAllTools(): void {
-    selectedToolNames.value = availableTools.value.map((tool) => tool.name)
+    selectedToolNames.value = availableTools.value.map((tool) => tool.key)
   }
 
   function clearSelectedTools(): void {

@@ -11,14 +11,13 @@ const showModal = ref(false)
 
 const selectedToolsList = computed(() =>
   agentStore.availableTools.filter(t =>
-    agentStore.selectedToolNames.includes(t.name) ||
-    agentStore.selectedToolNames.includes(`${t.namespace.id}::${t.name}`)
+    agentStore.selectedToolNames.includes(t.key)
   )
 )
 
 const missingTools = computed(() => {
-  const availableKeys = new Set(agentStore.availableTools.map(t => `${t.namespace.id}::${t.name}`))
-  return agentStore.selectedToolNames.filter(name => !name.includes('::') || !availableKeys.has(name))
+  const availableKeys = new Set(agentStore.availableTools.map(t => t.key))
+  return agentStore.selectedToolNames.filter(name => !availableKeys.has(name))
 })
 </script>
 

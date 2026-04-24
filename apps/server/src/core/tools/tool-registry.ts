@@ -14,6 +14,19 @@ export interface ToolNamespace {
   label: string   // e.g. "Built-in" or "My MCP Server"
 }
 
+export interface RegisteredToolInfo {
+  /** Stable persisted identifier: `namespaceId::toolName` */
+  key: string
+  /** Original bare tool name from the provider/MCP server */
+  name: string
+  /** LLM-facing callable name (may be prefixed on collisions) */
+  executionName: string
+  description: string
+  parameters: Record<string, unknown>
+  namespace: ToolNamespace
+  ambiguous: boolean
+}
+
 interface ToolEntry {
   tool: ToolDefinition
   namespace: ToolNamespace
@@ -21,12 +34,9 @@ interface ToolEntry {
 
 /**
  * Global tool registry that supports multiple tools with the same bare name
- * from different namespaces. Tools are stored by composite key (namespace::name)
- * and indexed by bare name for quick lookup.
- *
- * When a bare name is unique across all namespaces, `get(name)` returns it
- * directly. When ambiguous, callers must use a qualified key or the
- * `resolveForExecution()` method to pick the right one.
+ * from different namespaces. Agent and chat selections are stored as stable
+ * composite keys (`namespace::name`). LLM-facing execution names are generated
+ * at runtime and only prefixed when a bare-name collision exists.
  */
 export class ToolRegistry {
   /** Primary storage: compositeKey → entry */
@@ -38,23 +48,73 @@ export class ToolRegistry {
     return `${namespace.id}::${toolName}`
   }
 
+  private safeSlugForNamespace(namespace: ToolNamespace): string {
+    const labelSlug = namespace.label
+      .toLowerCase()
+      .replace(/^mcp[-_\s]+/i, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '')
+
+    const idSlug = namespace.id
+      .replace(/^mcp:/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '')
+
+    return labelSlug || idSlug || 'server'
+  }
+
+  private safeIdSlugForNamespace(namespace: ToolNamespace): string {
+    return namespace.id
+      .replace(/^mcp:/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '')
+      || 'ns'
+  }
+
+  private executionNameFor(entry: ToolEntry, forcePrefix = false): string {
+    const keys = this.nameIndex.get(entry.tool.name)
+    const ambiguous = forcePrefix || ((keys?.size ?? 0) > 1)
+    if (!ambiguous) return entry.tool.name
+
+    // Derive a human-readable namespace prefix and disambiguate that prefix
+    // itself if two namespaces would otherwise generate the same slug.
+    const baseSlug = this.safeSlugForNamespace(entry.namespace)
+    const sameSlugCollision = [...(keys || [])]
+      .map(key => this.entries.get(key))
+      .some(other => other && other.namespace.id !== entry.namespace.id && this.safeSlugForNamespace(other.namespace) === baseSlug)
+    const uniqueSlug = sameSlugCollision
+      ? `${baseSlug}_${this.safeIdSlugForNamespace(entry.namespace).slice(0, 8)}`
+      : baseSlug
+
+    return `${uniqueSlug}__${entry.tool.name}`
+  }
+
+  private aliasTool(key: string, entry: ToolEntry, executionName: string): ToolDefinition {
+    const metadata = { registryKey: key, originalName: entry.tool.name, namespaceId: entry.namespace.id }
+    if (executionName === entry.tool.name) return { ...entry.tool, ...metadata }
+    return { ...entry.tool, ...metadata, name: executionName }
+  }
+
   register(tool: ToolDefinition, namespace: ToolNamespace = { id: 'unknown', label: 'Unknown' }): void {
     const key = this.compositeKey(namespace, tool.name)
+
+    // Re-registration can happen during reconnect/auth completion. Remove the
+    // old key from the bare-name index first so Set sizes stay accurate.
+    const previous = this.entries.get(key)
+    if (previous) {
+      const oldKeys = this.nameIndex.get(previous.tool.name)
+      oldKeys?.delete(key)
+      if (oldKeys?.size === 0) this.nameIndex.delete(previous.tool.name)
+    }
+
     this.entries.set(key, { tool, namespace })
 
     if (!this.nameIndex.has(tool.name)) {
       this.nameIndex.set(tool.name, new Set())
     }
     this.nameIndex.get(tool.name)!.add(key)
-  }
-
-  unregister(name: string): void {
-    // Remove all entries matching this bare name
-    const keys = this.nameIndex.get(name)
-    if (keys) {
-      for (const key of keys) this.entries.delete(key)
-      this.nameIndex.delete(name)
-    }
   }
 
   unregisterByNamespace(namespaceId: string): void {
@@ -71,42 +131,10 @@ export class ToolRegistry {
     }
   }
 
-  /**
-   * Get a tool by bare name (when unique) or composite key.
-   * Returns undefined if the bare name is ambiguous — use resolveForExecution() instead.
-   */
+  /** Get a tool by stable registry key. */
   get(name: string): ToolDefinition | undefined {
-    // Try as composite key first
     const direct = this.entries.get(name)
-    if (direct) return direct.tool
-
-    // Try as bare name
-    const keys = this.nameIndex.get(name)
-    if (!keys || keys.size === 0) return undefined
-    if (keys.size === 1) return this.entries.get([...keys][0])!.tool
-
-    // Ambiguous — multiple tools share this bare name.
-    // Fall back: return the built-in one if present, otherwise first.
-    for (const key of keys) {
-      if (key.startsWith('builtin::')) return this.entries.get(key)!.tool
-    }
-    return this.entries.get([...keys][0])!.tool
-  }
-
-  getNamespace(name: string): ToolNamespace | undefined {
-    // Try composite key
-    const direct = this.entries.get(name)
-    if (direct) return direct.namespace
-
-    // Bare name
-    const keys = this.nameIndex.get(name)
-    if (!keys || keys.size === 0) return undefined
-    if (keys.size === 1) return this.entries.get([...keys][0])!.namespace
-    // Ambiguous: prefer built-in
-    for (const key of keys) {
-      if (key.startsWith('builtin::')) return this.entries.get(key)!.namespace
-    }
-    return this.entries.get([...keys][0])!.namespace
+    return direct?.tool
   }
 
   getAll(): ToolDefinition[] {
@@ -117,8 +145,20 @@ export class ToolRegistry {
     return [...this.entries.values()].map(({ tool, namespace }) => ({ tool, namespace }))
   }
 
+  listRegisteredTools(): RegisteredToolInfo[] {
+    return [...this.entries.entries()].map(([key, entry]) => ({
+      key,
+      name: entry.tool.name,
+      executionName: this.executionNameFor(entry),
+      description: entry.tool.description,
+      parameters: entry.tool.parameters,
+      namespace: entry.namespace,
+      ambiguous: (this.nameIndex.get(entry.tool.name)?.size ?? 0) > 1,
+    }))
+  }
+
   getToolSchemas(): LLMToolSchema[] {
-    return this.getAll().map((t) => ({
+    return this.getToolDefinitions().map((t) => ({
       type: 'function',
       function: {
         name: t.name,
@@ -129,11 +169,11 @@ export class ToolRegistry {
   }
 
   getToolDefinitions(): ToolDefinition[] {
-    return this.getAll()
+    return this.resolveForExecution([...this.entries.keys()])
   }
 
-  has(name: string): boolean {
-    return this.entries.has(name) || (this.nameIndex.get(name)?.size ?? 0) > 0
+  hasKey(key: string): boolean {
+    return this.entries.has(key)
   }
 
   async execute(name: string, params: unknown): Promise<ToolResult> {
@@ -145,123 +185,31 @@ export class ToolRegistry {
   }
 
   /**
-   * Look up the MCP slug for a given namespace ID.
-   * Used by resolveForExecution to build collision prefixes.
-   */
-  getSlugForNamespace(namespaceId: string): string {
-    // namespace id format: "mcp:<serverId>" — derive slug from label
-    for (const entry of this.entries.values()) {
-      if (entry.namespace.id === namespaceId) {
-        return entry.namespace.label
-          .toLowerCase()
-          .replace(/^mcp[-_\s]+/i, '')
-          .replace(/[^a-z0-9]+/g, '_')
-          .replace(/^_|_$/g, '')
-          || 'server'
-      }
-    }
-    return 'server'
-  }
-
-  /**
-   * Resolve a list of tool names into ToolDefinitions ready for LLM injection.
-   * - Bare names that are unique → returned as-is.
-   * - Bare names that collide among the selected set → ALL tools from each
-   *   colliding MCP namespace get a `slug__` prefix.
+   * Resolve selected registry keys into ToolDefinitions ready for LLM injection.
    *
-   * This is the method all execution paths should use instead of manual
-   * get() + filter().
+   * Selection keys are always stable composite keys (`namespace::name`). The
+   * returned ToolDefinitions keep the original execute implementation but may
+   * receive an LLM-safe execution alias when the bare name is globally
+   * ambiguous, e.g. `webfetch__fetch`.
    */
-  resolveForExecution(selectedNames: string[]): ToolDefinition[] {
-    // ── Pre-pass: collect "active" namespaces from unambiguous selections ──
-    // When a bare name is ambiguous in the global registry (exists in 2+ MCP
-    // namespaces), we must not blindly include tools from namespaces the user
-    // never selected. We only include a namespace in the ambiguous expansion if
-    // at least one OTHER tool from that namespace was unambiguously selected.
-    const activeNamespaces = new Set<string>()
-    for (const name of selectedNames) {
-      const direct = this.entries.get(name)
-      if (direct) { activeNamespaces.add(direct.namespace.id); continue }
-      const keys = this.nameIndex.get(name)
-      if (keys?.size === 1) {
-        activeNamespaces.add(this.entries.get([...keys][0])!.namespace.id)
-      }
+  resolveForExecution(selectedKeys: string[]): ToolDefinition[] {
+    const resolved: Array<{ key: string; entry: ToolEntry }> = []
+    for (const keyCandidate of selectedKeys) {
+      const key = keyCandidate.trim()
+      if (!key) continue
+
+      const entry = this.entries.get(key)
+      if (entry) resolved.push({ key, entry })
     }
 
-    // Phase 1: Resolve each name to its ToolEntry(ies)
-    const resolved: { name: string; entry: ToolEntry }[] = []
-    for (const name of selectedNames) {
-      // Composite key?
-      const direct = this.entries.get(name)
-      if (direct) {
-        resolved.push({ name: direct.tool.name, entry: direct })
-        continue
-      }
-      // Bare name
-      const keys = this.nameIndex.get(name)
-      if (keys && keys.size > 0) {
-        if (keys.size === 1) {
-          const entry = this.entries.get([...keys][0])!
-          resolved.push({ name, entry })
-        } else {
-          // Ambiguous bare name — only include tools from namespaces that are
-          // already active (i.e. had at least one unambiguous tool selected).
-          // This prevents unintended injection of tools from MCPs not in the
-          // user's selection when a tool name happens to collide globally.
-          const activeMatches = [...keys]
-            .map(k => this.entries.get(k)!)
-            .filter(e => activeNamespaces.has(e.namespace.id))
-          if (activeMatches.length > 0) {
-            for (const entry of activeMatches) resolved.push({ name, entry })
-          } else {
-            // Fallback: none of the matching namespaces has other active tools
-            // (e.g. only ambiguous tools were selected). Prefer built-in; otherwise
-            // first registered — consistent with get() behaviour.
-            const builtinKey = [...keys].find(k => k.startsWith('builtin::'))
-            const fallbackKey = builtinKey || [...keys][0]
-            resolved.push({ name, entry: this.entries.get(fallbackKey)! })
-          }
-        }
-        continue
-      }
-    }
-
-    // Phase 2: Detect collisions (same bare name, different namespaces)
-    const bareGroups = new Map<string, Set<string>>() // bareName → set of namespace IDs
-    for (const { name, entry } of resolved) {
-      if (!bareGroups.has(name)) bareGroups.set(name, new Set())
-      bareGroups.get(name)!.add(entry.namespace.id)
-    }
-
-    // Namespaces that need prefixing (have at least one colliding tool)
-    const prefixNamespaces = new Set<string>()
-    for (const [, nsIds] of bareGroups) {
-      if (nsIds.size > 1) {
-        for (const nsId of nsIds) prefixNamespaces.add(nsId)
-      }
-    }
-
-    // Phase 3: Build final tool list with clean or prefixed names
-    const slugCache = new Map<string, string>()
-    const seen = new Set<string>()
     const result: ToolDefinition[] = []
+    const seen = new Set<string>()
 
-    for (const { entry } of resolved) {
-      const tool = entry.tool
-      let finalName = tool.name
-
-      if (prefixNamespaces.has(entry.namespace.id)) {
-        if (!slugCache.has(entry.namespace.id)) {
-          slugCache.set(entry.namespace.id, this.getSlugForNamespace(entry.namespace.id))
-        }
-        finalName = `${slugCache.get(entry.namespace.id)}__${tool.name}`
-      }
-
-      // Deduplicate (same tool resolved from multiple paths)
+    for (const { key, entry } of resolved) {
+      const finalName = this.executionNameFor(entry)
       if (seen.has(finalName)) continue
       seen.add(finalName)
-
-      result.push(finalName === tool.name ? tool : { ...tool, name: finalName })
+      result.push(this.aliasTool(key, entry, finalName))
     }
 
     return result

@@ -29,10 +29,10 @@ interface ServerJson {
 // ── Tool registration ──────────────────────────────────────────────────────────
 
 /**
- * Register MCP tools into the registry under their bare names.
+ * Register MCP tools into the registry under a stable namespace key.
  * Collision resolution is deferred to execution time via
- * registry.resolveForExecution(), which adds a slug prefix only
- * when two same-named tools are both selected by the same agent.
+ * registry.resolveForExecution(), which adds a slug prefix to the LLM-facing
+ * function name when same-named tools are available.
  */
 export function registerMcpTools(
     tools: ToolDefinition[],
