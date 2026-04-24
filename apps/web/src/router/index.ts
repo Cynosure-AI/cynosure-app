@@ -20,7 +20,7 @@ const router = createRouter({
     {
       path: '/triggers/chat',
       name: 'triggers-chat',
-      component: () => import('@/views/triggers/ChatTriggerView.vue')
+      component: () => import('@/views/triggers/ChatView.vue')
     },
     {
       path: '/triggers/cron',
