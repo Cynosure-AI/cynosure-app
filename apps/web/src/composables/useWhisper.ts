@@ -154,7 +154,7 @@ export function useWhisper() {
             })
         }
 
-        const audioConstraints: MediaTrackConstraints = deviceId
+        const audioConstraints: boolean | MediaTrackConstraints = deviceId
             ? { deviceId: { exact: deviceId } }
             : true
         mediaStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints })
