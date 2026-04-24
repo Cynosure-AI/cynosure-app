@@ -6,6 +6,7 @@ import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js'
 import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
+import cynosureLogo from '../../assets/img/cynosure-logo.png'
 
 const markdownRef = ref<HTMLElement | null>(null)
 
@@ -217,7 +218,12 @@ const isUser = computed(() => props.role === 'user')
           alt=""
           class="w-full h-full object-cover"
         >
-        <span v-else>AI</span>
+        <img
+          v-else
+          :src="cynosureLogo"
+          alt="Cynosure"
+          class="w-full h-full object-cover"
+        >
       </div>
       <span
         v-if="agentName"
