@@ -35,7 +35,7 @@ const newProvider = reactive<{
 const defaultBaseUrls: Record<string, string> = {
   openai: 'https://api.openai.com/v1',
   anthropic: 'https://api.anthropic.com',
-  gemini: '',
+  google: '',
   lmstudio: 'http://localhost:1234/v1',
   grok: 'https://api.x.ai/v1',
   ollama: 'http://localhost:11434/v1',
@@ -47,7 +47,7 @@ const defaultBaseUrls: Record<string, string> = {
 const defaultModels: Record<string, string> = {
   openai: 'gpt-4o',
   anthropic: 'claude-sonnet-4-20250514',
-  gemini: 'gemini-3.1-flash-lite-preview',
+  google: 'gemini-3.1-flash-lite-preview',
   lmstudio: '',
   grok: 'grok-3-mini',
   ollama: '',
@@ -123,7 +123,7 @@ async function addProvider(): Promise<void> {
     supportsVision:
       newProvider.type === 'lmstudio' ||
       newProvider.type === 'openai' ||
-      newProvider.type === 'gemini' ||
+      newProvider.type === 'google' ||
       newProvider.type === 'grok' ||
       newProvider.type === 'ollama' ||
       newProvider.type === 'openrouter' ||
@@ -196,7 +196,7 @@ function getProviderIcon(type: string): string {
   const icons: Record<string, string> = {
     openai: 'O',
     anthropic: 'A',
-    gemini: 'G',
+    google: 'G',
     lmstudio: 'L',
     grok: 'X',
     ollama: 'O',
@@ -251,8 +251,8 @@ function getProviderIcon(type: string): string {
               <option value="anthropic">
                 Anthropic (Claude)
               </option>
-              <option value="gemini">
-                Google Gemini
+              <option value="google">
+                Google (Gemini)
               </option>
               <option value="grok">
                 Grok (xAI)

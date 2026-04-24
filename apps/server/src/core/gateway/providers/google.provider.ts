@@ -17,7 +17,7 @@ import {
   type ModelInfo
 } from './base.provider.js'
 
-export class GeminiProvider extends BaseLLMProvider {
+export class GoogleProvider extends BaseLLMProvider {
   readonly config: LLMProviderConfig
   private client: GoogleGenAI
 
@@ -146,11 +146,11 @@ export class GeminiProvider extends BaseLLMProvider {
     const { systemInstruction, contents } = this.formatMessages(request.messages)
 
     const config: Record<string, unknown> = {
-        systemInstruction,
-        maxOutputTokens: request.maxTokens,
-        tools: request.tools?.length
-          ? [{ functionDeclarations: this.formatTools(request.tools) }]
-          : undefined
+      systemInstruction,
+      maxOutputTokens: request.maxTokens,
+      tools: request.tools?.length
+        ? [{ functionDeclarations: this.formatTools(request.tools) }]
+        : undefined
     }
     if (request.temperature != null) config.temperature = request.temperature
 
@@ -192,7 +192,7 @@ export class GeminiProvider extends BaseLLMProvider {
 
     const usage = response.usageMetadata
     return {
-      id: `gemini_${Date.now()}`,
+      id: `google_${Date.now()}`,
       content,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       images: images.length > 0 ? images : undefined,
@@ -213,11 +213,11 @@ export class GeminiProvider extends BaseLLMProvider {
     const { systemInstruction, contents } = this.formatMessages(request.messages)
 
     const streamConfig: Record<string, unknown> = {
-        systemInstruction,
-        maxOutputTokens: request.maxTokens,
-        tools: request.tools?.length
-          ? [{ functionDeclarations: this.formatTools(request.tools) }]
-          : undefined
+      systemInstruction,
+      maxOutputTokens: request.maxTokens,
+      tools: request.tools?.length
+        ? [{ functionDeclarations: this.formatTools(request.tools) }]
+        : undefined
     }
     if (request.temperature != null) streamConfig.temperature = request.temperature
 

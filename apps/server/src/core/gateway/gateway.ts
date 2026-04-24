@@ -9,7 +9,7 @@ import {
 import { ensurePricingLoaded, getModelContextLength } from '../model-dev-fetcher.js'
 import { OpenAIProvider } from './providers/openai.provider.js'
 import { AnthropicProvider } from './providers/anthropic.provider.js'
-import { GeminiProvider } from './providers/gemini.provider.js'
+import { GoogleProvider } from './providers/google.provider.js'
 import { LMStudioProvider } from './providers/lmstudio.provider.js'
 import { GrokProvider } from './providers/grok.provider.js'
 import { OllamaProvider } from './providers/ollama.provider.js'
@@ -37,8 +37,8 @@ export class LLMGateway {
         return new OpenAIProvider(config)
       case 'anthropic':
         return new AnthropicProvider(config)
-      case 'gemini':
-        return new GeminiProvider(config)
+      case 'google':
+        return new GoogleProvider(config)
       case 'lmstudio':
         return new LMStudioProvider(config)
       case 'grok':
