@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import { useWhisper } from '../../composables/useWhisper'
 import { Icon } from '@iconify/vue'
@@ -139,6 +139,39 @@ function isDownloaded(modelId: string, quant: string): boolean {
 function modelLabel(modelId: string): string {
   return whisperModels.find(m => m.id === modelId)?.label ?? modelId
 }
+
+// ─── Microphone device selection ──────────────────
+interface MicDevice { deviceId: string; label: string }
+const micDevices = ref<MicDevice[]>([])
+
+async function enumerateMics(): Promise<void> {
+  try {
+    // Need permission to get labels
+    await navigator.mediaDevices.getUserMedia({ audio: true })
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    micDevices.value = devices
+      .filter(d => d.kind === 'audioinput')
+      .map(d => ({ deviceId: d.deviceId, label: d.label || `Microphone ${micDevices.value.length + 1}` }))
+  } catch {
+    micDevices.value = []
+  }
+}
+
+const micDeviceGroups = computed<SelectOptionGroup[]>(() => [{
+  label: 'Input Device',
+  options: [
+    { value: '', label: 'Default', iconName: 'lucide:mic' },
+    ...micDevices.value.map(d => ({
+      value: d.deviceId,
+      label: d.label,
+      iconName: 'lucide:mic',
+    })),
+  ],
+}])
+
+onMounted(() => {
+  if (prefs.whisperEnabled) enumerateMics()
+})
 </script>
 
 <template>
@@ -259,6 +292,47 @@ function modelLabel(modelId: string): string {
             :groups="languageGroups"
             placeholder="Select language…"
           />
+        </BaseCard>
+
+        <!-- Microphone -->
+        <BaseCard class="p-5 space-y-4">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+              <Icon
+                icon="lucide:mic"
+                class="w-5 h-5 text-zinc-400"
+              />
+            </div>
+            <div>
+              <h3 class="text-sm font-medium text-zinc-200">
+                Microphone
+              </h3>
+              <p class="text-xs text-zinc-500 mt-0.5">
+                Select which microphone to use for voice input
+              </p>
+            </div>
+          </div>
+
+          <CustomSelect
+            v-model="prefs.whisperMicDeviceId"
+            :groups="micDeviceGroups"
+            placeholder="Select microphone…"
+          />
+
+          <div
+            v-if="micDevices.length === 0"
+            class="rounded-lg bg-zinc-800/60 border border-zinc-700/50 p-3"
+          >
+            <div class="flex items-center gap-2 text-xs">
+              <Icon
+                icon="lucide:info"
+                class="w-3.5 h-3.5 text-amber-400 shrink-0"
+              />
+              <span class="text-zinc-400">
+                No microphones detected. Please allow microphone access when prompted.
+              </span>
+            </div>
+          </div>
         </BaseCard>
 
         <!-- Download & Cache -->
