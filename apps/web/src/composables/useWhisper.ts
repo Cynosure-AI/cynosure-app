@@ -142,7 +142,7 @@ export function useWhisper() {
         getWorker().postMessage({ type: 'load', model, dtype })
     }
 
-    async function startRecording(): Promise<void> {
+    async function startRecording(deviceId?: string): Promise<void> {
         // Ensure model is loaded
         if (status.value !== 'ready') {
             loadModel()
@@ -154,7 +154,10 @@ export function useWhisper() {
             })
         }
 
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const audioConstraints: MediaTrackConstraints = deviceId
+            ? { deviceId: { exact: deviceId } }
+            : true
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints })
         audioChunks = []
         mediaRecorder = new MediaRecorder(mediaStream)
         mediaRecorder.ondataavailable = (e) => {

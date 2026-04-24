@@ -5,7 +5,7 @@ import { syncPrefsToElectron } from '@/utils/electron-prefs'
 import {
     SK_THEME, SK_AUTO_EXPAND, SK_AUTO_EXPAND_TOOLS, SK_GENERATE_TITLE, SK_TITLE_PROVIDER, SK_TITLE_MODEL,
     SK_CONTEXT_STRATEGY, SK_AGENT_CATEGORIES, SK_MA_CATEGORIES,
-    SK_WHISPER_MODEL, SK_WHISPER_ENABLED, SK_WHISPER_QUANTIZATION, SK_WHISPER_LANGUAGE,
+    SK_WHISPER_MODEL, SK_WHISPER_ENABLED, SK_WHISPER_QUANTIZATION, SK_WHISPER_LANGUAGE, SK_WHISPER_MIC_DEVICE,
 } from '@/utils/storage-keys'
 
 export type ThemeId = 'dark' | 'light' | 'arasaka' | 'midnight-purple' | 'cyberpunk'
@@ -29,6 +29,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const whisperEnabled = useLocalStorage(SK_WHISPER_ENABLED, true)
     const whisperQuantization = useLocalStorage(SK_WHISPER_QUANTIZATION, 'q8')
     const whisperLanguage = useLocalStorage(SK_WHISPER_LANGUAGE, 'english')
+    const whisperMicDeviceId = useLocalStorage(SK_WHISPER_MIC_DEVICE, '')
 
     // Apply theme to <html> element
     watch(theme, (val) => {
@@ -38,7 +39,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     // Sync all pref changes to Electron's JSON file (single watcher)
     watch(
         [theme, autoExpandSteps, autoExpandToolCalls, generateTitle, titleProviderId, titleModel, contextStrategy,
-            agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage],
+            agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId],
         () => { syncPrefsToElectron() },
         { deep: true },
     )
@@ -98,7 +99,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
         theme, autoExpandSteps, autoExpandToolCalls, generateTitle, titleProviderId, titleModel, sidebarCollapsed,
         contextStrategy,
         agentCategories, maCategories,
-        whisperModel, whisperEnabled, whisperQuantization, whisperLanguage,
+        whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
         toggleTheme, setTheme, toggleAutoExpand,
         addAgentCategory, removeAgentCategory, renameAgentCategory, reorderAgentCategory,
         addMACategory, removeMACategory,

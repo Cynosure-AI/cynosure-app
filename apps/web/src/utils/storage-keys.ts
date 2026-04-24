@@ -20,6 +20,7 @@ export const SK_WHISPER_ENABLED = 'cy-whisper-enabled'
 export const SK_WHISPER_QUANTIZATION = 'cy-whisper-quantization'
 export const SK_WHISPER_LANGUAGE = 'cy-whisper-language'
 export const SK_WHISPER_DOWNLOADED = 'cy-whisper-downloaded'
+export const SK_WHISPER_MIC_DEVICE = 'cy-whisper-mic-device'
 
 // ── Layout state ───────────────────────────────────────────────────────────────
 export const SK_SIDEBAR_COLLAPSED = 'sidebar-collapsed'
@@ -45,4 +46,5 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_WHISPER_QUANTIZATION,
     SK_WHISPER_LANGUAGE,
     SK_CHAT_SIDEBAR_OPEN,
+    SK_WHISPER_MIC_DEVICE,
 ] as const

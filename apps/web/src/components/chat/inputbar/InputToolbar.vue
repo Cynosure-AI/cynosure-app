@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
 import { usePreferencesStore } from '../../../stores/preferences.store'
@@ -7,6 +7,7 @@ import { useProviderStore } from '../../../stores/provider.store'
 import { useWhisper } from '../../../composables/useWhisper'
 import { Icon } from '@iconify/vue'
 import ModelSelect from '../../shared/ModelSelect.vue'
+import HoverTooltip from '../../shared/HoverTooltip.vue'
 import ToolsButton from './ToolsButton.vue'
 import SubAgentsButton from './SubAgentsButton.vue'
 import MemorySpacesButton from './MemorySpacesButton.vue'
@@ -75,15 +76,65 @@ watch(currentProviderId, (newId, oldId) => {
 }, { immediate: true })
 
 // ─── Whisper / voice input ──────────────────
-const { status: whisperStatus, progress: whisperProgress, startRecording, stopRecording } = useWhisper()
+const { status: whisperStatus, progress: whisperProgress, startRecording, stopRecording, downloadedModels } = useWhisper()
+
+const hasDownloadedModel = computed(() => downloadedModels.value.length > 0)
 
 async function toggleMic(): Promise<void> {
+  if (!hasDownloadedModel.value) return
   if (whisperStatus.value === 'recording') {
     const text = await stopRecording()
     if (text) emit('transcription', text)
   } else {
-    await startRecording()
+    await startRecording(prefs.whisperMicDeviceId || undefined)
   }
+}
+
+// ─── Microphone device selection ──────────────────
+interface MicDevice { deviceId: string; label: string }
+const micDevices = ref<MicDevice[]>([])
+const showMicDropdown = ref(false)
+
+async function enumerateMics(): Promise<void> {
+  try {
+    // Need permission to get labels
+    await navigator.mediaDevices.getUserMedia({ audio: true })
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    micDevices.value = devices
+      .filter(d => d.kind === 'audioinput')
+      .map(d => ({ deviceId: d.deviceId, label: d.label || `Microphone ${micDevices.value.length + 1}` }))
+  } catch {
+    micDevices.value = []
+  }
+}
+
+function selectMic(deviceId: string): void {
+  prefs.whisperMicDeviceId = deviceId
+  showMicDropdown.value = false
+}
+
+const currentMicLabel = computed(() => {
+  if (!prefs.whisperMicDeviceId) return 'Default'
+  const found = micDevices.value.find(d => d.deviceId === prefs.whisperMicDeviceId)
+  return found?.label || 'Selected mic'
+})
+
+onMounted(() => {
+  if (prefs.whisperEnabled) enumerateMics()
+})
+
+// Close mic dropdown on outside click
+function handleClickOutside(e: MouseEvent): void {
+  if (showMicDropdown.value) {
+    const target = e.target as HTMLElement
+    if (!target.closest('[aria-label="Select microphone"]') && !target.closest('.mic-dropdown-panel')) {
+      showMicDropdown.value = false
+    }
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', handleClickOutside)
 }
 </script>
 
@@ -188,66 +239,166 @@ async function toggleMic(): Promise<void> {
     </div>
 
     <!-- Mic / voice input button -->
-    <button
-      v-if="prefs.whisperEnabled"
-      class="relative p-1.5 rounded-lg transition-all duration-300 shrink-0 focus:outline-none"
-      :class="whisperStatus === 'recording'
-        ? 'bg-red-600 text-white hover:bg-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.5)]'
-        : whisperStatus === 'transcribing'
-          ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.4)] animate-whisper-glow cursor-wait'
-          : whisperStatus === 'loading'
-            ? 'text-amber-400 cursor-wait'
-            : 'text-zinc-500 hover:text-zinc-300'"
-      :title="whisperStatus === 'recording'
-        ? 'Stop recording'
-        : whisperStatus === 'loading'
-          ? `Loading model (${whisperProgress}%)`
-          : whisperStatus === 'transcribing'
-            ? 'Transcribing…'
-            : 'Voice input'"
-      :disabled="whisperStatus === 'transcribing'"
-      aria-label="Voice input"
-      @click="toggleMic"
+    <HoverTooltip
+      v-if="prefs.whisperEnabled && !hasDownloadedModel"
+      placement="above"
     >
-      <Icon
-        :icon="whisperStatus === 'recording'
-          ? 'mdi:stop'
-          : whisperStatus === 'transcribing'
-            ? 'lucide:audio-waveform'
-            : 'mdi:microphone'"
-        class="h-4 w-4"
-        :class="whisperStatus === 'transcribing' ? 'animate-pulse' : ''"
-      />
-      <!-- Loading progress ring -->
-      <svg
-        v-if="whisperStatus === 'loading'"
-        class="absolute inset-0 w-full h-full -rotate-90"
-        viewBox="0 0 36 36"
+      <button
+        class="p-1.5 text-zinc-600 rounded-lg shrink-0 cursor-not-allowed focus:outline-none"
+        title="Voice input"
+        disabled
+        aria-label="Voice input (requires model download)"
       >
-        <circle
-          cx="18"
-          cy="18"
-          r="15"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-dasharray="94.2"
-          :stroke-dashoffset="94.2 - (94.2 * whisperProgress) / 100"
-          class="text-amber-400 transition-all duration-300"
+        <Icon
+          icon="mdi:microphone-off"
+          class="h-4 w-4"
         />
-      </svg>
-      <!-- Transcribing badge with animated dots -->
-      <span
-        v-if="whisperStatus === 'transcribing'"
-        class="absolute -top-1.5 -right-1.5 flex h-4 min-w-14 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-black tracking-wide"
+      </button>
+      <template #content>
+        <div class="flex items-start gap-2">
+          <Icon
+            icon="mdi:information"
+            class="h-4 w-4 text-amber-400 mt-0.5 shrink-0"
+          />
+          <span>Voice input requires a Whisper model to be downloaded first. Open Settings → Voice Input to download a model.</span>
+        </div>
+      </template>
+    </HoverTooltip>
+
+    <div
+      v-else-if="prefs.whisperEnabled"
+      class="relative flex items-center shrink-0"
+    >
+      <button
+        class="relative p-1.5 rounded-lg transition-all duration-300 shrink-0 focus:outline-none"
+        :class="whisperStatus === 'recording'
+          ? 'bg-red-600 text-white hover:bg-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.5)]'
+          : whisperStatus === 'transcribing'
+            ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.4)] animate-whisper-glow cursor-wait'
+            : whisperStatus === 'loading'
+              ? 'text-amber-400 cursor-wait'
+              : 'text-zinc-500 hover:text-zinc-300'"
+        :title="whisperStatus === 'recording'
+          ? 'Stop recording'
+          : whisperStatus === 'loading'
+            ? `Loading model (${whisperProgress}%)`
+            : whisperStatus === 'transcribing'
+              ? 'Transcribing…'
+              : 'Voice input'"
+        :disabled="whisperStatus === 'transcribing'"
+        aria-label="Voice input"
+        @click="toggleMic"
       >
-        <span class="inline-flex">
-          <span class="animate-dot1">.</span>
-          <span class="animate-dot2">.</span>
-          <span class="animate-dot3">.</span>
+        <Icon
+          :icon="whisperStatus === 'recording'
+            ? 'mdi:stop'
+            : whisperStatus === 'transcribing'
+              ? 'lucide:audio-waveform'
+              : 'mdi:microphone'"
+          class="h-4 w-4"
+          :class="whisperStatus === 'transcribing' ? 'animate-pulse' : ''"
+        />
+        <!-- Loading progress ring -->
+        <svg
+          v-if="whisperStatus === 'loading'"
+          class="absolute inset-0 w-full h-full -rotate-90"
+          viewBox="0 0 36 36"
+        >
+          <circle
+            cx="18"
+            cy="18"
+            r="15"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-dasharray="94.2"
+            :stroke-dashoffset="94.2 - (94.2 * whisperProgress) / 100"
+            class="text-amber-400 transition-all duration-300"
+          />
+        </svg>
+        <!-- Transcribing badge with animated dots -->
+        <span
+          v-if="whisperStatus === 'transcribing'"
+          class="absolute -top-1.5 -right-1.5 flex h-4 min-w-14 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-black tracking-wide"
+        >
+          <span class="inline-flex">
+            <span class="animate-dot1">.</span>
+            <span class="animate-dot2">.</span>
+            <span class="animate-dot3">.</span>
+          </span>
         </span>
+      </button>
+
+      <!-- Microphone selector dropdown (only when multiple mics available) -->
+      <div
+        v-if="micDevices.length > 1"
+        class="relative ml-0.5"
+      >
+        <button
+          class="p-1 text-zinc-500 hover:text-zinc-300 rounded-lg transition-colors shrink-0"
+          title="Select microphone"
+          aria-label="Select microphone"
+          @click="showMicDropdown = !showMicDropdown"
+        >
+          <Icon
+            icon="mdi:chevron-down"
+            class="h-3 w-3"
+          />
+        </button>
+
+        <div
+          v-if="showMicDropdown"
+          class="mic-dropdown-panel absolute bottom-full right-0 mb-1 w-56 rounded-lg border border-zinc-700 bg-zinc-800 shadow-xl shadow-black/40 overflow-hidden z-50"
+        >
+          <div class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-700">
+            Microphone
+          </div>
+          <button
+            class="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
+            :class="{ 'bg-zinc-700/50': !prefs.whisperMicDeviceId }"
+            @click="selectMic('')"
+          >
+            <Icon
+              v-if="!prefs.whisperMicDeviceId"
+              icon="mdi:check"
+              class="h-3.5 w-3.5 text-blue-400 shrink-0"
+            />
+            <span
+              v-else
+              class="w-3.5 shrink-0"
+            />
+            <span>Default</span>
+          </button>
+          <button
+            v-for="dev in micDevices"
+            :key="dev.deviceId"
+            class="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
+            :class="{ 'bg-zinc-700/50': prefs.whisperMicDeviceId === dev.deviceId }"
+            @click="selectMic(dev.deviceId)"
+          >
+            <Icon
+              v-if="prefs.whisperMicDeviceId === dev.deviceId"
+              icon="mdi:check"
+              class="h-3.5 w-3.5 text-blue-400 shrink-0"
+            />
+            <span
+              v-else
+              class="w-3.5 shrink-0"
+            />
+            <span class="truncate">{{ dev.label }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Current mic indicator -->
+      <span
+        v-if="micDevices.length > 1 && prefs.whisperMicDeviceId"
+        class="ml-1 text-[10px] text-zinc-500 truncate max-w-24"
+        :title="currentMicLabel"
+      >
+        {{ currentMicLabel }}
       </span>
-    </button>
+    </div>
 
     <!-- Send / Cancel -->
     <button
