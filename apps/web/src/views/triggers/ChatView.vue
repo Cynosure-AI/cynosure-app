@@ -43,12 +43,12 @@ function onDrop(e: DragEvent) {
 
 <template>
   <div class="flex flex-col h-full overflow-hidden">
-    <!-- Header bar -->
+    <!-- Header bar (full width) -->
     <ChatHeaderBar />
 
-    <!-- Content: sidebar overlay + chat -->
+    <!-- Main content area: sidebar + chat column -->
     <div class="flex flex-1 min-h-0 relative">
-      <!-- Overlay backdrop -->
+      <!-- Mobile overlay backdrop -->
       <Transition name="fade">
         <div
           v-if="chatSidebarOpen"
@@ -57,61 +57,52 @@ function onDrop(e: DragEvent) {
         />
       </Transition>
 
-      <!-- Collapsible sidebar (overlay) -->
-      <Transition name="slide">
-        <div
-          v-if="chatSidebarOpen"
-          class="absolute left-0 top-0 z-40 h-full w-64"
-        >
-          <ChatSidebar />
-        </div>
-      </Transition>
-
-      <!-- Chat area -->
+      <!-- Sidebar: overlay on mobile, shifts content on desktop -->
       <div
-        class="flex flex-col flex-1 min-w-0 relative"
-        @dragenter="onDragEnter"
-        @dragleave="onDragLeave"
-        @dragover="onDragOver"
-        @drop="onDrop"
+        class="absolute left-0 top-0 z-40 h-full w-64 md:relative md:z-auto md:shrink-0 md:overflow-hidden md:transition-all md:duration-200 md:ease-in-out transition-all duration-200 ease-in-out overflow-hidden"
+        :class="chatSidebarOpen ? 'translate-x-0 md:w-64' : '-translate-x-full md:w-0'"
       >
-        <ChatPanel />
+        <ChatSidebar />
+      </div>
 
+      <!-- Chat column: panel + input bar -->
+      <div class="flex flex-col flex-1 min-w-0">
+        <!-- Chat area -->
         <div
-          v-if="isDragOver"
-          class="absolute inset-0 z-50 flex items-center justify-center bg-zinc-900/80 border-2 border-dashed border-blue-500 rounded-lg pointer-events-none"
+          class="flex flex-col flex-1 min-h-0 relative"
+          @dragenter="onDragEnter"
+          @dragleave="onDragLeave"
+          @dragover="onDragOver"
+          @drop="onDrop"
         >
-          <div class="text-center">
-            <div class="text-4xl mb-2">
-              📎
-            </div>
-            <div class="text-blue-400 text-sm font-medium">
-              Drop files here
-            </div>
-            <div class="text-zinc-500 text-xs mt-1">
-              Images &amp; text files supported
+          <ChatPanel />
+
+          <div
+            v-if="isDragOver"
+            class="absolute inset-0 z-50 flex items-center justify-center bg-zinc-900/80 border-2 border-dashed border-blue-500 rounded-lg pointer-events-none"
+          >
+            <div class="text-center">
+              <div class="text-4xl mb-2">
+                📎
+              </div>
+              <div class="text-blue-400 text-sm font-medium">
+                Drop files here
+              </div>
+              <div class="text-zinc-500 text-xs mt-1">
+                Images &amp; text files supported
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- Input bar (full width of chat column) -->
+        <InputBar ref="inputBarRef" />
       </div>
     </div>
-
-    <!-- Input bar (full width) -->
-    <InputBar ref="inputBarRef" />
   </div>
 </template>
 
 <style scoped>
-/* Sidebar slide */
-.slide-enter-active,
-.slide-leave-active {
-  transition: transform 0.2s ease;
-}
-.slide-enter-from,
-.slide-leave-to {
-  transform: translateX(-100%);
-}
-
 /* Backdrop fade */
 .fade-enter-active,
 .fade-leave-active {
