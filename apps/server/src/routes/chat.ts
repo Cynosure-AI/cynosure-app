@@ -5,7 +5,7 @@ import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor } from '../core/agent/agent-executor.js'
 import { prepareAgentExecution } from '../core/agent/prepare-execution.js'
-import { routeTools, shouldRouteTools } from '../core/agent/tool-router.js'
+import { routeTools, shouldRouteTools, TOOL_SEARCH_TOOL_NAME } from '../core/agent/tool-router.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { hydrateBuiltInTools } from '../core/tools/built-in-tools.js'
@@ -563,6 +563,7 @@ function emitToolRoutingSelection(conversationId: string, taskId: string, tools:
     taskId,
     iteration: 0,
     toolCalls: tools
+      .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
       .map((tool) => ({ name: tool.name, arguments: '{}' })),
   })
 }
