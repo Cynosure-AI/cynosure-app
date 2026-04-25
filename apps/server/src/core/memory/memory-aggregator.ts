@@ -27,20 +27,22 @@ export class MemoryAggregator {
 
     // Build a filter covering all assigned memory spaces
     let spaceFilter: string | undefined
+    const spaceNameMap = new Map<string, string>()
     if (opts?.agentId) {
       try {
         const db = getDb()
-        const rows = db.prepare('SELECT space_id FROM agent_memory_spaces WHERE agent_id = ?').all(opts.agentId) as { space_id: string }[]
+        const rows = db.prepare(`
+          SELECT ms.id, ms.name
+          FROM agent_memory_spaces ams
+          JOIN memory_spaces ms ON ms.id = ams.space_id
+          WHERE ams.agent_id = ?
+        `).all(opts.agentId) as { id: string; name: string }[]
         if (rows.length > 0) {
-          const quoted = rows.map(r => `'${r.space_id.replace(/'/g, "''")}'`).join(', ')
+          for (const row of rows) spaceNameMap.set(row.id, row.name)
+          const quoted = rows.map(r => `'${r.id.replace(/'/g, "''")}'`).join(', ')
           spaceFilter = `spaceId IN (${quoted})`
         }
       } catch { /* DB not ready */ }
-    }
-
-    // No assigned spaces means no memory available
-    if (!spaceFilter) {
-      return { permanent: [] }
     }
 
     const permanent = await permanentMem.recall(query, opts?.permanentTopK ?? 3, spaceFilter).catch(() => [])
@@ -58,16 +60,39 @@ export class MemoryAggregator {
     const dedupedPermanent = dedup(permanent)
 
     // Enrich chunks with totalChunks per source file
-    const uniqueSources = [...new Set(dedupedPermanent.filter(c => c.sourceFile).map(c => c.sourceFile!))]
-    if (uniqueSources.length > 0) {
+    const uniqueSourceKeys = [...new Set(
+      dedupedPermanent
+        .filter(c => c.sourceFile)
+        .map(c => `${c.sourceFile!}\u0000${c.spaceId || ''}`)
+    )]
+    if (uniqueSourceKeys.length > 0) {
       const counts = await Promise.all(
-        uniqueSources.map(sf => permanentMem.countChunks(sf, spaceFilter))
+        uniqueSourceKeys.map(key => {
+          const [sf, spaceId] = key.split('\u0000')
+          const filter = spaceId ? `spaceId = '${spaceId.replace(/'/g, "''")}'` : spaceFilter
+          return permanentMem.countChunks(sf, filter)
+        })
       )
-      const countMap = new Map(uniqueSources.map((sf, i) => [sf, counts[i]]))
+      const countMap = new Map(uniqueSourceKeys.map((key, i) => [key, counts[i]]))
       for (const chunk of dedupedPermanent) {
-        if (chunk.sourceFile && countMap.has(chunk.sourceFile)) {
-          chunk.totalChunks = countMap.get(chunk.sourceFile)
+        const key = chunk.sourceFile ? `${chunk.sourceFile}\u0000${chunk.spaceId || ''}` : undefined
+        if (key && countMap.has(key)) {
+          chunk.totalChunks = countMap.get(key)
         }
+      }
+    }
+
+    if (spaceNameMap.size === 0) {
+      try {
+        const db = getDb()
+        const rows = db.prepare('SELECT id, name FROM memory_spaces').all() as { id: string; name: string }[]
+        for (const row of rows) spaceNameMap.set(row.id, row.name)
+      } catch { /* DB not ready */ }
+    }
+
+    for (const chunk of dedupedPermanent) {
+      if (chunk.spaceId) {
+        chunk.spaceName = spaceNameMap.get(chunk.spaceId)
       }
     }
 
@@ -89,13 +114,16 @@ export class MemoryAggregator {
           if (c.sourceFile) {
             const idx = c.chunkIndex != null ? c.chunkIndex + 1 : null
             const total = c.totalChunks ?? null
+            const label = c.spaceName ? `${c.spaceName} · ${c.sourceFile}` : c.sourceFile
             if (idx != null && total != null) {
-              parts.push(`[${c.sourceFile} · Part ${idx}/${total}]`)
+              parts.push(`[${label} · Part ${idx}/${total}]`)
             } else if (idx != null) {
-              parts.push(`[${c.sourceFile} · Part ${idx}]`)
+              parts.push(`[${label} · Part ${idx}]`)
             } else {
-              parts.push(`[${c.sourceFile}]`)
+              parts.push(`[${label}]`)
             }
+          } else if (c.spaceName) {
+            parts.push(`[${c.spaceName}]`)
           }
           parts.push(c.text)
           return `- ${parts.join(' ')}`

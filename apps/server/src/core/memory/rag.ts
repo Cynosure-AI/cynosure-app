@@ -25,6 +25,7 @@ export interface SearchResult {
   source: string
   sourceFile?: string
   chunkIndex?: number
+  spaceId?: string
   score: number
   createdAt: number
 }
@@ -238,10 +239,13 @@ export class RAGStore {
   ): Promise<SearchResult[]> {
     const table = await this.getOrCreateTable(tableName, queryVector.length)
     await this.ensureSpaceIdIndex(table, tableName)
+    const fieldNames = await this.getFieldNames(table, tableName)
+    const cols = ['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt']
+    if (fieldNames.has('spaceId')) cols.push('spaceId')
 
     let query = (table.search(queryVector) as lancedb.VectorQuery)
       .distanceType('cosine')
-      .select(['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt'])
+      .select(cols)
       .limit(topK)
 
     if (filter) query = query.where(filter)
@@ -256,6 +260,7 @@ export class RAGStore {
         source: r.source as string,
         sourceFile: r.sourceFile as string | undefined,
         chunkIndex: r.chunkIndex != null ? (r.chunkIndex as number) : undefined,
+        spaceId: (r.spaceId as string | undefined) || undefined,
         score: r._distance != null ? 1 - (r._distance as number) : 0,
         createdAt: r.createdAt as number
       }))
@@ -277,6 +282,9 @@ export class RAGStore {
     filter?: string
   ): Promise<SearchResult[]> {
     const table = await this.getOrCreateTable(tableName, queryVector.length)
+    const fieldNames = await this.getFieldNames(table, tableName)
+    const cols = ['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt']
+    if (fieldNames.has('spaceId')) cols.push('spaceId')
 
     // Safety fallback: rebuild FTS if callers didn't trigger it eagerly
     if (!this.ftsIndexCurrent.has(tableName)) {
@@ -291,7 +299,7 @@ export class RAGStore {
       let hybridQuery = (table.search(queryVector) as lancedb.VectorQuery)
         .fullTextSearch(queryText)
         .rerank(reranker)
-        .select(['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt'])
+        .select(cols)
         .limit(topK)
       if (filter) hybridQuery = hybridQuery.where(filter)
 
@@ -323,6 +331,7 @@ export class RAGStore {
             source: r.source as string,
             sourceFile: r.sourceFile as string | undefined,
             chunkIndex: r.chunkIndex != null ? (r.chunkIndex as number) : undefined,
+            spaceId: (r.spaceId as string | undefined) || undefined,
             score: scoreMap.get(r.id as string) ?? 0,
             createdAt: r.createdAt as number
           }
@@ -356,23 +365,27 @@ export class RAGStore {
     minIndex: number,
     maxIndex: number,
     filter?: string
-  ): Promise<{ text: string; chunkIndex: number; sourceFile: string }[]> {
+  ): Promise<{ text: string; chunkIndex: number; sourceFile: string; spaceId?: string }[]> {
     if (!this.db) return []
     try {
       const table = await this.openExistingTable(tableName)
       if (!table) return []
+      const fieldNames = await this.getFieldNames(table, tableName)
+      const cols = ['id', 'text', 'chunkIndex', 'sourceFile']
+      if (fieldNames.has('spaceId')) cols.push('spaceId')
 
       const escapedSource = sourceFile.replace(/'/g, "''")
       let whereClause = `sourceFile = '${escapedSource}' AND chunkIndex >= ${minIndex} AND chunkIndex <= ${maxIndex}`
       if (filter) whereClause += ` AND ${filter}`
 
-      const results = await table.query().select(['text', 'chunkIndex', 'sourceFile']).where(whereClause).toArray()
+      const results = await table.query().select(cols).where(whereClause).toArray()
       return results
         .filter((r) => r.id !== '__seed__')
         .map((r) => ({
           text: r.text as string,
           chunkIndex: r.chunkIndex as number,
-          sourceFile: r.sourceFile as string
+          sourceFile: r.sourceFile as string,
+          spaceId: (r.spaceId as string | undefined) || undefined
         }))
         .sort((a, b) => a.chunkIndex - b.chunkIndex)
     } catch {
@@ -511,13 +524,22 @@ export class RAGStore {
       const escaped = sourceFiles.map(sf => `'${sf.replace(/'/g, "''")}'`).join(', ')
       let whereClause = `sourceFile IN (${escaped})`
       if (filter) whereClause += ` AND ${filter}`
+      const deletedCount = await table.countRows(whereClause)
       await table.delete(whereClause)
       this.ftsIndexCurrent.delete(tableName)
       await this.rebuildFtsIndex(tableName)
-      return sourceFiles.length
+      return deletedCount
     } catch {
       return 0
     }
+  }
+
+  private async getFieldNames(table: lancedb.Table, tableName: string): Promise<Set<string>> {
+    const cached = this.fieldNamesCache.get(tableName)
+    if (cached) return cached
+    const names = new Set((await table.schema()).fields.map((f: { name: string }) => f.name))
+    this.fieldNamesCache.set(tableName, names)
+    return names
   }
 
   /** Delete documents by their IDs. */
