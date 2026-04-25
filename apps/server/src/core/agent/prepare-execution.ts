@@ -16,6 +16,9 @@ import { nanoid } from 'nanoid'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ChatMessage, ToolDefinition } from '../gateway/providers/base.provider.js'
 
+const AGENT_ROUTER_PROVIDER = '__agent_provider__'
+const AGENT_ROUTER_MODEL = '__agent_model__'
+
 type BroadcastFn = (event: string, data: unknown) => void
 
 export interface PrepareExecutionInput {
@@ -141,9 +144,16 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         try {
             const routingTaskId = `router_${nanoid()}`
             emitToolRoutingStatus(conversationId, routingTaskId, 'routing-tools', 'Selecting relevant tools...')
-            const routerProviderId = agent.toolRouterProviderId || input.toolRouterProviderId || resolvedProviderId
+            const useAgentRouterProvider = agent.toolRouterProviderId === AGENT_ROUTER_PROVIDER
+            const agentRouterProviderId = useAgentRouterProvider
+                ? agent.providerId
+                : agent.toolRouterProviderId
+            const useAgentRouterModel = agent.toolRouterModel === AGENT_ROUTER_MODEL
+            const routerProviderId = agentRouterProviderId || input.toolRouterProviderId || resolvedProviderId
             const routerProvider = gateway.getProvider(routerProviderId) || lastUsedProvider
-            const routerModel = agent.toolRouterModel || input.toolRouterModel || routerProvider.config.defaultModel || model
+            const routerModel = useAgentRouterModel
+                ? (agent.model || routerProvider.config.defaultModel || model)
+                : (agent.toolRouterModel || (useAgentRouterProvider ? undefined : input.toolRouterModel) || routerProvider.config.defaultModel || model)
 
             tools = await routeTools({
                 userQuery: input.userQuery || '',

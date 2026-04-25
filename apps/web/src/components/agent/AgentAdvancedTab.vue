@@ -11,6 +11,9 @@ import { usePreferencesStore } from '../../stores/preferences.store'
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 
+const AGENT_ROUTER_PROVIDER = '__agent_provider__'
+const AGENT_ROUTER_MODEL = '__agent_model__'
+
 const providerStore = useProviderStore()
 const prefs = usePreferencesStore()
 
@@ -18,8 +21,20 @@ const toolRouterModels = ref<string[]>([])
 const toolRouterLoadingModels = ref(false)
 
 const effectiveToolRouterProviderId = computed(() =>
-  props.agent.toolRouterProviderId || prefs.toolRouterProviderId || props.agent.providerId || ''
+  props.agent.toolRouterProviderId === AGENT_ROUTER_PROVIDER
+    ? props.agent.providerId
+    : props.agent.toolRouterProviderId || prefs.toolRouterProviderId || props.agent.providerId || ''
 )
+
+const toolRouterProviderOptions = [
+  { value: AGENT_ROUTER_PROVIDER, label: 'Use agent provider', iconName: 'lucide:bot' },
+]
+
+const toolRouterModelOptions = [
+  { value: AGENT_ROUTER_MODEL, label: 'Use agent model', iconName: 'lucide:bot' },
+]
+
+const isUsingAgentRouterProvider = computed(() => props.agent.toolRouterProviderId === AGENT_ROUTER_PROVIDER)
 
 async function fetchToolRouterModels(providerId: string) {
   if (!providerId) {
@@ -43,7 +58,8 @@ onMounted(() => {
 })
 
 watch(() => props.agent.toolRouterProviderId, (_id, oldId) => {
-  if (oldId !== undefined) emit('update', 'toolRouterModel', '')
+  if (oldId === undefined) return
+  emit('update', 'toolRouterModel', isUsingAgentRouterProvider.value ? AGENT_ROUTER_MODEL : '')
 })
 
 watch(effectiveToolRouterProviderId, (providerId) => {
@@ -164,6 +180,7 @@ function onMaxCtxBlur() {
                 include-default
                 default-label="Use global router provider"
                 placeholder="Use global router provider"
+                :leading-options="toolRouterProviderOptions"
                 @update:model-value="emit('update', 'toolRouterProviderId', $event)"
               />
             </div>
@@ -175,6 +192,8 @@ function onMaxCtxBlur() {
                 include-default
                 :default-label="toolRouterLoadingModels ? 'Loading models...' : 'Use global router model'"
                 :placeholder="toolRouterLoadingModels ? 'Loading models...' : 'Use global router model'"
+                :disable-default="isUsingAgentRouterProvider"
+                :leading-options="toolRouterModelOptions"
                 :filterable="true"
                 @update:model-value="emit('update', 'toolRouterModel', $event)"
               />
