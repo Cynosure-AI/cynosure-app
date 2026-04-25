@@ -256,7 +256,7 @@ function buildToolSearchTool(
     return {
         name: TOOL_SEARCH_TOOL_NAME,
         description:
-            'Search and load additional available tools when the current tools are insufficient. Use this before saying a capability is unavailable.',
+            'IMPORTANT TOOL: Search and load additional available tools when the current tools are insufficient or the wrong ones. Use this before saying a capability is unavailable.',
         timeout: 1_000,
         parameters: {
             type: 'object',
@@ -265,7 +265,7 @@ function buildToolSearchTool(
                 query: {
                     type: 'string',
                     description:
-                        'Capability to search for, e.g. "gmail latest email", "calendar event", or "github issue search".',
+                        'Capability to search for, e.g. "gmail latest email", "calendar event", "github issue search" or "web content search".',
                 },
                 limit: {
                     type: 'number',

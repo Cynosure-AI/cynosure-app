@@ -10,7 +10,7 @@
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import { hydrateBuiltInTools } from '../tools/built-in-tools.js'
-import { routeTools, shouldRouteTools } from './tool-router.js'
+import { routeTools, shouldRouteTools, TOOL_SEARCH_TOOL_NAME } from './tool-router.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { nanoid } from 'nanoid'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
@@ -250,6 +250,7 @@ function emitToolRoutingSelection(conversationId: string, taskId: string, tools:
         taskId,
         iteration: 0,
         toolCalls: tools
+            .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
             .map((tool) => ({ name: tool.name, arguments: '{}' })),
     })
 }
