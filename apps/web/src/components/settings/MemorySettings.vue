@@ -6,6 +6,7 @@ import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
 import MultiSelect from '../shared/MultiSelect.vue'
 import ProviderSelect from '../shared/ProviderSelect.vue'
+import CustomSelect from '../shared/CustomSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
 
 const providerStore = useProviderStore()
@@ -69,6 +70,15 @@ async function onOcrLangsUpdate(langs: string[]) {
   selectedOcrLangs.value = langs
   await saveOcrLanguage()
 }
+
+const embModelGroups = computed(() => [
+  {
+    options: embModels.value.map((m) => ({
+      value: m,
+      label: m,
+    })),
+  },
+])
 
 // Confirmation dialog
 const showDropConfirm = ref(false)
@@ -272,26 +282,14 @@ async function manualClearDb() {
         <div>
           <label class="block text-xs text-zinc-400 mb-1">Model</label>
           <div class="flex gap-2">
-            <select
-              v-if="embModels.length > 0"
+            <CustomSelect
               v-model="embModel"
-              class="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-600 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option
-                v-for="m in embModels"
-                :key="m"
-                :value="m"
-              >
-                {{ m }}
-              </option>
-            </select>
-            <input
-              v-else
-              v-model="embModel"
-              type="text"
-              placeholder="text-embedding-3-small"
-              class="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-600 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
+              :groups="embModelGroups"
+              placeholder="Select or type model name..."
+              filterable
+              dropdown-width="min-w-full"
+              class="flex-1"
+            />
             <button
               :disabled="embLoadingModels || !embProviderId"
               class="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors"
