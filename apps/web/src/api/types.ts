@@ -118,6 +118,7 @@ export interface AgentDefinition {
     tools: string[]
     subAgents?: SubAgentAssignment[]
     autoApproveTools: boolean
+    autoToolRouting: boolean
     generateTitle: boolean
     showInCarousel: boolean
     thinkingEnabled: boolean

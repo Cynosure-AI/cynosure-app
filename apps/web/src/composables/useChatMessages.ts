@@ -25,6 +25,7 @@ export function useChatMessages(
         sessionOverrideSubAgents: Ref<boolean>
         sessionSystemPrompt: Ref<string>
         sessionThinkingEnabled: Ref<boolean>
+        sessionAutoToolRouting: Ref<boolean>
         freeChatSubAgentIds: Ref<string[]>
         freeChatMemorySpaceIds: Ref<string[]>
         agentOriginalSubAgentIds: Ref<string[]>
@@ -116,7 +117,10 @@ export function useChatMessages(
             agentConfig.sessionThinkingEnabled.value,
             prefs.contextStrategy,
             prefs.titleProviderId || undefined,
-            prefs.titleModel || undefined
+            prefs.titleModel || undefined,
+            agentConfig.sessionAutoToolRouting.value,
+            prefs.toolRouterProviderId || undefined,
+            prefs.toolRouterModel || undefined
         )
     }
 

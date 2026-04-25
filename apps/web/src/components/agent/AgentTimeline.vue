@@ -16,6 +16,12 @@ function toggleStep(idx: number): void {
 }
 
 const statusMeta: Record<string, { label: string; icon: string; color: string; line: string }> = {
+  'routing-tools': {
+    label: 'Tool Routing',
+    icon: '◇',
+    color: 'text-blue-300',
+    line: 'bg-blue-500/40'
+  },
   'choosing-tools': {
     label: 'Choosing Tools',
     icon: '⚙',

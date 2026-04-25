@@ -16,6 +16,9 @@ apps/electron/release/
 # MCPs (separate repository)
 mcps/
 
+#Codex File
+.codex
+
 # OS files
 .DS_Store
 Thumbs.db

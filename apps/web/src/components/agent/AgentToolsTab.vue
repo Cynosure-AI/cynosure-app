@@ -4,6 +4,7 @@ import type { AgentDefinition } from '../../api/types'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
 import ToolSelector from '../shared/ToolSelector.vue'
+import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -23,9 +24,30 @@ function removeMissing() {
 
 <template>
   <div class="flex flex-col h-[75vh]">
-    <p class="text-sm text-zinc-500 mb-3 shrink-0">
-      Select which tools this agent can access
-    </p>
+    <div class="mb-3 shrink-0 rounded-lg border border-zinc-700 bg-zinc-900/70 px-4 py-3">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <Icon
+              icon="lucide:route"
+              class="h-4 w-4 text-blue-400"
+            />
+            <p class="text-sm font-medium text-zinc-200">
+              Auto-select tools
+            </p>
+          </div>
+          <p class="mt-1 text-xs text-zinc-500">
+            Let this agent route each request through the tools selected below.
+          </p>
+        </div>
+        <ToggleSwitch
+          :model-value="agent.autoToolRouting"
+          size="md"
+          color="blue"
+          @update:model-value="emit('update', 'autoToolRouting', $event)"
+        />
+      </div>
+    </div>
 
     <!-- Missing tools warning -->
     <div
