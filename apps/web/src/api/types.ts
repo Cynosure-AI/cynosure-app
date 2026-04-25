@@ -119,6 +119,8 @@ export interface AgentDefinition {
     subAgents?: SubAgentAssignment[]
     autoApproveTools: boolean
     autoToolRouting: boolean
+    toolRouterProviderId: string
+    toolRouterModel: string
     generateTitle: boolean
     showInCarousel: boolean
     thinkingEnabled: boolean

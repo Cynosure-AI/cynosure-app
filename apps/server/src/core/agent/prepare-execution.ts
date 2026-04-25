@@ -141,9 +141,9 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         try {
             const routingTaskId = `router_${nanoid()}`
             emitToolRoutingStatus(conversationId, routingTaskId, 'routing-tools', 'Selecting relevant tools...')
-            const routerProviderId = input.toolRouterProviderId || resolvedProviderId
+            const routerProviderId = agent.toolRouterProviderId || input.toolRouterProviderId || resolvedProviderId
             const routerProvider = gateway.getProvider(routerProviderId) || lastUsedProvider
-            const routerModel = input.toolRouterModel || routerProvider.config.defaultModel || model
+            const routerModel = agent.toolRouterModel || input.toolRouterModel || routerProvider.config.defaultModel || model
 
             tools = await routeTools({
                 userQuery: input.userQuery || '',
@@ -178,6 +178,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             signal,
             modelOverride: overrideSubAgents ? (modelOverride || undefined) : undefined,
             providerOverride: overrideSubAgents ? (modelOverride ? lastUsedProvider.config.id : (providerOverride || undefined)) : undefined,
+            toolRouterProviderId: input.toolRouterProviderId,
+            toolRouterModel: input.toolRouterModel,
         })
         tools = [...tools, ...subAgentTools]
     }

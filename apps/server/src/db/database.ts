@@ -257,6 +257,8 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('agents', 'sub_agents_json', "TEXT NOT NULL DEFAULT '[]'")
   addColumnIfMissing('agents', 'auto_approve_tools', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('agents', 'auto_tool_routing', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('agents', 'tool_router_provider_id', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('agents', 'tool_router_model', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'show_in_carousel', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('agents', 'thinking_enabled', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('agents', 'max_context_tokens', 'INTEGER')
