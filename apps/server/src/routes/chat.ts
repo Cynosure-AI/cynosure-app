@@ -317,8 +317,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         responseModel = model || freeChatLastUsedProvider.config.defaultModel
 
         if (shouldRouteTools(tools, content, { enabled: reqAutoToolRouting === true })) {
+          const routingTaskId = `router_${nanoid()}`
           try {
-            const routingTaskId = `router_${nanoid()}`
             emitToolRoutingStatus(conversationId, routingTaskId, 'routing-tools', 'Selecting relevant tools...')
             const routerProviderId = reqToolRouterProviderId || responseProvider
             const routerProvider = gateway.getProvider(routerProviderId) || freeChatLastUsedProvider
@@ -336,7 +336,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             })
             emitToolRoutingSelection(conversationId, routingTaskId, tools)
           } catch (err) {
-            console.warn('[tool-router] Routing failed, using full tool list:', err)
+            console.warn('[tool-router] Routing failed, using local tool list:', err)
+            tools = tools.filter((tool) => !tool.namespaceId?.startsWith('mcp:'))
+            emitToolRoutingSelection(conversationId, routingTaskId, tools)
           }
         }
 
@@ -561,7 +563,6 @@ function emitToolRoutingSelection(conversationId: string, taskId: string, tools:
     taskId,
     iteration: 0,
     toolCalls: tools
-      .filter((tool) => tool.namespaceId?.startsWith('mcp:'))
       .map((tool) => ({ name: tool.name, arguments: '{}' })),
   })
 }
