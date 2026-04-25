@@ -17,6 +17,8 @@ export interface RetrievedChunk {
   score: number
   sourceFile?: string
   chunkIndex?: number
+  spaceId?: string
+  spaceName?: string
   totalChunks?: number
 }
 
@@ -174,7 +176,8 @@ export class MemoryParser {
       source: r.source,
       score: r.score,
       sourceFile: r.sourceFile,
-      chunkIndex: r.chunkIndex
+      chunkIndex: r.chunkIndex,
+      spaceId: r.spaceId
     }))
   }
 

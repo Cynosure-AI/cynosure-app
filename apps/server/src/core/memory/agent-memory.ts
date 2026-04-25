@@ -36,7 +36,7 @@ export class AgentMemory {
         minIndex: number,
         maxIndex: number,
         filter?: string
-    ): Promise<{ text: string; chunkIndex: number; sourceFile: string }[]> {
+    ): Promise<{ text: string; chunkIndex: number; sourceFile: string; spaceId?: string }[]> {
         const ragStore = getRAGStore()
         return ragStore.getChunksByRange(TABLE_NAME, sourceFile, minIndex, maxIndex, filter)
     }
