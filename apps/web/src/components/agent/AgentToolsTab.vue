@@ -37,7 +37,7 @@ function removeMissing() {
             </p>
           </div>
           <p class="mt-1 text-xs text-zinc-500">
-            Let this agent route each request through the tools selected below.
+            Let this agent route each request through the tools selected below. Non-chosen tools are automatically omitted from the agens context. If none are selected, it will automatically choose from all available tools. 
           </p>
         </div>
         <ToggleSwitch
