@@ -136,13 +136,13 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     // Always resolve to the actual provider ID so metrics track correctly
     const resolvedProviderId = lastUsedProvider.config.id
 
-    // ── 2b. Context-aware MCP routing ──
-    // Built-ins and sub-agent delegation tools bypass routing; this pass only
-    // trims the MCP-backed portion of the agent's selected tool set.
+    // ── 2b. Context-aware tool routing ──
+    // Sub-agent delegation tools are added later and bypass routing. This pass
+    // trims the agent/free-chat tool set before the executor receives schemas.
 
     if (shouldRouteTools(tools, input.userQuery, { enabled: isToolRoutingEnabled(agent, input.autoToolRouting) })) {
+        const routingTaskId = `router_${nanoid()}`
         try {
-            const routingTaskId = `router_${nanoid()}`
             emitToolRoutingStatus(conversationId, routingTaskId, 'routing-tools', 'Selecting relevant tools...')
             const useAgentRouterProvider = agent.toolRouterProviderId === AGENT_ROUTER_PROVIDER
             const agentRouterProviderId = useAgentRouterProvider
@@ -168,7 +168,9 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             })
             emitToolRoutingSelection(conversationId, routingTaskId, tools)
         } catch (err) {
-            console.warn('[tool-router] Routing failed, using full tool list:', err)
+            console.warn('[tool-router] Routing failed, using local tool list:', err)
+            tools = tools.filter((tool) => !tool.namespaceId?.startsWith('mcp:'))
+            emitToolRoutingSelection(conversationId, routingTaskId, tools)
         }
     }
 
@@ -248,7 +250,6 @@ function emitToolRoutingSelection(conversationId: string, taskId: string, tools:
         taskId,
         iteration: 0,
         toolCalls: tools
-            .filter((tool) => tool.namespaceId?.startsWith('mcp:'))
             .map((tool) => ({ name: tool.name, arguments: '{}' })),
     })
 }
