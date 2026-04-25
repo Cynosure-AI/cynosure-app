@@ -201,6 +201,7 @@ export const useChatStore = defineStore('chat', () => {
         agentConfig.sessionModelOverride.value = cfg.model || null
         agentConfig.sessionProviderOverride.value = cfg.providerId || null
         agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents ?? false
+        agentConfig.sessionAutoToolRouting.value = cfg.autoToolRouting ?? false
       } else {
         agentConfig.syncAgentBaseline()
       }
@@ -461,6 +462,7 @@ export const useChatStore = defineStore('chat', () => {
     sessionOverrideSubAgents: agentConfig.sessionOverrideSubAgents,
     sessionSystemPrompt: agentConfig.sessionSystemPrompt,
     sessionThinkingEnabled: agentConfig.sessionThinkingEnabled,
+    sessionAutoToolRouting: agentConfig.sessionAutoToolRouting,
     agentOriginalSystemPrompt: agentConfig.agentOriginalSystemPrompt,
     freeChatSubAgentIds: agentConfig.freeChatSubAgentIds,
     freeChatMemorySpaceIds: agentConfig.freeChatMemorySpaceIds,

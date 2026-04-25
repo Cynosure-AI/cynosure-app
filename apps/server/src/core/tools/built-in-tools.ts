@@ -272,6 +272,8 @@ export function hydrateBuiltInTools(
             registryKey: t.registryKey,
             originalName: t.originalName,
             namespaceId: t.namespaceId,
+            namespaceLabel: t.namespaceLabel,
+            namespaceDescription: t.namespaceDescription,
         };
 
         switch (t.originalName ?? t.name) {

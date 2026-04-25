@@ -178,6 +178,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         conversationId,
         broadcast: ctx.broadcast,
         userQuery: userText,
+        recentMessages: messages,
         isFirstMessage: isFirstUserMessage,
         signal: AbortSignal.timeout(300_000),
     })

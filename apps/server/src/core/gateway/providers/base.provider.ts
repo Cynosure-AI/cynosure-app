@@ -48,6 +48,10 @@ export interface ToolDefinition {
   originalName?: string
   /** Namespace ID, when this tool came from the global registry. */
   namespaceId?: string
+  /** Human-readable namespace label, when this tool came from the global registry. */
+  namespaceLabel?: string
+  /** Namespace-level description, when provided by the upstream tool source. */
+  namespaceDescription?: string
   execute: (params: unknown) => Promise<ToolResult>
 }
 

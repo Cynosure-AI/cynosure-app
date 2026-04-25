@@ -63,6 +63,7 @@ export const api = {
           providerId?: string
           overrideSubAgents?: boolean
           thinkingEnabled?: boolean
+          autoToolRouting?: boolean
         }
       }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
     getExecutionSteps: (conversationId: string) =>
@@ -101,7 +102,10 @@ export const api = {
       thinkingEnabled?: boolean,
       contextStrategy?: string,
       titleProviderId?: string,
-      titleModel?: string
+      titleModel?: string,
+      autoToolRouting?: boolean,
+      toolRouterProviderId?: string,
+      toolRouterModel?: string
     ) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, {
         content,
@@ -119,6 +123,9 @@ export const api = {
         overrideSubAgents,
         thinkingEnabled,
         contextStrategy,
+        autoToolRouting,
+        toolRouterProviderId: toolRouterProviderId || undefined,
+        toolRouterModel: toolRouterModel || undefined,
         titleProviderId: titleProviderId || undefined,
         titleModel: titleModel || undefined
       }),

@@ -64,6 +64,8 @@ export interface AgentExecutorConfig {
     initialContextEstimate?: number
     /** Context window management strategy (default: 'sliding-window') */
     contextStrategy?: ContextStrategy
+    /** Mutable set populated with tool names invoked during this execution turn. */
+    usedToolNames?: Set<string>
 }
 
 export interface AgentExecutorResult {
@@ -594,6 +596,9 @@ export class AgentExecutor {
 
     /** Execute an array of tool calls concurrently and return results in original order. */
     private async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolCallResult[]> {
+        for (const tc of toolCalls) {
+            this.config.usedToolNames?.add(tc.function.name)
+        }
         return Promise.all(toolCalls.map(tc => this.executeSingleToolCall(tc)))
     }
 
