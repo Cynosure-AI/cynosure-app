@@ -2,8 +2,7 @@ import {
   GoogleGenAI,
   type Content,
   type Part,
-  type FunctionDeclaration,
-  Type
+  type FunctionDeclaration
 } from '@google/genai'
 import {
   BaseLLMProvider,
@@ -274,11 +273,18 @@ export class GoogleProvider extends BaseLLMProvider {
     }
   }
 
-  async listModels(_type?: 'llm' | 'embedding'): Promise<string[]> {
+  async listModels(type?: 'llm' | 'embedding'): Promise<string[]> {
     try {
       const pager = await this.client.models.list()
       const models: string[] = []
       for await (const model of pager) {
+        const methods = getSupportedGenerationMethods(model)
+        if (type === 'embedding' && !supportsGenerationMethod(methods, 'embedContent')) {
+          continue
+        }
+        if (type === 'llm' && methods.length > 0 && !supportsGenerationMethod(methods, 'generateContent')) {
+          continue
+        }
         if (model.name) {
           // API returns "models/gemini-2.5-flash" — strip the prefix
           models.push(model.name.replace(/^models\//, ''))
@@ -286,6 +292,12 @@ export class GoogleProvider extends BaseLLMProvider {
       }
       return models.sort()
     } catch {
+      if (type === 'embedding') {
+        return [
+          'gemini-embedding-001',
+          'text-embedding-004',
+        ]
+      }
       return [
         'gemini-3.1-flash-lite-preview',
         'gemini-2.5-flash',
@@ -318,4 +330,20 @@ export class GoogleProvider extends BaseLLMProvider {
       return { id: modelId }
     }
   }
+}
+
+function getSupportedGenerationMethods(model: unknown): string[] {
+  const raw = model as { supportedGenerationMethods?: unknown; supportedActions?: unknown }
+  if (Array.isArray(raw.supportedGenerationMethods)) {
+    return raw.supportedGenerationMethods.filter((item): item is string => typeof item === 'string')
+  }
+  if (Array.isArray(raw.supportedActions)) {
+    return raw.supportedActions.filter((item): item is string => typeof item === 'string')
+  }
+  return []
+}
+
+function supportsGenerationMethod(methods: string[], method: string): boolean {
+  const wanted = method.toLowerCase()
+  return methods.some((m) => m.toLowerCase() === wanted)
 }

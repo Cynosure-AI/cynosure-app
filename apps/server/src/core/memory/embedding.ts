@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { GoogleGenAI } from '@google/genai'
 import { getGateway } from '../gateway/gateway.js'
 import { getDb } from '../../db/database.js'
 
@@ -18,6 +19,7 @@ export interface EmbeddingResult {
 
 export class EmbeddingProvider {
   private client: OpenAI | null = null
+  private googleClient: GoogleGenAI | null = null
   private model: string = 'text-embedding-3-small'
   private dimensions: number = 1536
   private configured: boolean = false
@@ -50,6 +52,10 @@ export class EmbeddingProvider {
     const baseURL = opts?.baseUrl
     const apiKey = opts?.apiKey
 
+    this.client = null
+    this.googleClient = null
+    this.configured = false
+
     if (baseURL || apiKey) {
       this.client = new OpenAI({
         baseURL: baseURL || 'https://api.openai.com/v1',
@@ -61,10 +67,14 @@ export class EmbeddingProvider {
       const gateway = getGateway()
       const provider = gateway.getProvider(opts.providerId)
       if (provider) {
-        this.client = new OpenAI({
-          baseURL: provider.config.baseUrl,
-          apiKey: provider.config.apiKey || 'no-key'
-        })
+        if (provider.config.type === 'google') {
+          this.googleClient = new GoogleGenAI({ apiKey: provider.config.apiKey || 'not-set' })
+        } else {
+          this.client = new OpenAI({
+            baseURL: provider.config.baseUrl,
+            apiKey: provider.config.apiKey || 'no-key'
+          })
+        }
         this.configured = true
       }
     }
@@ -110,12 +120,62 @@ export class EmbeddingProvider {
     })
   }
 
+  private getGoogleClient(): GoogleGenAI | null {
+    if (this.googleClient) return this.googleClient
+
+    if (this.providerId) {
+      const provider = getGateway().getProvider(this.providerId)
+      if (provider?.config.type === 'google') {
+        this.googleClient = new GoogleGenAI({ apiKey: provider.config.apiKey || 'not-set' })
+        return this.googleClient
+      }
+    }
+
+    if (!this.configured) {
+      const provider = getGateway().getLastUsedProvider()
+      if (provider.config.type === 'google') {
+        this.googleClient = new GoogleGenAI({ apiKey: provider.config.apiKey || 'not-set' })
+        return this.googleClient
+      }
+    }
+
+    return null
+  }
+
   async embed(text: string): Promise<EmbeddingResult> {
     const results = await this.embedBatch([text])
     return results[0]
   }
 
   async embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
+    const googleClient = this.getGoogleClient()
+    if (googleClient) {
+      const response = await googleClient.models.embedContent({
+        model: this.model,
+        contents: texts,
+        config: {
+          outputDimensionality: this.dimensions
+        }
+      })
+
+      const embeddings = response.embeddings || []
+      if (embeddings.length !== texts.length) {
+        throw new Error(`Gemini embedding response returned ${embeddings.length} vectors for ${texts.length} inputs`)
+      }
+
+      return embeddings.map((item) => {
+        const vector = item.values || []
+        if (vector.length === 0) {
+          throw new Error('Gemini embedding response did not include vector values')
+        }
+        return {
+          vector,
+          model: this.model,
+          dimensions: vector.length
+        }
+      })
+    }
+
     const client = this.getClient()
 
     const response = await client.embeddings.create({
