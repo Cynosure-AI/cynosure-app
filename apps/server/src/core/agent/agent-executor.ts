@@ -444,7 +444,7 @@ export class AgentExecutor {
             {
                 role: 'user' as const,
                 content: reason
-                    ? `I denied that action because: ${reason}. Please take a completely different approach that respects this constraint, or answer directly from what you already know. Do not retry the denied tool(s).`
+                    ? `I denied that action because: ${reason}. Please take a completely different approach that respects this constraint, or answer directly from what you already know.`
                     : `I denied that tool call. Please take a different approach or answer directly. Do not retry the denied tool(s).`,
             }
         )
