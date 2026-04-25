@@ -132,7 +132,7 @@ async function addFromRegistry(srv: McpRegistryServer): Promise<void> {
     const iconUrl = srv.server.icons?.[0]?.src || undefined
 
     const result = await api.mcp.addServer({
-      name: getDisplayName(srv.server),
+      originalName: getDisplayName(srv.server),
       command: install.command,
       args: install.args,
       env: Object.keys(env).length ? env : undefined,

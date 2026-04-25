@@ -440,17 +440,21 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                     for (const srv of servers) {
                         try {
                             db.prepare(
-                                `INSERT OR REPLACE INTO mcp_servers (id, name, command, args_json, env_json, enabled, icon_url, origin, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                `INSERT OR REPLACE INTO mcp_servers (id, name, original_name, custom_name, command, args_json, env_json, enabled, icon_url, origin, description, env_hints_json, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 srv.id,
                                 srv.name,
+                                srv.original_name || srv.name,
+                                srv.custom_name || null,
                                 srv.command,
                                 srv.args_json || '[]',
                                 srv.env_json || '{}',
                                 srv.enabled ?? 1,
                                 srv.icon_url || null,
                                 srv.origin || null,
+                                srv.description || '',
+                                srv.env_hints_json || null,
                                 srv.created_at || Date.now(),
                                 srv.updated_at || Date.now()
                             )

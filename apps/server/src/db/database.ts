@@ -247,6 +247,10 @@ function createTables(db: Database.Database): void {
   }
   addColumnIfMissing('memory_spaces', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('mcp_servers', 'env_hints_json', 'TEXT')
+  addColumnIfMissing('mcp_servers', 'description', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('mcp_servers', 'original_name', 'TEXT')
+  addColumnIfMissing('mcp_servers', 'custom_name', 'TEXT')
+  db.prepare("UPDATE mcp_servers SET original_name = name WHERE original_name IS NULL OR original_name = ''").run()
 
   // Agent table: add columns for DB-only storage (migrating away from filesystem)
   addColumnIfMissing('agents', 'category', "TEXT NOT NULL DEFAULT ''")

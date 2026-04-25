@@ -314,9 +314,9 @@ export const api = {
   mcp: {
     listServers: () =>
       get<McpServerInfo[]>('/api/mcp/servers'),
-    addServer: (config: { name: string; command: string; args?: string[]; env?: Record<string, string>; enabled?: boolean; icon_url?: string; origin?: string; env_hints?: { name: string; description?: string; required: boolean; sensitive?: boolean }[] }) =>
+    addServer: (config: { name?: string; originalName?: string; customName?: string | null; command: string; args?: string[]; env?: Record<string, string>; enabled?: boolean; icon_url?: string; origin?: string; description?: string; env_hints?: { name: string; description?: string; required: boolean; sensitive?: boolean }[] }) =>
       post<{ id: string; connected: boolean; toolCount?: number; error?: string; pendingAuthUrl?: string }>('/api/mcp/servers', config),
-    updateServer: (id: string, config: { name?: string; command?: string; args?: string[]; env?: Record<string, string> }) =>
+    updateServer: (id: string, config: { name?: string; originalName?: string; customName?: string | null; command?: string; args?: string[]; env?: Record<string, string>; description?: string }) =>
       put<{ success: boolean; connected: boolean; toolCount?: number; error?: string }>(`/api/mcp/servers/${encodeURIComponent(id)}`, config),
     removeServer: (id: string) =>
       del<{ success: boolean }>(`/api/mcp/servers/${encodeURIComponent(id)}`),

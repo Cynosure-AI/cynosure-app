@@ -171,14 +171,14 @@ export class McpManager {
             throw err
         }
 
-        const { tools: mcpTools } = await client.listTools()
-        const slug = this.sanitiseName(config.name)
-        const tools = this.buildToolDefinitions(mcpTools, client, config)
-
         const ver = client.getServerVersion()
         const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl, icons: ver.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
+        const displayConfig = { ...config, name: serverInfo?.title || config.name }
+        const { tools: mcpTools } = await client.listTools()
+        const slug = this.sanitiseName(displayConfig.name)
+        const tools = this.buildToolDefinitions(mcpTools, client, displayConfig)
 
-        this.connections.set(config.id, { client, transport, config, tools, slug, serverInfo, isHttp: true, oauthProvider: provider })
+        this.connections.set(config.id, { client, transport, config: displayConfig, tools, slug, serverInfo, isHttp: true, oauthProvider: provider })
         return tools
     }
 
@@ -200,25 +200,25 @@ export class McpManager {
         // Now connect — the provider has valid tokens
         await pending.client.connect(transport)
 
-        const { tools: mcpTools } = await pending.client.listTools()
-        const slug = this.sanitiseName(pending.config.name)
-        const tools = this.buildToolDefinitions(mcpTools, pending.client, pending.config)
-
         const ver = pending.client.getServerVersion()
         const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl, icons: ver.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
+        const displayConfig = { ...pending.config, name: serverInfo?.title || pending.config.name }
+        const { tools: mcpTools } = await pending.client.listTools()
+        const slug = this.sanitiseName(displayConfig.name)
+        const tools = this.buildToolDefinitions(mcpTools, pending.client, displayConfig)
 
         this.connections.set(serverId, {
-            client: pending.client, transport, config: pending.config,
+            client: pending.client, transport, config: displayConfig,
             tools, slug, serverInfo, isHttp: true, oauthProvider: pending.provider
         })
 
         this.pendingHttpAuths.delete(serverId)
         this.pendingAuths.delete(serverId)
 
-        broadcast('mcp-auth-complete', { serverId, serverName: pending.config.name, toolCount: tools.length })
+        broadcast('mcp-auth-complete', { serverId, serverName: displayConfig.name, toolCount: tools.length })
 
         if (this.onAuthCompleteCallback) {
-            this.onAuthCompleteCallback(serverId, tools, pending.config)
+            this.onAuthCompleteCallback(serverId, tools, displayConfig)
         }
 
         return tools
@@ -310,16 +310,15 @@ export class McpManager {
             throw new Error(`${base.message}${stderrHint}`)
         }
 
-        const { tools: mcpTools } = await client.listTools()
-
-        const slug = this.sanitiseName(config.name)
-        const tools = this.buildToolDefinitions(mcpTools, client, config)
-
         // Capture server-declared metadata (title, description, websiteUrl)
         const ver = client.getServerVersion()
         const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl, icons: ver.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
+        const displayConfig = { ...config, name: serverInfo?.title || config.name }
+        const { tools: mcpTools } = await client.listTools()
+        const slug = this.sanitiseName(displayConfig.name)
+        const tools = this.buildToolDefinitions(mcpTools, client, displayConfig)
 
-        this.connections.set(config.id, { client, transport, config, tools, slug, serverInfo })
+        this.connections.set(config.id, { client, transport, config: displayConfig, tools, slug, serverInfo })
         return tools
     }
 
@@ -475,32 +474,32 @@ export class McpManager {
             this.pendingAuthConnections.delete(serverId)
             this.pendingAuths.delete(serverId)
 
+            const v = pending.client.getServerVersion()
+            const serverInfo = v ? { title: v.title, description: v.description, websiteUrl: v.websiteUrl, icons: v.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
+            const displayConfig = { ...pending.config, name: serverInfo?.title || pending.config.name }
             const { tools: mcpTools } = await pending.client.listTools()
-            const slug = this.sanitiseName(pending.config.name)
-            const tools = this.buildToolDefinitions(mcpTools, pending.client, pending.config)
+            const slug = this.sanitiseName(displayConfig.name)
+            const tools = this.buildToolDefinitions(mcpTools, pending.client, displayConfig)
 
             this.connections.set(pending.config.id, {
                 client: pending.client,
                 transport: pending.transport,
-                config: pending.config,
+                config: displayConfig,
                 tools,
                 slug,
-                serverInfo: (() => {
-                    const v = pending.client.getServerVersion()
-                    return v ? { title: v.title, description: v.description, websiteUrl: v.websiteUrl, icons: v.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
-                })()
+                serverInfo
             })
 
-            console.log(`MCP server "${pending.config.name}" connected after OAuth (${tools.length} tools)`)
+            console.log(`MCP server "${displayConfig.name}" connected after OAuth (${tools.length} tools)`)
 
             broadcast('mcp-auth-complete', {
                 serverId,
-                serverName: pending.config.name,
+                serverName: displayConfig.name,
                 toolCount: tools.length
             })
 
             if (this.onAuthCompleteCallback) {
-                this.onAuthCompleteCallback(serverId, tools, pending.config)
+                this.onAuthCompleteCallback(serverId, tools, displayConfig)
             }
         } catch (err) {
             console.warn(`OAuth wait for MCP server "${pending.config.name}" failed:`, (err as Error).message)

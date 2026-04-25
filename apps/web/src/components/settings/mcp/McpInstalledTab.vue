@@ -16,6 +16,19 @@ const showAddForm = ref(false)
 const editingId = ref<string | null>(null)
 const installedFilter = ref('')
 const installedView = ref<'cards' | 'json'>('cards')
+const brokenIconUrlById = reactive<Record<string, string>>({})
+
+function hasUsableIcon(server: McpServerInfo): boolean {
+  return !!server.icon_url && brokenIconUrlById[server.id] !== server.icon_url
+}
+
+function onServerIconError(server: McpServerInfo): void {
+  if (server.icon_url) brokenIconUrlById[server.id] = server.icon_url
+}
+
+function originalServerName(server: McpServerInfo): string {
+  return server.originalName || server.serverInfo?.title || server.name || 'Server name'
+}
 
 // --- Raw JSON editor ---
 const rawJson = ref('')
@@ -110,6 +123,8 @@ const filteredServers = computed(() => {
   const list = q
     ? servers.value.filter(s =>
         s.name.toLowerCase().includes(q) ||
+        originalServerName(s).toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
         s.command.toLowerCase().includes(q) ||
         s.args.some(a => a.toLowerCase().includes(q)),
       )
@@ -117,9 +132,9 @@ const filteredServers = computed(() => {
   return [...list].reverse()
 })
 
-const newServer = reactive({ name: '', command: '', args: '', env: '' })
+const newServer = reactive({ name: '', description: '', command: '', args: '', env: '' })
 const pendingAddId = ref<string | null>(null)
-const editServer = reactive({ name: '', command: '', args: '', env: '' })
+const editServer = reactive({ name: '', description: '', command: '', args: '', env: '' })
 const editEnvFields = reactive<Record<string, string>>({})
 
 const editingServerHints = computed(() => {
@@ -144,16 +159,18 @@ function textToEnv(text: string): Record<string, string> {
 }
 
 async function addServer(): Promise<void> {
-  if (!newServer.name || !newServer.command) return
+  if (!newServer.command) return
   setLoading('add', true)
   try {
     const args = newServer.args ? newServer.args.split('\n').map(a => a.trim()).filter(Boolean) : []
     const env = textToEnv(newServer.env)
+    const customName = newServer.name.trim() || null
 
     // If we already created a server that failed to connect, update it instead of creating a duplicate
     if (pendingAddId.value) {
       const result = await api.mcp.updateServer(pendingAddId.value, {
-        name: newServer.name,
+        customName,
+        description: newServer.description,
         command: newServer.command,
         args,
         env,
@@ -162,13 +179,14 @@ async function addServer(): Promise<void> {
         actionError.value['add'] = result.error
       } else {
         showAddForm.value = false
-        Object.assign(newServer, { name: '', command: '', args: '', env: '' })
+        Object.assign(newServer, { name: '', description: '', command: '', args: '', env: '' })
         actionError.value = {}
         pendingAddId.value = null
       }
     } else {
       const result = await api.mcp.addServer({
-        name: newServer.name,
+        customName,
+        description: newServer.description,
         command: newServer.command,
         args,
         env: Object.keys(env).length ? env : undefined,
@@ -181,7 +199,7 @@ async function addServer(): Promise<void> {
         }
       } else {
         showAddForm.value = false
-        Object.assign(newServer, { name: '', command: '', args: '', env: '' })
+        Object.assign(newServer, { name: '', description: '', command: '', args: '', env: '' })
         actionError.value = {}
         pendingAddId.value = null
       }
@@ -194,14 +212,15 @@ async function addServer(): Promise<void> {
 
 function cancelForm(): void {
   showAddForm.value = false
-  Object.assign(newServer, { name: '', command: '', args: '', env: '' })
+  Object.assign(newServer, { name: '', description: '', command: '', args: '', env: '' })
   delete actionError.value['add']
   pendingAddId.value = null
 }
 
 function startEditing(server: McpServerInfo): void {
   editingId.value = server.id
-  editServer.name = server.name
+  editServer.name = server.customName || ''
+  editServer.description = server.description || ''
   editServer.command = server.command
   editServer.args = server.args.join('\n')
   Object.keys(editEnvFields).forEach(k => delete editEnvFields[k])
@@ -241,7 +260,8 @@ async function saveEditing(id: string): Promise<void> {
       env = textToEnv(editServer.env)
     }
     const result = await api.mcp.updateServer(id, {
-      name: editServer.name,
+      customName: editServer.name.trim() || null,
+      description: editServer.description,
       command: editServer.command,
       args,
       env,
@@ -407,11 +427,11 @@ defineExpose({ loadServers })
       >
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm text-zinc-400 mb-1">Name</label>
+            <label class="block text-sm text-zinc-400 mb-1">Custom name</label>
             <input
               v-model="newServer.name"
               type="text"
-              placeholder="My MCP Server"
+              placeholder="Use original MCP name"
               class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
             >
           </div>
@@ -424,6 +444,15 @@ defineExpose({ loadServers })
               class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
             >
           </div>
+        </div>
+        <div>
+          <label class="block text-sm text-zinc-400 mb-1">Description</label>
+          <textarea
+            v-model="newServer.description"
+            rows="2"
+            placeholder="What this MCP server is useful for"
+            class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+          />
         </div>
         <div>
           <label class="block text-sm text-zinc-400 mb-1">Arguments (one per line)</label>
@@ -450,7 +479,7 @@ defineExpose({ loadServers })
           {{ actionError['add'] }}
         </div>
         <button
-          :disabled="!newServer.name || !newServer.command || isLoading('add')"
+          :disabled="!newServer.command || isLoading('add')"
           class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded-lg transition-colors"
           @click="addServer"
         >
@@ -470,10 +499,11 @@ defineExpose({ loadServers })
             <div class="space-y-3">
               <div class="grid grid-cols-2 gap-3">
                 <div>
-                  <label class="block text-xs text-zinc-400 mb-1">Name</label>
+                  <label class="block text-xs text-zinc-400 mb-1">Custom name</label>
                   <input
                     v-model="editServer.name"
                     type="text"
+                    :placeholder="originalServerName(server)"
                     class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
                 </div>
@@ -485,6 +515,15 @@ defineExpose({ loadServers })
                     class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
                 </div>
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-400 mb-1">Description</label>
+                <textarea
+                  v-model="editServer.description"
+                  rows="2"
+                  :placeholder="server.description || server.serverInfo?.description || 'What this MCP server is useful for'"
+                  class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+                />
               </div>
               <div>
                 <label class="block text-xs text-zinc-400 mb-1">Arguments (one per line)</label>
@@ -556,7 +595,7 @@ defineExpose({ loadServers })
                   Cancel
                 </button>
                 <button
-                  :disabled="!editServer.name || !editServer.command || isLoading(server.id)"
+                  :disabled="!editServer.command || isLoading(server.id)"
                   class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
                   @click="saveEditing(server.id)"
                 >
@@ -572,10 +611,11 @@ defineExpose({ loadServers })
               <!-- Icon with status dot -->
               <div class="relative shrink-0">
                 <img
-                  v-if="server.icon_url"
+                  v-if="hasUsableIcon(server)"
                   :src="server.icon_url"
                   class="w-10 h-10 rounded-lg object-cover"
                   :class="!server.connected && 'opacity-40 grayscale'"
+                  @error="onServerIconError(server)"
                 >
                 <div
                   v-else
@@ -597,10 +637,10 @@ defineExpose({ loadServers })
               <div class="flex-1 min-w-0 pt-0.5">
                 <span class="font-medium text-sm text-zinc-200">{{ server.name || server.serverInfo?.title }}</span>
                 <div
-                  v-if="server.serverInfo?.description"
+                  v-if="server.description || server.serverInfo?.description"
                   class="text-xs text-zinc-400 mt-0.5"
                 >
-                  {{ server.serverInfo.description }}
+                  {{ server.description || server.serverInfo?.description }}
                 </div>
                 <div class="text-xs text-zinc-500 mt-0.5 truncate font-mono">
                   {{ server.command }} {{ server.args.join(' ') }}

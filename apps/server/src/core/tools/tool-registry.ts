@@ -12,6 +12,7 @@ export interface LLMToolSchema {
 export interface ToolNamespace {
   id: string      // e.g. "builtin" or "mcp:<serverId>"
   label: string   // e.g. "Built-in" or "My MCP Server"
+  description?: string // Optional longer description for UI/tool discovery purposes
 }
 
 export interface RegisteredToolInfo {
