@@ -8,6 +8,7 @@ export interface SelectOption {
   imgSrc?: string | null
   iconName?: string
   tooltip?: string
+  disabled?: boolean
   /** Small badge shown to the right of the label (e.g. "+3") */
   tag?: string
 }
@@ -97,6 +98,7 @@ function toggle(): void {
 }
 
 function selectOption(value: string): void {
+  if (allOptions.value.find((o) => o.value === value)?.disabled) return
   emit('update:modelValue', value)
   emit('change', value)
   isOpen.value = false
@@ -115,11 +117,11 @@ function handleKeydown(e: KeyboardEvent): void {
   switch (e.key) {
     case 'ArrowDown':
       e.preventDefault()
-      focusedValue.value = opts[(idx + 1) % opts.length].value
+      focusedValue.value = nextEnabledOption(opts, idx, 1)?.value || focusedValue.value
       break
     case 'ArrowUp':
       e.preventDefault()
-      focusedValue.value = opts[(idx - 1 + opts.length) % opts.length].value
+      focusedValue.value = nextEnabledOption(opts, idx, -1)?.value || focusedValue.value
       break
     case 'Enter':
     case ' ':
@@ -134,6 +136,15 @@ function handleKeydown(e: KeyboardEvent): void {
       isOpen.value = false
       break
   }
+}
+
+function nextEnabledOption(opts: SelectOption[], startIdx: number, direction: 1 | -1): SelectOption | null {
+  if (!opts.length) return null
+  for (let i = 1; i <= opts.length; i++) {
+    const idx = (startIdx + i * direction + opts.length) % opts.length
+    if (!opts[idx].disabled) return opts[idx]
+  }
+  return null
 }
 
 function handleClickOutside(e: MouseEvent): void {
@@ -272,19 +283,23 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
             type="button"
             role="option"
             :aria-selected="opt.value === modelValue"
+            :aria-disabled="opt.disabled"
+            :disabled="opt.disabled"
             :title="opt.tooltip"
             :data-value="opt.value"
             class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer transition-colors"
             :class="[
-              opt.value === modelValue ? 'text-zinc-100' : 'text-zinc-300',
-              opt.value === focusedValue
+              opt.disabled ? 'text-zinc-600 cursor-not-allowed' : opt.value === modelValue ? 'text-zinc-100' : 'text-zinc-300',
+              opt.disabled
+                ? ''
+                : opt.value === focusedValue
                 ? 'bg-zinc-700/80'
                 : opt.value === modelValue
                   ? 'bg-blue-600/15 hover:bg-blue-600/25'
                   : 'hover:bg-zinc-800',
             ]"
             @click="selectOption(opt.value)"
-            @mouseenter="focusedValue = opt.value"
+            @mouseenter="!opt.disabled && (focusedValue = opt.value)"
           >
             <!-- Icon / image -->
             <span
@@ -298,9 +313,10 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
                 alt=""
               >
               <Icon
-                v-else-if="opt.iconName"
-                :icon="opt.iconName"
-                class="w-3.5 h-3.5 text-zinc-400"
+              v-else-if="opt.iconName"
+              :icon="opt.iconName"
+                class="w-3.5 h-3.5"
+                :class="opt.disabled ? 'text-zinc-600' : 'text-zinc-400'"
               />
             </span>
 
