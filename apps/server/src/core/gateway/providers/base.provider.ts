@@ -59,6 +59,8 @@ export interface ToolResult {
   success: boolean
   output: string
   error?: string
+  /** Internal-only: additional tools to expose on subsequent LLM rounds. */
+  loadedTools?: ToolDefinition[]
   /** File-path URLs for UI display (e.g. /api/files?path=...) */
   images?: string[]
   /** Base64 data-URL images for LLM vision (e.g. data:image/png;base64,...) */

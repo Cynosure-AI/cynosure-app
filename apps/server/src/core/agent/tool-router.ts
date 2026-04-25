@@ -284,7 +284,7 @@ function buildToolSearchTool(
             const loadedTools = getLoadedTools()
             const loadedNames = new Set(loadedTools.map(({ name }) => name))
             const searchableTools = allTools.filter(
-                ({ name }) => name !== TOOL_SEARCH_TOOL_NAME && !loadedNames.has(name),
+                (tool) => isMcpTool(tool) && tool.name !== TOOL_SEARCH_TOOL_NAME && !loadedNames.has(tool.name),
             )
 
             const names = lexicalToolFallback(query, searchableTools, limit)
@@ -306,6 +306,7 @@ function buildToolSearchTool(
                     `Loaded ${matches.length} additional tool(s). They are available in the next tool-calling round:`,
                     ...matches.map((tool) => `- ${tool.name}: ${compactToolDescription(tool.description)}`),
                 ].join('\n'),
+                loadedTools: matches,
             }
         },
     }
