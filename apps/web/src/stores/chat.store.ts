@@ -201,7 +201,7 @@ export const useChatStore = defineStore('chat', () => {
         agentConfig.sessionModelOverride.value = cfg.model || null
         agentConfig.sessionProviderOverride.value = cfg.providerId || null
         agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents ?? false
-        agentConfig.sessionAutoToolRouting.value = cfg.autoToolRouting ?? false
+        agentConfig.sessionAutoToolRouting.value = cfg.autoToolRouting ?? !agentConfig.activeAgentId.value
       } else {
         agentConfig.syncAgentBaseline()
       }
