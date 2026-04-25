@@ -8,6 +8,7 @@ import { getRAGStore } from '../core/memory/rag.js'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import OpenAI from 'openai'
+import { GoogleGenAI } from '@google/genai'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -144,23 +145,28 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   }>('/embeddings/probe', async (req, reply) => {
     const { providerId, model } = req.body
     try {
-      let client: OpenAI
-      if (providerId) {
-        const provider = getGateway().getProvider(providerId)
-        if (!provider) return reply.status(400).send({ error: 'Provider not found' })
-        client = new OpenAI({
-          baseURL: provider.config.baseUrl,
-          apiKey: provider.config.apiKey || 'no-key'
+      const provider = providerId
+        ? getGateway().getProvider(providerId)
+        : getGateway().getLastUsedProvider()
+      if (!provider) return reply.status(400).send({ error: 'Provider not found' })
+
+      let dimensions: number
+      if (provider.config.type === 'google') {
+        const client = new GoogleGenAI({ apiKey: provider.config.apiKey || 'not-set' })
+        const res = await client.models.embedContent({
+          model,
+          contents: 'test'
         })
+        dimensions = res.embeddings?.[0]?.values?.length || 0
       } else {
-        const provider = getGateway().getLastUsedProvider()
-        client = new OpenAI({
+        const client = new OpenAI({
           baseURL: provider.config.baseUrl,
           apiKey: provider.config.apiKey || 'no-key'
         })
+        const res = await client.embeddings.create({ model, input: 'test' })
+        dimensions = res.data[0].embedding.length
       }
-      const res = await client.embeddings.create({ model, input: 'test' })
-      const dimensions = res.data[0].embedding.length
+      if (!dimensions) throw new Error('Embedding response did not include vector values')
       return { dimensions }
     } catch (err) {
       return reply.status(500).send({ error: (err as Error).message })
