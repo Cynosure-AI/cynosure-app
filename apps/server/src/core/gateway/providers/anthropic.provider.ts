@@ -168,6 +168,12 @@ export class AnthropicProvider extends BaseLLMProvider {
     if (request.tools?.length) {
       params.tools = this.formatTools(request.tools)
     }
+    if (request.toolChoice) {
+      ; (params as unknown as Record<string, unknown>).tool_choice = {
+        type: 'tool',
+        name: request.toolChoice.name
+      }
+    }
 
     const response = await this.client.messages.create(params)
 
@@ -222,6 +228,12 @@ export class AnthropicProvider extends BaseLLMProvider {
     if (system) params.system = system
     if (request.tools?.length) {
       params.tools = this.formatTools(request.tools)
+    }
+    if (request.toolChoice) {
+      ; (params as unknown as Record<string, unknown>).tool_choice = {
+        type: 'tool',
+        name: request.toolChoice.name
+      }
     }
 
     const stream = this.client.messages.stream(params)

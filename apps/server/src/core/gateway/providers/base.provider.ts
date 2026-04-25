@@ -76,6 +76,8 @@ export interface CompletionRequest {
   temperature?: number
   maxTokens?: number
   tools?: ToolDefinition[]
+  /** Force a specific tool/function call when the provider supports it. */
+  toolChoice?: { type: 'function'; name: string }
   stream?: boolean
   signal?: AbortSignal
   /** Enable reasoning/thinking tokens (default: true) */

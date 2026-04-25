@@ -152,6 +152,14 @@ export class GoogleProvider extends BaseLLMProvider {
         : undefined
     }
     if (request.temperature != null) config.temperature = request.temperature
+    if (request.toolChoice) {
+      config.toolConfig = {
+        functionCallingConfig: {
+          mode: 'ANY',
+          allowedFunctionNames: [request.toolChoice.name]
+        }
+      }
+    }
 
     const response = await this.client.models.generateContent({
       model: request.model || this.config.defaultModel,
@@ -219,6 +227,14 @@ export class GoogleProvider extends BaseLLMProvider {
         : undefined
     }
     if (request.temperature != null) streamConfig.temperature = request.temperature
+    if (request.toolChoice) {
+      streamConfig.toolConfig = {
+        functionCallingConfig: {
+          mode: 'ANY',
+          allowedFunctionNames: [request.toolChoice.name]
+        }
+      }
+    }
 
     const stream = await this.client.models.generateContentStream({
       model: request.model || this.config.defaultModel,

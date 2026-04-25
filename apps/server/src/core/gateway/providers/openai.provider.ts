@@ -166,6 +166,12 @@ export class OpenAIProvider extends BaseLLMProvider {
     if (instructions) params.instructions = instructions
     const tools = this.formatToolsForResponses(request.tools)
     if (tools) params.tools = tools
+    if (request.toolChoice) {
+      params.tool_choice = {
+        type: 'function',
+        name: request.toolChoice.name
+      }
+    }
     if (request.thinkingEnabled) {
       params.reasoning = { effort: 'medium', summary: 'auto' }
     }
@@ -231,6 +237,12 @@ export class OpenAIProvider extends BaseLLMProvider {
     if (instructions) params.instructions = instructions
     const tools = this.formatToolsForResponses(request.tools)
     if (tools) params.tools = tools
+    if (request.toolChoice) {
+      params.tool_choice = {
+        type: 'function',
+        name: request.toolChoice.name
+      }
+    }
     if (request.thinkingEnabled) {
       params.reasoning = { effort: 'medium', summary: 'auto' }
     }
