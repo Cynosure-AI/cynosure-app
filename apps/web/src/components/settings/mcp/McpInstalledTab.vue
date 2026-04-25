@@ -118,6 +118,7 @@ const filteredServers = computed(() => {
 })
 
 const newServer = reactive({ name: '', command: '', args: '', env: '' })
+const pendingAddId = ref<string | null>(null)
 const editServer = reactive({ name: '', command: '', args: '', env: '' })
 const editEnvFields = reactive<Record<string, string>>({})
 
@@ -148,18 +149,42 @@ async function addServer(): Promise<void> {
   try {
     const args = newServer.args ? newServer.args.split('\n').map(a => a.trim()).filter(Boolean) : []
     const env = textToEnv(newServer.env)
-    const result = await api.mcp.addServer({
-      name: newServer.name,
-      command: newServer.command,
-      args,
-      env: Object.keys(env).length ? env : undefined,
-    })
-    if (result.error) {
-      actionError.value['add'] = result.error
+
+    // If we already created a server that failed to connect, update it instead of creating a duplicate
+    if (pendingAddId.value) {
+      const result = await api.mcp.updateServer(pendingAddId.value, {
+        name: newServer.name,
+        command: newServer.command,
+        args,
+        env,
+      })
+      if (result.error) {
+        actionError.value['add'] = result.error
+      } else {
+        showAddForm.value = false
+        Object.assign(newServer, { name: '', command: '', args: '', env: '' })
+        actionError.value = {}
+        pendingAddId.value = null
+      }
     } else {
-      showAddForm.value = false
-      Object.assign(newServer, { name: '', command: '', args: '', env: '' })
-      actionError.value = {}
+      const result = await api.mcp.addServer({
+        name: newServer.name,
+        command: newServer.command,
+        args,
+        env: Object.keys(env).length ? env : undefined,
+      })
+      if (result.error) {
+        actionError.value['add'] = result.error
+        // If server was created but failed to connect, remember its id so next "Add" updates instead of duplicates
+        if (result.id) {
+          pendingAddId.value = result.id
+        }
+      } else {
+        showAddForm.value = false
+        Object.assign(newServer, { name: '', command: '', args: '', env: '' })
+        actionError.value = {}
+        pendingAddId.value = null
+      }
     }
     await refreshAll()
   } finally {
@@ -171,6 +196,7 @@ function cancelForm(): void {
   showAddForm.value = false
   Object.assign(newServer, { name: '', command: '', args: '', env: '' })
   delete actionError.value['add']
+  pendingAddId.value = null
 }
 
 function startEditing(server: McpServerInfo): void {
@@ -428,7 +454,7 @@ defineExpose({ loadServers })
           class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded-lg transition-colors"
           @click="addServer"
         >
-          {{ isLoading('add') ? 'Connecting...' : 'Add Server' }}
+          {{ isLoading('add') ? 'Connecting...' : pendingAddId ? 'Save & Reconnect' : 'Add Server' }}
         </button>
       </div>
 
