@@ -6,13 +6,79 @@ import { nanoid } from 'nanoid'
 import { readFileSync } from 'fs'
 import { registerMcpTools, findMcpIcon, findEnvHints, type McpEnvHint } from './utils.js'
 
+type McpServerRow = {
+    id: string
+    name: string
+    original_name?: string | null
+    custom_name?: string | null
+    command: string
+    args_json: string
+    env_json: string
+    enabled: number
+    icon_url?: string | null
+    origin?: string | null
+    description?: string
+    env_hints_json?: string | null
+    created_at?: number
+    updated_at?: number
+}
+
+function trimToNull(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function deriveOriginalName(input: { originalName?: unknown; original_name?: unknown; name?: unknown; command?: unknown; args?: unknown }): string {
+    const explicit = trimToNull(input.originalName) || trimToNull(input.original_name) || trimToNull(input.name)
+    if (explicit) return explicit
+
+    if (Array.isArray(input.args)) {
+        const packageArg = [...input.args].reverse().find((arg) =>
+            typeof arg === 'string'
+            && !arg.startsWith('-')
+            && (arg.startsWith('@') || !arg.includes('/'))
+            && arg !== 'run'
+            && arg !== 'mcp-remote'
+        )
+        if (packageArg) return packageArg
+    }
+
+    return trimToNull(input.command) || 'MCP Server'
+}
+
+function effectiveName(row: Pick<McpServerRow, 'name'> & { original_name?: string | null; custom_name?: string | null }): string {
+    return row.custom_name?.trim() || row.original_name?.trim() || row.name
+}
+
+function syncOriginalNameFromServerInfo(serverId: string, fallbackName: string): string {
+    const manager = getMcpManager()
+    const serverInfo = manager.getServerInfo(serverId)
+    const originalName = trimToNull(serverInfo?.title) || fallbackName
+    const db = getDb()
+    db.prepare('UPDATE mcp_servers SET original_name = ?, name = COALESCE(NULLIF(custom_name, \'\'), ?), updated_at = ? WHERE id = ?')
+        .run(originalName, originalName, Date.now(), serverId)
+    return originalName
+}
+
+function buildMcpNamespace(serverId: string, name: string, manager: McpManager = getMcpManager()): ToolNamespace {
+    const serverInfo = manager.getServerInfo(serverId)
+    const row = getDb().prepare('SELECT description FROM mcp_servers WHERE id = ?').get(serverId) as { description: string } | undefined
+    const description = row?.description?.trim() || serverInfo?.description
+    return {
+        id: `mcp:${serverId}`,
+        label: name || serverInfo?.title || serverId,
+        description,
+    }
+}
+
 /** Set up the auth-complete callback so background OAuth completions auto-register tools. */
 function setupAuthCompleteCallback(): void {
     const manager = getMcpManager()
     const registry = getToolRegistry()
 
     manager.setOnAuthComplete((serverId, tools, config) => {
-        const ns: ToolNamespace = { id: `mcp:${serverId}`, label: config.name }
+        const row = getDb().prepare('SELECT * FROM mcp_servers WHERE id = ?').get(serverId) as McpServerRow | undefined
+        const originalName = syncOriginalNameFromServerInfo(serverId, row?.original_name || config.name)
+        const ns = buildMcpNamespace(serverId, row?.custom_name?.trim() || originalName, manager)
         registerMcpTools(tools, ns, registry)
     })
 }
@@ -22,21 +88,14 @@ export async function loadSavedMcpServers(): Promise<void> {
     setupAuthCompleteCallback()
 
     const db = getDb()
-    const rows = db.prepare('SELECT * FROM mcp_servers WHERE enabled = 1 ORDER BY created_at').all() as {
-        id: string
-        name: string
-        command: string
-        args_json: string
-        env_json: string
-        enabled: number
-    }[]
+    const rows = db.prepare('SELECT * FROM mcp_servers WHERE enabled = 1 ORDER BY created_at').all() as McpServerRow[]
 
     const manager = getMcpManager()
     const registry = getToolRegistry()
 
     const configs: McpServerConfig[] = rows.map((row) => ({
         id: row.id,
-        name: row.name,
+        name: effectiveName(row),
         command: row.command,
         args: JSON.parse(row.args_json),
         env: JSON.parse(row.env_json),
@@ -47,7 +106,9 @@ export async function loadSavedMcpServers(): Promise<void> {
         configs.map(async (config) => {
             try {
                 const tools = await manager.connect(config)
-                const ns: ToolNamespace = { id: `mcp:${config.id}`, label: config.name }
+                const originalName = syncOriginalNameFromServerInfo(config.id, config.name)
+                config.name = rows.find((row) => row.id === config.id)?.custom_name?.trim() || originalName
+                const ns = buildMcpNamespace(config.id, config.name, manager)
                 registerMcpTools(tools, ns, registry)
             } catch (err) {
                 console.error(`Failed to connect MCP server '${config.name}':`, (err as Error).message)
@@ -60,19 +121,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
     // GET /api/mcp/servers — list all MCP server configs
     app.get('/servers', async () => {
         const db = getDb()
-        const rows = db.prepare('SELECT * FROM mcp_servers ORDER BY created_at').all() as {
-            id: string
-            name: string
-            command: string
-            args_json: string
-            env_json: string
-            enabled: number
-            icon_url: string | null
-            origin: string | null
-            env_hints_json: string | null
-            created_at: number
-            updated_at: number
-        }[]
+        const rows = db.prepare('SELECT * FROM mcp_servers ORDER BY created_at').all() as McpServerRow[]
 
         const manager = getMcpManager()
         const pendingAuths = manager.getPendingAuths()
@@ -97,13 +146,16 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
 
             return {
                 id: row.id,
-                name: row.name,
+                name: effectiveName(row),
+                originalName: row.original_name || row.name,
+                customName: row.custom_name || null,
                 command: row.command,
                 args: JSON.parse(row.args_json) as string[],
                 env: JSON.parse(row.env_json) as Record<string, string>,
                 enabled: row.enabled === 1,
                 icon_url: iconUrl,
                 origin: row.origin,
+                description: row.description || '',
                 connected: manager.isConnected(row.id),
                 toolCount: manager.getTools(row.id).length,
                 pendingAuthUrl: pendingAuths[row.id] || null,
@@ -117,10 +169,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
     app.get<{ Params: { id: string } }>('/servers/:id/tools', async (req, reply) => {
         const { id } = req.params
         const db = getDb()
-        const row = db.prepare('SELECT id, name FROM mcp_servers WHERE id = ?').get(id) as {
-            id: string
-            name: string
-        } | undefined
+        const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as McpServerRow | undefined
 
         if (!row) {
             return reply.status(404).send({ error: 'Server not found' })
@@ -136,7 +185,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
             name: tool.name,
             description: tool.description,
             serverId: row.id,
-            serverName: row.name,
+            serverName: effectiveName(row),
         }))
     })
 
@@ -162,20 +211,23 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
     // POST /api/mcp/servers — add a new MCP server
     app.post<{
         Body: {
-            name: string
+            name?: string
+            originalName?: string
+            customName?: string | null
             command: string
             args?: string[]
             env?: Record<string, string>
             enabled?: boolean
             icon_url?: string
             origin?: string
+            description?: string
             env_hints?: McpEnvHint[]
         }
     }>('/servers', async (req, reply) => {
-        const { name, command, args, env, enabled, icon_url, origin, env_hints } = req.body
+        const { name, originalName, customName, command, args, env, enabled, icon_url, origin, description, env_hints } = req.body
 
-        if (!name || !command) {
-            return reply.status(400).send({ error: 'name and command are required' })
+        if (!command) {
+            return reply.status(400).send({ error: 'command is required' })
         }
 
         const db = getDb()
@@ -183,14 +235,17 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
         const now = Date.now()
         const isEnabled = enabled !== false
         const envHintsJson = env_hints?.length ? JSON.stringify(env_hints) : null
+        const original = deriveOriginalName({ originalName, name, command, args })
+        const custom = customName !== undefined ? trimToNull(customName) : null
+        const displayName = custom || original
 
         db.prepare(
-            `INSERT INTO mcp_servers (id, name, command, args_json, env_json, enabled, icon_url, origin, env_hints_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).run(id, name, command, JSON.stringify(args || []), JSON.stringify(env || {}), isEnabled ? 1 : 0, icon_url || null, origin || null, envHintsJson, now, now)
+            `INSERT INTO mcp_servers (id, name, original_name, custom_name, command, args_json, env_json, enabled, icon_url, origin, description, env_hints_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(id, displayName, original, custom, command, JSON.stringify(args || []), JSON.stringify(env || {}), isEnabled ? 1 : 0, icon_url || null, origin || null, description?.trim() || '', envHintsJson, now, now)
 
         const config: McpServerConfig = {
             id,
-            name,
+            name: displayName,
             command,
             args: args || [],
             env: env || {},
@@ -203,7 +258,8 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
                 const manager = getMcpManager()
                 const registry = getToolRegistry()
                 const tools = await manager.connect(config)
-                const ns: ToolNamespace = { id: `mcp:${id}`, label: name }
+                const syncedOriginal = syncOriginalNameFromServerInfo(id, original)
+                const ns = buildMcpNamespace(id, custom || syncedOriginal, manager)
                 registerMcpTools(tools, ns, registry)
                 return { id, connected: true, toolCount: tools.length }
             } catch (err) {
@@ -220,14 +276,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
     app.post<{ Params: { id: string } }>('/servers/:id/toggle', async (req, reply) => {
         const { id } = req.params
         const db = getDb()
-        const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as {
-            id: string
-            name: string
-            command: string
-            args_json: string
-            env_json: string
-            enabled: number
-        } | undefined
+        const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as McpServerRow | undefined
 
         if (!row) {
             return reply.status(404).send({ error: 'Server not found' })
@@ -246,7 +295,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
         if (newEnabled) {
             const config: McpServerConfig = {
                 id: row.id,
-                name: row.name,
+                name: effectiveName(row),
                 command: row.command,
                 args: JSON.parse(row.args_json),
                 env: JSON.parse(row.env_json),
@@ -254,7 +303,8 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
             }
             try {
                 const tools = await manager.connect(config)
-                const ns: ToolNamespace = { id: `mcp:${id}`, label: row.name }
+                const originalName = syncOriginalNameFromServerInfo(id, row.original_name || config.name)
+                const ns = buildMcpNamespace(id, row.custom_name?.trim() || originalName, manager)
                 registerMcpTools(tools, ns, registry)
                 return { enabled: true, connected: true, toolCount: tools.length }
             } catch (err) {
@@ -290,33 +340,31 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
     // PUT /api/mcp/servers/:id — update a server's config
     app.put<{
         Params: { id: string }
-        Body: { name?: string; command?: string; args?: string[]; env?: Record<string, string> }
+        Body: { name?: string; originalName?: string; customName?: string | null; command?: string; args?: string[]; env?: Record<string, string>; description?: string }
     }>('/servers/:id', async (req, reply) => {
         const { id } = req.params
-        const { name, command, args, env } = req.body
+        const { name, originalName, customName, command, args, env, description } = req.body
 
         const db = getDb()
-        const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as {
-            id: string
-            name: string
-            command: string
-            args_json: string
-            env_json: string
-            enabled: number
-        } | undefined
+        const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as McpServerRow | undefined
 
         if (!row) {
             return reply.status(404).send({ error: 'Server not found' })
         }
 
-        const updatedName = name ?? row.name
+        const updatedOriginalName = trimToNull(originalName) || row.original_name || row.name
+        const updatedCustomName = customName !== undefined
+            ? trimToNull(customName)
+            : (name !== undefined ? trimToNull(name) : (row.custom_name || null))
+        const updatedName = updatedCustomName || updatedOriginalName
         const updatedCommand = command ?? row.command
         const updatedArgs = args ?? JSON.parse(row.args_json)
         const updatedEnv = env ?? JSON.parse(row.env_json)
+        const updatedDescription = description !== undefined ? description.trim() : (row.description || '')
 
         db.prepare(
-            'UPDATE mcp_servers SET name = ?, command = ?, args_json = ?, env_json = ?, updated_at = ? WHERE id = ?'
-        ).run(updatedName, updatedCommand, JSON.stringify(updatedArgs), JSON.stringify(updatedEnv), Date.now(), id)
+            'UPDATE mcp_servers SET name = ?, original_name = ?, custom_name = ?, command = ?, args_json = ?, env_json = ?, description = ?, updated_at = ? WHERE id = ?'
+        ).run(updatedName, updatedOriginalName, updatedCustomName, updatedCommand, JSON.stringify(updatedArgs), JSON.stringify(updatedEnv), updatedDescription, Date.now(), id)
 
         // Reconnect if the server was enabled
         const manager = getMcpManager()
@@ -336,7 +384,8 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
 
             try {
                 const tools = await manager.connect(config)
-                const ns: ToolNamespace = { id: `mcp:${id}`, label: updatedName }
+                const syncedOriginal = syncOriginalNameFromServerInfo(id, updatedOriginalName)
+                const ns = buildMcpNamespace(id, updatedCustomName || syncedOriginal, manager)
                 registerMcpTools(tools, ns, registry)
                 return { success: true, connected: true, toolCount: tools.length }
             } catch (err) {
@@ -351,14 +400,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
     app.post<{ Params: { id: string } }>('/servers/:id/reconnect', async (req, reply) => {
         const { id } = req.params
         const db = getDb()
-        const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as {
-            id: string
-            name: string
-            command: string
-            args_json: string
-            env_json: string
-            enabled: number
-        } | undefined
+        const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as McpServerRow | undefined
 
         if (!row) {
             return reply.status(404).send({ error: 'Server not found' })
@@ -371,7 +413,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
 
         const config: McpServerConfig = {
             id: row.id,
-            name: row.name,
+            name: effectiveName(row),
             command: row.command,
             args: JSON.parse(row.args_json),
             env: JSON.parse(row.env_json),
@@ -380,7 +422,8 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
 
         try {
             const tools = await manager.connect(config)
-            const ns: ToolNamespace = { id: `mcp:${id}`, label: row.name }
+            const originalName = syncOriginalNameFromServerInfo(id, row.original_name || config.name)
+            const ns = buildMcpNamespace(id, row.custom_name?.trim() || originalName, manager)
             registerMcpTools(tools, ns, registry)
             return { connected: true, toolCount: tools.length }
         } catch (err) {
@@ -392,9 +435,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
     app.post<{ Params: { id: string } }>('/servers/:id/reauth', async (req, reply) => {
         const { id } = req.params
         const db = getDb()
-        const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as {
-            id: string; name: string; command: string; args_json: string; env_json: string; enabled: number
-        } | undefined
+        const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as McpServerRow | undefined
 
         if (!row) {
             return reply.status(404).send({ error: 'Server not found' })
@@ -415,7 +456,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
 
         const config: McpServerConfig = {
             id: row.id,
-            name: row.name,
+            name: effectiveName(row),
             command: row.command,
             args,
             env: JSON.parse(row.env_json),
@@ -424,7 +465,8 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
 
         try {
             const tools = await manager.connect(config)
-            const ns: ToolNamespace = { id: `mcp:${id}`, label: row.name }
+            const originalName = syncOriginalNameFromServerInfo(id, row.original_name || config.name)
+            const ns = buildMcpNamespace(id, row.custom_name?.trim() || originalName, manager)
             registerMcpTools(tools, ns, registry)
             return { connected: true, toolCount: tools.length, clearedTokenFiles: cleared }
         } catch (err) {
@@ -467,9 +509,10 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
                 // Tools were auto-registered via the auth-complete callback,
                 // but register explicitly in case the callback wasn't set up
                 const db = getDb()
-                const row = db.prepare('SELECT name FROM mcp_servers WHERE id = ?').get(serverId) as { name: string } | undefined
+                const row = db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(serverId) as McpServerRow | undefined
                 if (row) {
-                    const ns: ToolNamespace = { id: `mcp:${serverId}`, label: row.name }
+                    const originalName = syncOriginalNameFromServerInfo(serverId, row.original_name || effectiveName(row))
+                    const ns = buildMcpNamespace(serverId, row.custom_name?.trim() || originalName, manager)
                     registerMcpTools(tools, ns, registry)
                 }
 

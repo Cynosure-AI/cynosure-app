@@ -41,9 +41,12 @@ export interface StoredMessage {
 export interface McpServerInfo {
     id: string
     name: string
+    originalName: string
+    customName?: string | null
     command: string
     args: string[]
     env: Record<string, string>
+    description: string
     enabled: boolean
     connected: boolean
     toolCount: number
