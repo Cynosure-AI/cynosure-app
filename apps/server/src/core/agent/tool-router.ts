@@ -7,6 +7,7 @@ export const ROUTER_MODEL = 'qwen/qwen3-0.6b'
 export const MCP_CANDIDATE_COUNT = 8
 export const CONTEXT_WINDOW_TURNS = 5
 export const TOOL_COUNT_THRESHOLD = 20
+export const ROUTER_SELECTION_TOOL_NAME = 'select_relevant_tools'
 
 const TURN_CHAR_LIMIT = 200
 const TOOL_DESCRIPTION_LIMIT = 320
@@ -107,27 +108,53 @@ export async function llmConfirmTools(
             {
                 role: 'system',
                 content:
-                    'You are a tool selection assistant. Given a user request and a list of available tools, return a JSON array of tool names that are needed to fulfill the request. Return ONLY the JSON array. No explanation. No markdown. If no tools are needed, return []. /no_think',
+                    `You are a tool selection assistant. Given a user request and a list of available tools, call ${ROUTER_SELECTION_TOOL_NAME} with every tool name needed to fulfill the request. Include prerequisite/helper tools when a selected tool description says another tool is required. If no tools are needed, call it with an empty array. /no_think`,
             },
             {
                 role: 'user',
-                content: `Request: ${query}\n\nAvailable tools:\n${availableTools}\n\nReturn the tool names needed as a JSON array.`,
+                content: `Request: ${query}\n\nAvailable tools:\n${availableTools}`,
             },
         ],
         model: config.model,
         maxTokens: 500,
+        tools: [buildRouterSelectionTool(candidateTools)],
+        toolChoice: { type: 'function', name: ROUTER_SELECTION_TOOL_NAME },
         temperature: 0,
         thinkingEnabled: false,
         signal: config.signal,
     }, config.providerId)
 
     const allowed = new Set(candidateTools.map((tool) => tool.name))
-    const parsedNames = parseToolNameArray(result.content)
+    const selectionCall = result.toolCalls?.find((call) => call.function.name === ROUTER_SELECTION_TOOL_NAME)
+    const parsedNames = selectionCall
+        ? parseToolSelectionArguments(selectionCall.function.arguments)
+        : parseToolNameArray(result.content)
     if (!parsedNames) return candidateTools.map((tool) => tool.name).slice(0, MAX_CONFIRMED_TOOLS)
 
     return parsedNames
         .filter((name) => allowed.has(name))
         .slice(0, MAX_CONFIRMED_TOOLS)
+}
+
+function buildRouterSelectionTool(candidateTools: ToolDefinition[]): ToolDefinition {
+    return {
+        name: ROUTER_SELECTION_TOOL_NAME,
+        description: 'Select the tool names required to answer the current user request.',
+        timeout: 1_000,
+        parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+                toolNames: {
+                    type: 'array',
+                    description: 'Names of tools required for the request, including prerequisite helper tools.',
+                    items: { type: 'string', enum: candidateTools.map((tool) => tool.name) },
+                },
+            },
+            required: ['toolNames'],
+        },
+        execute: async () => ({ success: true, output: 'ok' }),
+    }
 }
 
 export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition[]> {
@@ -272,6 +299,24 @@ function parseToolNameArray(content: string): string[] | null {
         const parsed = JSON.parse(cleaned.slice(start, end + 1)) as unknown
         if (!Array.isArray(parsed)) return null
         return parsed.filter((item): item is string => typeof item === 'string')
+    } catch {
+        return null
+    }
+}
+
+function parseToolSelectionArguments(argumentsJson: string): string[] | null {
+    try {
+        const parsed = JSON.parse(argumentsJson) as unknown
+        if (Array.isArray(parsed)) {
+            return parsed.filter((item): item is string => typeof item === 'string')
+        }
+        if (!parsed || typeof parsed !== 'object') return null
+
+        const args = parsed as Record<string, unknown>
+        const toolNames = args.toolNames || args.tools || args.selectedTools
+        if (!Array.isArray(toolNames)) return null
+
+        return toolNames.filter((item): item is string => typeof item === 'string')
     } catch {
         return null
     }

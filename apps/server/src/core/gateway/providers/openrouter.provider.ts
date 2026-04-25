@@ -170,6 +170,12 @@ export class OpenRouterProvider extends BaseLLMProvider {
         if (request.tools?.length) {
             params.tools = this.formatToolsForProvider(request.tools) as unknown as OpenAI.Chat.ChatCompletionTool[]
         }
+        if (request.toolChoice) {
+            params.tool_choice = {
+                type: 'function',
+                function: { name: request.toolChoice.name }
+            }
+        }
 
         const response = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, {
             signal: request.signal
@@ -247,6 +253,12 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
         if (request.tools?.length) {
             params.tools = this.formatToolsForProvider(request.tools) as unknown as OpenAI.Chat.ChatCompletionTool[]
+        }
+        if (request.toolChoice) {
+            params.tool_choice = {
+                type: 'function',
+                function: { name: request.toolChoice.name }
+            }
         }
 
         const stream = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsStreaming, {
