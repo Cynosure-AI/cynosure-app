@@ -10,6 +10,18 @@ import {
     type ToolCall,
     type ModelInfo
 } from './base.provider.js'
+import { ensurePricingLoaded, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
+
+const MODEL_CACHE_TTL_MS = 10 * 60 * 1000
+
+interface OpenRouterModel {
+    id: string
+    context_length?: number
+    output_modalities?: unknown
+    architecture?: {
+        output_modalities?: unknown
+    }
+}
 
 /**
  * OpenRouter provider — uses the OpenAI-compatible Chat Completions API
@@ -21,6 +33,7 @@ import {
 export class OpenRouterProvider extends BaseLLMProvider {
     readonly config: LLMProviderConfig
     private client: OpenAI
+    private modelsCache: { models: OpenRouterModel[]; ts: number } | null = null
     protected get defaultBaseUrl(): string { return 'https://openrouter.ai/api/v1' }
 
     /** Whether this provider supports OpenRouter's native reasoning parameter */
@@ -54,6 +67,59 @@ export class OpenRouterProvider extends BaseLLMProvider {
             thinking = thinking.trim()
         }
         return { text, thinking }
+    }
+
+    private async fetchModels(): Promise<OpenRouterModel[]> {
+        if (this.modelsCache && Date.now() - this.modelsCache.ts < MODEL_CACHE_TTL_MS) {
+            return this.modelsCache.models
+        }
+
+        const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
+        const res = await fetch(`${baseUrl}/models`, {
+            headers: this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}
+        })
+        if (!res.ok) return []
+
+        const data = (await res.json()) as { data?: OpenRouterModel[] }
+        const models = Array.isArray(data.data) ? data.data : []
+        this.modelsCache = { models, ts: Date.now() }
+        return models
+    }
+
+    private getOutputModalities(model: OpenRouterModel | undefined): string[] {
+        const raw = model?.output_modalities ?? model?.architecture?.output_modalities
+        if (!Array.isArray(raw)) return []
+        return raw.filter((item): item is string => typeof item === 'string').map((item) => item.toLowerCase())
+    }
+
+    private async modelSupportsImageOutput(modelId: string): Promise<boolean> {
+        await ensurePricingLoaded().catch(() => { /* best-effort capability metadata */ })
+        const supportsImageOutput = modelSupportsOutputModality(this.config.type, modelId, 'image')
+        if (supportsImageOutput != null) return supportsImageOutput
+
+        try {
+            const models = await this.fetchModels()
+            const model = models.find(m => m.id === modelId)
+            return this.getOutputModalities(model).includes('image')
+        } catch {
+            return false
+        }
+    }
+
+    private extractImageUrls(source: unknown): string[] {
+        const images = (source as { images?: unknown } | undefined)?.images
+        if (!Array.isArray(images)) return []
+
+        const urls: string[] = []
+        for (const image of images) {
+            const item = image as {
+                image_url?: { url?: unknown }
+                imageUrl?: { url?: unknown }
+            }
+            const url = item.image_url?.url ?? item.imageUrl?.url
+            if (typeof url === 'string' && !urls.includes(url)) urls.push(url)
+        }
+        return urls
     }
 
     /** Convert internal messages to OpenAI Chat Completions format */
@@ -155,14 +221,19 @@ export class OpenRouterProvider extends BaseLLMProvider {
     async complete(request: CompletionRequest): Promise<CompletionResponse> {
         const start = Date.now()
         const messages = this.formatMessages(request.messages)
+        const model = request.model || this.config.defaultModel
 
         const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown> = {
-            model: request.model || this.config.defaultModel,
+            model,
             messages,
             max_tokens: request.maxTokens,
             stream: false
         }
         if (request.temperature != null) params.temperature = request.temperature
+        if (await this.modelSupportsImageOutput(model)) {
+            const imageParams = params as Record<string, unknown>
+            imageParams.modalities = ['image', 'text']
+        }
 
         // Send reasoning parameter for OpenRouter native thinking support
         if (this.supportsReasoningParam) {
@@ -181,6 +252,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
         const msg = choice?.message as unknown as Record<string, unknown> | undefined
         const rawContent = (msg?.content as string) || ''
         const { text, thinking: tagThinking } = this.separateThinking(rawContent)
+        const images = this.extractImageUrls(msg)
 
         // Extract native reasoning from OpenRouter response (reasoning field or reasoning_details)
         let nativeReasoning = ''
@@ -217,6 +289,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
             content: text,
             thinking: combinedThinking || undefined,
             toolCalls: toolCalls?.length ? toolCalls : undefined,
+            images: images.length ? images : undefined,
             usage: {
                 promptTokens: response.usage?.prompt_tokens || 0,
                 completionTokens: response.usage?.completion_tokens || 0,
@@ -232,15 +305,20 @@ export class OpenRouterProvider extends BaseLLMProvider {
         request: CompletionRequest
     ): AsyncIterable<StreamChunk> {
         const messages = this.formatMessages(request.messages)
+        const model = request.model || this.config.defaultModel
 
         const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming & Record<string, unknown> = {
-            model: request.model || this.config.defaultModel,
+            model,
             messages,
             max_tokens: request.maxTokens,
             stream: true,
             stream_options: { include_usage: true }
         }
         if (request.temperature != null) params.temperature = request.temperature
+        if (await this.modelSupportsImageOutput(model)) {
+            const imageParams = params as Record<string, unknown>
+            imageParams.modalities = ['image', 'text']
+        }
 
         // Send reasoning parameter for OpenRouter native thinking support
         if (this.supportsReasoningParam) {
@@ -271,9 +349,19 @@ export class OpenRouterProvider extends BaseLLMProvider {
         // the finish_reason chunk (OpenAI-compatible streaming protocol).
         let finished = false
         let finishedUsage: StreamChunk['usage']
+        const streamedImages = new Set<string>()
 
         for await (const chunk of stream) {
             const delta = chunk.choices?.[0]?.delta
+            const deltaImages = this.extractImageUrls(delta)
+                .filter((url) => {
+                    if (streamedImages.has(url)) return false
+                    streamedImages.add(url)
+                    return true
+                })
+            if (deltaImages.length) {
+                yield { images: deltaImages, done: false }
+            }
 
             // Handle tool call deltas
             if (delta?.tool_calls) {
@@ -458,22 +546,17 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
     /**
      * Fetch model metadata from OpenRouter's models API.
-     * The API returns context_length for each model.
+     * The API returns context_length and output modalities for each model.
      */
     async getModelInfo(modelId: string): Promise<ModelInfo> {
-        const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
         try {
-            const res = await fetch(`${baseUrl}/models`, {
-                headers: this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}
-            })
-            if (!res.ok) return { id: modelId }
-            const data = (await res.json()) as {
-                data: Array<{ id: string; context_length?: number }>
-            }
-            const model = data.data.find(m => m.id === modelId)
+            const models = await this.fetchModels()
+            const model = models.find(m => m.id === modelId)
+            const outputModalities = this.getOutputModalities(model)
             return {
                 id: modelId,
-                contextLength: model?.context_length || undefined
+                contextLength: model?.context_length || undefined,
+                outputModalities: outputModalities.length ? outputModalities : undefined
             }
         } catch {
             return { id: modelId }

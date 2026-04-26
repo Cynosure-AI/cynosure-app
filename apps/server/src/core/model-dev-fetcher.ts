@@ -10,7 +10,11 @@ interface ModelCost {
 
 interface ModelsDevProvider {
     id: string
-    models: Record<string, { cost?: { input?: number; output?: number }; limit?: { context?: number } }>
+    models: Record<string, {
+        cost?: { input?: number; output?: number }
+        limit?: { context?: number }
+        modalities?: { input?: string[]; output?: string[] }
+    }>
 }
 
 type ModelsDevData = Record<string, ModelsDevProvider>
@@ -43,6 +47,12 @@ let contextExactLookup: Map<string, number> = new Map()
 
 /** model → context length (first-seen across all providers) */
 let contextModelOnlyLookup: Map<string, number> = new Map()
+
+/** (provider, model) → output modalities */
+let outputModalitiesExactLookup: Map<string, string[]> = new Map()
+
+/** model → output modalities (first-seen across all providers) */
+let outputModalitiesModelOnlyLookup: Map<string, string[]> = new Map()
 
 let lastFetchedAt = 0
 let fetchPromise: Promise<void> | null = null
@@ -105,6 +115,36 @@ export function getModelContextLength(provider: string, model: string): number |
     return null
 }
 
+export function getModelOutputModalities(provider: string, model: string): string[] | null {
+    const normProvider = normaliseProvider(provider)
+
+    const exact = outputModalitiesExactLookup.get(`${normProvider}/${model}`)
+    if (exact) return exact
+
+    const fallback = outputModalitiesModelOnlyLookup.get(model)
+    if (fallback) return fallback
+
+    // OpenRouter-style IDs: "openai/gpt-5-image" → try "openai" + "gpt-5-image"
+    const slashIdx = model.indexOf('/')
+    if (slashIdx > 0) {
+        const embeddedProvider = normaliseProvider(model.slice(0, slashIdx))
+        const embeddedModel = model.slice(slashIdx + 1)
+        const nested = outputModalitiesExactLookup.get(`${embeddedProvider}/${embeddedModel}`)
+        if (nested) return nested
+        const nestedFallback = outputModalitiesModelOnlyLookup.get(embeddedModel)
+        if (nestedFallback) return nestedFallback
+    }
+
+    return null
+}
+
+export function modelSupportsOutputModality(provider: string, model: string, modality: string): boolean | null {
+    const modalities = getModelOutputModalities(provider, model)
+    if (!modalities) return null
+    const wanted = modality.toLowerCase()
+    return modalities.some((item) => item.toLowerCase() === wanted)
+}
+
 // ── Internals ───────────────────────────────────────────────────────────────
 
 function normaliseProvider(raw: string): string {
@@ -139,6 +179,8 @@ function buildLookups(data: ModelsDevData): void {
     const newModelOnly = new Map<string, ModelCost>()
     const newCtxExact = new Map<string, number>()
     const newCtxModelOnly = new Map<string, number>()
+    const newOutputModalitiesExact = new Map<string, string[]>()
+    const newOutputModalitiesModelOnly = new Map<string, string[]>()
 
     for (const [providerKey, provider] of Object.entries(data)) {
         if (!provider?.models || typeof provider.models !== 'object') continue
@@ -164,6 +206,20 @@ function buildLookups(data: ModelsDevData): void {
                     newCtxModelOnly.set(modelId, ctxLen)
                 }
             }
+
+            // Output modality lookup
+            const outputModalities = modelInfo?.modalities?.output
+            if (Array.isArray(outputModalities)) {
+                const modalities = outputModalities
+                    .filter((item): item is string => typeof item === 'string')
+                    .map((item) => item.toLowerCase())
+                if (modalities.length) {
+                    newOutputModalitiesExact.set(`${providerKey}/${modelId}`, modalities)
+                    if (!newOutputModalitiesModelOnly.has(modelId)) {
+                        newOutputModalitiesModelOnly.set(modelId, modalities)
+                    }
+                }
+            }
         }
     }
 
@@ -171,4 +227,6 @@ function buildLookups(data: ModelsDevData): void {
     modelOnlyLookup = newModelOnly
     contextExactLookup = newCtxExact
     contextModelOnlyLookup = newCtxModelOnly
+    outputModalitiesExactLookup = newOutputModalitiesExact
+    outputModalitiesModelOnlyLookup = newOutputModalitiesModelOnly
 }

@@ -90,7 +90,14 @@ const unifiedTimeline = computed(() => {
     // When we have execution steps, hide tool messages (shown via ToolExecutionCard)
     if (hasExecSteps && msg.role === 'tool') continue
     // Always hide empty assistant messages (tool-calling bookkeeping, no visible content)
-    if (msg.role === 'assistant' && !msg.content && !msg.thinking && !msg.isStreaming && !msg.isError) continue
+    if (
+      msg.role === 'assistant' &&
+      !msg.content &&
+      !msg.thinking &&
+      !msg.imageDataUrls?.length &&
+      !msg.isStreaming &&
+      !msg.isError
+    ) continue
 
     // A message is from a sub-agent if it has a different agentId than the orchestrator
     const isSubAgent = Boolean(msg.agentId && mainAgentId && msg.agentId !== mainAgentId)
@@ -198,6 +205,7 @@ function toggleFallback(id: string): void {
 // Scroll triggers
 watch(() => chatStore.messages.length, scrollToBottom)
 watch(() => chatStore.messages[chatStore.messages.length - 1]?.content, scrollToBottomIfNear)
+watch(() => chatStore.messages[chatStore.messages.length - 1]?.imageDataUrls?.length, scrollToBottomIfNear)
 watch(() => agentStore.executionSteps.length, scrollToBottomIfNear)
 watch(() => agentStore.pendingHITL, scrollToBottomIfNear)
 // When loading finishes the spinner is replaced by rendered messages — scroll then
