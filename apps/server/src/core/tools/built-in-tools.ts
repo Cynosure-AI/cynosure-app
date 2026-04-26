@@ -19,6 +19,11 @@ export {
     makeMemoryUpdateTool,
     type MemoryToolOptions,
 } from "./builtin/memory-tools.js";
+export {
+    makeSearchAvailableMcpToolsTool,
+    TOOL_SEARCH_TOOL_NAME,
+    type SearchAvailableMcpToolsOptions,
+} from "./builtin/search-available-mcp-tools.js";
 
 // Import for internal hydration use
 import { makeNotificationTool } from "./builtin/notification.js";
