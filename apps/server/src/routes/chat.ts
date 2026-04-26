@@ -5,11 +5,13 @@ import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor } from '../core/agent/agent-executor.js'
 import { prepareAgentExecution } from '../core/agent/prepare-execution.js'
+import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/search-available-mcp-tools.js'
+import { routeTools, shouldRouteTools } from '../core/agent/tool-router.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { hydrateBuiltInTools } from '../core/tools/built-in-tools.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
-import type { ChatMessage, ContentPart } from '../core/gateway/providers/base.provider.js'
+import type { ChatMessage, ContentPart, ToolDefinition } from '../core/gateway/providers/base.provider.js'
 import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
@@ -94,14 +96,22 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       overrideSubAgents?: boolean
       thinkingEnabled?: boolean
       contextStrategy?: 'sliding-window' | 'truncate-middle' | 'none'
+      autoToolRouting?: boolean
+      toolRouterProviderId?: string
+      toolRouterModel?: string
       titleProviderId?: string
       titleModel?: string
     }
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
       const db = getDb()
+      const hasExplicitToolAllowlist = Array.isArray(allowedTools)
+        && !(reqAutoToolRouting === true && allowedTools.length === 0)
+      const routeFromAllTools = reqAutoToolRouting === true
+        && Array.isArray(allowedTools)
+        && allowedTools.length === 0
 
       // Build content (text + optional images + optional audio + optional files)
       let userContent: string | ContentPart[]
@@ -232,8 +242,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
         // Session-level overrides: prefer request body over agent config
         const effectiveSubAgents = reqSubAgents ?? resolvedAgent.subAgents
-        const effectiveAgent = Array.isArray(allowedTools)
+        const toolRegistry = getToolRegistry()
+        const effectiveAgent = hasExplicitToolAllowlist
           ? { ...resolvedAgent, tools: allowedTools }
+          : routeFromAllTools
+            ? { ...resolvedAgent, tools: toolRegistry.listRegisteredTools().map((tool) => tool.key) }
           : resolvedAgent
 
         // Resolve memory space overrides (request body ids → { id, name } objects)
@@ -257,9 +270,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           userQuery: typeof messages[messages.length - 1]?.content === 'string'
             ? messages[messages.length - 1].content as string
             : content,
+          recentMessages: messages,
           isFirstMessage: isFirstUserMessage,
           memorySpaceOverrides,
           overrideSubAgents: overrideSubAgents !== false,
+          autoToolRouting: reqAutoToolRouting === true,
+          toolRouterProviderId: reqToolRouterProviderId || undefined,
+          toolRouterModel: reqToolRouterModel || undefined,
         })
 
         tools = prepared.tools
@@ -281,11 +298,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
 
         const toolRegistry = getToolRegistry()
-        const hasToolAllowlist = Array.isArray(allowedTools)
-        const selectedToolNames = hasToolAllowlist
+        const selectedToolNames = hasExplicitToolAllowlist
           ? Array.from(new Set(allowedTools)).filter((name) => toolRegistry.hasKey(name))
           : undefined
-        tools = hasToolAllowlist
+        tools = hasExplicitToolAllowlist
           ? toolRegistry.resolveForExecution(selectedToolNames || [])
           : toolRegistry.getToolDefinitions()
 
@@ -300,6 +316,32 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           : gateway.getLastUsedProvider()
         responseProvider = freeChatLastUsedProvider.config.id
         responseModel = model || freeChatLastUsedProvider.config.defaultModel
+
+        if (shouldRouteTools(tools, content, { enabled: reqAutoToolRouting === true })) {
+          const routingTaskId = `router_${nanoid()}`
+          try {
+            emitToolRoutingStatus(conversationId, routingTaskId, 'routing-tools', 'Selecting relevant tools...')
+            const routerProviderId = reqToolRouterProviderId || responseProvider
+            const routerProvider = gateway.getProvider(routerProviderId) || freeChatLastUsedProvider
+            const routerModel = reqToolRouterModel || routerProvider.config.defaultModel || responseModel
+
+            tools = await routeTools({
+              userQuery: content,
+              recentMessages: messages,
+              allTools: tools,
+              gateway,
+              providerId: routerProvider.config.id,
+              model: responseModel,
+              routerModel,
+              mcpMetadata: toolRegistry.getNamespaceMetadataForTools(tools),
+            })
+            emitToolRoutingSelection(conversationId, routingTaskId, tools)
+          } catch (err) {
+            console.warn('[tool-router] Routing failed, using local tool list:', err)
+            tools = tools.filter((tool) => !tool.namespaceId?.startsWith('mcp:'))
+            emitToolRoutingSelection(conversationId, routingTaskId, tools)
+          }
+        }
 
         // Sub-agent tools from request body (MA workspace)
         if (reqSubAgents?.length) {
@@ -347,6 +389,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         providerId: responseProvider,
         overrideSubAgents: overrideSubAgents ?? false,
         thinkingEnabled: reqThinkingEnabled ?? true,
+        autoToolRouting: reqAutoToolRouting === true,
       }
       db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
         JSON.stringify(chatConfig),
@@ -502,5 +545,26 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     const { conversationId } = req.body
     const cancelled = cancelPostActions(conversationId)
     return { success: cancelled }
+  })
+}
+
+function emitToolRoutingStatus(conversationId: string, taskId: string, status: string, message: string): void {
+  getEventBus().emit('step:status', {
+    conversationId,
+    taskId,
+    iteration: 0,
+    status,
+    message,
+  })
+}
+
+function emitToolRoutingSelection(conversationId: string, taskId: string, tools: ToolDefinition[]): void {
+  getEventBus().emit('step:tools-chosen', {
+    conversationId,
+    taskId,
+    iteration: 0,
+    toolCalls: tools
+      .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
+      .map((tool) => ({ name: tool.name, arguments: '{}' })),
   })
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import CustomSelect, { type SelectOptionGroup } from './CustomSelect.vue'
+import CustomSelect, { type SelectOption, type SelectOptionGroup } from './CustomSelect.vue'
 import { useProviderLogos } from '../../composables/useProviderLogos'
 
 const props = withDefaults(
@@ -13,6 +13,8 @@ const props = withDefaults(
     defaultLabel?: string
     /** Icon for the default entry */
     defaultIcon?: string
+    /** Extra options inserted after the default entry and before providers */
+    leadingOptions?: SelectOption[]
     placeholder?: string
     maxHeight?: string
     dropUp?: boolean
@@ -24,6 +26,7 @@ const props = withDefaults(
     includeDefault: false,
     defaultLabel: 'Use agent default',
     defaultIcon: 'lucide:settings',
+    leadingOptions: () => [],
     placeholder: 'Select a provider…',
     maxHeight: 'max-h-80',
     dropUp: false,
@@ -51,6 +54,7 @@ const groups = computed((): SelectOptionGroup[] => {
     return [{
       options: [
         { value: '', label: props.defaultLabel, iconName: props.defaultIcon },
+        ...props.leadingOptions,
         ...providerOptions,
       ],
     }]

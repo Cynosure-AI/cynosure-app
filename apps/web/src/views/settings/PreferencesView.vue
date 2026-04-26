@@ -29,6 +29,8 @@ const contextStrategyOptions: { value: ContextStrategy; label: string; descripti
 // ── Title generation provider/model ───────────────────────────────────────────
 const titleModels = ref<string[]>([])
 const titleLoadingModels = ref(false)
+const toolRouterModels = ref<string[]>([])
+const toolRouterLoadingModels = ref(false)
 
 async function fetchTitleModels(providerId: string) {
   if (!providerId) { titleModels.value = []; return }
@@ -43,6 +45,20 @@ watch(() => prefs.titleProviderId, (id, oldId) => {
   // Only reset the model when the provider actually changes, not on initial load
   if (oldId !== undefined) prefs.titleModel = ''
   fetchTitleModels(id)
+}, { immediate: true })
+
+async function fetchToolRouterModels(providerId: string) {
+  if (!providerId) { toolRouterModels.value = []; return }
+  toolRouterLoadingModels.value = true
+  try {
+    toolRouterModels.value = await providerStore.listModels(providerId, 'llm')
+  } catch { toolRouterModels.value = [] }
+  toolRouterLoadingModels.value = false
+}
+
+watch(() => prefs.toolRouterProviderId, (id, oldId) => {
+  if (oldId !== undefined) prefs.toolRouterModel = ''
+  fetchToolRouterModels(id)
 }, { immediate: true })
 </script>
 
@@ -183,6 +199,50 @@ watch(() => prefs.titleProviderId, (id, oldId) => {
               </div>
             </div>
             <ToggleSwitch v-model="prefs.autoExpandToolCalls" />
+          </div>
+        </BaseCard>
+
+        <!-- Tool Router -->
+        <BaseCard class="p-5 space-y-4">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+              <Icon
+                icon="lucide:route"
+                class="w-5 h-5 text-zinc-400"
+              />
+            </div>
+            <div>
+              <h3 class="text-sm font-medium text-zinc-200">
+                Tool Router
+              </h3>
+              <p class="text-xs text-zinc-500 mt-0.5">
+                Provider and model used to detect which tools a request needs
+              </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 pt-1 border-t border-zinc-700">
+            <div>
+              <label class="block text-xs text-zinc-400 mb-1.5">Provider</label>
+              <ProviderSelect
+                v-model="prefs.toolRouterProviderId"
+                :providers="providerStore.providers"
+                include-default
+                default-label="Use chat provider"
+                placeholder="Use chat provider"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-400 mb-1.5">Model</label>
+              <ModelSelect
+                v-model="prefs.toolRouterModel"
+                :models="toolRouterModels"
+                include-default
+                :default-label="toolRouterLoadingModels ? 'Loading models...' : 'Use provider default'"
+                :placeholder="toolRouterLoadingModels ? 'Loading models...' : 'Use provider default'"
+                :filterable="true"
+              />
+            </div>
           </div>
         </BaseCard>
 

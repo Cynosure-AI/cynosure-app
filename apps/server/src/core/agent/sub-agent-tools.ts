@@ -21,6 +21,10 @@ interface SubAgentToolOptions {
     modelOverride?: string
     /** Session-level provider override — when set, all sub-agents use this provider */
     providerOverride?: string
+    /** Request/global provider fallback for sub-agent tool routing */
+    toolRouterProviderId?: string
+    /** Request/global model fallback for sub-agent tool routing */
+    toolRouterModel?: string
 }
 
 /**
@@ -31,7 +35,7 @@ interface SubAgentToolOptions {
  * sub-agent's own tools, provider, and model.
  */
 export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition[] {
-    const { subAgents, conversationId, broadcast, signal, modelOverride, providerOverride } = options
+    const { subAgents, conversationId, broadcast, signal, modelOverride, providerOverride, toolRouterProviderId, toolRouterModel } = options
     const tools: ToolDefinition[] = []
 
     for (const assignment of subAgents) {
@@ -75,6 +79,8 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     modelOverride: modelOverride || undefined,
                     systemPromptSuffix: '\nYou are a sub-agent. Complete the task described below and report your results clearly.',
                     includeSubAgents: false,
+                    toolRouterProviderId,
+                    toolRouterModel,
                 })
 
                 // Sub-agent executor emits EventBus step events (for timeline cards)

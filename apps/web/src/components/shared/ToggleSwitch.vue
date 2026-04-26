@@ -67,7 +67,7 @@ const offColors: Record<string, string> = {
     v-else-if="size === 'md'"
     type="button"
     :class="[
-      'relative w-10 h-5 rounded-full transition-colors shrink-0',
+      'relative inline-flex items-center w-10 h-5 rounded-full transition-colors shrink-0',
       modelValue ? onColors[color] : offColors[size],
       disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
     ]"
@@ -76,7 +76,7 @@ const offColors: Record<string, string> = {
   >
     <span
       :class="[
-        'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform',
+        'absolute left-0.5 w-4 h-4 rounded-full bg-white transition-transform',
         modelValue ? 'translate-x-5' : 'translate-x-0',
       ]"
     />

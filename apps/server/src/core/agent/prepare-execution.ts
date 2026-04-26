@@ -10,8 +10,15 @@
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import { hydrateBuiltInTools } from '../tools/built-in-tools.js'
+import { TOOL_SEARCH_TOOL_NAME } from '../tools/builtin/search-available-mcp-tools.js'
+import { routeTools, shouldRouteTools } from './tool-router.js'
+import { getEventBus } from '../telemetry/event-bus.js'
+import { nanoid } from 'nanoid'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ChatMessage, ToolDefinition } from '../gateway/providers/base.provider.js'
+
+const AGENT_ROUTER_PROVIDER = '__agent_provider__'
+const AGENT_ROUTER_MODEL = '__agent_model__'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -38,8 +45,18 @@ export interface PrepareExecutionInput {
 
     /** The user's query text — used as the memory retrieval query */
     userQuery?: string
+    /** Recent conversation messages used by context-aware tool routing */
+    recentMessages?: ChatMessage[]
     /** Whether this is the first user message (memory enrichment only triggers on first message) */
     isFirstMessage?: boolean
+    /** Recently invoked tools that should survive routing for this execution turn */
+    usedToolNames?: Set<string>
+    /** Enable context-aware MCP tool routing for this execution */
+    autoToolRouting?: boolean
+    /** Optional provider override for the router confirmation pass */
+    toolRouterProviderId?: string
+    /** Optional model override for the router confirmation pass */
+    toolRouterModel?: string
 
     // ── Sub-agents ──
 
@@ -103,7 +120,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     // ── 2. Resolve provider / model ──
     // Must happen before sub-agent tool building so we can pass the resolved
-    // provider to sub-agents when a model override is active.
+    // provider to sub-agents when a model override is active. Tool routing also
+    // uses this provider for its compact confirmation call.
 
     const providerId = providerOverride || agent.providerId || undefined
     const lastUsedProvider = providerId
@@ -118,6 +136,44 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     // Always resolve to the actual provider ID so metrics track correctly
     const resolvedProviderId = lastUsedProvider.config.id
+
+    // ── 2b. Context-aware tool routing ──
+    // Sub-agent delegation tools are added later and bypass routing. This pass
+    // trims the agent/free-chat tool set before the executor receives schemas.
+
+    if (shouldRouteTools(tools, input.userQuery, { enabled: isToolRoutingEnabled(agent, input.autoToolRouting) })) {
+        const routingTaskId = `router_${nanoid()}`
+        try {
+            emitToolRoutingStatus(conversationId, routingTaskId, 'routing-tools', 'Selecting relevant tools...')
+            const useAgentRouterProvider = agent.toolRouterProviderId === AGENT_ROUTER_PROVIDER
+            const agentRouterProviderId = useAgentRouterProvider
+                ? agent.providerId
+                : agent.toolRouterProviderId
+            const useAgentRouterModel = agent.toolRouterModel === AGENT_ROUTER_MODEL
+            const routerProviderId = agentRouterProviderId || input.toolRouterProviderId || resolvedProviderId
+            const routerProvider = gateway.getProvider(routerProviderId) || lastUsedProvider
+            const routerModel = useAgentRouterModel
+                ? (agent.model || routerProvider.config.defaultModel || model)
+                : (agent.toolRouterModel || (useAgentRouterProvider ? undefined : input.toolRouterModel) || routerProvider.config.defaultModel || model)
+
+            tools = await routeTools({
+                userQuery: input.userQuery || '',
+                recentMessages: input.recentMessages || [],
+                allTools: tools,
+                gateway,
+                providerId: routerProvider.config.id,
+                model,
+                routerModel,
+                mcpMetadata: toolRegistry.getNamespaceMetadataForTools(tools),
+                usedToolNames: input.usedToolNames,
+            })
+            emitToolRoutingSelection(conversationId, routingTaskId, tools)
+        } catch (err) {
+            console.warn('[tool-router] Routing failed, using local tool list:', err)
+            tools = tools.filter((tool) => !tool.namespaceId?.startsWith('mcp:'))
+            emitToolRoutingSelection(conversationId, routingTaskId, tools)
+        }
+    }
 
     // ── 3. Sub-agent delegation tools ──
 
@@ -135,6 +191,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             signal,
             modelOverride: overrideSubAgents ? (modelOverride || undefined) : undefined,
             providerOverride: overrideSubAgents ? (modelOverride ? lastUsedProvider.config.id : (providerOverride || undefined)) : undefined,
+            toolRouterProviderId: input.toolRouterProviderId,
+            toolRouterModel: input.toolRouterModel,
         })
         tools = [...tools, ...subAgentTools]
     }
@@ -175,4 +233,37 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         systemMessages,
         hasSubAgents,
     }
+}
+
+function emitToolRoutingStatus(conversationId: string, taskId: string, status: string, message: string): void {
+    getEventBus().emit('step:status', {
+        conversationId,
+        taskId,
+        iteration: 0,
+        status,
+        message,
+    })
+}
+
+function emitToolRoutingSelection(conversationId: string, taskId: string, tools: ToolDefinition[]): void {
+    getEventBus().emit('step:tools-chosen', {
+        conversationId,
+        taskId,
+        iteration: 0,
+        toolCalls: tools
+            .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
+            .map((tool) => ({ name: tool.name, arguments: '{}' })),
+    })
+}
+
+function isToolRoutingEnabled(agent: AgentData, sessionEnabled?: boolean): boolean {
+    const routingPrefs = agent as AgentData & {
+        autoToolRouting?: boolean
+        toolRoutingEnabled?: boolean
+        disableToolRouting?: boolean
+    }
+
+    if (routingPrefs.disableToolRouting === true) return false
+    if (routingPrefs.toolRoutingEnabled === false) return false
+    return sessionEnabled === true || routingPrefs.autoToolRouting === true || routingPrefs.toolRoutingEnabled === true
 }

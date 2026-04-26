@@ -165,6 +165,14 @@ export class GoogleProvider extends BaseLLMProvider {
     if (await this.supportsImageOutput(model)) {
       config.responseModalities = ['TEXT', 'IMAGE']
     }
+    if (request.toolChoice) {
+      config.toolConfig = {
+        functionCallingConfig: {
+          mode: 'ANY',
+          allowedFunctionNames: [request.toolChoice.name]
+        }
+      }
+    }
 
     const response = await this.client.models.generateContent({
       model,
@@ -235,6 +243,14 @@ export class GoogleProvider extends BaseLLMProvider {
     if (request.temperature != null) streamConfig.temperature = request.temperature
     if (await this.supportsImageOutput(model)) {
       streamConfig.responseModalities = ['TEXT', 'IMAGE']
+    }
+    if (request.toolChoice) {
+      streamConfig.toolConfig = {
+        functionCallingConfig: {
+          mode: 'ANY',
+          allowedFunctionNames: [request.toolChoice.name]
+        }
+      }
     }
 
     const stream = await this.client.models.generateContentStream({
