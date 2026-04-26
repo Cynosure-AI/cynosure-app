@@ -22,7 +22,7 @@ export class GoogleProvider extends BaseLLMProvider {
 
   constructor(config: LLMProviderConfig) {
     super()
-    this.config = config
+    this.config = { ...config, baseUrl: '' }
     this.client = new GoogleGenAI({ apiKey: config.apiKey || 'not-set' })
   }
 

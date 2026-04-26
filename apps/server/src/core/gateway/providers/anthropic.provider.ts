@@ -13,13 +13,14 @@ import {
 export class AnthropicProvider extends BaseLLMProvider {
   readonly config: LLMProviderConfig
   private client: Anthropic
+  private static readonly defaultBaseUrl = 'https://api.anthropic.com'
 
   constructor(config: LLMProviderConfig) {
     super()
-    this.config = config
+    this.config = { ...config, baseUrl: AnthropicProvider.defaultBaseUrl }
     this.client = new Anthropic({
       apiKey: config.apiKey || 'not-set',
-      baseURL: config.baseUrl || undefined
+      baseURL: AnthropicProvider.defaultBaseUrl
     })
   }
 

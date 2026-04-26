@@ -21,16 +21,18 @@ import {
 export class OpenRouterProvider extends BaseLLMProvider {
     readonly config: LLMProviderConfig
     private client: OpenAI
+    protected get defaultBaseUrl(): string { return 'https://openrouter.ai/api/v1' }
 
     /** Whether this provider supports OpenRouter's native reasoning parameter */
     protected get supportsReasoningParam(): boolean { return true }
 
     constructor(config: LLMProviderConfig) {
         super()
-        this.config = config
+        const baseUrl = this.defaultBaseUrl
+        this.config = { ...config, baseUrl }
         this.client = new OpenAI({
             apiKey: config.apiKey || 'not-set',
-            baseURL: config.baseUrl || 'https://openrouter.ai/api/v1',
+            baseURL: baseUrl,
             defaultHeaders: {
                 'HTTP-Referer': 'https://cynosure.app',
                 'X-OpenRouter-Title': 'Cynosure'
@@ -408,9 +410,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
     }
 
     async listModels(type?: 'llm' | 'embedding'): Promise<string[]> {
-        const baseUrl = (
-            this.config.baseUrl || 'https://openrouter.ai/api/v1'
-        ).replace(/\/+$/, '')
+        const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 
         const modality = type === 'embedding' ? 'embeddings' : 'text'
         const url = `${baseUrl}/models?output_modalities=${modality}`
@@ -435,9 +435,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
     async testConnection(): Promise<boolean> {
         try {
-            const baseUrl = (
-                this.config.baseUrl || 'https://openrouter.ai/api/v1'
-            ).replace(/\/+$/, '')
+            const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 
             const res = await fetch(`${baseUrl}/models`, {
                 headers: this.config.apiKey
@@ -463,7 +461,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
      * The API returns context_length for each model.
      */
     async getModelInfo(modelId: string): Promise<ModelInfo> {
-        const baseUrl = (this.config.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/+$/, '')
+        const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
         try {
             const res = await fetch(`${baseUrl}/models`, {
                 headers: this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}

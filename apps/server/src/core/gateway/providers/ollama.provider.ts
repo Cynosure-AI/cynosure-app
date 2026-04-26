@@ -6,10 +6,12 @@ import type { LLMProviderConfig, ModelInfo } from './base.provider.js'
  * Defaults to http://localhost:11434/v1
  */
 export class OllamaProvider extends OpenAIProvider {
+    protected override get defaultBaseUrl(): string { return 'http://localhost:11434/v1' }
+    protected override get allowsCustomBaseUrl(): boolean { return true }
+
     constructor(config: LLMProviderConfig) {
         super({
             ...config,
-            baseUrl: config.baseUrl || 'http://localhost:11434/v1',
             apiKey: config.apiKey || 'ollama' // Ollama doesn't require a real key
         })
     }

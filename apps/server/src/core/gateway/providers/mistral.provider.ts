@@ -1,24 +1,16 @@
 import { OpenRouterProvider } from './openrouter.provider.js'
-import type { LLMProviderConfig, ModelInfo } from './base.provider.js'
+import type { ModelInfo } from './base.provider.js'
 
 /**
  * Mistral provider — uses the OpenAI-compatible Chat Completions API
  * at https://api.mistral.ai/v1.
  */
 export class MistralProvider extends OpenRouterProvider {
+    protected override get defaultBaseUrl(): string { return 'https://api.mistral.ai/v1' }
     protected get supportsReasoningParam(): boolean { return false }
 
-    constructor(config: LLMProviderConfig) {
-        super({
-            ...config,
-            baseUrl: config.baseUrl || 'https://api.mistral.ai/v1'
-        })
-    }
-
     async listModels(_type?: 'llm' | 'embedding'): Promise<string[]> {
-        const baseUrl = (
-            this.config.baseUrl || 'https://api.mistral.ai/v1'
-        ).replace(/\/+$/, '')
+        const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 
         const res = await fetch(`${baseUrl}/models`, {
             headers: this.config.apiKey
@@ -38,9 +30,7 @@ export class MistralProvider extends OpenRouterProvider {
 
     async testConnection(): Promise<boolean> {
         try {
-            const baseUrl = (
-                this.config.baseUrl || 'https://api.mistral.ai/v1'
-            ).replace(/\/+$/, '')
+            const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 
             const res = await fetch(`${baseUrl}/models`, {
                 headers: this.config.apiKey
@@ -54,7 +44,7 @@ export class MistralProvider extends OpenRouterProvider {
     }
 
     async getModelInfo(modelId: string): Promise<ModelInfo> {
-        const baseUrl = (this.config.baseUrl || 'https://api.mistral.ai/v1').replace(/\/+$/, '')
+        const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
         try {
             const res = await fetch(`${baseUrl}/models`, {
                 headers: this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}
