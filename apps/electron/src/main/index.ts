@@ -66,7 +66,11 @@ function resolveWebDist(): string {
 }
 
 function getDataDir(): string {
-    return join(app.getPath('userData'), 'data')
+    return app.getPath('userData')
+}
+
+function getAppDataDir(): string {
+    return join(getDataDir(), 'data')
 }
 
 // ── Node binary resolution ─────────────────────────────────────────────────────
@@ -343,10 +347,10 @@ app.whenReady().then(async () => {
     // ── UI preferences persistence (electron-store) ──────────────────────────────────────
     // Chromium's LevelDB "Reusing old log" optimization causes sequence-number
     // conflicts across app restarts, making localStorage unreliable in Electron.
-    // electron-store persists prefs to a plain JSON file in userData instead.
+    // electron-store persists prefs to a plain JSON file in the shared app data dir.
     const uiPrefsStore = new ElectronStore<Record<string, string>>({
         name: 'ui-prefs',
-        cwd: getDataDir(),
+        cwd: getAppDataDir(),
     })
 
     ipcMain.on('get-ui-prefs', (event) => {

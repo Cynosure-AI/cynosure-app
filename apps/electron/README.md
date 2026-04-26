@@ -15,7 +15,7 @@ electron/
 **How it works:**
 
 1. The main process spawns the Fastify server as a child process on port 3099
-2. Data is stored in Electron's `userData` directory via `CYNOSURE_DATA_DIR`
+2. Data is stored under Electron's `userData` directory via `CYNOSURE_DATA_DIR`
 3. In **development**: loads the Vite dev server (`http://localhost:5173`)
 4. In **production**: serves built web files via a custom `app://` protocol, with API/WS calls routed to `http://localhost:3099` via `VITE_API_URL`
 
@@ -64,6 +64,6 @@ npm run package:skip-deps
 ## Notes
 
 - **Server port** is fixed at 3099 in the Electron wrapper. Changing it requires updating `SERVER_PORT` in `src/main/index.ts` and rebuilding the web with the updated `VITE_API_URL`.
-- **Data directory** uses `app.getPath('userData')/data` which maps to platform-specific locations (e.g., `~/.config/cynosure-desktop/data` on Linux). This is separate from the standalone server's default directory (`~/.config/cynosure-server`).
+- **Data directory** passes `app.getPath('userData')` to the embedded server as `CYNOSURE_DATA_DIR`; the server stores app data under its own `data/` subdirectory (e.g., `~/.config/cynosure-desktop/data` on Linux). Electron UI prefs are stored in that same `data/` directory so app state stays grouped together. This is separate from the standalone server's default directory (`~/.config/cynosure-server`).
 - **MCP servers** are not bundled. They can be configured at runtime via the MCP settings page, pointing to MCPs installed on the user's system.
 - **Auto-update** is not yet configured. Consider adding `electron-updater` and a GitHub Releases-based update feed.
