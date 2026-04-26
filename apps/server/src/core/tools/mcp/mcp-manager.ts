@@ -87,7 +87,7 @@ export class McpManager {
     private pendingAuthConnections = new Map<string, PendingAuthConnection>()
     private pendingHttpAuths = new Map<string, PendingHttpAuth>()
     private onAuthCompleteCallback?: AuthCompleteCallback
-    /** Base URL of the Open-Agent server (e.g. http://127.0.0.1:3099). Set before connecting HTTP servers. */
+    /** Base URL of the Cynosure server (e.g. http://127.0.0.1:3099). Set before connecting HTTP servers. */
     private serverBaseUrl = ''
 
     /**
