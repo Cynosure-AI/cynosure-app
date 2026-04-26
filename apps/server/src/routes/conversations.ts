@@ -3,6 +3,7 @@ import { getDb } from '../db/database.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { nanoid } from 'nanoid'
 import { unlinkSync } from 'fs'
+import { cleanupConversationArtifacts, extractFilePathFromFileUrl } from '../core/artifacts/image-artifacts.js'
 
 /** Delete image files referenced by messages in the given conversation IDs. */
 function cleanupConversationImages(conversationIds: string[]): void {
@@ -17,13 +18,15 @@ function cleanupConversationImages(conversationIds: string[]): void {
                 const urls: string[] = JSON.parse(row.image_urls_json)
                 for (const url of urls) {
                     // Extract file path from /api/files?path=<encoded_path>
-                    const match = url.match(/\/api\/files\?path=([^&]+)/)
-                    if (match) {
-                        try { unlinkSync(decodeURIComponent(match[1])) } catch { /* file may already be gone */ }
+                    const filePath = extractFilePathFromFileUrl(url)
+                    if (filePath) {
+                        try { unlinkSync(filePath) } catch { /* file may already be gone */ }
                     }
                 }
             } catch { /* skip malformed JSON */ }
         }
+
+        cleanupConversationArtifacts(convId)
     }
 }
 
@@ -307,9 +310,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 try {
                     const urls: string[] = JSON.parse(ir.image_urls_json)
                     for (const url of urls) {
-                        const match = url.match(/\/api\/files\?path=([^&]+)/)
-                        if (match) {
-                            try { unlinkSync(decodeURIComponent(match[1])) } catch { /* already gone */ }
+                        const filePath = extractFilePathFromFileUrl(url)
+                        if (filePath) {
+                            try { unlinkSync(filePath) } catch { /* already gone */ }
                         }
                     }
                 } catch { /* skip */ }
