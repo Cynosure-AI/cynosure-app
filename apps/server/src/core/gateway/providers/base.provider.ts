@@ -64,6 +64,7 @@ export interface ToolResult {
 export interface ModelInfo {
   id: string
   contextLength?: number
+  outputModalities?: string[]
 }
 
 export interface CompletionRequest {

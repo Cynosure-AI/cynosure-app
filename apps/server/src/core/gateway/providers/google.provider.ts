@@ -15,6 +15,7 @@ import {
   type ToolDefinition,
   type ModelInfo
 } from './base.provider.js'
+import { ensurePricingLoaded, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
 
 export class GoogleProvider extends BaseLLMProvider {
   readonly config: LLMProviderConfig
@@ -140,9 +141,18 @@ export class GoogleProvider extends BaseLLMProvider {
     }))
   }
 
+  private async supportsImageOutput(model: string): Promise<boolean> {
+    await ensurePricingLoaded().catch(() => { /* best-effort capability metadata */ })
+    const supportsImageOutput = modelSupportsOutputModality(this.config.type, model, 'image')
+    if (supportsImageOutput != null) return supportsImageOutput
+
+    return /(?:^|[-/])image(?:-|$)|image-preview/.test(model.toLowerCase())
+  }
+
   async complete(request: CompletionRequest): Promise<CompletionResponse> {
     const start = Date.now()
     const { systemInstruction, contents } = this.formatMessages(request.messages)
+    const model = request.model || this.config.defaultModel
 
     const config: Record<string, unknown> = {
       systemInstruction,
@@ -152,9 +162,12 @@ export class GoogleProvider extends BaseLLMProvider {
         : undefined
     }
     if (request.temperature != null) config.temperature = request.temperature
+    if (await this.supportsImageOutput(model)) {
+      config.responseModalities = ['TEXT', 'IMAGE']
+    }
 
     const response = await this.client.models.generateContent({
-      model: request.model || this.config.defaultModel,
+      model,
       contents,
       config
     })
@@ -200,7 +213,7 @@ export class GoogleProvider extends BaseLLMProvider {
         completionTokens: usage?.candidatesTokenCount || 0,
         totalTokens: usage?.totalTokenCount || 0
       },
-      model: request.model || this.config.defaultModel,
+      model,
       provider: this.config.id,
       latencyMs: Date.now() - start
     }
@@ -210,6 +223,7 @@ export class GoogleProvider extends BaseLLMProvider {
     request: CompletionRequest
   ): AsyncIterable<StreamChunk> {
     const { systemInstruction, contents } = this.formatMessages(request.messages)
+    const model = request.model || this.config.defaultModel
 
     const streamConfig: Record<string, unknown> = {
       systemInstruction,
@@ -219,9 +233,12 @@ export class GoogleProvider extends BaseLLMProvider {
         : undefined
     }
     if (request.temperature != null) streamConfig.temperature = request.temperature
+    if (await this.supportsImageOutput(model)) {
+      streamConfig.responseModalities = ['TEXT', 'IMAGE']
+    }
 
     const stream = await this.client.models.generateContentStream({
-      model: request.model || this.config.defaultModel,
+      model,
       contents,
       config: streamConfig
     })

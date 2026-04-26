@@ -192,6 +192,12 @@ const renderedContent = computed(() => {
 })
 
 const isUser = computed(() => props.role === 'user')
+const hasAssistantImages = computed(() => !isUser.value && Boolean(props.imageDataUrls?.length))
+const imageGridClass = computed(() => {
+  const count = props.imageDataUrls?.length || 0
+  if (count > 1) return 'grid grid-cols-2 md:grid-cols-3 gap-2 w-full min-w-72 max-w-3xl'
+  return 'w-full min-w-64 max-w-xl'
+})
 </script>
 
 <template>
@@ -418,7 +424,7 @@ const isUser = computed(() => props.role === 'user')
 
       <!-- Assistant message: rendered markdown -->
       <div
-        v-else-if="!isUser"
+        v-else-if="!isUser && content"
         ref="markdownRef"
         class="msg-markdown prose dark:prose-invert prose-sm max-w-none"
         @click="handleMarkdownClick"
@@ -427,15 +433,15 @@ const isUser = computed(() => props.role === 'user')
 
       <!-- Model-generated images (assistant) -->
       <div
-        v-if="!isUser && imageDataUrls?.length"
+        v-if="hasAssistantImages"
         class="mt-2"
-        :class="imageDataUrls.length > 1 ? 'grid grid-cols-2 md:grid-cols-3 gap-2' : ''"
+        :class="imageGridClass"
       >
         <img
           v-for="(url, idx) in imageDataUrls"
           :key="idx"
           :src="url"
-          class="w-full rounded-lg border border-zinc-600 cursor-pointer hover:opacity-80 transition-opacity object-cover"
+          class="w-full max-h-[70vh] rounded-lg border border-zinc-600 cursor-pointer hover:opacity-80 transition-opacity object-contain bg-zinc-950/50"
           title="Click to enlarge"
           @click="lightboxSrc = url"
         >

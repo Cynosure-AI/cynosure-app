@@ -166,6 +166,7 @@ export const useChatStore = defineStore('chat', () => {
           role: 'assistant',
           content: buf.content,
           thinking: buf.thinking || undefined,
+          imageDataUrls: buf.images.length ? buf.images : undefined,
           agentId: buf.agentId,
           agentName: buf.agentName,
           agentIconUrl: buf.agentIconUrl,

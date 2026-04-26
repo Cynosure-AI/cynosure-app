@@ -10,6 +10,7 @@ import {
   type ToolCall,
   type ModelInfo
 } from './base.provider.js'
+import { ensurePricingLoaded, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
 
 export class OpenAIProvider extends BaseLLMProvider {
   readonly config: LLMProviderConfig
@@ -137,31 +138,48 @@ export class OpenAIProvider extends BaseLLMProvider {
     return { instructions, input }
   }
 
+  private async supportsResponsesImageGeneration(model: string): Promise<boolean> {
+    if (this.config.type !== 'openai') return false
+    await ensurePricingLoaded().catch(() => { /* best-effort capability metadata */ })
+    const supportsImageOutput = modelSupportsOutputModality(this.config.type, model, 'image')
+    if (supportsImageOutput === true) return true
+
+    const match = model.toLowerCase().match(/^gpt-(\d+(?:\.\d+)?)(?:-|$)/)
+    if (!match) return false
+    return Number(match[1]) >= 5
+  }
+
   /** Build the tools array for the Responses API (function tools + image_generation where supported) */
   private formatToolsForResponses(
+    model: string,
+    supportsImageGeneration: boolean,
     tools?: import('./base.provider.js').ToolDefinition[]
   ): unknown[] | undefined {
-    if (!tools?.length) return undefined
-    const formatted: unknown[] = tools.map((t) => ({
-      type: 'function' as const,
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters,
-      strict: false
-    }))
-    // Include built-in image generation for providers that support it
-    if (this.config.type === 'openai' || this.config.type === 'grok') {
+    const formatted: unknown[] = tools?.length
+      ? tools.map((t) => ({
+        type: 'function' as const,
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+        strict: false
+      }))
+      : []
+
+    if (supportsImageGeneration) {
       formatted.push({ type: 'image_generation' })
     }
-    return formatted
+
+    return formatted.length ? formatted : undefined
   }
 
   protected async completeViaResponses(request: CompletionRequest): Promise<CompletionResponse> {
     const start = Date.now()
     const { instructions, input } = this.formatMessagesForResponses(request.messages)
 
+    const model = request.model || this.config.defaultModel
+    const supportsImageGeneration = await this.supportsResponsesImageGeneration(model)
     const params: Record<string, unknown> = {
-      model: request.model || this.config.defaultModel,
+      model,
       input,
       max_output_tokens: request.maxTokens,
       store: false,
@@ -169,7 +187,7 @@ export class OpenAIProvider extends BaseLLMProvider {
     }
     if (request.temperature != null) params.temperature = request.temperature
     if (instructions) params.instructions = instructions
-    const tools = this.formatToolsForResponses(request.tools)
+    const tools = this.formatToolsForResponses(model, supportsImageGeneration, request.tools)
     if (tools) params.tools = tools
     if (request.thinkingEnabled) {
       params.reasoning = { effort: 'medium', summary: 'auto' }
@@ -226,15 +244,17 @@ export class OpenAIProvider extends BaseLLMProvider {
   protected async *streamCompleteViaResponses(request: CompletionRequest): AsyncIterable<StreamChunk> {
     const { instructions, input } = this.formatMessagesForResponses(request.messages)
 
+    const model = request.model || this.config.defaultModel
+    const supportsImageGeneration = await this.supportsResponsesImageGeneration(model)
     const params: Record<string, unknown> = {
-      model: request.model || this.config.defaultModel,
+      model,
       input,
       max_output_tokens: request.maxTokens,
       store: false
     }
     if (request.temperature != null) params.temperature = request.temperature
     if (instructions) params.instructions = instructions
-    const tools = this.formatToolsForResponses(request.tools)
+    const tools = this.formatToolsForResponses(model, supportsImageGeneration, request.tools)
     if (tools) params.tools = tools
     if (request.thinkingEnabled) {
       params.reasoning = { effort: 'medium', summary: 'auto' }
