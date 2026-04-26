@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { getEmbeddingProvider } from '../memory/embedding.js'
 import { getDb } from '../../db/database.js'
+import { makeSearchAvailableMcpToolsTool } from '../tools/builtin/search-available-mcp-tools.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolDefinition } from '../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../tools/tool-registry.js'
@@ -9,13 +10,11 @@ export const MCP_CANDIDATE_COUNT = 8
 export const CONTEXT_WINDOW_TURNS = 5
 export const TOOL_COUNT_THRESHOLD = 20
 export const ROUTER_SELECTION_TOOL_NAME = 'select_relevant_tools'
-export const TOOL_SEARCH_TOOL_NAME = 'search_available_mcp_tools'
 
 const TURN_CHAR_LIMIT = 200
 const TOOL_DESCRIPTION_LIMIT = 320
 const MAX_CONFIRMED_TOOLS = 40
 const FALLBACK_TOOL_COUNT = 12
-const TOOL_SEARCH_LIMIT = 12
 
 interface McpToolGroup {
     id: string
@@ -219,7 +218,10 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
     let routedTools: ToolDefinition[] = []
-    const searchTool = buildToolSearchTool(allTools, () => routedTools)
+    const searchTool = makeSearchAvailableMcpToolsTool({
+        allTools,
+        getLoadedTools: () => routedTools,
+    })
 
     routedTools = dedupeTools([...selectedTools, ...stickyTools, searchTool])
     return routedTools
@@ -247,82 +249,6 @@ function buildRouterSelectionTool(candidateTools: ToolDefinition[]): ToolDefinit
         },
         execute: async () => ({ success: true, output: 'ok' }),
     }
-}
-
-function buildToolSearchTool(
-    allTools: ToolDefinition[],
-    getLoadedTools: () => ToolDefinition[],
-): ToolDefinition {
-    return {
-        name: TOOL_SEARCH_TOOL_NAME,
-        description:
-            'IMPORTANT TOOL: Search and load additional available tools when the current tools are insufficient or the wrong ones. Use this before saying a capability is unavailable.',
-        timeout: 1_000,
-        parameters: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-                query: {
-                    type: 'string',
-                    description:
-                        'Capability to search for, e.g. "gmail latest email", "calendar event", "github issue search" or "web content search".',
-                },
-                limit: {
-                    type: 'number',
-                    description: `Maximum tools to load. Defaults to ${TOOL_SEARCH_LIMIT}.`,
-                },
-            },
-            required: ['query'],
-        },
-        execute: async (params) => {
-            const { query, limit } = parseToolSearchArgs(params)
-
-            if (!query) {
-                return { success: false, output: 'Provide a non-empty query to search available tools.' }
-            }
-
-            const loadedTools = getLoadedTools()
-            const loadedNames = new Set(loadedTools.map(({ name }) => name))
-            const searchableTools = allTools.filter(
-                (tool) => isMcpTool(tool) && tool.name !== TOOL_SEARCH_TOOL_NAME && !loadedNames.has(tool.name),
-            )
-
-            const names = lexicalToolFallback(query, searchableTools, limit)
-            const matches = searchableTools.filter(({ name }) => names.includes(name))
-
-            for (const tool of matches) {
-                if (loadedNames.has(tool.name)) continue
-                loadedTools.push(tool)
-                loadedNames.add(tool.name)
-            }
-
-            if (!matches.length) {
-                return { success: true, output: `No additional tools found for "${query}".` }
-            }
-
-            return {
-                success: true,
-                output: [
-                    `Loaded ${matches.length} additional tool(s). They are available in the next tool-calling round:`,
-                    ...matches.map((tool) => `- ${tool.name}: ${compactToolDescription(tool.description)}`),
-                ].join('\n'),
-                loadedTools: matches,
-            }
-        },
-    }
-}
-
-function parseToolSearchArgs(params: unknown): { query: string; limit: number } {
-    const args = params && typeof params === 'object'
-        ? params as { query?: unknown; limit?: unknown }
-        : {}
-
-    const query = typeof args.query === 'string' ? args.query.trim() : ''
-    const limit = typeof args.limit === 'number'
-        ? Math.max(1, Math.min(TOOL_SEARCH_LIMIT, Math.floor(args.limit)))
-        : TOOL_SEARCH_LIMIT
-
-    return { query, limit }
 }
 
 function messageContentForRouter(content: string | ContentPart[]): string {
