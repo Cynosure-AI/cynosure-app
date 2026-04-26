@@ -5,6 +5,7 @@ import { getHITLGate } from './hitl-gate.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolCall, ToolDefinition } from '../gateway/providers/base.provider.js'
+import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -500,8 +501,15 @@ export class AgentExecutor {
                     this.emit('step:thinking', { conversationId, thinking: chunk.thinking })
                 }
                 if (chunk.images?.length) {
-                    images.push(...chunk.images)
-                    broadcast(`${this._sp}-images`, { streamId, conversationId, images: chunk.images })
+                    let artifactUrls = chunk.images
+                    try {
+                        const artifacts = await materializeImageArtifacts(chunk.images, conversationId)
+                        artifactUrls = artifacts.map((artifact) => artifact.url)
+                    } catch (err) {
+                        console.warn('[artifacts] Failed to materialize generated image:', err instanceof Error ? err.message : err)
+                    }
+                    images.push(...artifactUrls)
+                    broadcast(`${this._sp}-images`, { streamId, conversationId, images: artifactUrls })
                 }
                 if (chunk.toolCalls?.length) toolCalls = chunk.toolCalls
                 if (chunk.usage) usage = chunk.usage

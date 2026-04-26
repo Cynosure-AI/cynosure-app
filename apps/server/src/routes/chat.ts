@@ -15,6 +15,7 @@ import type { ChatMessage, ContentPart, ToolDefinition } from '../core/gateway/p
 import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
+import { extractFilePathFromFileUrl } from '../core/artifacts/image-artifacts.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -28,6 +29,16 @@ export interface ActiveChatExecution {
 
 const activeChatExecutions = new Map<string, ActiveChatExecution>()
 const activeAbortControllers = new Map<string, AbortController>()
+
+interface ChatHistoryRow {
+  role: string
+  content: string
+  tool_calls_json: string | null
+  tool_call_id: string | null
+  agent_id: string | null
+  image_urls_json: string | null
+  created_at: number
+}
 
 /** Return all currently running chat executions. */
 export function getActiveChatExecutions(): ActiveChatExecution[] {
@@ -72,6 +83,65 @@ function withConversationLock<T>(conversationId: string, fn: () => Promise<T>): 
     }
   })
   return next
+}
+
+function buildRecentImageArtifactsSystemHint(rows: ChatHistoryRow[], limit = 5): string | null {
+  const artifacts: { path: string; url: string }[] = []
+  const seen = new Set<string>()
+
+  for (let i = rows.length - 1; i >= 0 && artifacts.length < limit; i--) {
+    const row = rows[i]
+    if (row.role !== 'assistant' || !row.image_urls_json) continue
+    try {
+      const urls = JSON.parse(row.image_urls_json) as string[]
+      for (let j = urls.length - 1; j >= 0 && artifacts.length < limit; j--) {
+        const url = urls[j]
+        const path = extractFilePathFromFileUrl(url)
+        if (!path || seen.has(path)) continue
+        seen.add(path)
+        artifacts.push({ path, url })
+      }
+    } catch {
+      // Ignore malformed image metadata.
+    }
+  }
+
+  if (!artifacts.length) return null
+
+  const lines = artifacts.map((artifact, index) => (
+    `${index === 0 ? 'latest generated image' : `generated image ${index + 1}`}: path=${artifact.path}; url=${artifact.url}`
+  ))
+
+  return [
+    'Recent generated image artifacts are available for follow-up file/tool operations.',
+    'Use these absolute paths when the user refers to "the image", "that image", "the last generated image", or asks to save/upload/edit a generated image.',
+    ...lines,
+  ].join('\n')
+}
+
+function appendHiddenSystemContext(messages: ChatMessage[], hint: string | null): ChatMessage[] {
+  if (!hint) return messages
+  let systemIndex = -1
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'system') {
+      systemIndex = i
+      break
+    }
+  }
+  if (systemIndex === -1) {
+    return [{ role: 'system', content: hint }, ...messages]
+  }
+
+  return messages.map((message, index) => {
+    if (index !== systemIndex) return message
+    const content = typeof message.content === 'string'
+      ? message.content
+      : message.content.filter((part) => part.type === 'text').map((part) => part.text).join('\n')
+    return {
+      ...message,
+      content: `${content}\n\n${hint}`
+    }
+  })
 }
 
 export async function registerChatRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
@@ -167,15 +237,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       // Build message history
       const historyRows = db
         .prepare(
-          'SELECT role, content, tool_calls_json, tool_call_id, agent_id FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
+          'SELECT role, content, tool_calls_json, tool_call_id, agent_id, image_urls_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
         )
-        .all(conversationId) as {
-          role: string
-          content: string
-          tool_calls_json: string | null
-          tool_call_id: string | null
-          agent_id: string | null
-        }[]
+        .all(conversationId) as ChatHistoryRow[]
 
       // Filter out sub-agent intermediate messages.
       // Keep: user messages, main-agent assistant messages + their tool results.
@@ -374,6 +438,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
         tools = hydrateBuiltInTools(tools, { agentId: undefined, conversationId, broadcast, memorySpaceOverrides })
       }
+
+      messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
       const streamId = nanoid()
       activeAbortControllers.set(streamId, abortController)
