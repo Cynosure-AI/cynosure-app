@@ -520,7 +520,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
                     <html><body style="font-family:system-ui;text-align:center;padding:80px 20px">
                         <h2 style="color:#22c55e">Authorization Complete</h2>
                         <p style="color:#a1a1aa">${tools.length} tool(s) connected successfully.</p>
-                        <p style="color:#71717a;font-size:14px">You can close this window and return to Open Agent.</p>
+                        <p style="color:#71717a;font-size:14px">You can close this window and return to Cynosure.</p>
                         <script>setTimeout(function(){ window.close() }, 2000)</script>
                     </body></html>
                 `)
