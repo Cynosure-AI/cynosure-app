@@ -14,13 +14,18 @@ import {
 export class OpenAIProvider extends BaseLLMProvider {
   readonly config: LLMProviderConfig
   protected client: OpenAI
+  protected get defaultBaseUrl(): string { return 'https://api.openai.com/v1' }
+  protected get allowsCustomBaseUrl(): boolean { return false }
 
   constructor(config: LLMProviderConfig) {
     super()
-    this.config = config
+    const baseUrl = this.allowsCustomBaseUrl
+      ? config.baseUrl || this.defaultBaseUrl
+      : this.defaultBaseUrl
+    this.config = { ...config, baseUrl }
     this.client = new OpenAI({
       apiKey: config.apiKey || 'not-set',
-      baseURL: config.baseUrl
+      baseURL: baseUrl
     })
   }
 

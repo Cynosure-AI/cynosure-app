@@ -17,6 +17,7 @@ const showApiKey = ref(false)
 const testResult = ref<Map<string, boolean>>(new Map())
 const fetchedModels = ref<string[]>([])
 const loadingModels = ref(false)
+type ProviderType = LLMProviderConfig['type']
 
 const newProvider = reactive<{
   name: string
@@ -32,7 +33,7 @@ const newProvider = reactive<{
   defaultModel: ''
 })
 
-const defaultBaseUrls: Record<string, string> = {
+const defaultBaseUrls: Record<ProviderType, string> = {
   openai: 'https://api.openai.com/v1',
   anthropic: 'https://api.anthropic.com',
   google: '',
@@ -44,7 +45,7 @@ const defaultBaseUrls: Record<string, string> = {
   mistral: 'https://api.mistral.ai/v1'
 }
 
-const defaultModels: Record<string, string> = {
+const defaultModels: Record<ProviderType, string> = {
   openai: 'gpt-4o',
   anthropic: 'claude-sonnet-4-20250514',
   google: 'gemini-3.1-flash-lite-preview',
@@ -56,8 +57,22 @@ const defaultModels: Record<string, string> = {
   mistral: 'mistral-large-latest'
 }
 
+const providerTypesWithEditableBaseUrl = new Set<ProviderType>(['lmstudio', 'ollama'])
+const hasEditableBaseUrl = computed(() => providerTypesWithEditableBaseUrl.has(newProvider.type))
+const resolvedBaseUrl = computed(() => getProviderBaseUrl(newProvider.type, newProvider.baseUrl))
+const canSaveProvider = computed(() =>
+  Boolean(newProvider.name && newProvider.defaultModel && (!hasEditableBaseUrl.value || newProvider.baseUrl))
+)
+
+function getProviderBaseUrl(type: ProviderType, baseUrl?: string): string {
+  if (providerTypesWithEditableBaseUrl.has(type)) {
+    return baseUrl || defaultBaseUrls[type]
+  }
+  return defaultBaseUrls[type]
+}
+
 function onTypeChange(): void {
-  newProvider.baseUrl = defaultBaseUrls[newProvider.type] || ''
+  newProvider.baseUrl = getProviderBaseUrl(newProvider.type)
   newProvider.defaultModel = defaultModels[newProvider.type] || ''
   if (!newProvider.name) {
     newProvider.name = newProvider.type.charAt(0).toUpperCase() + newProvider.type.slice(1)
@@ -80,7 +95,7 @@ async function fetchModelsForNew(): Promise<void> {
   // We need at least the apiKey (for cloud providers) or baseUrl (for local)
   const needsKey = newProvider.type !== 'lmstudio' && newProvider.type !== 'ollama'
   if (needsKey && !newProvider.apiKey) return
-  if ((newProvider.type === 'lmstudio' || newProvider.type === 'ollama') && !newProvider.baseUrl) return
+  if (hasEditableBaseUrl.value && !newProvider.baseUrl) return
 
   // Temporarily register provider, fetch models, then clean up
   const tempId = '__temp_model_fetch__'
@@ -88,7 +103,7 @@ async function fetchModelsForNew(): Promise<void> {
     id: tempId,
     name: 'temp',
     type: newProvider.type,
-    baseUrl: newProvider.baseUrl,
+    baseUrl: resolvedBaseUrl.value,
     apiKey: newProvider.apiKey || undefined,
     defaultModel: newProvider.defaultModel || 'temp',
     availableModels: [],
@@ -114,7 +129,7 @@ async function addProvider(): Promise<void> {
     id: editingProviderId.value || '',
     name: newProvider.name,
     type: newProvider.type,
-    baseUrl: newProvider.baseUrl,
+    baseUrl: resolvedBaseUrl.value,
     apiKey: newProvider.apiKey || undefined,
     defaultModel: newProvider.defaultModel,
     availableModels: [],
@@ -136,7 +151,7 @@ async function addProvider(): Promise<void> {
   // Reset form
   newProvider.name = ''
   newProvider.type = 'openai'
-  newProvider.baseUrl = ''
+  newProvider.baseUrl = getProviderBaseUrl(newProvider.type)
   newProvider.apiKey = ''
   newProvider.defaultModel = ''
   editingProviderId.value = null
@@ -147,7 +162,7 @@ function startAddProvider(): void {
   editingProviderId.value = null
   newProvider.name = ''
   newProvider.type = 'openai'
-  newProvider.baseUrl = ''
+  newProvider.baseUrl = getProviderBaseUrl(newProvider.type)
   newProvider.apiKey = ''
   newProvider.defaultModel = ''
   fetchedModels.value = []
@@ -158,7 +173,7 @@ function startEditProvider(provider: LLMProviderConfig): void {
   editingProviderId.value = provider.id
   newProvider.name = provider.name
   newProvider.type = provider.type
-  newProvider.baseUrl = provider.baseUrl
+  newProvider.baseUrl = getProviderBaseUrl(provider.type, provider.baseUrl)
   newProvider.apiKey = provider.apiKey || ''
   newProvider.defaultModel = provider.defaultModel
   fetchedModels.value = []
@@ -286,12 +301,12 @@ function getProviderIcon(type: string): string {
         </div>
       </div>
 
-      <div>
+      <div v-if="hasEditableBaseUrl">
         <label class="block text-sm text-zinc-400 mb-1">Base URL</label>
         <input
           v-model="newProvider.baseUrl"
           type="text"
-          placeholder="https://api.openai.com/v1"
+          :placeholder="defaultBaseUrls[newProvider.type]"
           class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
         >
       </div>
@@ -361,7 +376,7 @@ function getProviderIcon(type: string): string {
       </div>
 
       <button
-        :disabled="!newProvider.name || !newProvider.defaultModel"
+        :disabled="!canSaveProvider"
         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded-lg transition-colors"
         @click="addProvider"
       >

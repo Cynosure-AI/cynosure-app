@@ -17,10 +17,12 @@ interface LMStudioModel {
  * Supports vision models for image input.
  */
 export class LMStudioProvider extends OpenAIProvider {
+  protected override get defaultBaseUrl(): string { return 'http://localhost:1234/v1' }
+  protected override get allowsCustomBaseUrl(): boolean { return true }
+
   constructor(config: LLMProviderConfig) {
     super({
       ...config,
-      baseUrl: config.baseUrl || 'http://localhost:1234/v1',
       apiKey: config.apiKey || 'lm-studio' // LMStudio doesn't require a real key
     })
   }
