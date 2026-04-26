@@ -15,6 +15,10 @@ export interface ToolNamespace {
   description?: string // Optional longer description for UI/tool discovery purposes
 }
 
+export interface ToolNamespaceMetadata extends ToolNamespace {
+  toolCount: number
+}
+
 export interface RegisteredToolInfo {
   /** Stable persisted identifier: `namespaceId::toolName` */
   key: string
@@ -92,8 +96,30 @@ export class ToolRegistry {
     return `${uniqueSlug}__${entry.tool.name}`
   }
 
+  private cleanToolDescription(tool: ToolDefinition): string {
+    return tool.description.replace(/^\[MCP:\s*[^\]]*\]\s*/, '').trim()
+  }
+
+  private deriveNamespaceDescription(namespace: ToolNamespace, tools: ToolDefinition[]): string | undefined {
+    if (namespace.description?.trim()) return namespace.description.trim()
+
+    const samples = tools
+      .slice(0, 8)
+      .map((tool) => `${tool.name}: ${this.cleanToolDescription(tool)}`)
+      .join('\n')
+      .trim()
+
+    return samples || undefined
+  }
+
   private aliasTool(key: string, entry: ToolEntry, executionName: string): ToolDefinition {
-    const metadata = { registryKey: key, originalName: entry.tool.name, namespaceId: entry.namespace.id }
+    const metadata = {
+      registryKey: key,
+      originalName: entry.tool.name,
+      namespaceId: entry.namespace.id,
+      namespaceLabel: entry.namespace.label,
+      namespaceDescription: entry.namespace.description,
+    }
     if (executionName === entry.tool.name) return { ...entry.tool, ...metadata }
     return { ...entry.tool, ...metadata, name: executionName }
   }
@@ -144,6 +170,39 @@ export class ToolRegistry {
 
   getAllWithNamespaces(): { tool: ToolDefinition; namespace: ToolNamespace }[] {
     return [...this.entries.values()].map(({ tool, namespace }) => ({ tool, namespace }))
+  }
+
+  getNamespaceMetadataForTools(tools: ToolDefinition[]): ToolNamespaceMetadata[] {
+    const groups = new Map<string, { namespace: ToolNamespace; tools: ToolDefinition[] }>()
+
+    for (const tool of tools) {
+      let namespace: ToolNamespace | undefined
+      if (tool.registryKey) {
+        namespace = this.entries.get(tool.registryKey)?.namespace
+      }
+      if (!namespace && tool.namespaceId) {
+        namespace = {
+          id: tool.namespaceId,
+          label: tool.namespaceLabel || tool.namespaceId,
+          description: tool.namespaceDescription,
+        }
+      }
+      if (!namespace) continue
+
+      const group = groups.get(namespace.id)
+      if (group) {
+        group.tools.push(tool)
+      } else {
+        groups.set(namespace.id, { namespace, tools: [tool] })
+      }
+    }
+
+    return [...groups.values()].map(({ namespace, tools: namespaceTools }) => ({
+      id: namespace.id,
+      label: namespace.label,
+      description: this.deriveNamespaceDescription(namespace, namespaceTools),
+      toolCount: namespaceTools.length,
+    }))
   }
 
   listRegisteredTools(): RegisteredToolInfo[] {

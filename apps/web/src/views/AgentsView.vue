@@ -82,6 +82,7 @@ async function createAgent() {
     cronPrompt: '',
     tools: [],
     autoApproveTools: false,
+    autoToolRouting: false,
     generateTitle: true
   })
   showCreateDialog.value = false

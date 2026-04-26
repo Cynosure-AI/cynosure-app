@@ -164,6 +164,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         conversationId,
         broadcast: ctx.broadcast,
         userQuery: userText,
+        recentMessages: messages,
         isFirstMessage: isFirstUserMessage,
         signal: AbortSignal.timeout(300_000),
     })

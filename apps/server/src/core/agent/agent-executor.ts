@@ -64,6 +64,8 @@ export interface AgentExecutorConfig {
     initialContextEstimate?: number
     /** Context window management strategy (default: 'sliding-window') */
     contextStrategy?: ContextStrategy
+    /** Mutable set populated with tool names invoked during this execution turn. */
+    usedToolNames?: Set<string>
 }
 
 export interface AgentExecutorResult {
@@ -442,7 +444,7 @@ export class AgentExecutor {
             {
                 role: 'user' as const,
                 content: reason
-                    ? `I denied that action because: ${reason}. Please take a completely different approach that respects this constraint, or answer directly from what you already know. Do not retry the denied tool(s).`
+                    ? `I denied that action because: ${reason}. Please take a completely different approach that respects this constraint, or answer directly from what you already know.`
                     : `I denied that tool call. Please take a different approach or answer directly. Do not retry the denied tool(s).`,
             }
         )
@@ -594,6 +596,9 @@ export class AgentExecutor {
 
     /** Execute an array of tool calls concurrently and return results in original order. */
     private async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolCallResult[]> {
+        for (const tc of toolCalls) {
+            this.config.usedToolNames?.add(tc.function.name)
+        }
         return Promise.all(toolCalls.map(tc => this.executeSingleToolCall(tc)))
     }
 
@@ -627,6 +632,9 @@ export class AgentExecutor {
             if (typeof res === 'string') {
                 return { toolCallId: tc.id, name: tc.function.name, output: res, success: true }
             }
+            if (res?.loadedTools?.length) {
+                this.addLoadedTools(res.loadedTools)
+            }
             return {
                 toolCallId: tc.id,
                 name: tc.function.name,
@@ -637,6 +645,16 @@ export class AgentExecutor {
             }
         } catch (err) {
             return { toolCallId: tc.id, name: tc.function.name, output: `Error: ${(err as Error).message}`, success: false }
+        }
+    }
+
+    private addLoadedTools(tools: ToolDefinition[]): void {
+        const existingNames = new Set(this.config.tools.map(tool => tool.name))
+
+        for (const tool of tools) {
+            if (existingNames.has(tool.name)) continue
+            this.config.tools.push(tool)
+            existingNames.add(tool.name)
         }
     }
 

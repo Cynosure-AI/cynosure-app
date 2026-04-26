@@ -1,11 +1,70 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted } from 'vue'
 import type { AgentDefinition } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
+import ProviderSelect from '../shared/ProviderSelect.vue'
+import ModelSelect from '../shared/ModelSelect.vue'
+import { useProviderStore } from '../../stores/provider.store'
+import { usePreferencesStore } from '../../stores/preferences.store'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
+
+const AGENT_ROUTER_PROVIDER = '__agent_provider__'
+const AGENT_ROUTER_MODEL = '__agent_model__'
+
+const providerStore = useProviderStore()
+const prefs = usePreferencesStore()
+
+const toolRouterModels = ref<string[]>([])
+const toolRouterLoadingModels = ref(false)
+
+const effectiveToolRouterProviderId = computed(() =>
+  props.agent.toolRouterProviderId === AGENT_ROUTER_PROVIDER
+    ? props.agent.providerId
+    : props.agent.toolRouterProviderId || prefs.toolRouterProviderId || props.agent.providerId || ''
+)
+
+const toolRouterProviderOptions = [
+  { value: AGENT_ROUTER_PROVIDER, label: 'Use agent provider', iconName: 'lucide:bot' },
+]
+
+const toolRouterModelOptions = [
+  { value: AGENT_ROUTER_MODEL, label: 'Use agent model', iconName: 'lucide:bot' },
+]
+
+const isUsingAgentRouterProvider = computed(() => props.agent.toolRouterProviderId === AGENT_ROUTER_PROVIDER)
+
+async function fetchToolRouterModels(providerId: string) {
+  if (!providerId) {
+    toolRouterModels.value = []
+    return
+  }
+  toolRouterLoadingModels.value = true
+  try {
+    toolRouterModels.value = await providerStore.listModels(providerId, 'llm')
+  } catch {
+    toolRouterModels.value = []
+  } finally {
+    toolRouterLoadingModels.value = false
+  }
+}
+
+onMounted(() => {
+  if (providerStore.providers.length === 0) {
+    providerStore.loadProviders()
+  }
+})
+
+watch(() => props.agent.toolRouterProviderId, (_id, oldId) => {
+  if (oldId === undefined) return
+  emit('update', 'toolRouterModel', isUsingAgentRouterProvider.value ? AGENT_ROUTER_MODEL : '')
+})
+
+watch(effectiveToolRouterProviderId, (providerId) => {
+  fetchToolRouterModels(providerId)
+}, { immediate: true })
 
 // ── Max Context Tokens local state ──
 const maxCtxEnabled = computed(() => typeof props.agent.maxContextTokens === 'number' && props.agent.maxContextTokens > 0)
@@ -91,6 +150,56 @@ function onMaxCtxBlur() {
           class="mt-0.5"
           @update:model-value="emit('update', 'showInCarousel', $event)"
         />
+      </div>
+    </div>
+
+    <!-- Tool Router Model -->
+    <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
+      <div class="flex items-start gap-4">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            <Icon
+              icon="lucide:route"
+              class="w-4 h-4 text-emerald-400"
+            />
+            <h3 class="text-sm font-medium text-zinc-200">
+              Tool Router Model
+            </h3>
+          </div>
+          <p class="text-xs text-zinc-500 leading-relaxed">
+            Override the provider and model this agent uses when auto tool routing is enabled.
+            Leave blank to use the global router settings from Preferences.
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-4 border-t border-zinc-700">
+            <div>
+              <label class="block text-xs text-zinc-400 mb-1.5">Provider</label>
+              <ProviderSelect
+                :model-value="agent.toolRouterProviderId || ''"
+                :providers="providerStore.providers"
+                include-default
+                default-label="Use global router provider"
+                placeholder="Use global router provider"
+                :leading-options="toolRouterProviderOptions"
+                @update:model-value="emit('update', 'toolRouterProviderId', $event)"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-400 mb-1.5">Model</label>
+              <ModelSelect
+                :model-value="agent.toolRouterModel || ''"
+                :models="toolRouterModels"
+                include-default
+                :default-label="toolRouterLoadingModels ? 'Loading models...' : 'Use global router model'"
+                :placeholder="toolRouterLoadingModels ? 'Loading models...' : 'Use global router model'"
+                :disable-default="isUsingAgentRouterProvider"
+                :leading-options="toolRouterModelOptions"
+                :filterable="true"
+                @update:model-value="emit('update', 'toolRouterModel', $event)"
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

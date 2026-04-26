@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAgentStore } from '../../../stores/agent-runtime.store'
+import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
 import ToolSelectorModal from '../modals/ToolSelectorModal.vue'
 
 const agentStore = useAgentStore()
+const chatStore = useChatStore()
 
 const showModal = ref(false)
 
@@ -46,14 +48,28 @@ const missingTools = computed(() => {
       </span>
       <span
         v-else
-        class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-blue-600"
+        class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none"
+        :class="chatStore.sessionAutoToolRouting ? 'bg-emerald-600' : 'bg-blue-600'"
       >
-        {{ agentStore.selectedToolNames.length }}
+        <Icon
+          v-if="chatStore.sessionAutoToolRouting"
+          icon="lucide:sparkles"
+          class="w-2.5 h-2.5"
+        />
+        <template v-else>
+          {{ agentStore.selectedToolNames.length }}
+        </template>
       </span>
     </button>
     <template #content>
       <div class="font-medium text-zinc-300 mb-1.5">
         Tools ({{ agentStore.selectedToolNames.length }}/{{ agentStore.availableTools.length }})
+      </div>
+      <div
+        v-if="chatStore.sessionAutoToolRouting"
+        class="mb-1.5 px-1 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px]"
+      >
+        Auto-selection enabled
       </div>
       <template v-if="missingTools.length">
         <div class="mb-1.5 px-1 py-1 rounded bg-amber-500/10 border border-amber-500/20">

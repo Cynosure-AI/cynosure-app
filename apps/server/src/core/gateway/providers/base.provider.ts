@@ -48,6 +48,10 @@ export interface ToolDefinition {
   originalName?: string
   /** Namespace ID, when this tool came from the global registry. */
   namespaceId?: string
+  /** Human-readable namespace label, when this tool came from the global registry. */
+  namespaceLabel?: string
+  /** Namespace-level description, when provided by the upstream tool source. */
+  namespaceDescription?: string
   execute: (params: unknown) => Promise<ToolResult>
 }
 
@@ -55,6 +59,8 @@ export interface ToolResult {
   success: boolean
   output: string
   error?: string
+  /** Internal-only: additional tools to expose on subsequent LLM rounds. */
+  loadedTools?: ToolDefinition[]
   /** File-path URLs for UI display (e.g. /api/files?path=...) */
   images?: string[]
   /** Base64 data-URL images for LLM vision (e.g. data:image/png;base64,...) */
@@ -73,6 +79,8 @@ export interface CompletionRequest {
   temperature?: number
   maxTokens?: number
   tools?: ToolDefinition[]
+  /** Force a specific tool/function call when the provider supports it. */
+  toolChoice?: { type: 'function'; name: string }
   stream?: boolean
   signal?: AbortSignal
   /** Enable reasoning/thinking tokens (default: true) */

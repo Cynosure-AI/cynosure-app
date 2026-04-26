@@ -126,7 +126,8 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 const agentRows = db.prepare(
                     `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
                      category, sub_agents_json, auto_approve_tools, show_in_carousel, thinking_enabled,
-                     max_context_tokens, sort_order, cron_prompt, icon_mime, created_at, updated_at
+                     max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
+                     sort_order, cron_prompt, icon_mime, created_at, updated_at
                      FROM agents ORDER BY created_at`
                 ).all() as Record<string, unknown>[]
 
@@ -342,9 +343,10 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                             db.prepare(
                                 `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json,
                                  icon_url, codename, category, sub_agents_json, auto_approve_tools, show_in_carousel,
-                                 thinking_enabled, max_context_tokens, sort_order, cron_prompt, icon_data, icon_mime,
+                                 thinking_enabled, max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
+                                 sort_order, cron_prompt, icon_data, icon_mime,
                                  created_at, updated_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 row.id,
                                 row.name || '',
@@ -361,6 +363,9 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 row.show_in_carousel ?? 1,
                                 row.thinking_enabled ?? 1,
                                 row.max_context_tokens ?? null,
+                                row.auto_tool_routing ?? 0,
+                                row.tool_router_provider_id || '',
+                                row.tool_router_model || '',
                                 row.sort_order ?? 0,
                                 row.cron_prompt || '',
                                 iconData,

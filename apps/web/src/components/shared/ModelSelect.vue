@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import CustomSelect, { type SelectOptionGroup } from './CustomSelect.vue'
+import CustomSelect, { type SelectOption, type SelectOptionGroup } from './CustomSelect.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -10,6 +10,10 @@ const props = withDefaults(
     includeDefault?: boolean
     /** Label for the default entry */
     defaultLabel?: string
+    /** Disable the default entry when a parent setting makes it invalid */
+    disableDefault?: boolean
+    /** Extra options inserted after the default entry and before models */
+    leadingOptions?: SelectOption[]
     placeholder?: string
     maxHeight?: string
     filterable?: boolean
@@ -21,6 +25,8 @@ const props = withDefaults(
   {
     includeDefault: false,
     defaultLabel: 'Use provider default',
+    disableDefault: false,
+    leadingOptions: () => [],
     placeholder: 'Select a model…',
     maxHeight: 'max-h-80',
     filterable: true,
@@ -42,7 +48,8 @@ const groups = computed((): SelectOptionGroup[] => {
   if (props.includeDefault) {
     return [{
       options: [
-        { value: '', label: props.defaultLabel, iconName: 'lucide:settings' },
+        { value: '', label: props.defaultLabel, iconName: 'lucide:settings', disabled: props.disableDefault },
+        ...props.leadingOptions,
         ...modelOptions,
       ],
     }]
