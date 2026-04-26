@@ -5,6 +5,7 @@ import { getToolRegistry, type ToolNamespace } from '../../core/tools/tool-regis
 import { nanoid } from 'nanoid'
 import { readFileSync } from 'fs'
 import { registerMcpTools, findMcpIcon, findEnvHints, type McpEnvHint } from './utils.js'
+import { renderOAuthCallbackPage } from './oauth-callback-page.js'
 
 type McpServerRow = {
     id: string
@@ -483,22 +484,20 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
             const { code, error: oauthError } = req.query
 
             if (oauthError) {
-                return reply.type('text/html').send(`
-                    <html><body style="font-family:system-ui;text-align:center;padding:80px 20px">
-                        <h2 style="color:#ef4444">Authorization Failed</h2>
-                        <p style="color:#71717a">Error: ${oauthError.replace(/</g, '&lt;')}</p>
-                        <p style="color:#a1a1aa;font-size:14px">You can close this window.</p>
-                    </body></html>
-                `)
+                return reply.type('text/html').send(renderOAuthCallbackPage({
+                    title: 'Authorization Failed',
+                    message: 'Cynosure could not complete authorization for this MCP server.',
+                    detail: `Error: ${oauthError}`,
+                    variant: 'error',
+                }))
             }
 
             if (!code) {
-                return reply.status(400).type('text/html').send(`
-                    <html><body style="font-family:system-ui;text-align:center;padding:80px 20px">
-                        <h2 style="color:#ef4444">Missing Authorization Code</h2>
-                        <p style="color:#a1a1aa;font-size:14px">No code was provided in the callback.</p>
-                    </body></html>
-                `)
+                return reply.status(400).type('text/html').send(renderOAuthCallbackPage({
+                    title: 'Missing Authorization Code',
+                    message: 'No authorization code was provided in the callback.',
+                    variant: 'warning',
+                }))
             }
 
             const manager = getMcpManager()
@@ -516,22 +515,19 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
                     registerMcpTools(tools, ns, registry)
                 }
 
-                return reply.type('text/html').send(`
-                    <html><body style="font-family:system-ui;text-align:center;padding:80px 20px">
-                        <h2 style="color:#22c55e">Authorization Complete</h2>
-                        <p style="color:#a1a1aa">${tools.length} tool(s) connected successfully.</p>
-                        <p style="color:#71717a;font-size:14px">You can close this window and return to Cynosure.</p>
-                        <script>setTimeout(function(){ window.close() }, 2000)</script>
-                    </body></html>
-                `)
+                return reply.type('text/html').send(renderOAuthCallbackPage({
+                    title: 'Authorization Complete',
+                    message: `${tools.length} tool(s) connected successfully. You can return to Cynosure.`,
+                    variant: 'success',
+                    autoClose: true,
+                }))
             } catch (err) {
-                return reply.status(500).type('text/html').send(`
-                    <html><body style="font-family:system-ui;text-align:center;padding:80px 20px">
-                        <h2 style="color:#ef4444">Connection Failed</h2>
-                        <p style="color:#71717a">${(err as Error).message?.replace(/</g, '&lt;') || 'Unknown error'}</p>
-                        <p style="color:#a1a1aa;font-size:14px">You can close this window and try again.</p>
-                    </body></html>
-                `)
+                return reply.status(500).type('text/html').send(renderOAuthCallbackPage({
+                    title: 'Connection Failed',
+                    message: 'Cynosure received the callback, but could not connect the MCP server.',
+                    detail: (err as Error).message || 'Unknown error',
+                    variant: 'error',
+                }))
             }
         }
     )
