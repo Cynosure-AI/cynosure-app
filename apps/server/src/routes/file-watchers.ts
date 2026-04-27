@@ -48,6 +48,7 @@ export async function registerFileWatcherRoutes(app: FastifyInstance): Promise<v
             enabled?: boolean
             modelOverride?: string
             providerOverride?: string
+            outputChannelId?: string
         }
     }>('/', async (req, reply) => {
         const { agentId, paths } = req.body
@@ -78,6 +79,7 @@ export async function registerFileWatcherRoutes(app: FastifyInstance): Promise<v
             enabled?: boolean
             modelOverride?: string
             providerOverride?: string
+            outputChannelId?: string
         }
     }>('/:id', async (req, reply) => {
         const watcher = updateFileWatcher(req.params.id, req.body)

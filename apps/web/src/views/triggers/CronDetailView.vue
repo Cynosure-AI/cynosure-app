@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../../api/client'
-import type { AgentDefinition, CronJob } from '../../api/types'
+import type { AgentDefinition, ChannelDefinition, CronJob } from '../../api/types'
 import { useProviderStore } from '../../stores/provider.store'
 import { Icon } from '@iconify/vue'
 import AgentSelect from '../../components/shared/AgentSelect.vue'
@@ -21,6 +21,7 @@ const providerStore = useProviderStore()
 
 const job = ref<CronJob | null>(null)
 const allAgents = ref<AgentDefinition[]>([])
+const allChannels = ref<ChannelDefinition[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const saveMessage = ref('')
@@ -42,6 +43,7 @@ const cronPrompt = ref('')
 const cronOneOff = ref(false)
 const cronModelOverride = ref('')
 const cronProviderOverride = ref('')
+const cronOutputChannelId = ref('')
 const cronModels = ref<string[]>([])
 const loadingModels = ref(false)
 
@@ -71,6 +73,7 @@ function populateFields(j: CronJob) {
   cronOneOff.value = j.oneOff
   cronModelOverride.value = j.modelOverride || ''
   cronProviderOverride.value = j.providerOverride || ''
+  cronOutputChannelId.value = j.outputChannelId || ''
 
   const p = parseCronExpr(j.schedule)
   dlgFrequency.value = p.frequency
@@ -85,11 +88,13 @@ function populateFields(j: CronJob) {
 async function loadJob() {
   loading.value = true
   try {
-    const [jobs, agents] = await Promise.all([
+    const [jobs, agents, channels] = await Promise.all([
       api.cronJobs.list(),
       api.agents.list(),
+      api.channels.list(),
     ])
     allAgents.value = agents
+    allChannels.value = channels
     const found = jobs.find(j => j.id === jobId.value)
     if (!found) {
       router.push('/triggers/cron')
@@ -117,6 +122,7 @@ async function save() {
       oneOff: cronOneOff.value,
       modelOverride: cronModelOverride.value,
       providerOverride: cronProviderOverride.value,
+      outputChannelId: cronOutputChannelId.value,
     })
     saveMessage.value = 'Saved'
     setTimeout(() => saveMessage.value = '', 2000)
@@ -536,6 +542,29 @@ watch(cronPrompt, resizePrompt, { immediate: true })
                 </button>
               </div>
             </div>
+          </div>
+
+          <!-- Output Channel -->
+          <div>
+            <label class="block text-xs text-zinc-400 mb-1">Output channel (optional)</label>
+            <p class="text-[11px] text-zinc-600 mb-1.5">
+              Send the agent's result to a messaging channel after each run.
+            </p>
+            <select
+              v-model="cronOutputChannelId"
+              class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">
+                None
+              </option>
+              <option
+                v-for="ch in allChannels"
+                :key="ch.id"
+                :value="ch.id"
+              >
+                {{ ch.name }} ({{ ch.type }})
+              </option>
+            </select>
           </div>
 
           <!-- Prompt -->

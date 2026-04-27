@@ -52,4 +52,12 @@ export interface ChannelProvider {
 
     /** Re-register platform commands (e.g. Telegram bot menu) after agent changes. */
     refreshCommands?(): Promise<void>
+
+    /**
+     * Send a proactive notification to a specific target within this channel.
+     * For Telegram: target is a numeric chat ID (as string).
+     * For Discord:  target is a Discord text-channel ID.
+     * For Slack:    target is a Slack channel ID (e.g. C012AB3CD).
+     */
+    sendNotification?(target: string, text: string): Promise<void>
 }
