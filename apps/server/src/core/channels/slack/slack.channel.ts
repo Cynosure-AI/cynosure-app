@@ -3,6 +3,7 @@ import type { WebClient } from '@slack/web-api'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution } from '../base.channel.js'
 import type { SlackConfig, BroadcastFn, SlackCtx } from './slack.types.js'
 import { handleMessage, handleHITLAction, subscribeToHITL } from './slack.messaging.js'
+import { sendLongSlackMessage } from './slack.api.js'
 
 export class SlackChannel implements ChannelProvider {
     app: App
@@ -133,6 +134,15 @@ export class SlackChannel implements ChannelProvider {
             return { success: true, username: (authResult.user as string) || (authResult.bot_id as string) || 'Slack Bot' }
         } catch (err) {
             return { success: false, error: (err as Error).message }
+        }
+    }
+
+    async sendNotification(target: string, text: string): Promise<void> {
+        if (!this.connected) return
+        try {
+            await sendLongSlackMessage(this.app.client, target, text)
+        } catch (err) {
+            console.error(`[Slack] sendNotification failed: ${(err as Error).message}`)
         }
     }
 }

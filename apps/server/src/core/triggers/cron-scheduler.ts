@@ -3,6 +3,9 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getAgent } from '../agents/agent-store.js'
 import { runTriggerExecution } from './trigger-runner.js'
+import { getChannelManager } from '../channels/channel-manager.js'
+import { enqueueCoalescedTrigger } from './trigger-queue.js'
+import { resolveChannelTarget } from './channel-target-resolver.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -30,6 +33,7 @@ export interface CronJobRow {
     one_off: number
     model_override: string
     provider_override: string
+    output_channel_id: string
     created_at: number
     updated_at: number
 }
@@ -44,6 +48,7 @@ export interface CronJobData {
     oneOff: boolean
     modelOverride: string
     providerOverride: string
+    outputChannelId: string
     createdAt: number
     updatedAt: number
 }
@@ -59,6 +64,7 @@ function rowToData(row: CronJobRow): CronJobData {
         oneOff: row.one_off === 1,
         modelOverride: row.model_override || '',
         providerOverride: row.provider_override || '',
+        outputChannelId: row.output_channel_id || '',
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     }
@@ -78,23 +84,23 @@ export function getCronJob(id: string): CronJobData | undefined {
     return row ? rowToData(row) : undefined
 }
 
-export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string }): CronJobData {
+export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }): CronJobData {
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
     db.prepare(
-        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, model_override, provider_override, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.modelOverride || '', input.providerOverride || '', now, now)
+        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, model_override, provider_override, output_channel_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.modelOverride || '', input.providerOverride || '', input.outputChannelId || '', now, now)
     return getCronJob(id)!
 }
 
-export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string }): CronJobData | undefined {
+export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }): CronJobData | undefined {
     const db = getDb()
     const existing = db.prepare('SELECT * FROM cron_jobs WHERE id = ?').get(id) as CronJobRow | undefined
     if (!existing) return undefined
     const now = Date.now()
     db.prepare(
-        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, model_override = ?, provider_override = ?, updated_at = ? WHERE id = ?'
+        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, model_override = ?, provider_override = ?, output_channel_id = ?, updated_at = ? WHERE id = ?'
     ).run(
         input.name !== undefined ? input.name : existing.name,
         input.agentId !== undefined ? input.agentId : existing.agent_id,
@@ -104,6 +110,7 @@ export function updateCronJob(id: string, input: { name?: string; agentId?: stri
         input.oneOff !== undefined ? (input.oneOff ? 1 : 0) : existing.one_off,
         input.modelOverride !== undefined ? input.modelOverride : existing.model_override,
         input.providerOverride !== undefined ? input.providerOverride : existing.provider_override,
+        input.outputChannelId !== undefined ? input.outputChannelId : (existing.output_channel_id || ''),
         now, id
     )
     return getCronJob(id)
@@ -143,9 +150,9 @@ export function getScheduledJobIds(): string[] {
 // ─── Run a cron job ────────────────────────────────────────
 
 /** Run one cron turn for a specific job */
-async function runCronJob(jobId: string): Promise<void> {
+async function runCronJob(jobId: string, opts?: { force?: boolean }): Promise<void> {
     const job = getCronJob(jobId)
-    if (!job || !job.enabled) return
+    if (!job || (!job.enabled && !opts?.force)) return
 
     const agent = getAgent(job.agentId)
     if (!agent) return
@@ -161,7 +168,7 @@ async function runCronJob(jobId: string): Promise<void> {
         : `Scheduled cron job triggered at ${now.toISOString()}. Execute your scheduled task as described in your instructions.`
 
     try {
-        const { conversationId } = await runTriggerExecution({
+        const { conversationId, result } = await runTriggerExecution({
             agent,
             userContent,
             origin: 'cron',
@@ -177,6 +184,15 @@ async function runCronJob(jobId: string): Promise<void> {
                 if (run) run.conversationId = id
             },
         })
+
+        // Send result to configured output channel if set
+        if (job.outputChannelId && result.content) {
+            const target = resolveChannelTarget(job.outputChannelId)
+            if (target) {
+                const label = job.name?.trim() || 'Cron job'
+                getChannelManager().queueNotification(job.outputChannelId, target, `**${label}:**\n${result.content}`)
+            }
+        }
 
         // If one-off, disable the cron job after successful execution
         if (job.oneOff) {
@@ -207,13 +223,16 @@ export function scheduleCronJob(jobId: string): void {
     }
 
     const task = cron.schedule(job.schedule, () => {
-        runCronJob(jobId).catch((err) => {
-            console.error(`[cron] Unhandled error for job ${jobId}:`, err)
-        })
+        enqueueCoalescedTrigger(`cron:${jobId}`, () => runCronJob(jobId))
     })
 
     tasks.set(jobId, task)
     scheduledInfo.set(jobId, { jobId, agentId: job.agentId, schedule: job.schedule, scheduledSince: Date.now() })
+}
+
+/** Immediately enqueue a manual run for a cron job, bypassing its enabled state. */
+export function triggerCronJobNow(jobId: string): void {
+    enqueueCoalescedTrigger(`cron:${jobId}`, () => runCronJob(jobId, { force: true }))
 }
 
 /** Cancel a running cron execution for a specific job. Returns true if cancelled. */

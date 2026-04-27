@@ -153,4 +153,40 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
         }
         return manager.testChannel(tempConfig)
     })
+
+    /**
+     * GET /api/channels/:id/targets
+     * Returns the distinct chat/channel targets that have ever sent messages through this
+     * channel, derived from conversations whose config_json.channelKey starts with
+     * "{type}:{channelId}:".  Each entry has:
+     *   - target: the raw platform identifier (chatId for Telegram, channelId for Discord/Slack)
+     *   - label: the conversation title (sender name or group name)
+     *   - channelKey: the full key stored in the conversation
+     */
+    app.get<{ Params: { id: string } }>('/:id/targets', async (req, reply) => {
+        const ch = manager.getFromDb(req.params.id)
+        if (!ch) return reply.status(404).send({ error: 'Channel not found' })
+
+        const db = getDb()
+        const prefix = `${ch.type}:${ch.id}:`
+
+        const rows = db.prepare(
+            `SELECT DISTINCT json_extract(config_json, '$.channelKey') AS channel_key, title
+             FROM conversations
+             WHERE origin = 'channel'
+               AND json_extract(config_json, '$.channelKey') LIKE ?
+               AND json_extract(config_json, '$.archived') IS NULL
+             ORDER BY updated_at DESC`
+        ).all(`${prefix}%`) as { channel_key: string; title: string }[]
+
+        return rows
+            .filter(r => r.channel_key)
+            .map(r => {
+                // channelKey = "{type}:{channelDbId}:{platformTarget}"
+                // platformTarget may itself contain colons (unlikely but safe to use lastIndexOf)
+                const lastColon = r.channel_key.lastIndexOf(':')
+                const target = r.channel_key.slice(lastColon + 1)
+                return { target, label: r.title || target, channelKey: r.channel_key }
+            })
+    })
 }
