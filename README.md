@@ -40,7 +40,7 @@ pnpm install
 pnpm dev
 ```
 
-- **Server** → http://localhost:3099
+- **Server API** → http://localhost:3099
 - **Web UI** → http://localhost:5173
 - **API docs** (Swagger) → http://localhost:3099/docs
 
@@ -63,7 +63,12 @@ pnpm dev:electron   # Electron app (starts web + electron)
 ## Building
 
 ```bash
-pnpm build          # Build server + web
+pnpm build          # Build web + server; the server serves the built UI at /
+pnpm --filter cynosure-server start
+
+# Standalone server after build
+# Web UI/API/docs are available from the same origin:
+# http://localhost:3099, http://localhost:3099/api, http://localhost:3099/docs
 
 # Electron desktop app
 pnpm package:linux
