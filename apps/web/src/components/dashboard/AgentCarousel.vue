@@ -122,8 +122,8 @@ function onWheel(e: WheelEvent): void {
         class="carousel-card absolute rounded-2xl border cursor-pointer overflow-hidden"
         :class="[
           card.isActive
-            ? 'border-blue-500/70 bg-white dark:bg-zinc-800 shadow-2xl shadow-blue-500/20'
-            : 'border-zinc-200 dark:border-zinc-700/60 bg-zinc-50 dark:bg-zinc-900/80',
+            ? 'border-blue-500/70 bg-zinc-800 shadow-2xl shadow-blue-500/20'
+            : 'border-zinc-700/60 bg-zinc-900/80',
         ]"
         :style="card.style"
         @click="onCardClick(card)"
@@ -133,8 +133,8 @@ function onWheel(e: WheelEvent): void {
           <div
             class="rounded-2xl flex items-center justify-center overflow-hidden icon-wrap"
             :class="card.isActive
-              ? 'bg-zinc-100 dark:bg-zinc-700/60 ring-2 ring-blue-500/30'
-              : 'bg-zinc-100 dark:bg-zinc-800/80'"
+              ? 'bg-zinc-700/60 ring-2 ring-blue-500/30'
+              : 'bg-zinc-800/80'"
           >
             <img
               v-if="agentIcon(card.agent)"
@@ -146,7 +146,7 @@ function onWheel(e: WheelEvent): void {
               v-else
               icon="lucide:bot"
               class="text-icon"
-              :class="card.isActive ? 'text-blue-400' : 'text-zinc-400 dark:text-zinc-500'"
+              :class="card.isActive ? 'text-blue-400' : 'text-zinc-500'"
             />
           </div>
         </div>
@@ -165,8 +165,8 @@ function onWheel(e: WheelEvent): void {
             v-if="card.agent.description"
             class="mt-1 line-clamp-2 leading-snug agent-desc"
             :class="card.isActive
-              ? 'text-zinc-500 dark:text-zinc-400'
-              : 'text-zinc-400 dark:text-zinc-600'"
+              ? 'text-zinc-400'
+              : 'text-zinc-600'"
           >
             {{ card.agent.description }}
           </p>
@@ -177,7 +177,7 @@ function onWheel(e: WheelEvent): void {
           v-if="card.isActive"
           class="absolute bottom-3 inset-x-0 flex justify-center"
         >
-          <span class="flex items-center gap-1.5 text-xs text-blue-500/90 dark:text-blue-400/80 font-medium">
+          <span class="flex items-center gap-1.5 text-xs text-blue-400/80 font-medium">
             <Icon
               icon="lucide:message-square"
               class="w-3.5 h-3.5"
@@ -191,7 +191,7 @@ function onWheel(e: WheelEvent): void {
     <!-- Navigation arrows -->
     <button
       v-if="agents.length > 1"
-      class="absolute left-0 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors z-110"
+      class="absolute left-0 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-zinc-800/90 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 transition-colors z-110"
       @click="prev"
     >
       <Icon
@@ -201,7 +201,7 @@ function onWheel(e: WheelEvent): void {
     </button>
     <button
       v-if="agents.length > 1"
-      class="absolute right-0 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors z-110"
+      class="absolute right-0 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-zinc-800/90 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 transition-colors z-110"
       @click="next"
     >
       <Icon
@@ -221,7 +221,7 @@ function onWheel(e: WheelEvent): void {
         class="h-1.5 rounded-full transition-all duration-300"
         :class="i === activeIdx
           ? 'bg-blue-500 w-5'
-          : 'bg-zinc-300 dark:bg-zinc-600 hover:bg-zinc-400 dark:hover:bg-zinc-500 w-1.5'"
+          : 'bg-zinc-600 hover:bg-zinc-500 w-1.5'"
         @click="goTo(i)"
       />
     </div>
