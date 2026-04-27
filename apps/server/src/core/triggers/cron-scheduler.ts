@@ -189,7 +189,8 @@ async function runCronJob(jobId: string, opts?: { force?: boolean }): Promise<vo
         if (job.outputChannelId && result.content) {
             const target = resolveChannelTarget(job.outputChannelId)
             if (target) {
-                getChannelManager().queueNotification(job.outputChannelId, target, result.content)
+                const label = job.name?.trim() || 'Cron job'
+                getChannelManager().queueNotification(job.outputChannelId, target, `**${label}:**\n${result.content}`)
             }
         }
 
