@@ -4,6 +4,8 @@ import { getDb } from '../../db/database.js'
 import { getAgent } from '../agents/agent-store.js'
 import { runTriggerExecution } from './trigger-runner.js'
 import { getChannelManager } from '../channels/channel-manager.js'
+import { enqueueCoalescedTrigger } from './trigger-queue.js'
+import { resolveChannelTarget } from './channel-target-resolver.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -66,25 +68,6 @@ function rowToData(row: CronJobRow): CronJobData {
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     }
-}
-
-/** Resolve the most-recently-active chat/channel target for a given channel ID. */
-function resolveChannelTarget(channelId: string): string | null {
-    const db = getDb()
-    const ch = db.prepare('SELECT type FROM channels WHERE id = ?').get(channelId) as { type: string } | undefined
-    if (!ch) return null
-    const prefix = `${ch.type}:${channelId}:`
-    const row = db.prepare(
-        `SELECT json_extract(config_json, '$.channelKey') AS channel_key
-         FROM conversations
-         WHERE origin = 'channel'
-           AND json_extract(config_json, '$.channelKey') LIKE ?
-           AND json_extract(config_json, '$.archived') IS NULL
-         ORDER BY updated_at DESC
-         LIMIT 1`
-    ).get(`${prefix}%`) as { channel_key: string } | undefined
-    if (!row?.channel_key) return null
-    return row.channel_key.slice(row.channel_key.lastIndexOf(':') + 1)
 }
 
 // ─── CRUD ──────────────────────────────────────────────────
@@ -239,9 +222,7 @@ export function scheduleCronJob(jobId: string): void {
     }
 
     const task = cron.schedule(job.schedule, () => {
-        runCronJob(jobId).catch((err) => {
-            console.error(`[cron] Unhandled error for job ${jobId}:`, err)
-        })
+        enqueueCoalescedTrigger(`cron:${jobId}`, () => runCronJob(jobId))
     })
 
     tasks.set(jobId, task)
