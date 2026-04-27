@@ -6,9 +6,14 @@ import fastifyCors from '@fastify/cors'
 import fastifyWebsocket from '@fastify/websocket'
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
-import { basename } from 'path'
+import fastifyStatic from '@fastify/static'
+import { existsSync } from 'fs'
+import { readFile } from 'fs/promises'
+import { basename, dirname, join, resolve } from 'path'
+import { fileURLToPath } from 'url'
 import type { WebSocket } from 'ws'
 import { nanoid } from 'nanoid'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { closeDb, getDb } from './db/database.js'
 import { type ApprovalResult, getHITLGate } from './core/agent/hitl-gate.js'
@@ -41,6 +46,7 @@ import { getChannelManager } from './core/channels/channel-manager.js'
 const APP_NAME = 'cynosure-server'
 const APP_VERSION = process.env.CYNOSURE_VERSION || '1.0.0'
 const DEFAULT_PORT = 3099
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const executionEvents = [
   'task:started',
@@ -187,6 +193,86 @@ function formatListenAddress(host: string | undefined, port: number): string {
   return host ? `http://${host}:${port}` : `http://localhost:${port}`
 }
 
+function getServerInfo(startedAt: string): Record<string, unknown> {
+  return {
+    name: APP_NAME,
+    version: APP_VERSION,
+    status: 'ok',
+    description: 'Cynosure server is running.',
+    timestamp: new Date().toISOString(),
+    startedAt,
+    uptimeSeconds: Math.floor(process.uptime()),
+    endpoints: {
+      health: '/api/health',
+      docs: '/docs',
+      websocket: '/ws',
+      api: '/api'
+    }
+  }
+}
+
+function resolveWebDist(): string | null {
+  const candidates = [
+    process.env.CYNOSURE_WEB_DIST,
+    resolve(__dirname, '../../web/dist'),
+    resolve(process.cwd(), '../web/dist'),
+    resolve(process.cwd(), 'web/dist')
+  ].filter((candidate): candidate is string => Boolean(candidate))
+
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, 'index.html'))) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function shouldServeSpa(request: FastifyRequest): boolean {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return false
+  }
+
+  const pathname = new URL(request.url, 'http://localhost').pathname
+  if (pathname.startsWith('/api') || pathname.startsWith('/docs') || pathname === '/ws') {
+    return false
+  }
+
+  const accept = request.headers.accept || ''
+  return accept.includes('text/html') || accept.includes('*/*')
+}
+
+async function registerWebUi(app: FastifyInstance, startedAt: string): Promise<void> {
+  const webDist = resolveWebDist()
+
+  app.get('/api', async () => getServerInfo(startedAt))
+
+  if (!webDist) {
+    app.get('/', async () => getServerInfo(startedAt))
+    app.log.warn('Web UI dist not found. Build cynosure-web or set CYNOSURE_WEB_DIST to serve the UI at /.')
+    return
+  }
+
+  await app.register(fastifyStatic, {
+    root: webDist,
+    prefix: '/',
+    decorateReply: false
+  })
+
+  app.setNotFoundHandler(async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!shouldServeSpa(request)) {
+      return reply.status(404).send({
+        error: 'Not Found',
+        message: `Route ${request.method}:${request.url} not found`,
+        statusCode: 404
+      })
+    }
+
+    const html = await readFile(join(webDist, 'index.html'), 'utf8')
+    return reply.type('text/html; charset=utf-8').send(html)
+  })
+}
+
 async function startServer(options: StartServerOptions): Promise<RunningServer> {
   if (options.dataDir) {
     process.env.CYNOSURE_DATA_DIR = options.dataDir
@@ -209,24 +295,6 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
     }
   })
   await app.register(fastifySwaggerUi, { routePrefix: '/docs' })
-
-  app.get('/', async () => {
-    return {
-      name: APP_NAME,
-      version: APP_VERSION,
-      status: 'ok',
-      description: 'Cynosure server is running.',
-      timestamp: new Date().toISOString(),
-      startedAt,
-      uptimeSeconds: Math.floor(process.uptime()),
-      endpoints: {
-        health: '/api/health',
-        docs: '/docs',
-        websocket: '/ws',
-        api: '/api'
-      }
-    }
-  })
 
   const pendingHITLResolvers = new Map<string, (result: ApprovalResult) => void>()
 
@@ -355,6 +423,8 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       uptimeSeconds: Math.floor(process.uptime())
     }
   })
+
+  await registerWebUi(app, startedAt)
 
   loadSavedProviders()
   getEmbeddingProvider().loadFromDb()
