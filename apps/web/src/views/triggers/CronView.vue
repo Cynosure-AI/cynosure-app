@@ -93,6 +93,19 @@ const showDeleteConfirm = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 const pendingDeleteName = ref('')
 
+const runningNow = ref(new Set<string>())
+
+async function runJobNow(jobId: string) {
+  runningNow.value = new Set([...runningNow.value, jobId])
+  try {
+    await api.cronJobs.runNow(jobId)
+    await loadSchedules()
+  } finally {
+    runningNow.value.delete(jobId)
+    runningNow.value = new Set(runningNow.value)
+  }
+}
+
 function confirmDeleteCron(job: CronJob) {
   pendingDeleteId.value = job.id
   pendingDeleteName.value = job.agentName
@@ -324,6 +337,18 @@ onUnmounted(() => {
                 :title="job.enabled ? 'Pause cron job' : 'Enable cron job'"
                 @update:model-value="toggleCronJob(job.id, !job.enabled)"
               />
+              <button
+                class="p-1.5 rounded-lg text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-40"
+                title="Execute now"
+                :disabled="runningNow.has(job.id) || job.isRunning"
+                @click="runJobNow(job.id)"
+              >
+                <Icon
+                  :icon="runningNow.has(job.id) ? 'lucide:loader-2' : 'lucide:play'"
+                  class="w-4 h-4"
+                  :class="{ 'animate-spin': runningNow.has(job.id) }"
+                />
+              </button>
               <button
                 class="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
                 title="Edit"

@@ -150,9 +150,9 @@ export function getScheduledJobIds(): string[] {
 // ─── Run a cron job ────────────────────────────────────────
 
 /** Run one cron turn for a specific job */
-async function runCronJob(jobId: string): Promise<void> {
+async function runCronJob(jobId: string, opts?: { force?: boolean }): Promise<void> {
     const job = getCronJob(jobId)
-    if (!job || !job.enabled) return
+    if (!job || (!job.enabled && !opts?.force)) return
 
     const agent = getAgent(job.agentId)
     if (!agent) return
@@ -224,6 +224,11 @@ export function scheduleCronJob(jobId: string): void {
     const task = cron.schedule(job.schedule, () => {
         enqueueCoalescedTrigger(`cron:${jobId}`, () => runCronJob(jobId))
     })
+}
+
+/** Immediately enqueue a manual run for a cron job, bypassing its enabled state. */
+export function triggerCronJobNow(jobId: string): void {
+    enqueueCoalescedTrigger(`cron:${jobId}`, () => runCronJob(jobId, { force: true }))
 
     tasks.set(jobId, task)
     scheduledInfo.set(jobId, { jobId, agentId: job.agentId, schedule: job.schedule, scheduledSince: Date.now() })
