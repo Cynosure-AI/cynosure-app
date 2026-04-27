@@ -38,6 +38,11 @@ const router = createRouter({
       component: () => import('@/views/triggers/ChannelsView.vue')
     },
     {
+      path: '/triggers/channels/:id',
+      name: 'channel-detail',
+      component: () => import('@/views/triggers/ChannelDetailView.vue')
+    },
+    {
       path: '/triggers/file-watchers',
       name: 'triggers-file-watchers',
       component: () => import('@/views/triggers/FileWatchView.vue')
