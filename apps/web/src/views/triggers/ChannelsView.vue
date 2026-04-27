@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import type { AgentDefinition, ChannelDefinition, ChannelType } from '../../api/types'
 import { Icon } from '@iconify/vue'
@@ -10,6 +11,7 @@ import AgentSelect from '../../components/shared/AgentSelect.vue'
 import MultiSelect from '../../components/shared/MultiSelect.vue'
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 
+const router = useRouter()
 const channels = ref<ChannelDefinition[]>([])
 const allAgents = ref<AgentDefinition[]>([])
 const loading = ref(true)
@@ -67,20 +69,6 @@ function resetDialog() {
 async function openAddDialog() {
   allAgents.value = await api.agents.list()
   resetDialog()
-  showAddDialog.value = true
-}
-
-async function openEditDialog(ch: ChannelDefinition) {
-  allAgents.value = await api.agents.list()
-  resetDialog()
-  editingId.value = ch.id
-  dlgName.value = ch.name
-  dlgType.value = ch.type
-  dlgAgentId.value = ch.agentId
-  dlgBotToken.value = (ch.config.botToken as string) || ''
-  dlgAppToken.value = (ch.config.appToken as string) || ''
-  dlgAllowedAgentIds.value = (ch.config.allowedAgentIds as string[]) || []
-  dlgEnabled.value = ch.enabled
   showAddDialog.value = true
 }
 
@@ -256,8 +244,9 @@ onUnmounted(() => {
         <div
           v-for="ch in channels"
           :key="ch.id"
-          class="flex items-center gap-4 px-5 py-4 rounded-xl border bg-zinc-800/60 group"
+          class="flex items-center gap-4 px-5 py-4 rounded-xl border bg-zinc-800/60 group cursor-pointer hover:border-zinc-600 transition-colors"
           :class="ch.enabled ? 'border-zinc-700' : 'border-zinc-700/50 opacity-60'"
+          @click="router.push(`/triggers/channels/${ch.id}`)"
         >
           <!-- Channel type icon -->
           <div class="shrink-0">
@@ -318,7 +307,7 @@ onUnmounted(() => {
               <button
                 class="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors"
                 title="Edit"
-                @click="openEditDialog(ch)"
+                @click.stop="router.push(`/triggers/channels/${ch.id}`)"
               >
                 <Icon
                   icon="lucide:pencil"
@@ -328,7 +317,7 @@ onUnmounted(() => {
               <button
                 class="p-1.5 rounded-lg hover:bg-red-500/10 text-zinc-500 hover:text-red-400 transition-colors"
                 title="Delete"
-                @click="confirmDelete(ch)"
+                @click.stop="confirmDelete(ch)"
               >
                 <Icon
                   icon="lucide:trash-2"
@@ -343,6 +332,7 @@ onUnmounted(() => {
               size="sm"
               color="emerald"
               :title="ch.enabled ? 'Disable channel' : 'Enable channel'"
+              @click.stop
               @update:model-value="toggleChannel(ch.id)"
             />
 
