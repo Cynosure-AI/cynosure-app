@@ -225,14 +225,14 @@ export function scheduleCronJob(jobId: string): void {
     const task = cron.schedule(job.schedule, () => {
         enqueueCoalescedTrigger(`cron:${jobId}`, () => runCronJob(jobId))
     })
+
+    tasks.set(jobId, task)
+    scheduledInfo.set(jobId, { jobId, agentId: job.agentId, schedule: job.schedule, scheduledSince: Date.now() })
 }
 
 /** Immediately enqueue a manual run for a cron job, bypassing its enabled state. */
 export function triggerCronJobNow(jobId: string): void {
     enqueueCoalescedTrigger(`cron:${jobId}`, () => runCronJob(jobId, { force: true }))
-
-    tasks.set(jobId, task)
-    scheduledInfo.set(jobId, { jobId, agentId: job.agentId, schedule: job.schedule, scheduledSince: Date.now() })
 }
 
 /** Cancel a running cron execution for a specific job. Returns true if cancelled. */
