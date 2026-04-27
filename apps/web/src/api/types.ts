@@ -186,6 +186,7 @@ export interface CronJob {
     oneOff: boolean
     modelOverride: string
     providerOverride: string
+    outputChannelId: string
     createdAt: number
     updatedAt: number
     agentName: string
@@ -224,6 +225,7 @@ export interface FileWatcher {
     enabled: boolean
     modelOverride: string
     providerOverride: string
+    outputChannelId: string
     createdAt: number
     updatedAt: number
     agentName: string

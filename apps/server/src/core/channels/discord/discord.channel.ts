@@ -1,7 +1,8 @@
-import { Client, GatewayIntentBits, Events } from 'discord.js'
+import { Client, GatewayIntentBits, Events, TextChannel } from 'discord.js'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution } from '../base.channel.js'
 import type { DiscordConfig, DiscordCtx } from './discord.types.js'
 import { handleMessage, handleInteraction, subscribeToHITL } from './discord.messaging.js'
+import { sendLongMessage } from './discord.api.js'
 
 export class DiscordChannel implements ChannelProvider {
     client: Client
@@ -125,5 +126,16 @@ export class DiscordChannel implements ChannelProvider {
 
     async refreshCommands(): Promise<void> {
         return
+    }
+
+    async sendNotification(target: string, text: string): Promise<void> {
+        if (!this.connected) return
+        try {
+            const ch = await this.client.channels.fetch(target)
+            if (!ch || !(ch instanceof TextChannel)) return
+            await sendLongMessage(ch, text)
+        } catch (err) {
+            console.error(`[Discord] sendNotification failed: ${(err as Error).message}`)
+        }
     }
 }

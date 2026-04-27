@@ -278,6 +278,12 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('agents', 'cron_prompt', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'icon_data', 'BLOB')
   addColumnIfMissing('agents', 'icon_mime', 'TEXT')
+
+  // Trigger output channel support
+  addColumnIfMissing('cron_jobs', 'output_channel_id', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('cron_jobs', 'output_target', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('file_watchers', 'output_channel_id', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('file_watchers', 'output_target', "TEXT NOT NULL DEFAULT ''")
 }
 
 export function closeDb(): void {

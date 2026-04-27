@@ -377,12 +377,14 @@ export const api = {
   cronJobs: {
     list: () =>
       get<CronJob[]>('/api/cron-jobs'),
-    create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string }) =>
+    create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }) =>
       post<CronJob>('/api/cron-jobs', input),
-    update: (id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string }) =>
+    update: (id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }) =>
       put<CronJob>(`/api/cron-jobs/${encodeURIComponent(id)}`, input),
     delete: (id: string) =>
       del<{ success: boolean }>(`/api/cron-jobs/${encodeURIComponent(id)}`),
+    runNow: (id: string) =>
+      post<{ queued: boolean }>(`/api/cron-jobs/${encodeURIComponent(id)}/run`),
   },
 
   system: {
@@ -432,14 +434,16 @@ export const api = {
       post<{ success: boolean; username?: string; error?: string }>(`/api/channels/${encodeURIComponent(id)}/test`),
     testConfig: (data: { type: ChannelType; agentId: string; config: Record<string, unknown> }) =>
       post<{ success: boolean; username?: string; error?: string }>('/api/channels/test', data),
+    targets: (id: string) =>
+      get<{ target: string; label: string; channelKey: string }[]>(`/api/channels/${encodeURIComponent(id)}/targets`),
   },
 
   fileWatchers: {
     list: () =>
       get<FileWatcher[]>('/api/file-watchers'),
-    create: (input: { name?: string; agentId: string; paths: string[]; ignorePatterns?: string[]; prompt?: string; debounceMs?: number; enabled?: boolean; modelOverride?: string; providerOverride?: string }) =>
+    create: (input: { name?: string; agentId: string; paths: string[]; ignorePatterns?: string[]; prompt?: string; debounceMs?: number; enabled?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }) =>
       post<FileWatcher>('/api/file-watchers', input),
-    update: (id: string, input: { name?: string; agentId?: string; paths?: string[]; ignorePatterns?: string[]; prompt?: string; debounceMs?: number; enabled?: boolean; modelOverride?: string; providerOverride?: string }) =>
+    update: (id: string, input: { name?: string; agentId?: string; paths?: string[]; ignorePatterns?: string[]; prompt?: string; debounceMs?: number; enabled?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }) =>
       put<FileWatcher>(`/api/file-watchers/${encodeURIComponent(id)}`, input),
     delete: (id: string) =>
       del<{ success: boolean }>(`/api/file-watchers/${encodeURIComponent(id)}`),

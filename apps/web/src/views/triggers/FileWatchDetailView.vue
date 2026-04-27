@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../../api/client'
-import type { AgentDefinition, FileWatcher } from '../../api/types'
+import type { AgentDefinition, ChannelDefinition, FileWatcher } from '../../api/types'
 import { useProviderStore } from '../../stores/provider.store'
 import { Icon } from '@iconify/vue'
 import AgentSelect from '../../components/shared/AgentSelect.vue'
@@ -15,6 +15,7 @@ const providerStore = useProviderStore()
 
 const watcher = ref<FileWatcher | null>(null)
 const allAgents = ref<AgentDefinition[]>([])
+const allChannels = ref<ChannelDefinition[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const saveMessage = ref('')
@@ -38,6 +39,7 @@ const dlgPrompt = ref('')
 const dlgDebounceMs = ref(5)
 const dlgModelOverride = ref('')
 const dlgProviderOverride = ref('')
+const dlgOutputChannelId = ref('')
 const dlgModels = ref<string[]>([])
 const loadingModels = ref(false)
 
@@ -52,16 +54,19 @@ function populateFields(w: FileWatcher) {
   dlgDebounceMs.value = Math.round(w.debounceMs / 1000)
   dlgModelOverride.value = w.modelOverride || ''
   dlgProviderOverride.value = w.providerOverride || ''
+  dlgOutputChannelId.value = w.outputChannelId || ''
 }
 
 async function loadWatcher() {
   loading.value = true
   try {
-    const [watchers, agents] = await Promise.all([
+    const [watchers, agents, channels] = await Promise.all([
       api.fileWatchers.list(),
       api.agents.list(),
+      api.channels.list(),
     ])
     allAgents.value = agents
+    allChannels.value = channels
     const found = watchers.find(w => w.id === watcherId.value)
     if (!found) {
       router.push('/triggers/file-watchers')
@@ -93,6 +98,7 @@ async function save() {
       debounceMs,
       modelOverride: dlgModelOverride.value,
       providerOverride: dlgProviderOverride.value,
+      outputChannelId: dlgOutputChannelId.value,
     })
     saveMessage.value = 'Saved'
     setTimeout(() => saveMessage.value = '', 2000)
@@ -298,6 +304,29 @@ watch(dlgPrompt, resizePrompt, { immediate: true })
                 placeholder="Use agent default"
               />
             </div>
+          </div>
+
+          <!-- Output Channel -->
+          <div>
+            <label class="block text-xs text-zinc-400 mb-1">Output channel (optional)</label>
+            <p class="text-[11px] text-zinc-600 mb-1.5">
+              Send the agent's result to a messaging channel after each run.
+            </p>
+            <select
+              v-model="dlgOutputChannelId"
+              class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">
+                None
+              </option>
+              <option
+                v-for="ch in allChannels"
+                :key="ch.id"
+                :value="ch.id"
+              >
+                {{ ch.name }} ({{ ch.type }})
+              </option>
+            </select>
           </div>
 
           <!-- Prompt -->
