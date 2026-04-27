@@ -9,6 +9,7 @@ import {
     scheduleCronJob,
     unscheduleCronJob,
     getActiveCronRuns,
+    triggerCronJobNow,
     type CronJobData,
 } from '../core/triggers/cron-scheduler.js'
 import { getAgent } from '../core/agents/agent-store.js'
@@ -82,5 +83,16 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
             return { error: 'Cron job not found' }
         }
         return { success: true }
+    })
+
+    // POST /api/cron-jobs/:id/run — manually trigger a job immediately
+    app.post<{ Params: { id: string } }>('/:id/run', async (req, reply) => {
+        const job = getCronJob(req.params.id)
+        if (!job) {
+            reply.code(404)
+            return { error: 'Cron job not found' }
+        }
+        triggerCronJobNow(job.id)
+        return { queued: true }
     })
 }

@@ -383,6 +383,8 @@ export const api = {
       put<CronJob>(`/api/cron-jobs/${encodeURIComponent(id)}`, input),
     delete: (id: string) =>
       del<{ success: boolean }>(`/api/cron-jobs/${encodeURIComponent(id)}`),
+    runNow: (id: string) =>
+      post<{ queued: boolean }>(`/api/cron-jobs/${encodeURIComponent(id)}/run`),
   },
 
   system: {
