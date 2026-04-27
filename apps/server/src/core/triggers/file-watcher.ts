@@ -5,6 +5,8 @@ import { getDb } from '../../db/database.js'
 import { getAgent } from '../agents/agent-store.js'
 import { runTriggerExecution } from './trigger-runner.js'
 import { getChannelManager } from '../channels/channel-manager.js'
+import { enqueueCoalescedTrigger } from './trigger-queue.js'
+import { resolveChannelTarget } from './channel-target-resolver.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -76,25 +78,6 @@ function rowToData(row: FileWatcherRow): FileWatcherData {
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     }
-}
-
-/** Resolve the most-recently-active chat/channel target for a given channel ID. */
-function resolveChannelTarget(channelId: string): string | null {
-    const db = getDb()
-    const ch = db.prepare('SELECT type FROM channels WHERE id = ?').get(channelId) as { type: string } | undefined
-    if (!ch) return null
-    const prefix = `${ch.type}:${channelId}:`
-    const row = db.prepare(
-        `SELECT json_extract(config_json, '$.channelKey') AS channel_key
-         FROM conversations
-         WHERE origin = 'channel'
-           AND json_extract(config_json, '$.channelKey') LIKE ?
-           AND json_extract(config_json, '$.archived') IS NULL
-         ORDER BY updated_at DESC
-         LIMIT 1`
-    ).get(`${prefix}%`) as { channel_key: string } | undefined
-    if (!row?.channel_key) return null
-    return row.channel_key.slice(row.channel_key.lastIndexOf(':') + 1)
 }
 
 // ─── CRUD ──────────────────────────────────────────────────
@@ -215,10 +198,6 @@ export function isWatcherActive(watcherId: string): boolean {
 // ─── Debounce + Flush ──────────────────────────────────────
 
 function bufferChange(watcherId: string, entry: ChangeEntry): void {
-    // Don't buffer changes while an agent run is in progress for this watcher.
-    // They'll still be caught after the run completes since the watcher stays active.
-    if (activeRuns.has(watcherId)) return
-
     const buffer = changeBuffers.get(watcherId) || []
     buffer.push(entry)
     changeBuffers.set(watcherId, buffer)
@@ -305,6 +284,13 @@ function buildChangeMessage(changes: GroupedChanges, prompt: string): string {
 }
 
 async function flushChanges(watcherId: string): Promise<void> {
+    const buffer = changeBuffers.get(watcherId)
+    if (!buffer?.length) return
+
+    enqueueCoalescedTrigger(`file-watcher:${watcherId}`, () => consumeBufferedChanges(watcherId))
+}
+
+async function consumeBufferedChanges(watcherId: string): Promise<void> {
     const buffer = changeBuffers.get(watcherId)
     if (!buffer?.length) return
     changeBuffers.delete(watcherId)
