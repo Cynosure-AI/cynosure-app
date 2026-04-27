@@ -10,6 +10,8 @@ type BroadcastFn = (event: string, data: unknown) => void
 class ChannelManager {
     private providers = new Map<string, ChannelProvider>()
     private broadcast: BroadcastFn = () => { }
+    /** Per-channel notification queue — serialises proactive sends to avoid rate limits. */
+    private notificationQueues = new Map<string, Promise<void>>()
 
     setBroadcast(fn: BroadcastFn): void {
         this.broadcast = fn
@@ -93,6 +95,28 @@ class ChannelManager {
         for (const provider of this.providers.values()) {
             provider.refreshCommands?.().catch(() => { })
         }
+    }
+
+    /**
+     * Queue a proactive notification to a specific target within a channel.
+     * Notifications for the same channel are serialised to avoid rate-limit issues.
+     * @param channelId  The channel DB id.
+     * @param target     Platform-specific target (Telegram chat ID, Discord/Slack channel ID).
+     * @param text       Message text to send.
+     */
+    queueNotification(channelId: string, target: string, text: string): void {
+        const provider = this.providers.get(channelId)
+        if (!provider?.sendNotification) return
+
+        const prev = this.notificationQueues.get(channelId) ?? Promise.resolve()
+        const next = prev.then(() => provider.sendNotification!(target, text)).catch(() => { })
+        this.notificationQueues.set(channelId, next)
+        // Clean up the queue entry once the chain settles
+        next.finally(() => {
+            if (this.notificationQueues.get(channelId) === next) {
+                this.notificationQueues.delete(channelId)
+            }
+        })
     }
 
     // ─── DB helpers ───────────────────────────────────────────

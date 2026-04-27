@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getAgent } from '../agents/agent-store.js'
 import { runTriggerExecution } from './trigger-runner.js'
+import { getChannelManager } from '../channels/channel-manager.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -30,6 +31,7 @@ export interface CronJobRow {
     one_off: number
     model_override: string
     provider_override: string
+    output_channel_id: string
     created_at: number
     updated_at: number
 }
@@ -44,6 +46,7 @@ export interface CronJobData {
     oneOff: boolean
     modelOverride: string
     providerOverride: string
+    outputChannelId: string
     createdAt: number
     updatedAt: number
 }
@@ -59,9 +62,29 @@ function rowToData(row: CronJobRow): CronJobData {
         oneOff: row.one_off === 1,
         modelOverride: row.model_override || '',
         providerOverride: row.provider_override || '',
+        outputChannelId: row.output_channel_id || '',
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     }
+}
+
+/** Resolve the most-recently-active chat/channel target for a given channel ID. */
+function resolveChannelTarget(channelId: string): string | null {
+    const db = getDb()
+    const ch = db.prepare('SELECT type FROM channels WHERE id = ?').get(channelId) as { type: string } | undefined
+    if (!ch) return null
+    const prefix = `${ch.type}:${channelId}:`
+    const row = db.prepare(
+        `SELECT json_extract(config_json, '$.channelKey') AS channel_key
+         FROM conversations
+         WHERE origin = 'channel'
+           AND json_extract(config_json, '$.channelKey') LIKE ?
+           AND json_extract(config_json, '$.archived') IS NULL
+         ORDER BY updated_at DESC
+         LIMIT 1`
+    ).get(`${prefix}%`) as { channel_key: string } | undefined
+    if (!row?.channel_key) return null
+    return row.channel_key.slice(row.channel_key.lastIndexOf(':') + 1)
 }
 
 // ─── CRUD ──────────────────────────────────────────────────
@@ -78,23 +101,23 @@ export function getCronJob(id: string): CronJobData | undefined {
     return row ? rowToData(row) : undefined
 }
 
-export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string }): CronJobData {
+export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }): CronJobData {
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
     db.prepare(
-        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, model_override, provider_override, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.modelOverride || '', input.providerOverride || '', now, now)
+        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, model_override, provider_override, output_channel_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.modelOverride || '', input.providerOverride || '', input.outputChannelId || '', now, now)
     return getCronJob(id)!
 }
 
-export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string }): CronJobData | undefined {
+export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }): CronJobData | undefined {
     const db = getDb()
     const existing = db.prepare('SELECT * FROM cron_jobs WHERE id = ?').get(id) as CronJobRow | undefined
     if (!existing) return undefined
     const now = Date.now()
     db.prepare(
-        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, model_override = ?, provider_override = ?, updated_at = ? WHERE id = ?'
+        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, model_override = ?, provider_override = ?, output_channel_id = ?, updated_at = ? WHERE id = ?'
     ).run(
         input.name !== undefined ? input.name : existing.name,
         input.agentId !== undefined ? input.agentId : existing.agent_id,
@@ -104,6 +127,7 @@ export function updateCronJob(id: string, input: { name?: string; agentId?: stri
         input.oneOff !== undefined ? (input.oneOff ? 1 : 0) : existing.one_off,
         input.modelOverride !== undefined ? input.modelOverride : existing.model_override,
         input.providerOverride !== undefined ? input.providerOverride : existing.provider_override,
+        input.outputChannelId !== undefined ? input.outputChannelId : (existing.output_channel_id || ''),
         now, id
     )
     return getCronJob(id)
@@ -161,7 +185,7 @@ async function runCronJob(jobId: string): Promise<void> {
         : `Scheduled cron job triggered at ${now.toISOString()}. Execute your scheduled task as described in your instructions.`
 
     try {
-        const { conversationId } = await runTriggerExecution({
+        const { conversationId, result } = await runTriggerExecution({
             agent,
             userContent,
             origin: 'cron',
@@ -177,6 +201,14 @@ async function runCronJob(jobId: string): Promise<void> {
                 if (run) run.conversationId = id
             },
         })
+
+        // Send result to configured output channel if set
+        if (job.outputChannelId && result.content) {
+            const target = resolveChannelTarget(job.outputChannelId)
+            if (target) {
+                getChannelManager().queueNotification(job.outputChannelId, target, result.content)
+            }
+        }
 
         // If one-off, disable the cron job after successful execution
         if (job.oneOff) {

@@ -41,8 +41,8 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
     })
 
     // POST /api/cron-jobs — create a new cron job
-    app.post<{ Body: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string } }>('/', async (req, reply) => {
-        const { name, agentId, schedule, prompt, enabled, oneOff, modelOverride, providerOverride } = req.body
+    app.post<{ Body: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string } }>('/', async (req, reply) => {
+        const { name, agentId, schedule, prompt, enabled, oneOff, modelOverride, providerOverride, outputChannelId } = req.body
         if (!agentId || !schedule) {
             reply.code(400)
             return { error: 'agentId and schedule are required' }
@@ -52,13 +52,13 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
             reply.code(404)
             return { error: 'Agent not found' }
         }
-        const job = createCronJob({ name, agentId, schedule, prompt: prompt || '', enabled, oneOff, modelOverride, providerOverride })
+        const job = createCronJob({ name, agentId, schedule, prompt: prompt || '', enabled, oneOff, modelOverride, providerOverride, outputChannelId })
         if (job.enabled) scheduleCronJob(job.id)
         return job
     })
 
     // PUT /api/cron-jobs/:id — update a cron job
-    app.put<{ Params: { id: string }; Body: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string } }>('/:id', async (req, reply) => {
+    app.put<{ Params: { id: string }; Body: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string } }>('/:id', async (req, reply) => {
         const job = updateCronJob(req.params.id, req.body)
         if (!job) {
             reply.code(404)

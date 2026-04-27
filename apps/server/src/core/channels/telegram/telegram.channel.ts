@@ -3,6 +3,7 @@ import type { TelegramConfig, TelegramUpdate, PendingHITL, BroadcastFn } from '.
 import { TELEGRAM_API } from './telegram.types.js'
 import { registerBotCommands } from './telegram.commands.js'
 import { handleMessage, handleCallbackQuery, subscribeToHITL } from './telegram.messaging.js'
+import { sendLongMessage } from './telegram.api.js'
 
 export class TelegramChannel implements ChannelProvider {
     botToken: string
@@ -114,6 +115,12 @@ export class TelegramChannel implements ChannelProvider {
 
     async refreshCommands(): Promise<void> {
         await registerBotCommands(this)
+    }
+
+    async sendNotification(target: string, text: string): Promise<void> {
+        const chatId = parseInt(target, 10)
+        if (isNaN(chatId)) return
+        await sendLongMessage(this, chatId, text)
     }
 
     // ─── Polling ──────────────────────────────────────────────

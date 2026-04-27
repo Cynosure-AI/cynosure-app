@@ -4,6 +4,7 @@ import { relative } from 'path'
 import { getDb } from '../../db/database.js'
 import { getAgent } from '../agents/agent-store.js'
 import { runTriggerExecution } from './trigger-runner.js'
+import { getChannelManager } from '../channels/channel-manager.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -38,6 +39,7 @@ interface FileWatcherRow {
     enabled: number
     model_override: string
     provider_override: string
+    output_channel_id: string
     created_at: number
     updated_at: number
 }
@@ -53,6 +55,7 @@ export interface FileWatcherData {
     enabled: boolean
     modelOverride: string
     providerOverride: string
+    outputChannelId: string
     createdAt: number
     updatedAt: number
 }
@@ -69,9 +72,29 @@ function rowToData(row: FileWatcherRow): FileWatcherData {
         enabled: row.enabled === 1,
         modelOverride: row.model_override || '',
         providerOverride: row.provider_override || '',
+        outputChannelId: row.output_channel_id || '',
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     }
+}
+
+/** Resolve the most-recently-active chat/channel target for a given channel ID. */
+function resolveChannelTarget(channelId: string): string | null {
+    const db = getDb()
+    const ch = db.prepare('SELECT type FROM channels WHERE id = ?').get(channelId) as { type: string } | undefined
+    if (!ch) return null
+    const prefix = `${ch.type}:${channelId}:`
+    const row = db.prepare(
+        `SELECT json_extract(config_json, '$.channelKey') AS channel_key
+         FROM conversations
+         WHERE origin = 'channel'
+           AND json_extract(config_json, '$.channelKey') LIKE ?
+           AND json_extract(config_json, '$.archived') IS NULL
+         ORDER BY updated_at DESC
+         LIMIT 1`
+    ).get(`${prefix}%`) as { channel_key: string } | undefined
+    if (!row?.channel_key) return null
+    return row.channel_key.slice(row.channel_key.lastIndexOf(':') + 1)
 }
 
 // ─── CRUD ──────────────────────────────────────────────────
@@ -98,13 +121,14 @@ export function createFileWatcher(input: {
     enabled?: boolean
     modelOverride?: string
     providerOverride?: string
+    outputChannelId?: string
 }): FileWatcherData {
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
     db.prepare(
-        `INSERT INTO file_watchers (id, name, agent_id, paths_json, ignore_patterns_json, prompt, debounce_ms, enabled, model_override, provider_override, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO file_watchers (id, name, agent_id, paths_json, ignore_patterns_json, prompt, debounce_ms, enabled, model_override, provider_override, output_channel_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.name || '',
@@ -116,6 +140,7 @@ export function createFileWatcher(input: {
         input.enabled !== false ? 1 : 0,
         input.modelOverride || '',
         input.providerOverride || '',
+        input.outputChannelId || '',
         now,
         now
     )
@@ -132,13 +157,14 @@ export function updateFileWatcher(id: string, input: {
     enabled?: boolean
     modelOverride?: string
     providerOverride?: string
+    outputChannelId?: string
 }): FileWatcherData | undefined {
     const db = getDb()
     const existing = db.prepare('SELECT * FROM file_watchers WHERE id = ?').get(id) as FileWatcherRow | undefined
     if (!existing) return undefined
     const now = Date.now()
     db.prepare(
-        `UPDATE file_watchers SET name = ?, agent_id = ?, paths_json = ?, ignore_patterns_json = ?, prompt = ?, debounce_ms = ?, enabled = ?, model_override = ?, provider_override = ?, updated_at = ? WHERE id = ?`
+        `UPDATE file_watchers SET name = ?, agent_id = ?, paths_json = ?, ignore_patterns_json = ?, prompt = ?, debounce_ms = ?, enabled = ?, model_override = ?, provider_override = ?, output_channel_id = ?, updated_at = ? WHERE id = ?`
     ).run(
         input.name !== undefined ? input.name : existing.name,
         input.agentId !== undefined ? input.agentId : existing.agent_id,
@@ -149,6 +175,7 @@ export function updateFileWatcher(id: string, input: {
         input.enabled !== undefined ? (input.enabled ? 1 : 0) : existing.enabled,
         input.modelOverride !== undefined ? input.modelOverride : existing.model_override,
         input.providerOverride !== undefined ? input.providerOverride : existing.provider_override,
+        input.outputChannelId !== undefined ? input.outputChannelId : (existing.output_channel_id || ''),
         now,
         id
     )
@@ -310,7 +337,7 @@ async function runFileWatcher(
     const userContent = buildChangeMessage(changes, watcher.prompt)
 
     try {
-        const { conversationId } = await runTriggerExecution({
+        const { result } = await runTriggerExecution({
             agent,
             userContent,
             origin: 'file-watcher',
@@ -326,6 +353,14 @@ async function runFileWatcher(
                 if (run) run.conversationId = id
             },
         })
+
+        // Send result to configured output channel if set
+        if (watcher.outputChannelId && result.content) {
+            const target = resolveChannelTarget(watcher.outputChannelId)
+            if (target) {
+                getChannelManager().queueNotification(watcher.outputChannelId, target, result.content)
+            }
+        }
     } catch (err) {
         if ((err as Error).name === 'AbortError') return
         // Error already logged by trigger-runner
