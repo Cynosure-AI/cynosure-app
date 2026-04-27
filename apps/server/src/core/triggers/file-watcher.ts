@@ -344,7 +344,8 @@ async function runFileWatcher(
         if (watcher.outputChannelId && result.content) {
             const target = resolveChannelTarget(watcher.outputChannelId)
             if (target) {
-                getChannelManager().queueNotification(watcher.outputChannelId, target, result.content)
+                const label = watcher.name?.trim() || 'File watcher'
+                getChannelManager().queueNotification(watcher.outputChannelId, target, `**${label}:**\n${result.content}`)
             }
         }
     } catch (err) {
