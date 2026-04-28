@@ -5,27 +5,11 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { ToolDefinition, ToolResult } from '../../gateway/providers/base.provider.js'
 import { McpOAuthProvider } from './oauth-provider.js'
-import { writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, rmSync } from 'fs'
-import { join, extname } from 'path'
+import { existsSync, readdirSync, unlinkSync, rmSync } from 'fs'
+import { join } from 'path'
 import { createHash } from 'crypto'
-import { homedir, tmpdir } from 'os'
+import { homedir } from 'os'
 import { getAppDataDir } from '../../data-dir.js'
-import { nanoid } from 'nanoid'
-
-/** Directory for caching inline base64 image payloads returned by MCP tools */
-function getMcpImagesDir(): string {
-    const dir = join(tmpdir(), 'cynosure-mcp', 'images')
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-    return dir
-}
-
-/** Save base64 image data to a file and return the absolute path */
-function saveMcpImage(base64Data: string, ext: string): string {
-    const filename = `${nanoid()}.${ext}`
-    const filepath = join(getMcpImagesDir(), filename)
-    writeFileSync(filepath, Buffer.from(base64Data, 'base64'))
-    return filepath
-}
 
 /** Rewrite absolute file paths in tool text output to API-served URLs */
 function rewriteFilePathsInText(text: string): string {
@@ -282,7 +266,7 @@ export class McpManager {
             version: '1.0.0'
         })
 
-        // Race between: successful connect, auth detection (instant), or 30s timeout.
+        // Race between: successful connect, auth detection (instant), or 60s timeout.
         // When auth is detected via stderr, authNotice rejects immediately so the
         // API call returns fast while the child process stays alive in the background.
         const connectPromise = client.connect(transport)
@@ -352,16 +336,15 @@ export class McpManager {
                         .map((c) => c.text || '')
                         .join('\n')
 
-                    // Save inline base64 image content to a temp file so the LLM
-                    // receives a compact /api/files URL instead of a huge data URL.
-                    const imageUrls: string[] = []
+                    // Return inline image content as sources; the AgentExecutor
+                    // materializes them into durable conversation artifacts.
+                    const imageSources: string[] = []
                     const imageDataUrls: string[] = []
                     for (const c of parts) {
                         if (c.type === 'image' && c.data && c.mimeType) {
-                            const ext = c.mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'png'
-                            const savedPath = saveMcpImage(c.data, ext)
-                            imageUrls.push(`/api/files?path=${encodeURIComponent(savedPath)}`)
-                            imageDataUrls.push(`data:${c.mimeType};base64,${c.data}`)
+                            const dataUrl = `data:${c.mimeType};base64,${c.data}`
+                            imageSources.push(dataUrl)
+                            imageDataUrls.push(dataUrl)
                         }
                     }
 
@@ -371,9 +354,9 @@ export class McpManager {
 
                     return {
                         success: !result.isError,
-                        output: rewrittenOutput || (imageUrls.length ? `(${imageUrls.length} image(s) returned)` : '(no output)'),
+                        output: rewrittenOutput || (imageSources.length ? `(${imageSources.length} image(s) returned)` : '(no output)'),
                         error: result.isError ? rewrittenOutput : undefined,
-                        images: imageUrls.length ? imageUrls : undefined,
+                        images: imageSources.length ? imageSources : undefined,
                         imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined
                     }
                 } catch (err) {

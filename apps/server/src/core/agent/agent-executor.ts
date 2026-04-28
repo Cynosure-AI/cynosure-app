@@ -4,7 +4,7 @@ import { getEventBus } from '../telemetry/event-bus.js'
 import { getHITLGate } from './hitl-gate.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import type { ChatMessage, ContentPart, ToolCall, ToolDefinition } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, ContentPart, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -93,7 +93,7 @@ interface ToolCallResult {
     name: string
     output: string
     success: boolean
-    /** File-path URLs for UI display */
+    /** Artifact URLs for UI display */
     images?: string[]
     /** Base64 data-URL images for LLM vision */
     imageDataUrls?: string[]
@@ -255,7 +255,7 @@ export class AgentExecutor {
                 const toolResults = await this.executeToolCalls(pendingToolCalls)
 
                 for (const tr of toolResults) {
-                    if (tr.imageDataUrls?.length) collectedImages.push(...tr.imageDataUrls)
+                    if (tr.images?.length) collectedImages.push(...tr.images)
                 }
 
                 this.emit('step:executed', {
@@ -643,16 +643,31 @@ export class AgentExecutor {
             if (res?.loadedTools?.length) {
                 this.addLoadedTools(res.loadedTools)
             }
+            const images = await this.materializeToolImages(res)
             return {
                 toolCallId: tc.id,
                 name: tc.function.name,
                 output: res?.output ?? JSON.stringify(res),
                 success: res?.success !== false,
-                images: res?.images,
+                images,
                 imageDataUrls: res?.imageDataUrls,
             }
         } catch (err) {
             return { toolCallId: tc.id, name: tc.function.name, output: `Error: ${(err as Error).message}`, success: false }
+        }
+    }
+
+    private async materializeToolImages(res: ToolResult | undefined): Promise<string[] | undefined> {
+        const sources = res?.images?.length ? res.images : res?.imageDataUrls
+        if (!sources?.length) return undefined
+
+        try {
+            const artifacts = await materializeImageArtifacts(sources, this.config.conversationId)
+            return artifacts.map((artifact) => artifact.url)
+        } catch (err) {
+            console.warn('[artifacts] Failed to materialize tool image:', err instanceof Error ? err.message : err)
+            const nonInlineImages = res?.images?.filter((source) => !source.startsWith('data:'))
+            return nonInlineImages?.length ? nonInlineImages : undefined
         }
     }
 
