@@ -61,7 +61,7 @@ export interface ToolResult {
   error?: string
   /** Internal-only: additional tools to expose on subsequent LLM rounds. */
   loadedTools?: ToolDefinition[]
-  /** File-path URLs for UI display (e.g. /api/files?path=...) */
+  /** Image sources for UI display. AgentExecutor materializes these into artifact URLs before persistence. */
   images?: string[]
   /** Base64 data-URL images for LLM vision (e.g. data:image/png;base64,...) */
   imageDataUrls?: string[]
