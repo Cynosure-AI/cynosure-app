@@ -476,29 +476,6 @@ const settingsItems: NavItem[] = [
           {{ item.label }}
         </template>
       </HoverTooltip>
-
-      <!-- Setup Guide (visible once onboarding is complete, so users can redo it) -->
-      <HoverTooltip
-        v-if="onboardingStore.completed"
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/onboarding"
-          class="nav-item"
-          :class="{ active: isActiveExact('/onboarding') }"
-        >
-          <Icon
-            icon="lucide:graduation-cap"
-            class="w-4.5 h-4.5"
-          />
-          <span>Setup Guide</span>
-        </RouterLink>
-        <template #content>
-          Setup Guide
-        </template>
-      </HoverTooltip>
     </nav>
 
     <!-- Collapse toggle (desktop only) -->
