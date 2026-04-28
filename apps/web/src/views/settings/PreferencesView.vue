@@ -3,6 +3,8 @@ import { ref, computed, watch } from 'vue'
 import { usePreferencesStore, type ContextStrategy } from '../../stores/preferences.store'
 import type { ThemeId } from '../../stores/preferences.store'
 import { useProviderStore } from '../../stores/provider.store'
+import { useOnboardingStore } from '../../stores/onboarding.store'
+import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import ProviderSelect from '../../components/shared/ProviderSelect.vue'
@@ -11,6 +13,13 @@ import BaseCard from '../../components/shared/BaseCard.vue'
 
 const prefs = usePreferencesStore()
 const providerStore = useProviderStore()
+const onboardingStore = useOnboardingStore()
+const router = useRouter()
+
+function redoOnboarding() {
+  onboardingStore.reset()
+  router.push('/onboarding')
+}
 
 const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#09090b', surface: '#18181b', accent: '#3b82f6', text: '#f4f4f5' } },
@@ -327,6 +336,38 @@ watch(() => prefs.toolRouterProviderId, (id, oldId) => {
               {{ opt.label }} — {{ opt.description }}
             </option>
           </select>
+        </BaseCard>
+
+        <!-- Onboarding -->
+        <BaseCard class="p-5">
+          <div class="flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+                <Icon
+                  icon="lucide:graduation-cap"
+                  class="w-5 h-5 text-zinc-400"
+                />
+              </div>
+              <div>
+                <h3 class="text-sm font-medium text-zinc-200">
+                  Setup Guide
+                </h3>
+                <p class="text-xs text-zinc-500 mt-0.5">
+                  Re-run the onboarding flow to configure providers, memory and MCPs
+                </p>
+              </div>
+            </div>
+            <button
+              class="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors"
+              @click="redoOnboarding"
+            >
+              <Icon
+                icon="lucide:refresh-cw"
+                class="w-3.5 h-3.5"
+              />
+              Redo Setup
+            </button>
+          </div>
         </BaseCard>
       </div>
     </div>
