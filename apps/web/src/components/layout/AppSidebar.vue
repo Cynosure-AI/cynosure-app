@@ -5,6 +5,7 @@ import { useProviderStore } from '../../stores/provider.store'
 import { useNotificationStore } from '../../stores/notification.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useChatStore } from '../../stores/chat.store'
+import { useOnboardingStore } from '../../stores/onboarding.store'
 import { api } from '../../api/client'
 import { wsConnected } from '../../api/http'
 import type { AgentInstance } from '../../api/types'
@@ -19,6 +20,7 @@ const providerStore = useProviderStore()
 const notificationStore = useNotificationStore()
 const agentDefs = useAgentDefinitionsStore()
 const chatStore = useChatStore()
+const onboardingStore = useOnboardingStore()
 const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar()
 
 const showStatusPopover = ref(false)
@@ -276,13 +278,29 @@ const settingsItems: NavItem[] = [
 
     <!-- Navigation -->
     <nav class="flex-1 overflow-y-auto py-2 px-3">
-      <!-- Dashboard -->
+      <!-- Get Started / Dashboard -->
       <HoverTooltip
         placement="right"
         block
         :disabled="!sidebarCollapsed"
       >
+        <!-- Onboarding not complete → show Get Started -->
         <RouterLink
+          v-if="!onboardingStore.completed"
+          to="/onboarding"
+          class="nav-item"
+          :class="{ active: isActiveExact('/onboarding') }"
+        >
+          <Icon
+            icon="lucide:sparkles"
+            class="w-4.5 h-4.5 text-blue-400"
+          />
+          <span class="text-blue-400">Get Started</span>
+          <span class="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+        </RouterLink>
+        <!-- Onboarding complete → show Dashboard -->
+        <RouterLink
+          v-else
           to="/dashboard"
           class="nav-item"
           :class="{ active: isActiveExact('/dashboard') }"
@@ -294,7 +312,7 @@ const settingsItems: NavItem[] = [
           <span>Dashboard</span>
         </RouterLink>
         <template #content>
-          Dashboard
+          {{ onboardingStore.completed ? 'Dashboard' : 'Get Started' }}
         </template>
       </HoverTooltip>
 
@@ -456,6 +474,29 @@ const settingsItems: NavItem[] = [
         </RouterLink>
         <template #content>
           {{ item.label }}
+        </template>
+      </HoverTooltip>
+
+      <!-- Setup Guide (visible once onboarding is complete, so users can redo it) -->
+      <HoverTooltip
+        v-if="onboardingStore.completed"
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
+      >
+        <RouterLink
+          to="/onboarding"
+          class="nav-item"
+          :class="{ active: isActiveExact('/onboarding') }"
+        >
+          <Icon
+            icon="lucide:graduation-cap"
+            class="w-4.5 h-4.5"
+          />
+          <span>Setup Guide</span>
+        </RouterLink>
+        <template #content>
+          Setup Guide
         </template>
       </HoverTooltip>
     </nav>
