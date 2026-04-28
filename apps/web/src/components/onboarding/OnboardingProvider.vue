@@ -58,8 +58,45 @@
       </div>
     </div>
 
+    <!-- Success notice after adding a provider -->
+    <div
+      v-if="lastAddedProvider"
+      class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5 space-y-3"
+    >
+      <div class="flex items-start gap-3">
+        <div class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+          <Icon
+            icon="lucide:check"
+            class="w-4 h-4 text-emerald-400"
+          />
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-emerald-300">
+            Provider added successfully!
+          </p>
+          <p class="text-xs text-zinc-400 mt-0.5">
+            <span class="text-zinc-200 font-medium">{{ lastAddedProvider }}</span> is ready to use.
+            You can add more providers or continue to the next step.
+          </p>
+        </div>
+      </div>
+      <button
+        class="flex items-center gap-1.5 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors"
+        @click="lastAddedProvider = null"
+      >
+        <Icon
+          icon="lucide:plus"
+          class="w-3.5 h-3.5"
+        />
+        Add another provider
+      </button>
+    </div>
+
     <!-- Add provider form -->
-    <div class="bg-zinc-800/50 border border-zinc-700/60 rounded-xl p-5 space-y-4">
+    <div
+      v-else
+      class="bg-zinc-800/50 border border-zinc-700/60 rounded-xl p-5 space-y-4"
+    >
       <div class="flex items-center justify-between">
         <h3 class="text-sm font-semibold text-zinc-200">
           {{ providerStore.providers.length ? 'Add Another Provider' : 'Add Your First Provider' }}
@@ -207,6 +244,7 @@
         {{ saving ? 'Adding…' : 'Add Provider' }}
       </button>
     </div>
+    <!-- /v-else add form -->
 
     <!-- Validation note -->
     <p
@@ -239,6 +277,7 @@ const fetchedModels = ref<string[]>([])
 const loadingModels = ref(false)
 const saving = ref(false)
 const error = ref('')
+const lastAddedProvider = ref<string | null>(null)
 
 const form = reactive<{
   name: string
@@ -359,7 +398,8 @@ async function addProvider() {
       supportsVision: ['openai', 'google', 'grok', 'ollama', 'lmstudio', 'openrouter', 'groq', 'mistral'].includes(form.type),
     }
     await providerStore.addProvider(config)
-    // Reset form for adding another
+    lastAddedProvider.value = form.name
+    // Reset form for potential next addition
     form.apiKey = ''
     form.name = ''
     form.defaultModel = ''

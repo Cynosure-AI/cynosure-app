@@ -112,70 +112,26 @@
       </button>
     </div>
 
-    <!-- Memory Space -->
-    <div class="bg-zinc-800/50 border border-zinc-700/60 rounded-xl p-5 space-y-4">
-      <div class="flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-zinc-200">
-          Create a Memory Space
-        </h3>
-        <span
-          v-if="createdSpace"
-          class="text-xs text-emerald-400 flex items-center gap-1"
-        >
-          <Icon
-            icon="lucide:check-circle-2"
-            class="w-3.5 h-3.5"
-          />
-          Created
-        </span>
-      </div>
-      <p class="text-xs text-zinc-500">
-        A memory space organises documents your agents can retrieve. You can create more later.
-      </p>
-
-      <div v-if="!createdSpace">
-        <label class="block text-xs font-medium text-zinc-400 mb-1.5">Space Name</label>
-        <div class="flex gap-2">
-          <input
-            v-model="spaceName"
-            type="text"
-            placeholder="e.g. Personal Knowledge Base"
-            class="flex-1 bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
-          >
-          <button
-            class="flex items-center gap-1.5 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-zinc-300 text-sm rounded-lg transition-colors shrink-0"
-            :disabled="!spaceName.trim() || creatingSpace"
-            @click="createSpace"
-          >
-            <Icon
-              :icon="creatingSpace ? 'lucide:loader-2' : 'lucide:plus'"
-              class="w-4 h-4"
-              :class="{ 'animate-spin': creatingSpace }"
-            />
-            {{ creatingSpace ? 'Creating…' : 'Create' }}
-          </button>
-        </div>
-      </div>
+    <!-- Next step callout (shown after embeddings are saved) -->
+    <Transition name="fade">
       <div
-        v-else
-        class="flex items-center gap-3 bg-zinc-900/60 border border-emerald-500/20 rounded-lg px-4 py-3"
+        v-if="embSaved || embConfigured"
+        class="flex items-start gap-3 bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3.5"
       >
         <Icon
-          icon="lucide:brain"
-          class="w-4 h-4 text-emerald-400 shrink-0"
+          icon="lucide:arrow-right-circle"
+          class="w-5 h-5 text-blue-400 shrink-0 mt-0.5"
         />
-        <span class="text-sm text-zinc-200">
-          <strong class="text-zinc-100">{{ createdSpace.name }}</strong> — memory space ready
-        </span>
+        <div>
+          <p class="text-sm font-medium text-blue-300">
+            Embeddings configured!
+          </p>
+          <p class="text-xs text-zinc-400 mt-0.5">
+            Click <strong class="text-zinc-200">Continue</strong> to set up your first memory space — a place to store and search documents for your agents.
+          </p>
+        </div>
       </div>
-
-      <p
-        v-if="spaceError"
-        class="text-xs text-red-400"
-      >
-        {{ spaceError }}
-      </p>
-    </div>
+    </Transition>
   </div>
 </template>
 
@@ -184,7 +140,6 @@ import { ref, watch, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useProviderStore } from '../../stores/provider.store'
 import { api } from '../../api/client'
-import type { MemorySpace } from '../../api/types'
 
 const providerStore = useProviderStore()
 
@@ -195,11 +150,7 @@ const embModels = ref<string[]>([])
 const probing = ref(false)
 const savingEmb = ref(false)
 const embSaved = ref(false)
-
-const spaceName = ref('Personal Knowledge Base')
-const creatingSpace = ref(false)
-const createdSpace = ref<MemorySpace | null>(null)
-const spaceError = ref('')
+const embConfigured = ref(false)
 
 onMounted(async () => {
   await providerStore.loadProviders()
@@ -208,7 +159,10 @@ onMounted(async () => {
     if (cfg.providerId) embProviderId.value = cfg.providerId
     embModel.value = cfg.model
     embDimensions.value = cfg.dimensions
-    if (cfg.providerId) fetchEmbModels(cfg.providerId)
+    if (cfg.providerId) {
+      fetchEmbModels(cfg.providerId)
+      embConfigured.value = true
+    }
   } catch { /* first run */ }
 })
 
@@ -247,21 +201,16 @@ async function saveEmbeddings() {
       dimensions: embDimensions.value,
     })
     embSaved.value = true
-    setTimeout(() => { embSaved.value = false }, 2000)
+    embConfigured.value = true
+    setTimeout(() => { embSaved.value = false }, 3000)
   } catch { /* ignore */ }
   savingEmb.value = false
 }
-
-async function createSpace() {
-  if (!spaceName.value.trim()) return
-  creatingSpace.value = true
-  spaceError.value = ''
-  try {
-    createdSpace.value = await api.memorySpaces.create(spaceName.value.trim())
-  } catch (e) {
-    spaceError.value = e instanceof Error ? e.message : 'Failed to create memory space'
-  } finally {
-    creatingSpace.value = false
-  }
-}
 </script>
+
+<style scoped>
+.fade-enter-from { opacity: 0; transform: translateY(-6px); }
+.fade-enter-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+.fade-leave-to { opacity: 0; }
+.fade-leave-active { transition: opacity 0.2s ease; }
+</style>
