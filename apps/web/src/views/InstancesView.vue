@@ -121,6 +121,13 @@ const typeConfig: Record<string, { icon: string; color: string; bg: string; labe
   'file-watcher': { icon: 'lucide:eye', color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'File Watch' }
 }
 
+const historyBadgeOrigins = new Set(['channel', 'cron', 'file-watcher'])
+
+function historyOriginConfig(origin: string) {
+  if (!historyBadgeOrigins.has(origin)) return null
+  return typeConfig[origin] || null
+}
+
 async function openInstance(instance: AgentInstance) {
   await chatStore.setActiveAgent(instance.agentId || null)
   if (instance.conversationId) {
@@ -395,6 +402,17 @@ onUnmounted(() => {
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
                   <span class="text-sm font-medium text-zinc-200 truncate">{{ item.title || 'Untitled' }}</span>
+                  <span
+                    v-if="historyOriginConfig(item.origin)"
+                    :class="[historyOriginConfig(item.origin)!.bg, historyOriginConfig(item.origin)!.color]"
+                    class="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0"
+                  >
+                    <Icon
+                      :icon="historyOriginConfig(item.origin)!.icon"
+                      class="w-3 h-3"
+                    />
+                    {{ historyOriginConfig(item.origin)!.label }}
+                  </span>
                   <span
                     v-if="item.agent_id && agentDefs.get(item.agent_id)"
                     class="text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 bg-blue-500/10 text-blue-400"
