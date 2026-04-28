@@ -8,7 +8,6 @@ import type { ToolNamespaceMetadata } from '../tools/tool-registry.js'
 
 export const MCP_CANDIDATE_COUNT = 8
 export const CONTEXT_WINDOW_TURNS = 5
-export const TOOL_COUNT_THRESHOLD = 20
 export const ROUTER_SELECTION_TOOL_NAME = 'select_relevant_tools'
 
 const TURN_CHAR_LIMIT = 200
@@ -67,16 +66,11 @@ export function buildRouterQuery(
 export function shouldRouteTools(
     tools: ToolDefinition[],
     userQuery?: string,
-    opts: { enabled?: boolean; threshold?: number } = {},
+    opts: { enabled?: boolean } = {},
 ): boolean {
     const hasMcpTools = tools.some(isMcpTool)
 
-    return (
-        opts.enabled !== false &&
-        Boolean(userQuery?.trim()) &&
-        hasMcpTools &&
-        (opts.enabled === true || tools.length > (opts.threshold ?? TOOL_COUNT_THRESHOLD))
-    )
+    return opts.enabled === true && Boolean(userQuery?.trim()) && hasMcpTools
 }
 
 export async function embeddingPreFilter(
