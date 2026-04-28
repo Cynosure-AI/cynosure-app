@@ -116,7 +116,12 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     // ── 1. Resolve tools ──
 
-    let tools = toolRegistry.resolveForExecution(agent.tools || [])
+    const routingEnabled = isToolRoutingEnabled(agent, input.autoToolRouting)
+    const configuredToolKeys = agent.tools || []
+    const toolKeys = routingEnabled && configuredToolKeys.length === 0
+        ? toolRegistry.listRegisteredTools().map((tool) => tool.key)
+        : configuredToolKeys
+    let tools = toolRegistry.resolveForExecution(toolKeys)
 
     // ── 2. Resolve provider / model ──
     // Must happen before sub-agent tool building so we can pass the resolved
@@ -141,7 +146,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     // Sub-agent delegation tools are added later and bypass routing. This pass
     // trims the agent/free-chat tool set before the executor receives schemas.
 
-    if (shouldRouteTools(tools, input.userQuery, { enabled: isToolRoutingEnabled(agent, input.autoToolRouting) })) {
+    if (shouldRouteTools(tools, input.userQuery, { enabled: routingEnabled })) {
         const routingTaskId = `router_${nanoid()}`
         try {
             emitToolRoutingStatus(conversationId, routingTaskId, 'routing-tools', 'Selecting relevant tools...')

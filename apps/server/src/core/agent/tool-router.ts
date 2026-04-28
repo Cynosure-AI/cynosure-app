@@ -69,11 +69,13 @@ export function shouldRouteTools(
     userQuery?: string,
     opts: { enabled?: boolean; threshold?: number } = {},
 ): boolean {
+    const hasMcpTools = tools.some(isMcpTool)
+
     return (
         opts.enabled !== false &&
         Boolean(userQuery?.trim()) &&
-        tools.length > (opts.threshold ?? TOOL_COUNT_THRESHOLD) &&
-        tools.some(isMcpTool)
+        hasMcpTools &&
+        (opts.enabled === true || tools.length > (opts.threshold ?? TOOL_COUNT_THRESHOLD))
     )
 }
 
