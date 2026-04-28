@@ -266,6 +266,20 @@ const mcpOptions: McpOption[] = [
     args: ['-y', '@cynosure-mcp/computer-controller'],
     installId: '@cynosure-mcp/computer-controller',
   },
+  {
+    id: 'youtube-downloader',
+    name: 'YouTube Downloader',
+    description: 'Download videos and audio from YouTube, Vimeo and more — supports mp4, mp3, and many other formats.',
+    packageId: '@cynosure-mcp/youtube-video-downloader',
+    icon: 'lucide:youtube',
+    iconBg: 'bg-red-500/10',
+    iconColor: 'text-red-400',
+    badge: 'npm',
+    badgeClass: 'bg-zinc-600/60 text-zinc-300',
+    command: 'npx',
+    args: ['-y', '@cynosure-mcp/youtube-video-downloader'],
+    installId: '@cynosure-mcp/youtube-video-downloader',
+  },
 ]
 
 function checkInstalled() {
