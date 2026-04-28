@@ -129,7 +129,7 @@ function navigate(route: string) {
 
       <!-- Agent Carousel -->
       <div
-        v-if="carouselAgents.length"
+
         class="mb-8"
       >
         <h2 class="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-3">

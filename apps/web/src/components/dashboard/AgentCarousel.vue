@@ -5,10 +5,12 @@ import { useProviderStore } from '../../stores/provider.store'
 import { useChatStore } from '../../stores/chat.store'
 import { useProviderLogos } from '../../composables/useProviderLogos'
 import { Icon } from '@iconify/vue'
+import { useRouter } from 'vue-router'
 
 const props = defineProps<{ agents: AgentDefinition[] }>()
 const emit = defineEmits<{ select: [agent: AgentDefinition] }>()
 
+const router = useRouter()
 const providerStore = useProviderStore()
 const chatStore = useChatStore()
 const { logoUrl } = useProviderLogos()
@@ -224,6 +226,46 @@ function onWheel(e: WheelEvent): void {
           : 'bg-zinc-600 hover:bg-zinc-500 w-1.5'"
         @click="goTo(i)"
       />
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div
+    v-else
+    class="flex items-center justify-center"
+    style="height: 320px;"
+  >
+    <div
+      class="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/50 cursor-pointer hover:border-zinc-500 hover:bg-zinc-800/50 transition-colors"
+      style="width: 220px; height: 260px;"
+      @click="router.push('/agents/create')"
+    >
+      <!-- Icon -->
+      <div
+        class="flex items-center justify-center rounded-2xl bg-zinc-800 border border-zinc-700/60 icon-wrap"
+      >
+        <Icon
+          icon="lucide:plus"
+          class="text-zinc-500 text-icon"
+        />
+      </div>
+
+      <div class="text-center px-4">
+        <p class="font-semibold agent-name text-zinc-400">
+          No agents yet
+        </p>
+        <p class="mt-1 leading-snug agent-desc text-zinc-600">
+          Create an agent to get started
+        </p>
+      </div>
+
+      <span class="flex items-center gap-1.5 text-xs text-zinc-500">
+        <Icon
+          icon="lucide:plus-circle"
+          class="w-3.5 h-3.5"
+        />
+        New agent
+      </span>
     </div>
   </div>
 </template>
