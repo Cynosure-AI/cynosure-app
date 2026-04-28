@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full flex flex-col bg-zinc-950 overflow-hidden">
+  <div class="h-full flex flex-col overflow-hidden">
     <!-- ── Header / breadcrumb ─────────────────────────────────────── -->
     <div class="shrink-0 px-6 pt-5 pb-4 border-b border-zinc-800/60">
       <div class="max-w-2xl mx-auto flex items-center justify-between">
