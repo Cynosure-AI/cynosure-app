@@ -111,8 +111,7 @@
               You're all set!
             </h2>
             <p class="text-zinc-400 text-sm leading-relaxed mb-2">
-              Cynosure is configured and ready to use. Head to the dashboard to explore your agents,
-              triggers, and more.
+              Cynosure is configured and ready to use. Start a conversation and see what your agents can do.
             </p>
             <p class="text-zinc-600 text-xs">
               You can always revisit these settings from the sidebar.
@@ -187,9 +186,9 @@
             class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
             @click="goToDashboard"
           >
-            Go to Dashboard
+            Start chatting
             <Icon
-              icon="lucide:layout-dashboard"
+              icon="lucide:message-circle"
               class="w-4 h-4"
             />
           </button>
@@ -296,11 +295,11 @@ function jumpToStep(index: number) {
 
 function dismiss() {
   onboardingStore.finish()
-  router.push('/dashboard')
+  router.push('/chat')
 }
 
 function goToDashboard() {
-  router.push('/dashboard')
+  router.push('/chat')
 }
 </script>
 
