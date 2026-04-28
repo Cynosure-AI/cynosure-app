@@ -55,7 +55,7 @@ hljs.registerLanguage('plaintext', plaintext)
 hljs.registerLanguage('text', plaintext)
 import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
-import cynosureLogo from '../../assets/img/cynosure-logo.png'
+import { useAppBranding } from '../../composables/useAppBranding'
 
 const markdownRef = ref<HTMLElement | null>(null)
 
@@ -101,6 +101,7 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const prefs = usePreferencesStore()
+const { logoIconUrl } = useAppBranding()
 
 const thinkingExpanded = ref(prefs.autoExpandSteps)
 const copied = ref(false)
@@ -275,9 +276,9 @@ const imageGridClass = computed(() => {
         >
         <img
           v-else
-          :src="cynosureLogo"
+          :src="logoIconUrl"
           alt="Cynosure"
-          class="w-full h-full object-cover"
+          class="w-full h-full object-contain"
         >
       </div>
       <span

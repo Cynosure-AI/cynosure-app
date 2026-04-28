@@ -1,9 +1,9 @@
 <template>
   <div class="flex flex-col items-center justify-center text-center px-4 py-8 max-w-lg mx-auto">
     <img
-      src="../../assets/img/cynosure-logo.png"
+      :src="logoIconUrl"
       alt="Cynosure"
-      class="w-20 h-20 mb-6"
+      class="w-20 h-20 mb-6 object-contain drop-shadow-md "
     >
     <h1 class="text-3xl font-bold text-zinc-100 mb-3">
       Welcome to Cynosure
@@ -75,4 +75,7 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
+import { useAppBranding } from '../../composables/useAppBranding'
+
+const { logoIconUrl } = useAppBranding()
 </script>

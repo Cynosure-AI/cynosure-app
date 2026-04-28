@@ -11,6 +11,7 @@ import { wsConnected } from '../../api/http'
 import type { AgentInstance } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import { useSidebar } from '../../composables/useSidebar'
+import { useAppBranding } from '../../composables/useAppBranding'
 import StatusPopover from '../status/StatusPopover.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 
@@ -22,6 +23,7 @@ const agentDefs = useAgentDefinitionsStore()
 const chatStore = useChatStore()
 const onboardingStore = useOnboardingStore()
 const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar()
+const { logoIconUrl, logoTextUrl } = useAppBranding()
 
 const showStatusPopover = ref(false)
 const showNotifications = ref(false)
@@ -138,13 +140,17 @@ const settingsItems: NavItem[] = [
     :class="sidebarCollapsed ? 'w-60 md:w-16 sidebar-collapsed' : 'w-60'"
   >
     <!-- Brand -->
-    <div class="brand-area px-5 p-3 mt-2 mb-2 flex items-center gap-3 shrink-0">
+    <div class="brand-area px-1 p-3 mt-2 mb-2 flex items-center gap-3 shrink-0">
       <img
-        src="../../assets/img/cynosure-logo.png"
-        alt="Cynosure Logo"
-        class="w-8 h-8"
+        :src="logoIconUrl"
+        alt="Cynosure"
+        class="brand-logo-icon w-8 h-8 object-contain"
       >
-      <span class="text-sm font-semibold text-zinc-100 tracking-tight flex-1">Cynosure</span>
+      <img
+        :src="logoTextUrl"
+        alt="Cynosure"
+        class="brand-logo-text h-8 w-auto max-w-36 object-contain flex-1"
+      >
 
       <!-- Notification Bell -->
       <div class="relative">
@@ -596,12 +602,33 @@ const settingsItems: NavItem[] = [
   opacity: 0.6;
 }
 
+.brand-logo-icon {
+  display: none;
+}
+
 /* ── Collapsed sidebar (desktop only) ── */
 @media (min-width: 768px) {
+  .sidebar-collapsed nav {
+    padding-inline: 0.5rem;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+  }
+  .sidebar-collapsed nav::-webkit-scrollbar {
+    width: 0.375rem;
+  }
   .sidebar-collapsed .nav-item {
     justify-content: center;
     gap: 0;
-
+    width: 2.5rem;
+    min-height: 2.25rem;
+    padding: 0.5rem;
+    margin-inline: auto;
+  }
+  .sidebar-collapsed .nav-item > :first-child {
+    width: 1.125rem;
+    min-width: 1.125rem;
+    height: 1.125rem;
+    flex-shrink: 0;
   }
   .sidebar-collapsed .nav-item > *:not(:first-child) {
     display: none;
@@ -621,6 +648,9 @@ const settingsItems: NavItem[] = [
   }
   .sidebar-collapsed .brand-area > *:not(:first-child) {
     display: none;
+  }
+  .sidebar-collapsed .brand-logo-icon {
+    display: block;
   }
   .sidebar-collapsed .status-section button {
     justify-content: center;
