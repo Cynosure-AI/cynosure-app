@@ -6,14 +6,14 @@ import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolDefinition } from '../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../tools/tool-registry.js'
 
-export const MCP_CANDIDATE_COUNT = 8
-export const CONTEXT_WINDOW_TURNS = 5
-export const ROUTER_SELECTION_TOOL_NAME = 'select_relevant_tools'
+export const MCP_CANDIDATE_COUNT = 8 // Top-K MCP tool groups selected by embedding similarity and passed to the LLM for final confirmation
+export const CONTEXT_WINDOW_TURNS = 5 // Recent turns included in routing query context AND the window over which used tools stay sticky
+export const ROUTER_SELECTION_TOOL_NAME = 'select_relevant_tools' // Name of the tool the router LLM calls to confirm its tool selection
 
-const TURN_CHAR_LIMIT = 200
-const TOOL_DESCRIPTION_LIMIT = 320
-const MAX_CONFIRMED_TOOLS = 40
-const FALLBACK_TOOL_COUNT = 12
+const TURN_CHAR_LIMIT = 200 // Max characters taken from each conversation turn when building the router query
+const TOOL_DESCRIPTION_LIMIT = 320 // Max characters of a tool description used in embedding/LLM calls
+const MAX_CONFIRMED_TOOLS = 40 // Upper bound on how many tools the LLM confirmation step may select
+const FALLBACK_TOOL_COUNT = 12 // How many tools to fall back to via lexical scoring if LLM confirmation fails
 
 interface McpToolGroup {
     id: string
