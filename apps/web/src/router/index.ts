@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { SK_ONBOARDING_COMPLETE } from '@/utils/storage-keys'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -6,6 +7,11 @@ const router = createRouter({
     {
       path: '/',
       redirect: '/dashboard'
+    },
+    {
+      path: '/onboarding',
+      name: 'onboarding',
+      component: () => import('@/views/OnboardingView.vue')
     },
     {
       path: '/dashboard',
@@ -117,6 +123,16 @@ const router = createRouter({
       component: () => import('@/views/settings/SpeechToTextView.vue')
     }
   ]
+})
+
+// Redirect to onboarding on first visit (before any providers are configured)
+router.beforeEach((to) => {
+  if (to.name === 'dashboard' || to.path === '/dashboard') {
+    const done = localStorage.getItem(SK_ONBOARDING_COMPLETE)
+    if (!done || done === 'false') {
+      return { name: 'onboarding' }
+    }
+  }
 })
 
 export default router

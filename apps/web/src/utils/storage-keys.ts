@@ -24,6 +24,9 @@ export const SK_WHISPER_LANGUAGE = 'cy-whisper-language'
 export const SK_WHISPER_DOWNLOADED = 'cy-whisper-downloaded'
 export const SK_WHISPER_MIC_DEVICE = 'cy-whisper-mic-device'
 
+// ── Onboarding ─────────────────────────────────────────────────────────────────
+export const SK_ONBOARDING_COMPLETE = 'cy-onboarding-complete'
+
 // ── Layout state ───────────────────────────────────────────────────────────────
 export const SK_SIDEBAR_COLLAPSED = 'sidebar-collapsed'
 export const SK_CHAT_SIDEBAR_OPEN = 'chat-sidebar-open'
