@@ -33,6 +33,7 @@ function onProviderOverride(providerId: string): void {
   if (chatStore.activeAgentId) {
     chatStore.sessionProviderOverride =
       providerId !== selectedAgent.value?.providerId ? providerId : null
+    chatStore.markOverridesModified()
   } else {
     chatStore.sessionProviderOverride = providerId
     providerStore.setLastUsed(providerId)
