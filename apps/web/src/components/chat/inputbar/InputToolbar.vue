@@ -69,6 +69,7 @@ async function fetchSidebarModels(): Promise<void> {
 
 function onModelChange(value: string): void {
   chatStore.sessionModelOverride = value || null
+  chatStore.markOverridesModified()
 }
 
 watch(currentProviderId, (newId, oldId) => {
