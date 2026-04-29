@@ -177,7 +177,7 @@ function onTitleKeydown(e: KeyboardEvent): void {
       >
       <span
         v-else-if="conversationTitle"
-        class="text-sm font-medium text-zinc-300 truncate cursor-default select-none"
+        class="text-sm font-medium text-zinc-300 truncate select-none cursor-pointer"
         title="Double-click to rename"
         @dblclick="startEditTitle"
       >
