@@ -1,5 +1,5 @@
 import cron, { type ScheduledTask } from 'node-cron'
-import { parseExpression } from 'cron-parser'
+import { CronExpressionParser } from 'cron-parser'
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getAgent } from '../agents/agent-store.js'
@@ -284,8 +284,8 @@ export function startCronScheduler(broadcastFn: BroadcastFn): void {
         // Check if a scheduled fire was missed while the server was down
         if (job.lastRunAt !== null) {
             try {
-                const interval = parseExpression(job.schedule, { currentDate: new Date(job.lastRunAt) })
-                const nextFire = interval.next().getTime()
+                const interval = CronExpressionParser.parse(job.schedule, { currentDate: new Date(job.lastRunAt) })
+                const nextFire = interval.next().toDate().getTime()
                 if (nextFire <= now) {
                     console.log(`[cron] Missed execution for job "${job.name}" (${job.id}), running now`)
                     enqueueCoalescedTrigger(`cron:${job.id}`, () => runCronJob(job.id))
