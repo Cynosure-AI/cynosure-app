@@ -1,4 +1,5 @@
 import cron, { type ScheduledTask } from 'node-cron'
+import { parseExpression } from 'cron-parser'
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getAgent } from '../agents/agent-store.js'
@@ -36,6 +37,7 @@ export interface CronJobRow {
     output_channel_id: string
     created_at: number
     updated_at: number
+    last_run_at: number | null
 }
 
 export interface CronJobData {
@@ -51,6 +53,7 @@ export interface CronJobData {
     outputChannelId: string
     createdAt: number
     updatedAt: number
+    lastRunAt: number | null
 }
 
 function rowToData(row: CronJobRow): CronJobData {
@@ -67,6 +70,7 @@ function rowToData(row: CronJobRow): CronJobData {
         outputChannelId: row.output_channel_id || '',
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+        lastRunAt: row.last_run_at ?? null,
     }
 }
 
@@ -194,6 +198,9 @@ async function runCronJob(jobId: string, opts?: { force?: boolean }): Promise<vo
             }
         }
 
+        // Record successful execution time
+        getDb().prepare('UPDATE cron_jobs SET last_run_at = ? WHERE id = ?').run(Date.now(), jobId)
+
         // If one-off, disable the cron job after successful execution
         if (job.oneOff) {
             updateCronJob(jobId, { enabled: false })
@@ -269,11 +276,26 @@ export function unscheduleAllForAgent(agentId: string): void {
 export function startCronScheduler(broadcastFn: BroadcastFn): void {
     broadcast = broadcastFn
 
+    const now = Date.now()
     const jobs = listCronJobs()
     for (const job of jobs) {
-        if (job.enabled && job.schedule) {
-            scheduleCronJob(job.id)
+        if (!job.enabled || !job.schedule) continue
+
+        // Check if a scheduled fire was missed while the server was down
+        if (job.lastRunAt !== null) {
+            try {
+                const interval = parseExpression(job.schedule, { currentDate: new Date(job.lastRunAt) })
+                const nextFire = interval.next().getTime()
+                if (nextFire <= now) {
+                    console.log(`[cron] Missed execution for job "${job.name}" (${job.id}), running now`)
+                    enqueueCoalescedTrigger(`cron:${job.id}`, () => runCronJob(job.id))
+                }
+            } catch {
+                // Invalid expression — skip catch-up, regular scheduling will warn
+            }
         }
+
+        scheduleCronJob(job.id)
     }
 }
 
