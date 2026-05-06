@@ -222,7 +222,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
 
 <template>
   <div class="h-full overflow-y-auto">
-    <div class="max-w-5xl mx-auto py-8 px-6">
+    <div class="max-w-4xl mx-auto py-8 px-6">
       <div class="flex items-center justify-between mb-6">
         <div>
           <h1 class="text-2xl font-bold text-zinc-100">

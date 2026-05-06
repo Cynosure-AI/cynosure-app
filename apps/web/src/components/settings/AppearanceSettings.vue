@@ -1,0 +1,186 @@
+<script setup lang="ts">
+import { Icon } from '@iconify/vue'
+import { useRouter } from 'vue-router'
+import { usePreferencesStore } from '../../stores/preferences.store'
+import type { ThemeId } from '../../stores/preferences.store'
+import { useOnboardingStore } from '../../stores/onboarding.store'
+import ToggleSwitch from '../shared/ToggleSwitch.vue'
+import BaseCard from '../shared/BaseCard.vue'
+
+const prefs = usePreferencesStore()
+const onboardingStore = useOnboardingStore()
+const router = useRouter()
+
+function redoOnboarding() {
+  onboardingStore.reset()
+  router.push('/onboarding')
+}
+
+const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
+  { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#09090b', surface: '#18181b', accent: '#3b82f6', text: '#f4f4f5' } },
+  { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#ffffff', surface: '#f9fafb', accent: '#3b82f6', text: '#111827' } },
+  { id: 'arasaka', label: 'Arasaka', icon: 'lucide:zap', colors: { bg: '#080405', surface: '#110a0d', accent: '#ff003c', text: '#f0dce2' } },
+  { id: 'midnight-purple', label: 'Midnight', icon: 'lucide:sparkles', colors: { bg: '#08060e', surface: '#0f0a1c', accent: '#a855f7', text: '#ebe5f5' } },
+  { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#060608', surface: '#16161e', accent: '#f9f002', text: '#e8e8f0' } },
+]
+</script>
+
+<template>
+  <div class="space-y-4">
+    <!-- Theme -->
+    <BaseCard class="p-5 space-y-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+          <Icon
+            icon="lucide:palette"
+            class="w-5 h-5 text-zinc-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-zinc-200">
+            Theme
+          </h3>
+          <p class="text-xs text-zinc-500 mt-0.5">
+            Choose your visual style
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <button
+          v-for="t in themes"
+          :key="t.id"
+          class="group relative rounded-lg border-2 p-3 transition-all duration-200 text-left"
+          :class="prefs.theme === t.id
+            ? 'border-blue-500 ring-1 ring-blue-500/30'
+            : 'border-zinc-700 hover:border-zinc-600'"
+          @click="prefs.setTheme(t.id)"
+        >
+          <div
+            class="rounded-md overflow-hidden mb-2.5 h-16 p-1.5 flex flex-col gap-1"
+            :style="{ backgroundColor: t.colors.bg }"
+          >
+            <div class="flex gap-1 flex-1">
+              <div
+                class="w-5 rounded-sm"
+                :style="{ backgroundColor: t.colors.surface }"
+              />
+              <div class="flex-1 flex flex-col gap-0.5">
+                <div
+                  class="h-2 rounded-sm w-3/4"
+                  :style="{ backgroundColor: t.colors.surface }"
+                />
+                <div
+                  class="h-1.5 rounded-sm w-1/2 opacity-50"
+                  :style="{ backgroundColor: t.colors.text }"
+                />
+                <div class="flex-1" />
+                <div
+                  class="h-2 rounded-sm w-1/3"
+                  :style="{ backgroundColor: t.colors.accent }"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <Icon
+              :icon="t.icon"
+              class="w-3.5 h-3.5"
+              :style="{ color: t.colors.accent }"
+            />
+            <span class="text-xs font-medium text-zinc-200">{{ t.label }}</span>
+          </div>
+
+          <div
+            v-if="prefs.theme === t.id"
+            class="absolute top-1.5 right-1.5"
+          >
+            <Icon
+              icon="lucide:check-circle-2"
+              class="w-4 h-4 text-blue-400"
+            />
+          </div>
+        </button>
+      </div>
+    </BaseCard>
+
+    <!-- Auto-expand Thinking -->
+    <BaseCard class="p-5">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+            <Icon
+              icon="lucide:list-tree"
+              class="w-5 h-5 text-zinc-400"
+            />
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-zinc-200">
+              Auto-expand Thinking
+            </h3>
+            <p class="text-xs text-zinc-500 mt-0.5">
+              Automatically expand thinking / reasoning blocks
+            </p>
+          </div>
+        </div>
+        <ToggleSwitch v-model="prefs.autoExpandSteps" />
+      </div>
+    </BaseCard>
+
+    <!-- Auto-expand Tool Calls -->
+    <BaseCard class="p-5">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+            <Icon
+              icon="lucide:terminal"
+              class="w-5 h-5 text-zinc-400"
+            />
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-zinc-200">
+              Auto-expand Tool Calls
+            </h3>
+            <p class="text-xs text-zinc-500 mt-0.5">
+              Automatically expand tool call details in the chat
+            </p>
+          </div>
+        </div>
+        <ToggleSwitch v-model="prefs.autoExpandToolCalls" />
+      </div>
+    </BaseCard>
+
+    <!-- Onboarding -->
+    <BaseCard class="p-5">
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+            <Icon
+              icon="lucide:graduation-cap"
+              class="w-5 h-5 text-zinc-400"
+            />
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-zinc-200">
+              Setup Guide
+            </h3>
+            <p class="text-xs text-zinc-500 mt-0.5">
+              Re-run the onboarding flow to configure providers, memory and MCPs
+            </p>
+          </div>
+        </div>
+        <button
+          class="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors"
+          @click="redoOnboarding"
+        >
+          <Icon
+            icon="lucide:refresh-cw"
+            class="w-3.5 h-3.5"
+          />
+          Redo Setup
+        </button>
+      </div>
+    </BaseCard>
+  </div>
+</template>

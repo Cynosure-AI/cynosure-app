@@ -181,7 +181,7 @@ function goTo(path: string) {
       <div>
         <button
           class="flex items-center gap-2 mb-1.5 w-full hover:opacity-80 transition-opacity"
-          @click="goTo('/settings/providers')"
+          @click="goTo('/settings/ai?tab=providers')"
         >
           <Icon
             icon="lucide:cpu"

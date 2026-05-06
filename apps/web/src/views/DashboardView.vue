@@ -88,7 +88,7 @@ function timeLabel(ts: number): string {
 const quickActions = [
   { label: 'New Chat', icon: 'lucide:message-square-plus', route: '/triggers/chat' },
   { label: 'Create Agent', icon: 'lucide:bot', route: '/agents' },
-  { label: 'Add Provider', icon: 'lucide:plus-circle', route: '/settings/providers' },
+  { label: 'Add Provider', icon: 'lucide:plus-circle', route: '/settings/ai?tab=providers' },
   { label: 'Manage MCPs', icon: 'lucide:plug', route: '/settings/mcp' }
 ]
 
@@ -99,7 +99,7 @@ function navigate(route: string) {
 
 <template>
   <div class="h-full overflow-y-auto">
-    <div class="max-w-5xl mx-auto py-8 px-6">
+    <div class="max-w-4xl mx-auto py-8 px-6">
       <!-- Header -->
       <div class="mb-8">
         <h1 class="text-2xl font-bold text-zinc-100">

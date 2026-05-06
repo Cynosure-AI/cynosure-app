@@ -125,11 +125,9 @@ const triggerItems: NavItem[] = [
 ]
 
 const settingsItems: NavItem[] = [
-  { to: '/settings/providers', icon: 'lucide:cpu', label: 'LLM Providers' },
+  { to: '/settings/ai', icon: 'lucide:sparkles', label: 'AI Settings' },
   { to: '/settings/mcp', icon: 'lucide:plug', label: 'MCPs' },
-  { to: '/settings/memory', icon: 'lucide:brain', label: 'Memory' },
-  { to: '/settings/speech-to-text', icon: 'lucide:mic', label: 'Speech to Text' },
-  { to: '/settings/preferences', icon: 'lucide:sliders-horizontal', label: 'Preferences' },
+  { to: '/settings/appearance', icon: 'lucide:palette', label: 'Appearance' },
   { to: '/settings/backup', icon: 'lucide:archive', label: 'Backup' }
 ]
 </script>
