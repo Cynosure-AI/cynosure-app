@@ -1,22 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { SK_ONBOARDING_COMPLETE } from '@/utils/storage-keys'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
       path: '/',
-      redirect: '/dashboard'
+      redirect: '/chat'
     },
     {
       path: '/onboarding',
       name: 'onboarding',
       component: () => import('@/views/OnboardingView.vue')
-    },
-    {
-      path: '/dashboard',
-      name: 'dashboard',
-      component: () => import('@/views/DashboardView.vue')
     },
     // Triggers
     {
@@ -129,16 +123,6 @@ const router = createRouter({
       redirect: { name: 'settings-ai', query: { tab: 'speech-to-text' } }
     }
   ]
-})
-
-// Redirect to onboarding on first visit (before any providers are configured)
-router.beforeEach((to) => {
-  if (to.name === 'dashboard' || to.path === '/dashboard') {
-    const done = localStorage.getItem(SK_ONBOARDING_COMPLETE)
-    if (!done || done === 'false') {
-      return { name: 'onboarding' }
-    }
-  }
 })
 
 export default router

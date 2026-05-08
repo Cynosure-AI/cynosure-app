@@ -155,7 +155,7 @@
           />
         </div>
 
-        <!-- Continue / Finish / Go to Dashboard -->
+        <!-- Continue / Finish / Go to Chat -->
         <div class="flex items-center gap-2">
           <!-- Required step note -->
           <span
@@ -184,7 +184,7 @@
           <button
             v-else
             class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
-            @click="goToDashboard"
+            @click="goToChat"
           >
             Start chatting
             <Icon
@@ -298,7 +298,7 @@ function dismiss() {
   router.push('/chat')
 }
 
-function goToDashboard() {
+function goToChat() {
   router.push('/chat')
 }
 </script>

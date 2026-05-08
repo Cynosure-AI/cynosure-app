@@ -122,7 +122,6 @@ export interface AgentDefinition {
     toolRouterProviderId: string
     toolRouterModel: string
     generateTitle: boolean
-    showInCarousel: boolean
     thinkingEnabled: boolean
     maxContextTokens: number | null
     sortOrder: number

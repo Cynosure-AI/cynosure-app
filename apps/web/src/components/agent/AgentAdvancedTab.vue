@@ -111,34 +111,6 @@ function onMaxCtxBlur() {
       </div>
     </div>
 
-    <!-- Show in dashboard carousel -->
-    <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
-      <div class="flex items-start justify-between gap-4">
-        <div class="flex-1">
-          <div class="flex items-center gap-2 mb-1">
-            <Icon
-              icon="lucide:layout-dashboard"
-              class="w-4 h-4 text-teal-400"
-            />
-            <h3 class="text-sm font-medium text-zinc-200">
-              Show in Dashboard Carousel
-            </h3>
-          </div>
-          <p class="text-xs text-zinc-500 leading-relaxed">
-            When enabled, this agent appears in the agent carousel on the
-            dashboard. Disable to hide utility or internal agents from the
-            quick-launch view.
-          </p>
-        </div>
-        <ToggleSwitch
-          :model-value="agent.showInCarousel"
-          color="emerald"
-          class="mt-0.5"
-          @update:model-value="emit('update', 'showInCarousel', $event)"
-        />
-      </div>
-    </div>
-
     <!-- Tool Router Model -->
     <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
       <div class="flex items-start gap-4">

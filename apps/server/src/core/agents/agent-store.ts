@@ -23,7 +23,6 @@ export interface AgentConfig {
     autoToolRouting: boolean
     toolRouterProviderId: string
     toolRouterModel: string
-    showInCarousel: boolean
     thinkingEnabled: boolean
     maxContextTokens: number | null
     sortOrder: number
@@ -54,7 +53,6 @@ export type CreateAgentInput = {
     autoToolRouting?: boolean
     toolRouterProviderId?: string
     toolRouterModel?: string
-    showInCarousel?: boolean
     thinkingEnabled?: boolean
     maxContextTokens?: number | null
     sortOrder?: number
@@ -133,7 +131,6 @@ interface AgentRow {
     auto_tool_routing: number
     tool_router_provider_id: string
     tool_router_model: string
-    show_in_carousel: number
     thinking_enabled: number
     max_context_tokens: number | null
     sort_order: number
@@ -163,7 +160,6 @@ function rowToAgentData(row: AgentRow): AgentData {
         autoToolRouting: row.auto_tool_routing === 1,
         toolRouterProviderId: row.tool_router_provider_id || '',
         toolRouterModel: row.tool_router_model || '',
-        showInCarousel: row.show_in_carousel !== 0,
         thinkingEnabled: row.thinking_enabled !== 0,
         maxContextTokens: typeof row.max_context_tokens === 'number' ? row.max_context_tokens : null,
         sortOrder: typeof row.sort_order === 'number' ? row.sort_order : 0,
@@ -213,9 +209,9 @@ export function createAgent(input: CreateAgentInput): AgentData {
 
     db.prepare(
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
-         category, sub_agents_json, auto_approve_tools, show_in_carousel, thinking_enabled, max_context_tokens,
+            category, sub_agents_json, auto_approve_tools, thinking_enabled, max_context_tokens,
          auto_tool_routing, tool_router_provider_id, tool_router_model, sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.name,
@@ -229,7 +225,6 @@ export function createAgent(input: CreateAgentInput): AgentData {
         input.category || '',
         JSON.stringify(input.subAgents || []),
         input.autoApproveTools === true ? 1 : 0,
-        input.showInCarousel !== false ? 1 : 0,
         input.thinkingEnabled !== false ? 1 : 0,
         typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null,
         input.autoToolRouting === true ? 1 : 0,
@@ -267,7 +262,6 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     const updatedAutoToolRouting = input.autoToolRouting !== undefined ? input.autoToolRouting : (existing.auto_tool_routing === 1)
     const updatedToolRouterProviderId = input.toolRouterProviderId !== undefined ? (input.toolRouterProviderId || '') : (existing.tool_router_provider_id || '')
     const updatedToolRouterModel = input.toolRouterModel !== undefined ? (input.toolRouterModel || '') : (existing.tool_router_model || '')
-    const updatedShowInCarousel = input.showInCarousel !== undefined ? input.showInCarousel : (existing.show_in_carousel !== 0)
     const updatedThinkingEnabled = input.thinkingEnabled !== undefined ? input.thinkingEnabled : (existing.thinking_enabled !== 0)
     const updatedMaxContextTokens = input.maxContextTokens !== undefined
         ? (typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null)
@@ -292,7 +286,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
 
     db.prepare(
         `UPDATE agents SET name = ?, description = ?, provider_id = ?, model = ?, system_prompt = ?, tools_json = ?,
-         codename = ?, category = ?, sub_agents_json = ?, auto_approve_tools = ?, show_in_carousel = ?,
+         codename = ?, category = ?, sub_agents_json = ?, auto_approve_tools = ?,
          thinking_enabled = ?, max_context_tokens = ?, auto_tool_routing = ?, tool_router_provider_id = ?, tool_router_model = ?, sort_order = ?, cron_prompt = ?,
          icon_data = ?, icon_mime = ?, updated_at = ?
          WHERE id = ?`
@@ -307,7 +301,6 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         updatedCategory,
         JSON.stringify(updatedSubAgents),
         updatedAutoApprove ? 1 : 0,
-        updatedShowInCarousel ? 1 : 0,
         updatedThinkingEnabled ? 1 : 0,
         updatedMaxContextTokens,
         updatedAutoToolRouting ? 1 : 0,
@@ -342,9 +335,9 @@ export function duplicateAgent(id: string): AgentData | null {
 
     db.prepare(
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
-         category, sub_agents_json, auto_approve_tools, show_in_carousel, thinking_enabled, max_context_tokens,
+            category, sub_agents_json, auto_approve_tools, thinking_enabled, max_context_tokens,
          auto_tool_routing, tool_router_provider_id, tool_router_model, sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         newId,
         newName,
@@ -358,7 +351,6 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.category,
         existing.sub_agents_json,
         existing.auto_approve_tools,
-        existing.show_in_carousel,
         existing.thinking_enabled,
         existing.max_context_tokens,
         existing.auto_tool_routing,
