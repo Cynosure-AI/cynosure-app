@@ -1,190 +1,210 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted } from 'vue'
-import { api } from '../api/client'
-import type { MemorySpace } from '../api/types'
-import { Icon } from '@iconify/vue'
-import ModalDialog from '../components/shared/ModalDialog.vue'
-import MemoryDocumentList from '../components/memory/MemoryDocumentList.vue'
+import { ref, computed, nextTick, onMounted } from "vue";
+import { api } from "../api/client";
+import type { MemorySpace } from "../api/types";
+import { Icon } from "@iconify/vue";
+import ModalDialog from "../components/shared/ModalDialog.vue";
+import MemoryDocumentList from "../components/memory/MemoryDocumentList.vue";
 
 // --- Space management ---
-const spaces = ref<MemorySpace[]>([])
-const spacesLoading = ref(false)
-const selectedSpaceId = ref<string | null>(null)
-const showCreateDialog = ref(false)
-const editingSpace = ref<MemorySpace | null>(null)
-const spaceName = ref('')
-const spaceDescription = ref('')
-const showDeleteConfirm = ref(false)
-const pendingDeleteSpace = ref<MemorySpace | null>(null)
+const spaces = ref<MemorySpace[]>([]);
+const spacesLoading = ref(false);
+const selectedSpaceId = ref<string | null>(null);
+const showCreateDialog = ref(false);
+const editingSpace = ref<MemorySpace | null>(null);
+const spaceName = ref("");
+const spaceDescription = ref("");
+const showDeleteConfirm = ref(false);
+const pendingDeleteSpace = ref<MemorySpace | null>(null);
 
-const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null)
+const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null);
 
 function confirmDeleteSpace(space: MemorySpace) {
-  pendingDeleteSpace.value = space
-  showDeleteConfirm.value = true
+  pendingDeleteSpace.value = space;
+  showDeleteConfirm.value = true;
 }
 
 // --- Drag-and-drop reorder ---
-const draggedSpaceId = ref<string | null>(null)
-const dragOverSpaceId = ref<string | null>(null)
-const dropPosition = ref<'before' | 'after'>('before')
+const draggedSpaceId = ref<string | null>(null);
+const dragOverSpaceId = ref<string | null>(null);
+const dropPosition = ref<"before" | "after">("before");
 
 function onSpaceDragStart(e: DragEvent, spaceId: string) {
-  draggedSpaceId.value = spaceId
+  draggedSpaceId.value = spaceId;
   if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', spaceId)
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", spaceId);
   }
 }
 
 function onSpaceDragOver(e: DragEvent, spaceId: string) {
-  if (!draggedSpaceId.value || draggedSpaceId.value === spaceId) return
-  e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  dropPosition.value = e.clientX < rect.left + rect.width / 2 ? 'before' : 'after'
-  dragOverSpaceId.value = spaceId
+  if (!draggedSpaceId.value || draggedSpaceId.value === spaceId) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  dropPosition.value =
+    e.clientX < rect.left + rect.width / 2 ? "before" : "after";
+  dragOverSpaceId.value = spaceId;
 }
 
 function onSpaceDragLeave(e: DragEvent, spaceId: string) {
-  const related = e.relatedTarget as HTMLElement | null
-  const current = e.currentTarget as HTMLElement
+  const related = e.relatedTarget as HTMLElement | null;
+  const current = e.currentTarget as HTMLElement;
   if (!related || !current.contains(related)) {
-    if (dragOverSpaceId.value === spaceId) dragOverSpaceId.value = null
+    if (dragOverSpaceId.value === spaceId) dragOverSpaceId.value = null;
   }
 }
 
 async function onSpaceDrop(e: DragEvent, targetSpaceId: string) {
-  e.preventDefault()
-  const pos = dropPosition.value
-  dragOverSpaceId.value = null
-  const srcId = draggedSpaceId.value
-  draggedSpaceId.value = null
-  if (!srcId || srcId === targetSpaceId) return
+  e.preventDefault();
+  const pos = dropPosition.value;
+  dragOverSpaceId.value = null;
+  const srcId = draggedSpaceId.value;
+  draggedSpaceId.value = null;
+  if (!srcId || srcId === targetSpaceId) return;
 
-  const list = [...spaces.value]
-  const srcIdx = list.findIndex(s => s.id === srcId)
-  let tgtIdx = list.findIndex(s => s.id === targetSpaceId)
-  if (srcIdx === -1 || tgtIdx === -1) return
+  const list = [...spaces.value];
+  const srcIdx = list.findIndex((s) => s.id === srcId);
+  let tgtIdx = list.findIndex((s) => s.id === targetSpaceId);
+  if (srcIdx === -1 || tgtIdx === -1) return;
 
-  const [moved] = list.splice(srcIdx, 1)
+  const [moved] = list.splice(srcIdx, 1);
   // Adjust target index after removal
-  if (srcIdx < tgtIdx) tgtIdx--
-  if (pos === 'after') tgtIdx++
-  list.splice(tgtIdx, 0, moved)
-  spaces.value = list
+  if (srcIdx < tgtIdx) tgtIdx--;
+  if (pos === "after") tgtIdx++;
+  list.splice(tgtIdx, 0, moved);
+  spaces.value = list;
 
-  await api.memorySpaces.reorder(list.map(s => s.id))
+  await api.memorySpaces.reorder(list.map((s) => s.id));
 }
 
 function onSpaceDragEnd() {
-  draggedSpaceId.value = null
-  dragOverSpaceId.value = null
-  dropTargetSpaceId.value = null
+  draggedSpaceId.value = null;
+  dragOverSpaceId.value = null;
+  dropTargetSpaceId.value = null;
 }
 
 async function onSpaceOrFileDrop(e: DragEvent, spaceId: string) {
   if (draggedSpaceId.value) {
-    return onSpaceDrop(e, spaceId)
+    return onSpaceDrop(e, spaceId);
   }
-  return onFileDrop(e, spaceId)
+  return onFileDrop(e, spaceId);
 }
 
-const selectedSpace = computed(() => spaces.value.find(s => s.id === selectedSpaceId.value))
+const selectedSpace = computed(() =>
+  spaces.value.find((s) => s.id === selectedSpaceId.value),
+);
 
 async function loadSpaces() {
-  spacesLoading.value = true
+  spacesLoading.value = true;
   try {
-    spaces.value = await api.memorySpaces.list()
+    spaces.value = await api.memorySpaces.list();
     if (!selectedSpaceId.value && spaces.value.length > 0) {
-      selectedSpaceId.value = spaces.value[0].id
+      selectedSpaceId.value = spaces.value[0].id;
     }
-    if (selectedSpaceId.value && !spaces.value.find(s => s.id === selectedSpaceId.value)) {
-      selectedSpaceId.value = spaces.value.length > 0 ? spaces.value[0].id : null
+    if (
+      selectedSpaceId.value &&
+      !spaces.value.find((s) => s.id === selectedSpaceId.value)
+    ) {
+      selectedSpaceId.value =
+        spaces.value.length > 0 ? spaces.value[0].id : null;
     }
-  } catch { spaces.value = [] }
-  spacesLoading.value = false
+  } catch {
+    spaces.value = [];
+  }
+  spacesLoading.value = false;
 }
 
 function openCreateDialog() {
-  editingSpace.value = null
-  spaceName.value = ''
-  spaceDescription.value = ''
-  showCreateDialog.value = true
+  editingSpace.value = null;
+  spaceName.value = "";
+  spaceDescription.value = "";
+  showCreateDialog.value = true;
 }
 
 function openEditDialog(space: MemorySpace) {
-  editingSpace.value = space
-  spaceName.value = space.name
-  spaceDescription.value = space.description
-  showCreateDialog.value = true
+  editingSpace.value = space;
+  spaceName.value = space.name;
+  spaceDescription.value = space.description;
+  showCreateDialog.value = true;
 }
 
 async function saveSpace() {
-  if (!spaceName.value.trim()) return
+  if (!spaceName.value.trim()) return;
   try {
     if (editingSpace.value) {
-      await api.memorySpaces.update(editingSpace.value.id, { name: spaceName.value.trim(), description: spaceDescription.value })
+      await api.memorySpaces.update(editingSpace.value.id, {
+        name: spaceName.value.trim(),
+        description: spaceDescription.value,
+      });
     } else {
-      const space = await api.memorySpaces.create(spaceName.value.trim(), spaceDescription.value)
-      selectedSpaceId.value = space.id
+      const space = await api.memorySpaces.create(
+        spaceName.value.trim(),
+        spaceDescription.value,
+      );
+      selectedSpaceId.value = space.id;
     }
-    await loadSpaces()
-  } catch { /* error */ }
-  showCreateDialog.value = false
+    await loadSpaces();
+  } catch {
+    /* error */
+  }
+  showCreateDialog.value = false;
 }
 
 async function deleteSpace(space: MemorySpace) {
-  showDeleteConfirm.value = false
-  pendingDeleteSpace.value = null
+  showDeleteConfirm.value = false;
+  pendingDeleteSpace.value = null;
   try {
-    await api.memorySpaces.remove(space.id)
-    await loadSpaces()
-  } catch { /* error */ }
+    await api.memorySpaces.remove(space.id);
+    await loadSpaces();
+  } catch {
+    /* error */
+  }
 }
 
 // --- File drag-and-drop ---
-const dragCounter = ref(0)
-const dropTargetSpaceId = ref<string | null>(null)
+const dragCounter = ref(0);
+const dropTargetSpaceId = ref<string | null>(null);
 
 function onDragEnter(e: DragEvent, spaceId?: string) {
-  e.preventDefault()
+  e.preventDefault();
   if (spaceId) {
-    if (!draggedSpaceId.value) dropTargetSpaceId.value = spaceId
+    if (!draggedSpaceId.value) dropTargetSpaceId.value = spaceId;
   } else {
-    dragCounter.value++
+    dragCounter.value++;
   }
 }
 
 function onDragLeave(e: DragEvent, spaceId?: string) {
-  e.preventDefault()
+  e.preventDefault();
   if (spaceId) {
-    if (dropTargetSpaceId.value === spaceId) dropTargetSpaceId.value = null
+    if (dropTargetSpaceId.value === spaceId) dropTargetSpaceId.value = null;
   } else {
-    dragCounter.value--
-    if (dragCounter.value <= 0) dragCounter.value = 0
+    dragCounter.value--;
+    if (dragCounter.value <= 0) dragCounter.value = 0;
   }
 }
 
 function onDragOver(e: DragEvent) {
-  e.preventDefault()
-  if (e.dataTransfer && !draggedSpaceId.value) e.dataTransfer.dropEffect = 'copy'
+  e.preventDefault();
+  if (e.dataTransfer && !draggedSpaceId.value)
+    e.dataTransfer.dropEffect = "copy";
 }
 
 async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
-  e.preventDefault()
-  dragCounter.value = 0
-  dropTargetSpaceId.value = null
-  const files = e.dataTransfer?.files
-  if (!files?.length) return
-  const spaceId = targetSpaceId || selectedSpaceId.value
-  if (!spaceId) return
-  if (spaceId !== selectedSpaceId.value) selectedSpaceId.value = spaceId
-  await nextTick()
-  docList.value?.ingestFiles(Array.from(files))
+  e.preventDefault();
+  dragCounter.value = 0;
+  dropTargetSpaceId.value = null;
+  const files = e.dataTransfer?.files;
+  if (!files?.length) return;
+  const spaceId = targetSpaceId || selectedSpaceId.value;
+  if (!spaceId) return;
+  if (spaceId !== selectedSpaceId.value) selectedSpaceId.value = spaceId;
+  await nextTick();
+  docList.value?.ingestFiles(Array.from(files));
 }
 
-onMounted(() => loadSpaces())
+onMounted(() => loadSpaces());
 </script>
 
 <template>
@@ -197,7 +217,12 @@ onMounted(() => loadSpaces())
   >
     <!-- Drop overlay for selected space (only for external file drops, not space reordering) -->
     <div
-      v-if="dragCounter > 0 && selectedSpaceId && !dropTargetSpaceId && !draggedSpaceId"
+      v-if="
+        dragCounter > 0 &&
+          selectedSpaceId &&
+          !dropTargetSpaceId &&
+          !draggedSpaceId
+      "
       class="absolute inset-0 z-40 flex items-center justify-center bg-blue-500/10 border-2 border-dashed border-blue-500/40 rounded-xl pointer-events-none"
     >
       <div class="text-center">
@@ -206,7 +231,8 @@ onMounted(() => loadSpaces())
           class="w-12 h-12 text-blue-400 mx-auto mb-2"
         />
         <p class="text-blue-300 font-medium">
-          Drop files to ingest into {{ selectedSpace?.name || 'selected space' }}
+          Drop files to ingest into
+          {{ selectedSpace?.name || "selected space" }}
         </p>
         <p class="text-blue-400/60 text-sm mt-1">
           Files will be chunked and indexed automatically
@@ -275,8 +301,10 @@ onMounted(() => loadSpaces())
               selectedSpaceId === space.id
                 ? 'border-blue-500/50 bg-blue-500/10'
                 : 'border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800',
-              dropTargetSpaceId === space.id ? 'ring-2 ring-blue-400 border-blue-400/50 bg-blue-500/15' : '',
-              draggedSpaceId === space.id ? 'opacity-40' : ''
+              dropTargetSpaceId === space.id
+                ? 'ring-2 ring-blue-400 border-blue-400/50 bg-blue-500/15'
+                : '',
+              draggedSpaceId === space.id ? 'opacity-40' : '',
             ]"
             @click="selectedSpaceId = space.id"
             @dragstart="onSpaceDragStart($event, space.id)"
@@ -301,10 +329,14 @@ onMounted(() => loadSpaces())
                 icon="lucide:database"
                 class="w-4 h-4 text-zinc-400"
               />
-              <span class="text-sm font-medium text-zinc-200 truncate">{{ space.name }}</span>
+              <span class="text-sm font-medium text-zinc-200 truncate">{{
+                space.name
+              }}</span>
             </div>
             <div class="text-xs text-zinc-500">
-              {{ space.documentCount }} document{{ space.documentCount !== 1 ? 's' : '' }}
+              {{ space.documentCount }} document{{
+                space.documentCount !== 1 ? "s" : ""
+              }}
             </div>
           </button>
         </div>
@@ -328,9 +360,11 @@ onMounted(() => loadSpaces())
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
           @click.self="showCreateDialog = false"
         >
-          <div class="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-xl">
+          <div
+            class="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-xl"
+          >
             <h3 class="text-base font-medium text-zinc-200 mb-4">
-              {{ editingSpace ? 'Edit Space' : 'New Memory Space' }}
+              {{ editingSpace ? "Edit Space" : "New Memory Space" }}
             </h3>
             <div class="space-y-3">
               <div>
@@ -365,7 +399,7 @@ onMounted(() => loadSpaces())
                 class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg disabled:opacity-50"
                 @click="saveSpace"
               >
-                {{ editingSpace ? 'Save' : 'Create' }}
+                {{ editingSpace ? "Save" : "Create" }}
               </button>
             </div>
           </div>
@@ -381,8 +415,9 @@ onMounted(() => loadSpaces())
         @close="showDeleteConfirm = false"
       >
         <p class="text-zinc-400 leading-relaxed">
-          Are you sure you want to delete <strong class="text-zinc-200">{{ pendingDeleteSpace?.name }}</strong>?
-          All documents and chunks in this space will be permanently removed. This action cannot be undone.
+          Are you sure you want to delete
+          <strong class="text-zinc-200">{{ pendingDeleteSpace?.name }}</strong>? All documents and chunks in this space will be permanently removed.
+          This action cannot be undone.
         </p>
         <template #actions>
           <button
