@@ -55,7 +55,7 @@
 
         <!-- Dismiss button -->
         <button
-          v-if="currentStep !== STEP_DONE"
+          v-if="currentStep !== STEP_DONE && serverReady"
           class="text-xs text-zinc-600 hover:text-zinc-400 transition-colors flex items-center gap-1 ml-auto"
           @click="dismiss"
         >
@@ -70,7 +70,27 @@
 
     <!-- ── Step content ────────────────────────────────────────────── -->
     <div class="flex-1 overflow-hidden relative">
+      <div
+        v-if="!serverReady"
+        class="absolute inset-0 flex items-center justify-center px-6"
+      >
+        <div class="text-center max-w-sm">
+          <div class="w-14 h-14 rounded-full border border-zinc-700 bg-zinc-900/60 flex items-center justify-center mx-auto mb-4">
+            <Icon
+              icon="lucide:loader-2"
+              class="w-7 h-7 text-blue-400 animate-spin"
+            />
+          </div>
+          <h2 class="text-lg font-semibold text-zinc-100 mb-1">
+            Initializing
+          </h2>
+          <p class="text-sm text-zinc-500">
+            Waiting for server readiness before starting onboarding.
+          </p>
+        </div>
+      </div>
       <Transition
+        v-else
         :name="transitionName"
         mode="out-in"
       >
@@ -157,16 +177,23 @@
 
         <!-- Continue / Finish / Go to Chat -->
         <div class="flex items-center gap-2">
+          <span
+            v-if="!serverReady"
+            class="text-xs text-zinc-500"
+          >
+            Connecting to server...
+          </span>
+
           <!-- Required step note -->
           <span
-            v-if="currentStep === STEP_PROVIDER && !canContinue"
+            v-if="serverReady && currentStep === STEP_PROVIDER && !canContinue"
             class="text-xs text-amber-400/80 hidden sm:block"
           >
             Add a provider first
           </span>
 
           <button
-            v-if="currentStep < STEP_DONE"
+            v-if="serverReady && currentStep < STEP_DONE"
             class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-lg transition-colors"
             :class="canContinue
               ? 'bg-blue-600 hover:bg-blue-500 text-white'
@@ -182,7 +209,7 @@
           </button>
 
           <button
-            v-else
+            v-else-if="serverReady"
             class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
             @click="goToChat"
           >
@@ -199,11 +226,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useOnboardingStore } from '../stores/onboarding.store'
 import { useProviderStore } from '../stores/provider.store'
+import { api } from '../api/client'
 import OnboardingWelcome from '../components/onboarding/OnboardingWelcome.vue'
 import OnboardingProvider from '../components/onboarding/OnboardingProvider.vue'
 import OnboardingCynosureMcp from '../components/onboarding/OnboardingCynosureMcp.vue'
@@ -229,6 +257,8 @@ const totalSteps = STEP_DONE + 1 // 0..6
 // ── Navigation state ──────────────────────────────────────────────
 const currentStep = ref(STEP_WELCOME)
 const direction = ref<'forward' | 'backward'>('forward')
+const serverReady = ref(false)
+let readinessPoll: ReturnType<typeof setInterval> | null = null
 
 const transitionName = computed(() =>
   direction.value === 'forward' ? 'slide-forward' : 'slide-backward'
@@ -301,6 +331,32 @@ function dismiss() {
 function goToChat() {
   router.push('/chat')
 }
+
+async function probeServerReadiness() {
+  try {
+    const res = await api.system.health()
+    if (res?.status === 'ok') {
+      serverReady.value = true
+      if (readinessPoll) {
+        clearInterval(readinessPoll)
+        readinessPoll = null
+      }
+    }
+  } catch {
+    serverReady.value = false
+  }
+}
+
+onMounted(() => {
+  void probeServerReadiness()
+  readinessPoll = setInterval(() => {
+    if (!serverReady.value) void probeServerReadiness()
+  }, 1200)
+})
+
+onUnmounted(() => {
+  if (readinessPoll) clearInterval(readinessPoll)
+})
 </script>
 
 <style scoped>
