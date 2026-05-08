@@ -11,10 +11,6 @@ const chatStore = useChatStore()
 
 const showModal = ref(false)
 
-const memorySpaceCount = computed(() =>
-  chatStore.freeChatMemorySpaceIds.length
-)
-
 const cachedMemorySpaces = ref<MemorySpace[]>([])
 onMounted(async () => {
   try { cachedMemorySpaces.value = await api.memorySpaces.list() } catch { /* ignore */ }
@@ -24,6 +20,8 @@ const selectedMemorySpaces = computed(() => {
   const ids = chatStore.freeChatMemorySpaceIds
   return cachedMemorySpaces.value.filter(s => ids.includes(s.id))
 })
+
+const memorySpaceCount = computed(() => selectedMemorySpaces.value.length)
 </script>
 
 <template>
