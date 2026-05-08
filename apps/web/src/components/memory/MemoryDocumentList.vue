@@ -5,6 +5,8 @@ import type { MemorySpace } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentModal from "./MemoryDocumentModal.vue";
 
+const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
+
 const props = defineProps<{
   spaceId: string;
   spaces: MemorySpace[];
@@ -260,16 +262,21 @@ async function deleteSelectedGroups() {
 }
 
 async function moveSelectedGroups(targetSpaceId: string) {
-  if (selectedGroups.value.size === 0 || targetSpaceId === props.spaceId)
-    return;
+  await moveGroupsToSpace(targetSpaceId, Array.from(selectedGroups.value));
+}
+
+async function moveGroupsToSpace(targetSpaceId: string, sourceFiles?: string[]) {
+  const files =
+    selectedGroups.value.size > 0
+      ? Array.from(selectedGroups.value)
+      : sourceFiles ?? [];
+
+  if (files.length === 0 || targetSpaceId === props.spaceId) return;
+
   moving.value = true;
   try {
-    await api.memorySpaces.moveGroups(
-      props.spaceId,
-      Array.from(selectedGroups.value),
-      targetSpaceId,
-    );
-    const moved = selectedGroups.value;
+    await api.memorySpaces.moveGroups(props.spaceId, files, targetSpaceId);
+    const moved = new Set(files);
     selectedGroups.value = new Set();
     const newMap = new Map(groupChunks.value);
     for (const sf of moved) newMap.delete(sf);
@@ -427,6 +434,18 @@ function startReingest(sourceFile: string) {
   reingestFileInput.value?.click();
 }
 
+function startDocumentDrag(event: DragEvent, sourceFile: string) {
+  const sourceFiles =
+    selectedGroups.value.size > 0 ? Array.from(selectedGroups.value) : [sourceFile];
+
+  if (!event.dataTransfer) return;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData(
+    DOCUMENT_DRAG_MIME,
+    JSON.stringify({ sourceFiles }),
+  );
+}
+
 async function handleReingestFile(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -475,7 +494,7 @@ watch(
   { immediate: true },
 );
 
-defineExpose({ ingestFiles });
+defineExpose({ ingestFiles, moveGroupsToSpace });
 </script>
 
 <template>
@@ -752,8 +771,10 @@ defineExpose({ ingestFiles });
       >
         <!-- Group header -->
         <div
+          draggable="true"
           class="group/row flex items-center gap-3 px-3 py-2.5 bg-zinc-800/30 hover:bg-zinc-800/60 transition-colors cursor-pointer"
           @click="toggleExpandGroup(group.sourceFile)"
+          @dragstart.stop="startDocumentDrag($event, group.sourceFile)"
         >
           <input
             type="checkbox"
