@@ -53,7 +53,7 @@ onMounted(() =>
           @change="
             emit('update', 'name', ($event.target as HTMLInputElement).value)
           "
-        />
+        >
       </div>
 
       <div>
@@ -75,9 +75,7 @@ onMounted(() =>
     <!-- ── Model ─────────────────────────────────────────────── -->
     <BaseCard class="p-5 space-y-4">
       <div>
-        <label class="block text-sm text-zinc-400 mb-1.5"
-          >Provider / Model</label
-        >
+        <label class="block text-sm text-zinc-400 mb-1.5">Provider / Model</label>
         <p class="text-xs text-zinc-600 mb-2">
           Overrides the provider's default model for this agent. Leave empty to
           use the provider default.

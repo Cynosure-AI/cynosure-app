@@ -205,7 +205,10 @@ onBeforeUnmount(() =>
 </script>
 
 <template>
-  <div ref="containerRef" class="relative w-full">
+  <div
+    ref="containerRef"
+    class="relative w-full"
+  >
     <!-- ── Trigger ──────────────────────────────────────────────── -->
     <button
       type="button"
@@ -224,7 +227,7 @@ onBeforeUnmount(() =>
           :src="selectedOption.imgSrc"
           class="w-4 h-4 object-contain rounded-sm"
           alt=""
-        />
+        >
         <Icon
           v-else-if="selectedOption?.iconName"
           :icon="selectedOption.iconName"
@@ -267,7 +270,10 @@ onBeforeUnmount(() =>
       ]"
     >
       <!-- Filter input -->
-      <div v-if="filterable" class="px-2 pt-2 pb-1">
+      <div
+        v-if="filterable"
+        class="px-2 pt-2 pb-1"
+      >
         <input
           ref="filterInputRef"
           v-model="filterQuery"
@@ -279,17 +285,23 @@ onBeforeUnmount(() =>
           @keydown.arrow-down.prevent="handleKeydown"
           @keydown.arrow-up.prevent="handleKeydown"
           @keydown.enter.prevent="handleKeydown"
-        />
+        >
       </div>
 
-      <div class="py-1 overflow-y-auto" :class="maxHeight">
+      <div
+        class="py-1 overflow-y-auto"
+        :class="maxHeight"
+      >
         <div
           v-if="filterable && filterQuery && !filteredAllOptions.length"
           class="px-3 py-2 text-xs text-zinc-500 italic"
         >
           No results
         </div>
-        <template v-for="(group, gi) in filteredGroups" :key="gi">
+        <template
+          v-for="(group, gi) in filteredGroups"
+          :key="gi"
+        >
           <!-- Group header -->
           <div
             v-if="group.label"
@@ -343,7 +355,7 @@ onBeforeUnmount(() =>
                 :src="opt.imgSrc"
                 class="w-4 h-4 object-contain rounded-sm"
                 alt=""
-              />
+              >
               <Icon
                 v-else-if="opt.iconName"
                 :icon="opt.iconName"

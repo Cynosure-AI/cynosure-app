@@ -135,7 +135,7 @@ function onTitleKeydown(e: KeyboardEvent): void {
     <label
       v-if="
         selectedAgent?.subAgents?.length ||
-        chatStore.freeChatSubAgentIds?.length
+          chatStore.freeChatSubAgentIds?.length
       "
       class="items-center gap-1.5 hidden md:flex cursor-pointer select-none shrink-0"
       :title="
@@ -171,7 +171,7 @@ function onTitleKeydown(e: KeyboardEvent): void {
         class="text-sm font-medium text-zinc-300 bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 max-w-xs w-full focus:outline-none focus:border-blue-500"
         @blur="commitTitleEdit"
         @keydown="onTitleKeydown"
-      />
+      >
       <span
         v-else-if="conversationTitle"
         class="text-sm font-medium text-zinc-300 truncate select-none cursor-pointer"
@@ -185,7 +185,10 @@ function onTitleKeydown(e: KeyboardEvent): void {
         class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-800 shrink-0"
         :class="activeOrigin.color"
       >
-        <Icon :icon="activeOrigin.icon" class="w-3 h-3" />
+        <Icon
+          :icon="activeOrigin.icon"
+          class="w-3 h-3"
+        />
         {{ activeOrigin.label }}
       </span>
     </div>
@@ -195,7 +198,10 @@ function onTitleKeydown(e: KeyboardEvent): void {
       class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition-colors shrink-0"
       @click="newChat"
     >
-      <Icon icon="lucide:plus" class="w-3.5 h-3.5" />
+      <Icon
+        icon="lucide:plus"
+        class="w-3.5 h-3.5"
+      />
       <span class="hidden sm:inline">New Chat</span>
     </button>
   </div>
