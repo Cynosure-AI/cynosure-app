@@ -1,108 +1,106 @@
 <script setup lang="ts">
-import { computed, ref, nextTick } from 'vue'
-import { useChatStore } from '../../stores/chat.store'
-import { useAgentStore } from '../../stores/agent-runtime.store'
-import { useProviderStore } from '../../stores/provider.store'
-import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
-import { Icon } from '@iconify/vue'
-import AgentSelect from '../shared/AgentSelect.vue'
-import ProviderSelect from '../shared/ProviderSelect.vue'
-import ToggleSwitch from '../shared/ToggleSwitch.vue'
-import { useChatSidebar } from '../../composables/useSidebar'
+import { computed, ref, nextTick } from "vue";
+import { useChatStore } from "../../stores/chat.store";
+import { useAgentStore } from "../../stores/agent-runtime.store";
+import { useProviderStore } from "../../stores/provider.store";
+import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
+import { Icon } from "@iconify/vue";
+import AgentSelect from "../shared/AgentSelect.vue";
+import ToggleSwitch from "../shared/ToggleSwitch.vue";
+import { useChatSidebar } from "../../composables/useSidebar";
 
-const chatStore = useChatStore()
-const agentStore = useAgentStore()
-const providerStore = useProviderStore()
-const agentDefs = useAgentDefinitionsStore()
-const { chatSidebarOpen, toggle: toggleSidebar } = useChatSidebar()
+const chatStore = useChatStore();
+const agentStore = useAgentStore();
+const providerStore = useProviderStore();
+const agentDefs = useAgentDefinitionsStore();
+const { chatSidebarOpen, toggle: toggleSidebar } = useChatSidebar();
 
 const selectedAgent = computed(() =>
-  chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null
-)
+  chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null,
+);
 
-const conversationTitle = computed(() => chatStore.activeConversation?.title || '')
+const conversationTitle = computed(
+  () => chatStore.activeConversation?.title || "",
+);
 
-const agentDropdownValue = computed(() => chatStore.activeAgentId || '')
-
-const currentProviderId = computed(() =>
-  chatStore.sessionProviderOverride || selectedAgent.value?.providerId || providerStore.lastUsedProviderId
-)
-
-function onProviderOverride(providerId: string): void {
-  chatStore.sessionModelOverride = null
-  if (chatStore.activeAgentId) {
-    chatStore.sessionProviderOverride =
-      providerId !== selectedAgent.value?.providerId ? providerId : null
-    chatStore.markOverridesModified()
-  } else {
-    chatStore.sessionProviderOverride = providerId
-    providerStore.setLastUsed(providerId)
-  }
-}
+const agentDropdownValue = computed(() => chatStore.activeAgentId || "");
 
 async function onAgentChange(value: string) {
-  const agentId = value || null
-  await chatStore.setActiveAgent(agentId)
+  const agentId = value || null;
+  await chatStore.setActiveAgent(agentId);
   if (agentId) {
-    const agent = agentDefs.get(agentId)
+    const agent = agentDefs.get(agentId);
     if (agent?.providerId) {
-      providerStore.setLastUsed(agent.providerId)
+      providerStore.setLastUsed(agent.providerId);
     }
   }
 }
 
-const originConfig: Record<string, { icon: string; color: string; label: string }> = {
-  cron: { icon: 'lucide:clock', color: 'text-sky-400', label: 'Cron' },
-  channel: { icon: 'lucide:send', color: 'text-teal-400', label: 'Channel' },
-  'file-watcher': { icon: 'lucide:eye', color: 'text-orange-400', label: 'File Watch' },
-  'multi-agent': { icon: 'lucide:network', color: 'text-purple-400', label: 'Multi-Agent' },
-}
+const originConfig: Record<
+  string,
+  { icon: string; color: string; label: string }
+> = {
+  cron: { icon: "lucide:clock", color: "text-sky-400", label: "Cron" },
+  channel: { icon: "lucide:send", color: "text-teal-400", label: "Channel" },
+  "file-watcher": {
+    icon: "lucide:eye",
+    color: "text-orange-400",
+    label: "File Watch",
+  },
+  "multi-agent": {
+    icon: "lucide:network",
+    color: "text-purple-400",
+    label: "Multi-Agent",
+  },
+};
 
 const activeOrigin = computed(() => {
-  const origin = chatStore.activeConversation?.origin
-  return origin && origin !== 'chat' ? originConfig[origin] ?? null : null
-})
+  const origin = chatStore.activeConversation?.origin;
+  return origin && origin !== "chat" ? (originConfig[origin] ?? null) : null;
+});
 
 async function newChat(): Promise<void> {
-  chatStore.startNewChat()
-  agentStore.clearExecution()
+  chatStore.startNewChat();
+  agentStore.clearExecution();
 }
 
 // ── Inline title editing ──
-const isEditingTitle = ref(false)
-const editingTitleValue = ref('')
-const titleInputRef = ref<HTMLInputElement | null>(null)
+const isEditingTitle = ref(false);
+const editingTitleValue = ref("");
+const titleInputRef = ref<HTMLInputElement | null>(null);
 
 function startEditTitle(): void {
-  if (!chatStore.activeConversation) return
-  editingTitleValue.value = chatStore.activeConversation.title
-  isEditingTitle.value = true
+  if (!chatStore.activeConversation) return;
+  editingTitleValue.value = chatStore.activeConversation.title;
+  isEditingTitle.value = true;
   nextTick(() => {
-    titleInputRef.value?.select()
-  })
+    titleInputRef.value?.select();
+  });
 }
 
 async function commitTitleEdit(): Promise<void> {
-  if (!isEditingTitle.value) return
-  isEditingTitle.value = false
-  const id = chatStore.activeConversationId
+  if (!isEditingTitle.value) return;
+  isEditingTitle.value = false;
+  const id = chatStore.activeConversationId;
   if (id && editingTitleValue.value.trim()) {
-    await chatStore.renameConversation(id, editingTitleValue.value)
+    await chatStore.renameConversation(id, editingTitleValue.value);
   }
 }
 
 function cancelTitleEdit(): void {
-  isEditingTitle.value = false
+  isEditingTitle.value = false;
 }
 
 function onTitleKeydown(e: KeyboardEvent): void {
-  if (e.key === 'Enter') commitTitleEdit()
-  else if (e.key === 'Escape') cancelTitleEdit()
+  if (e.key === "Enter") commitTitleEdit();
+  else if (e.key === "Escape") cancelTitleEdit();
 }
 </script>
 
 <template>
-  <div class="shrink-0 border-b border-zinc-800/60 px-3 py-2 flex items-center gap-2">
+  <div
+    class="shrink-0 border-b border-zinc-800/60 px-3 py-2 flex items-center gap-2"
+  >
     <!-- Sidebar toggle -->
     <button
       class="p-1.5 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300 shrink-0"
@@ -110,7 +108,9 @@ function onTitleKeydown(e: KeyboardEvent): void {
       @click="toggleSidebar"
     >
       <Icon
-        :icon="chatSidebarOpen ? 'lucide:panel-left-close' : 'lucide:panel-left-open'"
+        :icon="
+          chatSidebarOpen ? 'lucide:panel-left-close' : 'lucide:panel-left-open'
+        "
         class="w-4 h-4"
       />
     </button>
@@ -131,25 +131,18 @@ function onTitleKeydown(e: KeyboardEvent): void {
       />
     </div>
 
-    <!-- Provider selector -->
-    <div
-      v-if="providerStore.providers.length > 1"
-      class="w-36 shrink-0 hidden sm:block"
-    >
-      <ProviderSelect
-        :model-value="currentProviderId"
-        :providers="providerStore.providers"
-        max-height="max-h-96"
-        size="sm"
-        @change="onProviderOverride"
-      />
-    </div>
-
     <!-- Sub-agent override toggle (next to provider) -->
     <label
-      v-if="selectedAgent?.subAgents?.length || chatStore.freeChatSubAgentIds?.length"
+      v-if="
+        selectedAgent?.subAgents?.length ||
+        chatStore.freeChatSubAgentIds?.length
+      "
       class="items-center gap-1.5 hidden md:flex cursor-pointer select-none shrink-0"
-      :title="chatStore.sessionOverrideSubAgents ? 'Model applies to all sub-agents — click to restrict to main agent only' : 'Model applies to main agent only — click to propagate to sub-agents'"
+      :title="
+        chatStore.sessionOverrideSubAgents
+          ? 'Model applies to all sub-agents — click to restrict to main agent only'
+          : 'Model applies to main agent only — click to propagate to sub-agents'
+      "
     >
       <ToggleSwitch
         :model-value="chatStore.sessionOverrideSubAgents"
@@ -159,7 +152,11 @@ function onTitleKeydown(e: KeyboardEvent): void {
       />
       <span
         class="text-[10px]"
-        :class="chatStore.sessionOverrideSubAgents ? 'text-amber-400' : 'text-zinc-500'"
+        :class="
+          chatStore.sessionOverrideSubAgents
+            ? 'text-amber-400'
+            : 'text-zinc-500'
+        "
       >
         Apply to All agents
       </span>
@@ -174,7 +171,7 @@ function onTitleKeydown(e: KeyboardEvent): void {
         class="text-sm font-medium text-zinc-300 bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 max-w-xs w-full focus:outline-none focus:border-blue-500"
         @blur="commitTitleEdit"
         @keydown="onTitleKeydown"
-      >
+      />
       <span
         v-else-if="conversationTitle"
         class="text-sm font-medium text-zinc-300 truncate select-none cursor-pointer"
@@ -188,10 +185,7 @@ function onTitleKeydown(e: KeyboardEvent): void {
         class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-800 shrink-0"
         :class="activeOrigin.color"
       >
-        <Icon
-          :icon="activeOrigin.icon"
-          class="w-3 h-3"
-        />
+        <Icon :icon="activeOrigin.icon" class="w-3 h-3" />
         {{ activeOrigin.label }}
       </span>
     </div>
@@ -201,10 +195,7 @@ function onTitleKeydown(e: KeyboardEvent): void {
       class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition-colors shrink-0"
       @click="newChat"
     >
-      <Icon
-        icon="lucide:plus"
-        class="w-3.5 h-3.5"
-      />
+      <Icon icon="lucide:plus" class="w-3.5 h-3.5" />
       <span class="hidden sm:inline">New Chat</span>
     </button>
   </div>

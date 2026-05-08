@@ -1,94 +1,87 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useChatStore } from '../../../stores/chat.store'
-import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
-import { usePreferencesStore } from '../../../stores/preferences.store'
-import { useProviderStore } from '../../../stores/provider.store'
-import { useWhisper } from '../../../composables/useWhisper'
-import { Icon } from '@iconify/vue'
-import ModelSelect from '../../shared/ModelSelect.vue'
-import HoverTooltip from '../../shared/HoverTooltip.vue'
-import ToolsButton from './ToolsButton.vue'
-import SubAgentsButton from './SubAgentsButton.vue'
-import MemorySpacesButton from './MemorySpacesButton.vue'
-import SystemPromptButton from './SystemPromptButton.vue'
-import ThinkingModeButton from './ThinkingModeButton.vue'
-import ModelButton from './ModelButton.vue'
+import { ref, computed } from "vue";
+import { useChatStore } from "../../../stores/chat.store";
+import { usePreferencesStore } from "../../../stores/preferences.store";
+import { useAgentDefinitionsStore } from "../../../stores/agent-definitions.store";
+import { useProviderStore } from "../../../stores/provider.store";
+import { useWhisper } from "../../../composables/useWhisper";
+import { Icon } from "@iconify/vue";
+import HoverTooltip from "../../shared/HoverTooltip.vue";
+import ProviderModelSelect from "../../shared/ProviderModelSelect.vue";
+import ToolsButton from "./ToolsButton.vue";
+import SubAgentsButton from "./SubAgentsButton.vue";
+import MemorySpacesButton from "./MemorySpacesButton.vue";
+import SystemPromptButton from "./SystemPromptButton.vue";
+import ThinkingModeButton from "./ThinkingModeButton.vue";
+import ModelButton from "./ModelButton.vue";
 
-const props = defineProps<{
-  canSend: boolean
-}>()
+defineProps<{
+  canSend: boolean;
+}>();
 
 const emit = defineEmits<{
-  attach: []
-  send: []
-  transcription: [text: string]
-}>()
+  attach: [];
+  send: [];
+  transcription: [text: string];
+}>();
 
-const chatStore = useChatStore()
-const agentDefs = useAgentDefinitionsStore()
-const prefs = usePreferencesStore()
-const providerStore = useProviderStore()
+const chatStore = useChatStore();
+const prefs = usePreferencesStore();
+const agentDefs = useAgentDefinitionsStore();
+const providerStore = useProviderStore();
 
-const showMobileDrawer = ref(false)
+const showMobileDrawer = ref(false);
 
-// ─── Model selector ──────────────────
 const selectedAgent = computed(() =>
-  chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null
-)
+  chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null,
+);
 
-const currentProviderId = computed(() =>
-  chatStore.sessionProviderOverride || selectedAgent.value?.providerId || providerStore.lastUsedProviderId
-)
+const currentProviderId = computed(
+  () =>
+    chatStore.sessionProviderOverride ||
+    selectedAgent.value?.providerId ||
+    providerStore.lastUsedProviderId,
+);
 
-const sidebarModels = ref<string[]>([])
-const loadingModels = ref(false)
+function onModelProviderOverride(selection: {
+  providerId: string;
+  model: string;
+}): void {
+  chatStore.sessionModelOverride = selection.model || null;
 
-const defaultModelLabel = computed(() => {
-  const agentModel = selectedAgent.value?.model
-  const provider = providerStore.providers.find(p => p.id === currentProviderId.value)
-  const providerDefault = provider?.defaultModel
-  const isProviderOverridden = chatStore.sessionProviderOverride &&
-    chatStore.sessionProviderOverride !== selectedAgent.value?.providerId
-  const effectiveDefault = isProviderOverridden ? providerDefault : (agentModel || providerDefault)
-  return effectiveDefault ? `${effectiveDefault} (Default)` : 'Provider default'
-})
-
-async function fetchSidebarModels(): Promise<void> {
-  const providerId = currentProviderId.value
-  if (!providerId) return
-  loadingModels.value = true
-  try {
-    sidebarModels.value = await providerStore.listModels(providerId, 'llm')
-  } catch {
-    sidebarModels.value = []
-  } finally {
-    loadingModels.value = false
+  if (chatStore.activeAgentId) {
+    chatStore.sessionProviderOverride =
+      selection.providerId !== selectedAgent.value?.providerId
+        ? selection.providerId
+        : null;
+  } else {
+    chatStore.sessionProviderOverride = selection.providerId;
+    if (selection.providerId) {
+      providerStore.setLastUsed(selection.providerId);
+    }
   }
-}
 
-function onModelChange(value: string): void {
-  chatStore.sessionModelOverride = value || null
-  chatStore.markOverridesModified()
+  chatStore.markOverridesModified();
 }
-
-watch(currentProviderId, (newId, oldId) => {
-  if (newId !== oldId) sidebarModels.value = []
-  if (newId) fetchSidebarModels()
-}, { immediate: true })
 
 // ─── Whisper / voice input ──────────────────
-const { status: whisperStatus, progress: whisperProgress, startRecording, stopRecording, downloadedModels } = useWhisper()
+const {
+  status: whisperStatus,
+  progress: whisperProgress,
+  startRecording,
+  stopRecording,
+  downloadedModels,
+} = useWhisper();
 
-const hasDownloadedModel = computed(() => downloadedModels.value.length > 0)
+const hasDownloadedModel = computed(() => downloadedModels.value.length > 0);
 
 async function toggleMic(): Promise<void> {
-  if (!hasDownloadedModel.value) return
-  if (whisperStatus.value === 'recording') {
-    const text = await stopRecording()
-    if (text) emit('transcription', text)
+  if (!hasDownloadedModel.value) return;
+  if (whisperStatus.value === "recording") {
+    const text = await stopRecording();
+    if (text) emit("transcription", text);
   } else {
-    await startRecording(prefs.whisperMicDeviceId || undefined)
+    await startRecording(prefs.whisperMicDeviceId || undefined);
   }
 }
 </script>
@@ -126,10 +119,7 @@ async function toggleMic(): Promise<void> {
       aria-label="Attach file"
       @click="emit('attach')"
     >
-      <Icon
-        icon="streamline-ultimate:attachment"
-        class="h-4 w-4"
-      />
+      <Icon icon="streamline-ultimate:attachment" class="h-4 w-4" />
     </button>
 
     <!--Vertical separator-->
@@ -138,15 +128,16 @@ async function toggleMic(): Promise<void> {
     <!-- Mobile: single tune button to open drawer -->
     <button
       class="lg:hidden p-1.5 rounded-lg transition-colors shrink-0 focus:outline-none"
-      :class="showMobileDrawer ? 'text-blue-400 bg-zinc-700/50' : 'text-zinc-500 hover:text-zinc-300'"
+      :class="
+        showMobileDrawer
+          ? 'text-blue-400 bg-zinc-700/50'
+          : 'text-zinc-500 hover:text-zinc-300'
+      "
       title="Chat settings"
       aria-label="Chat settings"
       @click="showMobileDrawer = !showMobileDrawer"
     >
-      <Icon
-        icon="material-symbols:tune"
-        class="h-4 w-4"
-      />
+      <Icon icon="material-symbols:tune" class="h-4 w-4" />
     </button>
 
     <!-- Desktop: inline buttons -->
@@ -160,38 +151,27 @@ async function toggleMic(): Promise<void> {
 
     <div class="flex-1" />
 
-    <!-- Model selector (desktop only, right-aligned) -->
+    <!-- Provider / Model selector (desktop only, right-aligned) -->
     <div
       v-if="currentProviderId"
       class="hidden lg:flex items-center gap-1 shrink-0"
     >
-      <div class="w-44">
-        <ModelSelect
+      <div class="w-56">
+        <ProviderModelSelect
+          :provider-id="currentProviderId"
           :model-value="chatStore.sessionModelOverride || ''"
-          :models="sidebarModels"
-          include-default
-          :default-label="defaultModelLabel"
+          :providers="providerStore.providers"
+          :include-default="!!selectedAgent"
+          default-label="Use agent defaults"
+          placeholder="Select provider/model"
           max-height="max-h-96"
           dropdown-width="min-w-full"
-          :filterable="true"
           :drop-up="true"
           align="center"
           size="sm"
-          @change="onModelChange"
+          @change="onModelProviderOverride"
         />
       </div>
-      <button
-        :disabled="loadingModels"
-        class="p-1 text-zinc-500 hover:text-zinc-300 disabled:opacity-40 rounded-lg transition-colors shrink-0"
-        title="Refresh models"
-        @click="fetchSidebarModels"
-      >
-        <Icon
-          :icon="loadingModels ? 'lucide:loader-2' : 'lucide:refresh-cw'"
-          class="w-3 h-3"
-          :class="{ 'animate-spin': loadingModels }"
-        />
-      </button>
     </div>
 
     <!-- Mic / voice input button -->
@@ -205,10 +185,7 @@ async function toggleMic(): Promise<void> {
         disabled
         aria-label="Voice input (requires model download)"
       >
-        <Icon
-          icon="mdi:microphone-off"
-          class="h-4 w-4"
-        />
+        <Icon icon="mdi:microphone-off" class="h-4 w-4" />
       </button>
       <template #content>
         <div class="flex items-start gap-2">
@@ -216,7 +193,10 @@ async function toggleMic(): Promise<void> {
             icon="mdi:information"
             class="h-4 w-4 text-amber-400 mt-0.5 shrink-0"
           />
-          <span>Voice input requires a Whisper model to be downloaded first. Open AI Settings → Speech to Text to download a model.</span>
+          <span
+            >Voice input requires a Whisper model to be downloaded first. Open
+            AI Settings → Speech to Text to download a model.</span
+          >
         </div>
       </template>
     </HoverTooltip>
@@ -227,30 +207,36 @@ async function toggleMic(): Promise<void> {
     >
       <button
         class="relative p-1.5 rounded-lg transition-all duration-300 shrink-0 focus:outline-none"
-        :class="whisperStatus === 'recording'
-          ? 'bg-red-600 text-white hover:bg-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.5)]'
-          : whisperStatus === 'transcribing'
-            ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.4)] animate-whisper-glow cursor-wait'
-            : whisperStatus === 'loading'
-              ? 'text-amber-400 cursor-wait'
-              : 'text-zinc-500 hover:text-zinc-300'"
-        :title="whisperStatus === 'recording'
-          ? 'Stop recording'
-          : whisperStatus === 'loading'
-            ? `Loading model (${whisperProgress}%)`
+        :class="
+          whisperStatus === 'recording'
+            ? 'bg-red-600 text-white hover:bg-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.5)]'
             : whisperStatus === 'transcribing'
-              ? 'Transcribing…'
-              : 'Voice input'"
+              ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.4)] animate-whisper-glow cursor-wait'
+              : whisperStatus === 'loading'
+                ? 'text-amber-400 cursor-wait'
+                : 'text-zinc-500 hover:text-zinc-300'
+        "
+        :title="
+          whisperStatus === 'recording'
+            ? 'Stop recording'
+            : whisperStatus === 'loading'
+              ? `Loading model (${whisperProgress}%)`
+              : whisperStatus === 'transcribing'
+                ? 'Transcribing…'
+                : 'Voice input'
+        "
         :disabled="whisperStatus === 'transcribing'"
         aria-label="Voice input"
         @click="toggleMic"
       >
         <Icon
-          :icon="whisperStatus === 'recording'
-            ? 'mdi:stop'
-            : whisperStatus === 'transcribing'
-              ? 'lucide:audio-waveform'
-              : 'mdi:microphone'"
+          :icon="
+            whisperStatus === 'recording'
+              ? 'mdi:stop'
+              : whisperStatus === 'transcribing'
+                ? 'lucide:audio-waveform'
+                : 'mdi:microphone'
+          "
           class="h-4 w-4"
           :class="whisperStatus === 'transcribing' ? 'animate-pulse' : ''"
         />
@@ -292,12 +278,13 @@ async function toggleMic(): Promise<void> {
       class="p-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
       title="Cancel"
       aria-label="Cancel"
-      @click="chatStore.isStreaming ? chatStore.cancelStream() : chatStore.cancelPostActions()"
+      @click="
+        chatStore.isStreaming
+          ? chatStore.cancelStream()
+          : chatStore.cancelPostActions()
+      "
     >
-      <Icon
-        icon="mdi:stop-circle"
-        class="h-4 w-4"
-      />
+      <Icon icon="mdi:stop-circle" class="h-4 w-4" />
     </button>
     <button
       v-else
@@ -307,27 +294,41 @@ async function toggleMic(): Promise<void> {
       aria-label="Send message"
       @click="emit('send')"
     >
-      <Icon
-        icon="mdi:send"
-        class="h-4 w-4"
-      />
+      <Icon icon="mdi:send" class="h-4 w-4" />
     </button>
   </div>
 </template>
 
 <style scoped>
 @keyframes whisper-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); }
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.6);
+  }
 }
 .animate-whisper-glow {
   animation: whisper-glow 1.5s ease-in-out infinite;
 }
 @keyframes dot-bounce {
-  0%, 80%, 100% { opacity: 0; }
-  40% { opacity: 1; }
+  0%,
+  80%,
+  100% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
 }
-.animate-dot1 { animation: dot-bounce 1.4s infinite 0s; }
-.animate-dot2 { animation: dot-bounce 1.4s infinite 0.2s; }
-.animate-dot3 { animation: dot-bounce 1.4s infinite 0.4s; }
+.animate-dot1 {
+  animation: dot-bounce 1.4s infinite 0s;
+}
+.animate-dot2 {
+  animation: dot-bounce 1.4s infinite 0.2s;
+}
+.animate-dot3 {
+  animation: dot-bounce 1.4s infinite 0.4s;
+}
 </style>
