@@ -16,6 +16,21 @@ function sqlString(value: string): string {
     return `'${value.replace(/'/g, "''")}'`
 }
 
+/**
+ * Get the default memory space, if one exists.
+ */
+function getDefaultMemorySpace(): MemorySpaceRef | undefined {
+    try {
+        const db = getDb()
+        const result = db
+            .prepare('SELECT id, name FROM memory_spaces WHERE is_default = 1 ORDER BY created_at ASC LIMIT 1')
+            .get() as MemorySpaceRef | undefined
+        return result
+    } catch {
+        return undefined
+    }
+}
+
 function getKnownMemorySpaces(): MemorySpaceRef[] {
     try {
         const db = getDb()
@@ -30,6 +45,10 @@ function getKnownMemorySpaces(): MemorySpaceRef[] {
 function formatSpaces(spaces: MemorySpaceRef[]): string {
     if (spaces.length === 0) return 'No memory spaces exist yet.'
     return spaces.map(s => `  - "${s.name}" (id: ${s.id})`).join('\n')
+}
+
+function findSpaceByIdOrName(spaces: MemorySpaceRef[], wanted: string): MemorySpaceRef | undefined {
+    return spaces.find(s => s.id === wanted || s.name.toLowerCase() === wanted.toLowerCase())
 }
 
 function makeScopeSummary(assignedSpaces: MemorySpaceRef[]): string {
@@ -55,7 +74,7 @@ function resolveReadableSpaceFilter(
 
     const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownMemorySpaces()
     const wanted = spaceParam.trim()
-    const match = candidates.find(s => s.id === wanted || s.name.toLowerCase() === wanted.toLowerCase())
+    const match = findSpaceByIdOrName(candidates, wanted)
     if (!match) {
         const scopeLabel = assignedSpaces.length > 0 ? 'available assigned spaces' : 'existing memory spaces'
         return {
@@ -67,47 +86,82 @@ function resolveReadableSpaceFilter(
 }
 
 /**
- * Resolve the target space for a write operation.
- * Returns the spaceId on success, or an error string on failure.
+ * Resolve the target space for a write operation, with smart name-based fallback.
+ * Priority (when no explicit space param):
+ * 1. If title exists in exactly one assigned space → use that
+ * 2. If default space exists → use it
+ * 3. If exactly one space assigned → use it
+ * 4. If multiple spaces assigned → error (need explicit choice)
+ * 5. If no spaces exist → error
  */
-function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], spaceParam?: string): { spaceId: string; spaceName: string } | { error: string } {
-    if (assignedSpaces.length === 0) {
-        const existing = getKnownMemorySpaces()
-        if (spaceParam?.trim()) {
-            const wanted = spaceParam.trim()
-            const match = existing.find(s => s.id === wanted || s.name.toLowerCase() === wanted.toLowerCase())
-            if (match) return { spaceId: match.id, spaceName: match.name }
-            return {
-                error: `Memory space "${wanted}" does not exist.\nExisting memory spaces:\n${formatSpaces(existing)}`
-            }
-        }
+async function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], spaceParam?: string, existingTitle?: string): Promise<{ spaceId: string; spaceName: string } | { error: string }> {
+    // --- Explicit space parameter provided ---
+    if (spaceParam?.trim()) {
+        const wanted = spaceParam.trim()
+        const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownMemorySpaces()
+        const match = findSpaceByIdOrName(candidates, wanted)
+        if (match) return { spaceId: match.id, spaceName: match.name }
+
+        const scopeLabel = assignedSpaces.length > 0 ? 'assigned spaces' : 'existing memory spaces'
         return {
-            error:
-                'No memory space is assigned for writes. Provide the target memory space using the "space" parameter, select one in the conversation, or assign one to the agent.\n' +
-                `Existing memory spaces:\n${formatSpaces(existing)}`
+            error: `Memory space "${wanted}" not found in ${scopeLabel}.\n${formatSpaces(candidates.length > 0 ? candidates : getKnownMemorySpaces())}`
         }
     }
+
+    // --- No explicit space parameter ---
+    // For updates: try smart title-based resolution first
+    if (existingTitle && assignedSpaces.length > 0) {
+        const mem = getAgentMemory()
+        const counts = await Promise.all(
+            assignedSpaces.map(async (space) => {
+                const filter = `spaceId = ${sqlString(space.id)}`
+                try {
+                    return await mem.countChunks(existingTitle, filter)
+                } catch {
+                    // Ignore errors in checking individual spaces
+                    return 0
+                }
+            })
+        )
+        const matchingSpaces = assignedSpaces.filter((_, i) => counts[i] > 0)
+
+        if (matchingSpaces.length === 1) {
+            // Title exists in exactly one space — use that
+            return { spaceId: matchingSpaces[0].id, spaceName: matchingSpaces[0].name }
+        }
+
+        if (matchingSpaces.length > 1) {
+            // Title exists in multiple spaces — need explicit selection
+            const listing = matchingSpaces.map(s => `  - "${s.name}" (id: ${s.id})`).join('\n')
+            return { error: `Memory entry "${existingTitle}" exists in multiple spaces. Please specify which to update using the 'space' parameter:\n${listing}` }
+        }
+    }
+
+    // --- Smart fallback logic ---
+    // 1. Default space always available as fallback (simplest UX)
+    const defaultSpace = getDefaultMemorySpace()
+    if (defaultSpace) {
+        return { spaceId: defaultSpace.id, spaceName: defaultSpace.name }
+    }
+
+    // 2. Single explicitly assigned space
     if (assignedSpaces.length === 1) {
-        const only = assignedSpaces[0]
-        if (!spaceParam || only.id === spaceParam || only.name.toLowerCase() === spaceParam.toLowerCase()) {
-            return { spaceId: only.id, spaceName: only.name }
-        }
-        return {
-            error: `Memory space "${spaceParam}" is not assigned here. Available space:\n${formatSpaces(assignedSpaces)}`
-        }
+        return { spaceId: assignedSpaces[0].id, spaceName: assignedSpaces[0].name }
     }
-    // Multiple spaces — require explicit selection
-    if (!spaceParam) {
+
+    // 3. Multiple assigned spaces but no default → error
+    if (assignedSpaces.length > 1) {
         const listing = assignedSpaces.map(s => `  - "${s.name}" (id: ${s.id})`).join('\n')
-        return { error: `Multiple memory spaces are assigned. Please specify which space to write to using the 'space' parameter.\nAvailable spaces:\n${listing}` }
+        return { error: `Multiple memory spaces are assigned. Please specify which to write to using the 'space' parameter.\nAvailable spaces:\n${listing}` }
     }
-    // Match by ID or name (case-insensitive)
-    const match = assignedSpaces.find(s => s.id === spaceParam || s.name.toLowerCase() === spaceParam.toLowerCase())
-    if (!match) {
-        const listing = assignedSpaces.map(s => `  - "${s.name}" (id: ${s.id})`).join('\n')
-        return { error: `Memory space "${spaceParam}" not found among assigned spaces. Available spaces:\n${listing}` }
+
+    // 4. No spaces at all
+    const existing = getKnownMemorySpaces()
+    return {
+        error:
+            'No memory space is assigned for writes. Provide the target memory space using the "space" parameter, select one in the conversation, or assign one to the agent.\n' +
+            `Existing memory spaces:\n${formatSpaces(existing)}`
     }
-    return { spaceId: match.id, spaceName: match.name }
 }
 
 /**
@@ -122,6 +176,7 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
             'List memorised documents (source files) stored in your knowledge base. ' +
             'Returns document names, chunk counts, and ingestion dates. Paginated — max 100 per page. ' +
             'Use this to discover what documents are available before using memory_retrieve_chunks or memory_semantic_search. ' +
+            'Multiple assigned memory spaces are treated as one unified knowledge base for reading — use the optional "space" parameter to filter to a specific space. ' +
             makeScopeSummary(assignedSpaces),
         parameters: {
             type: 'object',
@@ -241,6 +296,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             'Search through stored RAG memories using a semantic query. ' +
             'Use this to get a rough starting point for memories, which can then be refined or expanded using other tools. ' +
             'Returns the most relevant memory chunks with their source, memory space, and chunk index. ' +
+            'Multiple assigned memory spaces are treated as one unified knowledge base — use the optional "space" parameter to filter to a specific space. ' +
             makeScopeSummary(assignedSpaces),
         parameters: {
             type: 'object',
@@ -315,13 +371,15 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
         description:
             '[Experimental] Create a new memory entry with a title and content. ' +
             'The content will be chunked and embedded for later semantic retrieval. ' +
-            'Use this to persistently store notes, findings, or any information worth remembering.',
+            'Use this to persistently store notes, findings, or any information worth remembering. ' +
+            'If no explicit "space" is provided, the entry is stored in the default memory space. ' +
+            'Provide "space" to store in a specific assigned space.',
         parameters: {
             type: 'object',
             properties: {
                 title: { type: 'string', description: 'A short descriptive title for the memory entry (used as file name, e.g. "project-notes", "meeting-summary").' },
                 content: { type: 'string', description: 'The text content to store in memory.' },
-                space: { type: 'string', description: 'Target memory space name or ID. Required when multiple memory spaces are assigned, or when none are assigned and you need to choose an existing space.' }
+                space: { type: 'string', description: 'Optional memory space name or ID. If multiple spaces are assigned and you want to save elsewhere, specify it here.' }
             },
             required: ['title', 'content']
         },
@@ -329,7 +387,8 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
         execute: async (params: unknown) => {
             const { title, content, space } = params as { title: string; content: string; space?: string }
 
-            const resolved = resolveTargetSpace(assignedSpaces, space)
+            // For creates, don't try smart title-based resolution (new entries)
+            const resolved = await resolveTargetSpace(assignedSpaces, space)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
             const mem = getAgentMemory()
@@ -352,13 +411,16 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
         description:
             '[Experimental] Update an existing memory entry by replacing its content entirely. ' +
             'The old chunks are deleted and the new content is re-chunked and re-embedded. ' +
-            'Use the exact title (source file name) of the memory entry you want to update.',
+            'Use the exact title (source file name) of the memory entry you want to update. ' +
+            'When the title exists in only one assigned space, it is updated automatically. ' +
+            'When the title exists in multiple spaces or you want to update a specific space, specify it using the "space" parameter. ' +
+            'If no explicit "space" is provided and no unique title match is found, falls back to the default memory space.',
         parameters: {
             type: 'object',
             properties: {
                 title: { type: 'string', description: 'The exact title (source file name) of the existing memory entry to update.' },
                 content: { type: 'string', description: 'The new text content that will replace the old content.' },
-                space: { type: 'string', description: 'Target memory space name or ID. Required when multiple memory spaces are assigned, or when none are assigned and you need to choose an existing space.' }
+                space: { type: 'string', description: 'Optional memory space name or ID. Use this when the title exists in multiple spaces, or to update in a specific space.' }
             },
             required: ['title', 'content']
         },
@@ -366,7 +428,8 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
         execute: async (params: unknown) => {
             const { title, content, space } = params as { title: string; content: string; space?: string }
 
-            const resolved = resolveTargetSpace(assignedSpaces, space)
+            // For updates, use smart title-based resolution to find the right space
+            const resolved = await resolveTargetSpace(assignedSpaces, space, title)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
             const mem = getAgentMemory()

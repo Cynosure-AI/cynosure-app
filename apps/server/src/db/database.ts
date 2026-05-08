@@ -225,6 +225,7 @@ function createTables(db: Database.Database): void {
       name TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       sort_order INTEGER NOT NULL DEFAULT 0,
+      is_default INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
 
@@ -258,11 +259,21 @@ function createTables(db: Database.Database): void {
     try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`) } catch { /* column already exists */ }
   }
   addColumnIfMissing('memory_spaces', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('memory_spaces', 'is_default', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('mcp_servers', 'env_hints_json', 'TEXT')
   addColumnIfMissing('mcp_servers', 'description', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('mcp_servers', 'original_name', 'TEXT')
   addColumnIfMissing('mcp_servers', 'custom_name', 'TEXT')
   db.prepare("UPDATE mcp_servers SET original_name = name WHERE original_name IS NULL OR original_name = ''").run()
+
+  // Ensure default memory space exists
+  const defaultSpaceId = 'default'
+  const defaultSpaceExists = db.prepare("SELECT id FROM memory_spaces WHERE id = ?").get(defaultSpaceId)
+  if (!defaultSpaceExists) {
+    const now = Date.now()
+    db.prepare("INSERT INTO memory_spaces (id, name, description, sort_order, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(defaultSpaceId, 'Default', 'Default memory space for general knowledge and notes', 0, 1, now)
+  }
 
   // Agent table: add columns for DB-only storage (migrating away from filesystem)
   addColumnIfMissing('agents', 'category', "TEXT NOT NULL DEFAULT ''")

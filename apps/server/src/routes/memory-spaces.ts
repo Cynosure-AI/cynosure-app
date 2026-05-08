@@ -10,6 +10,7 @@ interface MemorySpaceRow {
     name: string
     description: string
     sort_order: number
+    is_default: number
     created_at: number
 }
 
@@ -18,6 +19,7 @@ interface MemorySpaceData {
     name: string
     description: string
     sortOrder: number
+    isDefault: boolean
     createdAt: number
     documentCount: number
 }
@@ -28,6 +30,7 @@ function rowToData(row: MemorySpaceRow, documentCount: number): MemorySpaceData 
         name: row.name,
         description: row.description,
         sortOrder: row.sort_order,
+        isDefault: row.is_default === 1,
         createdAt: row.created_at,
         documentCount,
     }
@@ -55,7 +58,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const id = nanoid()
         const now = Date.now()
         db.prepare('INSERT INTO memory_spaces (id, name, description, created_at) VALUES (?, ?, ?, ?)').run(id, name.trim(), description || '', now)
-        return rowToData({ id, name: name.trim(), description: description || '', sort_order: 0, created_at: now }, 0)
+        return rowToData({ id, name: name.trim(), description: description || '', sort_order: 0, is_default: 0, created_at: now }, 0)
     })
 
     // PUT /api/memory-spaces/reorder — update sort order
@@ -89,8 +92,14 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     // DELETE /api/memory-spaces/:id — delete space + all its documents
     app.delete<{ Params: { id: string } }>('/:id', async (req, reply) => {
         const db = getDb()
-        const row = db.prepare('SELECT id FROM memory_spaces WHERE id = ?').get(req.params.id) as { id: string } | undefined
+        const row = db.prepare('SELECT id, is_default FROM memory_spaces WHERE id = ?').get(req.params.id) as { id: string; is_default: number } | undefined
         if (!row) return reply.status(404).send({ error: 'Space not found' })
+
+        // Prevent deletion of default memory space
+        if (row.is_default) {
+            return reply.status(400).send({ error: 'Cannot delete the default memory space. It is always available as a fallback for agents without explicit space assignments.' })
+        }
+
         // Delete all documents in this space from LanceDB
         const rag = getRAGStore()
         await rag.deleteByFilter('permanent_memory', `spaceId = '${row.id.replace(/'/g, "''")}'`)

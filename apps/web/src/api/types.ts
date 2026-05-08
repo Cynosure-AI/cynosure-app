@@ -156,6 +156,7 @@ export interface MemorySpace {
     name: string
     description: string
     sortOrder: number
+    isDefault: boolean
     createdAt: number
     documentCount: number
 }
