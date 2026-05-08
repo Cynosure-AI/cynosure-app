@@ -18,6 +18,17 @@ watch(visible, async (val) => {
   loading.value = true
   try {
     spaces.value = await api.memorySpaces.list()
+
+    const validIds = new Set(spaces.value.map((space) => space.id))
+    const nextSelected = chatStore.freeChatMemorySpaceIds.filter((id) => validIds.has(id))
+    if (nextSelected.length !== chatStore.freeChatMemorySpaceIds.length) {
+      chatStore.freeChatMemorySpaceIds.splice(
+        0,
+        chatStore.freeChatMemorySpaceIds.length,
+        ...nextSelected,
+      )
+      chatStore.markOverridesModified()
+    }
   } catch { /* ignore */ }
   loading.value = false
 })
