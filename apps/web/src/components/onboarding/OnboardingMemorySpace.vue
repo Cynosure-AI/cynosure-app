@@ -2,21 +2,21 @@
   <div class="max-w-2xl mx-auto px-4 py-6 w-full space-y-4">
     <div class="mb-5">
       <h2 class="text-xl font-bold text-zinc-100">
-        Create a Memory Space
+        Memory Space Ready
       </h2>
       <p class="text-sm text-zinc-500 mt-1">
-        A memory space stores documents your agents can search and retrieve. You can create more
-        spaces and upload documents at any time from the Memory section.
+        Cynosure includes a default memory space automatically. You can upload documents now,
+        and create additional spaces later from the Memory section.
       </p>
     </div>
 
     <!-- Space creation -->
     <div class="bg-zinc-800/50 border border-zinc-700/60 rounded-xl p-5 space-y-4">
       <h3 class="text-sm font-semibold text-zinc-200">
-        Name Your Space
+        Active Space
       </h3>
 
-      <div v-if="!createdSpace">
+      <div v-if="!createdSpace && !loadingSpace">
         <label class="block text-xs font-medium text-zinc-400 mb-1.5">Space Name</label>
         <div class="flex gap-2">
           <input
@@ -45,6 +45,17 @@
         >
           {{ spaceError }}
         </p>
+      </div>
+
+      <div
+        v-else-if="loadingSpace"
+        class="flex items-center gap-2 text-zinc-500 text-sm"
+      >
+        <Icon
+          icon="lucide:loader-2"
+          class="w-4 h-4 animate-spin"
+        />
+        Loading default memory space…
       </div>
 
       <!-- Space created confirmation -->
@@ -148,13 +159,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { api } from '../../api/client'
 import type { MemorySpace } from '../../api/types'
 
 const spaceName = ref('Personal Knowledge Base')
 const creatingSpace = ref(false)
+const loadingSpace = ref(false)
 const createdSpace = ref<MemorySpace | null>(null)
 const spaceError = ref('')
 
@@ -195,6 +207,20 @@ async function createSpace() {
   }
 }
 
+async function loadInitialSpace() {
+  loadingSpace.value = true
+  spaceError.value = ''
+  try {
+    const spaces = await api.memorySpaces.list()
+    const defaultSpace = spaces.find((s) => s.isDefault)
+    createdSpace.value = defaultSpace || spaces[0] || null
+  } catch (e) {
+    spaceError.value = e instanceof Error ? e.message : 'Failed to load memory spaces'
+  } finally {
+    loadingSpace.value = false
+  }
+}
+
 async function ingestFiles(files: File[]) {
   if (!createdSpace.value) return
   uploading.value = true
@@ -232,6 +258,10 @@ function onDrop(event: DragEvent) {
   const files = Array.from(event.dataTransfer?.files ?? [])
   if (files.length) ingestFiles(files)
 }
+
+onMounted(() => {
+  void loadInitialSpace()
+})
 </script>
 
 <style scoped>
