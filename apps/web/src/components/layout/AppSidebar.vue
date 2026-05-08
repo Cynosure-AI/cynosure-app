@@ -1,135 +1,144 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useProviderStore } from '../../stores/provider.store'
-import { useNotificationStore } from '../../stores/notification.store'
-import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
-import { useChatStore } from '../../stores/chat.store'
-import { useOnboardingStore } from '../../stores/onboarding.store'
-import { api } from '../../api/client'
-import { wsConnected } from '../../api/http'
-import type { AgentInstance } from '../../api/types'
-import { Icon } from '@iconify/vue'
-import { useSidebar } from '../../composables/useSidebar'
-import { useAppBranding } from '../../composables/useAppBranding'
-import StatusPopover from '../status/StatusPopover.vue'
-import HoverTooltip from '../shared/HoverTooltip.vue'
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useProviderStore } from "../../stores/provider.store";
+import { useNotificationStore } from "../../stores/notification.store";
+import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
+import { useChatStore } from "../../stores/chat.store";
+import { useOnboardingStore } from "../../stores/onboarding.store";
+import { api } from "../../api/client";
+import { wsConnected } from "../../api/http";
+import type { AgentInstance } from "../../api/types";
+import { Icon } from "@iconify/vue";
+import { useSidebar } from "../../composables/useSidebar";
+import { useAppBranding } from "../../composables/useAppBranding";
+import StatusPopover from "../status/StatusPopover.vue";
+import HoverTooltip from "../shared/HoverTooltip.vue";
 
-const route = useRoute()
-const router = useRouter()
-const providerStore = useProviderStore()
-const notificationStore = useNotificationStore()
-const agentDefs = useAgentDefinitionsStore()
-const chatStore = useChatStore()
-const onboardingStore = useOnboardingStore()
-const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar()
-const { logoIconUrl, logoTextUrl } = useAppBranding()
+const route = useRoute();
+const router = useRouter();
+const providerStore = useProviderStore();
+const notificationStore = useNotificationStore();
+const agentDefs = useAgentDefinitionsStore();
+const chatStore = useChatStore();
+const onboardingStore = useOnboardingStore();
+const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar();
+const { logoIconUrl, logoTextUrl } = useAppBranding();
 
-const showStatusPopover = ref(false)
-const showNotifications = ref(false)
-const bellBtnRef = ref<HTMLElement | null>(null)
+const showStatusPopover = ref(false);
+const showNotifications = ref(false);
+const bellBtnRef = ref<HTMLElement | null>(null);
 const notifPopoverStyle = computed(() => {
-  if (!bellBtnRef.value) return {}
-  const rect = bellBtnRef.value.getBoundingClientRect()
+  if (!bellBtnRef.value) return {};
+  const rect = bellBtnRef.value.getBoundingClientRect();
   return {
-    position: 'fixed' as const,
+    position: "fixed" as const,
     top: `${rect.bottom + 8}px`,
-    left: `${rect.left}px`
-  }
-})
+    left: `${rect.left}px`,
+  };
+});
 
-const instances = ref<AgentInstance[]>([])
-let instancePollTimer: ReturnType<typeof setInterval> | undefined
-let unsubHITLRequest: (() => void) | undefined
-let unsubExecutionUpdate: (() => void) | undefined
+const instances = ref<AgentInstance[]>([]);
+let instancePollTimer: ReturnType<typeof setInterval> | undefined;
+let unsubHITLRequest: (() => void) | undefined;
+let unsubExecutionUpdate: (() => void) | undefined;
 
-const hasAwaitingApproval = computed(() => instances.value.some(i => i.status === 'awaiting-approval'))
+const hasAwaitingApproval = computed(() =>
+  instances.value.some((i) => i.status === "awaiting-approval"),
+);
 
 async function loadInstances() {
   try {
-    instances.value = await api.instances.list()
+    instances.value = await api.instances.list();
   } catch {
     // silently ignore
   }
 }
 
 async function navigateToInstance(instance: AgentInstance) {
-  showStatusPopover.value = false
-  closeSidebar()
-  await chatStore.setActiveAgent(instance.agentId || null)
+  showStatusPopover.value = false;
+  closeSidebar();
+  await chatStore.setActiveAgent(instance.agentId || null);
   if (instance.conversationId) {
-    await chatStore.selectConversation(instance.conversationId)
+    await chatStore.selectConversation(instance.conversationId);
   }
-  router.push('/triggers/chat')
+  router.push("/triggers/chat");
 }
 
 onMounted(() => {
-  loadInstances()
-  instancePollTimer = setInterval(loadInstances, 3_000)
-  unsubHITLRequest = api.agent.onHITLRequest(() => { loadInstances() })
+  loadInstances();
+  instancePollTimer = setInterval(loadInstances, 3_000);
+  unsubHITLRequest = api.agent.onHITLRequest(() => {
+    loadInstances();
+  });
   unsubExecutionUpdate = api.agent.onExecutionUpdate((data: unknown) => {
-    const d = data as { event?: string; data?: { status?: string } }
-    if (d.event === 'step:status' && d.data?.status !== 'awaiting-approval') loadInstances()
-  })
-})
+    const d = data as { event?: string; data?: { status?: string } };
+    if (d.event === "step:status" && d.data?.status !== "awaiting-approval")
+      loadInstances();
+  });
+});
 
 onUnmounted(() => {
-  clearInterval(instancePollTimer)
-  unsubHITLRequest?.()
-  unsubExecutionUpdate?.()
-})
+  clearInterval(instancePollTimer);
+  unsubHITLRequest?.();
+  unsubExecutionUpdate?.();
+});
 
 function formatTimeAgo(ts: number): string {
-  const diff = Date.now() - ts
-  const mins = Math.floor(diff / 60_000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  return `${days}d ago`
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
 }
 
-function navigateToNotification(notif: { id: string; agentId: string; conversationId: string | null }) {
-  notificationStore.markRead(notif.id)
-  showNotifications.value = false
-  closeSidebar()
+function navigateToNotification(notif: {
+  id: string;
+  agentId: string;
+  conversationId: string | null;
+}) {
+  notificationStore.markRead(notif.id);
+  showNotifications.value = false;
+  closeSidebar();
   if (notif.conversationId) {
-    router.push(`/triggers/chat?conversation=${notif.conversationId}`)
+    router.push(`/triggers/chat?conversation=${notif.conversationId}`);
   } else if (notif.agentId) {
-    router.push(`/agents/${notif.agentId}`)
+    router.push(`/agents/${notif.agentId}`);
   }
 }
 
 function isActive(path: string): boolean {
-  return route.path === path || route.path.startsWith(path + '/')
+  return route.path === path || route.path.startsWith(path + "/");
 }
 
 function isActiveExact(path: string): boolean {
-  return route.path === path
+  return route.path === path;
 }
 
 interface NavItem {
-  to: string
-  icon: string
-  label: string
-  badge?: string
-  exact?: boolean
+  to: string;
+  icon: string;
+  label: string;
+  badge?: string;
+  exact?: boolean;
 }
 
 const triggerItems: NavItem[] = [
-  { to: '/triggers/chat', icon: 'lucide:message-square', label: 'Chat' },
-  { to: '/triggers/cron', icon: 'lucide:clock', label: 'Cron' },
-  { to: '/triggers/channels', icon: 'lucide:radio', label: 'Channels' },
-  { to: '/triggers/file-watchers', icon: 'lucide:eye', label: 'File Watch' }
-]
+  { to: "/triggers/chat", icon: "lucide:message-square", label: "Chat" },
+  { to: "/triggers/cron", icon: "lucide:clock", label: "Cron" },
+  { to: "/triggers/channels", icon: "lucide:radio", label: "Channels" },
+  { to: "/triggers/file-watchers", icon: "lucide:eye", label: "File Watch" },
+];
 
 const settingsItems: NavItem[] = [
-  { to: '/settings/ai', icon: 'lucide:sparkles', label: 'AI Settings' },
-  { to: '/settings/mcp', icon: 'lucide:plug', label: 'MCPs' },
-  { to: '/settings/appearance', icon: 'lucide:palette', label: 'Appearance' },
-  { to: '/settings/backup', icon: 'lucide:archive', label: 'Backup' }
-]
+  { to: "/settings/ai", icon: "lucide:sparkles", label: "AI Settings" },
+  { to: "/settings/mcp", icon: "lucide:plug", label: "MCPs" },
+  { to: "/settings/appearance", icon: "lucide:palette", label: "Appearance" },
+  { to: "/settings/backup", icon: "lucide:archive", label: "Backup" },
+];
 </script>
 
 <template>
@@ -160,13 +169,20 @@ const settingsItems: NavItem[] = [
           <Icon
             icon="lucide:bell"
             class="w-4 h-4"
-            :class="notificationStore.unreadCount > 0 ? 'text-blue-400' : 'text-zinc-500'"
+            :class="notificationStore.unreadCount > 0
+              ? 'text-blue-400'
+              : 'text-zinc-500'
+            "
           />
           <span
             v-if="notificationStore.unreadCount > 0"
             class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center leading-none"
           >
-            {{ notificationStore.unreadCount > 9 ? '9+' : notificationStore.unreadCount }}
+            {{
+              notificationStore.unreadCount > 9
+                ? "9+"
+                : notificationStore.unreadCount
+            }}
           </span>
         </button>
 
@@ -227,12 +243,17 @@ const settingsItems: NavItem[] = [
                   <!-- Severity indicator -->
                   <div class="mt-1 shrink-0">
                     <Icon
-                      :icon="notif.severity === 'critical' ? 'lucide:alert-triangle' : notif.severity === 'warning' ? 'lucide:alert-circle' : 'lucide:info'"
+                      :icon="notif.severity === 'critical'
+                        ? 'lucide:alert-triangle'
+                        : notif.severity === 'warning'
+                          ? 'lucide:alert-circle'
+                          : 'lucide:info'
+                      "
                       class="w-3.5 h-3.5"
                       :class="{
                         'text-red-400': notif.severity === 'critical',
                         'text-amber-400': notif.severity === 'warning',
-                        'text-blue-400': notif.severity === 'info'
+                        'text-blue-400': notif.severity === 'info',
                       }"
                     />
                   </div>
@@ -249,10 +270,12 @@ const settingsItems: NavItem[] = [
                     </p>
                     <div class="flex items-center gap-2 mt-1">
                       <span class="text-[10px] text-zinc-600">
-                        {{ agentDefs.get(notif.agentId)?.name || 'Agent' }}
+                        {{ agentDefs.get(notif.agentId)?.name || "Agent" }}
                       </span>
                       <span class="text-[10px] text-zinc-600">·</span>
-                      <span class="text-[10px] text-zinc-600">{{ formatTimeAgo(notif.createdAt) }}</span>
+                      <span class="text-[10px] text-zinc-600">{{
+                        formatTimeAgo(notif.createdAt)
+                      }}</span>
                     </div>
                   </div>
                   <!-- Delete button -->
@@ -316,7 +339,7 @@ const settingsItems: NavItem[] = [
           <span>Dashboard</span>
         </RouterLink>
         <template #content>
-          {{ onboardingStore.completed ? 'Dashboard' : 'Get Started' }}
+          {{ onboardingStore.completed ? "Dashboard" : "Get Started" }}
         </template>
       </HoverTooltip>
 
@@ -413,7 +436,7 @@ const settingsItems: NavItem[] = [
           Usage
         </template>
       </HoverTooltip>
-      
+
       <!-- Instances -->
       <div class="section-separator" />
       <div class="section-label">
@@ -450,8 +473,6 @@ const settingsItems: NavItem[] = [
           Instances
         </template>
       </HoverTooltip>
-
-
 
       <!-- Settings -->
       <div class="section-separator" />
@@ -513,9 +534,13 @@ const settingsItems: NavItem[] = [
           :class="{
             'bg-red-500 animate-pulse': !wsConnected,
             'bg-amber-500 animate-pulse': wsConnected && hasAwaitingApproval,
-            'bg-blue-500 animate-pulse': wsConnected && instances.length > 0 && !hasAwaitingApproval,
-            'bg-emerald-500': wsConnected && instances.length === 0 && providerStore.providers.length > 0,
-            'bg-zinc-600': wsConnected && !providerStore.providers.length
+            'bg-blue-500 animate-pulse':
+              wsConnected && instances.length > 0 && !hasAwaitingApproval,
+            'bg-emerald-500':
+              wsConnected &&
+              instances.length === 0 &&
+              providerStore.providers.length > 0,
+            'bg-zinc-600': wsConnected && !providerStore.providers.length,
           }"
         />
         <span class="text-[11px] text-zinc-400 truncate flex-1">
@@ -611,9 +636,11 @@ const settingsItems: NavItem[] = [
     overflow-x: hidden;
     scrollbar-width: thin;
   }
+
   .sidebar-collapsed nav::-webkit-scrollbar {
     width: 0.375rem;
   }
+
   .sidebar-collapsed .nav-item {
     justify-content: center;
     gap: 0;
@@ -622,40 +649,49 @@ const settingsItems: NavItem[] = [
     padding: 0.5rem;
     margin-inline: auto;
   }
-  .sidebar-collapsed .nav-item > :first-child {
+
+  .sidebar-collapsed .nav-item> :first-child {
     width: 1.125rem;
     min-width: 1.125rem;
     height: 1.125rem;
     flex-shrink: 0;
   }
-  .sidebar-collapsed .nav-item > *:not(:first-child) {
+
+  .sidebar-collapsed .nav-item>*:not(:first-child) {
     display: none;
   }
+
   .sidebar-collapsed .section-label {
     display: none;
   }
+
   .sidebar-collapsed .section-separator {
     margin: 0.375rem auto 0.375rem;
     width: 60%;
     opacity: 1;
   }
+
   .sidebar-collapsed .brand-area {
     justify-content: center;
     padding-inline: 0;
     gap: 0;
   }
-  .sidebar-collapsed .brand-area > *:not(:first-child) {
+
+  .sidebar-collapsed .brand-area>*:not(:first-child) {
     display: none;
   }
+
   .sidebar-collapsed .brand-logo-icon {
     display: block;
   }
+
   .sidebar-collapsed .status-section button {
     justify-content: center;
     gap: 0;
     padding: 0.5rem;
   }
-  .sidebar-collapsed .status-section button > *:not(:first-child) {
+
+  .sidebar-collapsed .status-section button>*:not(:first-child) {
     display: none;
   }
 }

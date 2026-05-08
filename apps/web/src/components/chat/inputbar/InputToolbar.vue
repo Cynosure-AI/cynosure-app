@@ -119,7 +119,10 @@ async function toggleMic(): Promise<void> {
       aria-label="Attach file"
       @click="emit('attach')"
     >
-      <Icon icon="streamline-ultimate:attachment" class="h-4 w-4" />
+      <Icon
+        icon="streamline-ultimate:attachment"
+        class="h-4 w-4"
+      />
     </button>
 
     <!--Vertical separator-->
@@ -137,7 +140,10 @@ async function toggleMic(): Promise<void> {
       aria-label="Chat settings"
       @click="showMobileDrawer = !showMobileDrawer"
     >
-      <Icon icon="material-symbols:tune" class="h-4 w-4" />
+      <Icon
+        icon="material-symbols:tune"
+        class="h-4 w-4"
+      />
     </button>
 
     <!-- Desktop: inline buttons -->
@@ -185,7 +191,10 @@ async function toggleMic(): Promise<void> {
         disabled
         aria-label="Voice input (requires model download)"
       >
-        <Icon icon="mdi:microphone-off" class="h-4 w-4" />
+        <Icon
+          icon="mdi:microphone-off"
+          class="h-4 w-4"
+        />
       </button>
       <template #content>
         <div class="flex items-start gap-2">
@@ -193,10 +202,8 @@ async function toggleMic(): Promise<void> {
             icon="mdi:information"
             class="h-4 w-4 text-amber-400 mt-0.5 shrink-0"
           />
-          <span
-            >Voice input requires a Whisper model to be downloaded first. Open
-            AI Settings → Speech to Text to download a model.</span
-          >
+          <span>Voice input requires a Whisper model to be downloaded first. Open
+            AI Settings → Speech to Text to download a model.</span>
         </div>
       </template>
     </HoverTooltip>
@@ -284,7 +291,10 @@ async function toggleMic(): Promise<void> {
           : chatStore.cancelPostActions()
       "
     >
-      <Icon icon="mdi:stop-circle" class="h-4 w-4" />
+      <Icon
+        icon="mdi:stop-circle"
+        class="h-4 w-4"
+      />
     </button>
     <button
       v-else
@@ -294,7 +304,10 @@ async function toggleMic(): Promise<void> {
       aria-label="Send message"
       @click="emit('send')"
     >
-      <Icon icon="mdi:send" class="h-4 w-4" />
+      <Icon
+        icon="mdi:send"
+        class="h-4 w-4"
+      />
     </button>
   </div>
 </template>

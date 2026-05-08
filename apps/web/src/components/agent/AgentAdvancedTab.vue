@@ -87,7 +87,10 @@ function onMaxCtxBlur() {
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
-            <Icon icon="lucide:shield-check" class="w-4 h-4 text-amber-400" />
+            <Icon
+              icon="lucide:shield-check"
+              class="w-4 h-4 text-amber-400"
+            />
             <h3 class="text-sm font-medium text-zinc-200">
               Auto-Approve All Tools
             </h3>
@@ -141,8 +144,13 @@ function onMaxCtxBlur() {
       <div class="flex items-start gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
-            <Icon icon="lucide:route" class="w-4 h-4 text-emerald-400" />
-            <h3 class="text-sm font-medium text-zinc-200">Tool Router Model</h3>
+            <Icon
+              icon="lucide:route"
+              class="w-4 h-4 text-emerald-400"
+            />
+            <h3 class="text-sm font-medium text-zinc-200">
+              Tool Router Model
+            </h3>
           </div>
           <p class="text-xs text-zinc-500 leading-relaxed">
             Override the provider and model this agent uses when auto tool
@@ -151,9 +159,7 @@ function onMaxCtxBlur() {
           </p>
 
           <div class="mt-4 pt-4 border-t border-zinc-700">
-            <label class="block text-xs text-zinc-400 mb-1.5"
-              >Provider / Model</label
-            >
+            <label class="block text-xs text-zinc-400 mb-1.5">Provider / Model</label>
             <ProviderModelSelect
               :provider-id="agent.toolRouterProviderId || ''"
               :model-value="agent.toolRouterModel || ''"
@@ -172,7 +178,10 @@ function onMaxCtxBlur() {
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
-            <Icon icon="lucide:brain" class="w-4 h-4 text-indigo-400" />
+            <Icon
+              icon="lucide:brain"
+              class="w-4 h-4 text-indigo-400"
+            />
             <h3 class="text-sm font-medium text-zinc-200">
               Thinking / Reasoning
             </h3>
@@ -198,7 +207,10 @@ function onMaxCtxBlur() {
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
-            <Icon icon="lucide:ruler" class="w-4 h-4 text-amber-400" />
+            <Icon
+              icon="lucide:ruler"
+              class="w-4 h-4 text-amber-400"
+            />
             <h3 class="text-sm font-medium text-zinc-200">
               Max Context Tokens
             </h3>
@@ -209,7 +221,10 @@ function onMaxCtxBlur() {
             model's full context window. Useful to reduce costs and mitigate the
             "lost in the middle" effect on long conversations.
           </p>
-          <div v-if="maxCtxEnabled" class="mt-3">
+          <div
+            v-if="maxCtxEnabled"
+            class="mt-3"
+          >
             <input
               v-model.number="maxCtxInput"
               type="number"
@@ -218,7 +233,7 @@ function onMaxCtxBlur() {
               placeholder="e.g. 16384"
               class="w-40 bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/50"
               @blur="onMaxCtxBlur"
-            />
+            >
             <span class="ml-2 text-xs text-zinc-600">tokens</span>
           </div>
         </div>

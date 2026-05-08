@@ -186,7 +186,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
   <div class="h-full overflow-y-auto">
     <div class="max-w-3xl mx-auto py-8 px-6">
       <!-- Loading -->
-      <div v-if="loading" class="text-center py-12 text-zinc-400">Loading…</div>
+      <div
+        v-if="loading"
+        class="text-center py-12 text-zinc-400"
+      >
+        Loading…
+      </div>
 
       <template v-else-if="job">
         <!-- Back + Title -->
@@ -196,7 +201,10 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               class="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors"
               @click="router.push('/triggers/cron')"
             >
-              <Icon icon="lucide:arrow-left" class="w-5 h-5" />
+              <Icon
+                icon="lucide:arrow-left"
+                class="w-5 h-5"
+              />
             </button>
             <div
               class="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0 overflow-hidden"
@@ -205,8 +213,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-if="job.agentIconUrl"
                 :src="job.agentIconUrl"
                 class="w-full h-full object-cover"
+              >
+              <Icon
+                v-else
+                icon="lucide:clock"
+                class="w-5 h-5 text-zinc-400"
               />
-              <Icon v-else icon="lucide:clock" class="w-5 h-5 text-zinc-400" />
             </div>
             <div>
               <h1 class="text-2xl font-bold text-zinc-100">
@@ -231,7 +243,10 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <span class="w-2 h-2 rounded-full bg-zinc-600" />
               <span class="text-xs text-zinc-500">Paused</span>
             </template>
-            <span v-if="saveMessage" class="text-sm text-green-400">{{
+            <span
+              v-if="saveMessage"
+              class="text-sm text-green-400"
+            >{{
               saveMessage
             }}</span>
             <button
@@ -254,7 +269,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               type="text"
               placeholder="e.g. Daily health check"
               class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
+            >
           </div>
 
           <!-- Agent -->
@@ -283,7 +298,10 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 "
                 @click="dlgFrequency = opt.value"
               >
-                <Icon :icon="opt.icon" class="w-3.5 h-3.5" />
+                <Icon
+                  :icon="opt.icon"
+                  class="w-3.5 h-3.5"
+                />
                 {{ opt.label }}
               </button>
             </div>
@@ -298,7 +316,11 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-model.number="dlgEveryMinutes"
                 class="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option v-for="m in INTERVAL_MINUTES" :key="m" :value="m">
+                <option
+                  v-for="m in INTERVAL_MINUTES"
+                  :key="m"
+                  :value="m"
+                >
                   {{ m }}
                 </option>
               </select>
@@ -315,7 +337,11 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-model.number="dlgAtMinute"
                 class="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option v-for="m in MINUTE_OPTIONS" :key="m" :value="m">
+                <option
+                  v-for="m in MINUTE_OPTIONS"
+                  :key="m"
+                  :value="m"
+                >
                   :{{ String(m).padStart(2, "0") }}
                 </option>
               </select>
@@ -331,7 +357,11 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-model.number="dlgAtHour"
                 class="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option v-for="h in HOUR_OPTIONS" :key="h" :value="h">
+                <option
+                  v-for="h in HOUR_OPTIONS"
+                  :key="h"
+                  :value="h"
+                >
                   {{ String(h).padStart(2, "0") }}
                 </option>
               </select>
@@ -340,7 +370,11 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-model.number="dlgAtMinute"
                 class="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option v-for="m in MINUTE_OPTIONS" :key="m" :value="m">
+                <option
+                  v-for="m in MINUTE_OPTIONS"
+                  :key="m"
+                  :value="m"
+                >
                   {{ String(m).padStart(2, "0") }}
                 </option>
               </select>
@@ -356,7 +390,11 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-model.number="dlgWeekday"
                 class="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option v-for="(label, i) in WEEKDAYS" :key="i" :value="i">
+                <option
+                  v-for="(label, i) in WEEKDAYS"
+                  :key="i"
+                  :value="i"
+                >
                   {{ label }}
                 </option>
               </select>
@@ -365,7 +403,11 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-model.number="dlgAtHour"
                 class="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option v-for="h in HOUR_OPTIONS" :key="h" :value="h">
+                <option
+                  v-for="h in HOUR_OPTIONS"
+                  :key="h"
+                  :value="h"
+                >
                   {{ String(h).padStart(2, "0") }}
                 </option>
               </select>
@@ -374,7 +416,11 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-model.number="dlgAtMinute"
                 class="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option v-for="m in MINUTE_OPTIONS" :key="m" :value="m">
+                <option
+                  v-for="m in MINUTE_OPTIONS"
+                  :key="m"
+                  :value="m"
+                >
                   {{ String(m).padStart(2, "0") }}
                 </option>
               </select>
@@ -390,7 +436,11 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-model.number="dlgMonthDay"
                 class="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option v-for="d in 28" :key="d" :value="d">
+                <option
+                  v-for="d in 28"
+                  :key="d"
+                  :value="d"
+                >
                   {{ d }}
                 </option>
               </select>
@@ -399,7 +449,11 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-model.number="dlgAtHour"
                 class="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option v-for="h in HOUR_OPTIONS" :key="h" :value="h">
+                <option
+                  v-for="h in HOUR_OPTIONS"
+                  :key="h"
+                  :value="h"
+                >
                   {{ String(h).padStart(2, "0") }}
                 </option>
               </select>
@@ -408,20 +462,27 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-model.number="dlgAtMinute"
                 class="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option v-for="m in MINUTE_OPTIONS" :key="m" :value="m">
+                <option
+                  v-for="m in MINUTE_OPTIONS"
+                  :key="m"
+                  :value="m"
+                >
                   {{ String(m).padStart(2, "0") }}
                 </option>
               </select>
             </div>
 
             <!-- Custom -->
-            <div v-else-if="dlgFrequency === 'custom'" class="mb-3">
+            <div
+              v-else-if="dlgFrequency === 'custom'"
+              class="mb-3"
+            >
               <input
                 v-model="dlgCustomExpr"
                 type="text"
                 placeholder="*/30 * * * *"
                 class="w-full px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-              />
+              >
               <p class="text-[11px] text-zinc-600 mt-1">
                 Standard cron: minute hour day-of-month month day-of-week
               </p>
@@ -444,17 +505,17 @@ watch(cronPrompt, resizePrompt, { immediate: true });
 
           <!-- One-off -->
           <label class="flex items-center gap-2 cursor-pointer select-none">
-            <ToggleSwitch v-model="cronOneOff" size="md" color="amber" />
-            <span class="text-sm text-zinc-300"
-              >One-off (auto-disable after first run)</span
-            >
+            <ToggleSwitch
+              v-model="cronOneOff"
+              size="md"
+              color="amber"
+            />
+            <span class="text-sm text-zinc-300">One-off (auto-disable after first run)</span>
           </label>
 
           <!-- Provider/Model overrides -->
           <div>
-            <label class="block text-xs text-zinc-400 mb-1"
-              >Provider / Model override</label
-            >
+            <label class="block text-xs text-zinc-400 mb-1">Provider / Model override</label>
             <ProviderModelSelect
               :provider-id="effectiveProviderId"
               :model-value="cronModelOverride"
@@ -468,9 +529,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
 
           <!-- Output Channel -->
           <div>
-            <label class="block text-xs text-zinc-400 mb-1"
-              >Output channel (optional)</label
-            >
+            <label class="block text-xs text-zinc-400 mb-1">Output channel (optional)</label>
             <p class="text-[11px] text-zinc-600 mb-1.5">
               Send the agent's result to a messaging channel after each run.
             </p>
@@ -478,8 +537,14 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               v-model="cronOutputChannelId"
               class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              <option value="">None</option>
-              <option v-for="ch in allChannels" :key="ch.id" :value="ch.id">
+              <option value="">
+                None
+              </option>
+              <option
+                v-for="ch in allChannels"
+                :key="ch.id"
+                :value="ch.id"
+              >
                 {{ ch.name }} ({{ ch.type }})
               </option>
             </select>

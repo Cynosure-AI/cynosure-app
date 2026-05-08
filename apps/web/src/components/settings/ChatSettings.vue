@@ -59,10 +59,15 @@ function onTitleSelection(selection: {
         <div
           class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center"
         >
-          <Icon icon="lucide:route" class="w-5 h-5 text-zinc-400" />
+          <Icon
+            icon="lucide:route"
+            class="w-5 h-5 text-zinc-400"
+          />
         </div>
         <div>
-          <h3 class="text-sm font-medium text-zinc-200">Tool Router</h3>
+          <h3 class="text-sm font-medium text-zinc-200">
+            Tool Router
+          </h3>
           <p class="text-xs text-zinc-500 mt-0.5">
             Provider and model used to detect which tools a request needs
           </p>
@@ -70,9 +75,7 @@ function onTitleSelection(selection: {
       </div>
 
       <div class="pt-1 border-t border-zinc-700">
-        <label class="block text-xs text-zinc-400 mb-1.5"
-          >Provider / Model</label
-        >
+        <label class="block text-xs text-zinc-400 mb-1.5">Provider / Model</label>
         <ProviderModelSelect
           :provider-id="prefs.toolRouterProviderId"
           :model-value="prefs.toolRouterModel"
@@ -92,7 +95,10 @@ function onTitleSelection(selection: {
           <div
             class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center"
           >
-            <Icon icon="lucide:heading" class="w-5 h-5 text-zinc-400" />
+            <Icon
+              icon="lucide:heading"
+              class="w-5 h-5 text-zinc-400"
+            />
           </div>
           <div>
             <h3 class="text-sm font-medium text-zinc-200">
@@ -106,10 +112,11 @@ function onTitleSelection(selection: {
         <ToggleSwitch v-model="prefs.generateTitle" />
       </div>
 
-      <div v-if="prefs.generateTitle" class="pt-1 border-t border-zinc-700">
-        <label class="block text-xs text-zinc-400 mb-1.5"
-          >Provider / Model</label
-        >
+      <div
+        v-if="prefs.generateTitle"
+        class="pt-1 border-t border-zinc-700"
+      >
+        <label class="block text-xs text-zinc-400 mb-1.5">Provider / Model</label>
         <ProviderModelSelect
           :provider-id="prefs.titleProviderId"
           :model-value="prefs.titleModel"
@@ -128,10 +135,15 @@ function onTitleSelection(selection: {
         <div
           class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center"
         >
-          <Icon icon="lucide:scissors" class="w-5 h-5 text-zinc-400" />
+          <Icon
+            icon="lucide:scissors"
+            class="w-5 h-5 text-zinc-400"
+          />
         </div>
         <div>
-          <h3 class="text-sm font-medium text-zinc-200">Context Strategy</h3>
+          <h3 class="text-sm font-medium text-zinc-200">
+            Context Strategy
+          </h3>
           <p class="text-xs text-zinc-500 mt-0.5">
             How to manage conversation history when it exceeds the model's
             context window

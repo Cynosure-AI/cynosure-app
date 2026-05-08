@@ -57,7 +57,6 @@ function onAutoRoutingUpdate(enabled: boolean): void {
           @update:model-value="onAutoRoutingUpdate"
         />
       </div>
-
     </div>
 
     <ToolSelector

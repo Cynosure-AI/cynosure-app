@@ -491,14 +491,20 @@ defineExpose({ ingestFiles });
           title="Edit space"
           @click="emit('editSpace')"
         >
-          <Icon icon="lucide:pencil" class="w-3.5 h-3.5" />
+          <Icon
+            icon="lucide:pencil"
+            class="w-3.5 h-3.5"
+          />
         </button>
         <button
           class="p-1 text-zinc-500 hover:text-red-400 transition-colors"
           title="Delete space"
           @click="emit('deleteSpace')"
         >
-          <Icon icon="lucide:trash-2" class="w-3.5 h-3.5" />
+          <Icon
+            icon="lucide:trash-2"
+            class="w-3.5 h-3.5"
+          />
         </button>
       </div>
       <div class="flex items-center gap-2">
@@ -526,7 +532,10 @@ defineExpose({ ingestFiles });
     </div>
 
     <!-- Upload results -->
-    <div v-if="uploadResults.length > 0" class="mb-4 space-y-1">
+    <div
+      v-if="uploadResults.length > 0"
+      class="mb-4 space-y-1"
+    >
       <div
         v-for="(r, i) in uploadResults"
         :key="i"
@@ -542,8 +551,14 @@ defineExpose({ ingestFiles });
           class="w-3.5 h-3.5"
         />
         <span class="truncate">{{ r.fileName }}</span>
-        <span v-if="!r.error" class="text-zinc-500">{{ r.chunks }} chunks</span>
-        <span v-else class="text-red-400">{{ r.error }}</span>
+        <span
+          v-if="!r.error"
+          class="text-zinc-500"
+        >{{ r.chunks }} chunks</span>
+        <span
+          v-else
+          class="text-red-400"
+        >{{ r.error }}</span>
       </div>
       <button
         class="text-xs text-zinc-500 hover:text-zinc-300 px-1"
@@ -642,7 +657,10 @@ defineExpose({ ingestFiles });
     </div>
 
     <!-- Search -->
-    <div v-if="groups.length > 0" class="mb-3 flex items-center gap-2">
+    <div
+      v-if="groups.length > 0"
+      class="mb-3 flex items-center gap-2"
+    >
       <div class="relative flex-1">
         <Icon
           icon="lucide:search"
@@ -654,7 +672,7 @@ defineExpose({ ingestFiles });
           placeholder="Search documents…"
           class="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800/60 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
           @input="onSearchInput"
-        />
+        >
       </div>
 
       <button
@@ -700,7 +718,10 @@ defineExpose({ ingestFiles });
     </div>
 
     <!-- Document rows -->
-    <div v-else class="space-y-2">
+    <div
+      v-else
+      class="space-y-2"
+    >
       <!-- Top pagination -->
       <div
         v-if="totalPages > 1"
@@ -713,9 +734,7 @@ defineExpose({ ingestFiles });
         >
           Prev
         </button>
-        <span class="text-xs text-zinc-500"
-          >{{ page + 1 }} / {{ totalPages }}</span
-        >
+        <span class="text-xs text-zinc-500">{{ page + 1 }} / {{ totalPages }}</span>
         <button
           :disabled="page >= totalPages - 1"
           class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
@@ -741,7 +760,7 @@ defineExpose({ ingestFiles });
             :checked="selectedGroups.has(group.sourceFile)"
             @click.stop
             @change.stop="toggleSelectGroup(group.sourceFile)"
-          />
+          >
           <Icon
             icon="lucide:file-text"
             class="w-4 h-4 text-zinc-400 shrink-0"
@@ -808,9 +827,7 @@ defineExpose({ ingestFiles });
       >
         Prev
       </button>
-      <span class="text-xs text-zinc-500"
-        >{{ page + 1 }} / {{ totalPages }}</span
-      >
+      <span class="text-xs text-zinc-500">{{ page + 1 }} / {{ totalPages }}</span>
       <button
         :disabled="page >= totalPages - 1"
         class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
@@ -828,14 +845,14 @@ defineExpose({ ingestFiles });
       accept=".txt,.md,.markdown,.json,.csv,.log,.xml,.yaml,.yml,.html,.htm,.toml,.ini,.cfg,.conf,.rst,.tex,.py,.js,.ts,.java,.c,.cpp,.h,.hpp,.go,.rs,.rb,.php,.sh,.bat,.ps1,.sql,.r,.swift,.kt,.docx,.pptx,.xlsx,.odt,.odp,.ods,.pdf,.rtf"
       class="hidden"
       @change="handleFileUpload"
-    />
+    >
     <input
       ref="reingestFileInput"
       type="file"
       accept=".txt,.md,.markdown,.json,.csv,.log,.xml,.yaml,.yml,.html,.htm,.toml,.ini,.cfg,.conf,.rst,.tex,.py,.js,.ts,.java,.c,.cpp,.h,.hpp,.go,.rs,.rb,.php,.sh,.bat,.ps1,.sql,.r,.swift,.kt,.docx,.pptx,.xlsx,.odt,.odp,.ods,.pdf,.rtf"
       class="hidden"
       @change="handleReingestFile"
-    />
+    >
 
     <!-- Move Dialog -->
     <Teleport to="body">

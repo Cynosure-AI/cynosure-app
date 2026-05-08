@@ -159,7 +159,12 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
   <div class="h-full overflow-y-auto">
     <div class="max-w-3xl mx-auto py-8 px-6">
       <!-- Loading -->
-      <div v-if="loading" class="text-center py-12 text-zinc-400">Loading…</div>
+      <div
+        v-if="loading"
+        class="text-center py-12 text-zinc-400"
+      >
+        Loading…
+      </div>
 
       <template v-else-if="watcher">
         <!-- Back + Title -->
@@ -169,7 +174,10 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
               class="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors"
               @click="router.push('/triggers/file-watchers')"
             >
-              <Icon icon="lucide:arrow-left" class="w-5 h-5" />
+              <Icon
+                icon="lucide:arrow-left"
+                class="w-5 h-5"
+              />
             </button>
             <div
               class="w-9 h-9 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 overflow-hidden"
@@ -178,8 +186,12 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
                 v-if="watcher.agentIconUrl"
                 :src="watcher.agentIconUrl"
                 class="w-full h-full object-cover"
+              >
+              <Icon
+                v-else
+                icon="lucide:eye"
+                class="w-5 h-5 text-zinc-400"
               />
-              <Icon v-else icon="lucide:eye" class="w-5 h-5 text-zinc-400" />
             </div>
             <div>
               <h1 class="text-2xl font-bold text-zinc-100">
@@ -195,19 +207,19 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
             <span
               v-if="watcher.isRunning"
               class="px-2 py-1 text-xs font-semibold rounded-full bg-amber-500/20 text-amber-400"
-              >RUNNING</span
-            >
+            >RUNNING</span>
             <span
               v-else-if="watcher.isWatching"
               class="px-2 py-1 text-xs font-semibold rounded-full bg-green-500/20 text-green-400"
-              >WATCHING</span
-            >
+            >WATCHING</span>
             <span
               v-else
               class="px-2 py-1 text-xs font-semibold rounded-full bg-zinc-500/20 text-zinc-500"
-              >STOPPED</span
-            >
-            <span v-if="saveMessage" class="text-sm text-green-400">{{
+            >STOPPED</span>
+            <span
+              v-if="saveMessage"
+              class="text-sm text-green-400"
+            >{{
               saveMessage
             }}</span>
             <button
@@ -230,7 +242,7 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
               type="text"
               placeholder="My Watcher"
               class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
+            >
           </div>
 
           <!-- Agent -->
@@ -245,9 +257,7 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
 
           <!-- Paths -->
           <div>
-            <label class="block text-xs text-zinc-400 mb-1"
-              >Paths to watch (one per line)</label
-            >
+            <label class="block text-xs text-zinc-400 mb-1">Paths to watch (one per line)</label>
             <textarea
               v-model="dlgPaths"
               rows="4"
@@ -258,9 +268,7 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
 
           <!-- Ignore patterns -->
           <div>
-            <label class="block text-xs text-zinc-400 mb-1"
-              >Ignore patterns (one glob per line)</label
-            >
+            <label class="block text-xs text-zinc-400 mb-1">Ignore patterns (one glob per line)</label>
             <textarea
               v-model="dlgIgnorePatterns"
               rows="3"
@@ -271,23 +279,19 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
 
           <!-- Debounce -->
           <div>
-            <label class="block text-xs text-zinc-400 mb-1"
-              >Debounce (seconds after last change)</label
-            >
+            <label class="block text-xs text-zinc-400 mb-1">Debounce (seconds after last change)</label>
             <input
               v-model.number="dlgDebounceMs"
               type="number"
               min="1"
               max="300"
               class="w-32 bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
+            >
           </div>
 
           <!-- Provider/Model overrides -->
           <div>
-            <label class="block text-xs text-zinc-400 mb-1"
-              >Provider / Model override</label
-            >
+            <label class="block text-xs text-zinc-400 mb-1">Provider / Model override</label>
             <ProviderModelSelect
               :provider-id="effectiveProviderId"
               :model-value="dlgModelOverride"
@@ -301,9 +305,7 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
 
           <!-- Output Channel -->
           <div>
-            <label class="block text-xs text-zinc-400 mb-1"
-              >Output channel (optional)</label
-            >
+            <label class="block text-xs text-zinc-400 mb-1">Output channel (optional)</label>
             <p class="text-[11px] text-zinc-600 mb-1.5">
               Send the agent's result to a messaging channel after each run.
             </p>
@@ -311,8 +313,14 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
               v-model="dlgOutputChannelId"
               class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              <option value="">None</option>
-              <option v-for="ch in allChannels" :key="ch.id" :value="ch.id">
+              <option value="">
+                None
+              </option>
+              <option
+                v-for="ch in allChannels"
+                :key="ch.id"
+                :value="ch.id"
+              >
                 {{ ch.name }} ({{ ch.type }})
               </option>
             </select>
@@ -320,9 +328,7 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
 
           <!-- Prompt -->
           <div>
-            <label class="block text-xs text-zinc-400 mb-1"
-              >Prompt (optional instructions for the agent)</label
-            >
+            <label class="block text-xs text-zinc-400 mb-1">Prompt (optional instructions for the agent)</label>
             <textarea
               ref="promptTextarea"
               v-model="dlgPrompt"
