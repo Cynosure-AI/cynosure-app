@@ -29,7 +29,21 @@ const draggedSpaceId = ref<string | null>(null);
 const dragOverSpaceId = ref<string | null>(null);
 const dropPosition = ref<"before" | "after">("before");
 
+function pinDefaultSpaceFirst(list: MemorySpace[]): MemorySpace[] {
+  const ordered = [...list];
+  const idx = ordered.findIndex((s) => s.isDefault);
+  if (idx <= 0) return ordered;
+  const [defaultSpace] = ordered.splice(idx, 1);
+  ordered.unshift(defaultSpace);
+  return ordered;
+}
+
 function onSpaceDragStart(e: DragEvent, spaceId: string) {
+  const space = spaces.value.find((s) => s.id === spaceId);
+  if (space?.isDefault) {
+    e.preventDefault();
+    return;
+  }
   draggedSpaceId.value = spaceId;
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = "move";
@@ -41,6 +55,13 @@ function onSpaceDragOver(e: DragEvent, spaceId: string) {
   if (!draggedSpaceId.value || draggedSpaceId.value === spaceId) return;
   e.preventDefault();
   if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  const target = spaces.value.find((s) => s.id === spaceId);
+  if (target?.isDefault) {
+    // Default space is pinned first; only allow dropping after it.
+    dropPosition.value = "after";
+    dragOverSpaceId.value = spaceId;
+    return;
+  }
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
   dropPosition.value =
     e.clientX < rect.left + rect.width / 2 ? "before" : "after";
@@ -63,6 +84,9 @@ async function onSpaceDrop(e: DragEvent, targetSpaceId: string) {
   draggedSpaceId.value = null;
   if (!srcId || srcId === targetSpaceId) return;
 
+  const source = spaces.value.find((s) => s.id === srcId);
+  if (source?.isDefault) return;
+
   const list = [...spaces.value];
   const srcIdx = list.findIndex((s) => s.id === srcId);
   let tgtIdx = list.findIndex((s) => s.id === targetSpaceId);
@@ -73,9 +97,10 @@ async function onSpaceDrop(e: DragEvent, targetSpaceId: string) {
   if (srcIdx < tgtIdx) tgtIdx--;
   if (pos === "after") tgtIdx++;
   list.splice(tgtIdx, 0, moved);
-  spaces.value = list;
+  const pinned = pinDefaultSpaceFirst(list);
+  spaces.value = pinned;
 
-  await api.memorySpaces.reorder(list.map((s) => s.id));
+  await api.memorySpaces.reorder(pinned.map((s) => s.id));
 }
 
 function onSpaceDragEnd() {
@@ -98,7 +123,7 @@ const selectedSpace = computed(() =>
 async function loadSpaces() {
   spacesLoading.value = true;
   try {
-    spaces.value = await api.memorySpaces.list();
+    spaces.value = pinDefaultSpaceFirst(await api.memorySpaces.list());
     if (!selectedSpaceId.value && spaces.value.length > 0) {
       selectedSpaceId.value = spaces.value[0].id;
     }
@@ -295,12 +320,13 @@ onMounted(() => loadSpaces());
           <button
             v-for="space in spaces"
             :key="space.id"
-            draggable="true"
-            class="rounded-xl border px-4 py-3 text-left transition-all min-w-0 relative cursor-grab active:cursor-grabbing"
+            :draggable="!space.isDefault"
+            class="rounded-xl border px-4 py-3 text-left transition-all min-w-0 relative"
             :class="[
               selectedSpaceId === space.id
                 ? 'border-blue-500/50 bg-blue-500/10'
                 : 'border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800',
+              space.isDefault ? 'cursor-default' : 'cursor-grab active:cursor-grabbing',
               dropTargetSpaceId === space.id
                 ? 'ring-2 ring-blue-400 border-blue-400/50 bg-blue-500/15'
                 : '',
@@ -332,6 +358,12 @@ onMounted(() => loadSpaces());
               <span class="text-sm font-medium text-zinc-200 truncate">{{
                 space.name
               }}</span>
+              <span
+                v-if="space.isDefault"
+                class="text-[10px] px-1.5 py-0.5 rounded border border-blue-400/40 text-blue-300"
+              >
+                default
+              </span>
             </div>
             <div class="text-xs text-zinc-500">
               {{ space.documentCount }} document{{

@@ -66,10 +66,15 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const { ids } = req.body
         if (!Array.isArray(ids)) return reply.status(400).send({ error: 'ids must be an array' })
         const db = getDb()
+        const defaultRow = db.prepare('SELECT id FROM memory_spaces WHERE is_default = 1 ORDER BY created_at ASC LIMIT 1').get() as { id: string } | undefined
+        const orderedIds = defaultRow
+            ? [defaultRow.id, ...ids.filter(id => id !== defaultRow.id)]
+            : ids
+
         const stmt = db.prepare('UPDATE memory_spaces SET sort_order = ? WHERE id = ?')
         const runAll = db.transaction(() => {
-            for (let i = 0; i < ids.length; i++) {
-                stmt.run(i, ids[i])
+            for (let i = 0; i < orderedIds.length; i++) {
+                stmt.run(i, orderedIds[i])
             }
         })
         runAll()
