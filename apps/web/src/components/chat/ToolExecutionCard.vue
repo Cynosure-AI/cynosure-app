@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
+import CollapsibleSection from '../shared/CollapsibleSection.vue'
 
 export interface ToolExecStep {
   iteration: number
@@ -125,175 +126,177 @@ const maContext = computed(() => {
 <template>
   <div class="px-4 py-1.5">
     <div class="max-w-[80%] ml-3 md:ml-12">
-      <!-- Compact header — always visible -->
-      <button
-        class="w-full flex items-center gap-2 px-3 py-2 rounded-2xl text-[13px] font-medium transition-all group shadow-sm"
-        :class="[
-          expanded
-            ? 'bg-zinc-800 border border-zinc-700/60 shadow-md'
-            : 'bg-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-700/50 border border-transparent',
-        ]"
-        @click="expanded = !expanded"
-      >
-        <!-- Status icon -->
-        <Icon
-          :icon="currentPhase.label === 'Denied' ? 'lucide:shield-x' : currentPhase.label === 'Tool routing' ? 'lucide:route' : toolNames.length && !results.length ? (isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash') : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
-          class="w-3.5 h-3.5 shrink-0"
-          :class="[
-            currentPhase.label === 'Denied' ? 'text-red-400' :
-            currentPhase.label === 'Tool routing' ? 'text-blue-300' :
-            toolNames.length && !results.length ? (isActive ? 'text-blue-400' : 'text-zinc-500') :
-            allSuccess ? 'text-emerald-400' :
-            anyFailed ? 'text-red-400' :
-            currentPhase.color
-          ]"
-        />
-
-        <!-- MA context label -->
-        <span
-          v-if="maContext?.codename"
-          class="text-[10px] text-indigo-400/80 truncate max-w-16"
-          :title="maContext.agentName || maContext.codename"
-        >{{ maContext.codename }}</span>
-        <span
-          v-else-if="maContext?.phase"
-          class="text-[10px] text-violet-400/80"
-        >{{ maContext.phase }}</span>
-
-        <!-- Tool names -->
-        <div class="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
-          <template v-if="toolNames.length">
-            <span
-              v-for="name in toolNames.slice(0, 3)"
-              :key="name"
-              class="inline-flex items-center rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-300 font-medium truncate max-w-35"
-            >{{ name }}</span>
-            <span
-              v-if="toolNames.length > 3"
-              class="text-[10px] text-zinc-500"
-            >+{{ toolNames.length - 3 }}</span>
-          </template>
-          <span
-            v-else
-            class="text-zinc-400"
-            :class="currentPhase.color"
-          >{{ currentPhase.label }}</span>
-        </div>
-
-        <!-- Result count / status -->
-        <span
-          v-if="results.length"
-          class="text-[10px] shrink-0"
-          :class="allSuccess ? 'text-emerald-400/70' : 'text-red-400/70'"
-        >{{ results.filter(r => r.success).length }}/{{ results.length }} ok</span>
-
-        <!-- Elapsed -->
-        <span
-          v-if="elapsedMs > 0"
-          class="text-[10px] text-zinc-600 tabular-nums shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-        >{{ formatElapsed(elapsedMs) }}</span>
-
-        <!-- Expand icon -->
-        <Icon
-          icon="lucide:chevron-down"
-          class="w-3 h-3 text-zinc-600 shrink-0 transition-transform"
-          :class="{ 'rotate-180': expanded }"
-        />
-      </button>
-
-      <!-- Streaming text (always visible when actively streaming) -->
-      <div
-        v-if="streamingText && isActive"
-        class="mt-1.5 ml-3 px-3 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/30"
-      >
-        <span class="text-[10px] text-zinc-500 font-medium block mb-0.5">{{ streamingText.label }}</span>
-        <p class="text-[11px] text-zinc-400 whitespace-pre-wrap">
-          {{ streamingText.text }}<span class="inline-block w-1.5 h-3 bg-zinc-400/60 animate-pulse ml-0.5 align-middle" />
-        </p>
-      </div>
-
-      <!-- Expanded details -->
-      <div
-        v-if="expanded"
-        class="mt-1.5 ml-3 space-y-2"
-      >
-        <!-- Tool call arguments -->
-        <div
-          v-if="toolCallArgs.length"
-          class="space-y-1.5"
-        >
-          <div
-            v-for="(tc, i) in toolCallArgs"
-            :key="i"
-            class="rounded-lg bg-zinc-900/60 border border-zinc-700/30 px-3 py-2"
+      <CollapsibleSection v-model="expanded">
+        <template #trigger="{ expanded: isExpanded, toggle, triggerAttrs }">
+          <!-- Compact header — always visible -->
+          <button
+            v-bind="triggerAttrs"
+            class="w-full flex items-center gap-2 px-3 py-2 rounded-2xl text-[13px] font-medium transition-all group shadow-sm"
+            :class="[
+              isExpanded
+                ? 'bg-zinc-800 border border-zinc-700/60 shadow-md'
+                : 'bg-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-700/50 border border-transparent',
+            ]"
+            @click="toggle"
           >
-            <div class="flex items-center gap-1.5 mb-1">
-              <Icon
-                icon="lucide:terminal"
-                class="w-3 h-3 text-blue-400"
-              />
-              <span class="text-[11px] text-blue-300 font-medium">{{ tc.name }}</span>
-            </div>
-            <pre
-              v-if="tc.arguments && tc.arguments !== '{}'"
-              class="text-[10px] text-zinc-500 whitespace-pre-wrap break-all bg-zinc-950/50 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono"
-            >{{ prettifyJson(tc.arguments) }}</pre>
-          </div>
-        </div>
+            <!-- Status icon -->
+            <Icon
+              :icon="currentPhase.label === 'Denied' ? 'lucide:shield-x' : currentPhase.label === 'Tool routing' ? 'lucide:route' : toolNames.length && !results.length ? (isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash') : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
+              class="w-3.5 h-3.5 shrink-0"
+              :class="[
+                currentPhase.label === 'Denied' ? 'text-red-400' :
+                currentPhase.label === 'Tool routing' ? 'text-blue-300' :
+                toolNames.length && !results.length ? (isActive ? 'text-blue-400' : 'text-zinc-500') :
+                allSuccess ? 'text-emerald-400' :
+                anyFailed ? 'text-red-400' :
+                currentPhase.color
+              ]"
+            />
 
-        <!-- Results -->
-        <div
-          v-if="results.length"
-          class="space-y-1.5"
-        >
-          <div
-            v-for="(r, i) in results"
-            :key="i"
-            class="rounded-lg border px-3 py-2"
-            :class="r.success
-              ? 'bg-emerald-500/5 border-emerald-500/15'
-              : 'bg-red-500/5 border-red-500/15'"
-          >
-            <div class="flex items-center gap-1.5 mb-1">
-              <Icon
-                :icon="r.success ? 'lucide:check' : 'lucide:x'"
-                class="w-3 h-3"
-                :class="r.success ? 'text-emerald-400' : 'text-red-400'"
-              />
+            <!-- MA context label -->
+            <span
+              v-if="maContext?.codename"
+              class="text-[10px] text-indigo-400/80 truncate max-w-16"
+              :title="maContext.agentName || maContext.codename"
+            >{{ maContext.codename }}</span>
+            <span
+              v-else-if="maContext?.phase"
+              class="text-[10px] text-violet-400/80"
+            >{{ maContext.phase }}</span>
+
+            <!-- Tool names -->
+            <div class="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
+              <template v-if="toolNames.length">
+                <span
+                  v-for="name in toolNames.slice(0, 3)"
+                  :key="name"
+                  class="inline-flex items-center rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-300 font-medium truncate max-w-35"
+                >{{ name }}</span>
+                <span
+                  v-if="toolNames.length > 3"
+                  class="text-[10px] text-zinc-500"
+                >+{{ toolNames.length - 3 }}</span>
+              </template>
               <span
-                class="text-[11px] font-medium"
-                :class="r.success ? 'text-zinc-300' : 'text-red-300'"
-              >{{ r.name }}</span>
+                v-else
+                class="text-zinc-400"
+                :class="currentPhase.color"
+              >{{ currentPhase.label }}</span>
             </div>
-            <pre
-              class="text-[10px] whitespace-pre-wrap break-all rounded px-2 py-1.5 max-h-64 overflow-y-auto font-mono"
-              :class="r.success
-                ? 'text-zinc-400 bg-zinc-900/50'
-                : 'text-red-300/80 bg-red-950/30'"
-            >{{ prettifyJson(r.output) }}</pre>
-            <!-- Image thumbnails -->
+
+            <!-- Result count / status -->
+            <span
+              v-if="results.length"
+              class="text-[10px] shrink-0"
+              :class="allSuccess ? 'text-emerald-400/70' : 'text-red-400/70'"
+            >{{ results.filter(r => r.success).length }}/{{ results.length }} ok</span>
+
+            <!-- Elapsed -->
+            <span
+              v-if="elapsedMs > 0"
+              class="text-[10px] text-zinc-600 tabular-nums shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+            >{{ formatElapsed(elapsedMs) }}</span>
+
+            <!-- Expand icon -->
+            <Icon
+              icon="lucide:chevron-down"
+              class="w-3 h-3 text-zinc-600 shrink-0 transition-transform"
+              :class="{ 'rotate-180': isExpanded }"
+            />
+          </button>
+        </template>
+
+        <!-- Streaming text (always visible when actively streaming) -->
+        <div
+          v-if="streamingText && isActive"
+          class="mt-1.5 ml-3 px-3 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/30"
+        >
+          <span class="text-[10px] text-zinc-500 font-medium block mb-0.5">{{ streamingText.label }}</span>
+          <p class="text-[11px] text-zinc-400 whitespace-pre-wrap">
+            {{ streamingText.text }}<span class="inline-block w-1.5 h-3 bg-zinc-400/60 animate-pulse ml-0.5 align-middle" />
+          </p>
+        </div>
+
+        <!-- Expanded details -->
+        <div class="mt-1.5 ml-3 space-y-2">
+          <!-- Tool call arguments -->
+          <div
+            v-if="toolCallArgs.length"
+            class="space-y-1.5"
+          >
             <div
-              v-if="r.images?.length"
-              class="flex gap-2 mt-2 flex-wrap"
+              v-for="(tc, i) in toolCallArgs"
+              :key="i"
+              class="rounded-lg bg-zinc-900/60 border border-zinc-700/30 px-3 py-2"
             >
-              <img
-                v-for="(img, ii) in r.images"
-                :key="ii"
-                :src="img"
-                class="h-24 rounded-lg border border-zinc-600 object-cover cursor-pointer hover:border-blue-500 transition-colors"
-                :title="`Click to enlarge — Image ${ii + 1} from ${r.name}`"
-                @click.stop="lightboxSrc = img"
-              >
+              <div class="flex items-center gap-1.5 mb-1">
+                <Icon
+                  icon="lucide:terminal"
+                  class="w-3 h-3 text-blue-400"
+                />
+                <span class="text-[11px] text-blue-300 font-medium">{{ tc.name }}</span>
+              </div>
+              <pre
+                v-if="tc.arguments && tc.arguments !== '{}'"
+                class="text-[10px] text-zinc-500 whitespace-pre-wrap break-all bg-zinc-950/50 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono"
+              >{{ prettifyJson(tc.arguments) }}</pre>
             </div>
-            <p
-              v-if="r.error"
-              class="mt-1 text-[10px] text-red-400"
+          </div>
+
+          <!-- Results -->
+          <div
+            v-if="results.length"
+            class="space-y-1.5"
+          >
+            <div
+              v-for="(r, i) in results"
+              :key="i"
+              class="rounded-lg border px-3 py-2"
+              :class="r.success
+                ? 'bg-emerald-500/5 border-emerald-500/15'
+                : 'bg-red-500/5 border-red-500/15'"
             >
-              {{ r.error }}
-            </p>
+              <div class="flex items-center gap-1.5 mb-1">
+                <Icon
+                  :icon="r.success ? 'lucide:check' : 'lucide:x'"
+                  class="w-3 h-3"
+                  :class="r.success ? 'text-emerald-400' : 'text-red-400'"
+                />
+                <span
+                  class="text-[11px] font-medium"
+                  :class="r.success ? 'text-zinc-300' : 'text-red-300'"
+                >{{ r.name }}</span>
+              </div>
+              <pre
+                class="text-[10px] whitespace-pre-wrap break-all rounded px-2 py-1.5 max-h-64 overflow-y-auto font-mono"
+                :class="r.success
+                  ? 'text-zinc-400 bg-zinc-900/50'
+                  : 'text-red-300/80 bg-red-950/30'"
+              >{{ prettifyJson(r.output) }}</pre>
+              <!-- Image thumbnails -->
+              <div
+                v-if="r.images?.length"
+                class="flex gap-2 mt-2 flex-wrap"
+              >
+                <img
+                  v-for="(img, ii) in r.images"
+                  :key="ii"
+                  :src="img"
+                  class="h-24 rounded-lg border border-zinc-600 object-cover cursor-pointer hover:border-blue-500 transition-colors"
+                  :title="`Click to enlarge — Image ${ii + 1} from ${r.name}`"
+                  @click.stop="lightboxSrc = img"
+                >
+              </div>
+              <p
+                v-if="r.error"
+                class="mt-1 text-[10px] text-red-400"
+              >
+                {{ r.error }}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
     </div>
   </div>
 

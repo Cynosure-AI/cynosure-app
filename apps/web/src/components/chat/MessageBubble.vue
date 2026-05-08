@@ -56,6 +56,7 @@ hljs.registerLanguage('text', plaintext)
 import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import { useAppBranding } from '../../composables/useAppBranding'
+import CollapsibleSection from '../shared/CollapsibleSection.vue'
 
 const markdownRef = ref<HTMLElement | null>(null)
 
@@ -340,40 +341,28 @@ const imageGridClass = computed(() => {
         v-if="!isUser && thinking"
         class="mb-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5 backdrop-blur-sm shadow-sm"
       >
-        <button
-          class="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-medium text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors rounded-xl"
-          @click="thinkingExpanded = !thinkingExpanded"
+        <CollapsibleSection
+          v-model="thinkingExpanded"
+          header-label="Thinking"
+          header-icon="lucide:brain"
+          header-class="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] rounded-xl transition-colors hover:bg-indigo-500/10"
+          header-text-class="font-medium text-indigo-400"
+          chevron-class="h-3.5 w-3.5 text-indigo-300/70"
+          :keyboard-shortcuts="true"
         >
-          <Icon
-            icon="lucide:brain"
-            class="w-3.5 h-3.5"
-          />
-          <span>Thinking</span>
-          <span
-            v-if="isStreaming"
-            class="animate-pulse"
-          >…</span>
-          <svg
-            class="ml-auto h-3.5 w-3.5 transition-transform opacity-70"
-            :class="{ 'rotate-180': thinkingExpanded }"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+          <template #header-extra>
+            <span
+              v-if="isStreaming"
+              class="animate-pulse text-indigo-300"
+            >…</span>
+          </template>
+
+          <div
+            class="border-t border-indigo-500/20 px-3 py-2.5 text-[13px] leading-relaxed text-zinc-400 whitespace-pre-wrap max-h-64 overflow-y-auto font-mono"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
-        </button>
-        <div
-          v-if="thinkingExpanded"
-          class="border-t border-indigo-500/20 px-3 py-2.5 text-[13px] leading-relaxed text-zinc-400 whitespace-pre-wrap max-h-64 overflow-y-auto font-mono"
-        >
-          {{ thinking }}
-        </div>
+            {{ thinking }}
+          </div>
+        </CollapsibleSection>
       </div>
 
       <!-- User message: edit mode -->

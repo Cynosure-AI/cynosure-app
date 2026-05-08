@@ -6,6 +6,7 @@ import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import MessageBubble from '../chat/MessageBubble.vue'
 import ToolExecutionCard from '../chat/ToolExecutionCard.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
+import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import { Icon } from '@iconify/vue'
 
 const chatStore = useChatStore()
@@ -194,12 +195,9 @@ const lastToolGroupKey = computed(() => {
   return groups.length ? groups[groups.length - 1].key : null
 })
 
-function toggleFallback(id: string): void {
-  if (expandedFallback.value.has(id)) {
-    expandedFallback.value.delete(id)
-  } else {
-    expandedFallback.value.add(id)
-  }
+function setFallbackExpanded(id: string, expanded: boolean): void {
+  if (expanded) expandedFallback.value.add(id)
+  else expandedFallback.value.delete(id)
 }
 
 // Scroll triggers
@@ -336,32 +334,39 @@ onMounted(() => scrollToBottom())
           class="px-4 py-1.5"
         >
           <div class="max-w-[80%] ml-10">
-            <button
-              class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-colors group"
-              :class="expandedFallback.has(entry.msg.id)
-                ? 'bg-zinc-800/80 border border-zinc-700/60'
-                : 'bg-zinc-800/40 hover:bg-zinc-800/70 border border-zinc-800/40 hover:border-zinc-700/40'"
-              @click="toggleFallback(entry.msg.id)"
+            <CollapsibleSection
+              :model-value="expandedFallback.has(entry.msg.id)"
+              :keyboard-shortcuts="true"
+              @update:model-value="setFallbackExpanded(entry.msg.id, $event)"
             >
-              <Icon
-                icon="lucide:wrench"
-                class="w-3.5 h-3.5 text-zinc-500 shrink-0"
-              />
-              <span class="text-zinc-400 truncate flex-1 text-left">
-                {{ entry.msg.content.slice(0, 80) }}{{ entry.msg.content.length > 80 ? '…' : '' }}
-              </span>
-              <Icon
-                icon="lucide:chevron-down"
-                class="w-3 h-3 text-zinc-600 shrink-0 transition-transform"
-                :class="{ 'rotate-180': expandedFallback.has(entry.msg.id) }"
-              />
-            </button>
-            <div
-              v-if="expandedFallback.has(entry.msg.id)"
-              class="mt-1.5 ml-3"
-            >
-              <pre class="text-[10px] text-zinc-400 whitespace-pre-wrap break-all bg-zinc-900/60 border border-zinc-700/30 rounded-lg px-3 py-2 max-h-60 overflow-y-auto font-mono">{{ entry.msg.content }}</pre>
-            </div>
+              <template #trigger="{ expanded, toggle, triggerAttrs, onTriggerKeydown }">
+                <button
+                  v-bind="triggerAttrs"
+                  class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-colors group"
+                  :class="expanded
+                    ? 'bg-zinc-800/80 border border-zinc-700/60'
+                    : 'bg-zinc-800/40 hover:bg-zinc-800/70 border border-zinc-800/40 hover:border-zinc-700/40'"
+                  @click="toggle"
+                  @keydown="onTriggerKeydown"
+                >
+                  <Icon
+                    icon="lucide:wrench"
+                    class="w-3.5 h-3.5 text-zinc-500 shrink-0"
+                  />
+                  <span class="text-zinc-400 truncate flex-1 text-left">
+                    {{ entry.msg.content.slice(0, 80) }}{{ entry.msg.content.length > 80 ? '…' : '' }}
+                  </span>
+                  <Icon
+                    icon="lucide:chevron-down"
+                    class="w-3 h-3 text-zinc-600 shrink-0 transition-transform"
+                    :class="{ 'rotate-180': expanded }"
+                  />
+                </button>
+              </template>
+              <div class="mt-1.5 ml-3">
+                <pre class="text-[10px] text-zinc-400 whitespace-pre-wrap break-all bg-zinc-900/60 border border-zinc-700/30 rounded-lg px-3 py-2 max-h-60 overflow-y-auto font-mono">{{ entry.msg.content }}</pre>
+              </div>
+            </CollapsibleSection>
           </div>
         </div>
       </template>
