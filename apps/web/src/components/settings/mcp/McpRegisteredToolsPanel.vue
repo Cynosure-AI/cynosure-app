@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
+import CollapsibleSection from '../../shared/CollapsibleSection.vue'
 
 const agentStore = useAgentStore()
 
@@ -96,8 +97,12 @@ async function askAll(): Promise<void> {
   }
 }
 
-function toggleCollapse(nsId: string): void {
-  if (collapsedNamespaces.value.has(nsId)) collapsedNamespaces.value.delete(nsId)
+function isNamespaceExpanded(nsId: string): boolean {
+  return !collapsedNamespaces.value.has(nsId)
+}
+
+function setNamespaceExpanded(nsId: string, expanded: boolean): void {
+  if (expanded) collapsedNamespaces.value.delete(nsId)
   else collapsedNamespaces.value.add(nsId)
 }
 </script>
@@ -141,86 +146,90 @@ function toggleCollapse(nsId: string): void {
         v-for="group in groupedTools"
         :key="group.namespace.id"
       >
-        <!-- Namespace header -->
-        <div class="flex items-center gap-2 px-2 pt-2 pb-1">
-          <button
-            class="flex items-center gap-1.5 flex-1 text-left"
-            @click="toggleCollapse(group.namespace.id)"
-          >
-            <Icon
-              icon="mdi:chevron-down"
-              class="h-3 w-3 text-zinc-500 transition-transform"
-              :class="{ '-rotate-90': collapsedNamespaces.has(group.namespace.id) }"
-            />
-            <span class="text-[11px] uppercase tracking-wider font-semibold text-purple-400">
-              {{ group.namespace.label }}
-            </span>
-            <span class="text-[10px] text-zinc-600">
-              {{ group.tools.filter((t) => isAutoApproved(approvalName(t))).length }}/{{ group.tools.length }} auto
-            </span>
-          </button>
-
-          <!-- Bulk toggle for this namespace -->
-          <div class="flex items-center gap-1 shrink-0">
-            <button
-              class="text-[9px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
-              title="Auto-confirm all tools in this server"
-              @click="setAllInNamespace(group, true)"
-            >
-              All auto
-            </button>
-            <button
-              class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors"
-              title="Ask for all tools in this server"
-              @click="setAllInNamespace(group, false)"
-            >
-              All ask
-            </button>
-          </div>
-        </div>
-
-        <!-- Tools in namespace -->
-        <div
-          v-if="!collapsedNamespaces.has(group.namespace.id)"
-          class="space-y-0.5 pl-2"
+        <CollapsibleSection
+          :model-value="isNamespaceExpanded(group.namespace.id)"
+          @update:model-value="setNamespaceExpanded(group.namespace.id, $event)"
         >
-          <div
-            v-for="tool in group.tools"
-            :key="tool.name"
-            class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-zinc-800/60 transition-colors"
-            :title="displayDescription(tool)"
-          >
-            <!-- Tool info -->
-            <div class="flex-1 min-w-0">
-              <span class="text-xs text-zinc-200 font-medium block">{{ displayName(tool) }}</span>
-              <p class="text-[10px] text-zinc-500 leading-snug truncate">
-                {{ displayDescription(tool) }}
-              </p>
-            </div>
+          <template #trigger="{ expanded, toggle }">
+            <!-- Namespace header -->
+            <div class="flex items-center gap-2 px-2 pt-2 pb-1">
+              <button
+                class="flex items-center gap-1.5 flex-1 text-left"
+                @click="toggle"
+              >
+                <Icon
+                  icon="mdi:chevron-down"
+                  class="h-3 w-3 text-zinc-500 transition-transform"
+                  :class="{ '-rotate-90': !expanded }"
+                />
+                <span class="text-[11px] uppercase tracking-wider font-semibold text-purple-400">
+                  {{ group.namespace.label }}
+                </span>
+                <span class="text-[10px] text-zinc-600">
+                  {{ group.tools.filter((t) => isAutoApproved(approvalName(t))).length }}/{{ group.tools.length }} auto
+                </span>
+              </button>
 
-            <!-- HITL toggle -->
-            <button
-              class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors"
-              :class="
-                isAutoApproved(approvalName(tool))
-                  ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
-                  : 'bg-amber-500/10 text-amber-400/80 hover:bg-amber-500/20'
-              "
-              :title="
-                isAutoApproved(approvalName(tool))
-                  ? 'Auto-confirmed — click to require approval'
-                  : 'Requires approval — click to auto-confirm'
-              "
-              @click="toggleApproval(approvalName(tool))"
+              <!-- Bulk toggle for this namespace -->
+              <div class="flex items-center gap-1 shrink-0">
+                <button
+                  class="text-[9px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
+                  title="Auto-confirm all tools in this server"
+                  @click="setAllInNamespace(group, true)"
+                >
+                  All auto
+                </button>
+                <button
+                  class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors"
+                  title="Ask for all tools in this server"
+                  @click="setAllInNamespace(group, false)"
+                >
+                  All ask
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <!-- Tools in namespace -->
+          <div class="space-y-0.5 pl-2">
+            <div
+              v-for="tool in group.tools"
+              :key="tool.name"
+              class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-zinc-800/60 transition-colors"
+              :title="displayDescription(tool)"
             >
-              <Icon
-                :icon="isAutoApproved(approvalName(tool)) ? 'mdi:shield-check' : 'mdi:alert-outline'"
-                class="w-3 h-3"
-              />
-              {{ isAutoApproved(approvalName(tool)) ? 'auto' : 'ask' }}
-            </button>
+              <!-- Tool info -->
+              <div class="flex-1 min-w-0">
+                <span class="text-xs text-zinc-200 font-medium block">{{ displayName(tool) }}</span>
+                <p class="text-[10px] text-zinc-500 leading-snug truncate">
+                  {{ displayDescription(tool) }}
+                </p>
+              </div>
+
+              <!-- HITL toggle -->
+              <button
+                class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors"
+                :class="
+                  isAutoApproved(approvalName(tool))
+                    ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
+                    : 'bg-amber-500/10 text-amber-400/80 hover:bg-amber-500/20'
+                "
+                :title="
+                  isAutoApproved(approvalName(tool))
+                    ? 'Auto-confirmed — click to require approval'
+                    : 'Requires approval — click to auto-confirm'
+                "
+                @click="toggleApproval(approvalName(tool))"
+              >
+                <Icon
+                  :icon="isAutoApproved(approvalName(tool)) ? 'mdi:shield-check' : 'mdi:alert-outline'"
+                  class="w-3 h-3"
+                />
+                {{ isAutoApproved(approvalName(tool)) ? 'auto' : 'ask' }}
+              </button>
+            </div>
           </div>
-        </div>
+        </CollapsibleSection>
       </template>
 
       <!-- Empty state -->

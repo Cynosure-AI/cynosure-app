@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
+import CollapsibleSection from './CollapsibleSection.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -117,15 +118,15 @@ function isNamespacePartiallySelected(group: NamespaceGroup): boolean {
   return selectedCount > 0 && selectedCount < group.tools.length
 }
 
-function isNamespaceCollapsed(namespaceId: string): boolean {
-  return !expandedNamespaces.value.has(namespaceId)
+function isNamespaceExpanded(namespaceId: string): boolean {
+  return expandedNamespaces.value.has(namespaceId)
 }
 
-function toggleNamespaceCollapse(namespaceId: string): void {
-  if (expandedNamespaces.value.has(namespaceId)) {
-    expandedNamespaces.value.delete(namespaceId)
-  } else {
+function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
+  if (expanded) {
     expandedNamespaces.value.add(namespaceId)
+  } else {
+    expandedNamespaces.value.delete(namespaceId)
   }
 }
 </script>
@@ -168,107 +169,111 @@ function toggleNamespaceCollapse(namespaceId: string): void {
           :key="group.namespace.id"
         >
           <section class="relative">
-            <div class="flex items-center gap-3 sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm px-3 py-2 border-b border-zinc-800/50">
-              <button
-                class="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
-                @click="toggleNamespaceCollapse(group.namespace.id)"
-              >
-                <Icon
-                  :icon="isNamespaceCollapsed(group.namespace.id) ? 'lucide:chevron-right' : 'lucide:chevron-down'"
-                  class="w-4 h-4"
-                />
-              </button>
-              <label
-                class="flex items-center cursor-pointer"
-                title="Toggle entire group"
-              >
-                <span
-                  class="inline-flex items-center justify-center h-4 w-4 rounded border cursor-pointer"
-                  :class="[
-                    isNamespaceAllSelected(group)
-                      ? 'bg-blue-600 border-blue-600'
-                      : isNamespacePartiallySelected(group)
-                        ? 'bg-blue-600 border-blue-600'
-                        : 'border-zinc-500 bg-transparent'
-                  ]"
-                  @click="toggleNamespace(group)"
-                >
-                  <Icon
-                    v-if="isNamespaceAllSelected(group)"
-                    icon="lucide:check"
-                    class="w-3 h-3 text-white"
-                  />
-                  <Icon
-                    v-else-if="isNamespacePartiallySelected(group)"
-                    icon="lucide:minus"
-                    class="w-3 h-3 text-white"
-                  />
-                </span>
-              </label>
-              <div
-                class="flex-1 cursor-pointer select-none"
-                @click="toggleNamespaceCollapse(group.namespace.id)"
-              >
-                <p
-                  class="text-[11px] uppercase tracking-wider font-semibold"
-                  :class="group.namespace.id === 'builtin' ? 'text-blue-400' : 'text-purple-400'"
-                >
-                  {{ group.namespace.label }}
-                </p>
-                <p class="text-[10px] text-zinc-600 mt-0.5">
-                  {{ group.tools.filter((t) => isSelected(t)).length }}/{{ group.tools.length }} selected
-                </p>
-              </div>
-            </div>
-
-            <div
-              v-if="!isNamespaceCollapsed(group.namespace.id)"
-              class="px-3 pb-3 mt-2 space-y-1 pl-11"
+            <CollapsibleSection
+              :model-value="isNamespaceExpanded(group.namespace.id)"
+              @update:model-value="setNamespaceExpanded(group.namespace.id, $event)"
             >
-              <label
-                v-for="tool in group.tools"
-                :key="toolKey(tool)"
-                class="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-zinc-800/70 cursor-pointer"
-                :title="displayToolDescription(tool)"
-              >
-                <div class="flex items-start gap-2 flex-1 min-w-0">
-                  <input
-                    type="checkbox"
-                    class="mt-0.5 h-4 w-4 accent-blue-600 shrink-0"
-                    :checked="isSelected(tool)"
-                    @change="toggleTool(tool)"
+              <template #trigger="{ expanded, toggle }">
+                <div class="flex items-center gap-3 sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm px-3 py-2 border-b border-zinc-800/50">
+                  <button
+                    class="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+                    @click="toggle"
                   >
-                  <div class="min-w-0 flex-1">
-                    <p class="text-xs text-zinc-200 font-medium">{{ displayToolName(tool) }}</p>
-                    <p class="text-[10px] text-zinc-500 leading-snug wrap-break-word">
-                      {{ displayToolDescription(tool) }}
+                    <Icon
+                      :icon="expanded ? 'lucide:chevron-down' : 'lucide:chevron-right'"
+                      class="w-4 h-4"
+                    />
+                  </button>
+                  <label
+                    class="flex items-center cursor-pointer"
+                    title="Toggle entire group"
+                  >
+                    <span
+                      class="inline-flex items-center justify-center h-4 w-4 rounded border cursor-pointer"
+                      :class="[
+                        isNamespaceAllSelected(group)
+                          ? 'bg-blue-600 border-blue-600'
+                          : isNamespacePartiallySelected(group)
+                            ? 'bg-blue-600 border-blue-600'
+                            : 'border-zinc-500 bg-transparent'
+                      ]"
+                      @click="toggleNamespace(group)"
+                    >
+                      <Icon
+                        v-if="isNamespaceAllSelected(group)"
+                        icon="lucide:check"
+                        class="w-3 h-3 text-white"
+                      />
+                      <Icon
+                        v-else-if="isNamespacePartiallySelected(group)"
+                        icon="lucide:minus"
+                        class="w-3 h-3 text-white"
+                      />
+                    </span>
+                  </label>
+                  <div
+                    class="flex-1 cursor-pointer select-none"
+                    @click="toggle"
+                  >
+                    <p
+                      class="text-[11px] uppercase tracking-wider font-semibold"
+                      :class="group.namespace.id === 'builtin' ? 'text-blue-400' : 'text-purple-400'"
+                    >
+                      {{ group.namespace.label }}
+                    </p>
+                    <p class="text-[10px] text-zinc-600 mt-0.5">
+                      {{ group.tools.filter((t) => isSelected(t)).length }}/{{ group.tools.length }} selected
                     </p>
                   </div>
                 </div>
-                
-                <button
-                  v-if="showApprovals"
-                  class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] transition-colors"
-                  :class="
-                    agentStore.isToolAutoApproved(approvalName(tool))
-                      ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
-                      : 'bg-amber-500/10 text-amber-400/80 hover:bg-amber-500/20'
-                  "
-                  :title="
-                    agentStore.isToolAutoApproved(approvalName(tool))
-                      ? 'Auto-approved — click to require confirmation'
-                      : 'Requires confirmation — click to auto-approve'
-                  "
-                  @click.stop.prevent="agentStore.setToolApproval(approvalName(tool), !agentStore.isToolAutoApproved(approvalName(tool)))"
+              </template>
+
+              <div class="px-3 pb-3 mt-2 space-y-1 pl-11">
+                <label
+                  v-for="tool in group.tools"
+                  :key="toolKey(tool)"
+                  class="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-zinc-800/70 cursor-pointer"
+                  :title="displayToolDescription(tool)"
                 >
-                  <Icon
-                    :icon="agentStore.isToolAutoApproved(approvalName(tool)) ? 'mdi:shield-check' : 'mdi:alert-outline'"
-                    class="w-3 h-3"
-                  />
-                  {{ agentStore.isToolAutoApproved(approvalName(tool)) ? 'auto' : 'confirm' }}
-                </button>
-              </label>
-            </div>
+                  <div class="flex items-start gap-2 flex-1 min-w-0">
+                    <input
+                      type="checkbox"
+                      class="mt-0.5 h-4 w-4 accent-blue-600 shrink-0"
+                      :checked="isSelected(tool)"
+                      @change="toggleTool(tool)"
+                    >
+                    <div class="min-w-0 flex-1">
+                      <p class="text-xs text-zinc-200 font-medium">{{ displayToolName(tool) }}</p>
+                      <p class="text-[10px] text-zinc-500 leading-snug wrap-break-word">
+                        {{ displayToolDescription(tool) }}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    v-if="showApprovals"
+                    class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] transition-colors"
+                    :class="
+                      agentStore.isToolAutoApproved(approvalName(tool))
+                        ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
+                        : 'bg-amber-500/10 text-amber-400/80 hover:bg-amber-500/20'
+                    "
+                    :title="
+                      agentStore.isToolAutoApproved(approvalName(tool))
+                        ? 'Auto-approved — click to require confirmation'
+                        : 'Requires confirmation — click to auto-approve'
+                    "
+                    @click.stop.prevent="agentStore.setToolApproval(approvalName(tool), !agentStore.isToolAutoApproved(approvalName(tool)))"
+                  >
+                    <Icon
+                      :icon="agentStore.isToolAutoApproved(approvalName(tool)) ? 'mdi:shield-check' : 'mdi:alert-outline'"
+                      class="w-3 h-3"
+                    />
+                    {{ agentStore.isToolAutoApproved(approvalName(tool)) ? 'auto' : 'confirm' }}
+                  </button>
+                </label>
+              </div>
+            </CollapsibleSection>
           </section>
         </template>
 
