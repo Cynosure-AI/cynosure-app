@@ -6,6 +6,8 @@ import { Icon } from "@iconify/vue";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MemoryDocumentList from "../components/memory/MemoryDocumentList.vue";
 
+const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
+
 // --- Space management ---
 const spaces = ref<MemorySpace[]>([]);
 const spacesLoading = ref(false);
@@ -110,6 +112,24 @@ function onSpaceDragEnd() {
 }
 
 async function onSpaceOrFileDrop(e: DragEvent, spaceId: string) {
+  const documentPayload = e.dataTransfer?.getData(DOCUMENT_DRAG_MIME);
+  if (documentPayload) {
+    try {
+      const parsed = JSON.parse(documentPayload) as { sourceFiles?: unknown };
+      if (Array.isArray(parsed.sourceFiles)) {
+        const sourceFiles = parsed.sourceFiles.filter(
+          (value): value is string => typeof value === "string",
+        );
+        if (sourceFiles.length > 0) {
+          await docList.value?.moveGroupsToSpace(spaceId, sourceFiles);
+        }
+      }
+    } catch {
+      /* ignore malformed drag payload */
+    }
+    return;
+  }
+
   if (draggedSpaceId.value) {
     return onSpaceDrop(e, spaceId);
   }
@@ -212,8 +232,10 @@ function onDragLeave(e: DragEvent, spaceId?: string) {
 
 function onDragOver(e: DragEvent) {
   e.preventDefault();
-  if (e.dataTransfer && !draggedSpaceId.value)
-    e.dataTransfer.dropEffect = "copy";
+  if (e.dataTransfer && !draggedSpaceId.value) {
+    const isDocumentDrag = e.dataTransfer.types.includes(DOCUMENT_DRAG_MIME);
+    e.dataTransfer.dropEffect = isDocumentDrag ? "move" : "copy";
+  }
 }
 
 async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
