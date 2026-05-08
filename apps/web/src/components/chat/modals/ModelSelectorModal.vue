@@ -1,169 +1,96 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useChatStore } from '../../../stores/chat.store'
-import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
-import { useProviderStore } from '../../../stores/provider.store'
-import { Icon } from '@iconify/vue'
-import ModalDialog from '../../shared/ModalDialog.vue'
+import { computed } from "vue";
+import { useChatStore } from "../../../stores/chat.store";
+import { useAgentDefinitionsStore } from "../../../stores/agent-definitions.store";
+import { useProviderStore } from "../../../stores/provider.store";
+import ModalDialog from "../../shared/ModalDialog.vue";
+import ProviderModelSelect from "../../shared/ProviderModelSelect.vue";
 
-const chatStore = useChatStore()
-const agentDefs = useAgentDefinitionsStore()
-const providerStore = useProviderStore()
+const chatStore = useChatStore();
+const agentDefs = useAgentDefinitionsStore();
+const providerStore = useProviderStore();
 
-const visible = defineModel<boolean>({ required: true })
-const search = ref('')
-const models = ref<string[]>([])
-const loadingModels = ref(false)
+const visible = defineModel<boolean>({ required: true });
 
 const selectedAgent = computed(() =>
-  chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null
-)
+  chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null,
+);
 
-const currentProviderId = computed(() =>
-  chatStore.sessionProviderOverride || selectedAgent.value?.providerId || providerStore.lastUsedProviderId
-)
+const currentProviderId = computed(
+  () =>
+    chatStore.sessionProviderOverride ||
+    selectedAgent.value?.providerId ||
+    providerStore.lastUsedProviderId,
+);
 
 const currentProvider = computed(() =>
-  providerStore.providers.find(p => p.id === currentProviderId.value)
-)
+  providerStore.providers.find((p) => p.id === currentProviderId.value),
+);
 
 const defaultModelLabel = computed(() => {
-  const agentModel = selectedAgent.value?.model
-  const providerDefault = currentProvider.value?.defaultModel
-  const isProviderOverridden = chatStore.sessionProviderOverride &&
-    chatStore.sessionProviderOverride !== selectedAgent.value?.providerId
-  const effectiveDefault = isProviderOverridden ? providerDefault : (agentModel || providerDefault)
-  return effectiveDefault || 'Provider default'
-})
+  const agentModel = selectedAgent.value?.model;
+  const providerDefault = currentProvider.value?.defaultModel;
+  const isProviderOverridden =
+    chatStore.sessionProviderOverride &&
+    chatStore.sessionProviderOverride !== selectedAgent.value?.providerId;
+  const effectiveDefault = isProviderOverridden
+    ? providerDefault
+    : agentModel || providerDefault;
+  return effectiveDefault || "Provider default";
+});
 
-const filteredModels = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  if (!q) return models.value
-  return models.value.filter(m => m.toLowerCase().includes(q))
-})
+const selectedModel = computed(() => chatStore.sessionModelOverride || "");
 
-const selectedModel = computed(() => chatStore.sessionModelOverride || '')
+function onSelectionChange(selection: {
+  providerId: string;
+  model: string;
+}): void {
+  chatStore.sessionModelOverride = selection.model || null;
 
-async function fetchModels() {
-  const providerId = currentProviderId.value
-  if (!providerId) {
-    models.value = []
-    return
+  if (chatStore.activeAgentId) {
+    chatStore.sessionProviderOverride =
+      selection.providerId !== selectedAgent.value?.providerId
+        ? selection.providerId
+        : null;
+  } else {
+    chatStore.sessionProviderOverride = selection.providerId;
+    if (selection.providerId) {
+      providerStore.setLastUsed(selection.providerId);
+    }
   }
-  loadingModels.value = true
-  try {
-    models.value = await providerStore.listModels(providerId, 'llm')
-  } catch {
-    models.value = []
-  } finally {
-    loadingModels.value = false
-  }
-}
 
-function selectModel(model: string) {
-  chatStore.sessionModelOverride = model || null
-  chatStore.markOverridesModified()
-  visible.value = false
+  chatStore.markOverridesModified();
+  visible.value = false;
 }
-
-function selectDefault() {
-  chatStore.sessionModelOverride = null
-  chatStore.markOverridesModified()
-  visible.value = false
-}
-
-// Fetch models when modal opens or provider changes
-watch(visible, (isOpen) => {
-  if (isOpen) fetchModels()
-})
-watch(currentProviderId, () => {
-  if (visible.value) fetchModels()
-})
 </script>
 
 <template>
   <ModalDialog
     :show="visible"
-    title="Select Model"
+    title="Select Provider / Model"
     icon="lucide:cpu"
     icon-color="blue"
     max-width="max-w-lg"
     @close="visible = false"
   >
-    <!-- Search -->
-    <input
-      v-model="search"
-      type="text"
-      placeholder="Search models…"
-      class="w-full px-3 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 outline-none focus:border-zinc-500 transition-colors mb-3"
-    >
-
-    <!-- Model list -->
-    <div class="overflow-y-auto space-y-1 max-h-80">
-      <!-- Loading state -->
+    <div class="space-y-3">
       <div
-        v-if="loadingModels"
-        class="px-3 py-4 text-center text-sm text-zinc-500"
+        class="rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-2 text-xs text-zinc-500"
       >
-        <Icon
-          icon="lucide:loader-2"
-          class="h-4 w-4 inline animate-spin mr-2"
-        />
-        Loading models…
+        Current default:
+        <span class="text-zinc-300">{{ defaultModelLabel }}</span>
       </div>
 
-      <!-- Default option -->
-      <button
-        v-else
-        class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors"
-        :class="!selectedModel ? 'bg-blue-600/20 text-blue-400' : 'text-zinc-300 hover:bg-zinc-800'"
-        @click="selectDefault"
-      >
-        <Icon
-          icon="lucide:settings"
-          class="h-4 w-4 shrink-0"
-        />
-        <span class="text-sm truncate">{{ defaultModelLabel }}</span>
-        <Icon
-          v-if="!selectedModel"
-          icon="mdi:check"
-          class="h-4 w-4 ml-auto text-blue-400 shrink-0"
-        />
-      </button>
-
-      <!-- Models -->
-      <button
-        v-for="model in filteredModels"
-        :key="model"
-        class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors"
-        :class="selectedModel === model ? 'bg-blue-600/20 text-blue-400' : 'text-zinc-300 hover:bg-zinc-800'"
-        @click="selectModel(model)"
-      >
-        <Icon
-          icon="lucide:cpu"
-          class="h-4 w-4 shrink-0 text-zinc-500"
-        />
-        <span class="text-sm truncate">{{ model }}</span>
-        <Icon
-          v-if="selectedModel === model"
-          icon="mdi:check"
-          class="h-4 w-4 ml-auto text-blue-400 shrink-0"
-        />
-      </button>
-
-      <!-- Empty state -->
-      <div
-        v-if="filteredModels.length === 0 && models.length > 0"
-        class="px-3 py-4 text-center text-sm text-zinc-500"
-      >
-        No models match "{{ search }}"
-      </div>
-      <div
-        v-else-if="models.length === 0"
-        class="px-3 py-4 text-center text-sm text-zinc-500"
-      >
-        No models available for this provider
-      </div>
+      <ProviderModelSelect
+        :provider-id="currentProviderId"
+        :model-value="selectedModel"
+        :providers="providerStore.providers"
+        :include-default="!!selectedAgent"
+        default-label="Use agent defaults"
+        placeholder="Select provider/model"
+        max-height="max-h-96"
+        @change="onSelectionChange"
+      />
     </div>
   </ModalDialog>
 </template>
