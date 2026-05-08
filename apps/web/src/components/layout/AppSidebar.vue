@@ -5,7 +5,6 @@ import { useProviderStore } from "../../stores/provider.store";
 import { useNotificationStore } from "../../stores/notification.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { useChatStore } from "../../stores/chat.store";
-import { useOnboardingStore } from "../../stores/onboarding.store";
 import { api } from "../../api/client";
 import { wsConnected } from "../../api/http";
 import type { AgentInstance } from "../../api/types";
@@ -21,7 +20,6 @@ const providerStore = useProviderStore();
 const notificationStore = useNotificationStore();
 const agentDefs = useAgentDefinitionsStore();
 const chatStore = useChatStore();
-const onboardingStore = useOnboardingStore();
 const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar();
 const { logoIconUrl, logoTextUrl } = useAppBranding();
 
@@ -112,10 +110,6 @@ function navigateToNotification(notif: {
 
 function isActive(path: string): boolean {
   return route.path === path || route.path.startsWith(path + "/");
-}
-
-function isActiveExact(path: string): boolean {
-  return route.path === path;
 }
 
 interface NavItem {
@@ -304,29 +298,13 @@ const settingsItems: NavItem[] = [
 
     <!-- Navigation -->
     <nav class="flex-1 overflow-y-auto py-2 px-3">
-      <!-- Get Started / Chat -->
+      <!-- Chat -->
       <HoverTooltip
         placement="right"
         block
         :disabled="!sidebarCollapsed"
       >
-        <!-- Onboarding not complete → show Get Started -->
         <RouterLink
-          v-if="!onboardingStore.completed"
-          to="/onboarding"
-          class="nav-item"
-          :class="{ active: isActiveExact('/onboarding') }"
-        >
-          <Icon
-            icon="lucide:sparkles"
-            class="w-4.5 h-4.5 text-blue-400"
-          />
-          <span class="text-blue-400">Get Started</span>
-          <span class="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
-        </RouterLink>
-        <!-- Onboarding complete → show Chat -->
-        <RouterLink
-          v-else
           to="/chat"
           class="nav-item"
           :class="{ active: isActive('/triggers/chat') }"
@@ -338,7 +316,7 @@ const settingsItems: NavItem[] = [
           <span>Chat</span>
         </RouterLink>
         <template #content>
-          {{ onboardingStore.completed ? "Chat" : "Get Started" }}
+          Chat
         </template>
       </HoverTooltip>
 

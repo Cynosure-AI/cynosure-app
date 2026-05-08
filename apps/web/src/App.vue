@@ -12,7 +12,7 @@ import AppSidebar from './components/layout/AppSidebar.vue'
 import ModalDialog from './components/shared/ModalDialog.vue'
 import { RouterView, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useSidebar } from './composables/useSidebar'
 
 const providerStore = useProviderStore()
@@ -26,6 +26,7 @@ usePreferencesStore()
 
 const { sidebarOpen, sidebarCollapsed, close: closeSidebar } = useSidebar()
 const route = useRoute()
+const isOnboardingRoute = computed(() => route.name === 'onboarding')
 
 // Close mobile sidebar on route change
 watch(() => route.path, () => closeSidebar())
@@ -132,6 +133,7 @@ onUnmounted(() => {
   <div class="flex h-screen bg-zinc-950 text-zinc-100 antialiased selection:bg-blue-500/30 selection:text-blue-200">
     <!-- Mobile sidebar backdrop -->
     <Transition
+      v-if="!isOnboardingRoute"
       enter-active-class="transition-opacity duration-200"
       enter-from-class="opacity-0"
       enter-to-class="opacity-100"
@@ -148,6 +150,7 @@ onUnmounted(() => {
 
     <!-- Sidebar: always visible on md+, slide-in overlay on mobile -->
     <div
+      v-if="!isOnboardingRoute"
       class="fixed inset-y-0 left-0 z-50 w-60 transition-all duration-200 md:static md:translate-x-0"
       :class="[
         sidebarOpen ? 'translate-x-0' : '-translate-x-full',
@@ -157,9 +160,15 @@ onUnmounted(() => {
       <AppSidebar />
     </div>
 
-    <div class="flex flex-col flex-1 min-w-0 bg-zinc-950 p-2 pl-0 md:pl-0">
+    <div
+      class="flex flex-col flex-1 min-w-0 bg-zinc-950"
+      :class="isOnboardingRoute ? '' : 'p-2 pl-0 md:pl-0'"
+    >
       <!-- Mobile header with hamburger -->
-      <div class="flex items-center gap-2 px-2 py-1.5 md:hidden">
+      <div
+        v-if="!isOnboardingRoute"
+        class="flex items-center gap-2 px-2 py-1.5 md:hidden"
+      >
         <button
           class="p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
           @click="sidebarOpen = !sidebarOpen"
@@ -171,7 +180,12 @@ onUnmounted(() => {
         </button>
         <span class="text-sm font-semibold text-zinc-200">Cynosure</span>
       </div>
-      <main class="flex-1 overflow-hidden bg-zinc-900 ring-1 ring-black/5 dark:ring-white/10 rounded-xl relative flex flex-col shadow-2xl ml-2 md:ml-0">
+      <main
+        class="flex-1 overflow-hidden relative flex flex-col"
+        :class="isOnboardingRoute
+          ? 'bg-zinc-950'
+          : 'bg-zinc-900 ring-1 ring-black/5 dark:ring-white/10 rounded-xl shadow-2xl ml-2 md:ml-0'"
+      >
         <RouterView />
       </main>
     </div>
