@@ -246,6 +246,10 @@ onMounted(() => scrollToBottom())
         />
       </div>
       <template v-if="!wsConnected">
+        <Icon
+          icon="lucide:loader-2"
+          class="w-8 h-8 text-zinc-500 animate-spin mb-4"
+        />
         <h2 class="text-xl font-semibold text-zinc-200 tracking-tight">
           Initializing…
         </h2>
