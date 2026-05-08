@@ -125,7 +125,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 const db = getDb()
                 const agentRows = db.prepare(
                     `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
-                     category, sub_agents_json, auto_approve_tools, show_in_carousel, thinking_enabled,
+                     category, sub_agents_json, auto_approve_tools, thinking_enabled,
                      max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                      sort_order, cron_prompt, icon_mime, created_at, updated_at
                      FROM agents ORDER BY created_at`
@@ -342,11 +342,11 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
 
                             db.prepare(
                                 `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json,
-                                 icon_url, codename, category, sub_agents_json, auto_approve_tools, show_in_carousel,
+                                 icon_url, codename, category, sub_agents_json, auto_approve_tools,
                                  thinking_enabled, max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                                  sort_order, cron_prompt, icon_data, icon_mime,
                                  created_at, updated_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 row.id,
                                 row.name || '',
@@ -360,7 +360,6 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 row.category || '',
                                 row.sub_agents_json || '[]',
                                 row.auto_approve_tools ?? 0,
-                                row.show_in_carousel ?? 1,
                                 row.thinking_enabled ?? 1,
                                 row.max_context_tokens ?? null,
                                 row.auto_tool_routing ?? 0,

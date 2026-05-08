@@ -127,7 +127,6 @@ interface NavItem {
 }
 
 const triggerItems: NavItem[] = [
-  { to: "/triggers/chat", icon: "lucide:message-square", label: "Chat" },
   { to: "/triggers/cron", icon: "lucide:clock", label: "Cron" },
   { to: "/triggers/channels", icon: "lucide:radio", label: "Channels" },
   { to: "/triggers/file-watchers", icon: "lucide:eye", label: "File Watch" },
@@ -305,7 +304,7 @@ const settingsItems: NavItem[] = [
 
     <!-- Navigation -->
     <nav class="flex-1 overflow-y-auto py-2 px-3">
-      <!-- Get Started / Dashboard -->
+      <!-- Get Started / Chat -->
       <HoverTooltip
         placement="right"
         block
@@ -325,21 +324,21 @@ const settingsItems: NavItem[] = [
           <span class="text-blue-400">Get Started</span>
           <span class="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
         </RouterLink>
-        <!-- Onboarding complete → show Dashboard -->
+        <!-- Onboarding complete → show Chat -->
         <RouterLink
           v-else
-          to="/dashboard"
+          to="/chat"
           class="nav-item"
-          :class="{ active: isActiveExact('/dashboard') }"
+          :class="{ active: isActive('/triggers/chat') }"
         >
           <Icon
-            icon="lucide:layout-dashboard"
+            icon="lucide:message-square"
             class="w-4.5 h-4.5"
           />
-          <span>Dashboard</span>
+          <span>Chat</span>
         </RouterLink>
         <template #content>
-          {{ onboardingStore.completed ? "Dashboard" : "Get Started" }}
+          {{ onboardingStore.completed ? "Chat" : "Get Started" }}
         </template>
       </HoverTooltip>
 
