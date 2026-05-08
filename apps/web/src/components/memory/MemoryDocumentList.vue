@@ -497,8 +497,9 @@ defineExpose({ ingestFiles });
           />
         </button>
         <button
-          class="p-1 text-zinc-500 hover:text-red-400 transition-colors"
-          title="Delete space"
+          :disabled="currentSpace?.isDefault"
+          :title="currentSpace?.isDefault ? 'Cannot delete the default memory space' : 'Delete space'"
+          class="p-1 text-zinc-500 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-zinc-500"
           @click="emit('deleteSpace')"
         >
           <Icon

@@ -223,22 +223,53 @@ export function registerBuiltInTools(): void {
 // ─── Hydration helpers ─────────────────────────────────────
 
 /**
+ * Get the default memory space (if it exists).
+ */
+function getDefaultMemorySpace(): { id: string; name: string } | undefined {
+    try {
+        const db = getDb();
+        return db
+            .prepare('SELECT id, name FROM memory_spaces WHERE is_default = 1 ORDER BY created_at ASC LIMIT 1')
+            .get() as { id: string; name: string } | undefined;
+    } catch {
+        /* DB not ready */
+    }
+    return undefined;
+}
+
+/**
  * Look up the memory spaces assigned to an agent, returning both ID and name.
+ * If no spaces are assigned, returns the default space (if it exists).
  */
 function getAssignedSpaces(agentId: string): { id: string; name: string }[] {
     try {
         const db = getDb();
-        return db
+        const assigned = db
             .prepare(
                 `SELECT ms.id, ms.name FROM agent_memory_spaces ams
              JOIN memory_spaces ms ON ms.id = ams.space_id
              WHERE ams.agent_id = ?`,
             )
             .all(agentId) as { id: string; name: string }[];
+
+        if (assigned.length > 0) return assigned;
+
+        // If no spaces assigned, return the default space as fallback
+        const defaultSpace = getDefaultMemorySpace();
+
+        return defaultSpace ? [defaultSpace] : [];
     } catch {
         /* DB not ready */
     }
     return [];
+}
+
+/**
+ * Get the default memory space when no agent context is available.
+ */
+function getDefaultMemorySpaces(): { id: string; name: string }[] {
+    const defaultSpace = getDefaultMemorySpace();
+    return defaultSpace ? [defaultSpace] : [];
 }
 
 /**
@@ -269,7 +300,7 @@ export function hydrateBuiltInTools(
 ): ToolDefinition[] {
     const assignedSpaces =
         ctx.memorySpaceOverrides ??
-        (ctx.agentId ? getAssignedSpaces(ctx.agentId) : []);
+        (ctx.agentId ? getAssignedSpaces(ctx.agentId) : getDefaultMemorySpaces());
     const spaceFilter = buildMemorySpaceFilter(assignedSpaces);
 
     return tools.map((t) => {
