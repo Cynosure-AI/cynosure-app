@@ -3,6 +3,7 @@ import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import { useChatStore, type DisplayMessage } from '../../stores/chat.store'
 import { useAgentStore, type ExecutionStep } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
+import { wsConnected } from '../../api/http'
 import MessageBubble from '../chat/MessageBubble.vue'
 import ToolExecutionCard from '../chat/ToolExecutionCard.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
@@ -244,12 +245,22 @@ onMounted(() => scrollToBottom())
           class="w-10 h-10 text-indigo-400"
         />
       </div>
-      <h2 class="text-xl font-semibold text-zinc-200 tracking-tight">
-        How can I help you today?
-      </h2>
-      <p class="text-sm mt-2 text-zinc-500 max-w-sm text-center">
-        Type a message below to begin a new conversation, or choose an agent to assist you.
-      </p>
+      <template v-if="!wsConnected">
+        <h2 class="text-xl font-semibold text-zinc-200 tracking-tight">
+          Initializing…
+        </h2>
+        <p class="text-sm mt-2 text-zinc-500 max-w-sm text-center">
+          Connecting to server and loading your data.
+        </p>
+      </template>
+      <template v-else>
+        <h2 class="text-xl font-semibold text-zinc-200 tracking-tight">
+          How can I help you today?
+        </h2>
+        <p class="text-sm mt-2 text-zinc-500 max-w-sm text-center">
+          Type a message below to begin a new conversation, or choose an agent to assist you.
+        </p>
+      </template>
     </div>
 
     <!-- Unified timeline -->
