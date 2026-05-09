@@ -1,5 +1,6 @@
 import { getAgentMemory } from './agent-memory.js'
 import { getDb } from '../../db/database.js'
+import { buildMemorySpaceFilter, getAssignedOrDefaultSpaces } from './memory-space-scope.js'
 import type { RetrievedChunk } from './parser.js'
 
 export interface AggregatedMemory {
@@ -9,6 +10,10 @@ export interface AggregatedMemory {
 /**
  * Aggregates memory from all sources: permanent memory, task memory, and history.
  * Deduplicates and ranks results for injection into the agent's context.
+ * 
+ * Fallback logic:
+ * - If agent has explicit memory space assignments → query only those spaces
+ * - If agent has NO assignments → fallback to default space only
  */
 export class MemoryAggregator {
   /**
@@ -25,24 +30,13 @@ export class MemoryAggregator {
   ): Promise<AggregatedMemory> {
     const permanentMem = getAgentMemory()
 
-    // Build a filter covering all assigned memory spaces
     let spaceFilter: string | undefined
     const spaceNameMap = new Map<string, string>()
+
     if (opts?.agentId) {
-      try {
-        const db = getDb()
-        const rows = db.prepare(`
-          SELECT ms.id, ms.name
-          FROM agent_memory_spaces ams
-          JOIN memory_spaces ms ON ms.id = ams.space_id
-          WHERE ams.agent_id = ?
-        `).all(opts.agentId) as { id: string; name: string }[]
-        if (rows.length > 0) {
-          for (const row of rows) spaceNameMap.set(row.id, row.name)
-          const quoted = rows.map(r => `'${r.id.replace(/'/g, "''")}'`).join(', ')
-          spaceFilter = `spaceId IN (${quoted})`
-        }
-      } catch { /* DB not ready */ }
+      const scopedSpaces = getAssignedOrDefaultSpaces(opts.agentId)
+      for (const row of scopedSpaces) spaceNameMap.set(row.id, row.name)
+      spaceFilter = buildMemorySpaceFilter(scopedSpaces)
     }
 
     const permanent = await permanentMem.recall(query, opts?.permanentTopK ?? 3, spaceFilter).catch(() => [])
