@@ -81,6 +81,29 @@ async function setAllInNamespace(group: NamespaceGroup, autoApprove: boolean): P
   }
 }
 
+function namespaceAutoApprovedCount(group: NamespaceGroup): number {
+  return group.tools.filter((t) => isAutoApproved(approvalName(t))).length
+}
+
+function namespaceApprovalState(group: NamespaceGroup): 'all' | 'none' | 'partial' {
+  const autoCount = namespaceAutoApprovedCount(group)
+  if (autoCount === 0) return 'none'
+  if (autoCount === group.tools.length) return 'all'
+  return 'partial'
+}
+
+function namespaceApprovalLabel(group: NamespaceGroup): string {
+  const state = namespaceApprovalState(group)
+  if (state === 'all') return 'all auto'
+  if (state === 'none') return 'all ask'
+  return 'mixed'
+}
+
+async function toggleNamespaceApproval(group: NamespaceGroup): Promise<void> {
+  const state = namespaceApprovalState(group)
+  await setAllInNamespace(group, state !== 'all')
+}
+
 const autoApprovedCount = computed(() =>
   mcpTools.value.filter((t) => isAutoApproved(approvalName(t))).length
 )
@@ -166,27 +189,40 @@ function setNamespaceExpanded(nsId: string, expanded: boolean): void {
                   {{ group.namespace.label }}
                 </span>
                 <span class="text-[10px] text-zinc-600">
-                  {{ group.tools.filter((t) => isAutoApproved(approvalName(t))).length }}/{{ group.tools.length }} auto
+                  {{ namespaceAutoApprovedCount(group) }}/{{ group.tools.length }} auto
                 </span>
               </button>
 
-              <!-- Bulk toggle for this namespace -->
-              <div class="flex items-center gap-1 shrink-0">
-                <button
-                  class="text-[9px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
-                  title="Auto-confirm all tools in this server"
-                  @click="setAllInNamespace(group, true)"
-                >
-                  All auto
-                </button>
-                <button
-                  class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors"
-                  title="Ask for all tools in this server"
-                  @click="setAllInNamespace(group, false)"
-                >
-                  All ask
-                </button>
-              </div>
+              <button
+                class="shrink-0 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors"
+                :class="
+                  namespaceApprovalState(group) === 'all'
+                    ? 'text-green-400 hover:bg-green-500/10'
+                    : namespaceApprovalState(group) === 'none'
+                      ? 'text-amber-400 hover:bg-amber-500/10'
+                      : 'text-blue-300 hover:bg-blue-500/10'
+                "
+                role="checkbox"
+                :aria-checked="namespaceApprovalState(group) === 'partial' ? 'mixed' : namespaceApprovalState(group) === 'all'"
+                :title="
+                  namespaceApprovalState(group) === 'all'
+                    ? 'All tools auto-confirmed. Click to require approval for all.'
+                    : 'Enable auto-confirm for all tools in this server.'
+                "
+                @click="toggleNamespaceApproval(group)"
+              >
+                <Icon
+                  :icon="
+                    namespaceApprovalState(group) === 'all'
+                      ? 'mdi:checkbox-marked'
+                      : namespaceApprovalState(group) === 'none'
+                        ? 'mdi:checkbox-blank-outline'
+                        : 'mdi:minus-box'
+                  "
+                  class="w-4 h-4"
+                />
+                <span class="text-[10px] font-medium">{{ namespaceApprovalLabel(group) }}</span>
+              </button>
             </div>
           </template>
 
