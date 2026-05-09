@@ -69,7 +69,7 @@
         />
         <div class="flex-1 min-w-0">
           <p class="text-sm font-medium text-zinc-100">
-            {{ createdSpace.name }}
+            {{ createdSpace?.name }}
           </p>
           <p class="text-xs text-zinc-500">
             Memory space ready
