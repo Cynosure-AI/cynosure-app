@@ -81,13 +81,26 @@ const selectedOption = computed(
   () => allOptions.value.find((o) => o.value === props.modelValue) ?? null,
 );
 
+/** Fuzzy match: true if all query chars appear in text in order (case-insensitive) */
+function fuzzyMatch(text: string, query: string): boolean {
+  const textLower = text.toLowerCase().replace(/\s+/g, "");
+  const queryLower = query.toLowerCase().replace(/\s+/g, "");
+  let queryIdx = 0;
+  for (let i = 0; i < textLower.length && queryIdx < queryLower.length; i++) {
+    if (textLower[i] === queryLower[queryIdx]) {
+      queryIdx++;
+    }
+  }
+  return queryIdx === queryLower.length;
+}
+
 const filteredGroups = computed(() => {
   if (!props.filterable || !filterQuery.value.trim()) return props.groups;
-  const q = filterQuery.value.toLowerCase();
+  const q = filterQuery.value;
   return props.groups
     .map((g) => ({
       ...g,
-      options: g.options.filter((o) => o.label.toLowerCase().includes(q)),
+      options: g.options.filter((o) => fuzzyMatch(o.label, q)),
     }))
     .filter((g) => g.options.length > 0);
 });
