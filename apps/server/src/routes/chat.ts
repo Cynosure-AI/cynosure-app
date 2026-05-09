@@ -447,10 +447,26 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const streamId = nanoid()
       activeAbortControllers.set(streamId, abortController)
 
+      const routedToolKeys = reqAutoToolRouting === true
+        ? Array.from(
+          new Set(
+            tools
+              .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
+              .map((tool) => tool.registryKey)
+              .filter((key): key is string => typeof key === 'string' && key.length > 0)
+              .filter((key) => toolRegistry.hasKey(key))
+          )
+        )
+        : []
+
+      const persistedAllowedTools = reqAutoToolRouting === true
+        ? routedToolKeys
+        : selectedToolKeys
+
       // Persist the full session config with RESOLVED model/provider so it can
       // be restored correctly when navigating back to this conversation.
       const chatConfig: Record<string, unknown> = {
-        allowedTools: Array.isArray(allowedTools) ? allowedTools : [],
+        allowedTools: persistedAllowedTools,
         subAgents: reqSubAgents ?? [],
         memorySpaceIds: reqMemorySpaceIds ?? [],
         systemPrompt: systemPrompt || '',
