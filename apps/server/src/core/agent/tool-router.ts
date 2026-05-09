@@ -8,7 +8,7 @@ import type { ToolNamespaceMetadata } from '../tools/tool-registry.js'
 
 export const MCP_CANDIDATE_COUNT = 8 // Top-K MCP tool groups selected by embedding similarity and passed to the LLM for final confirmation
 export const CONTEXT_WINDOW_TURNS = 5 // Recent turns included in routing query context AND the window over which used tools stay sticky
-export const ROUTER_SELECTION_TOOL_NAME = 'select_relevant_tools' // Name of the tool the router LLM calls to confirm its tool selection
+export const ROUTER_SELECTION_TOOL_NAME = 'expand_available_toolset' // Name of the tool the router LLM calls to confirm its tool selection
 
 const TURN_CHAR_LIMIT = 200 // Max characters taken from each conversation turn when building the router query
 const TOOL_DESCRIPTION_LIMIT = 320 // Max characters of a tool description used in embedding/LLM calls
