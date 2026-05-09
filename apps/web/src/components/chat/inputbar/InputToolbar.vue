@@ -38,6 +38,11 @@ const selectedAgent = computed(() =>
   chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null,
 );
 
+const agentDefaultLabel = computed(() => {
+  const model = selectedAgent.value?.model;
+  return model ? `Use agent defaults (${model})` : "Use agent defaults";
+});
+
 const currentProviderId = computed(
   () =>
     chatStore.sessionProviderOverride ||
@@ -216,7 +221,7 @@ async function toggleMic(): Promise<void> {
           :model-value="selectedModelForSelector"
           :providers="providerStore.providers"
           :include-default="!!selectedAgent"
-          default-label="Use agent defaults"
+          :default-label="agentDefaultLabel"
           placeholder="Select provider/model"
           max-height="max-h-96"
           dropdown-width="min-w-full"
