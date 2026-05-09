@@ -47,7 +47,7 @@ function onAutoRoutingUpdate(enabled: boolean): void {
             </span>
           </div>
           <p class="mt-1 text-[11px] text-zinc-500">
-            Uses recent context to choose from the tools enabled below. Router model is configured in Preferences.
+            Uses recent context to choose automatically a fitting tool collection. Selected tools are preferred in the decision-making. Router model is configured in Preferences.
           </p>
         </div>
         <ToggleSwitch
