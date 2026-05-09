@@ -234,9 +234,31 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         if (!target) return reply.status(404).send({ error: 'Target space not found' })
 
         const rag = getRAGStore()
+        const mem = getAgentMemory()
+        const sourceFilesInTarget = await mem.listSourceFiles(target.id)
+        const existingNamesInTarget = new Set(sourceFilesInTarget.map(e => e.sourceFile))
+
+        const finalNames: string[] = []
+        let renamedCount = 0
+
+        for (const sf of sourceFiles) {
+            if (!existingNamesInTarget.has(sf)) {
+                finalNames.push(sf)
+            } else {
+                const uniqueName = await mem.resolveUniqueSourceFile(sf, target.id)
+                finalNames.push(uniqueName)
+                existingNamesInTarget.add(uniqueName)
+                renamedCount++
+
+                const sourceFilter = `spaceId = '${source.id.replace(/'/g, "''")}' AND sourceFile = '${sf.replace(/'/g, "''")}'`
+                await rag.updateSourceFile('permanent_memory', sourceFilter, uniqueName)
+            }
+        }
+
         const escaped = sourceFiles.map(sf => `'${sf.replace(/'/g, "''")}'`).join(', ')
         const filter = `spaceId = '${source.id.replace(/'/g, "''")}' AND sourceFile IN (${escaped})`
         await rag.updateSpaceId('permanent_memory', filter, target.id)
-        return { success: true, moved: sourceFiles.length }
+
+        return { success: true, moved: sourceFiles.length, renamed: renamedCount }
     })
 }

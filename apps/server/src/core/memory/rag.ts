@@ -597,6 +597,18 @@ export class RAGStore {
       console.error('[rag] updateSpaceId error:', (err as Error).message)
     }
   }
+
+  /** Update the sourceFile for documents matching a filter. */
+  async updateSourceFile(tableName: string, filter: string, newSourceFile: string): Promise<void> {
+    if (!this.db || !filter) return
+    try {
+      const table = await this.openExistingTable(tableName)
+      if (!table) return
+      await table.update({ where: filter, values: { sourceFile: newSourceFile } })
+    } catch (err) {
+      console.error('[rag] updateSourceFile error:', (err as Error).message)
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
