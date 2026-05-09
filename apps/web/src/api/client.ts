@@ -237,8 +237,8 @@ export const api = {
   },
 
   memory: {
-    search: (query: string, topK?: number) =>
-      post<unknown[]>('/api/memory/search', { query, topK }),
+    search: (query: string, topK?: number, spaceId?: string) =>
+      post<unknown[]>('/api/memory/search', { query, topK, spaceId }),
     deleteEntries: (ids: string[]) =>
       post<{ success: boolean; deleted: number }>('/api/memory/entries/delete', { ids }),
     aggregate: (

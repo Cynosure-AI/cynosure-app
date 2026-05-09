@@ -37,6 +37,7 @@ interface MemoryEntry {
 
 // --- Constants ---
 const SEMANTIC_SEARCH_DEBOUNCE_MS = 1500;
+const MIN_SEMANTIC_SCORE = 0.2;
 
 // --- State ---
 const groups = ref<DocumentGroup[]>([]);
@@ -74,6 +75,8 @@ const page = ref(0);
 const semanticSearchEnabled = ref(false);
 const semanticSearchLoading = ref(false);
 const semanticMatchedSourceFiles = ref<Set<string> | null>(null);
+const semanticMatchCounts = ref<Map<string, number>>(new Map());
+const semanticBestScores = ref<Map<string, number>>(new Map());
 let semanticSearchTimer: ReturnType<typeof setTimeout> | null = null;
 let semanticSearchRequestId = 0;
 
@@ -86,10 +89,23 @@ const filteredGroups = computed(() => {
   if (!q) return groups.value;
 
   if (semanticSearchEnabled.value) {
-    if (!semanticMatchedSourceFiles.value) return groups.value;
-    return groups.value.filter((g) =>
-      semanticMatchedSourceFiles.value?.has(g.sourceFile),
-    );
+    // While semantic search is resolving for a non-empty query, avoid showing
+    // unrelated documents; only render ranked matches.
+    if (!semanticMatchedSourceFiles.value) return [];
+
+    return groups.value
+      .filter((g) => semanticMatchedSourceFiles.value?.has(g.sourceFile))
+      .sort((a, b) => {
+        const countA = semanticMatchCounts.value.get(a.sourceFile) ?? 0;
+        const countB = semanticMatchCounts.value.get(b.sourceFile) ?? 0;
+        if (countA !== countB) return countB - countA;
+
+        const bestA = semanticBestScores.value.get(a.sourceFile) ?? 0;
+        const bestB = semanticBestScores.value.get(b.sourceFile) ?? 0;
+        if (bestA !== bestB) return bestB - bestA;
+
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
   }
 
   const qLower = q.toLowerCase();
@@ -130,12 +146,16 @@ function clearSemanticState(): void {
   semanticSearchRequestId++;
   semanticSearchLoading.value = false;
   semanticMatchedSourceFiles.value = null;
+  semanticMatchCounts.value = new Map();
+  semanticBestScores.value = new Map();
 }
 
 async function runSemanticSearchNow(): Promise<void> {
   const query = searchQuery.value.trim();
   if (!semanticSearchEnabled.value || !query) {
     semanticMatchedSourceFiles.value = null;
+    semanticMatchCounts.value = new Map();
+    semanticBestScores.value = new Map();
     semanticSearchLoading.value = false;
     return;
   }
@@ -143,23 +163,39 @@ async function runSemanticSearchNow(): Promise<void> {
   const requestId = ++semanticSearchRequestId;
   semanticSearchLoading.value = true;
   try {
-    const results = await api.memory.search(query, 200);
+    const results = await api.memory.search(query, 200, props.spaceId);
     if (requestId !== semanticSearchRequestId) return;
 
     const matched = new Set<string>();
+    const matchCounts = new Map<string, number>();
+    const bestScores = new Map<string, number>();
+
     for (const result of results) {
       const row = (result ?? {}) as Record<string, unknown>;
       const spaceId = typeof row.spaceId === "string" ? row.spaceId : "";
       if (spaceId && spaceId !== props.spaceId) continue;
 
+      const score = typeof row.score === "number" ? row.score : 0;
+      if (score < MIN_SEMANTIC_SCORE) continue;
+
       const sourceFile =
         typeof row.sourceFile === "string" ? row.sourceFile : "";
-      if (sourceFile) matched.add(sourceFile);
+      if (!sourceFile) continue;
+
+      matched.add(sourceFile);
+      matchCounts.set(sourceFile, (matchCounts.get(sourceFile) ?? 0) + 1);
+      const prevBest = bestScores.get(sourceFile) ?? 0;
+      if (score > prevBest) bestScores.set(sourceFile, score);
     }
+
     semanticMatchedSourceFiles.value = matched;
+    semanticMatchCounts.value = matchCounts;
+    semanticBestScores.value = bestScores;
   } catch {
     if (requestId !== semanticSearchRequestId) return;
     semanticMatchedSourceFiles.value = new Set<string>();
+    semanticMatchCounts.value = new Map();
+    semanticBestScores.value = new Map();
   } finally {
     if (requestId === semanticSearchRequestId) {
       semanticSearchLoading.value = false;
