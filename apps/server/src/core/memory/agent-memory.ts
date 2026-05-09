@@ -1,5 +1,6 @@
 import { getMemoryParser, type RetrievedChunk } from './parser.js'
 import { getRAGStore } from './rag.js'
+import { getEmbeddingProvider } from './embedding.js'
 
 const TABLE_NAME = 'permanent_memory'
 
@@ -47,6 +48,16 @@ export class AgentMemory {
     async countChunks(sourceFile: string, filter?: string): Promise<number> {
         const ragStore = getRAGStore()
         return ragStore.countBySource(TABLE_NAME, sourceFile, filter)
+    }
+
+    /**
+     * Update the text of a single chunk and re-embed it.
+     */
+    async updateChunk(chunkId: string, newText: string): Promise<void> {
+        const embedder = getEmbeddingProvider()
+        const ragStore = getRAGStore()
+        const result = await embedder.embed(newText)
+        await ragStore.updateChunkById(TABLE_NAME, chunkId, newText, result.vector)
     }
 
     /**

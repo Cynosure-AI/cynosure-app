@@ -494,7 +494,18 @@ watch(
   { immediate: true },
 );
 
-defineExpose({ ingestFiles, moveGroupsToSpace });
+defineExpose({ ingestFiles, moveGroupsToSpace })
+
+function onChunkUpdated(chunkId: string, newText: string) {
+  const chunks = groupChunks.value.get(modalSourceFile.value)
+  if (!chunks) return
+  const newMap = new Map(groupChunks.value)
+  newMap.set(
+    modalSourceFile.value,
+    chunks.map((c) => (c.id === chunkId ? { ...c, text: newText } : c)),
+  )
+  groupChunks.value = newMap
+};
 </script>
 
 <template>
@@ -943,6 +954,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
     <!-- Document Viewer Modal -->
     <MemoryDocumentModal
       :show="showDocumentModal"
+      :space-id="spaceId"
       :source-file="modalSourceFile"
       :chunk-count="
         groups.find((g) => g.sourceFile === modalSourceFile)?.chunkCount || 0
@@ -950,6 +962,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       :chunks="groupChunks.get(modalSourceFile) || []"
       :loading="groupChunksLoading.has(modalSourceFile)"
       @close="showDocumentModal = false"
+      @chunk-updated="onChunkUpdated"
     />
   </div>
 </template>
