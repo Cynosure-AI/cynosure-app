@@ -9,21 +9,14 @@ import { Icon } from '@iconify/vue'
 import BaseCard from '../components/shared/BaseCard.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import CategoryTabBar from '../components/shared/CategoryTabBar.vue'
-import { SK_AGENTS_VIEW_MODE } from '../utils/storage-keys'
+import ProviderModelSelect from '../components/shared/ProviderModelSelect.vue'
 
 const agentDefs = useAgentDefinitionsStore()
 const agentStore = useAgentStore()
 const providerStore = useProviderStore()
 const prefs = usePreferencesStore()
 const router = useRouter()
-
-// View mode toggle (grid / list) — persisted in localStorage
-type ViewMode = 'grid' | 'list'
-const viewMode = ref<ViewMode>((localStorage.getItem(SK_AGENTS_VIEW_MODE) as ViewMode) || 'grid')
-function setViewMode(mode: ViewMode) {
-  viewMode.value = mode
-  localStorage.setItem(SK_AGENTS_VIEW_MODE, mode)
-}
+const AGENT_IDS_MIME = 'application/x-cynosure-agent-ids'
 
 const showCreateDialog = ref(false)
 const newName = ref('')
@@ -37,6 +30,10 @@ const pendingDeleteName = ref('')
 // Category filter
 const activeCategory = ref('')
 const searchQuery = ref('')
+const bulkSelectionIds = ref<string[]>([])
+const bulkProviderId = ref('')
+const bulkModel = ref('')
+const hasBulkProviderModelSelection = ref(false)
 
 const hasUncategorized = computed(() =>
   agentDefs.agents.some(a => !a.category || !prefs.agentCategories.includes(a.category))
@@ -65,6 +62,61 @@ const agentsWithIssues = computed(() => {
       .map(a => a.id)
   )
 })
+
+const isBulkMode = computed(() => bulkSelectionIds.value.length > 0)
+const selectedAgentCount = computed(() => bulkSelectionIds.value.length)
+
+function isAgentSelected(agentId: string): boolean {
+  return bulkSelectionIds.value.includes(agentId)
+}
+
+function clearBulkSelection(): void {
+  bulkSelectionIds.value = []
+  bulkProviderId.value = ''
+  bulkModel.value = ''
+  hasBulkProviderModelSelection.value = false
+}
+
+function toggleAgentSelection(agentId: string, selected?: boolean): void {
+  const current = new Set(bulkSelectionIds.value)
+  const shouldSelect = selected ?? !current.has(agentId)
+  if (shouldSelect) current.add(agentId)
+  else current.delete(agentId)
+  bulkSelectionIds.value = [...current]
+  if (bulkSelectionIds.value.length === 0) {
+    clearBulkSelection()
+  }
+}
+
+function onSelectionInputChange(agentId: string, event: Event): void {
+  const target = event.target as HTMLInputElement | null
+  toggleAgentSelection(agentId, target?.checked ?? false)
+}
+
+function onRowClick(agentId: string): void {
+  if (isBulkMode.value) {
+    toggleAgentSelection(agentId)
+    return
+  }
+  router.push(`/agents/${agentId}`)
+}
+
+function draggedAgentIds(agentId: string): string[] {
+  if (isBulkMode.value && isAgentSelected(agentId)) {
+    return [...bulkSelectionIds.value]
+  }
+  return [agentId]
+}
+
+async function applyBulkProviderModel(): Promise<void> {
+  if (!isBulkMode.value || !hasBulkProviderModelSelection.value) return
+  const ids = [...bulkSelectionIds.value]
+  await Promise.all(ids.map(id => agentDefs.update(id, {
+    providerId: bulkProviderId.value,
+    model: bulkModel.value,
+  })))
+  clearBulkSelection()
+}
 
 onMounted(() => agentDefs.load())
 
@@ -114,9 +166,11 @@ const dropPosition = ref<'before' | 'after'>('before')
 
 function onReorderDragStart(e: DragEvent, agentId: string) {
   dragReorderId.value = agentId
+  const draggedIds = draggedAgentIds(agentId)
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', agentId)
+    e.dataTransfer.setData(AGENT_IDS_MIME, JSON.stringify(draggedIds))
   }
 }
 
@@ -130,11 +184,8 @@ function onReorderDragOver(e: DragEvent, targetId: string) {
 
   // Determine drop position based on cursor position within the element
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  const isListView = viewMode.value === 'list'
-  const midpoint = isListView
-    ? rect.top + rect.height / 2
-    : rect.left + rect.width / 2
-  const pos = isListView ? e.clientY : e.clientX
+  const midpoint = rect.top + rect.height / 2
+  const pos = e.clientY
   dropPosition.value = pos < midpoint ? 'before' : 'after'
   dropTargetId.value = targetId
 }
@@ -189,8 +240,14 @@ function formatDate(ts: number): string {
   })
 }
 
-async function onCategoryDrop(payload: { itemId: string; category: string }) {
-  await agentDefs.update(payload.itemId, { category: payload.category })
+async function onCategoryDrop(payload: { itemId?: string; itemIds?: string[]; category: string }) {
+  const ids = payload.itemIds?.length
+    ? payload.itemIds
+    : payload.itemId
+      ? [payload.itemId]
+      : []
+  if (!ids.length) return
+  await Promise.all(ids.map(id => agentDefs.update(id, { category: payload.category })))
 }
 
 function handleRemoveCategory(name: string) {
@@ -257,7 +314,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
         @reorder="handleReorderCategory"
       />
 
-      <!-- Search Bar + View Toggle -->
+      <!-- Search Bar -->
       <div class="flex items-center gap-2 mb-5">
         <div class="relative flex-1">
           <Icon
@@ -281,160 +338,52 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
             />
           </button>
         </div>
-
-        <!-- View mode toggle -->
-        <div class="flex bg-zinc-800 border border-zinc-700/60 rounded-lg p-0.5 shrink-0">
-          <button
-            class="px-2 py-1.5 rounded-md transition-colors"
-            :class="viewMode === 'grid' ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
-            title="Grid view"
-            @click="setViewMode('grid')"
-          >
-            <Icon
-              icon="lucide:layout-grid"
-              class="w-4 h-4"
-            />
-          </button>
-          <button
-            class="px-2 py-1.5 rounded-md transition-colors"
-            :class="viewMode === 'list' ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
-            title="List view"
-            @click="setViewMode('list')"
-          >
-            <Icon
-              icon="lucide:list"
-              class="w-4 h-4"
-            />
-          </button>
-        </div>
       </div>
 
-      <!-- Agents Grid -->
+      <!-- Bulk edit bar -->
       <div
-        v-if="filteredAgents.length && viewMode === 'grid'"
-        class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4"
+        v-if="isBulkMode"
+        class="mb-5 flex flex-col gap-3 rounded-xl border border-blue-500/30 bg-blue-500/8 px-4 py-3 md:flex-row md:items-center md:justify-between"
       >
         <div
-          v-for="agent in filteredAgents"
-          :key="agent.id"
-          draggable="true"
-          class="group relative rounded-xl border bg-zinc-800/60 p-5 hover:border-zinc-600 transition-all cursor-pointer"
-          :class="[
-            dragReorderId === agent.id ? 'border-blue-500/60 opacity-50' : 'border-zinc-700',
-            dropTargetId === agent.id && dropPosition === 'before' ? 'ring-l-2 ring-blue-500' : '',
-            dropTargetId === agent.id && dropPosition === 'after' ? 'ring-r-2 ring-blue-500' : ''
-          ]"
-          @click="router.push(`/agents/${agent.id}`)"
-          @dragstart="onReorderDragStart($event, agent.id)"
-          @dragover="onReorderDragOver($event, agent.id)"
-          @dragleave="onReorderDragLeave($event, agent.id)"
-          @drop="onReorderDrop($event, agent.id)"
-          @dragend="onReorderDragEnd"
+          class="text-sm text-zinc-200"
         >
-          <!-- Drop indicator: left edge -->
-          <div
-            v-if="dropTargetId === agent.id && dropPosition === 'before'"
-            class="absolute -left-0.75 top-1 bottom-1 w-0.75 rounded-full bg-blue-500"
-          />
-          <!-- Drop indicator: right edge -->
-          <div
-            v-if="dropTargetId === agent.id && dropPosition === 'after'"
-            class="absolute -right-0.75 top-1 bottom-1 w-0.75 rounded-full bg-blue-500"
-          />
-          <div class="flex items-start justify-between mb-3">
-            <div
-              class="w-10 h-10 rounded-lg bg-linear-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden"
-            >
-              <img
-                v-if="agent.iconUrl"
-                :src="agent.iconUrl"
-                alt=""
-                class="w-full h-full object-cover"
-              >
-              <Icon
-                v-else
-                icon="lucide:bot"
-                class="w-5 h-5 text-blue-400"
-              />
-            </div>
-            <div class="flex items-center gap-0.5">
-              <button
-                class="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-500 hover:text-blue-400 rounded-md transition-all"
-                title="Duplicate agent"
-                @click.stop="duplicateAgent(agent.id)"
-              >
-                <Icon
-                  icon="lucide:copy"
-                  class="w-4 h-4"
-                />
-              </button>
-              <button
-                class="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-500 hover:text-red-400 rounded-md transition-all"
-                @click.stop="confirmDelete(agent)"
-              >
-                <Icon
-                  icon="lucide:trash-2"
-                  class="w-4 h-4"
-                />
-              </button>
-            </div>
-          </div>
-          <h3 class="text-sm font-medium text-zinc-100 mb-1">
-            {{ agent.name }}
-            <Icon
-              v-if="agentsWithIssues.has(agent.id)"
-              icon="lucide:alert-triangle"
-              class="w-3.5 h-3.5 text-amber-400 inline-block ml-1"
+          {{ selectedAgentCount }} agent{{ selectedAgentCount === 1 ? '' : 's' }} selected
+        </div>
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-end md:flex-1">
+          <div class="min-w-0 md:min-w-80">
+            <ProviderModelSelect
+              :provider-id="bulkProviderId"
+              :model-value="bulkModel"
+              :providers="providerStore.providers"
+              placeholder="Set provider/model for selected agents"
+              dropdown-width="w-[28rem]"
+              @update:provider-id="bulkProviderId = $event"
+              @update:model-value="bulkModel = $event"
+              @change="hasBulkProviderModelSelection = Boolean($event.providerId)"
             />
-          </h3>
-          <p
-            v-if="agent.description"
-            class="text-xs text-zinc-500 mb-3 line-clamp-2"
-          >
-            {{ agent.description }}
-          </p>
-          <div class="flex items-center gap-3 text-xs text-zinc-500 flex-wrap">
-            <span
-              v-if="agent.model"
-              class="flex items-center gap-1"
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              class="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
+              :disabled="!hasBulkProviderModelSelection"
+              @click="applyBulkProviderModel"
             >
-              <Icon
-                icon="lucide:cpu"
-                class="w-3 h-3"
-              />
-              {{ agent.model }}
-            </span>
-            <span class="flex items-center gap-1">
-              <Icon
-                icon="lucide:wrench"
-                class="w-3 h-3"
-              />
-              {{ agent.tools.length }} tools
-            </span>
-            <span
-              v-if="agent.subAgents?.length"
-              class="flex items-center gap-1"
+              Apply
+            </button>
+            <button
+              class="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
+              @click="clearBulkSelection"
             >
-              <Icon
-                icon="lucide:users"
-                class="w-3 h-3"
-              />
-              {{ agent.subAgents.length }} sub-agent{{ agent.subAgents.length === 1 ? '' : 's' }}
-            </span>
-            <span class="flex items-center gap-1">
-              <Icon
-                icon="lucide:calendar"
-                class="w-3 h-3"
-              />
-              {{ formatDate(agent.createdAt) }}
-            </span>
+              Clear
+            </button>
           </div>
         </div>
       </div>
 
       <!-- Agents List -->
       <div
-        v-if="filteredAgents.length && viewMode === 'list'"
+        v-if="filteredAgents.length"
         class="flex flex-col gap-2"
       >
         <div
@@ -442,8 +391,10 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
           :key="agent.id"
           draggable="true"
           class="group relative flex items-center gap-4 rounded-xl border bg-zinc-800/60 px-4 py-3 hover:border-zinc-600 transition-all cursor-pointer"
-          :class="dragReorderId === agent.id ? 'border-blue-500/60 opacity-50' : 'border-zinc-700'"
-          @click="router.push(`/agents/${agent.id}`)"
+          :class="[
+            dragReorderId === agent.id ? 'border-blue-500/60 opacity-50' : isAgentSelected(agent.id) ? 'border-blue-500/60 bg-blue-500/10' : 'border-zinc-700'
+          ]"
+          @click="onRowClick(agent.id)"
           @dragstart="onReorderDragStart($event, agent.id)"
           @dragover="onReorderDragOver($event, agent.id)"
           @dragleave="onReorderDragLeave($event, agent.id)"
@@ -460,6 +411,20 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
             v-if="dropTargetId === agent.id && dropPosition === 'after'"
             class="absolute -bottom-0.75 left-2 right-2 h-0.75 rounded-full bg-blue-500"
           />
+
+          <!-- Bulk select checkbox -->
+          <label
+            class="shrink-0 cursor-pointer transition-opacity"
+            :class="isBulkMode || isAgentSelected(agent.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+            @click.stop
+          >
+            <input
+              type="checkbox"
+              class="h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-blue-500 focus:ring-blue-500/60"
+              :checked="isAgentSelected(agent.id)"
+              @change="onSelectionInputChange(agent.id, $event)"
+            >
+          </label>
 
           <!-- Icon -->
           <div class="w-9 h-9 shrink-0 rounded-lg bg-linear-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden">
