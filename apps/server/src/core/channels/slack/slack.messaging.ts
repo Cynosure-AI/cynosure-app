@@ -249,39 +249,19 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
     //     }
     // }))
 
-    unsubs.push(eventBus.on('step:tools-chosen', (...args: unknown[]) => {
-        const data = args[0] as { conversationId: string; iteration: number; toolCalls: { name: string; arguments: string }[]; maCodename?: string }
-        if (data.conversationId !== conversationId) return
-        const prefix = data.maCodename ? `🤖 *[${data.maCodename}]* ` : ''
-        const toolLines = data.toolCalls.map(tc => {
-            let params = ''
-            try {
-                const parsed = JSON.parse(tc.arguments)
-                params = Object.entries(parsed).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n')
-            } catch {
-                params = tc.arguments
-            }
-            return params
-                ? `\`${tc.name}\`:\n\`\`\`\n${params}\n\`\`\``
-                : `\`${tc.name}\``
-        })
-        const text = `${prefix}🔧 ${toolLines.join('\n')}`
-        enqueueSend(async () => {
-            await client.chat.postMessage({ channel: slackChannelId, text: text.slice(0, 3000), thread_ts: msg.ts }).catch(() => { })
-        })
-    }))
+    // Intentionally suppress verbose tool argument dumps in channel chats.
+    // We only send compact post-execution status lines in step:executed.
 
     unsubs.push(eventBus.on('step:executed', (...args: unknown[]) => {
-        const data = args[0] as { conversationId: string; iteration: number; results: { name: string; success: boolean; output: string; imageDataUrls?: string[] }[] }
+        const data = args[0] as { conversationId: string; iteration: number; results: { name: string; success: boolean; output: string; imageDataUrls?: string[] }[]; maCodename?: string }
         if (data.conversationId !== conversationId) return
-        const failures = data.results.filter(r => !r.success)
+        const prefix = data.maCodename ? `🤖 *[${data.maCodename}]* ` : ''
+        const lines = data.results.map(r =>
+            r.success ? `✅ \`${r.name}\` executed` : `❌ \`${r.name}\` failed`
+        )
         enqueueSend(async () => {
-            if (failures.length) {
-                const lines = failures.map(r => {
-                    const preview = r.output.length > 200 ? r.output.slice(0, 200) + '…' : r.output
-                    return `❌ \`${r.name}\`: ${preview}`
-                })
-                await client.chat.postMessage({ channel: slackChannelId, text: lines.join('\n').slice(0, 3000), thread_ts: msg.ts }).catch(() => { })
+            if (lines.length) {
+                await client.chat.postMessage({ channel: slackChannelId, text: `${prefix}${lines.join('\n')}`.slice(0, 3000), thread_ts: msg.ts }).catch(() => { })
             }
             for (const r of data.results) {
                 if (r.imageDataUrls?.length) {
