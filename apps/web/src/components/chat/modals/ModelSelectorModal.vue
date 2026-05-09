@@ -23,6 +23,25 @@ const currentProviderId = computed(
     providerStore.lastUsedProviderId,
 );
 
+const selectedProviderIdForSelector = computed(() => {
+  if (
+    selectedAgent.value &&
+    !chatStore.sessionProviderOverride &&
+    !chatStore.sessionModelOverride
+  ) {
+    return "";
+  }
+  return currentProviderId.value;
+});
+
+const selectedModelForSelector = computed(() =>
+  selectedAgent.value &&
+  !chatStore.sessionProviderOverride &&
+  !chatStore.sessionModelOverride
+    ? ""
+    : chatStore.sessionModelOverride || "",
+);
+
 const currentProvider = computed(() =>
   providerStore.providers.find((p) => p.id === currentProviderId.value),
 );
@@ -36,10 +55,8 @@ const defaultModelLabel = computed(() => {
   const effectiveDefault = isProviderOverridden
     ? providerDefault
     : agentModel || providerDefault;
-  return effectiveDefault || "Provider default";
+  return effectiveDefault || (selectedAgent.value ? "Agent defaults" : "Provider default");
 });
-
-const selectedModel = computed(() => chatStore.sessionModelOverride || "");
 
 function onSelectionChange(selection: {
   providerId: string;
@@ -49,6 +66,7 @@ function onSelectionChange(selection: {
 
   if (chatStore.activeAgentId) {
     chatStore.sessionProviderOverride =
+      selection.providerId &&
       selection.providerId !== selectedAgent.value?.providerId
         ? selection.providerId
         : null;
@@ -82,8 +100,8 @@ function onSelectionChange(selection: {
       </div>
 
       <ProviderModelSelect
-        :provider-id="currentProviderId"
-        :model-value="selectedModel"
+        :provider-id="selectedProviderIdForSelector"
+        :model-value="selectedModelForSelector"
         :providers="providerStore.providers"
         :include-default="!!selectedAgent"
         default-label="Use agent defaults"

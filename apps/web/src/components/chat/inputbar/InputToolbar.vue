@@ -45,6 +45,25 @@ const currentProviderId = computed(
     providerStore.lastUsedProviderId,
 );
 
+const selectedProviderIdForSelector = computed(() => {
+  if (
+    selectedAgent.value &&
+    !chatStore.sessionProviderOverride &&
+    !chatStore.sessionModelOverride
+  ) {
+    return "";
+  }
+  return currentProviderId.value;
+});
+
+const selectedModelForSelector = computed(() =>
+  selectedAgent.value &&
+  !chatStore.sessionProviderOverride &&
+  !chatStore.sessionModelOverride
+    ? ""
+    : chatStore.sessionModelOverride || "",
+);
+
 const hasPendingHITLForActiveConversation = computed(() => {
   const convId = chatStore.activeConversationId;
   if (!convId) return false;
@@ -79,6 +98,7 @@ function onModelProviderOverride(selection: {
 
   if (chatStore.activeAgentId) {
     chatStore.sessionProviderOverride =
+      selection.providerId &&
       selection.providerId !== selectedAgent.value?.providerId
         ? selection.providerId
         : null;
@@ -192,8 +212,8 @@ async function toggleMic(): Promise<void> {
     >
       <div class="w-56">
         <ProviderModelSelect
-          :provider-id="currentProviderId"
-          :model-value="chatStore.sessionModelOverride || ''"
+          :provider-id="selectedProviderIdForSelector"
+          :model-value="selectedModelForSelector"
           :providers="providerStore.providers"
           :include-default="!!selectedAgent"
           default-label="Use agent defaults"
