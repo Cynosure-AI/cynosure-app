@@ -155,6 +155,23 @@ const effectiveProviderId = computed(() => {
   return agent?.providerId || providerStore.lastUsedProviderId;
 });
 
+const selectedAgent = computed(() =>
+  allAgents.value.find((a) => a.id === cronAgentId.value) || null,
+);
+
+const agentDefaultLabel = computed(() => {
+  const model = selectedAgent.value?.model;
+  return model ? `Agent default (${model})` : "Agent default";
+});
+
+const selectedProviderIdForSelector = computed(() =>
+  cronProviderOverride.value || cronModelOverride.value ? effectiveProviderId.value : "",
+);
+
+const selectedModelForSelector = computed(() =>
+  cronProviderOverride.value || cronModelOverride.value ? cronModelOverride.value : "",
+);
+
 function onModelProviderChange(selection: {
   providerId: string;
   model: string;
@@ -517,11 +534,11 @@ watch(cronPrompt, resizePrompt, { immediate: true });
           <div>
             <label class="block text-xs text-zinc-400 mb-1">Provider / Model override</label>
             <ProviderModelSelect
-              :provider-id="effectiveProviderId"
-              :model-value="cronModelOverride"
+              :provider-id="selectedProviderIdForSelector"
+              :model-value="selectedModelForSelector"
               :providers="providerStore.providers"
               include-default
-              default-label="Agent default"
+              :default-label="agentDefaultLabel"
               placeholder="Agent default"
               @change="onModelProviderChange"
             />

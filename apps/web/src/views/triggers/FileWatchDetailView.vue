@@ -128,6 +128,23 @@ const effectiveProviderId = computed(() => {
   return agent?.providerId || providerStore.lastUsedProviderId;
 });
 
+const selectedAgent = computed(() =>
+  allAgents.value.find((a) => a.id === dlgAgentId.value) || null,
+);
+
+const agentDefaultLabel = computed(() => {
+  const model = selectedAgent.value?.model;
+  return model ? `Use agent default (${model})` : "Use agent default";
+});
+
+const selectedProviderIdForSelector = computed(() =>
+  dlgProviderOverride.value || dlgModelOverride.value ? effectiveProviderId.value : "",
+);
+
+const selectedModelForSelector = computed(() =>
+  dlgProviderOverride.value || dlgModelOverride.value ? dlgModelOverride.value : "",
+);
+
 function onModelProviderChange(selection: {
   providerId: string;
   model: string;
@@ -293,11 +310,11 @@ watch(dlgPrompt, resizePrompt, { immediate: true });
           <div>
             <label class="block text-xs text-zinc-400 mb-1">Provider / Model override</label>
             <ProviderModelSelect
-              :provider-id="effectiveProviderId"
-              :model-value="dlgModelOverride"
+              :provider-id="selectedProviderIdForSelector"
+              :model-value="selectedModelForSelector"
               :providers="providerStore.providers"
               include-default
-              default-label="Use agent default"
+              :default-label="agentDefaultLabel"
               placeholder="Use agent default"
               @change="onModelProviderChange"
             />
