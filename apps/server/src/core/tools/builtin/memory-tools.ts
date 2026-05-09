@@ -27,7 +27,7 @@ function getKnownMemorySpaces(): MemorySpaceRef[] {
 }
 
 function formatSpaces(spaces: MemorySpaceRef[]): string {
-    if (spaces.length === 0) return 'No memory spaces exist yet.'
+    if (spaces.length === 0) return 'No memory categories exist yet.'
     return spaces.map(s => `  - "${s.name}" (id: ${s.id})`).join('\n')
 }
 
@@ -38,10 +38,10 @@ function findSpaceByIdOrName(spaces: MemorySpaceRef[], wanted: string): MemorySp
 function makeScopeSummary(assignedSpaces: MemorySpaceRef[]): string {
     if (assignedSpaces.length === 0) {
         const defaultSpace = getDefaultMemorySpace()
-        return defaultSpace ? `Scope: "${defaultSpace.name}" (default).` : 'Scope: no memory spaces.'
+        return defaultSpace ? `Category: "${defaultSpace.name}" (default).` : 'Category: none available.'
     }
-    if (assignedSpaces.length === 1) return `Scope: "${assignedSpaces[0].name}" only.`
-    return `Scope: assigned memory spaces only (${assignedSpaces.map(s => `"${s.name}"`).join(', ')}).`
+    if (assignedSpaces.length === 1) return `Category: "${assignedSpaces[0].name}" only.`
+    return `Categories: ${assignedSpaces.map(s => `"${s.name}"`).join(', ')}.`
 }
 
 function buildSpaceMap(...spaceGroups: MemorySpaceRef[][]): Map<string, string> {
@@ -57,15 +57,20 @@ function resolveReadableSpaceFilter(
     baseFilter?: string,
     spaceParam?: string
 ): { filter?: string; space?: MemorySpaceRef } | { error: string } {
-    if (!spaceParam?.trim()) return { filter: baseFilter }
+    if (!spaceParam?.trim()) {
+        if (baseFilter) return { filter: baseFilter }
+        const defaultSpace = getDefaultMemorySpace()
+        if (defaultSpace) return { filter: buildScopeFilter([defaultSpace]), space: defaultSpace }
+        return { filter: undefined }
+    }
 
     const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownMemorySpaces()
     const wanted = spaceParam.trim()
     const match = findSpaceByIdOrName(candidates, wanted)
     if (!match) {
-        const scopeLabel = assignedSpaces.length > 0 ? 'available assigned spaces' : 'existing memory spaces'
+        const scopeLabel = assignedSpaces.length > 0 ? 'assigned categories' : 'existing categories'
         return {
-            error: `Memory space "${wanted}" was not found in ${scopeLabel}.\n${formatSpaces(candidates)}`
+            error: `Memory category "${wanted}" was not found in ${scopeLabel}.\n${formatSpaces(candidates)}`
         }
     }
 
@@ -89,9 +94,9 @@ async function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], spaceParam?:
         const match = findSpaceByIdOrName(candidates, wanted)
         if (match) return { spaceId: match.id, spaceName: match.name }
 
-        const scopeLabel = assignedSpaces.length > 0 ? 'assigned spaces' : 'existing memory spaces'
+        const scopeLabel = assignedSpaces.length > 0 ? 'assigned categories' : 'existing categories'
         return {
-            error: `Memory space "${wanted}" not found in ${scopeLabel}.\n${formatSpaces(candidates.length > 0 ? candidates : getKnownMemorySpaces())}`
+            error: `Memory category "${wanted}" not found in ${scopeLabel}.\n${formatSpaces(candidates.length > 0 ? candidates : getKnownMemorySpaces())}`
         }
     }
 
@@ -120,7 +125,7 @@ async function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], spaceParam?:
         if (matchingSpaces.length > 1) {
             // Title exists in multiple spaces — need explicit selection
             const listing = matchingSpaces.map(s => `  - "${s.name}" (id: ${s.id})`).join('\n')
-            return { error: `Memory entry "${existingTitle}" exists in multiple spaces. Please specify which to update using the 'space' parameter:\n${listing}` }
+            return { error: `Memory entry "${existingTitle}" exists in multiple categories. Please specify which to update using the 'category' parameter:\n${listing}` }
         }
     }
 
@@ -139,15 +144,15 @@ async function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], spaceParam?:
     // 3. Multiple assigned spaces but no default → error
     if (assignedSpaces.length > 1) {
         const listing = assignedSpaces.map(s => `  - "${s.name}" (id: ${s.id})`).join('\n')
-        return { error: `Multiple memory spaces are assigned. Please specify which to write to using the 'space' parameter.\nAvailable spaces:\n${listing}` }
+        return { error: `Multiple memory categories are assigned. Please specify which to write to using the 'category' parameter.\nAvailable categories:\n${listing}` }
     }
 
     // 4. No spaces at all
     const existing = getKnownMemorySpaces()
     return {
         error:
-            'No memory space is assigned for writes. Provide the target memory space using the "space" parameter, select one in the conversation, or assign one to the agent.\n' +
-            `Existing memory spaces:\n${formatSpaces(existing)}`
+            'No memory category is assigned for writes. Provide the target memory category using the "category" parameter, select one in the conversation, or assign one to the agent.\n' +
+            `Existing categories:\n${formatSpaces(existing)}`
     }
 }
 
@@ -163,18 +168,18 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
             'List memorised documents (source files) stored in your knowledge base. ' +
             'Returns document names, chunk counts, and ingestion dates. Paginated — max 100 per page. ' +
             'Use this to discover what documents are available before using memory_retrieve_chunks or memory_semantic_search. ' +
-            'Multiple assigned memory spaces are treated as one unified knowledge base for reading — use the optional "space" parameter to filter to a specific space. ' +
+            'Multiple assigned memory categories are treated as one unified knowledge base for reading — use the optional "category" parameter to filter to a specific category. ' +
             makeScopeSummary(assignedSpaces),
         parameters: {
             type: 'object',
             properties: {
                 pageIndex: { type: 'number', description: 'Zero-based page index (default: 0). Each page returns up to 100 documents.' },
-                space: { type: 'string', description: 'Optional memory space name or ID to restrict the listing. Without this, searches all assigned spaces, or all spaces when none are assigned.' },
+                category: { type: 'string', description: 'Optional memory category name or ID to restrict the listing. When omitted, searches the default category.' },
             },
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { pageIndex, space } = (params || {}) as { pageIndex?: number; space?: string }
+            const { pageIndex, category: space } = (params || {}) as { pageIndex?: number; category?: string }
             const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, space)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
@@ -230,13 +235,13 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
                 sourceFile: { type: 'string', description: 'The source file name exactly as shown in the memory context (e.g. "report.pdf", "notes.md").' },
                 minIndex: { type: 'number', description: 'Minimum chunk index (0-based). Use the Part number minus 1.' },
                 maxIndex: { type: 'number', description: 'Maximum chunk index (0-based, inclusive). Use the Part number minus 1.' },
-                space: { type: 'string', description: 'Optional memory space name or ID. Use this when the same source file exists in more than one space.' }
+                category: { type: 'string', description: 'Optional memory category name or ID. Use this when the same source file exists in more than one category.' }
             },
             required: ['sourceFile', 'minIndex', 'maxIndex']
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { sourceFile, minIndex, maxIndex, space } = params as { sourceFile: string; minIndex: number; maxIndex: number; space?: string }
+            const { sourceFile, minIndex, maxIndex, category: space } = params as { sourceFile: string; minIndex: number; maxIndex: number; category?: string }
             const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, space)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
@@ -254,7 +259,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
                 const listing = distinctSpaces.map(id => `  - "${spaceMap.get(id) || id}" (id: ${id})`).join('\n')
                 return {
                     success: false,
-                    output: `Source file "${sourceFile}" exists in multiple memory spaces. Re-run with the 'space' parameter.\nMatching spaces:\n${listing}`
+                    output: `Source file "${sourceFile}" exists in multiple memory categories. Re-run with the 'category' parameter.\nMatching categories:\n${listing}`
                 }
             }
 
@@ -282,21 +287,21 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
         description:
             'Search through stored RAG memories using a semantic query. ' +
             'Use this to get a rough starting point for memories, which can then be refined or expanded using other tools. ' +
-            'Returns the most relevant memory chunks with their source, memory space, and chunk index. ' +
-            'Multiple assigned memory spaces are treated as one unified knowledge base — use the optional "space" parameter to filter to a specific space. ' +
+            'Returns the most relevant memory chunks with their source, memory category, and chunk index. ' +
+            'Multiple assigned memory categories are treated as one unified knowledge base — use the optional "category" parameter to filter to a specific category. ' +
             makeScopeSummary(assignedSpaces),
         parameters: {
             type: 'object',
             properties: {
                 query: { type: 'string', description: 'A descriptive search query to find relevant memories.' },
                 topK: { type: 'number', description: 'Maximum number of results to return (default: 5, max: 10).' },
-                space: { type: 'string', description: 'Optional memory space name or ID to restrict the search. Without this, searches all assigned spaces, or all spaces when none are assigned.' }
+                category: { type: 'string', description: 'Optional memory category name or ID to restrict the search. When omitted, searches the default category.' }
             },
             required: ['query']
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { query, topK, space } = params as { query: string; topK?: number; space?: string }
+            const { query, topK, category: space } = params as { query: string; topK?: number; category?: string }
             const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, space)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
@@ -359,20 +364,20 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
             '[Experimental] Create a new memory entry with a title and content. ' +
             'The content will be chunked and embedded for later semantic retrieval. ' +
             'Use this to persistently store notes, findings, or any information worth remembering. ' +
-            'If no explicit "space" is provided, the entry is stored in the default memory space. ' +
-            'Provide "space" to store in a specific assigned space.',
+            'If no explicit "category" is provided, the entry is stored in the default category. ' +
+            'Provide "category" to store in a specific assigned category.',
         parameters: {
             type: 'object',
             properties: {
                 title: { type: 'string', description: 'A short descriptive title for the memory entry (used as file name, e.g. "project-notes", "meeting-summary").' },
                 content: { type: 'string', description: 'The text content to store in memory.' },
-                space: { type: 'string', description: 'Optional memory space name or ID. If multiple spaces are assigned and you want to save elsewhere, specify it here.' }
+                category: { type: 'string', description: 'Optional memory category name or ID. If multiple categories are assigned and you want to save elsewhere, specify it here.' }
             },
             required: ['title', 'content']
         },
         timeout: 30_000,
         execute: async (params: unknown) => {
-            const { title, content, space } = params as { title: string; content: string; space?: string }
+            const { title, content, category: space } = params as { title: string; content: string; category?: string }
 
             // For creates, don't try smart title-based resolution (new entries)
             const resolved = await resolveTargetSpace(assignedSpaces, space)
@@ -396,14 +401,14 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
     return {
         name: 'memory_update',
         description:
-            'Update an existing memory entry. Auto-matches the title to find the entry; if multiple spaces contain the same title, space parameter is required. ' +
+            'Update an existing memory entry. Auto-matches the title to find the entry; if multiple categories contain the same title, the category parameter is required. ' +
             'By default, replaces all content and re-chunks/re-embeds. Use chunkStartIndex and chunkEndIndex to update only specific chunks while preserving others.',
         parameters: {
             type: 'object',
             properties: {
-                title: { type: 'string', description: 'The title (source file name) of the memory entry to update. Auto-matched across assigned spaces.' },
+                title: { type: 'string', description: 'The title (source file name) of the memory entry to update. Auto-matched across assigned categories.' },
                 content: { type: 'string', description: 'The new text content. Replaces all content by default, or specific chunks if using chunkStartIndex/chunkEndIndex.' },
-                space: { type: 'string', description: 'Memory space name or ID. Required only when the title exists in multiple spaces; otherwise auto-selected.' },
+                category: { type: 'string', description: 'Memory category name or ID. Required only when the title exists in multiple categories; otherwise auto-selected.' },
                 chunkStartIndex: { type: 'number', description: 'Optional: zero-based index of the first chunk to replace. Omit to replace entire content.' },
                 chunkEndIndex: { type: 'number', description: 'Optional: zero-based index of the last chunk to replace (inclusive). Required if chunkStartIndex is provided.' }
             },
@@ -411,8 +416,8 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
         },
         timeout: 30_000,
         execute: async (params: unknown) => {
-            const { title, content, space, chunkStartIndex, chunkEndIndex } = params as {
-                title: string; content: string; space?: string; chunkStartIndex?: number; chunkEndIndex?: number
+            const { title, content, category: space, chunkStartIndex, chunkEndIndex } = params as {
+                title: string; content: string; category?: string; chunkStartIndex?: number; chunkEndIndex?: number
             }
 
             // Validate chunk indices if provided
