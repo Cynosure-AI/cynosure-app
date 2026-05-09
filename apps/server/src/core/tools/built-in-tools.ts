@@ -27,7 +27,7 @@ export {
     makeSearchAvailableMcpToolsTool,
     TOOL_SEARCH_TOOL_NAME,
     type SearchAvailableMcpToolsOptions,
-} from "./builtin/search-available-mcp-tools.js";
+} from "./builtin/expand-available-toolset.js";
 
 // Import for internal hydration use
 import { makeNotificationTool } from "./builtin/notification.js";

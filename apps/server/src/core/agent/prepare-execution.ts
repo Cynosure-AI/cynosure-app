@@ -10,7 +10,7 @@
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import { hydrateBuiltInTools } from '../tools/built-in-tools.js'
-import { TOOL_SEARCH_TOOL_NAME } from '../tools/builtin/search-available-mcp-tools.js'
+import { TOOL_SEARCH_TOOL_NAME } from '../tools/builtin/expand-available-toolset.js'
 import { routeTools, shouldRouteTools } from './tool-router.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { nanoid } from 'nanoid'
