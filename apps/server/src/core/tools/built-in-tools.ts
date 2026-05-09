@@ -79,7 +79,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_list_documents",
         description:
-            "List memorised documents (source files) with their chunk counts. Paginated — max 100 per page. Searches assigned spaces, or the default space when no assignments exist.",
+            "List memorised documents (source files) with their chunk counts. Paginated — max 100 per page. Searches assigned categories, or the default category when no assignments exist.",
         parameters: {
             type: "object",
             properties: {
@@ -87,10 +87,10 @@ const BUILTIN_TOOL_SPECS = [
                     type: "number",
                     description: "Zero-based page index (default: 0).",
                 },
-                space: {
+                category: {
                     type: "string",
                     description:
-                        "Optional memory space name or ID to restrict the listing.",
+                        "Optional memory category name or ID to restrict the listing.",
                 },
             },
         },
@@ -99,7 +99,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_retrieve_chunks",
         description:
-            "Retrieve additional chunks from a stored document by source file and chunk index range. Searches assigned spaces, or the default space when no assignments exist; use space to disambiguate duplicate source files.",
+            "Retrieve additional chunks from a stored document by source file and chunk index range. Searches assigned categories, or the default category when no assignments exist; use category to disambiguate duplicate source files.",
         parameters: {
             type: "object",
             properties: {
@@ -112,10 +112,10 @@ const BUILTIN_TOOL_SPECS = [
                     type: "number",
                     description: "Maximum chunk index (0-based, inclusive).",
                 },
-                space: {
+                category: {
                     type: "string",
                     description:
-                        "Optional memory space name or ID. Use when the same source file exists in more than one space.",
+                        "Optional memory category name or ID. Use when the same source file exists in more than one category.",
                 },
             },
             required: ["sourceFile", "minIndex", "maxIndex"],
@@ -125,7 +125,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_semantic_search",
         description:
-            "Search through stored memories using a semantic query. Returns the most relevant memory chunks with their memory space, source, and chunk index. Searches assigned spaces, or the default space when no assignments exist.",
+            "Search through stored memories using a semantic query. Returns the most relevant memory chunks with their memory category, source, and chunk index. Searches assigned categories, or the default category when no assignments exist.",
         parameters: {
             type: "object",
             properties: {
@@ -138,10 +138,10 @@ const BUILTIN_TOOL_SPECS = [
                     description:
                         "Maximum number of results to return (default: 5, max: 10).",
                 },
-                space: {
+                category: {
                     type: "string",
                     description:
-                        "Optional memory space name or ID to restrict the search.",
+                        "Optional memory category name or ID to restrict the search.",
                 },
             },
             required: ["query"],
@@ -151,7 +151,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_create",
         description:
-            "[Experimental] Create a new memory entry with a title and content. The content will be chunked and embedded for later semantic retrieval.",
+            "[Experimental] Create a new memory entry with a title and content. The content will be chunked and embedded for later semantic retrieval. If no category is specified, the default category is used.",
         parameters: {
             type: "object",
             properties: {
@@ -163,10 +163,10 @@ const BUILTIN_TOOL_SPECS = [
                     type: "string",
                     description: "The text content to store in memory.",
                 },
-                space: {
+                category: {
                     type: "string",
                     description:
-                        "Target memory space name or ID. Required when multiple memory spaces are assigned, or when none are assigned and you need to choose an existing space.",
+                        "Target memory category name or ID. Required when multiple categories are assigned and you need to pick a specific one.",
                 },
             },
             required: ["title", "content"],
@@ -176,7 +176,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_update",
         description:
-            "Update an existing memory entry. Auto-matches the title to find the entry; if multiple spaces contain the same title, space parameter is required. " +
+            "Update an existing memory entry. Auto-matches the title to find the entry; if multiple categories contain the same title, the category parameter is required. " +
             "By default, replaces all content. Use chunkStartIndex and chunkEndIndex to update only specific chunks.",
         parameters: {
             type: "object",
@@ -184,17 +184,17 @@ const BUILTIN_TOOL_SPECS = [
                 title: {
                     type: "string",
                     description:
-                        "The title (source file name) of the memory entry to update. Auto-matched across assigned spaces.",
+                        "The title (source file name) of the memory entry to update. Auto-matched across assigned categories.",
                 },
                 content: {
                     type: "string",
                     description:
                         "The new text content. Replaces all content by default, or specific chunks if using chunkStartIndex/chunkEndIndex.",
                 },
-                space: {
+                category: {
                     type: "string",
                     description:
-                        "Memory space name or ID. Required only when the title exists in multiple spaces; otherwise auto-selected.",
+                        "Memory category name or ID. Required only when the title exists in multiple categories; otherwise auto-selected.",
                 },
                 chunkStartIndex: {
                     type: "number",
