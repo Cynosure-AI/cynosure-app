@@ -177,11 +177,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     return withConversationLock(conversationId, async () => {
       const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
       const db = getDb()
+      const toolRegistry = getToolRegistry()
+      const selectedToolKeys = Array.isArray(allowedTools)
+        ? Array.from(new Set(allowedTools)).filter((name) => toolRegistry.hasKey(name))
+        : []
+      const stickyPreferredToolNames = reqAutoToolRouting === true
+        ? toolRegistry.resolveForExecution(selectedToolKeys).map((tool) => tool.name)
+        : []
       const hasExplicitToolAllowlist = Array.isArray(allowedTools)
-        && !(reqAutoToolRouting === true && allowedTools.length === 0)
-      const routeFromAllTools = reqAutoToolRouting === true
-        && Array.isArray(allowedTools)
-        && allowedTools.length === 0
+        && reqAutoToolRouting !== true
 
       // Build content (text + optional images + optional audio + optional files)
       let userContent: string | ContentPart[]
@@ -306,11 +310,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
         // Session-level overrides: prefer request body over agent config
         const effectiveSubAgents = reqSubAgents ?? resolvedAgent.subAgents
-        const toolRegistry = getToolRegistry()
         const effectiveAgent = hasExplicitToolAllowlist
-          ? { ...resolvedAgent, tools: allowedTools }
-          : routeFromAllTools
-            ? { ...resolvedAgent, tools: toolRegistry.listRegisteredTools().map((tool) => tool.key) }
+          ? { ...resolvedAgent, tools: selectedToolKeys }
           : resolvedAgent
 
         // Resolve memory space overrides (request body ids → { id, name } objects)
@@ -341,6 +342,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           autoToolRouting: reqAutoToolRouting === true,
           toolRouterProviderId: reqToolRouterProviderId || undefined,
           toolRouterModel: reqToolRouterModel || undefined,
+          preferredToolKeys: selectedToolKeys,
         })
 
         tools = prepared.tools
@@ -361,12 +363,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           messages = [{ role: 'system', content: systemPrompt }, ...messages]
         }
 
-        const toolRegistry = getToolRegistry()
-        const selectedToolNames = hasExplicitToolAllowlist
-          ? Array.from(new Set(allowedTools)).filter((name) => toolRegistry.hasKey(name))
-          : undefined
         tools = hasExplicitToolAllowlist
-          ? toolRegistry.resolveForExecution(selectedToolNames || [])
+          ? toolRegistry.resolveForExecution(selectedToolKeys)
           : toolRegistry.getToolDefinitions()
 
         // Resolve the effective provider + model up-front so sub-agent tools
@@ -398,6 +396,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
               model: responseModel,
               routerModel,
               mcpMetadata: toolRegistry.getNamespaceMetadataForTools(tools),
+              preferredToolNames: stickyPreferredToolNames.length ? new Set(stickyPreferredToolNames) : undefined,
             })
             emitToolRoutingSelection(conversationId, routingTaskId, tools)
           } catch (err) {

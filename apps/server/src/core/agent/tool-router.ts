@@ -14,6 +14,9 @@ const TURN_CHAR_LIMIT = 200 // Max characters taken from each conversation turn 
 const TOOL_DESCRIPTION_LIMIT = 320 // Max characters of a tool description used in embedding/LLM calls
 const MAX_CONFIRMED_TOOLS = 40 // Upper bound on how many tools the LLM confirmation step may select
 const FALLBACK_TOOL_COUNT = 12 // How many tools to fall back to via lexical scoring if LLM confirmation fails
+const PREFERRED_GROUP_EMBEDDING_BOOST = 0.08 // Soft bonus applied additively to MCP groups containing preferred tools during semantic prefilter
+const PREFERRED_GROUP_LEXICAL_BOOST = 0.3 // Soft bonus applied additively to preferred MCP groups during lexical fallback prefilter
+const PREFERRED_TOOL_LEXICAL_BOOST = 0.2 // Soft bonus applied additively to preferred tools during lexical fallback
 
 interface McpToolGroup {
     id: string
@@ -37,6 +40,7 @@ export interface RouteToolsInput {
     model?: string
     routerModel?: string
     mcpMetadata?: ToolNamespaceMetadata[]
+    preferredToolNames?: Set<string>
     usedToolNames?: Set<string>
     topK?: number
     contextWindowTurns?: number
@@ -77,6 +81,7 @@ export async function embeddingPreFilter(
     query: string,
     mcpGroups: McpToolGroup[],
     topK = MCP_CANDIDATE_COUNT,
+    preferredToolNames?: Set<string>,
 ): Promise<string[]> {
     if (mcpGroups.length <= topK) return mcpGroups.map(({ id }) => id)
 
@@ -106,23 +111,23 @@ export async function embeddingPreFilter(
         pruneRouterEmbeddingCache(mcpGroups.map(({ id }) => id), scope)
 
         return mcpGroups
-            .map(({ id }) => ({
-                id,
-                score: cosineSimilarity(queryVector, groupVectors.get(id) || []),
+            .map((group) => ({
+                id: group.id,
+                score: cosineSimilarity(queryVector, groupVectors.get(group.id) || []) + preferredGroupEmbeddingBoost(group, preferredToolNames),
             }))
             .sort((a, b) => b.score - a.score)
             .slice(0, topK)
             .map(({ id }) => id)
     } catch (err) {
         console.warn('[tool-router] Embedding pre-filter failed, using lexical fallback:', err)
-        return lexicalPreFilter(query, mcpGroups, topK)
+        return lexicalPreFilter(query, mcpGroups, topK, preferredToolNames)
     }
 }
 
 export async function llmConfirmTools(
     query: string,
     candidateTools: ToolDefinition[],
-    config: { gateway: LLMGateway; providerId?: string; model?: string; signal?: AbortSignal },
+    config: { gateway: LLMGateway; providerId?: string; model?: string; signal?: AbortSignal; preferredToolNames?: Set<string> },
 ): Promise<string[]> {
     if (!candidateTools.length) return []
 
@@ -160,7 +165,7 @@ export async function llmConfirmTools(
         : parseToolNameArray(result.content)
 
     if (!parsedNames) {
-        return lexicalToolFallback(query, candidateTools, FALLBACK_TOOL_COUNT)
+        return lexicalToolFallback(query, candidateTools, FALLBACK_TOOL_COUNT, config.preferredToolNames)
     }
 
     return parsedNames
@@ -178,6 +183,7 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
         model,
         routerModel,
         mcpMetadata = [],
+        preferredToolNames,
         usedToolNames,
         topK = MCP_CANDIDATE_COUNT,
         contextWindowTurns = CONTEXT_WINDOW_TURNS,
@@ -189,7 +195,7 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
 
     const query = buildRouterQuery(userQuery, recentMessages, contextWindowTurns)
     const groups = buildMcpGroups(mcpTools, mcpMetadata)
-    const candidateGroupIds = new Set(await embeddingPreFilter(query, groups, topK))
+    const candidateGroupIds = new Set(await embeddingPreFilter(query, groups, topK, preferredToolNames))
 
     const candidateMcpTools = groups
         .filter(({ id }) => candidateGroupIds.has(id))
@@ -203,10 +209,11 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
             gateway,
             providerId,
             model: routerModel || model,
+            preferredToolNames,
         }))
     } catch (err) {
         console.warn('[tool-router] LLM confirmation failed, using lexical tool fallback:', err)
-        confirmedNames = new Set(lexicalToolFallback(query, candidateTools, FALLBACK_TOOL_COUNT))
+        confirmedNames = new Set(lexicalToolFallback(query, candidateTools, FALLBACK_TOOL_COUNT, preferredToolNames))
     }
 
     const selectedTools = candidateTools.filter(({ name }) => confirmedNames.has(name))
@@ -460,12 +467,14 @@ function lexicalPreFilter(
     query: string,
     groups: McpToolGroup[],
     topK: number,
+    preferredToolNames?: Set<string>,
 ): string[] {
     return scoreItems(
         query,
         groups,
         (group) => `${group.label}\n${group.description}\n${group.tools.map(toolText).join('\n')}`,
         ({ id }) => id,
+        (group) => preferredGroupLexicalBoost(group, preferredToolNames),
     )
         .slice(0, topK)
         .map(({ value }) => value)
@@ -475,12 +484,14 @@ function lexicalToolFallback(
     query: string,
     tools: ToolDefinition[],
     limit: number,
+    preferredToolNames?: Set<string>,
 ): string[] {
     const scored = scoreItems(
         query,
         tools,
         toolText,
         ({ name }) => name,
+        (tool) => preferredToolNames?.has(tool.name) ? PREFERRED_TOOL_LEXICAL_BOOST : 0,
     )
 
     const matching = scored.filter(({ score }) => score > 0)
@@ -494,6 +505,7 @@ function scoreItems<T>(
     items: T[],
     textForItem: (item: T) => string,
     valueForItem: (item: T) => string,
+    bonusForItem?: (item: T) => number,
 ): Array<{ value: string; score: number; index: number }> {
     const terms = tokenize(query)
 
@@ -503,7 +515,7 @@ function scoreItems<T>(
             const score = [...terms].reduce(
                 (sum, term) => sum + (haystack.includes(term) ? 1 : 0),
                 0,
-            )
+            ) + (bonusForItem?.(item) || 0)
 
             return {
                 value: valueForItem(item),
@@ -574,7 +586,11 @@ function collectStickyToolNames(
     windowSize: number,
     usedToolNames?: Set<string>,
 ): Set<string> {
-    const names = new Set(usedToolNames ? [...usedToolNames] : [])
+    const names = new Set<string>()
+
+    for (const usedToolName of usedToolNames || []) {
+        names.add(usedToolName)
+    }
 
     for (const message of recentMessages.slice(-windowSize)) {
         for (const call of message.toolCalls || []) {
@@ -583,6 +599,28 @@ function collectStickyToolNames(
     }
 
     return names
+}
+
+function preferredGroupEmbeddingBoost(group: McpToolGroup, preferredToolNames?: Set<string>): number {
+    const matchCount = countPreferredTools(group.tools, preferredToolNames)
+    if (matchCount === 0) return 0
+    return PREFERRED_GROUP_EMBEDDING_BOOST + Math.min((matchCount - 1) * 0.02, 0.04)
+}
+
+function preferredGroupLexicalBoost(group: McpToolGroup, preferredToolNames?: Set<string>): number {
+    const matchCount = countPreferredTools(group.tools, preferredToolNames)
+    if (matchCount === 0) return 0
+    return PREFERRED_GROUP_LEXICAL_BOOST + Math.min((matchCount - 1) * 0.05, 0.1)
+}
+
+function countPreferredTools(tools: Array<{ name: string }>, preferredToolNames?: Set<string>): number {
+    if (!preferredToolNames?.size) return 0
+
+    let matches = 0
+    for (const tool of tools) {
+        if (preferredToolNames.has(tool.name)) matches++
+    }
+    return matches
 }
 
 function dedupeTools(tools: ToolDefinition[]): ToolDefinition[] {
