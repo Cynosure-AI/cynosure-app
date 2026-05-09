@@ -13,9 +13,11 @@ const emit = defineEmits<{
   'add': [name: string]
   'remove': [name: string]
   'rename': [payload: { oldName: string; newName: string }]
-  'drop': [payload: { itemId: string; category: string }]
+  'drop': [payload: { itemId?: string; itemIds?: string[]; category: string }]
   'reorder': [payload: { from: string; to: string; before: boolean }]
 }>()
+
+const AGENT_IDS_MIME = 'application/x-cynosure-agent-ids'
 
 const showAddInput = ref(false)
 const newCategoryName = ref('')
@@ -96,6 +98,21 @@ function onDrop(e: DragEvent, category: string) {
       emit('reorder', { from, to: category, before: catDropPos.value === 'before' })
     }
     return
+  }
+  const rawIds = e.dataTransfer?.getData(AGENT_IDS_MIME)
+  if (rawIds) {
+    try {
+      const itemIds = JSON.parse(rawIds) as unknown
+      if (Array.isArray(itemIds) && itemIds.length > 0) {
+        emit('drop', {
+          itemIds: itemIds.filter((id): id is string => typeof id === 'string' && id.length > 0),
+          category,
+        })
+        return
+      }
+    } catch {
+      // Fall through to the single-item payload.
+    }
   }
   const itemId = e.dataTransfer?.getData('text/plain')
   if (itemId) {
