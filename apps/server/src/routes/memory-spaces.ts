@@ -191,6 +191,23 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         }
     })
 
+    // PUT /api/memory-spaces/:id/entries/:entryId — update a single chunk's text and re-embed
+    app.put<{ Params: { id: string; entryId: string }; Body: { text: string } }>('/:id/entries/:entryId', async (req, reply) => {
+        const db = getDb()
+        const row = db.prepare('SELECT id FROM memory_spaces WHERE id = ?').get(req.params.id) as { id: string } | undefined
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        const { text } = req.body
+        if (typeof text !== 'string' || !text.trim()) return reply.status(400).send({ error: 'text is required' })
+        try {
+            const mem = getAgentMemory()
+            await mem.updateChunk(req.params.entryId, text.trim())
+            return { success: true }
+        } catch (err) {
+            const message = (err as Error).message || 'Failed to update chunk'
+            return reply.status(500).send({ error: message })
+        }
+    })
+
     // POST /api/memory-spaces/:id/delete-groups — delete documents from a space
     app.post<{ Params: { id: string }; Body: { sourceFiles: string[] } }>('/:id/delete-groups', async (req, reply) => {
         const db = getDb()
