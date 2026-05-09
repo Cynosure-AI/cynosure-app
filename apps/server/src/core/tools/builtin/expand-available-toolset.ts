@@ -1,6 +1,6 @@
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
 
-export const TOOL_SEARCH_TOOL_NAME = 'search_available_mcp_tools'
+export const TOOL_SEARCH_TOOL_NAME = 'expand_available_toolset' // Name of the tool the router LLM calls to confirm its tool selection
 
 const TOOL_DESCRIPTION_LIMIT = 320
 const TOOL_SEARCH_LIMIT = 12
