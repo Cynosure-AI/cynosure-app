@@ -15,11 +15,22 @@ type BroadcastFn = (event: string, data: unknown) => void
 
 export async function registerMemoryRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   // POST /api/memory/search — search permanent memory
-  app.post<{ Body: { query: string; topK?: number } }>('/search', async (req) => {
-    const { query, topK } = req.body
+  app.post<{ Body: { query: string; topK?: number; spaceId?: string } }>('/search', async (req) => {
+    const { query, topK, spaceId } = req.body
     const mem = getAgentMemory()
-    const defaultSpace = getDefaultMemorySpace()
-    const filter = defaultSpace ? buildMemorySpaceFilter([defaultSpace]) : undefined
+    let filter: string | undefined
+
+    if (spaceId?.trim()) {
+      const db = getDb()
+      const row = db
+        .prepare('SELECT id, name FROM memory_spaces WHERE id = ?')
+        .get(spaceId.trim()) as { id: string; name: string } | undefined
+      filter = row ? buildMemorySpaceFilter([row]) : undefined
+    } else {
+      const defaultSpace = getDefaultMemorySpace()
+      filter = defaultSpace ? buildMemorySpaceFilter([defaultSpace]) : undefined
+    }
+
     return mem.recall(query, topK, filter)
   })
 
