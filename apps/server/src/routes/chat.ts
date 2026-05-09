@@ -316,11 +316,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
         // Resolve memory space overrides (request body ids → { id, name } objects)
         let memorySpaceOverrides: { id: string; name: string }[] | undefined
-        if (reqMemorySpaceIds?.length) {
-          const spaceRows = reqMemorySpaceIds.map(sid =>
+        if (Array.isArray(reqMemorySpaceIds)) {
+          const uniqueSpaceIds = Array.from(new Set(reqMemorySpaceIds.map((sid) => sid.trim()).filter(Boolean)))
+          const spaceRows = uniqueSpaceIds.map(sid =>
             db.prepare('SELECT id, name FROM memory_spaces WHERE id = ?').get(sid) as { id: string; name: string } | undefined
           ).filter((r): r is { id: string; name: string } => Boolean(r))
-          if (spaceRows.length) memorySpaceOverrides = spaceRows
+          // Keep explicit empty overrides so downstream tools can fall back to the default space.
+          memorySpaceOverrides = spaceRows
         }
 
         const prepared = await prepareAgentExecution({
@@ -429,11 +431,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
         // Hydrate built-in tools (resolve memory space overrides for agentless)
         let memorySpaceOverrides: { id: string; name: string }[] | undefined
-        if (reqMemorySpaceIds?.length) {
-          const spaceRows = reqMemorySpaceIds.map(sid =>
+        if (Array.isArray(reqMemorySpaceIds)) {
+          const uniqueSpaceIds = Array.from(new Set(reqMemorySpaceIds.map((sid) => sid.trim()).filter(Boolean)))
+          const spaceRows = uniqueSpaceIds.map(sid =>
             db.prepare('SELECT id, name FROM memory_spaces WHERE id = ?').get(sid) as { id: string; name: string } | undefined
           ).filter((r): r is { id: string; name: string } => Boolean(r))
-          if (spaceRows.length) memorySpaceOverrides = spaceRows
+          // Keep explicit empty overrides so downstream tools can fall back to the default space.
+          memorySpaceOverrides = spaceRows
         }
         tools = hydrateBuiltInTools(tools, { agentId: undefined, conversationId, broadcast, memorySpaceOverrides })
       }
