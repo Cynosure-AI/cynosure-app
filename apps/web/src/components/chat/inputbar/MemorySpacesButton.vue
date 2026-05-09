@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import { api } from '../../../api/client'
@@ -12,8 +12,16 @@ const chatStore = useChatStore()
 const showModal = ref(false)
 
 const cachedMemorySpaces = ref<MemorySpace[]>([])
-onMounted(async () => {
+
+async function loadMemorySpaces() {
   try { cachedMemorySpaces.value = await api.memorySpaces.list() } catch { /* ignore */ }
+}
+
+onMounted(loadMemorySpaces)
+
+// Reload memory spaces when modal visibility changes
+watch(showModal, () => {
+  loadMemorySpaces()
 })
 
 const selectedMemorySpaces = computed(() => {
