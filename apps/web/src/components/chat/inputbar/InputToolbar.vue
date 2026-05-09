@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useChatStore } from "../../../stores/chat.store";
+import { useAgentStore } from "../../../stores/agent-runtime.store";
 import { usePreferencesStore } from "../../../stores/preferences.store";
 import { useAgentDefinitionsStore } from "../../../stores/agent-definitions.store";
 import { useProviderStore } from "../../../stores/provider.store";
@@ -26,6 +27,7 @@ const emit = defineEmits<{
 }>();
 
 const chatStore = useChatStore();
+const agentStore = useAgentStore();
 const prefs = usePreferencesStore();
 const agentDefs = useAgentDefinitionsStore();
 const providerStore = useProviderStore();
@@ -42,6 +44,32 @@ const currentProviderId = computed(
     selectedAgent.value?.providerId ||
     providerStore.lastUsedProviderId,
 );
+
+const hasPendingHITLForActiveConversation = computed(() => {
+  const convId = chatStore.activeConversationId;
+  if (!convId) return false;
+  return agentStore.awaitingHITLConvIds.has(convId);
+});
+
+const showCancelButton = computed(
+  () =>
+    chatStore.isStreaming ||
+    chatStore.activePostActions.size > 0 ||
+    agentStore.isExecuting ||
+    hasPendingHITLForActiveConversation.value,
+);
+
+function onCancelClick(): void {
+  if (
+    chatStore.isStreaming ||
+    agentStore.isExecuting ||
+    hasPendingHITLForActiveConversation.value
+  ) {
+    chatStore.cancelStream();
+    return;
+  }
+  chatStore.cancelPostActions();
+}
 
 function onModelProviderOverride(selection: {
   providerId: string;
@@ -281,15 +309,11 @@ async function toggleMic(): Promise<void> {
 
     <!-- Send / Cancel -->
     <button
-      v-if="chatStore.isStreaming || chatStore.activePostActions.size > 0"
+      v-if="showCancelButton"
       class="p-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
       title="Cancel"
       aria-label="Cancel"
-      @click="
-        chatStore.isStreaming
-          ? chatStore.cancelStream()
-          : chatStore.cancelPostActions()
-      "
+      @click="onCancelClick"
     >
       <Icon
         icon="mdi:stop-circle"
