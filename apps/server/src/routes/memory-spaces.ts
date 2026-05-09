@@ -54,11 +54,12 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     app.post<{ Body: { name: string; description?: string } }>('/', async (req, reply) => {
         const { name, description } = req.body
         if (!name?.trim()) return reply.status(400).send({ error: 'name is required' })
+        const trimmedName = name.trim()
         const db = getDb()
         const id = nanoid()
         const now = Date.now()
-        db.prepare('INSERT INTO memory_spaces (id, name, description, created_at) VALUES (?, ?, ?, ?)').run(id, name.trim(), description || '', now)
-        return rowToData({ id, name: name.trim(), description: description || '', sort_order: 0, is_default: 0, created_at: now }, 0)
+        db.prepare('INSERT INTO memory_spaces (id, name, description, created_at) VALUES (?, ?, ?, ?)').run(id, trimmedName, description || '', now)
+        return rowToData({ id, name: trimmedName, description: description || '', sort_order: 0, is_default: 0, created_at: now }, 0)
     })
 
     // PUT /api/memory-spaces/reorder — update sort order
@@ -66,15 +67,10 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const { ids } = req.body
         if (!Array.isArray(ids)) return reply.status(400).send({ error: 'ids must be an array' })
         const db = getDb()
-        const defaultRow = db.prepare('SELECT id FROM memory_spaces WHERE is_default = 1 ORDER BY created_at ASC LIMIT 1').get() as { id: string } | undefined
-        const orderedIds = defaultRow
-            ? [defaultRow.id, ...ids.filter(id => id !== defaultRow.id)]
-            : ids
-
         const stmt = db.prepare('UPDATE memory_spaces SET sort_order = ? WHERE id = ?')
         const runAll = db.transaction(() => {
-            for (let i = 0; i < orderedIds.length; i++) {
-                stmt.run(i, orderedIds[i])
+            for (let i = 0; i < ids.length; i++) {
+                stmt.run(i, ids[i])
             }
         })
         runAll()

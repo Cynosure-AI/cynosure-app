@@ -1,9 +1,8 @@
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
 import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
+import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import { getRAGStore } from '../../memory/rag.js'
-
-type MemorySpaceRef = { id: string; name: string }
 
 export interface MemoryToolOptions {
     /** SQL filter covering all assigned memory spaces, e.g. `spaceId IN ('...', '...')`. */
@@ -14,21 +13,6 @@ export interface MemoryToolOptions {
 
 function sqlString(value: string): string {
     return `'${value.replace(/'/g, "''")}'`
-}
-
-/**
- * Get the default memory space, if one exists.
- */
-function getDefaultMemorySpace(): MemorySpaceRef | undefined {
-    try {
-        const db = getDb()
-        const result = db
-            .prepare('SELECT id, name FROM memory_spaces WHERE is_default = 1 ORDER BY created_at ASC LIMIT 1')
-            .get() as MemorySpaceRef | undefined
-        return result
-    } catch {
-        return undefined
-    }
 }
 
 function getKnownMemorySpaces(): MemorySpaceRef[] {
@@ -52,7 +36,10 @@ function findSpaceByIdOrName(spaces: MemorySpaceRef[], wanted: string): MemorySp
 }
 
 function makeScopeSummary(assignedSpaces: MemorySpaceRef[]): string {
-    if (assignedSpaces.length === 0) return 'Scope: all memory spaces.'
+    if (assignedSpaces.length === 0) {
+        const defaultSpace = getDefaultMemorySpace()
+        return defaultSpace ? `Scope: "${defaultSpace.name}" (default).` : 'Scope: no memory spaces.'
+    }
     if (assignedSpaces.length === 1) return `Scope: "${assignedSpaces[0].name}" only.`
     return `Scope: assigned memory spaces only (${assignedSpaces.map(s => `"${s.name}"`).join(', ')}).`
 }
@@ -82,7 +69,7 @@ function resolveReadableSpaceFilter(
         }
     }
 
-    return { filter: `spaceId = ${sqlString(match.id)}`, space: match }
+    return { filter: buildScopeFilter([match]), space: match }
 }
 
 /**

@@ -1,5 +1,9 @@
-import { getDb } from "../../db/database.js";
 import type { ToolDefinition } from "../gateway/providers/base.provider.js";
+import {
+    buildMemorySpaceFilter,
+    getAssignedOrDefaultSpaces,
+    getDefaultMemorySpace,
+} from "../memory/memory-space-scope.js";
 import { getToolRegistry, type ToolNamespace } from "./tool-registry.js";
 
 // Re-export tool factories so existing imports keep working
@@ -75,7 +79,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_list_documents",
         description:
-            "List memorised documents (source files) with their chunk counts. Paginated — max 100 per page. Searches all assigned spaces, or all spaces when none are assigned.",
+            "List memorised documents (source files) with their chunk counts. Paginated — max 100 per page. Searches assigned spaces, or the default space when no assignments exist.",
         parameters: {
             type: "object",
             properties: {
@@ -95,7 +99,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_retrieve_chunks",
         description:
-            "Retrieve additional chunks from a stored document by source file and chunk index range. Searches all assigned spaces, or all spaces when none are assigned; use space to disambiguate duplicate source files.",
+            "Retrieve additional chunks from a stored document by source file and chunk index range. Searches assigned spaces, or the default space when no assignments exist; use space to disambiguate duplicate source files.",
         parameters: {
             type: "object",
             properties: {
@@ -121,7 +125,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_semantic_search",
         description:
-            "Search through stored memories using a semantic query. Returns the most relevant memory chunks with their memory space, source, and chunk index. Searches all assigned spaces, or all spaces when none are assigned.",
+            "Search through stored memories using a semantic query. Returns the most relevant memory chunks with their memory space, source, and chunk index. Searches assigned spaces, or the default space when no assignments exist.",
         parameters: {
             type: "object",
             properties: {
@@ -234,66 +238,11 @@ export function registerBuiltInTools(): void {
 // ─── Hydration helpers ─────────────────────────────────────
 
 /**
- * Get the default memory space (if it exists).
- */
-function getDefaultMemorySpace(): { id: string; name: string } | undefined {
-    try {
-        const db = getDb();
-        return db
-            .prepare('SELECT id, name FROM memory_spaces WHERE is_default = 1 ORDER BY created_at ASC LIMIT 1')
-            .get() as { id: string; name: string } | undefined;
-    } catch {
-        /* DB not ready */
-    }
-    return undefined;
-}
-
-/**
- * Look up the memory spaces assigned to an agent, returning both ID and name.
- * If no spaces are assigned, returns the default space (if it exists).
- */
-function getAssignedSpaces(agentId: string): { id: string; name: string }[] {
-    try {
-        const db = getDb();
-        const assigned = db
-            .prepare(
-                `SELECT ms.id, ms.name FROM agent_memory_spaces ams
-             JOIN memory_spaces ms ON ms.id = ams.space_id
-             WHERE ams.agent_id = ?`,
-            )
-            .all(agentId) as { id: string; name: string }[];
-
-        if (assigned.length > 0) return assigned;
-
-        // If no spaces assigned, return the default space as fallback
-        const defaultSpace = getDefaultMemorySpace();
-
-        return defaultSpace ? [defaultSpace] : [];
-    } catch {
-        /* DB not ready */
-    }
-    return [];
-}
-
-/**
  * Get the default memory space when no agent context is available.
  */
 function getDefaultMemorySpaces(): { id: string; name: string }[] {
     const defaultSpace = getDefaultMemorySpace();
     return defaultSpace ? [defaultSpace] : [];
-}
-
-/**
- * Build a SQL filter covering all assigned memory spaces for an agent.
- */
-function buildMemorySpaceFilter(
-    assignedSpaces: { id: string }[],
-): string | undefined {
-    if (assignedSpaces.length === 0) return undefined;
-    const quoted = assignedSpaces
-        .map((s) => `'${s.id.replace(/'/g, "''")}'`)
-        .join(", ");
-    return `spaceId IN (${quoted})`;
 }
 
 /**
@@ -311,7 +260,7 @@ export function hydrateBuiltInTools(
 ): ToolDefinition[] {
     const assignedSpaces =
         ctx.memorySpaceOverrides ??
-        (ctx.agentId ? getAssignedSpaces(ctx.agentId) : getDefaultMemorySpaces());
+        (ctx.agentId ? getAssignedOrDefaultSpaces(ctx.agentId) : getDefaultMemorySpaces());
     const spaceFilter = buildMemorySpaceFilter(assignedSpaces);
 
     return tools.map((t) => {
