@@ -6,6 +6,7 @@ import { Icon } from '@iconify/vue'
 import { useProviderStore } from '../../../stores/provider.store'
 import { useProviderLogos } from '../../../composables/useProviderLogos'
 import ModalDialog from '../../shared/ModalDialog.vue'
+import ToggleSwitch from '../../shared/ToggleSwitch.vue'
 
 const agentDefs = useAgentDefinitionsStore()
 const chatStore = useChatStore()
@@ -63,6 +64,23 @@ function toSubAgentCodename(name: string): string {
       placeholder="Search agents…"
       class="w-full px-3 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 outline-none focus:border-zinc-500 transition-colors mb-3"
     >
+
+    <div class="mb-3 flex items-center justify-between gap-4 rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2.5">
+      <div class="min-w-0">
+        <div class="text-sm text-zinc-200">
+          Enforce model
+        </div>
+        <div class="text-[11px] text-zinc-500">
+          Keep the main agent's provider and model across the selected sub-agents.
+        </div>
+      </div>
+      <ToggleSwitch
+        :model-value="chatStore.sessionOverrideSubAgents"
+        size="sm"
+        color="amber"
+        @update:model-value="chatStore.sessionOverrideSubAgents = $event"
+      />
+    </div>
 
     <!-- Agent list -->
     <div class="overflow-y-auto space-y-1 max-h-80">

@@ -6,7 +6,6 @@ import { useProviderStore } from "../../stores/provider.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { Icon } from "@iconify/vue";
 import AgentSelect from "../shared/AgentSelect.vue";
-import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import { useChatSidebar } from "../../composables/useSidebar";
 
 const chatStore = useChatStore();
@@ -130,37 +129,6 @@ function onTitleKeydown(e: KeyboardEvent): void {
         @change="onAgentChange"
       />
     </div>
-
-    <!-- Sub-agent override toggle (next to provider) -->
-    <label
-      v-if="
-        selectedAgent?.subAgents?.length ||
-          chatStore.freeChatSubAgentIds?.length
-      "
-      class="items-center gap-1.5 hidden md:flex cursor-pointer select-none shrink-0"
-      :title="
-        chatStore.sessionOverrideSubAgents
-          ? 'Model applies to all sub-agents — click to restrict to main agent only'
-          : 'Model applies to main agent only — click to propagate to sub-agents'
-      "
-    >
-      <ToggleSwitch
-        :model-value="chatStore.sessionOverrideSubAgents"
-        size="sm"
-        color="amber"
-        @update:model-value="chatStore.sessionOverrideSubAgents = $event"
-      />
-      <span
-        class="text-[10px]"
-        :class="
-          chatStore.sessionOverrideSubAgents
-            ? 'text-amber-400'
-            : 'text-zinc-500'
-        "
-      >
-        Apply to All agents
-      </span>
-    </label>
 
     <!-- Centered conversation title + origin badge -->
     <div class="flex-1 min-w-0 flex items-center justify-center gap-2">

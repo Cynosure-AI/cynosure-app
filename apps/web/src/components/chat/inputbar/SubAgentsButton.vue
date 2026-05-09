@@ -23,6 +23,10 @@ const selectedSubAgents = computed(() => {
 const missingSubAgents = computed(() =>
   chatStore.freeChatSubAgentIds.filter(id => !agentDefs.get(id))
 )
+
+const applyToAllStateLabel = computed(() =>
+  chatStore.sessionOverrideSubAgents ? 'Enforce model enabled' : 'Enforce model disabled'
+)
 </script>
 
 <template>
@@ -58,6 +62,14 @@ const missingSubAgents = computed(() =>
     <template #content>
       <div class="font-medium text-zinc-300 mb-1.5">
         Sub-Agents ({{ subAgentCount }} selected)
+      </div>
+      <div
+        class="mb-1.5 px-1 py-1 rounded border text-[10px]"
+        :class="chatStore.sessionOverrideSubAgents
+          ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+          : 'bg-zinc-800/80 border-zinc-700 text-zinc-400'"
+      >
+        {{ applyToAllStateLabel }}
       </div>
       <template v-if="missingSubAgents.length">
         <div class="mb-1.5 px-1 py-1 rounded bg-amber-500/10 border border-amber-500/20">
