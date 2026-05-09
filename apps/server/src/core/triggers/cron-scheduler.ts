@@ -92,9 +92,10 @@ export function createCronJob(input: { name?: string; agentId: string; schedule:
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
+    // Set lastRunAt to now so missed first runs are caught up after downtime
     db.prepare(
-        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, model_override, provider_override, output_channel_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.modelOverride || '', input.providerOverride || '', input.outputChannelId || '', now, now)
+        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, model_override, provider_override, output_channel_id, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.modelOverride || '', input.providerOverride || '', input.outputChannelId || '', now, now, now)
     return getCronJob(id)!
 }
 
