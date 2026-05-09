@@ -51,6 +51,8 @@ export interface PrepareExecutionInput {
     isFirstMessage?: boolean
     /** Recently invoked tools that should survive routing for this execution turn */
     usedToolNames?: Set<string>
+    /** Preferred tool registry keys that should be softly favored during routing */
+    preferredToolKeys?: string[]
     /** Enable context-aware MCP tool routing for this execution */
     autoToolRouting?: boolean
     /** Optional provider override for the router confirmation pass */
@@ -118,10 +120,15 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     const routingEnabled = isToolRoutingEnabled(agent, input.autoToolRouting)
     const configuredToolKeys = agent.tools || []
-    const toolKeys = routingEnabled && configuredToolKeys.length === 0
+    const toolKeys = routingEnabled
         ? toolRegistry.listRegisteredTools().map((tool) => tool.key)
         : configuredToolKeys
     let tools = toolRegistry.resolveForExecution(toolKeys)
+    const preferredToolNames = routingEnabled
+        ? toolRegistry
+            .resolveForExecution(input.preferredToolKeys ?? configuredToolKeys)
+            .map((tool) => tool.name)
+        : []
 
     // ── 2. Resolve provider / model ──
     // Must happen before sub-agent tool building so we can pass the resolved
@@ -170,6 +177,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
                 model,
                 routerModel,
                 mcpMetadata: toolRegistry.getNamespaceMetadataForTools(tools),
+                preferredToolNames: preferredToolNames.length ? new Set(preferredToolNames) : undefined,
                 usedToolNames: input.usedToolNames,
             })
             emitToolRoutingSelection(conversationId, routingTaskId, tools)
