@@ -57,14 +57,6 @@ function toSubAgentCodename(name: string): string {
     max-width="max-w-lg"
     @close="visible = false"
   >
-    <!-- Search -->
-    <input
-      v-model="search"
-      type="text"
-      placeholder="Search agents…"
-      class="w-full px-3 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 outline-none focus:border-zinc-500 transition-colors mb-3"
-    >
-
     <div class="mb-3 flex items-center justify-between gap-4 rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2.5">
       <div class="min-w-0">
         <div class="text-sm text-zinc-200">
@@ -81,6 +73,15 @@ function toSubAgentCodename(name: string): string {
         @update:model-value="chatStore.sessionOverrideSubAgents = $event"
       />
     </div>
+    
+    <!-- Search -->
+    <input
+      v-model="search"
+      type="text"
+      placeholder="Search agents…"
+      class="w-full px-3 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 outline-none focus:border-zinc-500 transition-colors mb-3"
+    >
+
 
     <!-- Agent list -->
     <div class="overflow-y-auto space-y-1 max-h-80">
