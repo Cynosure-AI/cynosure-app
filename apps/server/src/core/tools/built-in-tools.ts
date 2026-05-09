@@ -172,24 +172,35 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_update",
         description:
-            "[Experimental] Update an existing memory entry by replacing its content entirely.",
+            "Update an existing memory entry. Auto-matches the title to find the entry; if multiple spaces contain the same title, space parameter is required. " +
+            "By default, replaces all content. Use chunkStartIndex and chunkEndIndex to update only specific chunks.",
         parameters: {
             type: "object",
             properties: {
                 title: {
                     type: "string",
                     description:
-                        "The exact title of the existing memory entry to update.",
+                        "The title (source file name) of the memory entry to update. Auto-matched across assigned spaces.",
                 },
                 content: {
                     type: "string",
                     description:
-                        "The new text content that will replace the old content.",
+                        "The new text content. Replaces all content by default, or specific chunks if using chunkStartIndex/chunkEndIndex.",
                 },
                 space: {
                     type: "string",
                     description:
-                        "Target memory space name or ID. Required when multiple memory spaces are assigned, or when none are assigned and you need to choose an existing space.",
+                        "Memory space name or ID. Required only when the title exists in multiple spaces; otherwise auto-selected.",
+                },
+                chunkStartIndex: {
+                    type: "number",
+                    description:
+                        "Optional: zero-based index of the first chunk to replace. Omit to replace entire content.",
+                },
+                chunkEndIndex: {
+                    type: "number",
+                    description:
+                        "Optional: zero-based index of the last chunk to replace (inclusive). Required if chunkStartIndex is provided.",
                 },
             },
             required: ["title", "content"],

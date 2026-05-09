@@ -409,24 +409,33 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
     return {
         name: 'memory_update',
         description:
-            '[Experimental] Update an existing memory entry by replacing its content entirely. ' +
-            'The old chunks are deleted and the new content is re-chunked and re-embedded. ' +
-            'Use the exact title (source file name) of the memory entry you want to update. ' +
-            'When the title exists in only one assigned space, it is updated automatically. ' +
-            'When the title exists in multiple spaces or you want to update a specific space, specify it using the "space" parameter. ' +
-            'If no explicit "space" is provided and no unique title match is found, falls back to the default memory space.',
+            'Update an existing memory entry. Auto-matches the title to find the entry; if multiple spaces contain the same title, space parameter is required. ' +
+            'By default, replaces all content and re-chunks/re-embeds. Use chunkStartIndex and chunkEndIndex to update only specific chunks while preserving others.',
         parameters: {
             type: 'object',
             properties: {
-                title: { type: 'string', description: 'The exact title (source file name) of the existing memory entry to update.' },
-                content: { type: 'string', description: 'The new text content that will replace the old content.' },
-                space: { type: 'string', description: 'Optional memory space name or ID. Use this when the title exists in multiple spaces, or to update in a specific space.' }
+                title: { type: 'string', description: 'The title (source file name) of the memory entry to update. Auto-matched across assigned spaces.' },
+                content: { type: 'string', description: 'The new text content. Replaces all content by default, or specific chunks if using chunkStartIndex/chunkEndIndex.' },
+                space: { type: 'string', description: 'Memory space name or ID. Required only when the title exists in multiple spaces; otherwise auto-selected.' },
+                chunkStartIndex: { type: 'number', description: 'Optional: zero-based index of the first chunk to replace. Omit to replace entire content.' },
+                chunkEndIndex: { type: 'number', description: 'Optional: zero-based index of the last chunk to replace (inclusive). Required if chunkStartIndex is provided.' }
             },
             required: ['title', 'content']
         },
         timeout: 30_000,
         execute: async (params: unknown) => {
-            const { title, content, space } = params as { title: string; content: string; space?: string }
+            const { title, content, space, chunkStartIndex, chunkEndIndex } = params as {
+                title: string; content: string; space?: string; chunkStartIndex?: number; chunkEndIndex?: number
+            }
+
+            // Validate chunk indices if provided
+            if ((chunkStartIndex !== undefined || chunkEndIndex !== undefined) &&
+                (chunkStartIndex === undefined || chunkEndIndex === undefined)) {
+                return { success: false, output: 'Both chunkStartIndex and chunkEndIndex are required when updating specific chunks.' }
+            }
+            if (chunkStartIndex !== undefined && chunkEndIndex !== undefined && chunkStartIndex > chunkEndIndex) {
+                return { success: false, output: 'chunkStartIndex must be less than or equal to chunkEndIndex.' }
+            }
 
             // For updates, use smart title-based resolution to find the right space
             const resolved = await resolveTargetSpace(assignedSpaces, space, title)
@@ -443,13 +452,34 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 return { success: false, output: `No memory entry found with title "${title}" in "${resolved.spaceName}". Use memory_create to create a new entry.` }
             }
 
-            // Delete old chunks within the target space
-            const deleted = await rag.deleteBySource('permanent_memory', title, targetFilter)
+            let deleted = 0
+            let chunks = 0
 
-            // Re-ingest with new content into the target space
-            const chunks = await mem.store(content, title, resolved.spaceId)
+            // Handle chunk-specific updates
+            if (chunkStartIndex !== undefined && chunkEndIndex !== undefined) {
+                // Delete only specified chunks
+                const escapedSource = title.replace(/'/g, "''")
+                const chunkFilter = `sourceFile = '${escapedSource}' AND chunkIndex >= ${chunkStartIndex} AND chunkIndex <= ${chunkEndIndex} AND ${targetFilter}`
+                await rag.deleteByFilter('permanent_memory', chunkFilter)
+                deleted = chunkEndIndex - chunkStartIndex + 1
 
-            return { success: true, output: `Memory "${title}" updated in "${resolved.spaceName}" (${deleted} old chunk${deleted !== 1 ? 's' : ''} removed, ${chunks} new chunk${chunks !== 1 ? 's' : ''} stored).` }
+                // Re-ingest the new content into the target space
+                chunks = await mem.store(content, title, resolved.spaceId)
+
+                return {
+                    success: true,
+                    output: `Memory "${title}" updated in "${resolved.spaceName}" (chunks ${chunkStartIndex}–${chunkEndIndex} replaced, ${deleted} old chunk${deleted !== 1 ? 's' : ''} removed, ${chunks} new chunk${chunks !== 1 ? 's' : ''} stored).`
+                }
+            } else {
+                // Full replacement: delete all chunks and re-ingest
+                deleted = await rag.deleteBySource('permanent_memory', title, targetFilter)
+                chunks = await mem.store(content, title, resolved.spaceId)
+
+                return {
+                    success: true,
+                    output: `Memory "${title}" updated in "${resolved.spaceName}" (${deleted} old chunk${deleted !== 1 ? 's' : ''} removed, ${chunks} new chunk${chunks !== 1 ? 's' : ''} stored).`
+                }
+            }
         }
     }
 }
