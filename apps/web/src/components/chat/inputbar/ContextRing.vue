@@ -9,8 +9,10 @@ const agentDefs = useAgentDefinitionsStore()
 
 const contextUsage = computed(() => {
   const usage = chatStore.lastUsage
-  let ctxWindow = chatStore.contextWindow
-  if (!ctxWindow) return null
+  const rawMax = chatStore.contextWindow
+  if (!rawMax) return null
+
+  let effectiveMax = rawMax
 
   // If the active agent has a hard max-context-token limit, cap the effective
   // context window so the ring reflects the tighter budget.
@@ -18,13 +20,15 @@ const contextUsage = computed(() => {
   const agentCap = activeAgent?.maxContextTokens
   const hasHardLimit = typeof agentCap === 'number' && agentCap > 0
   if (hasHardLimit) {
-    ctxWindow = Math.min(ctxWindow, agentCap!)
+    effectiveMax = Math.min(rawMax, agentCap!)
   }
 
-  if (!usage) return { used: 0, max: ctxWindow, percent: 0, hardLimit: hasHardLimit }
+  if (!usage) {
+    return { used: 0, max: effectiveMax, rawMax, percent: 0, hardLimit: hasHardLimit }
+  }
   const used = usage.contextTokens ?? usage.totalTokens
-  const percent = (used / ctxWindow) * 100
-  return { used, max: ctxWindow, percent, hardLimit: hasHardLimit }
+  const percent = (used / effectiveMax) * 100
+  return { used, max: effectiveMax, rawMax, percent, hardLimit: hasHardLimit }
 })
 </script>
 
@@ -77,16 +81,19 @@ const contextUsage = computed(() => {
       >
         <div class="font-medium text-zinc-300 mb-1.5">
           Context Window
-          <span
-            v-if="contextUsage.hardLimit"
-            class="ml-1 text-[10px] text-amber-400 font-normal"
-          >(agent limit)</span>
         </div>
         <div class="flex justify-between text-zinc-400 mb-0.5">
           <span>Used</span><span class="text-zinc-300">{{ contextUsage.used.toLocaleString() }}</span>
         </div>
         <div class="flex justify-between text-zinc-400 mb-0.5">
-          <span>Capacity</span><span class="text-zinc-300">{{ contextUsage.max.toLocaleString() }}</span>
+          <span>Capacity</span>
+          <span class="flex items-center gap-1.5">
+            <span
+              v-if="contextUsage.hardLimit"
+              class="text-zinc-500 line-through"
+            >{{ contextUsage.rawMax.toLocaleString() }}</span>
+            <span :class="contextUsage.hardLimit ? 'text-amber-300' : 'text-zinc-300'">{{ contextUsage.max.toLocaleString() }}</span>
+          </span>
         </div>
         <div class="flex justify-between text-zinc-400">
           <span>Usage</span>
