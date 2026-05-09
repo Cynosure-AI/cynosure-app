@@ -1,6 +1,6 @@
 import { getAgentMemory } from './agent-memory.js'
 import { getDb } from '../../db/database.js'
-import { buildMemorySpaceFilter, getAssignedOrDefaultSpaces } from './memory-space-scope.js'
+import { buildMemorySpaceFilter, getAssignedOrDefaultSpaces, getDefaultMemorySpace } from './memory-space-scope.js'
 import type { RetrievedChunk } from './parser.js'
 
 export interface AggregatedMemory {
@@ -12,8 +12,9 @@ export interface AggregatedMemory {
  * Deduplicates and ranks results for injection into the agent's context.
  * 
  * Fallback logic:
+ * - If explicit space IDs are provided → query only those spaces
  * - If agent has explicit memory space assignments → query only those spaces
- * - If agent has NO assignments → fallback to default space only
+ * - If agent has NO assignments or no scope is provided → fallback to default space only
  */
 export class MemoryAggregator {
   /**
@@ -25,6 +26,7 @@ export class MemoryAggregator {
     opts?: {
       conversationId?: string
       agentId?: string
+      spaceIds?: string[]
       permanentTopK?: number
     }
   ): Promise<AggregatedMemory> {
@@ -33,8 +35,30 @@ export class MemoryAggregator {
     let spaceFilter: string | undefined
     const spaceNameMap = new Map<string, string>()
 
-    if (opts?.agentId) {
-      const scopedSpaces = getAssignedOrDefaultSpaces(opts.agentId)
+    let scopedSpaces: { id: string; name: string }[] = []
+
+    if (opts?.spaceIds?.length) {
+      try {
+        const db = getDb()
+        const uniqueSpaceIds = [...new Set(opts.spaceIds.map((s) => s.trim()).filter(Boolean))]
+        if (uniqueSpaceIds.length > 0) {
+          const placeholders = uniqueSpaceIds.map(() => '?').join(', ')
+          scopedSpaces = db.prepare(`SELECT id, name FROM memory_spaces WHERE id IN (${placeholders})`).all(...uniqueSpaceIds) as { id: string; name: string }[]
+        }
+      } catch { /* DB not ready */ }
+    } else if (opts?.agentId) {
+      scopedSpaces = getAssignedOrDefaultSpaces(opts.agentId)
+    } else {
+      const defaultSpace = getDefaultMemorySpace()
+      if (defaultSpace) scopedSpaces = [defaultSpace]
+    }
+
+    if (scopedSpaces.length === 0) {
+      const defaultSpace = getDefaultMemorySpace()
+      if (defaultSpace) scopedSpaces = [defaultSpace]
+    }
+
+    if (scopedSpaces.length > 0) {
       for (const row of scopedSpaces) spaceNameMap.set(row.id, row.name)
       spaceFilter = buildMemorySpaceFilter(scopedSpaces)
     }

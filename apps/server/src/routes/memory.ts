@@ -5,6 +5,7 @@ import { getHistoryStore } from '../core/memory/history.js'
 import { getEmbeddingProvider } from '../core/memory/embedding.js'
 import { getMemoryParser } from '../core/memory/parser.js'
 import { getRAGStore } from '../core/memory/rag.js'
+import { buildMemorySpaceFilter, getDefaultMemorySpace } from '../core/memory/memory-space-scope.js'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import OpenAI from 'openai'
@@ -17,7 +18,9 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   app.post<{ Body: { query: string; topK?: number } }>('/search', async (req) => {
     const { query, topK } = req.body
     const mem = getAgentMemory()
-    return mem.recall(query, topK)
+    const defaultSpace = getDefaultMemorySpace()
+    const filter = defaultSpace ? buildMemorySpaceFilter([defaultSpace]) : undefined
+    return mem.recall(query, topK, filter)
   })
 
   // POST /api/memory/entries/delete — delete entries by IDs
@@ -31,7 +34,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
 
   // POST /api/memory/aggregate — aggregated search
   app.post<{
-    Body: { query: string; opts?: { taskId?: string; conversationId?: string } }
+    Body: { query: string; opts?: { taskId?: string; conversationId?: string; agentId?: string; spaceIds?: string[] } }
   }>('/aggregate', async (req) => {
     const { query, opts } = req.body
     const aggregator = getMemoryAggregator()
