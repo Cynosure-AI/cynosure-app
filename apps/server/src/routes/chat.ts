@@ -4,7 +4,7 @@ import { getGateway } from '../core/gateway/gateway.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor } from '../core/agent/agent-executor.js'
-import { planChatExecution } from '../core/agent/pre-execution/chat-execution-planner.js'
+import { planExecution } from '../core/agent/pre-execution/execution-planner.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
@@ -179,9 +179,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const selectedToolKeys = Array.isArray(allowedTools)
         ? Array.from(new Set(allowedTools)).filter((name) => toolRegistry.hasKey(name))
         : []
-      const stickyPreferredToolNames = reqAutoToolRouting === true
-        ? toolRegistry.resolveForExecution(selectedToolKeys).map((tool) => tool.name)
-        : []
       const hasExplicitToolAllowlist = Array.isArray(allowedTools)
         && reqAutoToolRouting !== true
 
@@ -305,7 +302,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       let chatAgentIconUrl: string | null | undefined
       let hasSubAgents = false
 
-      const planned = await planChatExecution({
+      const planned = await planExecution({
         resolvedAgent,
         conversationId,
         broadcast,
@@ -314,18 +311,19 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         toolRegistry,
         messages,
         userText: content,
-        providerOverride: providerOverride || undefined,
-        modelOverride: model || undefined,
-        systemPrompt: systemPrompt || undefined,
-        requestedSubAgents: reqSubAgents,
-        memorySpaceOverrides,
-        overrideSubAgents: overrideSubAgents !== false,
-        autoToolRouting: reqAutoToolRouting === true,
-        toolRouterProviderId: reqToolRouterProviderId || undefined,
-        toolRouterModel: reqToolRouterModel || undefined,
-        selectedToolKeys,
-        hasExplicitToolAllowlist,
-        stickyPreferredToolNames,
+        run: {
+          providerOverride: providerOverride || undefined,
+          modelOverride: model || undefined,
+          systemPrompt: systemPrompt || undefined,
+          requestedSubAgents: reqSubAgents,
+          memorySpaceOverrides,
+          overrideSubAgents: overrideSubAgents !== false,
+          autoToolRouting: reqAutoToolRouting === true,
+          toolRouterProviderId: reqToolRouterProviderId || undefined,
+          toolRouterModel: reqToolRouterModel || undefined,
+          selectedToolKeys,
+          hasExplicitToolAllowlist,
+        },
       })
 
       tools = planned.tools

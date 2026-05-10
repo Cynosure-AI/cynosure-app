@@ -162,7 +162,7 @@ export async function llmConfirmTools(
 
     const parsedNames = selectionCall
         ? parseToolSelectionArguments(selectionCall.function.arguments)
-        : parseToolNameArray(result.content)
+        : null
 
     if (!parsedNames) {
         return lexicalToolFallback(query, candidateTools, FALLBACK_TOOL_COUNT, config.preferredToolNames)
@@ -534,40 +534,16 @@ function toolText(tool: ToolDefinition): string {
     return `${tool.name} ${tool.description}`
 }
 
-function parseToolNameArray(content: string): string[] | null {
-    const cleaned = content
-        .replace(/<think>[\s\S]*?<\/think>/gi, '')
-        .replace(/^```(?:json)?/i, '')
-        .replace(/```$/i, '')
-        .trim()
-
-    const start = cleaned.indexOf('[')
-    const end = cleaned.lastIndexOf(']')
-    if (start === -1 || end === -1 || end < start) return null
-
-    return extractJsonStringArray(cleaned.slice(start, end + 1))
-}
-
 function parseToolSelectionArguments(argumentsJson: string): string[] | null {
     try {
         const parsed = JSON.parse(argumentsJson) as unknown
 
-        if (Array.isArray(parsed)) return extractStringArray(parsed)
         if (!parsed || typeof parsed !== 'object') return null
 
         const args = parsed as Record<string, unknown>
-        const toolNames = args.toolNames || args.tools || args.selectedTools
+        const toolNames = args.toolNames
 
         return Array.isArray(toolNames) ? extractStringArray(toolNames) : null
-    } catch {
-        return null
-    }
-}
-
-function extractJsonStringArray(json: string): string[] | null {
-    try {
-        const parsed = JSON.parse(json) as unknown
-        return Array.isArray(parsed) ? extractStringArray(parsed) : null
     } catch {
         return null
     }

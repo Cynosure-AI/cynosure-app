@@ -3,7 +3,7 @@ import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { AgentExecutor, type AgentExecutorResult } from '../agent/agent-executor.js'
-import { planChatExecution } from '../agent/pre-execution/chat-execution-planner.js'
+import { planExecution } from '../agent/pre-execution/execution-planner.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import type { AgentData } from '../agents/agent-store.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
@@ -61,7 +61,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     // Notify caller of the conversationId before execution starts
     onConversationCreated?.(conversationId)
 
-    const planned = await planChatExecution({
+    const planned = await planExecution({
         resolvedAgent: agent,
         conversationId,
         broadcast,
@@ -70,9 +70,11 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         toolRegistry: getToolRegistry(),
         messages: [{ role: 'user', content: userContent }],
         userText: userContent,
-        providerOverride,
-        modelOverride,
-        systemPromptSuffix,
+        run: {
+            providerOverride,
+            modelOverride,
+            systemPromptSuffix,
+        },
     })
 
     // Persist session config so the chat view can restore the correct model/provider

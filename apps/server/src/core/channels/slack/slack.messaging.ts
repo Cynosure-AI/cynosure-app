@@ -1,7 +1,7 @@
 import { getDb } from '../../../db/database.js'
 import { getGateway } from '../../gateway/gateway.js'
 import { AgentExecutor } from '../../agent/agent-executor.js'
-import { planChatExecution } from '../../agent/pre-execution/chat-execution-planner.js'
+import { planExecution } from '../../agent/pre-execution/execution-planner.js'
 import { generateTitle } from '../../agent/post-execution.js'
 import { getAgent } from '../../agents/agent-store.js'
 import { getToolRegistry } from '../../tools/tool-registry.js'
@@ -173,7 +173,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         return
     }
 
-    const planned = await planChatExecution({
+    const planned = await planExecution({
         resolvedAgent,
         conversationId,
         broadcast: ctx.broadcast,
