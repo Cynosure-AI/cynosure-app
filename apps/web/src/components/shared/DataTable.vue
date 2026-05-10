@@ -93,6 +93,7 @@ function isSelected(id: string): boolean {
 
 const allSelected = computed(() => props.selectedIds.length === props.items.length && props.items.length > 0)
 const someSelected = computed(() => props.selectedIds.length > 0 && props.selectedIds.length < props.items.length)
+const anySelected = computed(() => props.selectedIds.length > 0)
 </script>
 
 <template>
@@ -153,7 +154,8 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
           >
             <input
               type="checkbox"
-              class="h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-blue-500 focus:ring-blue-500/60 cursor-pointer opacity-0 group-hover:opacity-100 md:opacity-100 transition-opacity"
+              class="h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-blue-500 focus:ring-blue-500/60 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+              :class="{ 'opacity-100': anySelected || isSelected(item.id) }"
               :checked="isSelected(item.id)"
               @change="toggleSelection(item.id)"
             >
