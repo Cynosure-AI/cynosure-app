@@ -5,7 +5,6 @@ import { getActiveChatExecutions, cancelChatExecution } from './chat.js'
 import { cancelPostActions } from '../core/agent/post-execution.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
-import { getActiveWatcherRuns, cancelWatcherRun } from '../core/triggers/file-watcher.js'
 import { getDb } from '../db/database.js'
 
 export async function registerInstanceRoutes(app: FastifyInstance): Promise<void> {
@@ -15,7 +14,7 @@ export async function registerInstanceRoutes(app: FastifyInstance): Promise<void
         const pendingHITLConversations = getHITLGate().getPendingConversationIds()
         const instances: {
             id: string
-            type: 'chat' | 'multi-agent' | 'cron' | 'channel' | 'file-watcher'
+            type: 'chat' | 'multi-agent' | 'cron' | 'channel'
             agentId: string
             agentName: string
             agentIconUrl: string | null
@@ -77,23 +76,6 @@ export async function registerInstanceRoutes(app: FastifyInstance): Promise<void
             })
         }
 
-        // Active file-watcher runs
-        for (const run of getActiveWatcherRuns()) {
-            const agent = getAgent(run.agentId)
-            instances.push({
-                id: `file-watcher-${run.watcherId}`,
-                type: 'file-watcher',
-                agentId: run.agentId,
-                agentName: agent?.name || 'Unknown',
-                agentIconUrl: agent?.iconUrl || null,
-                model: agent?.model || null,
-                conversationId: run.conversationId,
-                startedAt: run.startedAt,
-                intervalMinutes: 0,
-                status: pendingHITLConversations.has(run.conversationId) ? 'awaiting-approval' : 'running'
-            })
-        }
-
         return instances
     })
 
@@ -114,9 +96,6 @@ export async function registerInstanceRoutes(app: FastifyInstance): Promise<void
         } else if (id.startsWith('channel-')) {
             const executionId = id.slice(8)
             cancelled = getChannelManager().cancelExecution(executionId)
-        } else if (id.startsWith('file-watcher-')) {
-            const watcherId = id.slice(13)
-            cancelled = cancelWatcherRun(watcherId)
         }
 
         if (!cancelled) {

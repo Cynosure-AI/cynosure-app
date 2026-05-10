@@ -41,11 +41,6 @@ const originConfig: Record<
 > = {
   cron: { icon: "lucide:clock", color: "text-sky-400", label: "Cron" },
   channel: { icon: "lucide:send", color: "text-teal-400", label: "Channel" },
-  "file-watcher": {
-    icon: "lucide:eye",
-    color: "text-orange-400",
-    label: "File Watch",
-  },
   "multi-agent": {
     icon: "lucide:network",
     color: "text-purple-400",

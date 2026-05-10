@@ -162,11 +162,11 @@ export interface MemorySpace {
     documentCount: number
 }
 
-// ── Instances / Cron / Channels / File Watchers ─────────────────────────────
+// ── Instances / Cron / Channels ──────────────────────────────────────────────
 
 export interface AgentInstance {
     id: string
-    type: 'chat' | 'multi-agent' | 'cron' | 'channel' | 'file-watcher'
+    type: 'chat' | 'multi-agent' | 'cron' | 'channel'
     agentId: string
     agentName: string
     agentIconUrl: string | null
@@ -215,25 +215,6 @@ export interface ExecutionStepRecord {
 
 export type ChannelType = 'telegram' | 'discord' | 'slack'
 
-export interface FileWatcher {
-    id: string
-    name: string
-    agentId: string
-    paths: string[]
-    ignorePatterns: string[]
-    prompt: string
-    debounceMs: number
-    enabled: boolean
-    modelOverride: string
-    providerOverride: string
-    outputChannelId: string
-    createdAt: number
-    updatedAt: number
-    agentName: string
-    agentIconUrl: string | null
-    isWatching: boolean
-    isRunning: boolean
-}
 
 export interface ChannelDefinition {
     id: string

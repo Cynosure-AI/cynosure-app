@@ -3,7 +3,7 @@ import type {
   LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryResponse,
   AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace,
   AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType,
-  FileWatcher, MetricsSummary,
+  MetricsSummary,
 } from './types'
 import type { WsHandler } from './http'
 
@@ -444,22 +444,6 @@ export const api = {
       get<{ target: string; label: string; channelKey: string }[]>(`/api/channels/${encodeURIComponent(id)}/targets`),
   },
 
-  fileWatchers: {
-    list: () =>
-      get<FileWatcher[]>('/api/file-watchers'),
-    create: (input: { name?: string; agentId: string; paths: string[]; ignorePatterns?: string[]; prompt?: string; debounceMs?: number; enabled?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }) =>
-      post<FileWatcher>('/api/file-watchers', input),
-    update: (id: string, input: { name?: string; agentId?: string; paths?: string[]; ignorePatterns?: string[]; prompt?: string; debounceMs?: number; enabled?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }) =>
-      put<FileWatcher>(`/api/file-watchers/${encodeURIComponent(id)}`, input),
-    delete: (id: string) =>
-      del<{ success: boolean }>(`/api/file-watchers/${encodeURIComponent(id)}`),
-    start: (id: string) =>
-      post<{ success: boolean }>(`/api/file-watchers/${encodeURIComponent(id)}/start`),
-    stop: (id: string) =>
-      post<{ success: boolean }>(`/api/file-watchers/${encodeURIComponent(id)}/stop`),
-    cancel: (id: string) =>
-      post<{ success: boolean }>(`/api/file-watchers/${encodeURIComponent(id)}/cancel`),
-  },
 
   metrics: {
     get: (days = 30) =>

@@ -237,21 +237,6 @@ function createTables(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_ams_agent ON agent_memory_spaces(agent_id);
     CREATE INDEX IF NOT EXISTS idx_ams_space ON agent_memory_spaces(space_id);
 
-    CREATE TABLE IF NOT EXISTS file_watchers (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL DEFAULT '',
-      agent_id TEXT NOT NULL,
-      paths_json TEXT NOT NULL,
-      ignore_patterns_json TEXT,
-      prompt TEXT NOT NULL DEFAULT '',
-      debounce_ms INTEGER NOT NULL DEFAULT 5000,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      model_override TEXT NOT NULL DEFAULT '',
-      provider_override TEXT NOT NULL DEFAULT '',
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_file_watchers_agent ON file_watchers(agent_id);
   `)
 
   // Migrations for existing databases
@@ -294,8 +279,6 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('cron_jobs', 'output_channel_id', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('cron_jobs', 'output_target', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('cron_jobs', 'last_run_at', 'INTEGER')
-  addColumnIfMissing('file_watchers', 'output_channel_id', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('file_watchers', 'output_target', "TEXT NOT NULL DEFAULT ''")
 }
 
 export function closeDb(): void {

@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useProviderStore } from './stores/provider.store'
 import { useChatStore } from './stores/chat.store'
-import { useAgentStore } from './stores/agent-runtime.store'
+import { useAgentStore, type HITLRequest } from './stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from './stores/agent-definitions.store'
 import { usePreferencesStore } from './stores/preferences.store'
 import { useNotificationStore } from './stores/notification.store'
@@ -85,6 +85,16 @@ function handleMcpAuthComplete(data: { serverId: string; serverName: string; too
   agentStore.loadTools()
 }
 
+function isHITLRequestPayload(data: unknown): data is HITLRequest {
+  const d = data as Partial<HITLRequest> | null
+  return Boolean(d && typeof d.taskId === 'string' && Array.isArray(d.toolCalls))
+}
+
+function isExecutionUpdatePayload(data: unknown): data is { event: string; data: Record<string, unknown> } {
+  const d = data as { event?: unknown; data?: unknown } | null
+  return Boolean(d && typeof d.event === 'string' && d.data && typeof d.data === 'object')
+}
+
 onMounted(async () => {
   loadAllStores()
 
@@ -115,9 +125,16 @@ onMounted(async () => {
     api.chat.onNewMessage((data) => chatStore.handleNewMessage(data)),
     api.chat.onPostAction((data) => chatStore.handlePostAction(data)),
     // Agent event listeners
-    api.agent.onHITLRequest((data) => agentStore.handleHITLRequest(data as any)),
-    api.agent.onHITLResolved((data) => { agentStore.dismissHITLByTaskId((data as any)?.taskId) }),
-    api.agent.onExecutionUpdate((data) => agentStore.handleExecutionUpdate(data as any)),
+    api.agent.onHITLRequest((data) => {
+      if (isHITLRequestPayload(data)) agentStore.handleHITLRequest(data)
+    }),
+    api.agent.onHITLResolved((data) => {
+      const payload = data as { taskId?: string } | null
+      agentStore.dismissHITLByTaskId(payload?.taskId)
+    }),
+    api.agent.onExecutionUpdate((data) => {
+      if (isExecutionUpdatePayload(data)) agentStore.handleExecutionUpdate(data)
+    }),
     api.mcp.onAuthNeeded(handleMcpAuth),
     api.mcp.onAuthComplete(handleMcpAuthComplete),
     api.notifications.onCreated((data) => notificationStore.addFromWs(data))

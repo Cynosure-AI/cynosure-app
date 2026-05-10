@@ -420,10 +420,9 @@ async function confirmReset(): Promise<void> {
                   : o.origin === 'heartbeat' ? 'lucide:heart-pulse'
                     : o.origin === 'webhook' ? 'lucide:webhook'
                       : o.origin === 'cron' ? 'lucide:clock'
-                        : o.origin === 'file-watcher' ? 'lucide:eye'
-                          : o.origin === 'discord' ? 'simple-icons:discord'
-                            : o.origin === 'slack' ? 'simple-icons:slack'
-                              : 'lucide:zap'"
+                        : o.origin === 'discord' ? 'simple-icons:discord'
+                          : o.origin === 'slack' ? 'simple-icons:slack'
+                            : 'lucide:zap'"
                 class="w-3.5 h-3.5 text-zinc-500"
               />
               <span class="text-xs text-zinc-300 capitalize">{{ o.origin }}</span>

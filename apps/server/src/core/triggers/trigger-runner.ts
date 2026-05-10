@@ -15,7 +15,7 @@ export interface TriggerRunConfig {
     agent: AgentData
     /** User message content for this trigger execution */
     userContent: string
-    /** Conversation origin label (e.g. 'cron', 'file-watcher') */
+    /** Conversation origin label (e.g. 'cron') */
     origin: string
     /** Conversation title */
     title: string
@@ -29,7 +29,7 @@ export interface TriggerRunConfig {
     broadcast: BroadcastFn
     /** Abort signal for cancellation */
     signal: AbortSignal
-    /** Log prefix for console messages (e.g. '[cron]', '[file-watcher]') */
+    /** Log prefix for console messages (e.g. '[cron]') */
     logPrefix: string
     /** Called as soon as the conversation is created, before execution starts */
     onConversationCreated?: (conversationId: string) => void
@@ -41,7 +41,7 @@ export interface TriggerRunResult {
 }
 
 /**
- * Shared orchestration for trigger-based agent executions (cron, file-watcher).
+ * Shared orchestration for trigger-based agent executions.
  *
  * Creates a conversation, prepares the execution context, runs the agent
  * executor, saves messages, and returns the result. The caller is responsible
