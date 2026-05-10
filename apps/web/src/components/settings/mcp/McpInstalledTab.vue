@@ -151,10 +151,10 @@ const filteredServers = computed(() => {
 // Table columns definition for DataTable component
 const tableColumns: Column[] = [
   { key: 'server', label: 'Server', width: 'minmax(0,1.75fr)' },
-  { key: 'tools', label: 'Tools', width: '120px' },
-  { key: 'status', label: 'Status', width: '170px' },
-  { key: 'actions', label: 'Actions', width: '260px' },
-  { key: 'enable', label: 'Enable', width: '56px' },
+  { key: 'tools', label: 'Tools', width: '120px', hideOnMobile: true, hideOnTablet: true },
+  { key: 'status', label: 'Status', width: '120px', hideOnMobile: true },
+  { key: 'actions', label: 'Actions', width: '200px' },
+  { key: 'enable', label: 'Enable', width: '56px', hideOnMobile: true},
 ]
 
 const newServer = reactive({ name: '', description: '', command: '', args: '', env: '' })
@@ -477,281 +477,279 @@ defineExpose({ loadServers })
     </div>
 
     <template v-if="installedView === 'table'">
-      <div
+      <DataTable
         v-if="filteredServers.length"
-        class="rounded-xl border border-zinc-800 overflow-hidden bg-zinc-950/45"
+        :items="filteredServers"
+        :columns="tableColumns"
+        empty-message="No servers found"
       >
-        <div class="hidden md:grid md:grid-cols-[minmax(0,1.75fr)_120px_170px_260px_56px] px-5 py-3 text-[11px] tracking-wider uppercase text-zinc-400 bg-zinc-900/70 border-b border-zinc-800">
-          <span>Server</span>
-          <span>Tools</span>
-          <span>Status</span>
-          <span>Actions</span>
-          <span>Enable</span>
-        </div>
-
-        <div
-          v-for="server in filteredServers"
-          :key="server.id"
-          class="border-b border-zinc-800/70 last:border-b-0"
-        >
-          <template v-if="editingId === server.id">
-            <div class="p-4 bg-zinc-900/45">
-              <div class="space-y-3">
-                <div class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="block text-xs text-zinc-400 mb-1">Custom name</label>
-                    <input
-                      v-model="editServer.name"
-                      type="text"
-                      :placeholder="originalServerName(server)"
-                      class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    >
-                  </div>
-                  <div>
-                    <label class="block text-xs text-zinc-400 mb-1">Command</label>
-                    <input
-                      v-model="editServer.command"
-                      type="text"
-                      class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    >
-                  </div>
-                </div>
-                <div>
-                  <label class="block text-xs text-zinc-400 mb-1">Description</label>
-                  <textarea
-                    v-model="editServer.description"
-                    rows="2"
-                    :placeholder="server.description || server.serverInfo?.description || 'What this MCP server is useful for'"
-                    class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
-                  />
-                </div>
-                <div>
-                  <label class="block text-xs text-zinc-400 mb-1">Arguments (one per line)</label>
-                  <textarea
-                    v-model="editServer.args"
-                    rows="3"
-                    class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label class="block text-xs text-zinc-400 mb-1">Environment Variables</label>
-                  <template v-if="server.envHints?.length">
-                    <div class="space-y-2">
-                      <div
-                        v-for="hint in server.envHints"
-                        :key="hint.name"
-                      >
-                        <label class="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
-                          <span class="font-mono">{{ hint.name }}</span>
-                          <span
-                            v-if="hint.required"
-                            class="text-red-400/80"
-                          >*</span>
-                          <span
-                            v-if="hint.description"
-                            class="text-zinc-400/70 font-normal"
-                          >- {{ hint.description }}</span>
-                        </label>
-                        <input
-                          v-model="editEnvFields[hint.name]"
-                          :type="hint.sensitive ? 'password' : 'text'"
-                          :placeholder="hint.name"
-                          class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
-                        >
-                      </div>
-                    </div>
-                    <div class="mt-2">
-                      <label class="block text-[11px] text-zinc-500 mb-1">Additional env vars (KEY=VALUE, one per line)</label>
-                      <textarea
-                        v-model="editServer.env"
-                        rows="2"
-                        placeholder="EXTRA_VAR=value"
-                        class="w-full resize-y bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
-                      />
-                    </div>
-                  </template>
-                  <template v-else>
-                    <textarea
-                      v-model="editServer.env"
-                      rows="3"
-                      class="w-full resize-y bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
-                      placeholder="API_KEY=sk-..."
-                    />
-                  </template>
-                </div>
-                <div
-                  v-if="actionError['edit']"
-                  class="text-xs text-red-400"
+        <!-- Server column -->
+        <template #col-server="{ item: server }">
+          <div
+            v-if="editingId === server.id"
+            class="space-y-3 py-2"
+          >
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-zinc-400 mb-1">Custom name</label>
+                <input
+                  v-model="editServer.name"
+                  type="text"
+                  :placeholder="originalServerName(server)"
+                  class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
-                  {{ actionError['edit'] }}
-                </div>
-                <div class="flex gap-2 justify-end">
-                  <button
-                    class="px-3 py-1.5 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-md transition-colors"
-                    @click="cancelEditing"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    :disabled="!editServer.command || isLoading(server.id)"
-                    class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
-                    @click="saveEditing(server.id)"
-                  >
-                    {{ isLoading(server.id) ? 'Saving...' : 'Save & Reconnect' }}
-                  </button>
-                </div>
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-400 mb-1">Command</label>
+                <input
+                  v-model="editServer.command"
+                  type="text"
+                  class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
               </div>
             </div>
-          </template>
-
-          <template v-else>
-            <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1.75fr)_120px_170px_260px_56px] gap-3 md:gap-4 px-4 py-4 md:px-5 items-start">
-              <div class="min-w-0 flex items-start gap-3">
-                <div class="relative shrink-0 mt-0.5">
-                  <img
-                    v-if="hasUsableIcon(server)"
-                    :src="server.icon_url"
-                    class="w-10 h-10 rounded-lg object-cover"
-                    :class="!server.connected && 'opacity-40 grayscale'"
-                    @error="onServerIconError(server)"
-                  >
+            <div>
+              <label class="block text-xs text-zinc-400 mb-1">Description</label>
+              <textarea
+                v-model="editServer.description"
+                rows="2"
+                :placeholder="server.description || server.serverInfo?.description || 'What this MCP server is useful for'"
+                class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-400 mb-1">Arguments (one per line)</label>
+              <textarea
+                v-model="editServer.args"
+                rows="3"
+                class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-400 mb-1">Environment Variables</label>
+              <template v-if="server.envHints?.length">
+                <div class="space-y-2">
                   <div
-                    v-else
-                    class="w-10 h-10 rounded-lg flex items-center justify-center"
-                    :class="server.connected ? 'bg-blue-500/15 text-blue-300' : 'bg-zinc-700/50 text-zinc-500'"
+                    v-for="hint in server.envHints"
+                    :key="hint.name"
                   >
-                    <Icon
-                      icon="lucide:plug"
-                      class="w-5 h-5"
-                    />
+                    <label class="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
+                      <span class="font-mono">{{ hint.name }}</span>
+                      <span
+                        v-if="hint.required"
+                        class="text-red-400/80"
+                      >*</span>
+                      <span
+                        v-if="hint.description"
+                        class="text-zinc-400/70 font-normal"
+                      >- {{ hint.description }}</span>
+                    </label>
+                    <input
+                      v-model="editEnvFields[hint.name]"
+                      :type="hint.sensitive ? 'password' : 'text'"
+                      :placeholder="hint.name"
+                      class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+                    >
                   </div>
-                  <div
-                    class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-zinc-900"
-                    :class="server.connected ? 'bg-emerald-500' : server.enabled ? 'bg-blue-400' : 'bg-zinc-500'"
+                </div>
+                <div class="mt-2">
+                  <label class="block text-[11px] text-zinc-500 mb-1">Additional env vars (KEY=VALUE, one per line)</label>
+                  <textarea
+                    v-model="editServer.env"
+                    rows="2"
+                    placeholder="EXTRA_VAR=value"
+                    class="w-full resize-y bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
                   />
                 </div>
-
-                <div class="min-w-0">
-                  <div class="text-sm font-medium text-zinc-100 truncate">
-                    {{ server.name || server.serverInfo?.title }}
-                  </div>
-                  <div
-                    v-if="server.description || server.serverInfo?.description"
-                    class="text-xs text-zinc-400 mt-0.5 line-clamp-2"
-                  >
-                    {{ server.description || server.serverInfo?.description }}
-                  </div>
-                  <div class="text-xs text-zinc-500 mt-1 truncate font-mono">
-                    {{ server.command }} {{ server.args.join(' ') }}
-                  </div>
-                </div>
-              </div>
-
-              <div class="md:pt-1">
-                <span
-                  class="inline-flex items-center text-[11px] px-2 py-1 rounded-md"
-                  :class="server.toolCount > 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-700/60 text-zinc-400'"
-                >
-                  {{ server.toolCount }} {{ server.toolCount === 1 ? 'tool' : 'tools' }}
-                </span>
-              </div>
-
-              <div class="md:pt-1">
-                <span
-                  class="inline-flex items-center gap-1.5 text-xs"
-                  :class="server.connected ? 'text-emerald-400' : server.enabled ? (server.pendingAuthUrl ? 'text-blue-400' : 'text-red-400') : 'text-zinc-500'"
-                >
-                  <span
-                    class="w-1.5 h-1.5 rounded-full"
-                    :class="server.connected ? 'bg-emerald-400' : server.enabled ? (server.pendingAuthUrl ? 'bg-blue-400' : 'bg-red-400') : 'bg-zinc-500'"
-                  />
-                  {{ server.connected ? 'Connected' : server.enabled ? (server.pendingAuthUrl ? 'Authorization required' : 'Disconnected') : 'Disabled' }}
-                </span>
-              </div>
-
-              <div class="flex flex-wrap items-center gap-1.5 md:justify-start">
-                <button
-                  class="px-2.5 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors"
-                  @click="startEditing(server)"
-                >
-                  Edit
-                </button>
-
-                <button
-                  v-if="server.enabled && server.pendingAuthUrl && authInProgress !== server.id"
-                  class="px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-md transition-colors"
-                  @click="startAuth(server)"
-                >
-                  Authorize
-                </button>
-                <button
-                  v-else-if="server.enabled && server.pendingAuthUrl && authInProgress === server.id"
-                  :disabled="isLoading(server.id)"
-                  class="px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
-                  @click="finishAuth(server.id)"
-                >
-                  {{ isLoading(server.id) ? 'Reconnecting...' : 'Reconnect' }}
-                </button>
-                <button
-                  v-else-if="server.enabled"
-                  class="px-2.5 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors"
-                  :disabled="isLoading(server.id)"
-                  @click="reconnectServer(server.id)"
-                >
-                  {{ isLoading(server.id) ? 'Connecting...' : 'Reconnect' }}
-                </button>
-
-                <button
-                  class="p-1.5 text-zinc-600 hover:text-red-400 rounded-md hover:bg-red-500/10 transition-colors"
-                  @click="removeServer(server.id)"
-                >
-                  <Icon
-                    icon="lucide:trash-2"
-                    class="w-3.5 h-3.5"
-                  />
-                </button>
-
-                <button
-                  v-if="server.enabled && !server.pendingAuthUrl && (server.origin === 'smithery.ai' || server.args.some(a => /^https?:\/\//.test(a) || a === 'mcp-remote'))"
-                  class="p-1.5 text-zinc-600 hover:text-blue-400 rounded-md hover:bg-blue-500/10 transition-colors"
-                  :disabled="isLoading(server.id)"
-                  title="Clear cached OAuth tokens and re-authorize"
-                  @click="reauthServer(server.id)"
-                >
-                  <Icon
-                    icon="lucide:key"
-                    class="w-3.5 h-3.5"
-                  />
-                </button>
-              </div>
-
-              <div class="md:pt-1 flex items-center">
-                <ToggleSwitch
-                  :model-value="server.enabled"
-                  size="sm"
-                  color="green"
-                  :title="server.enabled ? 'Disable' : 'Enable'"
-                  @update:model-value="toggleServer(server.id)"
+              </template>
+              <template v-else>
+                <textarea
+                  v-model="editServer.env"
+                  rows="3"
+                  class="w-full resize-y bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+                  placeholder="API_KEY=sk-..."
+                />
+              </template>
+            </div>
+            <div
+              v-if="actionError['edit']"
+              class="text-xs text-red-400"
+            >
+              {{ actionError['edit'] }}
+            </div>
+            <div class="flex gap-2 justify-end">
+              <button
+                class="px-3 py-1.5 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-md transition-colors"
+                @click="cancelEditing"
+              >
+                Cancel
+              </button>
+              <button
+                :disabled="!editServer.command || isLoading(server.id)"
+                class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
+                @click="saveEditing(server.id)"
+              >
+                {{ isLoading(server.id) ? 'Saving...' : 'Save & Reconnect' }}
+              </button>
+            </div>
+          </div>
+          <div
+            v-else
+            class="min-w-0 flex items-start gap-3"
+          >
+            <div class="relative shrink-0 mt-0.5">
+              <img
+                v-if="hasUsableIcon(server)"
+                :src="server.icon_url"
+                class="w-10 h-10 rounded-lg object-cover"
+                :class="!server.connected && 'opacity-40 grayscale'"
+                @error="onServerIconError(server)"
+              >
+              <div
+                v-else
+                class="w-10 h-10 rounded-lg flex items-center justify-center"
+                :class="server.connected ? 'bg-blue-500/15 text-blue-300' : 'bg-zinc-700/50 text-zinc-500'"
+              >
+                <Icon
+                  icon="lucide:plug"
+                  class="w-5 h-5"
                 />
               </div>
+              <div
+                class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-zinc-900"
+                :class="server.connected ? 'bg-emerald-500' : server.enabled ? 'bg-blue-400' : 'bg-zinc-500'"
+              />
             </div>
 
-            <div
-              v-if="server.envHints?.length && server.envHints.some(h => h.required && !server.env[h.name])"
-              class="px-4 pb-3 md:px-5 text-[11px] text-blue-400/90"
-            >
-              Requires: {{ server.envHints.filter(h => h.required && !server.env[h.name]).map(h => h.name).join(', ') }}
+            <div class="min-w-0">
+              <div class="text-sm font-medium text-zinc-100 truncate">
+                {{ server.name || server.serverInfo?.title }}
+              </div>
+              <div
+                v-if="server.description || server.serverInfo?.description"
+                class="text-xs text-zinc-400 mt-0.5 line-clamp-2"
+              >
+                {{ server.description || server.serverInfo?.description }}
+              </div>
+              <div class="text-xs text-zinc-500 mt-1 truncate font-mono">
+                {{ server.command }} {{ server.args.join(' ') }}
+              </div>
+              <div
+                v-if="server.envHints?.length && server.envHints.some(h => h.required && !server.env[h.name])"
+                class="text-[11px] text-blue-400/90 mt-1"
+              >
+                Requires: {{ server.envHints.filter(h => h.required && !server.env[h.name]).map(h => h.name).join(', ') }}
+              </div>
+              <div
+                v-if="actionError[server.id]"
+                class="text-xs text-red-400 mt-1"
+              >
+                {{ actionError[server.id] }}
+              </div>
             </div>
+          </div>
+        </template>
 
-            <div
-              v-if="actionError[server.id]"
-              class="px-4 pb-3 md:px-5 text-xs text-red-400"
+        <!-- Tools column -->
+        <template #col-tools="{ item: server }">
+          <span
+            v-if="!editingId || editingId !== server.id"
+            class="inline-flex items-center text-[11px] px-2 py-1 rounded-md"
+            :class="server.toolCount > 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-700/60 text-zinc-400'"
+          >
+            {{ server.toolCount }} {{ server.toolCount === 1 ? 'tool' : 'tools' }}
+          </span>
+        </template>
+
+        <!-- Status column -->
+        <template #col-status="{ item: server }">
+          <span
+            v-if="!editingId || editingId !== server.id"
+            class="inline-flex items-center gap-1.5 text-xs"
+            :class="server.connected ? 'text-emerald-400' : server.enabled ? (server.pendingAuthUrl ? 'text-blue-400' : 'text-red-400') : 'text-zinc-500'"
+          >
+            <span
+              class="w-1.5 h-1.5 rounded-full"
+              :class="server.connected ? 'bg-emerald-400' : server.enabled ? (server.pendingAuthUrl ? 'bg-blue-400' : 'bg-red-400') : 'bg-zinc-500'"
+            />
+            {{ server.connected ? 'Connected' : server.enabled ? (server.pendingAuthUrl ? 'Authorization required' : 'Disconnected') : 'Disabled' }}
+          </span>
+        </template>
+
+        <!-- Actions column -->
+        <template #col-actions="{ item: server }">
+          <div
+            v-if="!editingId || editingId !== server.id"
+            class="flex flex-wrap items-center gap-1.5"
+          >
+            <button
+              class="px-2.5 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors"
+              @click="startEditing(server)"
             >
-              {{ actionError[server.id] }}
-            </div>
-          </template>
-        </div>
-      </div>
+              Edit
+            </button>
+
+            <button
+              v-if="server.enabled && server.pendingAuthUrl && authInProgress !== server.id"
+              class="px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-md transition-colors"
+              @click="startAuth(server)"
+            >
+              Authorize
+            </button>
+            <button
+              v-else-if="server.enabled && server.pendingAuthUrl && authInProgress === server.id"
+              :disabled="isLoading(server.id)"
+              class="px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
+              @click="finishAuth(server.id)"
+            >
+              {{ isLoading(server.id) ? 'Reconnecting...' : 'Reconnect' }}
+            </button>
+            <button
+              v-else-if="server.enabled"
+              class="px-2.5 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors"
+              :disabled="isLoading(server.id)"
+              @click="reconnectServer(server.id)"
+            >
+              {{ isLoading(server.id) ? 'Connecting...' : 'Reconnect' }}
+            </button>
+
+            <button
+              class="p-1.5 text-zinc-600 hover:text-red-400 rounded-md hover:bg-red-500/10 transition-colors"
+              @click="removeServer(server.id)"
+            >
+              <Icon
+                icon="lucide:trash-2"
+                class="w-3.5 h-3.5"
+              />
+            </button>
+
+            <button
+              v-if="server.enabled && !server.pendingAuthUrl && (server.origin === 'smithery.ai' || server.args.some(a => /^https?:\/\//.test(a) || a === 'mcp-remote'))"
+              class="p-1.5 text-zinc-600 hover:text-blue-400 rounded-md hover:bg-blue-500/10 transition-colors"
+              :disabled="isLoading(server.id)"
+              title="Clear cached OAuth tokens and re-authorize"
+              @click="reauthServer(server.id)"
+            >
+              <Icon
+                icon="lucide:key"
+                class="w-3.5 h-3.5"
+              />
+            </button>
+          </div>
+        </template>
+
+        <!-- Enable column -->
+        <template #col-enable="{ item: server }">
+          <ToggleSwitch
+            v-if="!editingId || editingId !== server.id"
+            :model-value="server.enabled"
+            size="sm"
+            color="green"
+            :title="server.enabled ? 'Disable' : 'Enable'"
+            @update:model-value="toggleServer(server.id)"
+          />
+        </template>
+      </DataTable>
 
       <div
         v-else-if="servers.length === 0 && !showAddForm"
