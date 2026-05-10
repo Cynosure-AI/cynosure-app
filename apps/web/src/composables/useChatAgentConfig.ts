@@ -24,6 +24,7 @@ export interface ChatAgentConfigApi {
     resetAgentOverrides(): void
     applyOverridesToAgent(): Promise<void>
     setActiveAgent(id: string | null): Promise<void>
+    setConversationAgent(id: string | null): void
     setSessionModel(model: string | null, providerId?: string | null): void
     syncAgentBaseline(): void
 }
@@ -162,7 +163,7 @@ export function useChatAgentConfig(
         userModifiedOverrides.value = false
     }
 
-    async function setActiveAgent(id: string | null) {
+    function applyAgentSelection(id: string | null): void {
         activeAgentId.value = id
         userModifiedOverrides.value = false
         if (id) {
@@ -209,9 +210,17 @@ export function useChatAgentConfig(
         }
         sessionModelOverride.value = null
         sessionProviderOverride.value = null
+    }
+
+    async function setActiveAgent(id: string | null) {
+        applyAgentSelection(id)
         activeConversationId.value = null
         messages.value = []
         await loadConversations()
+    }
+
+    function setConversationAgent(id: string | null): void {
+        applyAgentSelection(id)
     }
 
     function setSessionModel(model: string | null, providerId?: string | null): void {
@@ -270,6 +279,7 @@ export function useChatAgentConfig(
         resetAgentOverrides,
         applyOverridesToAgent,
         setActiveAgent,
+        setConversationAgent,
         setSessionModel,
         syncAgentBaseline,
     }

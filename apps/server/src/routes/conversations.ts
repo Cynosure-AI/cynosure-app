@@ -45,13 +45,15 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
     // GET /api/chat/conversations — list (optionally filtered by agent_id or ma_workspace_id)
     // Supports pagination via ?limit=N&offset=N — when limit is set, returns { items, total }
-    app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; limit?: string; offset?: string } }>('/conversations', async (req) => {
+    app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; limit?: string; offset?: string; sort?: string } }>('/conversations', async (req) => {
         const db = getDb()
         const { agentId, maWorkspaceId } = req.query
         const limit = req.query.limit ? Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20)) : undefined
         const offset = req.query.offset ? Math.max(0, parseInt(req.query.offset, 10) || 0) : 0
         const excerpt = `(SELECT SUBSTR(m.content, 1, 120) FROM messages m WHERE m.conversation_id = conversations.id AND m.role = 'user' ORDER BY m.created_at DESC LIMIT 1) AS last_user_message`
-        const orderBy = 'ORDER BY pinned DESC, updated_at DESC'
+        const orderBy = req.query.sort === 'updated'
+            ? 'ORDER BY updated_at DESC'
+            : 'ORDER BY pinned DESC, updated_at DESC'
 
         let where = ''
         const params: unknown[] = []
@@ -79,7 +81,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         const db = getDb()
 
         // Fetch conversation-level metadata (context tokens + session config)
-        const convRow = db.prepare('SELECT last_context_tokens, config_json FROM conversations WHERE id = ?').get(req.params.id) as { last_context_tokens: number | null; config_json: string | null } | undefined
+        const convRow = db.prepare('SELECT agent_id, last_context_tokens, config_json FROM conversations WHERE id = ?').get(req.params.id) as { agent_id: string | null; last_context_tokens: number | null; config_json: string | null } | undefined
 
         const rows = db
             .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
@@ -110,6 +112,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         } catch { /* malformed JSON — ignore */ }
 
         return {
+            conversationAgentId: convRow?.agent_id ?? null,
             lastContextTokens: convRow?.last_context_tokens ?? null,
             chatConfig,
             messages: rows.map((row) => {
