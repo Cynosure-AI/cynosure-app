@@ -106,11 +106,10 @@ const originBadgeConfig: Record<string, { icon: string; color: string; bg: strin
   'multi-agent':{ icon: 'lucide:network',        color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'Multi-Agent' },
   cron:         { icon: 'lucide:clock',          color: 'text-sky-400',    bg: 'bg-sky-500/10',    label: 'Cron' },
   channel:      { icon: 'lucide:send',           color: 'text-teal-400',   bg: 'bg-teal-500/10',   label: 'Channel' },
-  'file-watcher':{ icon: 'lucide:eye',           color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'File Watch' },
 }
 
-// Only channel/cron/file-watcher get badges on history rows
-const HISTORY_BADGE_ORIGINS = new Set(['channel', 'cron', 'file-watcher'])
+// Only channel/cron get badges on history rows
+const HISTORY_BADGE_ORIGINS = new Set(['channel', 'cron'])
 
 // ── Timeline ──
 type TimelineItem =

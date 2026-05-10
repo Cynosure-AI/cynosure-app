@@ -32,14 +32,12 @@ import { registerCronJobRoutes } from './routes/cron-jobs.js'
 import { registerBackupRoutes } from './routes/backup.js'
 import { registerChannelRoutes } from './routes/channels.js'
 import { registerMemorySpacesRoutes } from './routes/memory-spaces.js'
-import { registerFileWatcherRoutes } from './routes/file-watchers.js'
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { addClient, broadcast, startHeartbeat } from './ws.js'
 import { getMcpManager } from './core/tools/mcp/mcp-manager.js'
 import { getEmbeddingProvider } from './core/memory/embedding.js'
 import { startCronScheduler, stopCronScheduler } from './core/triggers/cron-scheduler.js'
-import { startFileWatcherService, stopFileWatcherService } from './core/triggers/file-watcher.js'
 import { registerBuiltInTools } from './core/tools/built-in-tools.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
 
@@ -410,7 +408,6 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerBackupRoutes, { prefix: '/api/backup' })
   app.register(registerChannelRoutes, { prefix: '/api/channels' })
   app.register(registerMemorySpacesRoutes, { prefix: '/api/memory-spaces' })
-  app.register(registerFileWatcherRoutes, { prefix: '/api/file-watchers' })
   app.register(registerMetricsRoutes, { prefix: '/api/metrics' })
   app.register(registerFileRoutes, { prefix: '/api/files' })
 
@@ -435,7 +432,6 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   getMcpManager().setServerBaseUrl(`http://127.0.0.1:${options.port}`)
   await loadSavedMcpServers()
   startCronScheduler(broadcast)
-  startFileWatcherService(broadcast)
 
   // Start messaging channels (Telegram, etc.)
   const channelManager = getChannelManager()
@@ -465,7 +461,6 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
         cleanup()
       }
       stopCronScheduler()
-      stopFileWatcherService()
       await getChannelManager().stopAll()
 
       await app.close()

@@ -42,16 +42,6 @@ const router = createRouter({
       name: 'channel-detail',
       component: () => import('@/views/triggers/ChannelDetailView.vue')
     },
-    {
-      path: '/triggers/file-watchers',
-      name: 'triggers-file-watchers',
-      component: () => import('@/views/triggers/FileWatchView.vue')
-    },
-    {
-      path: '/triggers/file-watchers/:id',
-      name: 'file-watcher-detail',
-      component: () => import('@/views/triggers/FileWatchDetailView.vue')
-    },
     // Instances
     {
       path: '/instances',

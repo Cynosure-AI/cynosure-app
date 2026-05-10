@@ -812,7 +812,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         const tables = [
             'messages', 'conversations', 'execution_steps', 'execution_logs',
             'tasks', 'pending_hitl', 'notifications', 'tool_approvals',
-            'cron_jobs', 'channels', 'file_watchers',
+            'cron_jobs', 'channels',
             'memory_spaces', 'agent_memory_spaces',
             'mcp_servers', 'providers', 'agents',
             'settings'

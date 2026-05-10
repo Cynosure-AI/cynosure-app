@@ -3,7 +3,7 @@
  *
  * Consolidates the duplicated pre-action logic (tool resolution, memory
  * space-aware tool hydration, system prompt construction, provider/model resolution) that
- * was previously copy-pasted across chat, cron, file-watcher, channels,
+ * was previously copy-pasted across chat, cron, channels,
  * and sub-agent triggers.
  */
 

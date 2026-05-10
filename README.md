@@ -10,7 +10,7 @@ Open-source AI agent platform with tool use, memory, multi-provider LLM support,
 - **Agents** — Reusable AI presets with custom system prompts, model selection, tool access, and sub-agent orchestration
 - **Memory spaces** — RAG-powered knowledge retrieval with configurable embedding models, chunking, and OCR
 - **Messaging channels** — Telegram, Discord, and Slack integrations so agents can respond remotely
-- **Triggers** — Cron jobs and file watchers for automated, unattended agent execution
+- **Triggers** — Cron jobs for automated, unattended agent execution
 - **Human-in-the-loop** — Granular approval gates for tool execution (per-tool, per-session, or always)
 - **Desktop app** — Electron wrapper that bundles the server and UI into a single self-contained package (AppImage, deb, exe)
 - **Backup & restore** — Export/import your entire configuration (agents, providers, memory, channels, etc.)
