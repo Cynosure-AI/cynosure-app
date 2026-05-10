@@ -7,15 +7,20 @@ import { usePreferencesStore } from '../stores/preferences.store'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import BaseCard from '../components/shared/BaseCard.vue'
+import DataTable from '../components/shared/DataTable.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import CategoryTabBar from '../components/shared/CategoryTabBar.vue'
 import ProviderModelSelect from '../components/shared/ProviderModelSelect.vue'
+import { useProviderLogos } from '../composables/useProviderLogos'
+import type { Column } from '../components/shared/DataTable.vue'
+import type { AgentDefinition } from '../api/types'
 
 const agentDefs = useAgentDefinitionsStore()
 const agentStore = useAgentStore()
 const providerStore = useProviderStore()
 const prefs = usePreferencesStore()
 const router = useRouter()
+const { logoUrl } = useProviderLogos()
 const AGENT_IDS_MIME = 'application/x-cynosure-agent-ids'
 
 const showCreateDialog = ref(false)
@@ -66,8 +71,27 @@ const agentsWithIssues = computed(() => {
 const isBulkMode = computed(() => bulkSelectionIds.value.length > 0)
 const selectedAgentCount = computed(() => bulkSelectionIds.value.length)
 
+// Table columns for DataTable component
+const agentTableColumns: Column[] = [
+  { key: 'name', label: 'Name', width: 'minmax(0,1.5fr)' },
+  { key: 'provider', label: 'Provider/Model', width: 'minmax(200px,1fr)' },
+  { key: 'metadata', label: 'Info', width: '200px' },
+  { key: 'actions', label: 'Actions', width: '120px' },
+]
+
 function isAgentSelected(agentId: string): boolean {
   return bulkSelectionIds.value.includes(agentId)
+}
+
+function getProviderName(agent: AgentDefinition): string {
+  const provider = providerStore.providers.find(p => p.id === agent.providerId)
+  return provider ? provider.name : 'Unknown'
+}
+
+function getProviderLogoUrl(agent: AgentDefinition): string | null {
+  const provider = providerStore.providers.find(p => p.id === agent.providerId)
+  if (!provider) return null
+  return logoUrl(provider.type)
 }
 
 function clearBulkSelection(): void {
@@ -280,7 +304,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
 
 <template>
   <div class="h-full overflow-y-auto">
-    <div class="max-w-4xl mx-auto py-8 px-6">
+    <div class="max-w-6xl mx-auto py-8 px-6">
       <div class="flex items-center justify-between mb-6">
         <div>
           <h1 class="text-2xl font-bold text-zinc-100">
@@ -382,128 +406,108 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
         </div>
       </div>
 
-      <!-- Agents List -->
-      <div
+      <!-- Agents List using DataTable -->
+      <DataTable
         v-if="filteredAgents.length"
-        class="flex flex-col gap-2"
+        :items="filteredAgents"
+        :columns="agentTableColumns"
+        :selectable="true"
+        :selected-ids="bulkSelectionIds"
+        @update:selected-ids="bulkSelectionIds = $event"
+        @row-click="onRowClick($event.id)"
       >
-        <div
-          v-for="agent in filteredAgents"
-          :key="agent.id"
-          draggable="true"
-          class="group relative flex items-center gap-4 rounded-xl border bg-zinc-800/60 px-4 py-3 hover:border-zinc-600 transition-all cursor-pointer"
-          :class="[
-            dragReorderId === agent.id ? 'border-blue-500/60 opacity-50' : isAgentSelected(agent.id) ? 'border-blue-500/60 bg-blue-500/10' : 'border-zinc-700'
-          ]"
-          @click="onRowClick(agent.id)"
-          @dragstart="onReorderDragStart($event, agent.id)"
-          @dragover="onReorderDragOver($event, agent.id)"
-          @dragleave="onReorderDragLeave($event, agent.id)"
-          @drop="onReorderDrop($event, agent.id)"
-          @dragend="onReorderDragEnd"
-        >
-          <!-- Drop indicator: top edge -->
-          <div
-            v-if="dropTargetId === agent.id && dropPosition === 'before'"
-            class="absolute -top-0.75 left-2 right-2 h-0.75 rounded-full bg-blue-500"
-          />
-          <!-- Drop indicator: bottom edge -->
-          <div
-            v-if="dropTargetId === agent.id && dropPosition === 'after'"
-            class="absolute -bottom-0.75 left-2 right-2 h-0.75 rounded-full bg-blue-500"
-          />
+        <!-- Name column with icon and description -->
+        <template #col-name="{ item }">
+          <div class="flex items-start gap-3 min-w-0">
+            <div class="w-9 h-9 shrink-0 rounded-lg bg-linear-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden">
+              <img
+                v-if="item.iconUrl"
+                :src="item.iconUrl"
+                alt=""
+                class="w-full h-full object-cover"
+              >
+              <Icon
+                v-else
+                icon="lucide:bot"
+                class="w-4 h-4 text-blue-400"
+              />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-zinc-100 truncate flex items-center gap-1">
+                {{ item.name }}
+                <Icon
+                  v-if="agentsWithIssues.has(item.id)"
+                  icon="lucide:alert-triangle"
+                  class="w-3.5 h-3.5 text-amber-400 shrink-0"
+                />
+              </div>
+              <div
+                v-if="item.description"
+                class="text-xs text-zinc-500 truncate"
+              >
+                {{ item.description }}
+              </div>
+            </div>
+          </div>
+        </template>
 
-          <!-- Bulk select checkbox -->
-          <label
-            class="shrink-0 cursor-pointer transition-opacity"
-            :class="isBulkMode || isAgentSelected(agent.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
-            @click.stop
-          >
-            <input
-              type="checkbox"
-              class="h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-blue-500 focus:ring-blue-500/60"
-              :checked="isAgentSelected(agent.id)"
-              @change="onSelectionInputChange(agent.id, $event)"
-            >
-          </label>
-
-          <!-- Icon -->
-          <div class="w-9 h-9 shrink-0 rounded-lg bg-linear-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden">
+        <!-- Provider/Model column -->
+        <template #col-provider="{ item }">
+          <div class="flex items-center gap-2 md:pt-1">
             <img
-              v-if="agent.iconUrl"
-              :src="agent.iconUrl"
-              alt=""
-              class="w-full h-full object-cover"
+              v-if="getProviderLogoUrl(item)"
+              :src="getProviderLogoUrl(item) || ''"
+              :alt="getProviderName(item)"
+              class="w-5 h-5 rounded object-contain shrink-0"
             >
-            <Icon
-              v-else
-              icon="lucide:bot"
-              class="w-4 h-4 text-blue-400"
-            />
+            <div class="flex flex-col gap-0.5 min-w-0">
+              <div class="text-sm text-zinc-200 font-medium">
+                {{ getProviderName(item) }}
+              </div>
+              <div class="text-xs text-zinc-500 truncate">
+                {{ item.model }}
+              </div>
+            </div>
           </div>
+        </template>
 
-          <!-- Name + description -->
-          <div class="flex-1 min-w-0">
-            <h3 class="text-sm font-medium text-zinc-100 truncate">
-              {{ agent.name }}
-              <Icon
-                v-if="agentsWithIssues.has(agent.id)"
-                icon="lucide:alert-triangle"
-                class="w-3.5 h-3.5 text-amber-400 inline-block ml-1"
-              />
-            </h3>
-            <p
-              v-if="agent.description"
-              class="text-xs text-zinc-500 truncate"
-            >
-              {{ agent.description }}
-            </p>
-          </div>
-
-          <!-- Meta -->
-          <div class="hidden sm:flex items-center gap-3 text-xs text-zinc-600 shrink-0">
-            <span
-              v-if="agent.model"
-              class="flex items-center gap-1"
-            >
-              <Icon
-                icon="lucide:cpu"
-                class="w-3 h-3"
-              />
-              {{ agent.model }}
-            </span>
+        <!-- Metadata column (tools, subagents, created date) -->
+        <template #col-metadata="{ item }">
+          <div class="flex items-center gap-3 text-xs text-zinc-600">
             <span class="flex items-center gap-1">
               <Icon
                 icon="lucide:wrench"
                 class="w-3 h-3"
               />
-              {{ agent.tools.length }}
+              {{ item.tools.length }}
             </span>
             <span
-              v-if="agent.subAgents?.length"
+              v-if="item.subAgents?.length"
               class="flex items-center gap-1"
             >
               <Icon
                 icon="lucide:users"
                 class="w-3 h-3"
               />
-              {{ agent.subAgents.length }}
+              {{ item.subAgents.length }}
             </span>
-            <span class="flex items-center gap-1">
+            <span class="flex items-center gap-1 whitespace-nowrap">
               <Icon
                 icon="lucide:calendar"
                 class="w-3 h-3"
               />
-              {{ formatDate(agent.createdAt) }}
+              {{ formatDate(item.createdAt) }}
             </span>
           </div>
+        </template>
 
-          <!-- Actions -->
-          <div class="flex items-center gap-0.5 shrink-0">
+        <!-- Actions column -->
+        <template #col-actions="{ item }">
+          <div class="flex items-center gap-1">
             <button
-              class="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-500 hover:text-blue-400 rounded-md transition-all"
+              class="p-1.5 text-zinc-500 hover:text-blue-400 rounded-md transition-all"
               title="Duplicate agent"
-              @click.stop="duplicateAgent(agent.id)"
+              @click.stop="duplicateAgent(item.id)"
             >
               <Icon
                 icon="lucide:copy"
@@ -511,8 +515,9 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
               />
             </button>
             <button
-              class="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-500 hover:text-red-400 rounded-md transition-all"
-              @click.stop="confirmDelete(agent)"
+              class="p-1.5 text-zinc-500 hover:text-red-400 rounded-md transition-all"
+              title="Delete agent"
+              @click.stop="confirmDelete(item)"
             >
               <Icon
                 icon="lucide:trash-2"
@@ -520,8 +525,8 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
               />
             </button>
           </div>
-        </div>
-      </div>
+        </template>
+      </DataTable>
 
       <!-- Empty State -->
       <BaseCard

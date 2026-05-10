@@ -2,9 +2,11 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { api } from '../../../api/client'
 import { Icon } from '@iconify/vue'
+import DataTable from '../../shared/DataTable.vue'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
 import type { McpServerInfo } from '../../../api/types'
+import type { Column } from '../../shared/DataTable.vue'
 
 const emit = defineEmits<{
   goToBrowse: []
@@ -145,6 +147,15 @@ const filteredServers = computed(() => {
 
   return list
 })
+
+// Table columns definition for DataTable component
+const tableColumns: Column[] = [
+  { key: 'server', label: 'Server', width: 'minmax(0,1.75fr)' },
+  { key: 'tools', label: 'Tools', width: '120px' },
+  { key: 'status', label: 'Status', width: '170px' },
+  { key: 'actions', label: 'Actions', width: '260px' },
+  { key: 'enable', label: 'Enable', width: '56px' },
+]
 
 const newServer = reactive({ name: '', description: '', command: '', args: '', env: '' })
 const pendingAddId = ref<string | null>(null)
