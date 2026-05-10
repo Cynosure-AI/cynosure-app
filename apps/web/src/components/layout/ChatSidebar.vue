@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useChatStore } from '../../stores/chat.store'
+import { ref, computed, watch } from 'vue'
+import { api } from '../../api/client'
+import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { Icon } from '@iconify/vue'
@@ -11,6 +12,8 @@ const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const showClearConfirm = ref(false)
 const searchQuery = ref('')
+const showAllConversations = ref(false)
+const allConversations = ref<Conversation[]>([])
 
 const clearLabel = computed(() => {
   if (chatStore.activeAgentId) {
@@ -28,11 +31,31 @@ async function selectChat(id: string): Promise<void> {
 async function deleteChat(id: string, event: Event): Promise<void> {
   event.stopPropagation()
   await chatStore.deleteConversation(id)
+  if (showAllConversations.value) {
+    await loadAllConversations()
+  }
 }
 
 async function togglePin(id: string, pinned: boolean, event: Event): Promise<void> {
   event.stopPropagation()
   await chatStore.pinConversation(id, !pinned)
+  if (showAllConversations.value) {
+    await loadAllConversations()
+  }
+}
+
+async function loadAllConversations(): Promise<void> {
+  const rows = await api.chat.listConversations()
+  allConversations.value = rows
+    .map(row => ({
+      id: row.id,
+      title: row.title,
+      origin: row.origin,
+      pinned: !!row.pinned,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 function formatDate(ts: number): string {
@@ -64,12 +87,24 @@ function displayTitle(conv: { title: string; origin?: string }): string {
   return conv.title
 }
 
+const visibleConversations = computed(() => (
+  showAllConversations.value
+    ? allConversations.value
+    : chatStore.sortedConversations
+))
+
 const filteredConversations = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return chatStore.sortedConversations
-  return chatStore.sortedConversations.filter(conv =>
+  if (!q) return visibleConversations.value
+  return visibleConversations.value.filter(conv =>
     displayTitle(conv).toLowerCase().includes(q)
   )
+})
+
+watch(showAllConversations, (enabled) => {
+  if (enabled) {
+    void loadAllConversations()
+  }
 })
 </script>
 
@@ -79,7 +114,7 @@ const filteredConversations = computed(() => {
     <div class="px-3 py-2.5 border-b border-zinc-800/60 flex items-center justify-between">
       <span class="text-xs font-medium text-zinc-500 uppercase tracking-wider">Chat History</span>
       <button
-        v-if="chatStore.sortedConversations.length > 0"
+        v-if="!showAllConversations && chatStore.sortedConversations.length > 0"
         class="p-1 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
         title="Clear all history"
         @click="showClearConfirm = true"
@@ -93,6 +128,27 @@ const filteredConversations = computed(() => {
 
     <!-- Search -->
     <div class="px-2 py-1.5 border-b border-zinc-800/60">
+      <button
+        class="w-full mb-2 rounded-lg border border-zinc-800 bg-zinc-900/70 p-0.5 grid grid-cols-2 text-[11px]"
+        type="button"
+        :aria-label="showAllConversations ? 'Showing all conversations' : 'Showing current conversations'"
+      >
+        <span
+          class="rounded-md px-2 py-1 transition-colors"
+          :class="showAllConversations ? 'text-zinc-500 hover:text-zinc-300' : 'bg-zinc-700 text-zinc-100'"
+          @click="showAllConversations = false"
+        >
+          Current
+        </span>
+        <span
+          class="rounded-md px-2 py-1 transition-colors"
+          :class="showAllConversations ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
+          @click="showAllConversations = true"
+        >
+          All
+        </span>
+      </button>
+
       <div class="relative">
         <Icon
           icon="lucide:search"
