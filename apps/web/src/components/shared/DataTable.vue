@@ -124,7 +124,7 @@ const anySelected = computed(() => props.selectedIds.length > 0)
     <!-- Header Row -->
     <div
       v-if="showHeader"
-      class="hidden md:grid md:px-5 md:py-3 text-[11px] tracking-wider uppercase text-zinc-400 bg-zinc-900/70 border-b border-zinc-800 dt-grid"
+      class="hidden md:grid gap-3 md:gap-4 md:px-5 md:py-3 text-[11px] tracking-wider uppercase text-zinc-400 bg-zinc-900/70 border-b border-zinc-800 dt-grid items-start"
       :style="{ '--dt-desktop-cols': desktopGridColsTemplate, '--dt-tablet-cols': tabletGridColsTemplate, '--dt-mobile-cols': mobileGridColsTemplate }"
     >
       <!-- Select All Checkbox (hidden on mobile) -->
@@ -143,13 +143,13 @@ const anySelected = computed(() => props.selectedIds.length > 0)
       </div>
 
       <!-- Column Headers -->
-      <span
+      <div
         v-for="col in columns"
         :key="col.key"
         :class="[col.class, responsiveVisibilityClass(col.hideOnMobile, col.hideOnTablet)]"
       >
         {{ col.label }}
-      </span>
+      </div>
     </div>
 
     <!-- Data Rows -->
