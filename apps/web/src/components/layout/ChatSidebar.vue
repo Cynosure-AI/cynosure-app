@@ -21,6 +21,13 @@ const allSearchLoadToken = ref(0)
 
 const ALL_PAGE_SIZE = 50
 
+function sortPinnedFirst(items: Conversation[]): Conversation[] {
+  return [...items].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    return b.updatedAt - a.updatedAt
+  })
+}
+
 const clearLabel = computed(() => {
   if (showAllConversations.value) {
     return 'this app'
@@ -31,7 +38,6 @@ const clearLabel = computed(() => {
   }
   return 'Default'
 })
-
 async function selectChat(conv: Conversation): Promise<void> {
   await chatStore.selectConversation(conv.id, conv.agentId ?? null)
   await agentStore.restoreForConversation(conv.id)
@@ -57,7 +63,7 @@ async function togglePin(id: string, pinned: boolean, event: Event): Promise<voi
     if (conv) {
       conv.pinned = !pinned
       conv.updatedAt = Date.now()
-      allConversations.value.sort((a, b) => b.updatedAt - a.updatedAt)
+      allConversations.value = sortPinnedFirst(allConversations.value)
     }
   }
 }
@@ -92,7 +98,7 @@ async function loadMoreAllConversations(reset = false): Promise<void> {
   allConversationsError.value = null
   try {
     const offset = reset ? 0 : allConversations.value.length
-    const res = await api.chat.listConversationsPaginated(ALL_PAGE_SIZE, offset, 'updated')
+    const res = await api.chat.listConversationsPaginated(ALL_PAGE_SIZE, offset)
     const page = res.items.map(mapConversationRow)
     if (reset) {
       allConversations.value = page
@@ -166,7 +172,7 @@ function displayTitle(conv: { title: string; origin?: string }): string {
 
 const visibleConversations = computed(() => (
   showAllConversations.value
-    ? [...allConversations.value].sort((a, b) => b.updatedAt - a.updatedAt)
+    ? sortPinnedFirst(allConversations.value)
     : chatStore.sortedConversations
 ))
 
