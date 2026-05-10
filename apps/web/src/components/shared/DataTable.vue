@@ -1,17 +1,19 @@
 <script setup lang="ts" generic="T extends { id: string }">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 export interface Column {
   key: string
   label: string
   width?: string  // e.g., '120px', 'minmax(0,1.75fr)'
   class?: string   // Custom CSS classes for column content
+  hideOnMobile?: boolean
 }
 
 interface Props<TItem> {
   items: TItem[]
   columns: Column[]
   selectable?: boolean
+  hideSelectableOnMobile?: boolean
   selectedIds?: string[]
   showHeader?: boolean
   emptyMessage?: string
@@ -22,6 +24,8 @@ const props = withDefaults(defineProps<Props<T>>(), {
   showHeader: true,
   emptyMessage: 'No items found',
   selectedIds: () => [],
+  hideSelectableOnMobile: false,
+  rowClass: undefined,
 })
 
 const emit = defineEmits<{
@@ -30,9 +34,36 @@ const emit = defineEmits<{
   'selection-change': [value: string[]]
 }>()
 
+const isMobile = ref(false)
+
+function updateIsMobile() {
+  if (typeof window !== 'undefined') {
+    isMobile.value = window.innerWidth < 768
+  }
+}
+
+onMounted(() => {
+  updateIsMobile()
+  window.addEventListener('resize', updateIsMobile)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateIsMobile)
+})
+
+const visibleColumns = computed(() =>
+  isMobile.value
+    ? props.columns.filter(col => !col.hideOnMobile)
+    : props.columns
+)
+
+const showSelectableColumn = computed(() =>
+  Boolean(props.selectable) && !(isMobile.value && props.hideSelectableOnMobile)
+)
+
 const gridColsTemplate = computed(() => {
-  const columnWidths = props.columns.map(col => col.width || 'minmax(0,1fr)').join(' ')
-  return props.selectable ? `40px ${columnWidths}` : columnWidths
+  const columnWidths = visibleColumns.value.map(col => col.width || 'minmax(0,1fr)').join(' ')
+  return showSelectableColumn.value ? `40px ${columnWidths}` : columnWidths
 })
 
 function toggleSelection(id: string) {
@@ -82,8 +113,8 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
     >
       <!-- Select All Checkbox (hidden on mobile) -->
       <div
-        v-if="selectable"
-        class="hidden md:flex items-center"
+        v-if="showSelectableColumn"
+        class="flex items-center"
       >
         <input
           type="checkbox"
@@ -96,7 +127,7 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
 
       <!-- Column Headers -->
       <span
-        v-for="col in columns"
+        v-for="col in visibleColumns"
         :key="col.key"
         :class="col.class"
       >
@@ -119,8 +150,8 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
         >
           <!-- Selection Checkbox (hidden on mobile) -->
           <div
-            v-if="selectable"
-            class="hidden md:flex items-center md:pt-1"
+            v-if="showSelectableColumn"
+            class="flex items-center md:pt-1"
             @click.stop
           >
             <input
@@ -133,7 +164,7 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
 
           <!-- Column Content (via slots) -->
           <slot
-            v-for="col in columns"
+            v-for="col in visibleColumns"
             :key="col.key"
             :name="`col-${col.key}`"
             :item="item"
