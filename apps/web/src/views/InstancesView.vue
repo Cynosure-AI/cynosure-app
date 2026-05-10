@@ -215,7 +215,7 @@ onUnmounted(() => {
 
 <template>
   <div class="h-full overflow-y-auto">
-    <div class="max-w-4xl mx-auto py-8 px-6">
+    <div class="max-w-6xl mx-auto py-8 px-6">
       <div class="mb-6">
         <h1 class="text-2xl font-bold text-zinc-100">
           Instances Timeline

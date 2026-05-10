@@ -11,6 +11,7 @@ import DataTable from '../components/shared/DataTable.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import CategoryTabBar from '../components/shared/CategoryTabBar.vue'
 import ProviderModelSelect from '../components/shared/ProviderModelSelect.vue'
+import CustomSelect, { type SelectOptionGroup } from '../components/shared/CustomSelect.vue'
 import { useProviderLogos } from '../composables/useProviderLogos'
 import type { Column } from '../components/shared/DataTable.vue'
 import type { AgentDefinition } from '../api/types'
@@ -36,6 +37,7 @@ const pendingDeleteName = ref('')
 const activeCategory = ref('')
 const searchQuery = ref('')
 const bulkSelectionIds = ref<string[]>([])
+const bulkCategory = ref('')
 const bulkProviderId = ref('')
 const bulkModel = ref('')
 const hasBulkProviderModelSelection = ref(false)
@@ -71,6 +73,17 @@ const agentsWithIssues = computed(() => {
 const isBulkMode = computed(() => bulkSelectionIds.value.length > 0)
 const selectedAgentCount = computed(() => bulkSelectionIds.value.length)
 
+const categoryGroups = computed<SelectOptionGroup[]>(() => [
+  {
+    options: [
+      ...(hasUncategorized.value
+        ? [{ value: '__uncategorized__', label: 'Uncategorized' }]
+        : []),
+      ...prefs.agentCategories.map(cat => ({ value: cat, label: cat })),
+    ],
+  },
+])
+
 // Table columns for DataTable component
 const agentTableColumns: Column[] = [
   { key: 'name', label: 'Name', width: 'minmax(0,1.5fr)' },
@@ -96,6 +109,7 @@ function getProviderLogoUrl(agent: AgentDefinition): string | null {
 
 function clearBulkSelection(): void {
   bulkSelectionIds.value = []
+  bulkCategory.value = ''
   bulkProviderId.value = ''
   bulkModel.value = ''
   hasBulkProviderModelSelection.value = false
@@ -110,11 +124,6 @@ function toggleAgentSelection(agentId: string, selected?: boolean): void {
   if (bulkSelectionIds.value.length === 0) {
     clearBulkSelection()
   }
-}
-
-function onSelectionInputChange(agentId: string, event: Event): void {
-  const target = event.target as HTMLInputElement | null
-  toggleAgentSelection(agentId, target?.checked ?? false)
 }
 
 function onRowClick(agentId: string): void {
@@ -132,13 +141,21 @@ function draggedAgentIds(agentId: string): string[] {
   return [agentId]
 }
 
-async function applyBulkProviderModel(): Promise<void> {
-  if (!isBulkMode.value || !hasBulkProviderModelSelection.value) return
+async function applyBulkChanges(): Promise<void> {
+  if (!isBulkMode.value) return
   const ids = [...bulkSelectionIds.value]
-  await Promise.all(ids.map(id => agentDefs.update(id, {
-    providerId: bulkProviderId.value,
-    model: bulkModel.value,
-  })))
+  const updates: Partial<Omit<typeof agentDefs.agents[0], 'id' | 'createdAt' | 'updatedAt'>> = {}
+  
+  if (bulkCategory.value) {
+    updates.category = bulkCategory.value === '__uncategorized__' ? '' : bulkCategory.value
+  }
+  if (hasBulkProviderModelSelection.value) {
+    updates.providerId = bulkProviderId.value
+    updates.model = bulkModel.value
+  }
+  
+  if (Object.keys(updates).length === 0) return
+  await Promise.all(ids.map(id => agentDefs.update(id, updates)))
   clearBulkSelection()
 }
 
@@ -376,12 +393,22 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
           {{ selectedAgentCount }} agent{{ selectedAgentCount === 1 ? '' : 's' }} selected
         </div>
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-end md:flex-1">
+          <div class="w-full md:w-56">
+            <CustomSelect
+              :model-value="bulkCategory"
+              :groups="categoryGroups"
+              placeholder="Set category…"
+              size="sm"
+              @update:model-value="bulkCategory = $event"
+            />
+          </div>
           <div class="min-w-0 md:min-w-80">
             <ProviderModelSelect
               :provider-id="bulkProviderId"
               :model-value="bulkModel"
               :providers="providerStore.providers"
-              placeholder="Set provider/model for selected agents"
+              placeholder="Set model for selected agents"
+              size="sm"
               dropdown-width="w-[28rem]"
               @update:provider-id="bulkProviderId = $event"
               @update:model-value="bulkModel = $event"
@@ -391,8 +418,8 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
           <div class="flex items-center gap-2">
             <button
               class="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
-              :disabled="!hasBulkProviderModelSelection"
-              @click="applyBulkProviderModel"
+              :disabled="!hasBulkProviderModelSelection && !bulkCategory"
+              @click="applyBulkChanges"
             >
               Apply
             </button>
@@ -419,7 +446,19 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
       >
         <!-- Name column with icon and description -->
         <template #col-name="{ item }">
-          <div class="flex items-start gap-3 min-w-0">
+          <div
+            class="flex items-start gap-3 min-w-0 cursor-grab active:cursor-grabbing"
+            :class="{
+              'opacity-60': dragReorderId === item.id,
+              'ring-1 ring-blue-500/70 ring-inset rounded-lg': dropTargetId === item.id,
+            }"
+            draggable="true"
+            @dragstart="onReorderDragStart($event, item.id)"
+            @dragover="onReorderDragOver($event, item.id)"
+            @dragleave="onReorderDragLeave($event, item.id)"
+            @drop="onReorderDrop($event, item.id)"
+            @dragend="onReorderDragEnd"
+          >
             <div class="w-9 h-9 shrink-0 rounded-lg bg-linear-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden">
               <img
                 v-if="item.iconUrl"
