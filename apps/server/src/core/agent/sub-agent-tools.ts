@@ -72,7 +72,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 // Prepare tools, provider/model via the shared builder.
                 // includeSubAgents: false prevents infinite delegation recursion.
                 const prepared = await prepareAgentExecution({
-                    agent: agentData,
+                    preset: agentData,
                     conversationId,
                     broadcast,
                     providerOverride: providerOverride || undefined,

@@ -12,7 +12,8 @@ import { getToolRegistry } from '../tools/tool-registry.js'
 import { hydrateBuiltInTools } from '../tools/built-in-tools.js'
 import { applyAutoToolRouting } from './pre-execution/auto-tool-routing.js'
 import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
-import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
+import type { SubAgentAssignment } from '../agents/agent-store.js'
+import type { ExecutionPreset } from './execution-preset.js'
 import type { ChatMessage, ToolDefinition } from '../gateway/providers/base.provider.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -22,7 +23,7 @@ const AGENT_ROUTER_MODEL = '__agent_model__'
 
 export interface PrepareExecutionInput {
     /** The resolved agent config */
-    agent: AgentData
+    preset: ExecutionPreset
     /** Conversation ID for tool hydration and memory aggregation */
     conversationId: string
     /** WebSocket broadcast function */
@@ -71,6 +72,10 @@ export interface PrepareExecutionInput {
 
     /** Memory space overrides for agentless chat (bypasses agent's assigned spaces) */
     memorySpaceOverrides?: { id: string; name: string }[]
+    /** Agent id used during built-in tool hydration. Defaults to agent.id. */
+    hydrationAgentId?: string
+    /** Force sub-agent provider override to the resolved execution provider. */
+    forceResolvedSubAgentProvider?: boolean
 }
 
 export interface PreparedExecution {
@@ -99,7 +104,7 @@ export interface PreparedExecution {
  */
 export async function prepareAgentExecution(input: PrepareExecutionInput): Promise<PreparedExecution> {
     const {
-        agent, conversationId, broadcast,
+        preset, conversationId, broadcast,
         providerOverride, modelOverride,
         systemPromptOverride, systemPromptSuffix,
         includeSubAgents = true,
@@ -107,6 +112,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         signal,
         overrideSubAgents = true,
         memorySpaceOverrides,
+        hydrationAgentId,
+        forceResolvedSubAgentProvider = false,
     } = input
 
     const gateway = getGateway()
@@ -114,8 +121,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     // ── 1. Resolve tools ──
 
-    const routingEnabled = isToolRoutingEnabled(agent, input.autoToolRouting)
-    const configuredToolKeys = agent.tools || []
+    const routingEnabled = isToolRoutingEnabled(preset, input.autoToolRouting)
+    const configuredToolKeys = preset.tools || []
     const toolKeys = routingEnabled
         ? toolRegistry.listRegisteredTools().map((tool) => tool.key)
         : configuredToolKeys
@@ -133,8 +140,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     const providerModel = resolveProviderAndModel({
         gateway,
-        baseProviderId: agent.providerId,
-        baseModel: agent.model,
+        baseProviderId: preset.providerId,
+        baseModel: preset.model,
         providerOverride,
         modelOverride,
     })
@@ -144,15 +151,15 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     // trims the agent/free-chat tool set before the executor receives schemas.
 
     if (routingEnabled) {
-        const useAgentRouterProvider = agent.toolRouterProviderId === AGENT_ROUTER_PROVIDER
-        const useAgentRouterModel = agent.toolRouterModel === AGENT_ROUTER_MODEL
+        const useAgentRouterProvider = preset.toolRouterProviderId === AGENT_ROUTER_PROVIDER
+        const useAgentRouterModel = preset.toolRouterModel === AGENT_ROUTER_MODEL
 
         const router = resolveRouterProviderModel({
             gateway,
             fallbackProviderId: providerModel.providerId,
             fallbackModel: providerModel.model,
-            agentRouterProviderId: useAgentRouterProvider ? agent.providerId : (agent.toolRouterProviderId || undefined),
-            agentRouterModel: useAgentRouterModel ? (agent.model || undefined) : (agent.toolRouterModel || undefined),
+            agentRouterProviderId: useAgentRouterProvider ? preset.providerId : (preset.toolRouterProviderId || undefined),
+            agentRouterModel: useAgentRouterModel ? (preset.model || undefined) : (preset.toolRouterModel || undefined),
             requestRouterProviderId: input.toolRouterProviderId,
             requestRouterModel: useAgentRouterProvider ? undefined : input.toolRouterModel,
         })
@@ -176,21 +183,25 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     // ── 3. Sub-agent delegation tools ──
 
     const effectiveSubAgents = includeSubAgents
-        ? (subAgentAssignments ?? agent.subAgents)
+        ? (subAgentAssignments ?? preset.subAgents)
         : undefined
     const hasSubAgents = Boolean(effectiveSubAgents?.length)
 
     if (hasSubAgents) {
         const { buildSubAgentTools } = await import('./sub-agent-tools.js')
+        const subAgentProviderOverride = overrideSubAgents
+            ? (forceResolvedSubAgentProvider || modelOverride
+                ? providerModel.providerId
+                : (providerOverride || undefined))
+            : undefined
+
         const subAgentTools = buildSubAgentTools({
             subAgents: effectiveSubAgents!,
             conversationId,
             broadcast,
             signal,
             modelOverride: overrideSubAgents ? (modelOverride || undefined) : undefined,
-            providerOverride: overrideSubAgents
-                ? (modelOverride ? providerModel.providerId : (providerOverride || undefined))
-                : undefined,
+            providerOverride: subAgentProviderOverride,
             toolRouterProviderId: input.toolRouterProviderId,
             toolRouterModel: input.toolRouterModel,
         })
@@ -200,7 +211,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     // ── 4. Hydrate built-in tool stubs ──
 
     tools = hydrateBuiltInTools(tools, {
-        agentId: agent.id,
+        agentId: hydrationAgentId !== undefined ? hydrationAgentId : preset.id,
         conversationId,
         broadcast,
         memorySpaceOverrides,
@@ -210,7 +221,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     const systemMessages: ChatMessage[] = []
 
-    let effectiveSystemPrompt = systemPromptOverride ?? agent.systemPrompt ?? ''
+    let effectiveSystemPrompt = systemPromptOverride ?? preset.systemPrompt ?? ''
 
     if (hasSubAgents) {
         const { buildSubAgentPrompt } = await import('./sub-agent-tools.js')
@@ -235,16 +246,10 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     }
 }
 
-function isToolRoutingEnabled(agent: AgentData, sessionEnabled?: boolean): boolean {
-    const routingPrefs = agent as AgentData & {
-        autoToolRouting?: boolean
-        toolRoutingEnabled?: boolean
-        disableToolRouting?: boolean
-    }
-
-    if (routingPrefs.disableToolRouting === true) return false
-    if (routingPrefs.toolRoutingEnabled === false) return false
+function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
+    if (preset.disableToolRouting === true) return false
+    if (preset.toolRoutingEnabled === false) return false
     if (sessionEnabled === true) return true
     if (sessionEnabled === false) return false
-    return routingPrefs.autoToolRouting === true || routingPrefs.toolRoutingEnabled === true
+    return preset.autoToolRouting === true || preset.toolRoutingEnabled === true
 }
