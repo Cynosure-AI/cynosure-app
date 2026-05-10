@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { api } from '../../../api/client'
 import { Icon } from '@iconify/vue'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
@@ -17,6 +17,15 @@ const editingId = ref<string | null>(null)
 const installedFilter = ref('')
 const installedView = ref<'cards' | 'json'>('cards')
 const brokenIconUrlById = reactive<Record<string, string>>({})
+const sortedServerIds = ref<string[]>([])
+
+onMounted(() => {
+  // Sort servers once on mount by enabled status
+  sortedServerIds.value = [...servers.value]
+    .sort((a, b) => (a.enabled ? 1 : 0) - (b.enabled ? 1 : 0))
+    .reverse()
+    .map(s => s.id)
+})
 
 function hasUsableIcon(server: McpServerInfo): boolean {
   return !!server.icon_url && brokenIconUrlById[server.id] !== server.icon_url
@@ -120,16 +129,22 @@ async function applyRawJson(): Promise<void> {
 
 const filteredServers = computed(() => {
   const q = installedFilter.value.trim().toLowerCase()
-  const list = q
-    ? servers.value.filter(s =>
-        s.name.toLowerCase().includes(q) ||
-        originalServerName(s).toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q) ||
-        s.command.toLowerCase().includes(q) ||
-        s.args.some(a => a.toLowerCase().includes(q)),
-      )
-    : servers.value
-  return [...list].reverse()
+  const serverMap = new Map(servers.value.map(s => [s.id, s]))
+  let list = sortedServerIds.value
+    .map(id => serverMap.get(id))
+    .filter((s): s is McpServerInfo => !!s)
+
+  if (q) {
+    list = list.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      originalServerName(s).toLowerCase().includes(q) ||
+      s.description.toLowerCase().includes(q) ||
+      s.command.toLowerCase().includes(q) ||
+      s.args.some(a => a.toLowerCase().includes(q)),
+    )
+  }
+
+  return list
 })
 
 const newServer = reactive({ name: '', description: '', command: '', args: '', env: '' })
