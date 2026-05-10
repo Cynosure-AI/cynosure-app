@@ -14,8 +14,17 @@ const showClearConfirm = ref(false)
 const searchQuery = ref('')
 const showAllConversations = ref(false)
 const allConversations = ref<Conversation[]>([])
+const allConversationsTotal = ref(0)
+const allConversationsLoading = ref(false)
+const allConversationsError = ref<string | null>(null)
+const allSearchLoadToken = ref(0)
+
+const ALL_PAGE_SIZE = 50
 
 const clearLabel = computed(() => {
+  if (showAllConversations.value) {
+    return 'this app'
+  }
   if (chatStore.activeAgentId) {
     const agent = agentDefs.get(chatStore.activeAgentId)
     return agent?.name || 'this agent'
@@ -23,16 +32,20 @@ const clearLabel = computed(() => {
   return 'Default'
 })
 
-async function selectChat(id: string): Promise<void> {
-  await chatStore.selectConversation(id)
-  await agentStore.restoreForConversation(id)
+async function selectChat(conv: Conversation): Promise<void> {
+  await chatStore.selectConversation(conv.id, conv.agentId ?? null)
+  await agentStore.restoreForConversation(conv.id)
 }
 
 async function deleteChat(id: string, event: Event): Promise<void> {
   event.stopPropagation()
   await chatStore.deleteConversation(id)
   if (showAllConversations.value) {
-    await loadAllConversations()
+    const idx = allConversations.value.findIndex(conv => conv.id === id)
+    if (idx >= 0) {
+      allConversations.value.splice(idx, 1)
+      allConversationsTotal.value = Math.max(0, allConversationsTotal.value - 1)
+    }
   }
 }
 
@@ -40,22 +53,86 @@ async function togglePin(id: string, pinned: boolean, event: Event): Promise<voi
   event.stopPropagation()
   await chatStore.pinConversation(id, !pinned)
   if (showAllConversations.value) {
-    await loadAllConversations()
+    const conv = allConversations.value.find(c => c.id === id)
+    if (conv) {
+      conv.pinned = !pinned
+      conv.updatedAt = Date.now()
+      allConversations.value.sort((a, b) => b.updatedAt - a.updatedAt)
+    }
   }
 }
 
-async function loadAllConversations(): Promise<void> {
-  const rows = await api.chat.listConversations()
-  allConversations.value = rows
-    .map(row => ({
-      id: row.id,
-      title: row.title,
-      origin: row.origin,
-      pinned: !!row.pinned,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    }))
-    .sort((a, b) => b.updatedAt - a.updatedAt)
+function mapConversationRow(row: {
+  id: string
+  title: string
+  agent_id: string | null
+  origin: string
+  pinned: number
+  created_at: number
+  updated_at: number
+}): Conversation {
+  return {
+    id: row.id,
+    title: row.title,
+    agentId: row.agent_id,
+    origin: row.origin,
+    pinned: !!row.pinned,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+const allConversationsHasMore = computed(() => allConversations.value.length < allConversationsTotal.value)
+
+async function loadMoreAllConversations(reset = false): Promise<void> {
+  if (allConversationsLoading.value) return
+  if (!reset && !allConversationsHasMore.value) return
+
+  allConversationsLoading.value = true
+  allConversationsError.value = null
+  try {
+    const offset = reset ? 0 : allConversations.value.length
+    const res = await api.chat.listConversationsPaginated(ALL_PAGE_SIZE, offset, 'updated')
+    const page = res.items.map(mapConversationRow)
+    if (reset) {
+      allConversations.value = page
+    } else {
+      allConversations.value.push(...page)
+    }
+    allConversationsTotal.value = res.total
+  } catch {
+    allConversationsError.value = 'Failed to load conversations'
+  } finally {
+    allConversationsLoading.value = false
+  }
+}
+
+async function loadAllPagesForSearch(token: number): Promise<void> {
+  while (
+    showAllConversations.value
+    && searchQuery.value.trim().length > 0
+    && allConversationsHasMore.value
+    && token === allSearchLoadToken.value
+  ) {
+    await loadMoreAllConversations()
+  }
+}
+
+function onConversationListScroll(event: Event): void {
+  if (!showAllConversations.value || allConversationsLoading.value || !allConversationsHasMore.value) return
+  const target = event.target as HTMLElement
+  const threshold = 120
+  if (target.scrollHeight - target.scrollTop - target.clientHeight <= threshold) {
+    void loadMoreAllConversations()
+  }
+}
+
+async function clearHistory(): Promise<void> {
+  await chatStore.deleteAllConversations(showAllConversations.value)
+  if (showAllConversations.value) {
+    await loadMoreAllConversations(true)
+  }
+  showClearConfirm.value = false
 }
 
 function formatDate(ts: number): string {
@@ -89,7 +166,7 @@ function displayTitle(conv: { title: string; origin?: string }): string {
 
 const visibleConversations = computed(() => (
   showAllConversations.value
-    ? allConversations.value
+    ? [...allConversations.value].sort((a, b) => b.updatedAt - a.updatedAt)
     : chatStore.sortedConversations
 ))
 
@@ -103,8 +180,15 @@ const filteredConversations = computed(() => {
 
 watch(showAllConversations, (enabled) => {
   if (enabled) {
-    void loadAllConversations()
+    void loadMoreAllConversations(true)
   }
+})
+
+watch(searchQuery, (query) => {
+  if (!showAllConversations.value) return
+  if (!query.trim()) return
+  allSearchLoadToken.value += 1
+  void loadAllPagesForSearch(allSearchLoadToken.value)
 })
 </script>
 
@@ -114,7 +198,7 @@ watch(showAllConversations, (enabled) => {
     <div class="px-3 py-2.5 border-b border-zinc-800/60 flex items-center justify-between">
       <span class="text-xs font-medium text-zinc-500 uppercase tracking-wider">Chat History</span>
       <button
-        v-if="!showAllConversations && chatStore.sortedConversations.length > 0"
+        v-if="showAllConversations ? allConversations.length > 0 : chatStore.sortedConversations.length > 0"
         class="p-1 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
         title="Clear all history"
         @click="showClearConfirm = true"
@@ -174,13 +258,16 @@ watch(showAllConversations, (enabled) => {
     </div>
 
     <!-- Conversation list -->
-    <div class="flex-1 overflow-y-auto">
+    <div
+      class="flex-1 overflow-y-auto"
+      @scroll.passive="onConversationListScroll"
+    >
       <div
         v-for="conv in filteredConversations"
         :key="conv.id"
         class="group flex items-center px-3 py-2.5 mx-2 my-0.5 rounded-lg cursor-pointer transition-colors hover:bg-zinc-800/60"
         :class="{ 'bg-zinc-800': conv.id === chatStore.activeConversationId }"
-        @click="selectChat(conv.id)"
+        @click="selectChat(conv)"
       >
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
@@ -246,6 +333,19 @@ watch(showAllConversations, (enabled) => {
       >
         {{ searchQuery ? 'No matching conversations' : 'No conversations yet' }}
       </div>
+
+      <div
+        v-if="showAllConversations && allConversationsLoading"
+        class="px-4 py-2 text-center text-zinc-500 text-xs"
+      >
+        Loading more...
+      </div>
+      <div
+        v-else-if="showAllConversations && allConversationsError"
+        class="px-4 py-2 text-center text-red-400 text-xs"
+      >
+        {{ allConversationsError }}
+      </div>
     </div>
 
     <!-- Clear All Confirmation -->
@@ -262,7 +362,7 @@ watch(showAllConversations, (enabled) => {
       <template #actions>
         <button
           class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
-          @click="chatStore.deleteAllConversations(); showClearConfirm = false"
+          @click="clearHistory"
         >
           Delete All
         </button>

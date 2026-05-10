@@ -12,6 +12,7 @@ import { useChatAgentConfig } from '../composables/useChatAgentConfig'
 export interface Conversation {
   id: string
   title: string
+  agentId?: string | null
   origin?: string
   pinned: boolean
   createdAt: number
@@ -68,9 +69,10 @@ export const useChatStore = defineStore('chat', () => {
     const agentId = agentConfig.activeAgentId.value
     const rows = await api.chat.listConversations(agentId !== null ? agentId : '')
     conversations.value = rows.map(
-      (r: { id: string; title: string; origin: string; pinned: number; created_at: number; updated_at: number }) => ({
+      (r: { id: string; title: string; agent_id: string | null; origin: string; pinned: number; created_at: number; updated_at: number }) => ({
         id: r.id,
         title: r.title,
+        agentId: r.agent_id,
         origin: r.origin,
         pinned: !!r.pinned,
         createdAt: r.created_at,
@@ -89,6 +91,7 @@ export const useChatStore = defineStore('chat', () => {
     conversations.value.unshift({
       id: conv.id,
       title: conv.title,
+      agentId: conv.agentId,
       origin: conv.origin,
       pinned: false,
       createdAt: conv.createdAt,
@@ -112,9 +115,12 @@ export const useChatStore = defineStore('chat', () => {
 
   // ── Conversation CRUD ──
 
-  async function selectConversation(id: string): Promise<void> {
+  async function selectConversation(id: string, agentIdHint?: string | null): Promise<void> {
     activeConversationId.value = id
     agentStore.setActiveViewConversation(id)
+    if (agentIdHint !== undefined) {
+      agentConfig.setConversationAgent(agentIdHint)
+    }
     loadingMessages.value = true
     try {
       const response = await api.chat.getMessages(id)
@@ -346,8 +352,8 @@ export const useChatStore = defineStore('chat', () => {
     resetStreaming()
   }
 
-  async function deleteAllConversations(): Promise<void> {
-    await api.chat.deleteAllConversations(agentConfig.activeAgentId.value)
+  async function deleteAllConversations(allConversations = false): Promise<void> {
+    await api.chat.deleteAllConversations(allConversations ? undefined : agentConfig.activeAgentId.value)
     // Keep pinned conversations in the local list
     const pinned = conversations.value.filter(c => c.pinned)
     conversations.value = pinned
