@@ -86,24 +86,26 @@ const tabs = [
       </div>
 
       <!-- Tabs -->
-      <div class="flex gap-1 mb-6 border-b border-zinc-800">
-        <button
-          v-for="tab in tabs"
-          :key="tab.id"
-          class="flex items-center gap-2 px-4 py-2.5 text-sm transition-colors border-b-2 -mb-px"
-          :class="
-            activeTab === tab.id
-              ? 'text-blue-400 border-blue-400'
-              : 'text-zinc-500 border-transparent hover:text-zinc-300'
-          "
-          @click="activeTab = tab.id"
-        >
-          <Icon
-            :icon="tab.icon"
-            class="w-4 h-4"
-          />
-          {{ tab.label }}
-        </button>
+      <div class="w-full overflow-x-auto overflow-y-hidden mb-6 border-b border-zinc-800">
+        <div class="flex gap-1 whitespace-nowrap min-w-max items-center">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            class="flex items-center gap-2 px-4 py-2 text-sm transition-colors border-b-2 -mb-px flex-shrink-0"
+            :class="
+              activeTab === tab.id
+                ? 'text-blue-400 border-blue-400'
+                : 'text-zinc-500 border-transparent hover:text-zinc-300'
+            "
+            @click="activeTab = tab.id"
+          >
+            <Icon
+              :icon="tab.icon"
+              class="w-4 h-4"
+            />
+            {{ tab.label }}
+          </button>
+        </div>
       </div>
 
       <!-- General Tab -->
