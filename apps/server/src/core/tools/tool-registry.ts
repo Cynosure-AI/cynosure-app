@@ -37,6 +37,11 @@ interface ToolEntry {
   namespace: ToolNamespace
 }
 
+interface NameResolutionScope {
+  ambiguous: boolean
+  entriesWithSameName: ToolEntry[]
+}
+
 /**
  * Global tool registry that supports multiple tools with the same bare name
  * from different namespaces. Agent and chat selections are stored as stable
@@ -78,17 +83,22 @@ export class ToolRegistry {
       || 'ns'
   }
 
-  private executionNameFor(entry: ToolEntry, forcePrefix = false): string {
-    const keys = this.nameIndex.get(entry.tool.name)
-    const ambiguous = forcePrefix || ((keys?.size ?? 0) > 1)
+  private executionNameFor(entry: ToolEntry, scope?: NameResolutionScope): string {
+    const globalKeys = this.nameIndex.get(entry.tool.name)
+    const globalAmbiguous = (globalKeys?.size ?? 0) > 1
+    const ambiguous = scope?.ambiguous ?? globalAmbiguous
     if (!ambiguous) return entry.tool.name
+
+    const sameNameEntries = scope?.entriesWithSameName
+      ?? [...(globalKeys || [])]
+        .map((key) => this.entries.get(key))
+        .filter((item): item is ToolEntry => Boolean(item))
 
     // Derive a human-readable namespace prefix and disambiguate that prefix
     // itself if two namespaces would otherwise generate the same slug.
     const baseSlug = this.safeSlugForNamespace(entry.namespace)
-    const sameSlugCollision = [...(keys || [])]
-      .map(key => this.entries.get(key))
-      .some(other => other && other.namespace.id !== entry.namespace.id && this.safeSlugForNamespace(other.namespace) === baseSlug)
+    const sameSlugCollision = sameNameEntries
+      .some((other) => other.namespace.id !== entry.namespace.id && this.safeSlugForNamespace(other.namespace) === baseSlug)
     const uniqueSlug = sameSlugCollision
       ? `${baseSlug}_${this.safeIdSlugForNamespace(entry.namespace).slice(0, 8)}`
       : baseSlug
@@ -264,9 +274,21 @@ export class ToolRegistry {
 
     const result: ToolDefinition[] = []
     const seen = new Set<string>()
+    const selectedByBareName = new Map<string, ToolEntry[]>()
+
+    for (const { entry } of resolved) {
+      const bare = entry.tool.name
+      const bucket = selectedByBareName.get(bare)
+      if (bucket) bucket.push(entry)
+      else selectedByBareName.set(bare, [entry])
+    }
 
     for (const { key, entry } of resolved) {
-      const finalName = this.executionNameFor(entry)
+      const sameNameEntries = selectedByBareName.get(entry.tool.name) || [entry]
+      const finalName = this.executionNameFor(entry, {
+        ambiguous: sameNameEntries.length > 1,
+        entriesWithSameName: sameNameEntries,
+      })
       if (seen.has(finalName)) continue
       seen.add(finalName)
       result.push(this.aliasTool(key, entry, finalName))
