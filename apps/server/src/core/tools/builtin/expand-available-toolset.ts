@@ -24,7 +24,7 @@ export function makeSearchAvailableMcpToolsTool(
             type: 'object',
             additionalProperties: false,
             properties: {
-                query: {
+                requested_capability: {
                     type: 'string',
                     description:
                         'Capability to search for, e.g. "gmail latest email", "calendar event", "github issue search" or "web content search".',
@@ -34,13 +34,13 @@ export function makeSearchAvailableMcpToolsTool(
                     description: `Maximum tools to load. Defaults to ${TOOL_SEARCH_LIMIT}.`,
                 },
             },
-            required: ['query'],
+            required: ['requested_capability'],
         },
         execute: async (params) => {
-            const { query, limit } = parseSearchArgs(params)
+            const { requested_capability, limit } = parseSearchArgs(params)
 
-            if (!query) {
-                return { success: false, output: 'Provide a non-empty query to search available tools.' }
+            if (!requested_capability) {
+                return { success: false, output: 'Provide a non-empty capability to search available tools.' }
             }
 
             const loadedTools = getLoadedTools()
@@ -49,7 +49,7 @@ export function makeSearchAvailableMcpToolsTool(
                 (tool) => isMcpTool(tool) && tool.name !== TOOL_SEARCH_TOOL_NAME && !loadedNames.has(tool.name),
             )
 
-            const names = lexicalToolSearch(query, searchableTools, limit)
+            const names = lexicalToolSearch(requested_capability, searchableTools, limit)
             const matches = searchableTools.filter(({ name }) => names.includes(name))
 
             for (const tool of matches) {
@@ -59,7 +59,7 @@ export function makeSearchAvailableMcpToolsTool(
             }
 
             if (!matches.length) {
-                return { success: true, output: `No additional tools found for "${query}".` }
+                return { success: true, output: `No additional tools found for "${requested_capability}".` }
             }
 
             return {
@@ -74,26 +74,26 @@ export function makeSearchAvailableMcpToolsTool(
     }
 }
 
-function parseSearchArgs(params: unknown): { query: string; limit: number } {
+function parseSearchArgs(params: unknown): { requested_capability: string; limit: number } {
     const args = params && typeof params === 'object'
-        ? params as { query?: unknown; limit?: unknown }
+        ? params as { requested_capability?: unknown; limit?: unknown }
         : {}
 
-    const query = typeof args.query === 'string' ? args.query.trim() : ''
+    const requested_capability = typeof args.requested_capability === 'string' ? args.requested_capability.trim() : ''
     const limit = typeof args.limit === 'number'
         ? Math.max(1, Math.min(TOOL_SEARCH_LIMIT, Math.floor(args.limit)))
         : TOOL_SEARCH_LIMIT
 
-    return { query, limit }
+    return { requested_capability, limit }
 }
 
 function lexicalToolSearch(
-    query: string,
+    requested_capability: string,
     tools: ToolDefinition[],
     limit: number,
 ): string[] {
     const scored = scoreItems(
-        query,
+        requested_capability,
         tools,
         toolText,
         ({ name }) => name,
@@ -106,12 +106,12 @@ function lexicalToolSearch(
 }
 
 function scoreItems<T>(
-    query: string,
+    requested_capability: string,
     items: T[],
     textForItem: (item: T) => string,
     valueForItem: (item: T) => string,
 ): Array<{ value: string; score: number; index: number }> {
-    const terms = tokenize(query)
+    const terms = tokenize(requested_capability)
 
     return items
         .map((item, index) => {
