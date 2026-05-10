@@ -319,12 +319,10 @@ onBeforeUnmount(() =>
           <div
             v-if="group.label"
             class="px-2.5 pb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500"
-            :class="gi > 0 ? 'pt-2 border-t border-zinc-800' : 'pt-1.5'"
-            :style="
-              props.stickyGroupHeaders
-                ? 'position: sticky; top: -5px; z-index: 1; background: rgba(24,24,27,0.95); backdrop-filter: blur(2px);'
-                : undefined
-            "
+            :class="[
+              gi > 0 ? 'pt-2 border-t border-zinc-800' : 'pt-1.5',
+              props.stickyGroupHeaders ? 'select-group-header' : ''
+            ]"
           >
             {{ group.label }}
           </div>
@@ -400,3 +398,21 @@ onBeforeUnmount(() =>
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 767px) {
+  .select-group-header {
+    position: static;
+  }
+}
+
+@media (min-width: 768px) {
+  .select-group-header {
+    position: sticky;
+    top: -5px;
+    z-index: 1;
+    background: rgba(24, 24, 27, 0.95);
+    backdrop-filter: blur(2px);
+  }
+}
+</style>
