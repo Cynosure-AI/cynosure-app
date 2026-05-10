@@ -12,7 +12,7 @@ const agentStore = useAgentStore()
 const { servers, actionError, authInProgress, loadServers, refreshAll } = useMcpServers()
 
 type McpTab = 'browse' | 'installed' | 'tools'
-const activeTab = ref<McpTab>('browse')
+const activeTab = ref<McpTab>('installed')
 
 const cleanups: (() => void)[] = []
 
@@ -43,8 +43,8 @@ onUnmounted(() => {
     <TabBar
       v-model="activeTab"
       :tabs="[
-        { value: 'browse', label: 'Browse Registry', icon: 'lucide:search' } as TabDef<McpTab>,
         { value: 'installed', label: 'Installed', icon: 'lucide:plug', badge: servers.length || undefined } as TabDef<McpTab>,
+        { value: 'browse', label: 'Browse Registry', icon: 'lucide:search' } as TabDef<McpTab>,
         { value: 'tools', label: 'Registered Tools', icon: 'lucide:wrench' } as TabDef<McpTab>,
       ]"
       class="mb-5"
