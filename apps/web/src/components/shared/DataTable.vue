@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T extends { id: string }">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed } from 'vue'
 
 export interface Column {
   key: string
@@ -9,11 +9,16 @@ export interface Column {
   hideOnMobile?: boolean
 }
 
+interface SelectionColumn {
+  width?: string
+  hideOnMobile?: boolean
+}
+
 interface Props<TItem> {
   items: TItem[]
   columns: Column[]
   selectable?: boolean
-  hideSelectableOnMobile?: boolean
+  selectionColumn?: SelectionColumn
   selectedIds?: string[]
   showHeader?: boolean
   emptyMessage?: string
@@ -24,7 +29,10 @@ const props = withDefaults(defineProps<Props<T>>(), {
   showHeader: true,
   emptyMessage: 'No items found',
   selectedIds: () => [],
-  hideSelectableOnMobile: false,
+  selectionColumn: () => ({
+    width: '40px',
+    hideOnMobile: false,
+  }),
   rowClass: undefined,
 })
 
@@ -34,36 +42,23 @@ const emit = defineEmits<{
   'selection-change': [value: string[]]
 }>()
 
-const isMobile = ref(false)
+const showSelectableColumn = computed(() => Boolean(props.selectable))
 
-function updateIsMobile() {
-  if (typeof window !== 'undefined') {
-    isMobile.value = window.innerWidth < 768
-  }
-}
-
-onMounted(() => {
-  updateIsMobile()
-  window.addEventListener('resize', updateIsMobile)
+const desktopGridColsTemplate = computed(() => {
+  const columnWidths = props.columns.map(col => col.width || 'minmax(0,1fr)').join(' ')
+  const selectionWidth = props.selectionColumn?.width || '40px'
+  return showSelectableColumn.value ? `${selectionWidth} ${columnWidths}` : columnWidths
 })
 
-onUnmounted(() => {
-  window.removeEventListener('resize', updateIsMobile)
-})
+const mobileGridColsTemplate = computed(() => {
+  const columnWidths = props.columns
+    .filter(col => !col.hideOnMobile)
+    .map(col => col.width || 'minmax(0,1fr)')
+    .join(' ')
 
-const visibleColumns = computed(() =>
-  isMobile.value
-    ? props.columns.filter(col => !col.hideOnMobile)
-    : props.columns
-)
-
-const showSelectableColumn = computed(() =>
-  Boolean(props.selectable) && !(isMobile.value && props.hideSelectableOnMobile)
-)
-
-const gridColsTemplate = computed(() => {
-  const columnWidths = visibleColumns.value.map(col => col.width || 'minmax(0,1fr)').join(' ')
-  return showSelectableColumn.value ? `40px ${columnWidths}` : columnWidths
+  const includeSelection = showSelectableColumn.value && !props.selectionColumn?.hideOnMobile
+  const selectionWidth = props.selectionColumn?.width || '40px'
+  return includeSelection ? `${selectionWidth} ${columnWidths}` : columnWidths
 })
 
 function toggleSelection(id: string) {
@@ -108,13 +103,14 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
     <!-- Header Row -->
     <div
       v-if="showHeader"
-      class="hidden md:grid md:px-5 md:py-3 text-[11px] tracking-wider uppercase text-zinc-400 bg-zinc-900/70 border-b border-zinc-800"
-      :style="{ gridTemplateColumns: gridColsTemplate }"
+      class="hidden md:grid md:px-5 md:py-3 text-[11px] tracking-wider uppercase text-zinc-400 bg-zinc-900/70 border-b border-zinc-800 dt-grid"
+      :style="{ '--dt-desktop-cols': desktopGridColsTemplate, '--dt-mobile-cols': mobileGridColsTemplate }"
     >
       <!-- Select All Checkbox (hidden on mobile) -->
       <div
         v-if="showSelectableColumn"
         class="flex items-center"
+        :class="props.selectionColumn?.hideOnMobile ? 'dt-mobile-hidden' : ''"
       >
         <input
           type="checkbox"
@@ -127,9 +123,9 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
 
       <!-- Column Headers -->
       <span
-        v-for="col in visibleColumns"
+        v-for="col in columns"
         :key="col.key"
-        :class="col.class"
+        :class="[col.class, col.hideOnMobile ? 'dt-mobile-hidden' : '']"
       >
         {{ col.label }}
       </span>
@@ -145,13 +141,14 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
         @click="handleRowClick(item, $event)"
       >
         <div
-          class="grid gap-3 md:gap-4 px-4 py-4 md:px-5 items-start"
-          :style="{ gridTemplateColumns: gridColsTemplate }"
+          class="grid gap-3 md:gap-4 px-4 py-4 md:px-5 items-start dt-grid"
+          :style="{ '--dt-desktop-cols': desktopGridColsTemplate, '--dt-mobile-cols': mobileGridColsTemplate }"
         >
           <!-- Selection Checkbox (hidden on mobile) -->
           <div
             v-if="showSelectableColumn"
             class="flex items-center md:pt-1"
+            :class="props.selectionColumn?.hideOnMobile ? 'dt-mobile-hidden' : ''"
             @click.stop
           >
             <input
@@ -163,18 +160,23 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
           </div>
 
           <!-- Column Content (via slots) -->
-          <slot
-            v-for="col in visibleColumns"
+          <template
+            v-for="col in columns"
             :key="col.key"
-            :name="`col-${col.key}`"
-            :item="item"
-            :column="col"
           >
-            <!-- Fallback: render simple text if no slot provided -->
-            <div :class="col.class">
-              {{ (item as Record<string, unknown>)[col.key] }}
+            <div :class="col.hideOnMobile ? 'dt-mobile-hidden' : ''">
+              <slot
+                :name="`col-${col.key}`"
+                :item="item"
+                :column="col"
+              >
+                <!-- Fallback: render simple text if no slot provided -->
+                <div :class="col.class">
+                  {{ (item as Record<string, unknown>)[col.key] }}
+                </div>
+              </slot>
             </div>
-          </slot>
+          </template>
         </div>
       </div>
     </div>
@@ -188,3 +190,19 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
     {{ emptyMessage }}
   </div>
 </template>
+
+<style scoped>
+.dt-grid {
+  grid-template-columns: var(--dt-desktop-cols);
+}
+
+@media (max-width: 767px) {
+  .dt-grid {
+    grid-template-columns: var(--dt-mobile-cols);
+  }
+
+  .dt-mobile-hidden {
+    display: none !important;
+  }
+}
+</style>

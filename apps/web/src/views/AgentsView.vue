@@ -412,6 +412,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
         :items="filteredAgents"
         :columns="agentTableColumns"
         :selectable="true"
+        :selection-column="{ hideOnMobile: true }"
         :selected-ids="bulkSelectionIds"
         @update:selected-ids="bulkSelectionIds = $event"
         @row-click="onRowClick($event.id)"
