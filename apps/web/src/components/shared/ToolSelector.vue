@@ -216,8 +216,8 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
                     @click="toggle"
                   >
                     <p
-                      class="text-[11px] uppercase tracking-wider font-semibold"
-                      :class="group.namespace.id === 'builtin' ? 'text-blue-400' : 'text-purple-400'"
+                      class="text-[11px] uppercase tracking-wider "
+                      :class="group.namespace.id === 'builtin' ? 'text-blue-400' : ''"
                     >
                       {{ group.namespace.label }}
                     </p>

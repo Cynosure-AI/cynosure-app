@@ -185,7 +185,7 @@ function setNamespaceExpanded(nsId: string, expanded: boolean): void {
                   class="h-3 w-3 text-zinc-500 transition-transform"
                   :class="{ '-rotate-90': !expanded }"
                 />
-                <span class="text-[11px] uppercase tracking-wider font-semibold text-purple-400">
+                <span class="text-[11px] uppercase tracking-wider font-semibold ">
                   {{ group.namespace.label }}
                 </span>
                 <span class="text-[10px] text-zinc-600">
