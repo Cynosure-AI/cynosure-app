@@ -58,11 +58,16 @@ const historyPage = ref(1)
 const historyLoading = ref(false)
 const historyPages = computed(() => Math.max(1, Math.ceil(historyTotal.value / PAGE_SIZE)))
 
+// Sort history items chronologically (newest first)
+const sortedHistoryItems = computed(() =>
+  [...historyItems.value].sort((a, b) => b.updated_at - a.updated_at)
+)
+
 async function loadHistory() {
   historyLoading.value = true
   try {
     const offset = (historyPage.value - 1) * PAGE_SIZE
-    const res = await api.chat.listConversationsPaginated(PAGE_SIZE, offset)
+    const res = await api.chat.listConversationsPaginated(PAGE_SIZE, offset, 'updated')
     historyItems.value = res.items
     historyTotal.value = res.total
   } catch {
@@ -370,7 +375,7 @@ onUnmounted(() => {
         <template v-else>
           <div class="space-y-2">
             <div
-              v-for="item in historyItems"
+              v-for="item in sortedHistoryItems"
               :key="item.id"
               role="button"
               tabindex="0"
