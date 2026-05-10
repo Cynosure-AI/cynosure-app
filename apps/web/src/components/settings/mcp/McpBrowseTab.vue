@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted, computed } from 'vue'
 import { api } from '../../../api/client'
 import type { McpRegistryServer } from '../../../api/types'
 import { Icon } from '@iconify/vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
+import DataTable from '../../shared/DataTable.vue'
+import type { Column } from '../../shared/DataTable.vue'
 
 const emit = defineEmits<{
   goToInstalled: []
@@ -20,6 +22,21 @@ const registryLoading = ref(false)
 const registryHasMore = ref(true)
 const addingRegistryId = ref<string | null>(null)
 const registryEnv = reactive<Record<string, string>>({})
+
+type RegistryRow = McpRegistryServer & { id: string }
+
+const registryRows = computed<RegistryRow[]>(() =>
+  registryServers.value.map(entry => ({
+    ...entry,
+    id: entryId(entry.server),
+  }))
+)
+
+const registryTableColumns: Column[] = [
+  { key: 'server', label: 'Server', width: 'minmax(0,4fr)' },
+  { key: 'type', label: 'Type', width: 'minmax(180px,1fr)', hideOnMobile: true },
+  { key: 'actions', label: 'Actions', width: 'minmax(200px,1fr)' },
+]
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let currentAbortController: AbortController | null = null
@@ -194,6 +211,10 @@ function isInstalled(srv: McpRegistryServer['server']): boolean {
   return servers.value.some(s => s.args.some(a => a === identifier))
 }
 
+function registryRowClass(item: RegistryRow): string | undefined {
+  return isInstalled(item.server) ? 'opacity-60' : undefined
+}
+
 onMounted(() => {
   loadRegistry()
 })
@@ -231,172 +252,167 @@ onMounted(() => {
   </div>
 
   <!-- Registry list -->
-  <div class="rounded-xl border border-zinc-800 overflow-hidden bg-zinc-950/45">
-    <div class="hidden md:grid md:grid-cols-[minmax(0,1.75fr)_220px_220px] px-5 py-3 text-[11px] tracking-wider uppercase text-zinc-400 bg-zinc-900/70 border-b border-zinc-800">
-      <span>Server</span>
-      <span>Type</span>
-      <span>Actions</span>
-    </div>
-
-    <div
-      v-for="entry in registryServers"
-      :key="entry.server.name + ':' + entry.server.version"
-      class="border-b border-zinc-800/70 last:border-b-0"
-      :class="{ 'opacity-60': isInstalled(entry.server) }"
-    >
-      <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1.75fr)_220px_220px] gap-3 md:gap-4 px-4 py-4 md:px-5 items-start">
-        <div class="min-w-0 flex items-start gap-3">
-          <div class="w-10 h-10 rounded-lg bg-zinc-700/70 flex items-center justify-center shrink-0 overflow-hidden">
-            <img
-              v-if="entry.server.icons?.length"
-              :src="entry.server.icons[0].src"
-              class="w-full h-full object-cover"
-              @error="($event.target as HTMLImageElement).style.display = 'none'"
-            >
-            <Icon
-              v-else
-              icon="lucide:puzzle"
-              class="w-5 h-5 text-zinc-400"
-            />
-          </div>
-
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              <button
-                class="font-medium text-zinc-100 text-sm hover:underline hover:text-zinc-50 transition-colors text-left"
-                @click="selectedRegistryServer = entry"
-              >
-                {{ getDisplayName(entry.server) }}
-              </button>
-              <span class="text-xs text-zinc-500">v{{ entry.server.version }}</span>
-            </div>
-            <p class="text-xs text-zinc-400 mt-1 line-clamp-2">
-              {{ entry.server.description || 'No description' }}
-            </p>
-            <div class="flex items-center gap-3 mt-2 text-xs text-zinc-600">
-              <span class="truncate">{{ entry.server.name }}</span>
-              <a
-                v-if="entry.server.repository?.url"
-                :href="entry.server.repository.url"
-                target="_blank"
-                rel="noopener"
-                class="flex items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
-              >
-                <Icon
-                  icon="lucide:github"
-                  class="w-3 h-3"
-                /> Repo
-              </a>
-            </div>
-          </div>
+  <DataTable
+    :items="registryRows"
+    :columns="registryTableColumns"
+    :row-class="registryRowClass"
+    empty-message="No servers found"
+  >
+    <template #col-server="{ item }">
+      <div class="min-w-0 flex items-start gap-3">
+        <div class="w-10 h-10 rounded-lg bg-zinc-700/70 flex items-center justify-center shrink-0 overflow-hidden">
+          <img
+            v-if="item.server.icons?.length"
+            :src="item.server.icons[0].src"
+            class="w-full h-full object-cover"
+            @error="($event.target as HTMLImageElement).style.display = 'none'"
+          >
+          <Icon
+            v-else
+            icon="lucide:puzzle"
+            class="w-5 h-5 text-zinc-400"
+          />
         </div>
 
-        <div class="flex flex-wrap items-center gap-1.5 md:pt-1">
-          <span
-            v-for="tag in getTypeTags(entry.server)"
-            :key="tag"
-            class="text-[11px] px-2 py-1 rounded-md"
-            :class="tag === 'npm'
-              ? 'bg-sky-500/15 text-sky-300'
-              : tag === 'pypi'
-                ? 'bg-indigo-500/15 text-indigo-300'
-                : tag === 'smithery'
-                  ? 'bg-blue-500/15 text-blue-300'
-                  : tag === 'local'
-                    ? 'bg-emerald-500/15 text-emerald-300'
-                    : tag === 'remote'
-                      ? 'bg-violet-500/15 text-violet-300'
-                      : 'bg-zinc-700/60 text-zinc-400'"
-          >
-            {{ tag }}
-          </span>
-        </div>
-
-        <div class="flex items-center gap-2 md:justify-start md:pt-0.5">
-          <button
-            class="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-md transition-colors"
-            @click="selectedRegistryServer = entry"
-          >
-            Details
-          </button>
-          <template v-if="isInstalled(entry.server)">
-            <span class="text-xs text-zinc-500 flex items-center gap-1">
-              <Icon
-                icon="lucide:check"
-                class="w-3.5 h-3.5"
-              /> Added
-            </span>
-          </template>
-          <template v-else-if="getInstallInfo(entry.server)">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 flex-wrap">
             <button
-              :disabled="isLoading(entryId(entry.server))"
-              class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
-              @click="addFromRegistry(entry)"
+              class="font-medium text-zinc-100 text-sm hover:underline hover:text-zinc-50 transition-colors text-left"
+              @click="selectedRegistryServer = item"
             >
-              {{ isLoading(entryId(entry.server)) ? 'Adding...' : 'Add' }}
+              {{ getDisplayName(item.server) }}
             </button>
-          </template>
-          <template v-else>
-            <span class="text-xs text-zinc-600">Not installable</span>
-          </template>
+            <span class="text-xs text-zinc-500">v{{ item.server.version }}</span>
+          </div>
+          <p class="text-xs text-zinc-400 mt-1 line-clamp-2">
+            {{ item.server.description || 'No description' }}
+          </p>
+          <div class="flex items-center gap-3 mt-2 text-xs text-zinc-600">
+            <span class="truncate">{{ item.server.name }}</span>
+            <a
+              v-if="item.server.repository?.url"
+              :href="item.server.repository.url"
+              target="_blank"
+              rel="noopener"
+              class="flex items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
+            >
+              <Icon
+                icon="lucide:github"
+                class="w-3 h-3"
+              /> Repo
+            </a>
+          </div>
+
+          <div
+            v-if="addingRegistryId === entryId(item.server) && getInstallInfo(item.server)?.envVars.length"
+            class="mt-3 p-3 border border-zinc-700 rounded-lg bg-zinc-900/60 space-y-2"
+          >
+            <p class="text-xs text-zinc-400 mb-1">
+              Required configuration:
+            </p>
+            <div
+              v-for="ev in getInstallInfo(item.server)!.envVars"
+              :key="ev.name"
+            >
+              <label class="block text-xs text-zinc-400 mb-1">
+                {{ ev.name }}
+                <span
+                  v-if="ev.required"
+                  class="text-red-400"
+                >*</span>
+                <span
+                  v-if="ev.description"
+                  class="text-zinc-600 ml-1"
+                >- {{ ev.description }}</span>
+              </label>
+              <input
+                v-model="registryEnv[ev.name]"
+                type="text"
+                :placeholder="ev.name"
+                class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+              >
+            </div>
+            <div class="flex gap-2 justify-end mt-2">
+              <button
+                class="px-3 py-1.5 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-md transition-colors"
+                @click="cancelRegistryAdd"
+              >
+                Cancel
+              </button>
+              <button
+                :disabled="isLoading(entryId(item.server)) || getInstallInfo(item.server)!.envVars.some(v => v.required && !registryEnv[v.name])"
+                class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
+                @click="addFromRegistry(item)"
+              >
+                {{ isLoading(entryId(item.server)) ? 'Adding...' : 'Confirm & Add' }}
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="actionError[entryId(item.server)]"
+            class="mt-2 text-xs text-red-400"
+          >
+            {{ actionError[entryId(item.server)] }}
+          </div>
         </div>
       </div>
+    </template>
 
-      <!-- Env var inputs (shown when configuring) -->
-      <div
-        v-if="addingRegistryId === entryId(entry.server) && getInstallInfo(entry.server)?.envVars.length"
-        class="mx-4 md:mx-5 mb-4 mt-1 p-3 border border-zinc-700 rounded-lg bg-zinc-900/60 space-y-2"
-      >
-        <p class="text-xs text-zinc-400 mb-1">
-          Required configuration:
-        </p>
-        <div
-          v-for="ev in getInstallInfo(entry.server)!.envVars"
-          :key="ev.name"
+    <template #col-type="{ item }">
+      <div class="flex flex-wrap items-center gap-1.5 md:pt-1">
+        <span
+          v-for="tag in getTypeTags(item.server)"
+          :key="tag"
+          class="text-[11px] px-2 py-1 rounded-md"
+          :class="tag === 'npm'
+            ? 'bg-sky-500/15 text-sky-300'
+            : tag === 'pypi'
+              ? 'bg-indigo-500/15 text-indigo-300'
+              : tag === 'smithery'
+                ? 'bg-blue-500/15 text-blue-300'
+                : tag === 'local'
+                  ? 'bg-emerald-500/15 text-emerald-300'
+                  : tag === 'remote'
+                    ? 'bg-violet-500/15 text-violet-300'
+                    : 'bg-zinc-700/60 text-zinc-400'"
         >
-          <label class="block text-xs text-zinc-400 mb-1">
-            {{ ev.name }}
-            <span
-              v-if="ev.required"
-              class="text-red-400"
-            >*</span>
-            <span
-              v-if="ev.description"
-              class="text-zinc-600 ml-1"
-            >- {{ ev.description }}</span>
-          </label>
-          <input
-            v-model="registryEnv[ev.name]"
-            type="text"
-            :placeholder="ev.name"
-            class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
-          >
-        </div>
-        <div class="flex gap-2 justify-end mt-2">
-          <button
-            class="px-3 py-1.5 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-md transition-colors"
-            @click="cancelRegistryAdd"
-          >
-            Cancel
-          </button>
-          <button
-            :disabled="isLoading(entryId(entry.server)) || getInstallInfo(entry.server)!.envVars.some(v => v.required && !registryEnv[v.name])"
-            class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
-            @click="addFromRegistry(entry)"
-          >
-            {{ isLoading(entryId(entry.server)) ? 'Adding...' : 'Confirm & Add' }}
-          </button>
-        </div>
+          {{ tag }}
+        </span>
       </div>
+    </template>
 
-      <div
-        v-if="actionError[entryId(entry.server)]"
-        class="px-4 md:px-5 pb-3 text-xs text-red-400"
-      >
-        {{ actionError[entryId(entry.server)] }}
+    <template #col-actions="{ item }">
+      <div class="flex items-center gap-2 md:justify-start md:pt-0.5">
+        <button
+          class="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-md transition-colors"
+          @click="selectedRegistryServer = item"
+        >
+          Details
+        </button>
+        <template v-if="isInstalled(item.server)">
+          <span class="text-xs text-zinc-500 flex items-center gap-1">
+            <Icon
+              icon="lucide:check"
+              class="w-3.5 h-3.5"
+            /> Added
+          </span>
+        </template>
+        <template v-else-if="getInstallInfo(item.server)">
+          <button
+            :disabled="isLoading(entryId(item.server))"
+            class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
+            @click="addFromRegistry(item)"
+          >
+            {{ isLoading(entryId(item.server)) ? 'Adding...' : 'Add' }}
+          </button>
+        </template>
+        <template v-else>
+          <span class="text-xs text-zinc-600">Not installable</span>
+        </template>
       </div>
-    </div>
-  </div>
+    </template>
+  </DataTable>
 
   <!-- Load more / Loading -->
   <div class="flex justify-center py-6">
