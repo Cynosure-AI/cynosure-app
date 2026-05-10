@@ -12,6 +12,12 @@ defineProps<{
   iconColor?: 'blue' | 'red' | 'amber'
   /** Max width class (default: 'max-w-md') */
   maxWidth?: string
+  /** Max height class for the dialog panel (default: 'max-h-[90vh]') */
+  maxHeight?: string
+  /** Allow content to overflow the panel (useful for nested dropdowns) */
+  overflowVisible?: boolean
+  /** Allow body slot to overflow instead of clipping with vertical scrolling */
+  bodyOverflowVisible?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -27,12 +33,19 @@ const emit = defineEmits<{
       @click.self="emit('close')"
     >
       <div
-        class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden w-full flex flex-col max-h-[90vh]"
-        :class="maxWidth || 'max-w-md'"
+        v-bind="$attrs"
+        class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full flex flex-col"
+        :class="[
+          maxWidth || 'max-w-md',
+          maxHeight || 'max-h-[90vh]',
+          overflowVisible ? 'overflow-visible' : 'overflow-hidden'
+        ]"
       >
-        <div class="p-6 flex flex-col min-h-0 flex-1">
+        <div
+          class="p-6 flex flex-col min-h-0 flex-1"
+        >
           <!-- Header -->
-          <div class="flex items-center gap-3 mb-4 flex-shrink-0">
+          <div class="flex items-center gap-3 mb-4 shrink-0">
             <div
               v-if="icon"
               class="p-2 rounded-lg"
@@ -53,14 +66,17 @@ const emit = defineEmits<{
           </div>
 
           <!-- Body slot -->
-          <div class="overflow-y-auto min-h-0 flex-1">
+          <div
+            class="min-h-0 flex-1"
+            :class="bodyOverflowVisible ? 'overflow-visible' : 'overflow-y-auto'"
+          >
             <slot />
           </div>
 
           <!-- Actions slot -->
           <div
             v-if="$slots.actions"
-            class="flex flex-col gap-3 mt-6 flex-shrink-0"
+            class="flex flex-col gap-3 mt-6 shrink-0"
           >
             <slot name="actions" />
           </div>
