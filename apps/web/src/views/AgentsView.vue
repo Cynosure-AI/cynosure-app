@@ -74,8 +74,8 @@ const selectedAgentCount = computed(() => bulkSelectionIds.value.length)
 // Table columns for DataTable component
 const agentTableColumns: Column[] = [
   { key: 'name', label: 'Name', width: 'minmax(0,1.5fr)' },
-  { key: 'provider', label: 'Provider/Model', width: 'minmax(200px,1fr)' },
-  { key: 'metadata', label: 'Info', width: '200px' },
+  { key: 'provider', label: 'Provider/Model', width: 'minmax(200px,1fr)', hideOnMobile: true },
+  { key: 'metadata', label: 'Info', width: '200px', hideOnMobile: true },
   { key: 'actions', label: 'Actions', width: '120px' },
 ]
 
@@ -446,6 +446,9 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
                 class="text-xs text-zinc-500 truncate"
               >
                 {{ item.description }}
+              </div>
+              <div class="text-xs text-zinc-500 truncate mt-1 md:hidden">
+                {{ item.model || 'No model selected' }}
               </div>
             </div>
           </div>
