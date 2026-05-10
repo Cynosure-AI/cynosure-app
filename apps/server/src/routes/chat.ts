@@ -287,6 +287,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const convCheck = db.prepare('SELECT agent_id, ma_workspace_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null; ma_workspace_id: string | null } | undefined
       const agentId: string | null = convCheck?.agent_id || null
       const resolvedAgent = agentId ? getAgent(agentId) : null
+      const effectiveOverrideSubAgents = overrideSubAgents !== undefined
+        ? overrideSubAgents
+        : (resolvedAgent?.overrideSubAgents === true)
 
       // Resolve memory space overrides (request body ids -> { id, name } objects)
       const memorySpaceOverrides = resolveMemorySpaceOverrides(db, reqMemorySpaceIds)
@@ -317,7 +320,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           systemPrompt: systemPrompt || undefined,
           requestedSubAgents: reqSubAgents,
           memorySpaceOverrides,
-          overrideSubAgents: overrideSubAgents !== false,
+          overrideSubAgents: effectiveOverrideSubAgents,
           autoToolRouting: reqAutoToolRouting === true,
           toolRouterProviderId: reqToolRouterProviderId || undefined,
           toolRouterModel: reqToolRouterModel || undefined,
@@ -365,7 +368,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         systemPrompt: systemPrompt || '',
         model: responseModel,
         providerId: responseProvider,
-        overrideSubAgents: overrideSubAgents ?? false,
+        overrideSubAgents: effectiveOverrideSubAgents,
         thinkingEnabled: reqThinkingEnabled ?? true,
         autoToolRouting: reqAutoToolRouting === true,
       }

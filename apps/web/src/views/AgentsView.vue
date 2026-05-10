@@ -134,6 +134,7 @@ async function createAgent() {
     cronPrompt: '',
     tools: [],
     autoApproveTools: false,
+    overrideSubAgents: false,
     autoToolRouting: false,
     generateTitle: true
   })

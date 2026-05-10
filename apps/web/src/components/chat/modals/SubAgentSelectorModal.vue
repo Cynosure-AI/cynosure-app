@@ -46,6 +46,11 @@ function agentIcon(agent: { iconUrl: string | null; providerId: string }): strin
 function toSubAgentCodename(name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent'
 }
+
+function onOverrideSubAgentsToggle(value: boolean): void {
+  chatStore.sessionOverrideSubAgents = value
+  chatStore.markOverridesModified()
+}
 </script>
 
 <template>
@@ -70,7 +75,7 @@ function toSubAgentCodename(name: string): string {
         :model-value="chatStore.sessionOverrideSubAgents"
         size="sm"
         color="amber"
-        @update:model-value="chatStore.sessionOverrideSubAgents = $event"
+        @update:model-value="onOverrideSubAgentsToggle"
       />
     </div>
     
