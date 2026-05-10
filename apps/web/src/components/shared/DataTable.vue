@@ -110,7 +110,7 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
       <div
         v-if="showSelectableColumn"
         class="flex items-center"
-        :class="props.selectionColumn?.hideOnMobile ? 'dt-mobile-hidden' : ''"
+        :class="props.selectionColumn?.hideOnMobile ? 'hidden md:block' : ''"
       >
         <input
           type="checkbox"
@@ -125,7 +125,7 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
       <span
         v-for="col in columns"
         :key="col.key"
-        :class="[col.class, col.hideOnMobile ? 'dt-mobile-hidden' : '']"
+        :class="[col.class, col.hideOnMobile ? 'hidden md:block' : '']"
       >
         {{ col.label }}
       </span>
@@ -148,7 +148,7 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
           <div
             v-if="showSelectableColumn"
             class="flex items-center md:pt-1"
-            :class="props.selectionColumn?.hideOnMobile ? 'dt-mobile-hidden' : ''"
+            :class="props.selectionColumn?.hideOnMobile ? 'hidden md:block' : ''"
             @click.stop
           >
             <input
@@ -164,7 +164,7 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
             v-for="col in columns"
             :key="col.key"
           >
-            <div :class="col.hideOnMobile ? 'dt-mobile-hidden' : ''">
+            <div :class="col.hideOnMobile ? 'hidden md:block' : ''">
               <slot
                 :name="`col-${col.key}`"
                 :item="item"
@@ -201,8 +201,5 @@ const someSelected = computed(() => props.selectedIds.length > 0 && props.select
     grid-template-columns: var(--dt-mobile-cols);
   }
 
-  .dt-mobile-hidden {
-    display: none !important;
-  }
 }
 </style>
