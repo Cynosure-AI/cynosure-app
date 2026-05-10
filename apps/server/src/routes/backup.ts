@@ -8,6 +8,8 @@ import { getGateway } from '../core/gateway/gateway.js'
 import { loadSavedProviders } from './providers.js'
 import { loadSavedMcpServers } from './mcp/index.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
+import { readdirSync, writeFileSync } from 'fs'
+import { getConversationArtifactsDir, cleanupConversationArtifacts } from '../core/artifacts/image-artifacts.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getMemoryParser } from '../core/memory/parser.js'
@@ -240,6 +242,17 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 archive.append(JSON.stringify(conversations, null, 2), { name: 'conversations/conversations.json' })
                 archive.append(JSON.stringify(messages, null, 2), { name: 'conversations/messages.json' })
                 archive.append(JSON.stringify(tasks, null, 2), { name: 'conversations/tasks.json' })
+
+                // Export artifact files for each conversation
+                const conversationIds = (conversations as Record<string, unknown>[]).map(c => c.id as string)
+                for (const convId of conversationIds) {
+                    const artifactDir = getConversationArtifactsDir(convId)
+                    if (existsSync(artifactDir)) {
+                        // Add the entire artifacts directory for this conversation
+                        archive.directory(artifactDir, `conversations/artifacts/${convId}`)
+                    }
+                }
+
                 manifest.modules.conversations = { count: conversations.length }
             }
 
@@ -724,6 +737,40 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                             res.errors.push(`Task: ${(e as Error).message}`)
                         }
                     }
+                }
+
+                // Restore artifact files for imported conversations
+                try {
+                    const appDataDir = getAppDataDir()
+                    const artifactsBaseDir = join(appDataDir, 'artifacts', 'conversations')
+
+                    // Get all entries in the zip
+                    const allEntries = zip.getEntries()
+                    for (const entry of allEntries) {
+                        // Match entries like: conversations/artifacts/{convId}/{relative/path/to/file}
+                        const match = entry.entryName.match(/^conversations\/artifacts\/([^/]+)\/(.+)$/)
+                        if (!match) continue
+
+                        const convId = match[1]
+                        const relPath = match[2]
+
+                        // Only restore artifacts for conversations we're importing
+                        if (!importedConversationIds.has(convId)) continue
+
+                        // Skip directories, only restore files
+                        if (entry.isDirectory) continue
+
+                        try {
+                            const targetPath = join(artifactsBaseDir, convId, relPath)
+                            const targetDir = join(artifactsBaseDir, convId)
+                            mkdirSync(targetDir, { recursive: true })
+                            writeFileSync(targetPath, entry.getData())
+                        } catch (e) {
+                            res.errors.push(`Artifact file ${entry.entryName}: ${(e as Error).message}`)
+                        }
+                    }
+                } catch (e) {
+                    res.errors.push(`Artifact restoration: ${(e as Error).message}`)
                 }
             } catch (e) {
                 res.errors.push((e as Error).message)

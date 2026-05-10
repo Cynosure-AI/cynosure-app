@@ -13,7 +13,7 @@ import type { ChatMessage, ContentPart } from '../core/gateway/providers/base.pr
 import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
-import { extractFilePathFromFileUrl } from '../core/artifacts/image-artifacts.js'
+import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -182,6 +182,18 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const hasExplicitToolAllowlist = Array.isArray(allowedTools)
         && reqAutoToolRouting !== true
 
+      // Persist user-uploaded images as file artifacts and keep only file URLs in DB.
+      // We still use inline data URLs for the immediate provider request in this send call.
+      let storedImageUrls = imageDataUrls
+      if (imageDataUrls?.length) {
+        try {
+          const artifacts = await materializeImageArtifacts(imageDataUrls, conversationId)
+          storedImageUrls = artifacts.map((artifact) => artifact.url)
+        } catch (err) {
+          console.warn('[chat] Failed to materialize user images, keeping original URLs:', err)
+        }
+      }
+
       // Build content (text + optional images + optional audio + optional files)
       let userContent: string | ContentPart[]
       if (imageDataUrls?.length || audioDataUrls?.length || files?.length) {
@@ -230,7 +242,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       db.prepare(
         `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, file_attachments_json, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(userMsgId, conversationId, 'user', content, imageDataUrls?.length ? JSON.stringify(imageDataUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, files?.length ? JSON.stringify(files.map(f => ({ name: f.name }))) : null, now)
+      ).run(userMsgId, conversationId, 'user', content, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, files?.length ? JSON.stringify(files.map(f => ({ name: f.name }))) : null, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
       // Build message history
