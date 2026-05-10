@@ -75,12 +75,14 @@ const hasPendingHITLForActiveConversation = computed(() => {
   return agentStore.awaitingHITLConvIds.has(convId);
 });
 
+const hasActiveConversation = computed(() => !!chatStore.activeConversationId);
+
 const showCancelButton = computed(
   () =>
     chatStore.isStreaming ||
     chatStore.activePostActions.size > 0 ||
-    agentStore.isExecuting ||
-    hasPendingHITLForActiveConversation.value,
+    (hasActiveConversation.value &&
+      (agentStore.isExecuting || hasPendingHITLForActiveConversation.value)),
 );
 
 function onCancelClick(): void {

@@ -342,6 +342,7 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId.value = null
     messages.value = []
     agentStore.setActiveViewConversation(null)
+    agentStore.clearExecutionState()
     resetStreaming()
   }
 
