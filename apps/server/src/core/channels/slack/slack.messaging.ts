@@ -1,9 +1,10 @@
 import { getDb } from '../../../db/database.js'
 import { getGateway } from '../../gateway/gateway.js'
 import { AgentExecutor } from '../../agent/agent-executor.js'
-import { prepareAgentExecution } from '../../agent/prepare-execution.js'
+import { planChatExecution } from '../../agent/pre-execution/chat-execution-planner.js'
 import { generateTitle } from '../../agent/post-execution.js'
 import { getAgent } from '../../agents/agent-store.js'
+import { getToolRegistry } from '../../tools/tool-registry.js'
 import { getEventBus } from '../../telemetry/event-bus.js'
 import type { ChatMessage, ContentPart } from '../../gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
@@ -172,17 +173,17 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         return
     }
 
-    const isFirstUserMessage = historyRows.filter(r => r.role === 'user').length === 1
-    const prepared = await prepareAgentExecution({
-        agent: resolvedAgent,
+    const planned = await planChatExecution({
+        resolvedAgent,
         conversationId,
         broadcast: ctx.broadcast,
-        userQuery: userText,
-        recentMessages: messages,
-        isFirstMessage: isFirstUserMessage,
-        signal: AbortSignal.timeout(300_000),
+        abortSignal: AbortSignal.timeout(300_000),
+        gateway: getGateway(),
+        toolRegistry: getToolRegistry(),
+        messages,
+        userText,
     })
-    messages = [...prepared.systemMessages, ...messages]
+    messages = planned.messages
 
     const streamId = nanoid()
     const execAbort = new AbortController()
@@ -193,13 +194,13 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
 
     const executor = new AgentExecutor({
         gateway: getGateway(),
-        tools: prepared.tools,
+        tools: planned.tools,
         conversationId,
         broadcast: ctx.broadcast,
-        providerId: prepared.providerId,
-        model: prepared.model,
+        providerId: planned.providerId,
+        model: planned.responseModel,
         hitl: !resolvedAgent.autoApproveTools,
-        maxRounds: prepared.hasSubAgents ? 30 : 15,
+        maxRounds: planned.hasSubAgents ? 30 : 15,
         thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
         streamMode: 'single',
         signal: execAbort.signal,
@@ -383,7 +384,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         ).run(
             assistantMsgId, conversationId, 'assistant', result.content,
             result.thinking || null, effectiveAgentId,
-            prepared.providerId || null, prepared.model || null,
+            planned.providerId || null, planned.responseModel || null,
             result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null,
             result.contextTokens ?? null,
             Date.now() - now, Date.now()
@@ -399,8 +400,8 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
                 userMessage: userText,
                 assistantResponse: result.content,
                 broadcast: ctx.broadcast,
-                providerId: prepared.providerId,
-                model: prepared.model
+                providerId: planned.providerId,
+                model: planned.responseModel
             }).catch(() => { })
         }
 

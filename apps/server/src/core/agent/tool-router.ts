@@ -545,35 +545,35 @@ function parseToolNameArray(content: string): string[] | null {
     const end = cleaned.lastIndexOf(']')
     if (start === -1 || end === -1 || end < start) return null
 
-    return parseStringArray(cleaned.slice(start, end + 1))
+    return extractJsonStringArray(cleaned.slice(start, end + 1))
 }
 
 function parseToolSelectionArguments(argumentsJson: string): string[] | null {
     try {
         const parsed = JSON.parse(argumentsJson) as unknown
 
-        if (Array.isArray(parsed)) return filterStrings(parsed)
+        if (Array.isArray(parsed)) return extractStringArray(parsed)
         if (!parsed || typeof parsed !== 'object') return null
 
         const args = parsed as Record<string, unknown>
         const toolNames = args.toolNames || args.tools || args.selectedTools
 
-        return Array.isArray(toolNames) ? filterStrings(toolNames) : null
+        return Array.isArray(toolNames) ? extractStringArray(toolNames) : null
     } catch {
         return null
     }
 }
 
-function parseStringArray(json: string): string[] | null {
+function extractJsonStringArray(json: string): string[] | null {
     try {
         const parsed = JSON.parse(json) as unknown
-        return Array.isArray(parsed) ? filterStrings(parsed) : null
+        return Array.isArray(parsed) ? extractStringArray(parsed) : null
     } catch {
         return null
     }
 }
 
-function filterStrings(items: unknown[]): string[] {
+function extractStringArray(items: unknown[]): string[] {
     return items.filter((item): item is string => typeof item === 'string')
 }
 
@@ -602,15 +602,35 @@ function collectStickyToolNames(
 }
 
 function preferredGroupEmbeddingBoost(group: McpToolGroup, preferredToolNames?: Set<string>): number {
-    const matchCount = countPreferredTools(group.tools, preferredToolNames)
-    if (matchCount === 0) return 0
-    return PREFERRED_GROUP_EMBEDDING_BOOST + Math.min((matchCount - 1) * 0.02, 0.04)
+    return preferredGroupBoost(
+        group,
+        preferredToolNames,
+        PREFERRED_GROUP_EMBEDDING_BOOST,
+        0.02,
+        0.04,
+    )
 }
 
 function preferredGroupLexicalBoost(group: McpToolGroup, preferredToolNames?: Set<string>): number {
+    return preferredGroupBoost(
+        group,
+        preferredToolNames,
+        PREFERRED_GROUP_LEXICAL_BOOST,
+        0.05,
+        0.1,
+    )
+}
+
+function preferredGroupBoost(
+    group: McpToolGroup,
+    preferredToolNames: Set<string> | undefined,
+    baseBoost: number,
+    perExtraMatch: number,
+    maxExtraBoost: number,
+): number {
     const matchCount = countPreferredTools(group.tools, preferredToolNames)
     if (matchCount === 0) return 0
-    return PREFERRED_GROUP_LEXICAL_BOOST + Math.min((matchCount - 1) * 0.05, 0.1)
+    return baseBoost + Math.min((matchCount - 1) * perExtraMatch, maxExtraBoost)
 }
 
 function countPreferredTools(tools: Array<{ name: string }>, preferredToolNames?: Set<string>): number {

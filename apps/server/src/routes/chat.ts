@@ -4,14 +4,12 @@ import { getGateway } from '../core/gateway/gateway.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor } from '../core/agent/agent-executor.js'
-import { prepareAgentExecution } from '../core/agent/prepare-execution.js'
+import { planChatExecution } from '../core/agent/pre-execution/chat-execution-planner.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
-import { routeTools, shouldRouteTools } from '../core/agent/tool-router.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
-import { hydrateBuiltInTools } from '../core/tools/built-in-tools.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
-import type { ChatMessage, ContentPart, ToolDefinition } from '../core/gateway/providers/base.provider.js'
+import type { ChatMessage, ContentPart } from '../core/gateway/providers/base.provider.js'
 import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
@@ -293,10 +291,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const agentId: string | null = convCheck?.agent_id || null
       const resolvedAgent = agentId ? getAgent(agentId) : null
 
+      // Resolve memory space overrides (request body ids -> { id, name } objects)
+      const memorySpaceOverrides = resolveMemorySpaceOverrides(db, reqMemorySpaceIds)
+
       // Create AbortController early so sub-agent tools can receive the signal
       const abortController = new AbortController()
 
-      const isFirstUserMessage = historyRows.filter(r => r.role === 'user').length === 1
       let tools: import('../core/gateway/providers/base.provider.js').ToolDefinition[]
       let providerId: string | undefined
       let responseModel: string
@@ -305,142 +305,37 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       let chatAgentIconUrl: string | null | undefined
       let hasSubAgents = false
 
-      if (resolvedAgent) {
-        // ── Agent-based chat: use shared builder ──
+      const planned = await planChatExecution({
+        resolvedAgent,
+        conversationId,
+        broadcast,
+        abortSignal: abortController.signal,
+        gateway,
+        toolRegistry,
+        messages,
+        userText: content,
+        providerOverride: providerOverride || undefined,
+        modelOverride: model || undefined,
+        systemPrompt: systemPrompt || undefined,
+        requestedSubAgents: reqSubAgents,
+        memorySpaceOverrides,
+        overrideSubAgents: overrideSubAgents !== false,
+        autoToolRouting: reqAutoToolRouting === true,
+        toolRouterProviderId: reqToolRouterProviderId || undefined,
+        toolRouterModel: reqToolRouterModel || undefined,
+        selectedToolKeys,
+        hasExplicitToolAllowlist,
+        stickyPreferredToolNames,
+      })
 
-        // Session-level overrides: prefer request body over agent config
-        const effectiveSubAgents = reqSubAgents ?? resolvedAgent.subAgents
-        const effectiveAgent = hasExplicitToolAllowlist
-          ? { ...resolvedAgent, tools: selectedToolKeys }
-          : resolvedAgent
-
-        // Resolve memory space overrides (request body ids → { id, name } objects)
-        let memorySpaceOverrides: { id: string; name: string }[] | undefined
-        if (Array.isArray(reqMemorySpaceIds)) {
-          const uniqueSpaceIds = Array.from(new Set(reqMemorySpaceIds.map((sid) => sid.trim()).filter(Boolean)))
-          const spaceRows = uniqueSpaceIds.map(sid =>
-            db.prepare('SELECT id, name FROM memory_spaces WHERE id = ?').get(sid) as { id: string; name: string } | undefined
-          ).filter((r): r is { id: string; name: string } => Boolean(r))
-          // Keep explicit empty overrides so downstream tools can fall back to the default space.
-          memorySpaceOverrides = spaceRows
-        }
-
-        const prepared = await prepareAgentExecution({
-          agent: effectiveAgent,
-          conversationId,
-          broadcast,
-          providerOverride: providerOverride || undefined,
-          modelOverride: model || undefined,
-          systemPromptOverride: systemPrompt || undefined,
-          subAgentAssignments: effectiveSubAgents,
-          signal: abortController.signal,
-          userQuery: typeof messages[messages.length - 1]?.content === 'string'
-            ? messages[messages.length - 1].content as string
-            : content,
-          recentMessages: messages,
-          isFirstMessage: isFirstUserMessage,
-          memorySpaceOverrides,
-          overrideSubAgents: overrideSubAgents !== false,
-          autoToolRouting: reqAutoToolRouting === true,
-          toolRouterProviderId: reqToolRouterProviderId || undefined,
-          toolRouterModel: reqToolRouterModel || undefined,
-          preferredToolKeys: selectedToolKeys,
-        })
-
-        tools = prepared.tools
-        providerId = prepared.providerId
-        hasSubAgents = prepared.hasSubAgents
-        chatAgentName = resolvedAgent.name
-        chatAgentIconUrl = resolvedAgent.iconUrl || null
-        messages = [...prepared.systemMessages, ...messages]
-
-        const lastUsedProvider = providerId
-          ? gateway.getProvider(providerId) || gateway.getLastUsedProvider()
-          : gateway.getLastUsedProvider()
-        responseProvider = lastUsedProvider.config.id
-        responseModel = prepared.model
-      } else {
-        // ── Agentless chat: manual tool + provider resolution ──
-        if (systemPrompt) {
-          messages = [{ role: 'system', content: systemPrompt }, ...messages]
-        }
-
-        tools = hasExplicitToolAllowlist
-          ? toolRegistry.resolveForExecution(selectedToolKeys)
-          : toolRegistry.getToolDefinitions()
-
-        // Resolve the effective provider + model up-front so sub-agent tools
-        // receive the same provider that the main executor will use.
-        // In free-chat mode the frontend calls providerStore.setActive() (a server
-        // API) instead of setting sessionProviderOverride, so providerOverride in
-        // the request body may be null — getLastUsedProvider() is the true source.
-        providerId = providerOverride || undefined
-        const freeChatLastUsedProvider = providerId
-          ? gateway.getProvider(providerId) || gateway.getLastUsedProvider()
-          : gateway.getLastUsedProvider()
-        responseProvider = freeChatLastUsedProvider.config.id
-        responseModel = model || freeChatLastUsedProvider.config.defaultModel
-
-        if (shouldRouteTools(tools, content, { enabled: reqAutoToolRouting === true })) {
-          const routingTaskId = `router_${nanoid()}`
-          try {
-            emitToolRoutingStatus(conversationId, routingTaskId, 'routing-tools', 'Selecting relevant tools...')
-            const routerProviderId = reqToolRouterProviderId || responseProvider
-            const routerProvider = gateway.getProvider(routerProviderId) || freeChatLastUsedProvider
-            const routerModel = reqToolRouterModel || routerProvider.config.defaultModel || responseModel
-
-            tools = await routeTools({
-              userQuery: content,
-              recentMessages: messages,
-              allTools: tools,
-              gateway,
-              providerId: routerProvider.config.id,
-              model: responseModel,
-              routerModel,
-              mcpMetadata: toolRegistry.getNamespaceMetadataForTools(tools),
-              preferredToolNames: stickyPreferredToolNames.length ? new Set(stickyPreferredToolNames) : undefined,
-            })
-            emitToolRoutingSelection(conversationId, routingTaskId, tools)
-          } catch (err) {
-            console.warn('[tool-router] Routing failed, using local tool list:', err)
-            tools = tools.filter((tool) => !tool.namespaceId?.startsWith('mcp:'))
-            emitToolRoutingSelection(conversationId, routingTaskId, tools)
-          }
-        }
-
-        // Sub-agent tools from request body (MA workspace)
-        if (reqSubAgents?.length) {
-          const { buildSubAgentTools, buildSubAgentPrompt } = await import('../core/agent/sub-agent-tools.js')
-          messages = [{ role: 'system', content: buildSubAgentPrompt(reqSubAgents) }, ...messages]
-          // Propagate the resolved provider (not the raw request param) so that
-          // sub-agents use the same provider as the main free-chat executor when
-          // overrideSubAgents is true — even if providerOverride was null because
-          // the frontend set the active provider via setActive() rather than a
-          // session override.
-          const subAgentTools = buildSubAgentTools({
-            subAgents: reqSubAgents,
-            conversationId,
-            broadcast,
-            signal: abortController.signal,
-            modelOverride: overrideSubAgents ? (model || undefined) : undefined,
-            providerOverride: overrideSubAgents ? responseProvider : undefined,
-          })
-          tools = [...tools, ...subAgentTools]
-          hasSubAgents = true
-        }
-
-        // Hydrate built-in tools (resolve memory space overrides for agentless)
-        let memorySpaceOverrides: { id: string; name: string }[] | undefined
-        if (Array.isArray(reqMemorySpaceIds)) {
-          const uniqueSpaceIds = Array.from(new Set(reqMemorySpaceIds.map((sid) => sid.trim()).filter(Boolean)))
-          const spaceRows = uniqueSpaceIds.map(sid =>
-            db.prepare('SELECT id, name FROM memory_spaces WHERE id = ?').get(sid) as { id: string; name: string } | undefined
-          ).filter((r): r is { id: string; name: string } => Boolean(r))
-          // Keep explicit empty overrides so downstream tools can fall back to the default space.
-          memorySpaceOverrides = spaceRows
-        }
-        tools = hydrateBuiltInTools(tools, { agentId: undefined, conversationId, broadcast, memorySpaceOverrides })
-      }
+      tools = planned.tools
+      providerId = planned.providerId
+      responseProvider = planned.responseProvider
+      responseModel = planned.responseModel
+      hasSubAgents = planned.hasSubAgents
+      chatAgentName = planned.chatAgentName
+      chatAgentIconUrl = planned.chatAgentIconUrl
+      messages = planned.messages
 
       messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
@@ -633,23 +528,17 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   })
 }
 
-function emitToolRoutingStatus(conversationId: string, taskId: string, status: string, message: string): void {
-  getEventBus().emit('step:status', {
-    conversationId,
-    taskId,
-    iteration: 0,
-    status,
-    message,
-  })
-}
+function resolveMemorySpaceOverrides(
+  db: ReturnType<typeof getDb>,
+  requestedSpaceIds?: string[]
+): { id: string; name: string }[] | undefined {
+  if (!Array.isArray(requestedSpaceIds)) return undefined
 
-function emitToolRoutingSelection(conversationId: string, taskId: string, tools: ToolDefinition[]): void {
-  getEventBus().emit('step:tools-chosen', {
-    conversationId,
-    taskId,
-    iteration: 0,
-    toolCalls: tools
-      .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
-      .map((tool) => ({ name: tool.name, arguments: '{}' })),
-  })
+  const uniqueSpaceIds = Array.from(new Set(requestedSpaceIds.map((sid) => sid.trim()).filter(Boolean)))
+  const spaceRows = uniqueSpaceIds
+    .map((sid) => db.prepare('SELECT id, name FROM memory_spaces WHERE id = ?').get(sid) as { id: string; name: string } | undefined)
+    .filter((row): row is { id: string; name: string } => Boolean(row))
+
+  // Keep explicit empty overrides so downstream tools can fall back to default memory space behavior.
+  return spaceRows
 }

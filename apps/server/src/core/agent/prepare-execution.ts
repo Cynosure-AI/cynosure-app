@@ -2,7 +2,7 @@
  * Shared pre-action builder for agent execution.
  *
  * Consolidates the duplicated pre-action logic (tool resolution, memory
- * enrichment, system prompt construction, provider/model resolution) that
+ * space-aware tool hydration, system prompt construction, provider/model resolution) that
  * was previously copy-pasted across chat, cron, file-watcher, channels,
  * and sub-agent triggers.
  */
@@ -10,17 +10,15 @@
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import { hydrateBuiltInTools } from '../tools/built-in-tools.js'
-import { TOOL_SEARCH_TOOL_NAME } from '../tools/builtin/expand-available-toolset.js'
-import { routeTools, shouldRouteTools } from './tool-router.js'
-import { getEventBus } from '../telemetry/event-bus.js'
-import { nanoid } from 'nanoid'
+import { applyAutoToolRouting } from './pre-execution/auto-tool-routing.js'
+import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ChatMessage, ToolDefinition } from '../gateway/providers/base.provider.js'
 
+type BroadcastFn = (event: string, data: unknown) => void
+
 const AGENT_ROUTER_PROVIDER = '__agent_provider__'
 const AGENT_ROUTER_MODEL = '__agent_model__'
-
-type BroadcastFn = (event: string, data: unknown) => void
 
 export interface PrepareExecutionInput {
     /** The resolved agent config */
@@ -41,14 +39,12 @@ export interface PrepareExecutionInput {
     /** Append extra instructions to the system prompt */
     systemPromptSuffix?: string
 
-    // ── Memory enrichment ──
+    // ── Routing context ──
 
-    /** The user's query text — used as the memory retrieval query */
+    /** The user's query text — used for context-aware tool routing */
     userQuery?: string
     /** Recent conversation messages used by context-aware tool routing */
     recentMessages?: ChatMessage[]
-    /** Whether this is the first user message (memory enrichment only triggers on first message) */
-    isFirstMessage?: boolean
     /** Recently invoked tools that should survive routing for this execution turn */
     usedToolNames?: Set<string>
     /** Preferred tool registry keys that should be softly favored during routing */
@@ -94,7 +90,7 @@ export interface PreparedExecution {
  * Prepare all shared pre-action state for agent execution.
  *
  * Returns resolved tools (with hydration + sub-agents), provider/model,
- * system messages (prompt + memory context), and memory sources.
+ * and system messages (prompt + appended execution context).
  *
  * The caller is responsible for:
  * - Building conversation messages (history or fresh)
@@ -135,57 +131,46 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     // provider to sub-agents when a model override is active. Tool routing also
     // uses this provider for its compact confirmation call.
 
-    const providerId = providerOverride || agent.providerId || undefined
-    const lastUsedProvider = providerId
-        ? gateway.getProvider(providerId) || gateway.getLastUsedProvider()
-        : gateway.getLastUsedProvider()
-    // When a provider override is active without an explicit model override,
-    // skip the agent's configured model (it belongs to a different provider)
-    // and fall through to the new provider's default model.
-    const model = modelOverride
-        || (providerOverride ? undefined : agent.model)
-        || lastUsedProvider.config.defaultModel
-
-    // Always resolve to the actual provider ID so metrics track correctly
-    const resolvedProviderId = lastUsedProvider.config.id
+    const providerModel = resolveProviderAndModel({
+        gateway,
+        baseProviderId: agent.providerId,
+        baseModel: agent.model,
+        providerOverride,
+        modelOverride,
+    })
 
     // ── 2b. Context-aware tool routing ──
     // Sub-agent delegation tools are added later and bypass routing. This pass
     // trims the agent/free-chat tool set before the executor receives schemas.
 
-    if (shouldRouteTools(tools, input.userQuery, { enabled: routingEnabled })) {
-        const routingTaskId = `router_${nanoid()}`
-        try {
-            emitToolRoutingStatus(conversationId, routingTaskId, 'routing-tools', 'Selecting relevant tools...')
-            const useAgentRouterProvider = agent.toolRouterProviderId === AGENT_ROUTER_PROVIDER
-            const agentRouterProviderId = useAgentRouterProvider
-                ? agent.providerId
-                : agent.toolRouterProviderId
-            const useAgentRouterModel = agent.toolRouterModel === AGENT_ROUTER_MODEL
-            const routerProviderId = agentRouterProviderId || input.toolRouterProviderId || resolvedProviderId
-            const routerProvider = gateway.getProvider(routerProviderId) || lastUsedProvider
-            const routerModel = useAgentRouterModel
-                ? (agent.model || routerProvider.config.defaultModel || model)
-                : (agent.toolRouterModel || (useAgentRouterProvider ? undefined : input.toolRouterModel) || routerProvider.config.defaultModel || model)
+    if (routingEnabled) {
+        const useAgentRouterProvider = agent.toolRouterProviderId === AGENT_ROUTER_PROVIDER
+        const useAgentRouterModel = agent.toolRouterModel === AGENT_ROUTER_MODEL
 
-            tools = await routeTools({
-                userQuery: input.userQuery || '',
-                recentMessages: input.recentMessages || [],
-                allTools: tools,
-                gateway,
-                providerId: routerProvider.config.id,
-                model,
-                routerModel,
-                mcpMetadata: toolRegistry.getNamespaceMetadataForTools(tools),
-                preferredToolNames: preferredToolNames.length ? new Set(preferredToolNames) : undefined,
-                usedToolNames: input.usedToolNames,
-            })
-            emitToolRoutingSelection(conversationId, routingTaskId, tools)
-        } catch (err) {
-            console.warn('[tool-router] Routing failed, using local tool list:', err)
-            tools = tools.filter((tool) => !tool.namespaceId?.startsWith('mcp:'))
-            emitToolRoutingSelection(conversationId, routingTaskId, tools)
-        }
+        const router = resolveRouterProviderModel({
+            gateway,
+            fallbackProviderId: providerModel.providerId,
+            fallbackModel: providerModel.model,
+            agentRouterProviderId: useAgentRouterProvider ? agent.providerId : (agent.toolRouterProviderId || undefined),
+            agentRouterModel: useAgentRouterModel ? (agent.model || undefined) : (agent.toolRouterModel || undefined),
+            requestRouterProviderId: input.toolRouterProviderId,
+            requestRouterModel: useAgentRouterProvider ? undefined : input.toolRouterModel,
+        })
+
+        tools = await applyAutoToolRouting({
+            enabled: routingEnabled,
+            conversationId,
+            userQuery: input.userQuery,
+            recentMessages: input.recentMessages,
+            tools,
+            gateway,
+            providerId: router.providerId,
+            model: providerModel.model,
+            routerModel: router.model,
+            mcpMetadata: toolRegistry.getNamespaceMetadataForTools(tools),
+            preferredToolNames: preferredToolNames.length ? new Set(preferredToolNames) : undefined,
+            usedToolNames: input.usedToolNames,
+        })
     }
 
     // ── 3. Sub-agent delegation tools ──
@@ -203,7 +188,9 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             broadcast,
             signal,
             modelOverride: overrideSubAgents ? (modelOverride || undefined) : undefined,
-            providerOverride: overrideSubAgents ? (modelOverride ? lastUsedProvider.config.id : (providerOverride || undefined)) : undefined,
+            providerOverride: overrideSubAgents
+                ? (modelOverride ? providerModel.providerId : (providerOverride || undefined))
+                : undefined,
             toolRouterProviderId: input.toolRouterProviderId,
             toolRouterModel: input.toolRouterModel,
         })
@@ -241,32 +228,11 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     return {
         tools,
-        providerId: resolvedProviderId,
-        model,
+        providerId: providerModel.providerId,
+        model: providerModel.model,
         systemMessages,
         hasSubAgents,
     }
-}
-
-function emitToolRoutingStatus(conversationId: string, taskId: string, status: string, message: string): void {
-    getEventBus().emit('step:status', {
-        conversationId,
-        taskId,
-        iteration: 0,
-        status,
-        message,
-    })
-}
-
-function emitToolRoutingSelection(conversationId: string, taskId: string, tools: ToolDefinition[]): void {
-    getEventBus().emit('step:tools-chosen', {
-        conversationId,
-        taskId,
-        iteration: 0,
-        toolCalls: tools
-            .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
-            .map((tool) => ({ name: tool.name, arguments: '{}' })),
-    })
 }
 
 function isToolRoutingEnabled(agent: AgentData, sessionEnabled?: boolean): boolean {
@@ -278,5 +244,7 @@ function isToolRoutingEnabled(agent: AgentData, sessionEnabled?: boolean): boole
 
     if (routingPrefs.disableToolRouting === true) return false
     if (routingPrefs.toolRoutingEnabled === false) return false
-    return sessionEnabled === true || routingPrefs.autoToolRouting === true || routingPrefs.toolRoutingEnabled === true
+    if (sessionEnabled === true) return true
+    if (sessionEnabled === false) return false
+    return routingPrefs.autoToolRouting === true || routingPrefs.toolRoutingEnabled === true
 }

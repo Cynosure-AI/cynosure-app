@@ -3,7 +3,8 @@ import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { AgentExecutor, type AgentExecutorResult } from '../agent/agent-executor.js'
-import { prepareAgentExecution } from '../agent/prepare-execution.js'
+import { planChatExecution } from '../agent/pre-execution/chat-execution-planner.js'
+import { getToolRegistry } from '../tools/tool-registry.js'
 import type { AgentData } from '../agents/agent-store.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
 
@@ -60,30 +61,29 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     // Notify caller of the conversationId before execution starts
     onConversationCreated?.(conversationId)
 
-    // Prepare execution: tools, memory, system prompt, provider/model
-    const prepared = await prepareAgentExecution({
-        agent,
+    const planned = await planChatExecution({
+        resolvedAgent: agent,
         conversationId,
         broadcast,
+        abortSignal: signal,
+        gateway,
+        toolRegistry: getToolRegistry(),
+        messages: [{ role: 'user', content: userContent }],
+        userText: userContent,
         providerOverride,
         modelOverride,
         systemPromptSuffix,
-        userQuery: userContent,
-        isFirstMessage: true,
     })
 
     // Persist session config so the chat view can restore the correct model/provider
     const chatConfig = JSON.stringify({
-        model: prepared.model,
-        providerId: prepared.providerId,
+        model: planned.responseModel,
+        providerId: planned.providerId,
         thinkingEnabled: agent.thinkingEnabled !== false,
     })
     db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(chatConfig, conversationId)
 
-    const messages: ChatMessage[] = [
-        ...prepared.systemMessages,
-        { role: 'user', content: userContent }
-    ]
+    const messages: ChatMessage[] = planned.messages
 
     // Save trigger message
     const triggerMsgId = nanoid()
@@ -99,11 +99,11 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     // Run executor
     const executor = new AgentExecutor({
         gateway,
-        tools: prepared.tools,
+        tools: planned.tools,
         conversationId,
         broadcast,
-        providerId: prepared.providerId,
-        model: prepared.model,
+        providerId: planned.providerId,
+        model: planned.responseModel,
         maxRounds: 10,
         thinkingEnabled: agent.thinkingEnabled !== false,
         streamMode: 'per-round',
@@ -124,7 +124,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         const now = Date.now()
         db.prepare(
             'INSERT INTO messages (id, conversation_id, role, content, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(assistantMsgId, conversationId, 'assistant', result.content, prepared.providerId || null, prepared.model || null, result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null, result.contextTokens ?? null, now - startMs, now)
+        ).run(assistantMsgId, conversationId, 'assistant', result.content, planned.providerId || null, planned.responseModel || null, result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null, result.contextTokens ?? null, now - startMs, now)
 
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(Date.now(), conversationId)
 
