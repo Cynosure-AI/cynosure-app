@@ -7,11 +7,13 @@ export interface Column {
   width?: string  // e.g., '120px', 'minmax(0,1.75fr)'
   class?: string   // Custom CSS classes for column content
   hideOnMobile?: boolean
+  hideOnTablet?: boolean
 }
 
 interface SelectionColumn {
   width?: string
   hideOnMobile?: boolean
+  hideOnTablet?: boolean
 }
 
 interface Props<TItem> {
@@ -61,6 +63,24 @@ const mobileGridColsTemplate = computed(() => {
   return includeSelection ? `${selectionWidth} ${columnWidths}` : columnWidths
 })
 
+const tabletGridColsTemplate = computed(() => {
+  const columnWidths = props.columns
+    .filter(col => !col.hideOnTablet)
+    .map(col => col.width || 'minmax(0,1fr)')
+    .join(' ')
+
+  const includeSelection = showSelectableColumn.value && !props.selectionColumn?.hideOnTablet
+  const selectionWidth = props.selectionColumn?.width || '40px'
+  return includeSelection ? `${selectionWidth} ${columnWidths}` : columnWidths
+})
+
+function responsiveVisibilityClass(hideOnMobile?: boolean, hideOnTablet?: boolean): string {
+  if (hideOnMobile && hideOnTablet) return 'hidden lg:block'
+  if (hideOnMobile) return 'hidden md:block'
+  if (hideOnTablet) return 'md:hidden lg:block'
+  return ''
+}
+
 function toggleSelection(id: string) {
   const current = new Set(props.selectedIds)
   if (current.has(id)) {
@@ -105,13 +125,13 @@ const anySelected = computed(() => props.selectedIds.length > 0)
     <div
       v-if="showHeader"
       class="hidden md:grid md:px-5 md:py-3 text-[11px] tracking-wider uppercase text-zinc-400 bg-zinc-900/70 border-b border-zinc-800 dt-grid"
-      :style="{ '--dt-desktop-cols': desktopGridColsTemplate, '--dt-mobile-cols': mobileGridColsTemplate }"
+      :style="{ '--dt-desktop-cols': desktopGridColsTemplate, '--dt-tablet-cols': tabletGridColsTemplate, '--dt-mobile-cols': mobileGridColsTemplate }"
     >
       <!-- Select All Checkbox (hidden on mobile) -->
       <div
         v-if="showSelectableColumn"
         class="flex items-center"
-        :class="props.selectionColumn?.hideOnMobile ? 'hidden md:block' : ''"
+        :class="responsiveVisibilityClass(props.selectionColumn?.hideOnMobile, props.selectionColumn?.hideOnTablet)"
       >
         <input
           type="checkbox"
@@ -126,7 +146,7 @@ const anySelected = computed(() => props.selectedIds.length > 0)
       <span
         v-for="col in columns"
         :key="col.key"
-        :class="[col.class, col.hideOnMobile ? 'hidden md:block' : '']"
+        :class="[col.class, responsiveVisibilityClass(col.hideOnMobile, col.hideOnTablet)]"
       >
         {{ col.label }}
       </span>
@@ -143,13 +163,13 @@ const anySelected = computed(() => props.selectedIds.length > 0)
       >
         <div
           class="grid gap-3 md:gap-4 px-4 py-4 md:px-5 items-start dt-grid"
-          :style="{ '--dt-desktop-cols': desktopGridColsTemplate, '--dt-mobile-cols': mobileGridColsTemplate }"
+          :style="{ '--dt-desktop-cols': desktopGridColsTemplate, '--dt-tablet-cols': tabletGridColsTemplate, '--dt-mobile-cols': mobileGridColsTemplate }"
         >
           <!-- Selection Checkbox (hidden on mobile) -->
           <div
             v-if="showSelectableColumn"
             class="flex items-center md:pt-1"
-            :class="props.selectionColumn?.hideOnMobile ? 'hidden md:block' : ''"
+            :class="responsiveVisibilityClass(props.selectionColumn?.hideOnMobile, props.selectionColumn?.hideOnTablet)"
             @click.stop
           >
             <input
@@ -166,7 +186,7 @@ const anySelected = computed(() => props.selectedIds.length > 0)
             v-for="col in columns"
             :key="col.key"
           >
-            <div :class="col.hideOnMobile ? 'hidden md:block' : ''">
+            <div :class="responsiveVisibilityClass(col.hideOnMobile, col.hideOnTablet)">
               <slot
                 :name="`col-${col.key}`"
                 :item="item"
@@ -203,5 +223,11 @@ const anySelected = computed(() => props.selectedIds.length > 0)
     grid-template-columns: var(--dt-mobile-cols);
   }
 
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .dt-grid {
+    grid-template-columns: var(--dt-tablet-cols);
+  }
 }
 </style>
