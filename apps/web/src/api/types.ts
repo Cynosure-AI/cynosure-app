@@ -118,6 +118,7 @@ export interface AgentDefinition {
     tools: string[]
     subAgents?: SubAgentAssignment[]
     autoApproveTools: boolean
+    overrideSubAgents: boolean
     autoToolRouting: boolean
     toolRouterProviderId: string
     toolRouterModel: string

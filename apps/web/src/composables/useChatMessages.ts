@@ -2,6 +2,7 @@ import { type Ref } from 'vue'
 import { api } from '../api/client'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
+import type { SubAgentAssignment } from '../api/types'
 import type { DisplayMessage } from '../stores/chat.store'
 import type { ChatStreamingState } from './useChatStreaming'
 
@@ -28,11 +29,30 @@ export function useChatMessages(
         sessionAutoToolRouting: Ref<boolean>
         freeChatSubAgentIds: Ref<string[]>
         freeChatMemorySpaceIds: Ref<string[]>
-        agentOriginalSubAgentIds: Ref<string[]>
-        agentOriginalMemorySpaceIds: Ref<string[]>
     },
 ): ChatMessagesApi {
     const agentStore = useAgentStore()
+
+    function toSubAgentCodename(name: string): string {
+        return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent'
+    }
+
+    function buildSubAgentAssignments(parentAgentId: string | null, selectedIds: string[]): SubAgentAssignment[] {
+        const agentDefs = useAgentDefinitionsStore()
+        const parentAgent = parentAgentId ? agentDefs.get(parentAgentId) : null
+
+        return selectedIds.map((id) => {
+            const def = agentDefs.get(id)
+            const assignment = parentAgent?.subAgents?.find((subAgent) => subAgent.agentId === id)
+            const codename = assignment?.codename || (def ? toSubAgentCodename(def.name) : id)
+
+            return {
+                agentId: id,
+                codename,
+                role: assignment?.role || def?.description || '',
+            }
+        })
+    }
 
     async function sendMessage(
         content: string,
@@ -79,50 +99,42 @@ export function useChatMessages(
             isStreaming: true
         })
 
-        const agent = activeAgentId.value ? agentDefs.get(activeAgentId.value) : null
         const tools = agentStore.selectedToolNames
-
-        const model = agentConfig.sessionModelOverride.value || undefined
-        const providerOverride = agentConfig.sessionProviderOverride.value || undefined
-        const systemPrompt = agentConfig.sessionSystemPrompt.value || agent?.systemPrompt || undefined
+        const baseSystemPrompt = activeAgent?.systemPrompt || undefined
+        const executionRun = {
+            model: agentConfig.sessionModelOverride.value || undefined,
+            providerOverride: agentConfig.sessionProviderOverride.value || undefined,
+            systemPrompt: agentConfig.sessionSystemPrompt.value || baseSystemPrompt,
+            subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.freeChatSubAgentIds.value]),
+            memorySpaceIds: [...agentConfig.freeChatMemorySpaceIds.value],
+            overrideSubAgents: agentConfig.sessionOverrideSubAgents.value,
+            thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
+            autoToolRouting: agentConfig.sessionAutoToolRouting.value,
+        }
 
         const { usePreferencesStore } = await import('../stores/preferences.store')
         const prefs = usePreferencesStore()
 
-        // Always send the full session config so it can be persisted and restored.
-        const effectiveSubAgentIds = agentConfig.freeChatSubAgentIds.value
-        const parentAgent = activeAgentId.value ? agentDefs.get(activeAgentId.value) : null
-        const subAgents = effectiveSubAgentIds.map(id => {
-            const def = agentDefs.get(id)
-            // Prefer the custom codename set on the parent agent's sub-agent assignment;
-            // fall back to auto-generating from the sub-agent's display name.
-            const assignment = parentAgent?.subAgents?.find(s => s.agentId === id)
-            const codename = assignment?.codename
-                || (def ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent' : id)
-            return { agentId: id, codename, role: assignment?.role || def?.description || '' }
-        })
-        const memorySpaceIds = [...agentConfig.freeChatMemorySpaceIds.value]
-
         await api.chat.send(
             conversationId,
             content,
-            model,
-            providerOverride,
+            executionRun.model,
+            executionRun.providerOverride,
             imageDataUrls,
             tools,
             files,
-            systemPrompt,
+            executionRun.systemPrompt,
             prefs.generateTitle,
             msgId,
             audioDataUrls,
-            subAgents,
-            memorySpaceIds,
-            agentConfig.sessionOverrideSubAgents.value,
-            agentConfig.sessionThinkingEnabled.value,
+            executionRun.subAgents,
+            executionRun.memorySpaceIds,
+            executionRun.overrideSubAgents,
+            executionRun.thinkingEnabled,
             prefs.contextStrategy,
             prefs.titleProviderId || undefined,
             prefs.titleModel || undefined,
-            agentConfig.sessionAutoToolRouting.value,
+            executionRun.autoToolRouting,
             prefs.toolRouterProviderId || undefined,
             prefs.toolRouterModel || undefined
         )
