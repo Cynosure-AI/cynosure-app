@@ -14,7 +14,7 @@ import SubAgentsButton from "./SubAgentsButton.vue";
 import MemorySpacesButton from "./MemorySpacesButton.vue";
 import SystemPromptButton from "./SystemPromptButton.vue";
 import ThinkingModeButton from "./ThinkingModeButton.vue";
-import ModelButton from "./ModelButton.vue";
+import ModelSelectorModal from "../modals/ModelSelectorModal.vue";
 
 defineProps<{
   canSend: boolean;
@@ -33,6 +33,7 @@ const agentDefs = useAgentDefinitionsStore();
 const providerStore = useProviderStore();
 
 const showMobileDrawer = ref(false);
+const showModelModal = ref(false);
 
 const selectedAgent = computed(() =>
   chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null,
@@ -68,6 +69,26 @@ const selectedModelForSelector = computed(() =>
     ? ""
     : chatStore.sessionModelOverride || "",
 );
+
+const currentProvider = computed(() =>
+  providerStore.providers.find((p) => p.id === currentProviderId.value),
+);
+
+const mobileModelLabel = computed(() => {
+  const override = chatStore.sessionModelOverride;
+  if (override) {
+    return override;
+  }
+  const agentModel = selectedAgent.value?.model;
+  const providerDefault = currentProvider.value?.defaultModel;
+  const isProviderOverridden =
+    chatStore.sessionProviderOverride &&
+    chatStore.sessionProviderOverride !== selectedAgent.value?.providerId;
+  const effectiveDefault = isProviderOverridden
+    ? providerDefault
+    : agentModel || providerDefault;
+  return effectiveDefault || "Default";
+});
 
 const hasPendingHITLForActiveConversation = computed(() => {
   const convId = chatStore.activeConversationId;
@@ -160,7 +181,6 @@ async function toggleMic(): Promise<void> {
       <MemorySpacesButton />
       <SystemPromptButton />
       <ThinkingModeButton />
-      <ModelButton />
     </div>
   </Transition>
 
@@ -210,7 +230,22 @@ async function toggleMic(): Promise<void> {
       <ThinkingModeButton />
     </span>
 
+    
     <div class="flex-1" />
+
+    <!-- Mobile: provider/model selector as a button that opens a modal -->
+    <button
+      v-if="currentProviderId"
+      class="lg:hidden max-w-44 flex items-center gap-1 px-2 py-1.5 rounded-lg  text-zinc-300 hover:text-zinc-100 transition-colors shrink min-w-0"
+      aria-label="Select provider and model"
+      @click="showModelModal = true"
+    >
+      <span class="truncate text-xs">{{ mobileModelLabel }}</span>
+      <Icon
+        icon="lucide:chevron-down"
+        class="h-3.5 w-3.5 text-zinc-500 shrink-0"
+      />
+    </button>
 
     <!-- Provider / Model selector (desktop only, right-aligned) -->
     <div
@@ -361,6 +396,8 @@ async function toggleMic(): Promise<void> {
       />
     </button>
   </div>
+
+  <ModelSelectorModal v-model="showModelModal" />
 </template>
 
 <style scoped>

@@ -338,7 +338,7 @@ onMounted(() => loadSpaces());
 
       <template v-else>
         <!-- Space cards grid -->
-        <div class="grid grid-cols-4 gap-3 mb-6">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <button
             v-for="space in spaces"
             :key="space.id"

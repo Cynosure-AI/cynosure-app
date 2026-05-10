@@ -94,6 +94,8 @@ function onSelectionChange(selection: {
     icon="lucide:cpu"
     icon-color="blue"
     max-width="max-w-lg"
+    :overflow-visible="true"
+    :body-overflow-visible="true"
     @close="visible = false"
   >
     <div class="space-y-3">

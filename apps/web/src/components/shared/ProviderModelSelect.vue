@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
 import type { LLMProviderConfig } from "../../api/types";
 import CustomSelect, {
   type SelectOption,
@@ -36,6 +36,7 @@ const props = withDefaults(
     maxHeight?: string;
     filterable?: boolean;
     dropUp?: boolean;
+    stickyGroupHeaders?: boolean;
     align?: "left" | "center" | "right";
     dropdownWidth?: string;
     size?: "sm" | "md";
@@ -70,6 +71,20 @@ const sharedModelCache = new Map<string, string[]>();
 
 const providerModels = ref<Record<string, string[]>>({});
 const loadingByProvider = ref<Record<string, boolean>>({});
+const isMobileViewport = ref(false);
+
+function updateViewportFlags(): void {
+  isMobileViewport.value = window.matchMedia("(max-width: 767px)").matches;
+}
+
+onMounted(() => {
+  updateViewportFlags();
+  window.addEventListener("resize", updateViewportFlags, { passive: true });
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", updateViewportFlags);
+});
 
 function cacheKey(providerId: string): string {
   return `${props.modelType}:${providerId}`;
@@ -130,6 +145,10 @@ watch(
 
 const selectedEncoded = computed(() =>
   encode(props.providerId || "", props.modelValue || ""),
+);
+
+const effectiveStickyGroupHeaders = computed(
+  () => props.stickyGroupHeaders ?? !isMobileViewport.value,
 );
 
 const groups = computed((): SelectOptionGroup[] => {
@@ -237,7 +256,7 @@ function onSelectionChange(value: string): void {
     :align="align"
     :dropdown-width="dropdownWidth"
     :size="size"
-    :sticky-group-headers="true"
+    :sticky-group-headers="effectiveStickyGroupHeaders"
     @update:model-value="onSelectionChange"
     @change="onSelectionChange"
   />
