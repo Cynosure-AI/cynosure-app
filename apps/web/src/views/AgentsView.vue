@@ -328,7 +328,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
             My Agents
           </h1>
           <p class="text-sm text-zinc-500 mt-1">
-            Create and manage AI agents with custom configurations. Drag and drop to reorder or organize into categories.
+            Create and manage AI agents with custom configurations. Drag and drop the name column to reorder or organize into categories.
           </p>
         </div>
         <button
@@ -516,8 +516,8 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
 
         <!-- Metadata column (tools, subagents, created date) -->
         <template #col-metadata="{ item }">
-          <div class="flex items-center gap-3 text-xs text-zinc-600">
-            <span class="flex items-center gap-1">
+          <div class="flex items-center gap-3 text-xs text-zinc-500">
+            <span class="flex items-center gap-1 bg-zinc-700/50 px-1.5 py-0.5 rounded">
               <Icon
                 icon="lucide:wrench"
                 class="w-3 h-3"
@@ -526,7 +526,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
             </span>
             <span
               v-if="item.subAgents?.length"
-              class="flex items-center gap-1"
+              class="flex items-center gap-1 bg-zinc-700/50 px-1.5 py-0.5 rounded"
             >
               <Icon
                 icon="lucide:users"
