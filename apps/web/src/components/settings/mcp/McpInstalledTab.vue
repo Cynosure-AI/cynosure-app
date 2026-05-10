@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { api } from '../../../api/client'
 import { Icon } from '@iconify/vue'
 import DataTable from '../../shared/DataTable.vue'
@@ -19,12 +19,22 @@ const editingId = ref<string | null>(null)
 const installedFilter = ref('')
 const brokenIconUrlById = reactive<Record<string, string>>({})
 
-// Compute sorted server IDs reactively so it updates when servers load
-const sortedServerIds = computed(() => {
-  return [...servers.value]
+// Keep sorted IDs stable during editing; re-sort only on page load/refresh
+const sortedServerIds = ref<string[]>([])
+
+function updateSortedIds() {
+  sortedServerIds.value = [...servers.value]
     .sort((a, b) => (a.enabled ? 1 : 0) - (b.enabled ? 1 : 0))
     .reverse()
     .map(s => s.id)
+}
+
+onMounted(() => {
+  updateSortedIds()
+})
+
+watch(() => servers.value.length, () => {
+  updateSortedIds()
 })
 
 function hasUsableIcon(server: McpServerInfo): boolean {
