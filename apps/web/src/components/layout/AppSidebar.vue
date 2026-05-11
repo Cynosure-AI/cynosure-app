@@ -93,7 +93,7 @@ function formatTimeAgo(ts: number): string {
   return `${days}d ago`;
 }
 
-function navigateToNotification(notif: {
+async function navigateToNotification(notif: {
   id: string;
   agentId: string;
   conversationId: string | null;
@@ -102,7 +102,9 @@ function navigateToNotification(notif: {
   showNotifications.value = false;
   closeSidebar();
   if (notif.conversationId) {
-    router.push(`/triggers/chat?conversation=${notif.conversationId}`);
+    await chatStore.setActiveAgent(notif.agentId || null);
+    await chatStore.selectConversation(notif.conversationId);
+    router.push("/triggers/chat");
   } else if (notif.agentId) {
     router.push(`/agents/${notif.agentId}`);
   }
