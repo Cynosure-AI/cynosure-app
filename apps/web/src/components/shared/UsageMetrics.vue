@@ -83,7 +83,7 @@ async function confirmReset(): Promise<void> {
 <template>
   <!-- Period selector -->
   <div class="flex items-center justify-between mb-3">
-    <h2 class="text-sm font-medium text-zinc-400 uppercase tracking-wider">
+    <h2 class="text-sm font-medium text-theme-400 uppercase tracking-wider">
       Usage Metrics
     </h2>
     <div class="flex items-center gap-2">
@@ -93,15 +93,15 @@ async function confirmReset(): Promise<void> {
           :key="d"
           class="px-2.5 py-1 text-xs rounded-md transition-colors"
           :class="selectedDays === d
-            ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-            : 'text-zinc-500 hover:text-zinc-300 border border-transparent'"
+            ? 'bg-accent-600/20 text-accent-400 border border-accent-500/30'
+            : 'text-theme-500 hover:text-theme-300 border border-transparent'"
           @click="selectedDays = d"
         >
           {{ d }}d
         </button>
       </div>
       <button
-        class="flex items-center gap-1.5 px-2.5 py-1 text-xs text-zinc-500 hover:text-red-400 border border-transparent hover:border-red-500/30 hover:bg-red-500/10 rounded-md transition-colors"
+        class="flex items-center gap-1.5 px-2.5 py-1 text-xs text-theme-500 hover:text-red-400 border border-transparent hover:border-red-500/30 hover:bg-red-500/10 rounded-md transition-colors"
         title="Reset usage metrics"
         @click="showResetModal = true"
       >
@@ -122,19 +122,19 @@ async function confirmReset(): Promise<void> {
     icon-color="red"
     @close="showResetModal = false"
   >
-    <p class="text-sm text-zinc-400">
+    <p class="text-sm text-theme-400">
       This will clear all recorded usage data up to this point. New metrics will be tracked from now on. Your chat history is not affected.
     </p>
     <template #actions>
       <button
         :disabled="resetting"
-        class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium rounded-xl transition-colors"
+        class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm font-medium rounded-xl transition-colors"
         @click="confirmReset"
       >
         {{ resetting ? 'Resetting...' : 'Reset Usage' }}
       </button>
       <button
-        class="w-full px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm rounded-xl transition-colors border border-zinc-700"
+        class="w-full px-4 py-2.5 bg-theme-800 hover:bg-theme-700 text-theme-300 text-sm rounded-xl transition-colors border border-theme-700"
         @click="showResetModal = false"
       >
         Cancel
@@ -145,7 +145,7 @@ async function confirmReset(): Promise<void> {
   <!-- Loading / Error -->
   <div
     v-if="loading"
-    class="flex items-center justify-center py-12 text-zinc-500 text-sm"
+    class="flex items-center justify-center py-12 text-theme-500 text-sm"
   >
     <Icon
       icon="lucide:loader-2"
@@ -166,99 +166,99 @@ async function confirmReset(): Promise<void> {
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
       <HoverTooltip>
         <BaseCard class="p-4 w-full">
-          <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
+          <div class="text-[11px] text-theme-500 uppercase tracking-wider mb-1">
             Conversations
           </div>
-          <div class="text-xl font-semibold text-zinc-100">
+          <div class="text-xl font-semibold text-theme-100">
             {{ formatNumber(metrics.totals.conversations) }}
           </div>
         </BaseCard>
         <template #content>
-          <div class="font-medium text-zinc-300 mb-1">
+          <div class="font-medium text-theme-300 mb-1">
             Conversations
           </div>
-          <div class="text-zinc-400">
+          <div class="text-theme-400">
             Total: {{ metrics.totals.conversations.toLocaleString() }}
           </div>
-          <div class="text-zinc-500 text-[10px] mt-1">
+          <div class="text-theme-500 text-[10px] mt-1">
             Unique chat sessions in the selected period
           </div>
         </template>
       </HoverTooltip>
       <HoverTooltip>
         <BaseCard class="p-4 w-full">
-          <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
+          <div class="text-[11px] text-theme-500 uppercase tracking-wider mb-1">
             Messages
           </div>
-          <div class="text-xl font-semibold text-zinc-100">
+          <div class="text-xl font-semibold text-theme-100">
             {{ formatNumber(metrics.totals.messages) }}
           </div>
         </BaseCard>
         <template #content>
-          <div class="font-medium text-zinc-300 mb-1">
+          <div class="font-medium text-theme-300 mb-1">
             Messages
           </div>
-          <div class="text-zinc-400">
+          <div class="text-theme-400">
             Total: {{ metrics.totals.messages.toLocaleString() }}
           </div>
-          <div class="text-zinc-500 text-[10px] mt-1">
+          <div class="text-theme-500 text-[10px] mt-1">
             User + assistant messages across all conversations
           </div>
         </template>
       </HoverTooltip>
       <HoverTooltip>
         <BaseCard class="p-4 w-full">
-          <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
+          <div class="text-[11px] text-theme-500 uppercase tracking-wider mb-1">
             Total Tokens
           </div>
-          <div class="text-xl font-semibold text-zinc-100">
+          <div class="text-xl font-semibold text-theme-100">
             {{ formatNumber(metrics.totals.totalTokens) }}
           </div>
-          <div class="text-[10px] text-zinc-600 mt-0.5">
+          <div class="text-[10px] text-theme-600 mt-0.5">
             {{ formatNumber(metrics.totals.promptTokens) }} in · {{ formatNumber(metrics.totals.completionTokens) }} out
           </div>
         </BaseCard>
         <template #content>
-          <div class="font-medium text-zinc-300 mb-1">
+          <div class="font-medium text-theme-300 mb-1">
             Token Usage
           </div>
-          <div class="flex justify-between text-zinc-400 mb-0.5">
-            <span>Prompt (input)</span><span class="text-zinc-300">{{ metrics.totals.promptTokens.toLocaleString() }}</span>
+          <div class="flex justify-between text-theme-400 mb-0.5">
+            <span>Prompt (input)</span><span class="text-theme-300">{{ metrics.totals.promptTokens.toLocaleString() }}</span>
           </div>
-          <div class="flex justify-between text-zinc-400 mb-0.5">
-            <span>Completion (output)</span><span class="text-zinc-300">{{ metrics.totals.completionTokens.toLocaleString() }}</span>
+          <div class="flex justify-between text-theme-400 mb-0.5">
+            <span>Completion (output)</span><span class="text-theme-300">{{ metrics.totals.completionTokens.toLocaleString() }}</span>
           </div>
-          <div class="flex justify-between text-zinc-400 border-t border-zinc-800 pt-1 mt-1">
-            <span>Total</span><span class="text-zinc-200 font-medium">{{ metrics.totals.totalTokens.toLocaleString() }}</span>
+          <div class="flex justify-between text-theme-400 border-t border-theme-800 pt-1 mt-1">
+            <span>Total</span><span class="text-theme-200 font-medium">{{ metrics.totals.totalTokens.toLocaleString() }}</span>
           </div>
         </template>
       </HoverTooltip>
       <HoverTooltip>
         <BaseCard class="p-4 w-full">
-          <div class="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
+          <div class="text-[11px] text-theme-500 uppercase tracking-wider mb-1">
             Est. Cost
           </div>
           <div
             class="text-xl font-semibold"
-            :class="metrics.totals.estimatedCost !== null ? 'text-amber-400' : 'text-zinc-500'"
+            :class="metrics.totals.estimatedCost !== null ? 'text-amber-400' : 'text-theme-500'"
           >
             {{ formatCost(metrics.totals.estimatedCost) }}
           </div>
-          <div class="text-[10px] text-zinc-600 mt-0.5">
+          <div class="text-[10px] text-theme-600 mt-0.5">
             {{ metrics.totals.avgLatencyMs.toLocaleString() }}ms avg latency
           </div>
         </BaseCard>
         <template #content>
-          <div class="font-medium text-zinc-300 mb-1">
+          <div class="font-medium text-theme-300 mb-1">
             Cost &amp; Latency
           </div>
-          <div class="flex justify-between text-zinc-400 mb-0.5">
+          <div class="flex justify-between text-theme-400 mb-0.5">
             <span>Estimated cost</span><span class="text-amber-400">{{ formatCost(metrics.totals.estimatedCost) }}</span>
           </div>
-          <div class="flex justify-between text-zinc-400">
-            <span>Avg latency</span><span class="text-zinc-300">{{ metrics.totals.avgLatencyMs.toLocaleString() }}ms</span>
+          <div class="flex justify-between text-theme-400">
+            <span>Avg latency</span><span class="text-theme-300">{{ metrics.totals.avgLatencyMs.toLocaleString() }}ms</span>
           </div>
-          <div class="text-zinc-500 text-[10px] mt-1">
+          <div class="text-theme-500 text-[10px] mt-1">
             Cost estimates via models.dev pricing data
           </div>
         </template>
@@ -268,14 +268,14 @@ async function confirmReset(): Promise<void> {
     <!-- Cost attribution -->
     <p
       v-if="metrics.totals.estimatedCost !== null"
-      class="text-[10px] text-zinc-600 mb-4 -mt-4 text-right"
+      class="text-[10px] text-theme-600 mb-4 -mt-4 text-right"
     >
       Cost estimates via
       <a
         href="https://models.dev"
         target="_blank"
         rel="noopener noreferrer"
-        class="text-zinc-500 hover:text-zinc-400 underline underline-offset-2"
+        class="text-theme-500 hover:text-theme-400 underline underline-offset-2"
       >models.dev</a>
       pricing
     </p>
@@ -291,12 +291,12 @@ async function confirmReset(): Promise<void> {
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
       <!-- Model Usage -->
       <BaseCard class="p-4">
-        <h3 class="text-xs font-medium text-zinc-400 mb-3">
+        <h3 class="text-xs font-medium text-theme-400 mb-3">
           Model Usage
         </h3>
         <div
           v-if="!metrics.modelUsage.length"
-          class="text-xs text-zinc-600 py-4 text-center"
+          class="text-xs text-theme-600 py-4 text-center"
         >
           No model data
         </div>
@@ -309,16 +309,16 @@ async function confirmReset(): Promise<void> {
             :key="m.provider + m.model"
           >
             <div class="flex items-center justify-between text-xs mb-0.5">
-              <span class="text-zinc-300 truncate mr-2">{{ m.model }}</span>
-              <span class="text-zinc-500 shrink-0">{{ formatNumber(m.requestCount) }} reqs</span>
+              <span class="text-theme-300 truncate mr-2">{{ m.model }}</span>
+              <span class="text-theme-500 shrink-0">{{ formatNumber(m.requestCount) }} reqs</span>
             </div>
-            <div class="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+            <div class="w-full h-1.5 bg-theme-800 rounded-full overflow-hidden">
               <div
                 class="h-full bg-emerald-500/70 rounded-full"
                 :style="{ width: (m.requestCount / maxModelRequests * 100) + '%' }"
               />
             </div>
-            <div class="text-[10px] text-zinc-600 mt-0.5">
+            <div class="text-[10px] text-theme-600 mt-0.5">
               {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
@@ -331,12 +331,12 @@ async function confirmReset(): Promise<void> {
 
       <!-- Tool Usage -->
       <BaseCard class="p-4">
-        <h3 class="text-xs font-medium text-zinc-400 mb-3">
+        <h3 class="text-xs font-medium text-theme-400 mb-3">
           Tool Usage
         </h3>
         <div
           v-if="!metrics.toolUsage.length"
-          class="text-xs text-zinc-600 py-4 text-center"
+          class="text-xs text-theme-600 py-4 text-center"
         >
           No tool data
         </div>
@@ -349,10 +349,10 @@ async function confirmReset(): Promise<void> {
             :key="t.toolName"
           >
             <div class="flex items-center justify-between text-xs mb-0.5">
-              <span class="text-zinc-300 truncate mr-2 font-mono text-[11px]">{{ t.toolName }}</span>
-              <span class="text-zinc-500 shrink-0">{{ formatNumber(t.callCount) }}</span>
+              <span class="text-theme-300 truncate mr-2 font-mono text-[11px]">{{ t.toolName }}</span>
+              <span class="text-theme-500 shrink-0">{{ formatNumber(t.callCount) }}</span>
             </div>
-            <div class="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+            <div class="w-full h-1.5 bg-theme-800 rounded-full overflow-hidden">
               <div
                 class="h-full bg-violet-500/70 rounded-full"
                 :style="{ width: (t.callCount / maxToolCalls * 100) + '%' }"
@@ -367,28 +367,28 @@ async function confirmReset(): Promise<void> {
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <!-- Agent Usage -->
       <BaseCard class="p-4">
-        <h3 class="text-xs font-medium text-zinc-400 mb-3">
+        <h3 class="text-xs font-medium text-theme-400 mb-3">
           Agent Usage
         </h3>
         <div
           v-if="!metrics.agentUsage.length"
-          class="text-xs text-zinc-600 py-4 text-center"
+          class="text-xs text-theme-600 py-4 text-center"
         >
           No agent data
         </div>
         <div
           v-else
-          class="divide-y divide-zinc-800/60"
+          class="divide-y divide-theme-800/60"
         >
           <div
             v-for="a in metrics.agentUsage.slice(0, 8)"
             :key="a.agentId"
             class="flex items-center justify-between py-1.5 first:pt-0 last:pb-0"
           >
-            <span class="text-xs text-zinc-300 truncate mr-2">{{ resolveAgentName(a.agentId) }}</span>
+            <span class="text-xs text-theme-300 truncate mr-2">{{ resolveAgentName(a.agentId) }}</span>
             <div class="flex items-center gap-3 shrink-0 text-[11px]">
-              <span class="text-zinc-500">{{ a.conversationCount }} convos</span>
-              <span class="text-zinc-600">{{ formatNumber(a.messageCount) }} msgs</span>
+              <span class="text-theme-500">{{ a.conversationCount }} convos</span>
+              <span class="text-theme-600">{{ formatNumber(a.messageCount) }} msgs</span>
             </div>
           </div>
         </div>
@@ -396,12 +396,12 @@ async function confirmReset(): Promise<void> {
 
       <!-- Origin Breakdown -->
       <BaseCard class="p-4">
-        <h3 class="text-xs font-medium text-zinc-400 mb-3">
+        <h3 class="text-xs font-medium text-theme-400 mb-3">
           Trigger Origins
         </h3>
         <div
           v-if="!metrics.originBreakdown.length"
-          class="text-xs text-zinc-600 py-4 text-center"
+          class="text-xs text-theme-600 py-4 text-center"
         >
           No origin data
         </div>
@@ -423,11 +423,11 @@ async function confirmReset(): Promise<void> {
                         : o.origin === 'discord' ? 'simple-icons:discord'
                           : o.origin === 'slack' ? 'simple-icons:slack'
                             : 'lucide:zap'"
-                class="w-3.5 h-3.5 text-zinc-500"
+                class="w-3.5 h-3.5 text-theme-500"
               />
-              <span class="text-xs text-zinc-300 capitalize">{{ o.origin }}</span>
+              <span class="text-xs text-theme-300 capitalize">{{ o.origin }}</span>
             </div>
-            <span class="text-xs text-zinc-500">{{ formatNumber(o.count) }}</span>
+            <span class="text-xs text-theme-500">{{ formatNumber(o.count) }}</span>
           </div>
         </div>
       </BaseCard>

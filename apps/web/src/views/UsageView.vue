@@ -7,10 +7,10 @@ import UsageMetrics from '../components/shared/UsageMetrics.vue'
     <div class="max-w-4xl mx-auto py-8 px-6">
       <!-- Header -->
       <div class="mb-8">
-        <h1 class="text-2xl font-bold text-zinc-100">
+        <h1 class="text-2xl font-bold text-theme-100">
           Usage
         </h1>
-        <p class="text-sm text-zinc-500 mt-1">
+        <p class="text-sm text-theme-500 mt-1">
           Model, tool, and agent usage metrics
         </p>
       </div>

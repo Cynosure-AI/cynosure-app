@@ -17,11 +17,11 @@ function redoOnboarding() {
 }
 
 const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
-  { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#09090b', surface: '#18181b', accent: '#3b82f6', text: '#f4f4f5' } },
-  { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#ffffff', surface: '#f9fafb', accent: '#3b82f6', text: '#111827' } },
-  { id: 'arasaka', label: 'Arasaka', icon: 'lucide:zap', colors: { bg: '#080405', surface: '#110a0d', accent: '#ff003c', text: '#f0dce2' } },
-  { id: 'midnight-purple', label: 'Midnight', icon: 'lucide:sparkles', colors: { bg: '#08060e', surface: '#0f0a1c', accent: '#a855f7', text: '#ebe5f5' } },
-  { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#060608', surface: '#16161e', accent: '#f9f002', text: '#e8e8f0' } },
+  { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#141417', surface: '#202024', accent: '#3b82f6', text: '#f4f4f5' } },
+  { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#eef2f7', surface: '#ffffff', accent: '#3b82f6', text: '#0f172a' } },
+  { id: 'arasaka', label: 'Arasaka', icon: 'lucide:zap', colors: { bg: '#13090e', surface: '#1c1218', accent: '#00dce8', text: '#f0dce2' } },
+  { id: 'midnight-purple', label: 'Midnight', icon: 'lucide:sparkles', colors: { bg: '#130f1b', surface: '#1a1528', accent: '#a855f7', text: '#ebe5f5' } },
+  { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#111114', surface: '#181819', accent: '#f9f002', text: '#e8e8f0' } },
 ]
 </script>
 
@@ -30,17 +30,17 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
     <!-- Theme -->
     <BaseCard class="p-5 space-y-4">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:palette"
-            class="w-5 h-5 text-zinc-400"
+            class="w-5 h-5 text-theme-400"
           />
         </div>
         <div>
-          <h3 class="text-sm font-medium text-zinc-200">
+          <h3 class="text-sm font-medium text-theme-200">
             Theme
           </h3>
-          <p class="text-xs text-zinc-500 mt-0.5">
+          <p class="text-xs text-theme-500 mt-0.5">
             Choose your visual style
           </p>
         </div>
@@ -52,8 +52,8 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
           :key="t.id"
           class="group relative rounded-lg border-2 p-3 transition-all duration-200 text-left"
           :class="prefs.theme === t.id
-            ? 'border-blue-500 ring-1 ring-blue-500/30'
-            : 'border-zinc-700 hover:border-zinc-600'"
+            ? 'border-accent-500 ring-1 ring-accent-500/30'
+            : 'border-theme-700 hover:border-theme-600'"
           @click="prefs.setTheme(t.id)"
         >
           <div
@@ -89,7 +89,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
               class="w-3.5 h-3.5"
               :style="{ color: t.colors.accent }"
             />
-            <span class="text-xs font-medium text-zinc-200">{{ t.label }}</span>
+            <span class="text-xs font-medium text-theme-200">{{ t.label }}</span>
           </div>
 
           <div
@@ -98,7 +98,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
           >
             <Icon
               icon="lucide:check-circle-2"
-              class="w-4 h-4 text-blue-400"
+              class="w-4 h-4 text-accent-400"
             />
           </div>
         </button>
@@ -109,17 +109,17 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
     <BaseCard class="p-5">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
             <Icon
               icon="lucide:list-tree"
-              class="w-5 h-5 text-zinc-400"
+              class="w-5 h-5 text-theme-400"
             />
           </div>
           <div>
-            <h3 class="text-sm font-medium text-zinc-200">
+            <h3 class="text-sm font-medium text-theme-200">
               Auto-expand Thinking
             </h3>
-            <p class="text-xs text-zinc-500 mt-0.5">
+            <p class="text-xs text-theme-500 mt-0.5">
               Automatically expand thinking / reasoning blocks
             </p>
           </div>
@@ -132,17 +132,17 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
     <BaseCard class="p-5">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
             <Icon
               icon="lucide:terminal"
-              class="w-5 h-5 text-zinc-400"
+              class="w-5 h-5 text-theme-400"
             />
           </div>
           <div>
-            <h3 class="text-sm font-medium text-zinc-200">
+            <h3 class="text-sm font-medium text-theme-200">
               Auto-expand Tool Calls
             </h3>
-            <p class="text-xs text-zinc-500 mt-0.5">
+            <p class="text-xs text-theme-500 mt-0.5">
               Automatically expand tool call details in the chat
             </p>
           </div>
@@ -155,23 +155,23 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
     <BaseCard class="p-5">
       <div class="flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
             <Icon
               icon="lucide:graduation-cap"
-              class="w-5 h-5 text-zinc-400"
+              class="w-5 h-5 text-theme-400"
             />
           </div>
           <div>
-            <h3 class="text-sm font-medium text-zinc-200">
+            <h3 class="text-sm font-medium text-theme-200">
               Setup Guide
             </h3>
-            <p class="text-xs text-zinc-500 mt-0.5">
+            <p class="text-xs text-theme-500 mt-0.5">
               Re-run the onboarding flow to configure providers, memory and MCPs
             </p>
           </div>
         </div>
         <button
-          class="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors"
+          class="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-theme-700 hover:bg-theme-600 text-theme-300 text-sm rounded-lg transition-colors"
           @click="redoOnboarding"
         >
           <Icon

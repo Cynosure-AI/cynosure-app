@@ -29,7 +29,7 @@ const missingTools = computed(() => {
     :max-width="280"
   >
     <button
-      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-500 hover:text-zinc-300"
+      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-accent-500 text-theme-500 hover:text-theme-300"
       aria-label="Tool access"
       @click="showModal = true"
     >
@@ -49,7 +49,7 @@ const missingTools = computed(() => {
       <span
         v-else
         class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none"
-        :class="chatStore.sessionAutoToolRouting ? 'bg-emerald-600' : 'bg-blue-600'"
+        :class="chatStore.sessionAutoToolRouting ? 'bg-emerald-600' : 'bg-accent-600'"
       >
         <Icon
           v-if="chatStore.sessionAutoToolRouting"
@@ -62,7 +62,7 @@ const missingTools = computed(() => {
       </span>
     </button>
     <template #content>
-      <div class="font-medium text-zinc-300 mb-1.5">
+      <div class="font-medium text-theme-300 mb-1.5">
         Tools ({{ agentStore.selectedToolNames.length }}/{{ agentStore.availableTools.length }})
       </div>
       <div
@@ -106,25 +106,25 @@ const missingTools = computed(() => {
             class="w-3 h-3 text-emerald-400 shrink-0 mt-0.5"
           />
           <div class="min-w-0">
-            <div class="text-zinc-300 font-mono text-[11px] truncate">
+            <div class="text-theme-300 font-mono text-[11px] truncate">
               {{ t.name }}
             </div>
           </div>
         </div>
         <div
           v-if="selectedToolsList.length > 12"
-          class="text-zinc-500 text-[10px] mt-1"
+          class="text-theme-500 text-[10px] mt-1"
         >
           +{{ selectedToolsList.length - 12 }} more
         </div>
       </template>
       <div
         v-else
-        class="text-zinc-500"
+        class="text-theme-500"
       >
         No tools selected
       </div>
-      <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
+      <div class="text-theme-600 text-[10px] mt-1.5 border-t border-theme-800 pt-1.5">
         Click to configure
       </div>
     </template>

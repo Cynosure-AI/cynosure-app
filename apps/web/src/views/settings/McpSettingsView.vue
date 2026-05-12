@@ -6,10 +6,10 @@ import McpSettings from '../../components/settings/mcp/McpSettings.vue'
   <div class="h-full overflow-y-auto">
     <div class="max-w-6xl mx-auto py-8 px-6">
       <div class="mb-6">
-        <h1 class="text-2xl font-bold text-zinc-100">
+        <h1 class="text-2xl font-bold text-theme-100">
           MCP Servers
         </h1>
-        <p class="text-sm text-zinc-500 mt-1">
+        <p class="text-sm text-theme-500 mt-1">
           Connect MCP (Model Context Protocol) servers to add external tools the LLM can use
         </p>
       </div>

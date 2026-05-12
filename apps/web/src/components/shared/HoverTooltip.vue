@@ -92,7 +92,7 @@ function onLeave() {
     <Transition name="fade">
       <div
         v-if="hovered && !disabled"
-        class="rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl shadow-black/40 p-2.5 text-xs pointer-events-none z-9999"
+        class="rounded-lg border border-theme-700 bg-theme-900 shadow-xl shadow-black/40 p-2.5 text-xs pointer-events-none z-9999"
         :style="popoverStyle"
       >
         <slot name="content" />

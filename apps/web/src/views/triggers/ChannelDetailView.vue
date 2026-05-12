@@ -143,7 +143,7 @@ onMounted(loadChannel)
     <div class="max-w-3xl mx-auto py-8 px-6">
       <div
         v-if="loading"
-        class="text-center py-12 text-zinc-400"
+        class="text-center py-12 text-theme-400"
       >
         Loading...
       </div>
@@ -152,7 +152,7 @@ onMounted(loadChannel)
         <div class="flex items-center justify-between mb-6">
           <div class="flex items-center gap-3">
             <button
-              class="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+              class="p-1.5 text-theme-500 hover:text-theme-300 transition-colors"
               @click="router.push('/triggers/channels')"
             >
               <Icon
@@ -171,10 +171,10 @@ onMounted(loadChannel)
               />
             </div>
             <div>
-              <h1 class="text-2xl font-bold text-zinc-100">
+              <h1 class="text-2xl font-bold text-theme-100">
                 {{ channel.name || 'Unnamed channel' }}
               </h1>
-              <p class="text-sm text-zinc-400 mt-0.5">
+              <p class="text-sm text-theme-400 mt-0.5">
                 Agent: {{ selectedAgent?.name || channel.agentId }}
               </p>
             </div>
@@ -194,15 +194,15 @@ onMounted(loadChannel)
               <span class="text-xs text-amber-400">Starting</span>
             </template>
             <template v-else>
-              <span class="w-2 h-2 rounded-full bg-zinc-600" />
-              <span class="text-xs text-zinc-500">Disabled</span>
+              <span class="w-2 h-2 rounded-full bg-theme-600" />
+              <span class="text-xs text-theme-500">Disabled</span>
             </template>
             <span
               v-if="saveMessage"
               class="text-sm text-green-400"
             >{{ saveMessage }}</span>
             <button
-              class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+              class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
               :disabled="saving || !canSave"
               @click="save"
             >
@@ -213,17 +213,17 @@ onMounted(loadChannel)
 
         <div class="space-y-6">
           <div>
-            <label class="block text-xs text-zinc-400 mb-1">Name</label>
+            <label class="block text-xs text-theme-400 mb-1">Name</label>
             <input
               v-model="dlgName"
               type="text"
               placeholder="e.g. Support Bot"
-              class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="w-full bg-theme-800 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
             >
           </div>
 
           <div>
-            <label class="block text-xs text-zinc-400 mb-2">Platform</label>
+            <label class="block text-xs text-theme-400 mb-2">Platform</label>
             <div class="flex gap-2">
               <button
                 v-for="opt in channelTypeOptions"
@@ -232,8 +232,8 @@ onMounted(loadChannel)
                 disabled
                 class="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm transition-colors"
                 :class="channel.type === opt.value
-                  ? 'border-blue-500 bg-blue-500/10 text-blue-400'
-                  : 'border-zinc-700 bg-zinc-800 text-zinc-500 opacity-50'"
+                  ? 'border-accent-500 bg-accent-500/10 text-accent-400'
+                  : 'border-theme-700 bg-theme-800 text-theme-500 opacity-50'"
               >
                 <Icon
                   :icon="opt.icon"
@@ -245,7 +245,7 @@ onMounted(loadChannel)
           </div>
 
           <div>
-            <label class="block text-xs text-zinc-400 mb-1">Agent</label>
+            <label class="block text-xs text-theme-400 mb-1">Agent</label>
             <AgentSelect
               v-model="dlgAgentId"
               :agents="allAgents"
@@ -254,8 +254,8 @@ onMounted(loadChannel)
           </div>
 
           <div>
-            <label class="block text-xs text-zinc-400 mb-1">Allowed Agents</label>
-            <p class="text-[11px] text-zinc-600 mb-1.5">
+            <label class="block text-xs text-theme-400 mb-1">Allowed Agents</label>
+            <p class="text-[11px] text-theme-600 mb-1.5">
               Restrict which agents can be switched to via commands. Leave empty to allow all.
             </p>
             <MultiSelect
@@ -267,29 +267,29 @@ onMounted(loadChannel)
 
           <template v-if="channel.type === 'telegram'">
             <div>
-              <label class="block text-xs text-zinc-400 mb-1">Bot Token</label>
+              <label class="block text-xs text-theme-400 mb-1">Bot Token</label>
               <input
                 v-model="dlgBotToken"
                 type="password"
                 placeholder="123456:ABC-DEF..."
-                class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                class="w-full bg-theme-800 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
-              <p class="text-[11px] text-zinc-600 mt-1">
-                Get your bot token from <span class="text-zinc-400">@BotFather</span> on Telegram.
+              <p class="text-[11px] text-theme-600 mt-1">
+                Get your bot token from <span class="text-theme-400">@BotFather</span> on Telegram.
               </p>
             </div>
           </template>
 
           <template v-else-if="channel.type === 'discord'">
             <div>
-              <label class="block text-xs text-zinc-400 mb-1">Bot Token</label>
+              <label class="block text-xs text-theme-400 mb-1">Bot Token</label>
               <input
                 v-model="dlgBotToken"
                 type="password"
                 placeholder="MTIz...abc"
-                class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                class="w-full bg-theme-800 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
-              <p class="text-[11px] text-zinc-600 mt-1">
+              <p class="text-[11px] text-theme-600 mt-1">
                 Ensure Message Content intent is enabled in the Discord Developer Portal.
               </p>
             </div>
@@ -297,37 +297,37 @@ onMounted(loadChannel)
 
           <template v-else-if="channel.type === 'slack'">
             <div>
-              <label class="block text-xs text-zinc-400 mb-1">Bot Token</label>
+              <label class="block text-xs text-theme-400 mb-1">Bot Token</label>
               <input
                 v-model="dlgBotToken"
                 type="password"
                 placeholder="xoxb-..."
-                class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                class="w-full bg-theme-800 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
             </div>
 
             <div>
-              <label class="block text-xs text-zinc-400 mb-1">App Token</label>
+              <label class="block text-xs text-theme-400 mb-1">App Token</label>
               <input
                 v-model="dlgAppToken"
                 type="password"
                 placeholder="xapp-..."
-                class="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                class="w-full bg-theme-800 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
-              <p class="text-[11px] text-zinc-600 mt-1">
+              <p class="text-[11px] text-theme-600 mt-1">
                 Enable Socket Mode and generate an app-level token with connections:write scope.
               </p>
             </div>
           </template>
 
-          <div class="flex items-center justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-800/50 px-3 py-2">
+          <div class="flex items-center justify-between gap-4 rounded-lg border border-theme-800 bg-theme-800/50 px-3 py-2">
             <label class="flex items-center gap-2 cursor-pointer select-none">
               <ToggleSwitch
                 v-model="dlgEnabled"
                 size="md"
                 color="emerald"
               />
-              <span class="text-sm text-zinc-300">Enabled</span>
+              <span class="text-sm text-theme-300">Enabled</span>
             </label>
 
             <button
@@ -337,7 +337,7 @@ onMounted(loadChannel)
                 ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400'
                 : testResult && !testResult.success
                   ? 'border-red-500/30 bg-red-500/5 text-red-400'
-                  : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'"
+                  : 'border-theme-700 bg-theme-800 text-theme-400 hover:text-theme-200 hover:border-theme-600'"
               @click="testConnection"
             >
               <Icon

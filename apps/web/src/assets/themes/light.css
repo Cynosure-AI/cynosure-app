@@ -2,31 +2,54 @@
    Light Theme
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Variable overrides: remap zinc scale to light tones ── */
+/* ── Variable overrides: remap the neutral scale to light tones ── */
 [data-theme="light"] {
-  --color-zinc-950: #f7f8fb;
-  --color-zinc-900: #eef0f6;
-  --color-zinc-800: #dce2f0;
-  --color-zinc-700: #c0c8d8;
-  --color-zinc-600: #9ca3af;
-  --color-zinc-500: #6b7280;
-  --color-zinc-400: #4b5563;
-  --color-zinc-300: #374151;
-  --color-zinc-200: #1f2937;
-  --color-zinc-100: #111827;
+  --color-theme-950: #eef2f7;
+  --color-theme-900: #f3f6fb;
+  --color-theme-800: #ffffff;
+  --color-theme-700: #dbe3ef;
+  --color-theme-600: #94a3b8;
+  --color-theme-500: #64748b;
+  --color-theme-400: #475569;
+  --color-theme-300: #334155;
+  --color-theme-200: #1e293b;
+  --color-theme-100: #0f172a;
   color-scheme: light;
+}
+
+/* ── Quiet surfaces: light mode should feel airy, not card-heavy ── */
+[data-theme="light"] .border-theme-700,
+[data-theme="light"] .border-theme-800,
+[data-theme="light"] .border-theme-800\/60 {
+  border-color: rgba(203, 213, 225, 0.72);
+}
+
+[data-theme="light"] .bg-theme-800,
+[data-theme="light"] .bg-theme-800\/80,
+[data-theme="light"] .bg-theme-900,
+[data-theme="light"] .bg-theme-900\/60 {
+  background-color: rgba(255, 255, 255, 0.78);
+}
+
+[data-theme="light"] .bg-theme-950 {
+  background-color: var(--color-theme-950);
+}
+
+[data-theme="light"] .shadow-2xl,
+[data-theme="light"] .shadow-xl {
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
 }
 
 /* ── Text selection ── */
 [data-theme="light"] ::selection {
-  background: rgba(59, 130, 246, 0.25);
-  color: #111827;
+  background: color-mix(in srgb, var(--color-accent-500) 25%, transparent);
+  color: var(--color-theme-100);
 }
 
 /* ── Markdown rendering overrides ── */
 [data-theme="light"] .msg-markdown :not(pre) > code {
   background: rgba(229, 231, 235, 0.6);
-  color: #2563eb;
+  color: var(--color-accent-600);
 }
 [data-theme="light"] .msg-markdown strong {
   color: rgba(24, 24, 27, 1);

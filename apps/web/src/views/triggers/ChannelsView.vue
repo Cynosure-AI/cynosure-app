@@ -174,15 +174,15 @@ onUnmounted(() => {
     <div class="max-w-3xl mx-auto py-8 px-6">
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h1 class="text-2xl font-bold text-zinc-100">
+          <h1 class="text-2xl font-bold text-theme-100">
             Channels
           </h1>
-          <p class="text-sm text-zinc-500 mt-1">
+          <p class="text-sm text-theme-500 mt-1">
             Connect messaging platforms to interact with agents
           </p>
         </div>
         <button
-          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white transition-colors"
+          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-white transition-colors"
           @click="openAddDialog"
         >
           <Icon
@@ -200,9 +200,9 @@ onUnmounted(() => {
       >
         <Icon
           icon="lucide:loader-2"
-          class="w-8 h-8 text-zinc-500 animate-spin mx-auto mb-3"
+          class="w-8 h-8 text-theme-500 animate-spin mx-auto mb-3"
         />
-        <p class="text-sm text-zinc-500">
+        <p class="text-sm text-theme-500">
           Loading channels…
         </p>
       </BaseCard>
@@ -218,14 +218,14 @@ onUnmounted(() => {
             class="w-8 h-8 text-purple-400"
           />
         </div>
-        <h3 class="text-lg font-medium text-zinc-200 mb-2">
+        <h3 class="text-lg font-medium text-theme-200 mb-2">
           No channels configured
         </h3>
-        <p class="text-sm text-zinc-500 max-w-md mx-auto mb-4">
+        <p class="text-sm text-theme-500 max-w-md mx-auto mb-4">
           Connect a messaging platform like Telegram so users can interact with your agents via chat.
         </p>
         <button
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium text-white transition-colors"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-white transition-colors"
           @click="openAddDialog"
         >
           <Icon
@@ -244,20 +244,20 @@ onUnmounted(() => {
         <div
           v-for="ch in channels"
           :key="ch.id"
-          class="flex items-center gap-4 px-5 py-4 rounded-xl border bg-zinc-800/60 group cursor-pointer hover:border-zinc-600 transition-colors"
-          :class="ch.enabled ? 'border-zinc-700' : 'border-zinc-700/50 opacity-60'"
+          class="flex items-center gap-4 px-5 py-4 rounded-xl border bg-theme-800/60 group cursor-pointer hover:border-theme-600 transition-colors"
+          :class="ch.enabled ? 'border-theme-700' : 'border-theme-700/50 opacity-60'"
           @click="router.push(`/triggers/channels/${ch.id}`)"
         >
           <!-- Channel type icon -->
           <div class="shrink-0">
             <div
               class="w-10 h-10 rounded-xl flex items-center justify-center"
-              :class="ch.type === 'telegram' ? 'bg-sky-500/10' : ch.type === 'discord' ? 'bg-indigo-500/10' : ch.type === 'slack' ? 'bg-purple-500/10' : 'bg-zinc-800'"
+              :class="ch.type === 'telegram' ? 'bg-sky-500/10' : ch.type === 'discord' ? 'bg-indigo-500/10' : ch.type === 'slack' ? 'bg-purple-500/10' : 'bg-theme-800'"
             >
               <Icon
                 :icon="ch.type === 'telegram' ? 'mdi:telegram' : ch.type === 'discord' ? 'ic:baseline-discord' : ch.type === 'slack' ? 'mdi:slack' : 'lucide:radio'"
                 class="w-5 h-5"
-                :class="ch.type === 'telegram' ? 'text-sky-400' : ch.type === 'discord' ? 'text-indigo-400' : ch.type === 'slack' ? 'text-purple-400' : 'text-zinc-500'"
+                :class="ch.type === 'telegram' ? 'text-sky-400' : ch.type === 'discord' ? 'text-indigo-400' : ch.type === 'slack' ? 'text-purple-400' : 'text-theme-500'"
               />
             </div>
           </div>
@@ -265,14 +265,14 @@ onUnmounted(() => {
           <!-- Info -->
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-0.5">
-              <span class="text-sm font-medium text-zinc-200 truncate">
+              <span class="text-sm font-medium text-theme-200 truncate">
                 {{ ch.name }}
               </span>
-              <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 shrink-0 uppercase">
+              <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-theme-800 text-theme-400 shrink-0 uppercase">
                 {{ ch.type }}
               </span>
             </div>
-            <div class="flex items-center gap-2 text-xs text-zinc-500">
+            <div class="flex items-center gap-2 text-xs text-theme-500">
               <img
                 v-if="agentIconById(ch.agentId)"
                 :src="agentIconById(ch.agentId)!"
@@ -286,7 +286,7 @@ onUnmounted(() => {
               />
               <span>{{ agentNameById(ch.agentId) }}</span>
               <template v-if="ch.status?.username">
-                <span class="text-zinc-700">·</span>
+                <span class="text-theme-700">·</span>
                 <span class="font-mono">
                   @{{ ch.status.username }}
                 </span>
@@ -305,7 +305,7 @@ onUnmounted(() => {
             <!-- Edit / Delete (hover) -->
             <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
-                class="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors"
+                class="p-1.5 rounded-lg hover:bg-theme-800 text-theme-500 hover:text-theme-200 transition-colors"
                 title="Edit"
                 @click.stop="router.push(`/triggers/channels/${ch.id}`)"
               >
@@ -315,7 +315,7 @@ onUnmounted(() => {
                 />
               </button>
               <button
-                class="p-1.5 rounded-lg hover:bg-red-500/10 text-zinc-500 hover:text-red-400 transition-colors"
+                class="p-1.5 rounded-lg hover:bg-red-500/10 text-theme-500 hover:text-red-400 transition-colors"
                 title="Delete"
                 @click.stop="confirmDelete(ch)"
               >
@@ -350,8 +350,8 @@ onUnmounted(() => {
               <span class="text-xs text-amber-400">Starting</span>
             </template>
             <template v-else>
-              <span class="w-2 h-2 rounded-full bg-zinc-600" />
-              <span class="text-xs text-zinc-500">Disabled</span>
+              <span class="w-2 h-2 rounded-full bg-theme-600" />
+              <span class="text-xs text-theme-500">Disabled</span>
             </template>
           </div>
         </div>
@@ -365,24 +365,24 @@ onUnmounted(() => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
         @click.self="showAddDialog = false"
       >
-        <div class="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
-          <h2 class="text-lg font-semibold text-zinc-100 mb-4">
+        <div class="w-full max-w-lg bg-theme-900 border border-theme-800 rounded-2xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
+          <h2 class="text-lg font-semibold text-theme-100 mb-4">
             {{ editingId ? 'Edit Channel' : 'Add Channel' }}
           </h2>
 
           <!-- Channel name -->
-          <label class="block text-sm text-zinc-400 mb-1">
+          <label class="block text-sm text-theme-400 mb-1">
             Name
           </label>
           <input
             v-model="dlgName"
             type="text"
             placeholder="e.g. Support Bot"
-            class="w-full px-3 py-2 mb-4 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="w-full px-3 py-2 mb-4 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
           >
 
           <!-- Channel type -->
-          <label class="block text-sm text-zinc-400 mb-1">
+          <label class="block text-sm text-theme-400 mb-1">
             Platform
           </label>
           <div class="flex gap-2 mb-4">
@@ -393,8 +393,8 @@ onUnmounted(() => {
               :disabled="!!editingId"
               class="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm transition-colors"
               :class="dlgType === opt.value
-                ? 'border-blue-500 bg-blue-500/10 text-blue-400'
-                : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 disabled:opacity-50'"
+                ? 'border-accent-500 bg-accent-500/10 text-accent-400'
+                : 'border-theme-700 bg-theme-800 text-theme-400 hover:text-theme-200 hover:border-theme-600 disabled:opacity-50'"
               @click="dlgType = opt.value"
             >
               <Icon
@@ -406,7 +406,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Agent picker -->
-          <label class="block text-sm text-zinc-400 mb-1">
+          <label class="block text-sm text-theme-400 mb-1">
             Agent
           </label>
           <div class="mb-4">
@@ -418,10 +418,10 @@ onUnmounted(() => {
           </div>
 
           <!-- Allowed agents -->
-          <label class="block text-sm text-zinc-400 mb-1">
+          <label class="block text-sm text-theme-400 mb-1">
             Allowed Agents
           </label>
-          <p class="text-[11px] text-zinc-600 mb-1.5">
+          <p class="text-[11px] text-theme-600 mb-1.5">
             Restrict which agents can be switched to via commands. Leave empty to allow all.
           </p>
           <div class="mb-4">
@@ -434,7 +434,7 @@ onUnmounted(() => {
 
           <!-- Telegram-specific config -->
           <template v-if="dlgType === 'telegram'">
-            <label class="block text-sm text-zinc-400 mb-1">
+            <label class="block text-sm text-theme-400 mb-1">
               Bot Token
             </label>
             <div class="relative mb-1">
@@ -442,19 +442,19 @@ onUnmounted(() => {
                 v-model="dlgBotToken"
                 type="password"
                 placeholder="123456:ABC-DEF..."
-                class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono pr-10"
+                class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono pr-10"
               >
             </div>
-            <p class="text-[11px] text-zinc-600 mb-4">
+            <p class="text-[11px] text-theme-600 mb-4">
               Get your bot token from
-              <span class="text-zinc-400">@BotFather</span>
+              <span class="text-theme-400">@BotFather</span>
               on Telegram
             </p>
           </template>
 
           <!-- Discord-specific config -->
           <template v-if="dlgType === 'discord'">
-            <label class="block text-sm text-zinc-400 mb-1">
+            <label class="block text-sm text-theme-400 mb-1">
               Bot Token
             </label>
             <div class="relative mb-1">
@@ -462,19 +462,19 @@ onUnmounted(() => {
                 v-model="dlgBotToken"
                 type="password"
                 placeholder="MTIz...abc"
-                class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono pr-10"
+                class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono pr-10"
               >
             </div>
-            <p class="text-[11px] text-zinc-600 mb-4">
+            <p class="text-[11px] text-theme-600 mb-4">
               Get your bot token from the
-              <span class="text-zinc-400">Discord Developer Portal</span>
+              <span class="text-theme-400">Discord Developer Portal</span>
               — ensure Message Content intent is enabled
             </p>
           </template>
 
           <!-- Slack-specific config -->
           <template v-if="dlgType === 'slack'">
-            <label class="block text-sm text-zinc-400 mb-1">
+            <label class="block text-sm text-theme-400 mb-1">
               Bot Token
             </label>
             <div class="relative mb-1">
@@ -482,14 +482,14 @@ onUnmounted(() => {
                 v-model="dlgBotToken"
                 type="password"
                 placeholder="xoxb-..."
-                class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono pr-10"
+                class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono pr-10"
               >
             </div>
-            <p class="text-[11px] text-zinc-600 mb-2">
+            <p class="text-[11px] text-theme-600 mb-2">
               The Bot User OAuth Token from your Slack app's OAuth settings
             </p>
 
-            <label class="block text-sm text-zinc-400 mb-1">
+            <label class="block text-sm text-theme-400 mb-1">
               App Token
             </label>
             <div class="relative mb-1">
@@ -497,12 +497,12 @@ onUnmounted(() => {
                 v-model="dlgAppToken"
                 type="password"
                 placeholder="xapp-..."
-                class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono pr-10"
+                class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono pr-10"
               >
             </div>
-            <p class="text-[11px] text-zinc-600 mb-4">
+            <p class="text-[11px] text-theme-600 mb-4">
               Enable Socket Mode in your Slack app and generate an App-Level Token with
-              <span class="text-zinc-400">connections:write</span>
+              <span class="text-theme-400">connections:write</span>
               scope
             </p>
           </template>
@@ -515,7 +515,7 @@ onUnmounted(() => {
               ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400'
               : dlgTestResult && !dlgTestResult.success
                 ? 'border-red-500/30 bg-red-500/5 text-red-400'
-                : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 disabled:opacity-40'"
+                : 'border-theme-700 bg-theme-800 text-theme-400 hover:text-theme-200 hover:border-theme-600 disabled:opacity-40'"
             @click="testConnection"
           >
             <Icon
@@ -544,7 +544,7 @@ onUnmounted(() => {
               size="md"
               color="emerald"
             />
-            <span class="text-sm text-zinc-300">
+            <span class="text-sm text-theme-300">
               Enable on save
             </span>
           </label>
@@ -552,14 +552,14 @@ onUnmounted(() => {
           <!-- Actions -->
           <div class="flex justify-end gap-3">
             <button
-              class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+              class="px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors"
               @click="showAddDialog = false"
             >
               Cancel
             </button>
             <button
               :disabled="!dlgAgentId || !dlgBotToken.trim() || dlgSaving"
-              class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
+              class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
               @click="saveChannel"
             >
               {{ dlgSaving ? 'Saving…' : editingId ? 'Save Changes' : 'Create Channel' }}
@@ -577,9 +577,9 @@ onUnmounted(() => {
       icon-color="red"
       @close="showDeleteConfirm = false"
     >
-      <p class="text-zinc-400 leading-relaxed">
+      <p class="text-theme-400 leading-relaxed">
         Are you sure you want to delete the channel
-        <strong class="text-zinc-200">
+        <strong class="text-theme-200">
           {{ pendingDeleteName }}
         </strong>?
         The bot will stop receiving messages.
@@ -592,7 +592,7 @@ onUnmounted(() => {
           Delete
         </button>
         <button
-          class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+          class="px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors"
           @click="showDeleteConfirm = false"
         >
           Cancel

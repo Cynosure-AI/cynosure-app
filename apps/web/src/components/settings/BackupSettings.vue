@@ -147,15 +147,15 @@ async function doReset(): Promise<void> {
   <div>
     <!-- ═══════════════════ EXPORT ═══════════════════ -->
     <section class="mb-8">
-      <h3 class="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
+      <h3 class="text-sm font-semibold text-theme-300 mb-3 flex items-center gap-2">
         <Icon
           icon="lucide:download"
-          class="w-4 h-4 text-blue-400"
+          class="w-4 h-4 text-accent-400"
         />
         Export Backup
       </h3>
-      <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 space-y-4">
-        <p class="text-xs text-zinc-500">
+      <div class="bg-theme-800 border border-theme-700 rounded-xl p-4 space-y-4">
+        <p class="text-xs text-theme-500">
           Select which modules to include in the backup file.
         </p>
 
@@ -164,22 +164,22 @@ async function doReset(): Promise<void> {
             v-for="(meta, key) in moduleLabels"
             :key="key"
             class="flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer"
-            :class="exportModules[key as keyof typeof exportModules] ? 'border-blue-500/40 bg-blue-500/5' : 'border-zinc-700 bg-zinc-900 hover:border-zinc-600'"
+            :class="exportModules[key as keyof typeof exportModules] ? 'border-accent-500/40 bg-accent-500/5' : 'border-theme-700 bg-theme-900 hover:border-theme-600'"
           >
             <input
               v-model="exportModules[key as keyof typeof exportModules]"
               type="checkbox"
-              class="mt-0.5 h-4 w-4 accent-blue-600 shrink-0"
+              class="mt-0.5 h-4 w-4 accent-accent-600 shrink-0"
             >
             <div>
               <div class="flex items-center gap-1.5">
                 <Icon
                   :icon="meta.icon"
-                  class="w-3.5 h-3.5 text-zinc-400"
+                  class="w-3.5 h-3.5 text-theme-400"
                 />
-                <span class="text-sm font-medium text-zinc-200">{{ meta.label }}</span>
+                <span class="text-sm font-medium text-theme-200">{{ meta.label }}</span>
               </div>
-              <p class="text-[11px] text-zinc-500 mt-0.5">{{ meta.description }}</p>
+              <p class="text-[11px] text-theme-500 mt-0.5">{{ meta.description }}</p>
             </div>
           </label>
         </div>
@@ -193,7 +193,7 @@ async function doReset(): Promise<void> {
 
         <button
           :disabled="exporting || !Object.values(exportModules).some(Boolean)"
-          class="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+          class="w-full px-4 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
           @click="doExport"
         >
           <Icon
@@ -213,28 +213,28 @@ async function doReset(): Promise<void> {
 
     <!-- ═══════════════════ IMPORT ═══════════════════ -->
     <section>
-      <h3 class="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
+      <h3 class="text-sm font-semibold text-theme-300 mb-3 flex items-center gap-2">
         <Icon
           icon="lucide:upload"
           class="w-4 h-4 text-green-400"
         />
         Restore from Backup
       </h3>
-      <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 space-y-4">
+      <div class="bg-theme-800 border border-theme-700 rounded-xl p-4 space-y-4">
         <!-- File picker -->
         <div
           v-if="!previewData && !importResults"
           class="relative"
         >
           <label
-            class="flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed border-zinc-600 rounded-lg hover:border-zinc-500 cursor-pointer transition-colors"
+            class="flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed border-theme-600 rounded-lg hover:border-theme-500 cursor-pointer transition-colors"
           >
             <Icon
               icon="lucide:upload-cloud"
-              class="w-8 h-8 text-zinc-500"
+              class="w-8 h-8 text-theme-500"
             />
-            <span class="text-sm text-zinc-400">Click to select a backup file</span>
-            <span class="text-[11px] text-zinc-600">.zip files only</span>
+            <span class="text-sm text-theme-400">Click to select a backup file</span>
+            <span class="text-[11px] text-theme-600">.zip files only</span>
             <input
               type="file"
               accept=".zip"
@@ -244,11 +244,11 @@ async function doReset(): Promise<void> {
           </label>
           <div
             v-if="previewing"
-            class="absolute inset-0 bg-zinc-800/80 rounded-lg flex items-center justify-center"
+            class="absolute inset-0 bg-theme-800/80 rounded-lg flex items-center justify-center"
           >
             <Icon
               icon="lucide:loader-2"
-              class="w-5 h-5 text-blue-400 animate-spin"
+              class="w-5 h-5 text-accent-400 animate-spin"
             />
           </div>
         </div>
@@ -257,15 +257,15 @@ async function doReset(): Promise<void> {
         <template v-if="previewData && !importResults">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm text-zinc-200 font-medium">
+              <p class="text-sm text-theme-200 font-medium">
                 {{ importFile?.name }}
               </p>
-              <p class="text-[11px] text-zinc-500">
+              <p class="text-[11px] text-theme-500">
                 Created {{ new Date(previewData.createdAt).toLocaleString() }}
               </p>
             </div>
             <button
-              class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              class="text-xs text-theme-500 hover:text-theme-300 transition-colors"
               @click="clearImport"
             >
               Change file
@@ -273,14 +273,14 @@ async function doReset(): Promise<void> {
           </div>
 
           <div class="space-y-2">
-            <p class="text-xs text-zinc-400">
+            <p class="text-xs text-theme-400">
               Select modules to restore:
             </p>
             <label
               v-for="(info, key) in previewData.modules"
               :key="key"
               class="flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer"
-              :class="importModules[key] ? 'border-green-500/40 bg-green-500/5' : 'border-zinc-700 bg-zinc-900 hover:border-zinc-600'"
+              :class="importModules[key] ? 'border-green-500/40 bg-green-500/5' : 'border-theme-700 bg-theme-900 hover:border-theme-600'"
             >
               <input
                 v-model="importModules[key]"
@@ -289,11 +289,11 @@ async function doReset(): Promise<void> {
               >
               <Icon
                 :icon="moduleLabels[key]?.icon || 'lucide:package'"
-                class="w-4 h-4 text-zinc-400 shrink-0"
+                class="w-4 h-4 text-theme-400 shrink-0"
               />
               <div class="flex-1">
-                <span class="text-sm text-zinc-200">{{ moduleLabels[key]?.label || key }}</span>
-                <span class="text-xs text-zinc-500 ml-2">{{ info.count }} item{{ info.count !== 1 ? 's' : '' }}</span>
+                <span class="text-sm text-theme-200">{{ moduleLabels[key]?.label || key }}</span>
+                <span class="text-xs text-theme-500 ml-2">{{ info.count }} item{{ info.count !== 1 ? 's' : '' }}</span>
               </div>
             </label>
           </div>
@@ -310,7 +310,7 @@ async function doReset(): Promise<void> {
 
           <button
             :disabled="importing || !Object.values(importModules).some(Boolean)"
-            class="w-full px-4 py-2.5 bg-green-600 hover:bg-green-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            class="w-full px-4 py-2.5 bg-green-600 hover:bg-green-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
             @click="doImport"
           >
             <Icon
@@ -335,20 +335,20 @@ async function doReset(): Promise<void> {
                 icon="lucide:check-circle"
                 class="w-5 h-5 text-green-400"
               />
-              <span class="text-sm font-medium text-zinc-200">Restore Complete</span>
+              <span class="text-sm font-medium text-theme-200">Restore Complete</span>
             </div>
 
             <div
               v-for="(res, key) in importResults"
               :key="key"
-              class="flex items-center gap-3 p-3 rounded-lg bg-zinc-900 border border-zinc-700"
+              class="flex items-center gap-3 p-3 rounded-lg bg-theme-900 border border-theme-700"
             >
               <Icon
                 :icon="moduleLabels[key]?.icon || 'lucide:package'"
-                class="w-4 h-4 text-zinc-400 shrink-0"
+                class="w-4 h-4 text-theme-400 shrink-0"
               />
               <div class="flex-1">
-                <span class="text-sm text-zinc-200">{{ moduleLabels[key]?.label || key }}</span>
+                <span class="text-sm text-theme-200">{{ moduleLabels[key]?.label || key }}</span>
                 <span class="text-xs text-green-400 ml-2">{{ res.restored }} restored</span>
               </div>
               <Icon
@@ -383,7 +383,7 @@ async function doReset(): Promise<void> {
           </div>
 
           <button
-            class="w-full px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors"
+            class="w-full px-4 py-2 bg-theme-700 hover:bg-theme-600 text-theme-300 text-sm rounded-lg transition-colors"
             @click="clearImport"
           >
             Done
@@ -401,15 +401,15 @@ async function doReset(): Promise<void> {
 
     <!-- ═══════════════════ RESET ═══════════════════ -->
     <section class="mt-8">
-      <h3 class="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
+      <h3 class="text-sm font-semibold text-theme-300 mb-3 flex items-center gap-2">
         <Icon
           icon="lucide:trash-2"
           class="w-4 h-4 text-red-400"
         />
         Reset Application
       </h3>
-      <div class="bg-zinc-800 border border-red-500/20 rounded-xl p-4 space-y-4">
-        <p class="text-xs text-zinc-400">
+      <div class="bg-theme-800 border border-red-500/20 rounded-xl p-4 space-y-4">
+        <p class="text-xs text-theme-400">
           Permanently delete all data and reset Cynosure to a clean state. This removes all agents, providers,
           conversations, memory spaces, MCP servers, channels, and settings.
         </p>
@@ -452,23 +452,23 @@ async function doReset(): Promise<void> {
       icon-color="red"
       @close="showResetConfirm = false; resetConfirmText = ''"
     >
-      <p class="text-sm text-zinc-400 mb-4">
-        This will permanently delete <strong class="text-zinc-200">all data</strong> including agents, providers,
+      <p class="text-sm text-theme-400 mb-4">
+        This will permanently delete <strong class="text-theme-200">all data</strong> including agents, providers,
         conversations, memory, and settings. This cannot be undone.
       </p>
-      <p class="text-sm text-zinc-400 mb-2">
+      <p class="text-sm text-theme-400 mb-2">
         Type <strong class="text-red-400">RESET</strong> to confirm:
       </p>
       <input
         v-model="resetConfirmText"
         type="text"
         placeholder="Type RESET"
-        class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-red-500/50"
+        class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder-theme-600 focus:outline-none focus:border-red-500/50"
       >
       <template #actions>
         <button
           :disabled="resetConfirmText !== 'RESET' || resetting"
-          class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+          class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
           @click="doReset"
         >
           <Icon
@@ -484,7 +484,7 @@ async function doReset(): Promise<void> {
           {{ resetting ? 'Resetting...' : 'Confirm Reset' }}
         </button>
         <button
-          class="w-full px-4 py-2 text-zinc-400 hover:text-zinc-200 text-sm transition-colors"
+          class="w-full px-4 py-2 text-theme-400 hover:text-theme-200 text-sm transition-colors"
           @click="showResetConfirm = false; resetConfirmText = ''"
         >
           Cancel

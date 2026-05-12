@@ -1,27 +1,27 @@
 <template>
   <div class="max-w-2xl mx-auto px-4 py-6 w-full">
     <div class="mb-6">
-      <h2 class="text-xl font-bold text-zinc-100">
+      <h2 class="text-xl font-bold text-theme-100">
         Set Up Memory
       </h2>
-      <p class="text-sm text-zinc-500 mt-1">
+      <p class="text-sm text-theme-500 mt-1">
         Give your agents searchable, long-term memory. Choose an embedding model and create a memory space.
         You can skip this and configure it later in Settings.
       </p>
     </div>
 
     <!-- Embedding Config -->
-    <div class="bg-zinc-800/50 border border-zinc-700/60 rounded-xl p-5 space-y-4 mb-4">
-      <h3 class="text-sm font-semibold text-zinc-200">
+    <div class="bg-theme-800/50 border border-theme-700/60 rounded-xl p-5 space-y-4 mb-4">
+      <h3 class="text-sm font-semibold text-theme-200">
         Embeddings Provider
       </h3>
 
       <!-- Provider select -->
       <div>
-        <label class="block text-xs font-medium text-zinc-400 mb-1.5">Provider</label>
+        <label class="block text-xs font-medium text-theme-400 mb-1.5">Provider</label>
         <select
           v-model="embProviderId"
-          class="w-full bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
         >
           <option value="">
             Select a provider…
@@ -38,7 +38,7 @@
 
       <!-- Model -->
       <div>
-        <label class="block text-xs font-medium text-zinc-400 mb-1.5">Embedding Model</label>
+        <label class="block text-xs font-medium text-theme-400 mb-1.5">Embedding Model</label>
         <div class="flex gap-2">
           <div class="flex-1">
             <input
@@ -46,12 +46,12 @@
               v-model="embModel"
               type="text"
               placeholder="e.g. text-embedding-3-small"
-              class="w-full bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
             >
             <select
               v-else
               v-model="embModel"
-              class="w-full bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
             >
               <option value="">
                 Select model…
@@ -70,17 +70,17 @@
 
       <!-- Dimensions -->
       <div>
-        <label class="block text-xs font-medium text-zinc-400 mb-1.5">Vector Dimensions</label>
+        <label class="block text-xs font-medium text-theme-400 mb-1.5">Vector Dimensions</label>
         <div class="flex gap-2 items-center">
           <input
             v-model.number="embDimensions"
             type="number"
             min="1"
             step="1"
-            class="w-32 bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="w-32 bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
           >
           <button
-            class="flex items-center gap-1.5 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-zinc-300 text-sm rounded-lg transition-colors"
+            class="flex items-center gap-1.5 px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:opacity-50 text-theme-300 text-sm rounded-lg transition-colors"
             :disabled="probing || !embModel"
             @click="probeDimensions"
           >
@@ -92,14 +92,14 @@
             {{ probing ? 'Detecting…' : 'Auto-detect' }}
           </button>
         </div>
-        <p class="text-xs text-zinc-600 mt-1">
+        <p class="text-xs text-theme-600 mt-1">
           Dimensions must match the embedding model output.
         </p>
       </div>
 
       <!-- Save embeddings button -->
       <button
-        class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+        class="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
         :disabled="!embModel || !embDimensions || savingEmb"
         @click="saveEmbeddings"
       >
@@ -116,18 +116,18 @@
     <Transition name="fade">
       <div
         v-if="embSaved || embConfigured"
-        class="flex items-start gap-3 bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3.5"
+        class="flex items-start gap-3 bg-accent-500/10 border border-accent-500/30 rounded-xl px-4 py-3.5"
       >
         <Icon
           icon="lucide:arrow-right-circle"
-          class="w-5 h-5 text-blue-400 shrink-0 mt-0.5"
+          class="w-5 h-5 text-accent-400 shrink-0 mt-0.5"
         />
         <div>
-          <p class="text-sm font-medium text-blue-300">
+          <p class="text-sm font-medium text-accent-300">
             Embeddings configured!
           </p>
-          <p class="text-xs text-zinc-400 mt-0.5">
-            Click <strong class="text-zinc-200">Continue</strong> to set up your first memory space — a place to store and search documents for your agents.
+          <p class="text-xs text-theme-400 mt-0.5">
+            Click <strong class="text-theme-200">Continue</strong> to set up your first memory space — a place to store and search documents for your agents.
           </p>
         </div>
       </div>

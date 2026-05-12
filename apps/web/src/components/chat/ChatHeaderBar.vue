@@ -93,11 +93,11 @@ function onTitleKeydown(e: KeyboardEvent): void {
 
 <template>
   <div
-    class="shrink-0 border-b border-zinc-800/60 px-3 py-2 flex items-center gap-2"
+    class="shrink-0 border-b border-theme-800/60 px-3 py-2 flex items-center gap-2"
   >
     <!-- Sidebar toggle -->
     <button
-      class="p-1.5 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300 shrink-0"
+      class="p-1.5 rounded-lg hover:bg-theme-800 transition-colors text-theme-500 hover:text-theme-300 shrink-0"
       title="Toggle chat history"
       @click="toggleSidebar"
     >
@@ -131,13 +131,13 @@ function onTitleKeydown(e: KeyboardEvent): void {
         v-if="isEditingTitle"
         ref="titleInputRef"
         v-model="editingTitleValue"
-        class="text-sm font-medium text-zinc-300 bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 max-w-xs w-full focus:outline-none focus:border-blue-500"
+        class="text-sm font-medium text-theme-300 bg-theme-800 border border-theme-600 rounded px-2 py-0.5 max-w-xs w-full focus:outline-none focus:border-accent-500"
         @blur="commitTitleEdit"
         @keydown="onTitleKeydown"
       >
       <span
         v-else-if="conversationTitle"
-        class="text-sm font-medium text-zinc-300 truncate select-none cursor-pointer"
+        class="text-sm font-medium text-theme-300 truncate select-none cursor-pointer"
         title="Double-click to rename"
         @dblclick="startEditTitle"
       >
@@ -145,7 +145,7 @@ function onTitleKeydown(e: KeyboardEvent): void {
       </span>
       <span
         v-if="activeOrigin"
-        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-800 shrink-0"
+        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-theme-800 shrink-0"
         :class="activeOrigin.color"
       >
         <Icon
@@ -158,7 +158,7 @@ function onTitleKeydown(e: KeyboardEvent): void {
 
     <!-- New Chat button -->
     <button
-      class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition-colors shrink-0"
+      class="flex items-center gap-1.5 px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-xs font-medium transition-colors shrink-0"
       @click="newChat"
     >
       <Icon

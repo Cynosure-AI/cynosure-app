@@ -19,14 +19,14 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="w-full flex gap-1 border-b border-zinc-800 overflow-x-auto overflow-y-hidden scrollbar-none">
+  <div class="w-full flex gap-1 border-b border-theme-800 overflow-x-auto overflow-y-hidden scrollbar-none">
     <button
       v-for="tab in props.tabs"
       :key="tab.value"
       class="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2.5 text-sm transition-colors border-b-2 -mb-px"
       :class="modelValue === tab.value
-        ? 'text-blue-400 border-blue-400'
-        : 'text-zinc-500 border-transparent hover:text-zinc-300'"
+        ? 'text-accent-400 border-accent-400'
+        : 'text-theme-500 border-transparent hover:text-theme-300'"
       @click="emit('update:modelValue', tab.value)"
     >
       <Icon
@@ -38,7 +38,7 @@ const emit = defineEmits<{
       {{ tab.label }}
       <span
         v-if="tab.badge != null && tab.badge !== '' && tab.badge !== 0"
-        class="text-xs px-1.5 py-0.5 rounded-full bg-zinc-700 text-zinc-300"
+        class="text-xs px-1.5 py-0.5 rounded-full bg-theme-700 text-theme-300"
       >
         {{ tab.badge }}
       </span>

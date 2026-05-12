@@ -116,8 +116,8 @@ const originBadgeConfig: Record<
 > = {
   chat: {
     icon: "lucide:message-circle",
-    color: "text-blue-400",
-    bg: "bg-blue-500/10",
+    color: "text-accent-400",
+    bg: "bg-accent-500/10",
     label: "Chat",
   },
   "multi-agent": {
@@ -279,10 +279,10 @@ onUnmounted(() => {
   <div class="h-full overflow-y-auto">
     <div class="max-w-6xl mx-auto py-8 px-6">
       <div class="mb-6">
-        <h1 class="text-2xl font-bold text-zinc-100">
+        <h1 class="text-2xl font-bold text-theme-100">
           Instances Timeline
         </h1>
-        <p class="text-sm text-zinc-500 mt-1">
+        <p class="text-sm text-theme-500 mt-1">
           Running instances are pinned on top, with historical entries below in
           chronological order.
         </p>
@@ -295,9 +295,9 @@ onUnmounted(() => {
       >
         <Icon
           icon="lucide:loader-2"
-          class="w-8 h-8 text-zinc-500 animate-spin mx-auto mb-3"
+          class="w-8 h-8 text-theme-500 animate-spin mx-auto mb-3"
         />
-        <p class="text-sm text-zinc-500">
+        <p class="text-sm text-theme-500">
           Loading timeline…
         </p>
       </BaseCard>
@@ -308,17 +308,17 @@ onUnmounted(() => {
         class="p-12 text-center"
       >
         <div
-          class="w-16 h-16 rounded-2xl bg-zinc-800 flex items-center justify-center mx-auto mb-4"
+          class="w-16 h-16 rounded-2xl bg-theme-800 flex items-center justify-center mx-auto mb-4"
         >
           <Icon
             icon="lucide:activity"
-            class="w-8 h-8 text-zinc-600"
+            class="w-8 h-8 text-theme-600"
           />
         </div>
-        <h3 class="text-lg font-medium text-zinc-200 mb-2">
+        <h3 class="text-lg font-medium text-theme-200 mb-2">
           No timeline entries yet
         </h3>
-        <p class="text-sm text-zinc-500 max-w-md mx-auto">
+        <p class="text-sm text-theme-500 max-w-md mx-auto">
           Running instances and recent conversations will appear here.
         </p>
       </BaseCard>
@@ -350,7 +350,7 @@ onUnmounted(() => {
               >
               <div
                 v-else
-                class="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0"
+                class="w-10 h-10 rounded-xl bg-theme-800 flex items-center justify-center shrink-0"
               >
                 <Icon
                   :icon="
@@ -358,11 +358,11 @@ onUnmounted(() => {
                       ? 'lucide:bot'
                       : 'lucide:message-circle'
                   "
-                  class="w-5 h-5 text-zinc-500"
+                  class="w-5 h-5 text-theme-500"
                 />
               </div>
               <div class="min-w-0">
-                <div class="text-sm font-medium text-zinc-200 truncate">
+                <div class="text-sm font-medium text-theme-200 truncate">
                   {{
                     item.kind === "running"
                       ? item.running.agentName
@@ -373,7 +373,7 @@ onUnmounted(() => {
                   v-if="
                     item.kind === 'history' && item.history.last_user_message
                   "
-                  class="text-xs text-zinc-500 truncate mt-0.5"
+                  class="text-xs text-theme-500 truncate mt-0.5"
                 >
                   {{ item.history.last_user_message }}
                 </div>
@@ -412,7 +412,7 @@ onUnmounted(() => {
                 </span>
                 <span
                   v-else
-                  class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-700/50 text-zinc-400"
+                  class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-theme-700/50 text-theme-400"
                 >
                   Chat
                 </span>
@@ -429,7 +429,7 @@ onUnmounted(() => {
                   v-if="
                     agentById[item.running.agentId]?.model || item.running.model
                   "
-                  class="text-xs text-zinc-500 truncate max-w-50"
+                  class="text-xs text-theme-500 truncate max-w-50"
                 >
                   {{
                     item.running.model || agentById[item.running.agentId]?.model
@@ -441,19 +441,19 @@ onUnmounted(() => {
                   v-if="
                     item.history.agent_id && agentById[item.history.agent_id]
                   "
-                  class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400"
+                  class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent-500/10 text-accent-400"
                 >
                   {{ agentById[item.history.agent_id]!.name }}
                 </span>
                 <span
                   v-else-if="!item.history.agent_id"
-                  class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-700/50 text-zinc-400"
+                  class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-theme-700/50 text-theme-400"
                 >
                   Free Chat
                 </span>
                 <span
                   v-if="agentById[item.history.agent_id!]?.model"
-                  class="text-xs text-zinc-500 truncate max-w-50"
+                  class="text-xs text-theme-500 truncate max-w-50"
                 >
                   {{ agentById[item.history.agent_id!]!.model }}
                 </span>
@@ -463,10 +463,10 @@ onUnmounted(() => {
 
           <!-- Time — use item.ts directly, avoids per-kind ternaries -->
           <template #col-time="{ item }">
-            <div class="text-xs text-zinc-400">
+            <div class="text-xs text-theme-400">
               {{ formatStarted(item.ts) }}
             </div>
-            <div class="text-xs text-zinc-600 mt-0.5">
+            <div class="text-xs text-theme-600 mt-0.5">
               {{
                 item.kind === "running"
                   ? formatDuration(item.ts)
@@ -497,13 +497,13 @@ onUnmounted(() => {
                   <span class="text-xs text-emerald-400">Running</span>
                 </template>
                 <template v-else>
-                  <span class="w-2 h-2 rounded-full bg-zinc-500" />
-                  <span class="text-xs text-zinc-400">Completed</span>
+                  <span class="w-2 h-2 rounded-full bg-theme-500" />
+                  <span class="text-xs text-theme-400">Completed</span>
                 </template>
               </div>
               <button
                 v-if="item.kind === 'running'"
-                class="shrink-0 p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                class="shrink-0 p-1.5 rounded-lg text-theme-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                 :class="{ 'text-red-400': stopping.has(item.running.id) }"
                 title="Stop instance"
                 @click="stopInstance(item.running, $event)"
@@ -521,7 +521,7 @@ onUnmounted(() => {
               <Icon
                 v-else
                 icon="lucide:chevron-right"
-                class="w-4 h-4 text-zinc-600"
+                class="w-4 h-4 text-theme-600"
               />
             </div>
           </template>
@@ -533,7 +533,7 @@ onUnmounted(() => {
           class="flex items-center justify-center gap-2 mt-6"
         >
           <button
-            class="px-3 py-1.5 text-sm rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+            class="px-3 py-1.5 text-sm rounded-lg border border-theme-700 text-theme-400 hover:text-theme-200 hover:border-theme-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
             :disabled="historyPage <= 1"
             @click="goToPage(historyPage - 1)"
           >
@@ -542,9 +542,9 @@ onUnmounted(() => {
               class="w-4 h-4"
             />
           </button>
-          <span class="text-sm text-zinc-500">Page {{ historyPage }} of {{ historyPages }}</span>
+          <span class="text-sm text-theme-500">Page {{ historyPage }} of {{ historyPages }}</span>
           <button
-            class="px-3 py-1.5 text-sm rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+            class="px-3 py-1.5 text-sm rounded-lg border border-theme-700 text-theme-400 hover:text-theme-200 hover:border-theme-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
             :disabled="historyPage >= historyPages"
             @click="goToPage(historyPage + 1)"
           >

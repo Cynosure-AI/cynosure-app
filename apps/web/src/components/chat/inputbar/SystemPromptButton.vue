@@ -13,10 +13,10 @@ const showModal = ref(false)
 <template>
   <HoverTooltip :max-width="320">
     <button
-      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500"
+      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-accent-500"
       :class="chatStore.sessionSystemPrompt.trim()
-        ? 'text-blue-400 hover:text-blue-300'
-        : 'text-zinc-500 hover:text-zinc-300'"
+        ? 'text-accent-400 hover:text-accent-300'
+        : 'text-theme-500 hover:text-theme-300'"
       aria-label="System prompt"
       @click="showModal = true"
     >
@@ -26,22 +26,22 @@ const showModal = ref(false)
       />
     </button>
     <template #content>
-      <div class="font-medium text-zinc-300 mb-1.5">
+      <div class="font-medium text-theme-300 mb-1.5">
         System Prompt
       </div>
       <div
         v-if="chatStore.sessionSystemPrompt.trim()"
-        class="text-zinc-400 text-[11px] whitespace-pre-wrap line-clamp-6 font-mono"
+        class="text-theme-400 text-[11px] whitespace-pre-wrap line-clamp-6 font-mono"
       >
         {{ chatStore.sessionSystemPrompt }}
       </div>
       <div
         v-else
-        class="text-zinc-500"
+        class="text-theme-500"
       >
         No system prompt set
       </div>
-      <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
+      <div class="text-theme-600 text-[10px] mt-1.5 border-t border-theme-800 pt-1.5">
         Click to edit
       </div>
     </template>

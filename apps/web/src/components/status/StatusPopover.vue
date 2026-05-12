@@ -109,12 +109,12 @@ function goTo(path: string) {
   >
     <div
       v-if="show"
-      class="absolute left-3 right-3 bottom-full mb-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-3 space-y-3 z-50 max-h-[70vh] overflow-y-auto"
+      class="absolute left-3 right-3 bottom-full mb-2 bg-theme-900 border border-theme-700 rounded-xl shadow-2xl p-3 space-y-3 z-50 max-h-[70vh] overflow-y-auto"
     >
       <!-- Refresh button -->
       <div class="flex justify-end -mt-0.5 -mb-1">
         <button
-          class="p-1 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+          class="p-1 rounded-md text-theme-500 hover:text-theme-300 hover:bg-theme-800 transition-colors"
           title="Refresh status"
           :disabled="refreshing"
           @click="fetchStatus(true)"
@@ -132,12 +132,12 @@ function goTo(path: string) {
         <div class="flex items-center gap-2 mb-1.5">
           <Icon
             icon="lucide:activity"
-            class="w-3.5 h-3.5 text-zinc-500"
+            class="w-3.5 h-3.5 text-theme-500"
           />
-          <span class="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">Instances</span>
+          <span class="text-[11px] font-medium text-theme-400 uppercase tracking-wider">Instances</span>
           <span
             v-if="instances.length"
-            class="text-[10px] text-zinc-500 ml-auto"
+            class="text-[10px] text-theme-500 ml-auto"
           >{{ instances.length }} running</span>
         </div>
 
@@ -147,7 +147,7 @@ function goTo(path: string) {
             :key="instance.id"
             role="button"
             tabindex="0"
-            class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer group"
+            class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-theme-800 transition-colors cursor-pointer group"
             @click="emit('navigateToInstance', instance)"
             @keydown.enter="emit('navigateToInstance', instance)"
           >
@@ -159,23 +159,23 @@ function goTo(path: string) {
             <Icon
               v-else
               icon="lucide:loader-2"
-              class="w-3.5 h-3.5 text-blue-400 animate-spin shrink-0"
+              class="w-3.5 h-3.5 text-accent-400 animate-spin shrink-0"
             />
             <span
               class="text-[11px] truncate flex-1"
-              :class="instance.status === 'awaiting-approval' ? 'text-amber-400 group-hover:text-amber-300' : 'text-zinc-400 group-hover:text-zinc-200'"
+              :class="instance.status === 'awaiting-approval' ? 'text-amber-400 group-hover:text-amber-300' : 'text-theme-400 group-hover:text-theme-200'"
             >{{ instance.agentName }}</span>
           </div>
         </template>
         <div
           v-else
-          class="text-[11px] text-zinc-600 px-2"
+          class="text-[11px] text-theme-600 px-2"
         >
           No running instances
         </div>
       </div>
 
-      <div class="border-t border-zinc-800" />
+      <div class="border-t border-theme-800" />
 
       <!-- ── LLM Providers ── -->
       <div>
@@ -185,14 +185,14 @@ function goTo(path: string) {
         >
           <Icon
             icon="lucide:cpu"
-            class="w-3.5 h-3.5 text-zinc-500"
+            class="w-3.5 h-3.5 text-theme-500"
           />
-          <span class="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">Providers</span>
+          <span class="text-[11px] font-medium text-theme-400 uppercase tracking-wider">Providers</span>
         </button>
 
         <div
           v-if="providerHealthList.length === 0"
-          class="text-[11px] text-zinc-600 px-2"
+          class="text-[11px] text-theme-600 px-2"
         >
           No providers configured
         </div>
@@ -204,19 +204,19 @@ function goTo(path: string) {
           <span
             class="w-1.5 h-1.5 rounded-full shrink-0"
             :class="{
-              'bg-zinc-600 animate-pulse': p.status === 'checking',
+              'bg-theme-600 animate-pulse': p.status === 'checking',
               'bg-emerald-500': p.status === 'ok',
               'bg-red-500': p.status === 'error'
             }"
           />
           <span
             class="text-[11px] truncate flex-1"
-            :class="p.status === 'error' ? 'text-red-400' : 'text-zinc-400'"
+            :class="p.status === 'error' ? 'text-red-400' : 'text-theme-400'"
           >{{ p.name }}</span>
         </div>
       </div>
 
-      <div class="border-t border-zinc-800" />
+      <div class="border-t border-theme-800" />
 
       <!-- ── MCPs ── -->
       <div>
@@ -226,14 +226,14 @@ function goTo(path: string) {
         >
           <Icon
             icon="lucide:plug"
-            class="w-3.5 h-3.5 text-zinc-500"
+            class="w-3.5 h-3.5 text-theme-500"
           />
-          <span class="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">MCPs</span>
+          <span class="text-[11px] font-medium text-theme-400 uppercase tracking-wider">MCPs</span>
         </button>
 
         <div
           v-if="!mcpLoaded"
-          class="text-[11px] text-zinc-600 px-2"
+          class="text-[11px] text-theme-600 px-2"
         >
           Loading…
         </div>
@@ -241,7 +241,7 @@ function goTo(path: string) {
           <div class="flex flex-wrap gap-x-4 gap-y-1 px-2">
             <div class="flex items-center gap-1.5">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-              <span class="text-[11px] text-zinc-400">{{ mcpStats.connected }} connected</span>
+              <span class="text-[11px] text-theme-400">{{ mcpStats.connected }} connected</span>
             </div>
             <div
               v-if="mcpStats.failed > 0"
@@ -253,14 +253,14 @@ function goTo(path: string) {
             <div class="flex items-center gap-1.5">
               <Icon
                 icon="lucide:wrench"
-                class="w-3 h-3 text-zinc-500"
+                class="w-3 h-3 text-theme-500"
               />
-              <span class="text-[11px] text-zinc-400">{{ mcpStats.totalTools }} tools</span>
+              <span class="text-[11px] text-theme-400">{{ mcpStats.totalTools }} tools</span>
             </div>
           </div>
           <div
             v-if="mcpStats.total === 0"
-            class="text-[11px] text-zinc-600 px-2"
+            class="text-[11px] text-theme-600 px-2"
           >
             No MCP servers configured
           </div>

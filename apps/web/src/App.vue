@@ -150,7 +150,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-zinc-950 text-zinc-100 antialiased selection:bg-blue-500/30 selection:text-blue-200">
+  <div class="flex h-screen bg-theme-950 text-theme-100 antialiased selection:bg-accent-500/30 selection:text-accent-200">
     <!-- Mobile sidebar backdrop -->
     <Transition
       v-if="!isOnboardingRoute"
@@ -181,7 +181,7 @@ onUnmounted(() => {
     </div>
 
     <div
-      class="flex flex-col flex-1 min-w-0 bg-zinc-950"
+      class="flex flex-col flex-1 min-w-0 bg-theme-950"
       :class="isOnboardingRoute ? '' : 'p-2 pl-0 md:pl-0'"
     >
       <!-- Mobile header with hamburger -->
@@ -190,7 +190,7 @@ onUnmounted(() => {
         class="flex items-center gap-2 px-2 py-1.5 md:hidden"
       >
         <button
-          class="p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+          class="p-2 rounded-lg text-theme-400 hover:text-theme-100 hover:bg-theme-800 transition-colors"
           @click="sidebarOpen = !sidebarOpen"
         >
           <Icon
@@ -198,13 +198,13 @@ onUnmounted(() => {
             class="w-5 h-5"
           />
         </button>
-        <span class="text-sm font-semibold text-zinc-200">Cynosure</span>
+        <span class="text-sm font-semibold text-theme-200">Cynosure</span>
       </div>
       <main
         class="flex-1 overflow-hidden relative flex flex-col"
         :class="isOnboardingRoute
-          ? 'bg-zinc-950'
-          : 'bg-zinc-900 ring-1 ring-black/5 dark:ring-white/10 rounded-xl shadow-2xl ml-2 md:ml-0'"
+          ? 'bg-theme-950'
+          : 'bg-theme-900 ring-1 ring-black/5 dark:ring-white/10 rounded-xl shadow-2xl ml-2 md:ml-0'"
       >
         <RouterView />
       </main>
@@ -215,18 +215,18 @@ onUnmounted(() => {
       :show="mcpAuthRequests.length > 0"
       title="Authentication Required"
       icon="lucide:shield-alert"
-      icon-color="blue"
+      icon-color="accent"
       @close="dismissAuthRequest(mcpAuthRequests[0]?.serverId)"
     >
-      <p class="text-zinc-400 leading-relaxed">
-        The MCP server <strong class="text-zinc-200">{{ mcpAuthRequests[0]?.serverName }}</strong> requires external authorization before it can connect. Please click the unblock link below.
+      <p class="text-theme-400 leading-relaxed">
+        The MCP server <strong class="text-theme-200">{{ mcpAuthRequests[0]?.serverName }}</strong> requires external authorization before it can connect. Please click the unblock link below.
       </p>
       <template #actions>
         <a
           v-if="!mcpAuthOpened.has(mcpAuthRequests[0]?.serverId)"
           :href="mcpAuthRequests[0]?.authUrl"
           target="_blank"
-          class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-center font-medium transition-colors shadow-lg shadow-blue-500/20"
+          class="w-full px-4 py-3 bg-accent-600 hover:bg-accent-500 text-white rounded-xl text-center font-medium transition-colors shadow-lg shadow-accent-500/20"
           @click.prevent="openAuthPage(mcpAuthRequests[0]?.serverId, mcpAuthRequests[0]?.authUrl)"
         >
           Open Authorization Page
@@ -240,7 +240,7 @@ onUnmounted(() => {
           {{ mcpAuthReconnecting === mcpAuthRequests[0]?.serverId ? 'Connecting...' : 'I\'ve Authorized — Reconnect' }}
         </button>
         <button
-          class="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-center font-medium transition-colors"
+          class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
           @click="dismissAuthRequest(mcpAuthRequests[0]?.serverId)"
         >
           Dismiss

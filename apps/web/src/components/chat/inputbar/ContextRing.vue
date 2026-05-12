@@ -51,7 +51,7 @@ const contextUsage = computed(() => {
           fill="none"
           stroke="currentColor"
           stroke-width="2.5"
-          :class="contextUsage.hardLimit ? 'text-amber-900/50' : 'text-zinc-700/50'"
+          :class="contextUsage.hardLimit ? 'text-amber-900/50' : 'text-theme-700/50'"
         />
         <!-- Progress arc -->
         <circle
@@ -64,14 +64,14 @@ const contextUsage = computed(() => {
           stroke-linecap="round"
           :stroke-dasharray="87.96"
           :stroke-dashoffset="Math.max(0, 87.96 - (87.96 * contextUsage.percent) / 100)"
-          :class="contextUsage.percent > 90 ? 'text-red-500' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-blue-500'"
+          :class="contextUsage.percent > 90 ? 'text-red-500' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-accent-500'"
           class="transition-all duration-500"
         />
       </svg>
       <span
         v-if="contextUsage"
         class="absolute text-[8px] font-bold leading-none"
-        :class="contextUsage.percent > 90 ? 'text-red-400' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-zinc-400'"
+        :class="contextUsage.percent > 90 ? 'text-red-400' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-theme-400'"
       >{{ Math.round(contextUsage.percent) }}%</span>
     </div>
     <template #content>
@@ -79,29 +79,29 @@ const contextUsage = computed(() => {
         v-if="contextUsage"
         class="min-w-36"
       >
-        <div class="font-medium text-zinc-300 mb-1.5">
+        <div class="font-medium text-theme-300 mb-1.5">
           Context Window
         </div>
-        <div class="flex justify-between text-zinc-400 mb-0.5">
-          <span>Used</span><span class="text-zinc-300">{{ contextUsage.used.toLocaleString() }}</span>
+        <div class="flex justify-between text-theme-400 mb-0.5">
+          <span>Used</span><span class="text-theme-300">{{ contextUsage.used.toLocaleString() }}</span>
         </div>
-        <div class="flex justify-between text-zinc-400 mb-0.5">
+        <div class="flex justify-between text-theme-400 mb-0.5">
           <span>Capacity</span>
           <span class="flex items-center gap-1.5">
             <span
               v-if="contextUsage.hardLimit"
-              class="text-zinc-500 line-through"
+              class="text-theme-500 line-through"
             >{{ contextUsage.rawMax.toLocaleString() }}</span>
-            <span :class="contextUsage.hardLimit ? 'text-amber-300' : 'text-zinc-300'">{{ contextUsage.max.toLocaleString() }}</span>
+            <span :class="contextUsage.hardLimit ? 'text-amber-300' : 'text-theme-300'">{{ contextUsage.max.toLocaleString() }}</span>
           </span>
         </div>
-        <div class="flex justify-between text-zinc-400">
+        <div class="flex justify-between text-theme-400">
           <span>Usage</span>
           <span
-            :class="contextUsage.percent > 90 ? 'text-red-400' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-zinc-300'"
+            :class="contextUsage.percent > 90 ? 'text-red-400' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-theme-300'"
           >{{ Math.round(contextUsage.percent) }}%</span>
         </div>
-        <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
+        <div class="text-theme-600 text-[10px] mt-1.5 border-t border-theme-800 pt-1.5">
           {{ contextUsage.hardLimit ? 'Capped by agent max context token limit' : 'Tokens used in current conversation' }}
         </div>
       </div>

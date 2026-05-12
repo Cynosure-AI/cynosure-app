@@ -69,8 +69,8 @@ function removeImage() {
 
 <template>
   <div>
-    <label class="block text-sm text-zinc-400 mb-1.5">Icon</label>
-    <p class="text-xs text-zinc-600 mb-2">
+    <label class="block text-sm text-theme-400 mb-1.5">Icon</label>
+    <p class="text-xs text-theme-600 mb-2">
       <slot name="description">
         Custom avatar. Falls back to the default icon if not set.
       </slot>
@@ -81,8 +81,8 @@ function removeImage() {
         class="relative w-14 h-14 rounded-xl border flex items-center justify-center overflow-hidden cursor-pointer transition-colors"
         :class="[
           isDragging 
-            ? 'bg-zinc-700 border-zinc-400 ring-2 ring-zinc-500' 
-            : 'bg-zinc-800 border-zinc-700 hover:border-zinc-500'
+            ? 'bg-theme-700 border-theme-400 ring-2 ring-theme-500'
+            : 'bg-theme-800 border-theme-700 hover:border-theme-500'
         ]"
         @click="fileInput?.click()"
         @dragover.prevent="isDragging = true"
@@ -100,14 +100,14 @@ function removeImage() {
           v-else
           :icon="fallbackIcon || 'lucide:image'"
           class="w-7 h-7 transition-colors"
-          :class="isDragging ? 'text-zinc-300' : 'text-zinc-500'"
+          :class="isDragging ? 'text-theme-300' : 'text-theme-500'"
         />
       </div>
 
       <div class="flex gap-2">
         <button
           type="button"
-          class="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs rounded-lg transition-colors"
+          class="px-3 py-1.5 bg-theme-700 hover:bg-theme-600 text-theme-300 text-xs rounded-lg transition-colors"
           @click="fileInput?.click()"
         >
           Upload
@@ -115,7 +115,7 @@ function removeImage() {
         <button
           v-if="iconUrl"
           type="button"
-          class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs rounded-lg transition-colors"
+          class="px-3 py-1.5 bg-theme-800 hover:bg-theme-700 text-theme-400 text-xs rounded-lg transition-colors"
           @click="removeImage"
         >
           Remove

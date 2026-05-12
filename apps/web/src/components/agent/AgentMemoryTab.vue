@@ -64,18 +64,18 @@ onMounted(() => loadSpaces())
         <div class="flex items-center gap-2">
           <Icon
             icon="lucide:brain"
-            class="w-4 h-4 text-blue-400"
+            class="w-4 h-4 text-accent-400"
           />
-          <h3 class="text-sm font-medium text-zinc-200">
+          <h3 class="text-sm font-medium text-theme-200">
             Memory Spaces
           </h3>
-          <span class="text-xs text-zinc-500">
+          <span class="text-xs text-theme-500">
             ({{ assignedSpaces.length }} assigned)
           </span>
         </div>
         <div class="flex items-center gap-2">
           <button
-            class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1"
+            class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 transition-colors flex items-center gap-1"
             @click="goToMemory"
           >
             <Icon
@@ -86,7 +86,7 @@ onMounted(() => loadSpaces())
           </button>
           <button
             :disabled="spacesLoading"
-            class="px-2 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+            class="px-2 py-1.5 text-xs text-theme-400 hover:text-theme-200 transition-colors"
             @click="loadSpaces"
           >
             <Icon
@@ -97,7 +97,7 @@ onMounted(() => loadSpaces())
           </button>
         </div>
       </div>
-      <p class="text-xs text-zinc-500 mb-4">
+      <p class="text-xs text-theme-500 mb-4">
         Assign memory spaces to give this agent access to shared knowledge bases.
         Documents uploaded to those spaces will be used for retrieval during conversations.
       </p>
@@ -105,16 +105,16 @@ onMounted(() => loadSpaces())
       <!-- Assigned spaces list -->
       <div
         v-if="assignedSpaces.length === 0"
-        class="text-center py-6 border-2 border-dashed border-zinc-700 rounded-lg"
+        class="text-center py-6 border-2 border-dashed border-theme-700 rounded-lg"
       >
         <Icon
           icon="lucide:brain"
-          class="w-8 h-8 text-zinc-700 mx-auto mb-2"
+          class="w-8 h-8 text-theme-700 mx-auto mb-2"
         />
-        <p class="text-sm text-zinc-500">
+        <p class="text-sm text-theme-500">
           No memory spaces assigned
         </p>
-        <p class="text-xs text-zinc-600 mt-1">
+        <p class="text-xs text-theme-600 mt-1">
           Add a space to give this agent access to knowledge documents
         </p>
       </div>
@@ -126,28 +126,28 @@ onMounted(() => loadSpaces())
         <div
           v-for="space in assignedSpaces"
           :key="space.id"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-zinc-600 bg-zinc-900/40 hover:bg-zinc-900/60 transition-colors group"
+          class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-theme-600 bg-theme-900/40 hover:bg-theme-900/60 transition-colors group"
         >
           <Icon
             icon="lucide:database"
-            class="w-4 h-4 text-blue-400 shrink-0"
+            class="w-4 h-4 text-accent-400 shrink-0"
           />
           <div class="flex-1 min-w-0">
-            <div class="text-sm text-zinc-200 truncate">
+            <div class="text-sm text-theme-200 truncate">
               {{ space.name }}
             </div>
             <div
               v-if="space.description"
-              class="text-xs text-zinc-500 truncate"
+              class="text-xs text-theme-500 truncate"
             >
               {{ space.description }}
             </div>
           </div>
-          <span class="text-xs text-zinc-500 shrink-0">
+          <span class="text-xs text-theme-500 shrink-0">
             {{ space.fileCount }} doc{{ space.fileCount !== 1 ? 's' : '' }}
           </span>
           <button
-            class="p-1 rounded text-zinc-600 hover:text-red-400 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+            class="p-1 rounded text-theme-600 hover:text-red-400 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
             title="Remove from agent"
             @click="unassignSpace(space.id)"
           >
@@ -164,7 +164,7 @@ onMounted(() => loadSpaces())
         <button
           v-if="!showSpacePicker"
           :disabled="availableSpaces.length === 0"
-          class="w-full px-3 py-2 text-sm border border-dashed border-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 disabled:text-zinc-600 disabled:hover:border-zinc-700 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          class="w-full px-3 py-2 text-sm border border-dashed border-theme-700 rounded-lg text-theme-400 hover:text-theme-200 hover:border-theme-500 disabled:text-theme-600 disabled:hover:border-theme-700 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           @click="showSpacePicker = true"
         >
           <Icon
@@ -177,12 +177,12 @@ onMounted(() => loadSpaces())
         <!-- Space picker dropdown -->
         <div
           v-if="showSpacePicker"
-          class="border border-zinc-700 bg-zinc-900 rounded-lg shadow-xl overflow-hidden"
+          class="border border-theme-700 bg-theme-900 rounded-lg shadow-xl overflow-hidden"
         >
-          <div class="px-3 py-2 border-b border-zinc-800 flex items-center justify-between">
-            <span class="text-xs text-zinc-400 font-medium">Select a space</span>
+          <div class="px-3 py-2 border-b border-theme-800 flex items-center justify-between">
+            <span class="text-xs text-theme-400 font-medium">Select a space</span>
             <button
-              class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              class="text-xs text-theme-500 hover:text-theme-300 transition-colors"
               @click="showSpacePicker = false"
             >
               Cancel
@@ -192,25 +192,25 @@ onMounted(() => loadSpaces())
             <button
               v-for="space in availableSpaces"
               :key="space.id"
-              class="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-800 transition-colors text-left"
+              class="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-theme-800 transition-colors text-left"
               @click="assignSpace(space.id)"
             >
               <Icon
                 icon="lucide:database"
-                class="w-4 h-4 text-zinc-500 shrink-0"
+                class="w-4 h-4 text-theme-500 shrink-0"
               />
               <div class="flex-1 min-w-0">
-                <div class="text-sm text-zinc-200 truncate">
+                <div class="text-sm text-theme-200 truncate">
                   {{ space.name }}
                 </div>
                 <div
                   v-if="space.description"
-                  class="text-xs text-zinc-500 truncate"
+                  class="text-xs text-theme-500 truncate"
                 >
                   {{ space.description }}
                 </div>
               </div>
-              <span class="text-xs text-zinc-500 shrink-0">
+              <span class="text-xs text-theme-500 shrink-0">
                 {{ space.fileCount }} doc{{ space.fileCount !== 1 ? 's' : '' }}
               </span>
             </button>

@@ -34,8 +34,8 @@ function getProviderIcon(type: string): string {
 </script>
 
 <template>
-  <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 flex items-center gap-4">
-    <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-zinc-900 p-1.5">
+  <div class="bg-theme-800 border border-theme-700 rounded-xl p-4 flex items-center gap-4">
+    <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-theme-900 p-1.5">
       <img
         v-if="providerLogos[provider.type]"
         :src="providerLogos[provider.type].dark"
@@ -50,19 +50,19 @@ function getProviderIcon(type: string): string {
       >
       <span
         v-else
-        class="text-lg font-bold text-zinc-400"
+        class="text-lg font-bold text-theme-400"
       >{{ getProviderIcon(provider.type) }}</span>
     </div>
 
     <div class="flex-1 min-w-0">
       <div class="flex items-center gap-2">
-        <span class="font-medium text-zinc-200">{{ provider.name }}</span>
+        <span class="font-medium text-theme-200">{{ provider.name }}</span>
         <span
           v-if="isLastUsed"
-          class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium"
+          class="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-500/20 text-accent-400 font-medium"
         >Last used</span>
       </div>
-      <div class="text-sm text-zinc-500 truncate">
+      <div class="text-sm text-theme-500 truncate">
         {{ provider.defaultModel }} · {{ provider.type }}
       </div>
     </div>
@@ -76,7 +76,7 @@ function getProviderIcon(type: string): string {
             ? 'bg-green-600/20 text-green-400'
             : testStatus === false
               ? 'bg-red-600/20 text-red-400'
-              : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
+              : 'bg-theme-700 hover:bg-theme-600 text-theme-300'
         "
         @click="emit('test', provider.id)"
       >
@@ -91,13 +91,13 @@ function getProviderIcon(type: string): string {
         }}
       </button>
       <button
-        class="px-2.5 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-md transition-colors"
+        class="px-2.5 py-1 text-xs bg-theme-700 hover:bg-theme-600 text-theme-300 rounded-md transition-colors"
         @click="emit('edit', provider)"
       >
         Edit
       </button>
       <button
-        class="p-1 text-zinc-500 hover:text-red-400 transition-colors"
+        class="p-1 text-theme-500 hover:text-red-400 transition-colors"
         @click="emit('remove', provider.id)"
       >
         <svg

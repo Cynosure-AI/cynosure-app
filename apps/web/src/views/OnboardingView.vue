@@ -1,7 +1,7 @@
 <template>
   <div class="h-full flex flex-col overflow-hidden">
     <!-- ── Header / breadcrumb ─────────────────────────────────────── -->
-    <div class="shrink-0 px-6 pt-5 pb-4 border-b border-zinc-800/60">
+    <div class="shrink-0 px-6 pt-5 pb-4 border-b border-theme-800/60">
       <div class="max-w-2xl mx-auto flex items-center justify-between">
         <!-- Step breadcrumbs (hidden on welcome/done) -->
         <div
@@ -16,7 +16,7 @@
             <div
               v-if="index > 0"
               class="w-8 h-px transition-colors duration-300"
-              :class="breadcrumbStepIndex > index - 1 ? 'bg-blue-500' : 'bg-zinc-700'"
+              :class="breadcrumbStepIndex > index - 1 ? 'bg-accent-500' : 'bg-theme-700'"
             />
             <!-- Step circle -->
             <button
@@ -36,7 +36,7 @@
               </div>
               <span
                 class="text-[10px] font-medium transition-colors duration-200 hidden sm:block"
-                :class="breadcrumbStepIndex === index ? 'text-zinc-200' : breadcrumbStepIndex > index ? 'text-zinc-400' : 'text-zinc-600'"
+                :class="breadcrumbStepIndex === index ? 'text-theme-200' : breadcrumbStepIndex > index ? 'text-theme-400' : 'text-theme-600'"
               >{{ step.label }}</span>
             </button>
           </template>
@@ -56,7 +56,7 @@
         <!-- Dismiss button -->
         <button
           v-if="currentStep !== STEP_DONE && serverReady"
-          class="text-xs text-zinc-600 hover:text-zinc-400 transition-colors flex items-center gap-1 ml-auto"
+          class="text-xs text-theme-600 hover:text-theme-400 transition-colors flex items-center gap-1 ml-auto"
           @click="dismiss"
         >
           Skip setup
@@ -75,16 +75,16 @@
         class="absolute inset-0 flex items-center justify-center px-6"
       >
         <div class="text-center max-w-sm">
-          <div class="w-14 h-14 rounded-full border border-zinc-700 bg-zinc-900/60 flex items-center justify-center mx-auto mb-4">
+          <div class="w-14 h-14 rounded-full border border-theme-700 bg-theme-900/60 flex items-center justify-center mx-auto mb-4">
             <Icon
               icon="lucide:loader-2"
-              class="w-7 h-7 text-blue-400 animate-spin"
+              class="w-7 h-7 text-accent-400 animate-spin"
             />
           </div>
-          <h2 class="text-lg font-semibold text-zinc-100 mb-1">
+          <h2 class="text-lg font-semibold text-theme-100 mb-1">
             Initializing
           </h2>
-          <p class="text-sm text-zinc-500">
+          <p class="text-sm text-theme-500">
             Waiting for server readiness before starting onboarding.
           </p>
         </div>
@@ -127,13 +127,13 @@
                 class="w-10 h-10 text-emerald-400"
               />
             </div>
-            <h2 class="text-2xl font-bold text-zinc-100 mb-3">
+            <h2 class="text-2xl font-bold text-theme-100 mb-3">
               You're all set!
             </h2>
-            <p class="text-zinc-400 text-sm leading-relaxed mb-2">
+            <p class="text-theme-400 text-sm leading-relaxed mb-2">
               Cynosure is configured and ready to use. Start a conversation and see what your agents can do.
             </p>
-            <p class="text-zinc-600 text-xs">
+            <p class="text-theme-600 text-xs">
               You can always revisit these settings from the sidebar.
             </p>
           </div>
@@ -142,12 +142,12 @@
     </div>
 
     <!-- ── Footer / navigation ────────────────────────────────────── -->
-    <div class="shrink-0 px-6 py-4 border-t border-zinc-800/60">
+    <div class="shrink-0 px-6 py-4 border-t border-theme-800/60">
       <div class="max-w-2xl mx-auto flex items-center justify-between gap-3">
         <!-- Back -->
         <button
           v-if="currentStep > STEP_WELCOME && currentStep < STEP_DONE"
-          class="flex items-center gap-1.5 px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors rounded-lg hover:bg-zinc-800/60"
+          class="flex items-center gap-1.5 px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors rounded-lg hover:bg-theme-800/60"
           @click="goBack"
         >
           <Icon
@@ -168,10 +168,10 @@
             :key="i"
             class="rounded-full transition-all duration-200"
             :class="currentStep === i - 1
-              ? 'w-4 h-1.5 bg-blue-500'
+              ? 'w-4 h-1.5 bg-accent-500'
               : currentStep > i - 1
-                ? 'w-1.5 h-1.5 bg-zinc-500'
-                : 'w-1.5 h-1.5 bg-zinc-700'"
+                ? 'w-1.5 h-1.5 bg-theme-500'
+                : 'w-1.5 h-1.5 bg-theme-700'"
           />
         </div>
 
@@ -179,7 +179,7 @@
         <div class="flex items-center gap-2">
           <span
             v-if="!serverReady"
-            class="text-xs text-zinc-500"
+            class="text-xs text-theme-500"
           >
             Connecting to server...
           </span>
@@ -196,8 +196,8 @@
             v-if="serverReady && currentStep < STEP_DONE"
             class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-lg transition-colors"
             :class="canContinue
-              ? 'bg-blue-600 hover:bg-blue-500 text-white'
-              : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'"
+              ? 'bg-accent-600 hover:bg-accent-500 text-white'
+              : 'bg-theme-800 text-theme-500 cursor-not-allowed'"
             :disabled="!canContinue"
             @click="goNext"
           >
@@ -210,7 +210,7 @@
 
           <button
             v-else-if="serverReady"
-            class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+            class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
             @click="goToChat"
           >
             Start chatting
@@ -284,12 +284,12 @@ const showBreadcrumb = computed(() =>
 
 function stepCircleClass(bIndex: number): string {
   if (breadcrumbStepIndex.value > bIndex) {
-    return 'border-blue-500 bg-blue-500 text-white'
+    return 'border-accent-500 bg-accent-500 text-white'
   }
   if (breadcrumbStepIndex.value === bIndex) {
-    return 'border-blue-500 bg-transparent text-blue-400'
+    return 'border-accent-500 bg-transparent text-accent-400'
   }
-  return 'border-zinc-700 bg-transparent text-zinc-600'
+  return 'border-theme-700 bg-transparent text-theme-600'
 }
 
 // ── Validation ────────────────────────────────────────────────────

@@ -254,22 +254,22 @@ async function manualClearDb() {
     <!-- Embedding Model -->
     <BaseCard class="p-5 space-y-4 mb-4">
       <div>
-        <h3 class="text-sm font-medium text-zinc-200 mb-1">
+        <h3 class="text-sm font-medium text-theme-200 mb-1">
           Embedding Model
         </h3>
-        <p class="text-xs text-zinc-500">
+        <p class="text-xs text-theme-500">
           Select which provider and model to use for generating vector embeddings.
           Changing the model will offer to re-embed existing memories or drop them.
         </p>
-        <p class="text-xs text-zinc-500 mt-1">
-          For local embeddings we recommend <span class="text-zinc-300 font-medium">mxbai-embed-large</span> for
+        <p class="text-xs text-theme-500 mt-1">
+          For local embeddings we recommend <span class="text-theme-300 font-medium">mxbai-embed-large</span> for
           best retrieval quality.
         </p>
       </div>
 
       <div class="space-y-3">
         <div>
-          <label class="block text-xs text-zinc-400 mb-1">Provider</label>
+          <label class="block text-xs text-theme-400 mb-1">Provider</label>
           <ProviderSelect
             v-model="embProviderId"
             :providers="providerStore.providers"
@@ -280,7 +280,7 @@ async function manualClearDb() {
         </div>
 
         <div>
-          <label class="block text-xs text-zinc-400 mb-1">Model</label>
+          <label class="block text-xs text-theme-400 mb-1">Model</label>
           <div class="flex gap-2">
             <CustomSelect
               v-model="embModel"
@@ -292,7 +292,7 @@ async function manualClearDb() {
             />
             <button
               :disabled="embLoadingModels || !embProviderId"
-              class="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors"
+              class="px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:bg-theme-800 disabled:text-theme-600 text-theme-300 text-sm rounded-lg transition-colors"
               @click="fetchEmbModels(embProviderId)"
             >
               <Icon
@@ -310,18 +310,18 @@ async function manualClearDb() {
         </div>
 
         <div>
-          <label class="block text-xs text-zinc-400 mb-1">Dimensions</label>
+          <label class="block text-xs text-theme-400 mb-1">Dimensions</label>
           <div class="flex gap-2 items-center">
             <input
               v-model.number="embDimensions"
               type="number"
               min="64"
               max="8192"
-              class="w-32 px-3 py-2 bg-zinc-900 border border-zinc-600 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
             >
             <button
               :disabled="embProbing || !embModel"
-              class="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-300 text-xs rounded-lg transition-colors flex items-center gap-1.5"
+              class="px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:bg-theme-800 disabled:text-theme-600 text-theme-300 text-xs rounded-lg transition-colors flex items-center gap-1.5"
               @click="probeDimensions"
             >
               <Icon
@@ -342,7 +342,7 @@ async function manualClearDb() {
 
       <button
         :disabled="embSaving || !embModel"
-        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded-lg transition-colors"
+        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
         @click="saveEmbeddings"
       >
         <span v-if="embSaving">Saving...</span>
@@ -353,10 +353,10 @@ async function manualClearDb() {
     <!-- Chunking -->
     <BaseCard class="p-5 space-y-4 mb-4">
       <div>
-        <h3 class="text-sm font-medium text-zinc-200 mb-1">
+        <h3 class="text-sm font-medium text-theme-200 mb-1">
           Chunking
         </h3>
-        <p class="text-xs text-zinc-500">
+        <p class="text-xs text-theme-500">
           Controls how documents are split before embedding. Larger chunks retain more context,
           smaller chunks improve retrieval precision. Overlap ensures context isn't lost at chunk boundaries.
           Sections and headings are also taken into account to avoid splitting in the middle of important content.
@@ -365,32 +365,32 @@ async function manualClearDb() {
 
       <div class="space-y-3">
         <div>
-          <label class="block text-xs text-zinc-400 mb-1">Chunk Size (characters)</label>
+          <label class="block text-xs text-theme-400 mb-1">Chunk Size (characters)</label>
           <input
             v-model.number="chunkSize"
             type="number"
             min="100"
             max="10000"
             step="64"
-            class="w-40 px-3 py-2 bg-zinc-900 border border-zinc-600 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="w-40 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
           >
         </div>
         <div>
-          <label class="block text-xs text-zinc-400 mb-1">Chunk Overlap (characters)</label>
+          <label class="block text-xs text-theme-400 mb-1">Chunk Overlap (characters)</label>
           <input
             v-model.number="chunkOverlap"
             type="number"
             min="0"
             :max="chunkSize - 1"
             step="16"
-            class="w-40 px-3 py-2 bg-zinc-900 border border-zinc-600 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="w-40 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
           >
         </div>
       </div>
 
       <button
         :disabled="chunkSaving"
-        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded-lg transition-colors"
+        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
         @click="saveChunking"
       >
         <span v-if="chunkSaving">Saving...</span>
@@ -402,10 +402,10 @@ async function manualClearDb() {
     <BaseCard class="p-5 space-y-4 mb-4">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h3 class="text-sm font-medium text-zinc-200 mb-1">
+          <h3 class="text-sm font-medium text-theme-200 mb-1">
             OCR for Document Images
           </h3>
-          <p class="text-xs text-zinc-500">
+          <p class="text-xs text-theme-500">
             When enabled, images embedded in uploaded documents (PDFs, DOCX, PPTX, etc.) will be
             processed with OCR to extract visible text. Useful for scanned documents, diagrams with
             labels, or presentations with text inside images. Increases processing time.
@@ -414,7 +414,7 @@ async function manualClearDb() {
         <button
           :disabled="ocrSaving"
           class="shrink-0 mt-0.5 relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none"
-          :class="ocrEnabled ? 'bg-blue-600' : 'bg-zinc-600'"
+          :class="ocrEnabled ? 'bg-accent-600' : 'bg-theme-600'"
           @click="toggleOcr"
         >
           <span
@@ -426,7 +426,7 @@ async function manualClearDb() {
 
       <!-- OCR Language Multi-select -->
       <div v-if="ocrEnabled">
-        <label class="text-xs text-zinc-400 mb-1 block">OCR Language(s)</label>
+        <label class="text-xs text-theme-400 mb-1 block">OCR Language(s)</label>
         <MultiSelect
           :model-value="selectedOcrLangs"
           :options="OCR_LANGUAGE_OPTIONS"
@@ -438,12 +438,12 @@ async function manualClearDb() {
     </BaseCard>
 
     <!-- Danger Zone -->
-    <div class="rounded-xl mt-4 border border-red-900/50 bg-zinc-800 p-5 space-y-3">
+    <div class="rounded-xl mt-4 border border-red-900/50 bg-theme-800 p-5 space-y-3">
       <div>
-        <h3 class="text-sm font-medium text-zinc-200 mb-1">
+        <h3 class="text-sm font-medium text-theme-200 mb-1">
           Danger Zone
         </h3>
-        <p class="text-xs text-zinc-500">
+        <p class="text-xs text-theme-500">
           Clear all stored vector embeddings. This will remove all permanent memories across all agents.
           You will need to re-upload any knowledge files afterwards.
         </p>
@@ -464,10 +464,10 @@ async function manualClearDb() {
       icon-color="amber"
       @close="cancelDrop"
     >
-      <p class="text-zinc-400 leading-relaxed">
+      <p class="text-theme-400 leading-relaxed">
         Changing the embedding model or dimensions makes existing vectors incompatible.
-        You can <strong class="text-zinc-200">re-embed</strong> all stored memories with the new model to preserve your data,
-        or <strong class="text-zinc-200">drop</strong> all vectors and re-upload files manually.
+        You can <strong class="text-theme-200">re-embed</strong> all stored memories with the new model to preserve your data,
+        or <strong class="text-theme-200">drop</strong> all vectors and re-upload files manually.
       </p>
 
       <!-- Re-embed progress bar -->
@@ -475,13 +475,13 @@ async function manualClearDb() {
         v-if="reembedProgress"
         class="mt-4 space-y-2"
       >
-        <div class="flex items-center justify-between text-xs text-zinc-400">
+        <div class="flex items-center justify-between text-xs text-theme-400">
           <span>Re-embedding...</span>
           <span>{{ reembedProgress.current }} / {{ reembedProgress.total }} chunks ({{ reembedPercent }}%)</span>
         </div>
-        <div class="w-full h-2 bg-zinc-700 rounded-full overflow-hidden">
+        <div class="w-full h-2 bg-theme-700 rounded-full overflow-hidden">
           <div
-            class="h-full bg-blue-500 rounded-full transition-all duration-300"
+            class="h-full bg-accent-500 rounded-full transition-all duration-300"
             :style="{ width: `${reembedPercent}%` }"
           />
         </div>
@@ -490,21 +490,21 @@ async function manualClearDb() {
       <template #actions>
         <button
           :disabled="embSaving"
-          class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 text-white rounded-xl text-center font-medium transition-colors"
+          class="w-full px-4 py-3 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 text-white rounded-xl text-center font-medium transition-colors"
           @click="confirmReembed"
         >
           {{ embSaving ? 'Re-Embedding...' : 'Re-Embed All Memories' }}
         </button>
         <button
           :disabled="embSaving"
-          class="w-full px-4 py-3 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 text-white rounded-xl text-center font-medium transition-colors"
+          class="w-full px-4 py-3 bg-amber-600 hover:bg-amber-500 disabled:bg-theme-700 text-white rounded-xl text-center font-medium transition-colors"
           @click="confirmDrop"
         >
           {{ embSaving ? 'Saving...' : 'Drop & Save' }}
         </button>
         <button
           :disabled="embSaving"
-          class="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-center font-medium transition-colors"
+          class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
           @click="cancelDrop"
         >
           Cancel
@@ -520,19 +520,19 @@ async function manualClearDb() {
       icon-color="red"
       @close="showManualClear = false"
     >
-      <p class="text-zinc-400 leading-relaxed">
+      <p class="text-theme-400 leading-relaxed">
         This will permanently delete all stored vector embeddings and memories across all agents. You will need to re-upload any knowledge files afterwards.
       </p>
       <template #actions>
         <button
           :disabled="clearingDb"
-          class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white rounded-xl text-center font-medium transition-colors"
+          class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 text-white rounded-xl text-center font-medium transition-colors"
           @click="manualClearDb"
         >
           {{ clearingDb ? 'Clearing...' : 'Clear All Vectors' }}
         </button>
         <button
-          class="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-center font-medium transition-colors"
+          class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
           @click="showManualClear = false"
         >
           Cancel
