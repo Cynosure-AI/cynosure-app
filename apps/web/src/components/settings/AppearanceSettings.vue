@@ -18,7 +18,7 @@ function redoOnboarding() {
 
 const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#141417', surface: '#202024', accent: '#3b82f6', text: '#f4f4f5' } },
-  { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#f7f8fb', surface: '#eef0f6', accent: '#3b82f6', text: '#111827' } },
+  { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#eef2f7', surface: '#ffffff', accent: '#3b82f6', text: '#0f172a' } },
   { id: 'arasaka', label: 'Arasaka', icon: 'lucide:zap', colors: { bg: '#13090e', surface: '#1c1218', accent: '#00dce8', text: '#f0dce2' } },
   { id: 'midnight-purple', label: 'Midnight', icon: 'lucide:sparkles', colors: { bg: '#130f1b', surface: '#1a1528', accent: '#a855f7', text: '#ebe5f5' } },
   { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#111114', surface: '#181819', accent: '#f9f002', text: '#e8e8f0' } },

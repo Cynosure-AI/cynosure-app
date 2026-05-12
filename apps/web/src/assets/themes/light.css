@@ -4,17 +4,40 @@
 
 /* ── Variable overrides: remap the neutral scale to light tones ── */
 [data-theme="light"] {
-  --color-theme-950: #f7f8fb;
-  --color-theme-900: #eef0f6;
-  --color-theme-800: #dce2f0;
-  --color-theme-700: #c0c8d8;
-  --color-theme-600: #9ca3af;
-  --color-theme-500: #6b7280;
-  --color-theme-400: #4b5563;
-  --color-theme-300: #374151;
-  --color-theme-200: #1f2937;
-  --color-theme-100: #111827;
+  --color-theme-950: #eef2f7;
+  --color-theme-900: #f3f6fb;
+  --color-theme-800: #ffffff;
+  --color-theme-700: #dbe3ef;
+  --color-theme-600: #94a3b8;
+  --color-theme-500: #64748b;
+  --color-theme-400: #475569;
+  --color-theme-300: #334155;
+  --color-theme-200: #1e293b;
+  --color-theme-100: #0f172a;
   color-scheme: light;
+}
+
+/* ── Quiet surfaces: light mode should feel airy, not card-heavy ── */
+[data-theme="light"] .border-theme-700,
+[data-theme="light"] .border-theme-800,
+[data-theme="light"] .border-theme-800\/60 {
+  border-color: rgba(203, 213, 225, 0.72);
+}
+
+[data-theme="light"] .bg-theme-800,
+[data-theme="light"] .bg-theme-800\/80,
+[data-theme="light"] .bg-theme-900,
+[data-theme="light"] .bg-theme-900\/60 {
+  background-color: rgba(255, 255, 255, 0.78);
+}
+
+[data-theme="light"] .bg-theme-950 {
+  background-color: var(--color-theme-950);
+}
+
+[data-theme="light"] .shadow-2xl,
+[data-theme="light"] .shadow-xl {
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
 }
 
 /* ── Text selection ── */
