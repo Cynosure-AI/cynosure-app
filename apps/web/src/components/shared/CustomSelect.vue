@@ -411,7 +411,7 @@ onBeforeUnmount(() =>
     position: sticky;
     top: -5px;
     z-index: 1;
-    background: rgba(24, 24, 27, 0.95);
+    background: color-mix(in oklab, var(--color-zinc-900) 97%, transparent);
     backdrop-filter: blur(2px);
   }
 }
