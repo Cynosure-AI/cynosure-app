@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
-import { getAppDataDir } from '../core/data-dir.js'
+import { getAppDataDir, getDefaultMemorySpaceDir } from '../core/data-dir.js'
 
 let db: Database.Database | null = null
 
@@ -224,10 +224,22 @@ function createTables(db: Database.Database): void {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
+      folder_path TEXT NOT NULL DEFAULT '',
       sort_order INTEGER NOT NULL DEFAULT 0,
       is_default INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS memory_file_index (
+      space_id TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      content_hash TEXT NOT NULL DEFAULT '',
+      chunk_count INTEGER NOT NULL DEFAULT 0,
+      last_indexed_at INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (space_id, file_name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_mfi_space ON memory_file_index(space_id);
 
     CREATE TABLE IF NOT EXISTS agent_memory_spaces (
       agent_id TEXT NOT NULL,
@@ -245,6 +257,7 @@ function createTables(db: Database.Database): void {
   }
   addColumnIfMissing('memory_spaces', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('memory_spaces', 'is_default', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('memory_spaces', 'folder_path', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('mcp_servers', 'env_hints_json', 'TEXT')
   addColumnIfMissing('mcp_servers', 'description', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('mcp_servers', 'original_name', 'TEXT')
@@ -253,11 +266,16 @@ function createTables(db: Database.Database): void {
 
   // Ensure default memory space exists
   const defaultSpaceId = 'default'
+  const defaultFolderPath = getDefaultMemorySpaceDir()
   const defaultSpaceExists = db.prepare("SELECT id FROM memory_spaces WHERE id = ?").get(defaultSpaceId)
   if (!defaultSpaceExists) {
     const now = Date.now()
-    db.prepare("INSERT INTO memory_spaces (id, name, description, sort_order, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(defaultSpaceId, 'Default', 'Default memory space for general knowledge and notes', 0, 1, now)
+    db.prepare("INSERT INTO memory_spaces (id, name, description, folder_path, sort_order, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(defaultSpaceId, 'Default', 'Default memory space for general knowledge and notes', defaultFolderPath, 0, 1, now)
+  } else {
+    // Migrate existing default space to have folder_path set
+    db.prepare("UPDATE memory_spaces SET folder_path = ? WHERE id = ? AND (folder_path IS NULL OR folder_path = '')")
+      .run(defaultFolderPath, defaultSpaceId)
   }
 
   // Agent table: add columns for DB-only storage (migrating away from filesystem)

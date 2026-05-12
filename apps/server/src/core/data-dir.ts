@@ -37,3 +37,18 @@ export function getDataDir(): string {
 export function getAppDataDir(): string {
     return join(getDataDir(), 'data')
 }
+
+/**
+ * Returns the root directory that contains all memory space folders.
+ * Individual spaces live in sub-directories under this root.
+ */
+export function getMemorySpacesRootDir(): string {
+    return join(getAppDataDir(), 'memories')
+}
+
+/**
+ * Returns the default memory space folder path.
+ */
+export function getDefaultMemorySpaceDir(): string {
+    return join(getMemorySpacesRootDir(), 'default')
+}

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { api } from "../../api/client";
-import type { MemorySpace } from "../../api/types";
+import type { MemorySpace, MemoryFileStatus } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentModal from "./MemoryDocumentModal.vue";
 
@@ -18,308 +18,137 @@ const emit = defineEmits<{
   spacesChanged: [];
 }>();
 
-// --- Types ---
-interface DocumentGroup {
-  sourceFile: string;
-  chunkCount: number;
-  createdAt: number;
-}
-
-interface MemoryEntry {
-  id: string;
-  text: string;
-  source: string;
-  tags?: string;
-  sourceFile?: string;
-  chunkIndex?: number;
-  createdAt: number;
-}
-
 // --- Constants ---
-const SEMANTIC_SEARCH_DEBOUNCE_MS = 1500;
-const MIN_SEMANTIC_SCORE = 0.2;
+const FILES_PAGE_SIZE = 30;
 
 // --- State ---
-const groups = ref<DocumentGroup[]>([]);
-const groupsLoading = ref(false);
-const groupChunks = ref<Map<string, MemoryEntry[]>>(new Map());
-const groupChunksLoading = ref<Set<string>>(new Set());
-const expandedGroup = ref<string | null>(null);
-const selectedGroups = ref<Set<string>>(new Set());
+const files = ref<MemoryFileStatus[]>([]);
+const filesLoading = ref(false);
+const selectedFiles = ref<Set<string>>(new Set());
 const deleting = ref(false);
 const moving = ref(false);
-const exporting = ref(false);
 const showMoveDialog = ref(false);
-
-// Document viewer modal
-const showDocumentModal = ref(false);
-const modalSourceFile = ref("");
+const reindexingFile = ref<string | null>(null);
 
 // Upload
 const fileInput = ref<HTMLInputElement | null>(null);
 const uploading = ref(false);
 const uploadProgress = ref({ current: 0, total: 0 });
-const uploadResults = ref<
-  { fileName: string; chunks: number; error?: string }[]
->([]);
-
-// Reingest
-const reingestingGroup = ref<string | null>(null);
-const reingestFileInput = ref<HTMLInputElement | null>(null);
-let pendingReingestSourceFile = "";
+const uploadResults = ref<{ fileName: string; chunks: number; error?: string }[]>([]);
 
 // Search + pagination
-const GROUPS_PAGE_SIZE = 30;
 const searchQuery = ref("");
 const page = ref(0);
-const semanticSearchEnabled = ref(false);
-const semanticSearchLoading = ref(false);
-const semanticMatchedSourceFiles = ref<Set<string> | null>(null);
-const semanticMatchCounts = ref<Map<string, number>>(new Map());
-const semanticBestScores = ref<Map<string, number>>(new Map());
-let semanticSearchTimer: ReturnType<typeof setTimeout> | null = null;
-let semanticSearchRequestId = 0;
 
-const currentSpace = computed(() =>
-  props.spaces.find((s) => s.id === props.spaceId),
-);
+const currentSpace = computed(() => props.spaces.find((s) => s.id === props.spaceId));
 
-const filteredGroups = computed(() => {
-  const q = searchQuery.value.trim();
-  if (!q) return groups.value;
-
-  if (semanticSearchEnabled.value) {
-    // While semantic search is resolving for a non-empty query, avoid showing
-    // unrelated documents; only render ranked matches.
-    if (!semanticMatchedSourceFiles.value) return [];
-
-    return groups.value
-      .filter((g) => semanticMatchedSourceFiles.value?.has(g.sourceFile))
-      .sort((a, b) => {
-        const countA = semanticMatchCounts.value.get(a.sourceFile) ?? 0;
-        const countB = semanticMatchCounts.value.get(b.sourceFile) ?? 0;
-        if (countA !== countB) return countB - countA;
-
-        const bestA = semanticBestScores.value.get(a.sourceFile) ?? 0;
-        const bestB = semanticBestScores.value.get(b.sourceFile) ?? 0;
-        if (bestA !== bestB) return bestB - bestA;
-
-        return (b.createdAt || 0) - (a.createdAt || 0);
-      });
-  }
-
-  const qLower = q.toLowerCase();
-  return groups.value.filter((g) =>
-    (g.sourceFile || "").toLowerCase().includes(qLower),
-  );
+const filteredFiles = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return files.value;
+  return files.value.filter((f) => f.fileName.toLowerCase().includes(q));
 });
-const totalPages = computed(() =>
-  Math.max(1, Math.ceil(filteredGroups.value.length / GROUPS_PAGE_SIZE)),
-);
-const pagedGroups = computed(() => {
-  const start = page.value * GROUPS_PAGE_SIZE;
-  return filteredGroups.value.slice(start, start + GROUPS_PAGE_SIZE);
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredFiles.value.length / FILES_PAGE_SIZE)));
+
+const pagedFiles = computed(() => {
+  const start = page.value * FILES_PAGE_SIZE;
+  return filteredFiles.value.slice(start, start + FILES_PAGE_SIZE);
 });
 
 const allFilteredSelected = computed(
   () =>
-    filteredGroups.value.length > 0 &&
-    filteredGroups.value.every((g) => selectedGroups.value.has(g.sourceFile)),
+    filteredFiles.value.length > 0 &&
+    filteredFiles.value.every((f) => selectedFiles.value.has(f.fileName)),
+);
+
+const supportedFiles = computed(() => files.value.filter((f) => f.supported));
+const needsAttentionCount = computed(
+  () => supportedFiles.value.filter((f) => f.status === "needs_reindex" || f.status === "not_indexed").length,
 );
 
 // --- Data loading ---
-async function loadGroups() {
-  groupsLoading.value = true;
+async function loadFiles() {
+  filesLoading.value = true;
   try {
-    groups.value = await api.memorySpaces.listGroups(props.spaceId);
+    files.value = await api.memorySpaces.listFiles(props.spaceId);
   } catch {
-    groups.value = [];
+    files.value = [];
   }
-  groupsLoading.value = false;
-}
-
-function clearSemanticState(): void {
-  if (semanticSearchTimer) {
-    clearTimeout(semanticSearchTimer);
-    semanticSearchTimer = null;
-  }
-  semanticSearchRequestId++;
-  semanticSearchLoading.value = false;
-  semanticMatchedSourceFiles.value = null;
-  semanticMatchCounts.value = new Map();
-  semanticBestScores.value = new Map();
-}
-
-async function runSemanticSearchNow(): Promise<void> {
-  const query = searchQuery.value.trim();
-  if (!semanticSearchEnabled.value || !query) {
-    semanticMatchedSourceFiles.value = null;
-    semanticMatchCounts.value = new Map();
-    semanticBestScores.value = new Map();
-    semanticSearchLoading.value = false;
-    return;
-  }
-
-  const requestId = ++semanticSearchRequestId;
-  semanticSearchLoading.value = true;
-  try {
-    const results = await api.memory.search(query, 200, props.spaceId);
-    if (requestId !== semanticSearchRequestId) return;
-
-    const matched = new Set<string>();
-    const matchCounts = new Map<string, number>();
-    const bestScores = new Map<string, number>();
-
-    for (const result of results) {
-      const row = (result ?? {}) as Record<string, unknown>;
-      const spaceId = typeof row.spaceId === "string" ? row.spaceId : "";
-      if (spaceId && spaceId !== props.spaceId) continue;
-
-      const score = typeof row.score === "number" ? row.score : 0;
-      if (score < MIN_SEMANTIC_SCORE) continue;
-
-      const sourceFile =
-        typeof row.sourceFile === "string" ? row.sourceFile : "";
-      if (!sourceFile) continue;
-
-      matched.add(sourceFile);
-      matchCounts.set(sourceFile, (matchCounts.get(sourceFile) ?? 0) + 1);
-      const prevBest = bestScores.get(sourceFile) ?? 0;
-      if (score > prevBest) bestScores.set(sourceFile, score);
-    }
-
-    semanticMatchedSourceFiles.value = matched;
-    semanticMatchCounts.value = matchCounts;
-    semanticBestScores.value = bestScores;
-  } catch {
-    if (requestId !== semanticSearchRequestId) return;
-    semanticMatchedSourceFiles.value = new Set<string>();
-    semanticMatchCounts.value = new Map();
-    semanticBestScores.value = new Map();
-  } finally {
-    if (requestId === semanticSearchRequestId) {
-      semanticSearchLoading.value = false;
-    }
-  }
-}
-
-function scheduleSemanticSearch(): void {
-  if (semanticSearchTimer) clearTimeout(semanticSearchTimer);
-  semanticSearchTimer = setTimeout(() => {
-    void runSemanticSearchNow();
-  }, SEMANTIC_SEARCH_DEBOUNCE_MS);
-}
-
-function onSearchInput(): void {
-  page.value = 0;
-  if (semanticSearchEnabled.value) {
-    scheduleSemanticSearch();
-  }
-}
-
-function toggleSemanticSearch(): void {
-  semanticSearchEnabled.value = !semanticSearchEnabled.value;
-  page.value = 0;
-  if (semanticSearchEnabled.value) {
-    scheduleSemanticSearch();
-  } else {
-    clearSemanticState();
-  }
-}
-
-async function loadGroupChunks(sourceFile: string) {
-  if (
-    groupChunks.value.has(sourceFile) ||
-    groupChunksLoading.value.has(sourceFile)
-  )
-    return;
-  const loading = new Set(groupChunksLoading.value);
-  loading.add(sourceFile);
-  groupChunksLoading.value = loading;
-  try {
-    const entries = await api.memorySpaces.listEntries(
-      props.spaceId,
-      sourceFile,
-    );
-    const newMap = new Map(groupChunks.value);
-    newMap.set(sourceFile, entries as MemoryEntry[]);
-    groupChunks.value = newMap;
-  } catch {
-    /* error */
-  }
-  const l2 = new Set(groupChunksLoading.value);
-  l2.delete(sourceFile);
-  groupChunksLoading.value = l2;
+  filesLoading.value = false;
 }
 
 // --- Selection ---
-function toggleExpandGroup(sourceFile: string) {
-  modalSourceFile.value = sourceFile;
-  showDocumentModal.value = true;
-  loadGroupChunks(sourceFile);
-}
-
-function toggleSelectGroup(sourceFile: string) {
-  const s = new Set(selectedGroups.value);
-  if (s.has(sourceFile)) s.delete(sourceFile);
-  else s.add(sourceFile);
-  selectedGroups.value = s;
+function toggleSelectFile(fileName: string) {
+  const s = new Set(selectedFiles.value);
+  if (s.has(fileName)) s.delete(fileName);
+  else s.add(fileName);
+  selectedFiles.value = s;
 }
 
 function selectAllOnPage() {
-  selectedGroups.value = new Set(pagedGroups.value.map((g) => g.sourceFile));
+  selectedFiles.value = new Set(pagedFiles.value.filter((f) => f.supported).map((f) => f.fileName));
 }
 
 function selectAll() {
-  selectedGroups.value = new Set(filteredGroups.value.map((g) => g.sourceFile));
+  selectedFiles.value = new Set(filteredFiles.value.filter((f) => f.supported).map((f) => f.fileName));
 }
 
-// --- Bulk operations ---
-async function deleteSelectedGroups() {
-  if (selectedGroups.value.size === 0) return;
+// --- Re-index ---
+async function reindexFile(fileName: string) {
+  reindexingFile.value = fileName;
+  try {
+    const res = await api.memorySpaces.reindexFile(props.spaceId, fileName);
+    if (res.success) {
+      const idx = files.value.findIndex((f) => f.fileName === fileName);
+      if (idx !== -1) {
+        files.value[idx] = {
+          ...files.value[idx],
+          status: "indexed",
+          chunkCount: res.chunksStored,
+          lastIndexedAt: Date.now(),
+        };
+      }
+    }
+  } catch {
+    /* error */
+  }
+  reindexingFile.value = null;
+}
+
+async function reindexAll() {
+  const toReindex = files.value.filter(
+    (f) => f.supported && (f.status === "needs_reindex" || f.status === "not_indexed"),
+  );
+  for (const f of toReindex) {
+    await reindexFile(f.fileName);
+  }
+}
+
+// --- Bulk delete ---
+async function deleteSelectedFiles() {
+  if (selectedFiles.value.size === 0) return;
   deleting.value = true;
   try {
-    await api.memorySpaces.deleteGroups(
-      props.spaceId,
-      Array.from(selectedGroups.value),
-    );
-    const deleted = selectedGroups.value;
-    selectedGroups.value = new Set();
-    const newMap = new Map(groupChunks.value);
-    for (const sf of deleted) newMap.delete(sf);
-    groupChunks.value = newMap;
-    groups.value = groups.value.filter((g) => !deleted.has(g.sourceFile));
-    const space = currentSpace.value;
-    if (space) space.documentCount = groups.value.length;
+    await api.memorySpaces.deleteGroups(props.spaceId, Array.from(selectedFiles.value));
+    const deleted = selectedFiles.value;
+    selectedFiles.value = new Set();
+    files.value = files.value.filter((f) => !deleted.has(f.fileName));
+    emit("spacesChanged");
   } catch {
     /* error */
   }
   deleting.value = false;
 }
 
-async function moveSelectedGroups(targetSpaceId: string) {
-  await moveGroupsToSpace(targetSpaceId, Array.from(selectedGroups.value));
-}
-
-async function moveGroupsToSpace(targetSpaceId: string, sourceFiles?: string[]) {
-  const files =
-    selectedGroups.value.size > 0
-      ? Array.from(selectedGroups.value)
-      : sourceFiles ?? [];
-
-  if (files.length === 0 || targetSpaceId === props.spaceId) return;
-
+// --- Move ---
+async function moveSelectedFiles(targetSpaceId: string) {
+  if (selectedFiles.value.size === 0 || targetSpaceId === props.spaceId) return;
   moving.value = true;
   try {
-    await api.memorySpaces.moveGroups(props.spaceId, files, targetSpaceId);
-    const moved = new Set(files);
-    selectedGroups.value = new Set();
-    const newMap = new Map(groupChunks.value);
-    for (const sf of moved) newMap.delete(sf);
-    groupChunks.value = newMap;
-    groups.value = groups.value.filter((g) => !moved.has(g.sourceFile));
-    const space = currentSpace.value;
-    if (space) space.documentCount = groups.value.length;
+    await api.memorySpaces.moveGroups(props.spaceId, Array.from(selectedFiles.value), targetSpaceId);
+    const moved = selectedFiles.value;
+    selectedFiles.value = new Set();
+    files.value = files.value.filter((f) => !moved.has(f.fileName));
     showMoveDialog.value = false;
     emit("spacesChanged");
   } catch {
@@ -328,70 +157,20 @@ async function moveGroupsToSpace(targetSpaceId: string, sourceFiles?: string[]) 
   moving.value = false;
 }
 
-// --- Text helpers ---
-function findOverlap(a: string, b: string): number {
-  const maxLen = Math.min(a.length, b.length, 300);
-  for (let len = maxLen; len > 0; len--) {
-    if (a.endsWith(b.slice(0, len))) return len;
-  }
-  return 0;
-}
-
-function getMergedText(sf: string): string {
-  const chunks = (groupChunks.value.get(sf) || [])
-    .slice()
-    .sort((a, b) => (a.chunkIndex ?? 0) - (b.chunkIndex ?? 0));
-  if (chunks.length === 0) return "";
-  let result = chunks[0].text;
-  for (let i = 1; i < chunks.length; i++) {
-    const overlap = findOverlap(result, chunks[i].text);
-    result += chunks[i].text.slice(overlap);
-  }
-  return result;
-}
-
-// --- Export ---
-async function exportSelectedDocuments() {
-  exporting.value = true;
+async function moveGroupsToSpace(targetSpaceId: string, sourceFiles: string[]) {
+  if (sourceFiles.length === 0 || targetSpaceId === props.spaceId) return;
   try {
-    for (const sf of selectedGroups.value) {
-      await exportDocument(sf);
-    }
-  } finally {
-    exporting.value = false;
+    await api.memorySpaces.moveGroups(props.spaceId, sourceFiles, targetSpaceId);
+    files.value = files.value.filter((f) => !sourceFiles.includes(f.fileName));
+    emit("spacesChanged");
+  } catch {
+    /* error */
   }
-}
-
-async function exportDocument(sourceFile: string) {
-  if (!groupChunks.value.has(sourceFile)) {
-    await loadGroupChunks(sourceFile);
-  }
-  let text = getMergedText(sourceFile);
-  if (!text) return;
-  text = text
-    .replace(/^\[File:[^\]]*\]\n(?:---\n[\s\S]*?\n---\n)?/, "")
-    .trimStart();
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = sourceFile || "document.txt";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 // --- Upload ---
 const PARSEABLE_DOC_EXTENSIONS = new Set([
-  ".docx",
-  ".pptx",
-  ".xlsx",
-  ".odt",
-  ".odp",
-  ".ods",
-  ".pdf",
-  ".rtf",
+  ".docx", ".pptx", ".xlsx", ".odt", ".odp", ".ods", ".pdf", ".rtf",
 ]);
 
 function isParseableDoc(filename: string): boolean {
@@ -429,119 +208,128 @@ async function ingestFiles(fileList: File[]) {
   for (const file of fileList) {
     uploadProgress.value.current++;
     if (file.size > 10 * 1024 * 1024) {
-      results.push({
-        fileName: file.name,
-        chunks: 0,
-        error: "File too large (max 10MB)",
-      });
+      results.push({ fileName: file.name, chunks: 0, error: "File too large (max 10MB)" });
       continue;
     }
     try {
       const content = await readFileContent(file);
-      const res = await api.memorySpaces.ingestFile(
-        props.spaceId,
-        file.name,
-        content,
-      );
+      const res = await api.memorySpaces.ingestFile(props.spaceId, file.name, content);
       results.push({ fileName: res.fileName, chunks: res.chunksStored });
     } catch (err) {
-      results.push({
-        fileName: file.name,
-        chunks: 0,
-        error: (err as Error).message,
-      });
+      results.push({ fileName: file.name, chunks: 0, error: (err as Error).message });
     }
     uploadResults.value = [...results];
   }
   uploadResults.value = results;
   uploading.value = false;
-  const newMap = new Map(groupChunks.value);
-  for (const r of results) {
-    if (!r.error) newMap.delete(r.fileName);
-  }
-  groupChunks.value = newMap;
-  loadGroups();
+  loadFiles();
   emit("spacesChanged");
 }
 
-// --- Reingest ---
-function startReingest(sourceFile: string) {
-  pendingReingestSourceFile = sourceFile;
-  reingestFileInput.value?.click();
+// --- Document preview modal ---
+interface MemoryEntry {
+  id: string; text: string; source: string; tags?: string;
+  sourceFile?: string; chunkIndex?: number; createdAt: number;
 }
 
-function startDocumentDrag(event: DragEvent, sourceFile: string) {
-  const sourceFiles =
-    selectedGroups.value.size > 0 ? Array.from(selectedGroups.value) : [sourceFile];
+const showDocumentModal = ref(false);
+const modalFileName = ref("");
+const fileChunks = ref<Map<string, MemoryEntry[]>>(new Map());
+const fileChunksLoading = ref<Set<string>>(new Set());
 
+async function loadFileChunks(fileName: string) {
+  if (fileChunks.value.has(fileName) || fileChunksLoading.value.has(fileName)) return;
+  const loading = new Set(fileChunksLoading.value);
+  loading.add(fileName);
+  fileChunksLoading.value = loading;
+  try {
+    const entries = await api.memorySpaces.listEntries(props.spaceId, fileName);
+    const newMap = new Map(fileChunks.value);
+    newMap.set(fileName, entries as MemoryEntry[]);
+    fileChunks.value = newMap;
+  } catch {
+    /* ignore */
+  } finally {
+    const l = new Set(fileChunksLoading.value);
+    l.delete(fileName);
+    fileChunksLoading.value = l;
+  }
+}
+
+function openDocumentModal(fileName: string) {
+  if (!files.value.find((f) => f.fileName === fileName)?.supported) return;
+  modalFileName.value = fileName;
+  showDocumentModal.value = true;
+  loadFileChunks(fileName);
+}
+
+function onChunkUpdated(chunkId: string, newText: string) {
+  const chunks = fileChunks.value.get(modalFileName.value);
+  if (!chunks) return;
+  const newMap = new Map(fileChunks.value);
+  newMap.set(modalFileName.value, chunks.map((c) => (c.id === chunkId ? { ...c, text: newText } : c)));
+  fileChunks.value = newMap;
+}
+
+// --- Drag ---
+function startDocumentDrag(event: DragEvent, fileName: string) {
+  const fileNames = selectedFiles.value.size > 0 ? Array.from(selectedFiles.value) : [fileName];
   if (!event.dataTransfer) return;
   event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData(
-    DOCUMENT_DRAG_MIME,
-    JSON.stringify({ sourceFiles }),
-  );
+  event.dataTransfer.setData(DOCUMENT_DRAG_MIME, JSON.stringify({ sourceFiles: fileNames }));
 }
 
-async function handleReingestFile(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = "";
-  if (!file || !pendingReingestSourceFile) return;
-  const sourceFile = pendingReingestSourceFile;
-  reingestingGroup.value = sourceFile;
-  try {
-    const content = await readFileContent(file);
-    const res = await api.memorySpaces.reingestFile(
-      props.spaceId,
-      sourceFile,
-      content,
-    );
-    const idx = groups.value.findIndex((g) => g.sourceFile === sourceFile);
-    if (idx !== -1)
-      groups.value[idx] = {
-        ...groups.value[idx],
-        chunkCount: res.chunksStored,
-        createdAt: Date.now(),
-      };
-    const newMap = new Map(groupChunks.value);
-    newMap.delete(sourceFile);
-    groupChunks.value = newMap;
-    if (expandedGroup.value === sourceFile) loadGroupChunks(sourceFile);
-  } catch {
-    /* error */
+// --- Helpers ---
+function statusIcon(status: MemoryFileStatus["status"]) {
+  switch (status) {
+    case "indexed": return "lucide:check-circle";
+    case "needs_reindex": return "lucide:alert-circle";
+    case "not_indexed": return "lucide:info";
+    default: return "lucide:slash";
   }
-  reingestingGroup.value = null;
+}
+
+function statusClass(status: MemoryFileStatus["status"]) {
+  switch (status) {
+    case "indexed": return "text-green-400";
+    case "needs_reindex": return "text-orange-400";
+    case "not_indexed": return "text-blue-400";
+    default: return "text-zinc-600";
+  }
+}
+
+function statusLabel(status: MemoryFileStatus["status"]) {
+  switch (status) {
+    case "indexed": return "Indexed";
+    case "needs_reindex": return "Needs re-index";
+    case "not_indexed": return "Not indexed";
+    default: return "Not supported";
+  }
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // --- Lifecycle ---
 watch(
   () => props.spaceId,
   () => {
-    groups.value = [];
-    groupChunks.value = new Map();
-    expandedGroup.value = null;
-    selectedGroups.value = new Set();
+    files.value = [];
+    selectedFiles.value = new Set();
+    fileChunks.value = new Map();
+    showDocumentModal.value = false;
+    modalFileName.value = "";
     searchQuery.value = "";
-    semanticSearchEnabled.value = false;
-    clearSemanticState();
     page.value = 0;
-    loadGroups();
+    loadFiles();
   },
   { immediate: true },
 );
 
-defineExpose({ ingestFiles, moveGroupsToSpace })
-
-function onChunkUpdated(chunkId: string, newText: string) {
-  const chunks = groupChunks.value.get(modalSourceFile.value)
-  if (!chunks) return
-  const newMap = new Map(groupChunks.value)
-  newMap.set(
-    modalSourceFile.value,
-    chunks.map((c) => (c.id === chunkId ? { ...c, text: newText } : c)),
-  )
-  groupChunks.value = newMap
-};
+defineExpose({ ingestFiles, moveGroupsToSpace });
 </script>
 
 <template>
@@ -576,6 +364,17 @@ function onChunkUpdated(chunkId: string, newText: string) {
       </div>
       <div class="flex items-center gap-2">
         <button
+          v-if="needsAttentionCount > 0"
+          class="px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg text-sm transition-colors flex items-center gap-2"
+          @click="reindexAll"
+        >
+          <Icon
+            icon="lucide:refresh-cw"
+            class="w-4 h-4"
+          />
+          Re-index {{ needsAttentionCount }}
+        </button>
+        <button
           :disabled="uploading"
           class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
           @click="fileInput?.click()"
@@ -588,6 +387,18 @@ function onChunkUpdated(chunkId: string, newText: string) {
           Upload
         </button>
       </div>
+    </div>
+
+    <!-- Folder path hint -->
+    <div
+      v-if="currentSpace?.folderPath"
+      class="mb-3 flex items-center gap-1.5 text-xs text-zinc-600"
+    >
+      <Icon
+        icon="lucide:folder"
+        class="w-3.5 h-3.5 shrink-0"
+      />
+      <span class="truncate font-mono">{{ currentSpace.folderPath }}</span>
     </div>
 
     <!-- Upload progress -->
@@ -607,11 +418,7 @@ function onChunkUpdated(chunkId: string, newText: string) {
         v-for="(r, i) in uploadResults"
         :key="i"
         class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
-        :class="
-          r.error
-            ? 'bg-red-500/10 text-red-300'
-            : 'bg-green-500/10 text-green-300'
-        "
+        :class="r.error ? 'bg-red-500/10 text-red-300' : 'bg-green-500/10 text-green-300'"
       >
         <Icon
           :icon="r.error ? 'lucide:x-circle' : 'lucide:check-circle'"
@@ -638,15 +445,13 @@ function onChunkUpdated(chunkId: string, newText: string) {
     <!-- Toolbar -->
     <div class="flex items-center justify-between mb-2">
       <div class="text-xs text-zinc-500">
-        {{ filteredGroups.length }} document{{
-          filteredGroups.length !== 1 ? "s" : ""
-        }}
+        {{ filteredFiles.length }} file{{ filteredFiles.length !== 1 ? "s" : "" }}
       </div>
       <div class="flex items-center gap-2">
-        <template v-if="selectedGroups.size > 0">
+        <template v-if="selectedFiles.size > 0">
           <button
             class="flex items-center gap-1 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
-            @click="selectedGroups = new Set()"
+            @click="selectedFiles = new Set()"
           >
             Clear
           </button>
@@ -655,19 +460,7 @@ function onChunkUpdated(chunkId: string, newText: string) {
             class="flex items-center gap-1 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
             @click="selectAll"
           >
-            Select all {{ filteredGroups.length }}
-          </button>
-          <button
-            :disabled="exporting"
-            class="flex items-center gap-1 px-2 py-1 text-xs bg-green-500/10 text-green-400 hover:bg-green-500/20 rounded transition-colors"
-            @click="exportSelectedDocuments"
-          >
-            <Icon
-              :icon="exporting ? 'lucide:loader-2' : 'lucide:download'"
-              class="w-3.5 h-3.5"
-              :class="{ 'animate-spin': exporting }"
-            />
-            Export {{ selectedGroups.size }}
+            Select all {{ filteredFiles.length }}
           </button>
           <button
             v-if="spaces.length > 1"
@@ -680,22 +473,22 @@ function onChunkUpdated(chunkId: string, newText: string) {
               class="w-3.5 h-3.5"
               :class="{ 'animate-spin': moving }"
             />
-            Move {{ selectedGroups.size }}
+            Move {{ selectedFiles.size }}
           </button>
           <button
             :disabled="deleting"
             class="flex items-center gap-1 px-2 py-1 text-xs bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded transition-colors"
-            @click="deleteSelectedGroups"
+            @click="deleteSelectedFiles"
           >
             <Icon
               :icon="deleting ? 'lucide:loader-2' : 'lucide:trash-2'"
               class="w-3.5 h-3.5"
               :class="{ 'animate-spin': deleting }"
             />
-            Delete {{ selectedGroups.size }}
+            Delete {{ selectedFiles.size }}
           </button>
         </template>
-        <template v-else-if="groups.length > 0">
+        <template v-else-if="files.length > 0">
           <button
             class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
             @click="selectAllOnPage"
@@ -706,18 +499,18 @@ function onChunkUpdated(chunkId: string, newText: string) {
             class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
             @click="selectAll"
           >
-            Select all {{ filteredGroups.length }}
+            Select all {{ filteredFiles.length }}
           </button>
         </template>
         <button
-          :disabled="groupsLoading"
+          :disabled="filesLoading"
           class="px-2 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
-          @click="loadGroups"
+          @click="loadFiles"
         >
           <Icon
-            :icon="groupsLoading ? 'lucide:loader-2' : 'lucide:refresh-cw'"
+            :icon="filesLoading ? 'lucide:loader-2' : 'lucide:refresh-cw'"
             class="w-3.5 h-3.5"
-            :class="{ 'animate-spin': groupsLoading }"
+            :class="{ 'animate-spin': filesLoading }"
           />
         </button>
       </div>
@@ -725,10 +518,10 @@ function onChunkUpdated(chunkId: string, newText: string) {
 
     <!-- Search -->
     <div
-      v-if="groups.length > 0"
-      class="mb-3 flex items-center gap-2"
+      v-if="files.length > 0"
+      class="mb-3"
     >
-      <div class="relative flex-1">
+      <div class="relative">
         <Icon
           icon="lucide:search"
           class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500"
@@ -736,58 +529,31 @@ function onChunkUpdated(chunkId: string, newText: string) {
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="Search documents…"
+          placeholder="Search files…"
           class="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800/60 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
-          @input="onSearchInput"
+          @input="page = 0"
         >
       </div>
-
-      <button
-        type="button"
-        class="px-3 py-2 rounded-lg border text-xs font-medium transition-colors flex items-center gap-1.5"
-        :class="
-          semanticSearchEnabled
-            ? 'border-blue-500/50 bg-blue-500/10 text-blue-300'
-            : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-        "
-        :title="
-          semanticSearchEnabled
-            ? 'Semantic filtering enabled'
-            : 'Enable semantic filtering'
-        "
-        @click="toggleSemanticSearch"
-      >
-        <Icon
-          :icon="semanticSearchLoading ? 'lucide:loader-2' : 'lucide:sparkles'"
-          class="w-3.5 h-3.5"
-          :class="semanticSearchLoading ? 'animate-spin' : ''"
-        />
-        Semantic
-      </button>
     </div>
 
     <!-- Empty states -->
     <div
-      v-if="groups.length === 0 && !groupsLoading"
+      v-if="files.length === 0 && !filesLoading"
       class="text-center py-8 text-zinc-500 text-sm"
     >
-      No documents in this space yet. Upload files to get started.
+      No files in this space yet. Upload files to get started.
     </div>
-
     <div
-      v-else-if="filteredGroups.length === 0 && searchQuery.trim()"
+      v-else-if="filteredFiles.length === 0 && searchQuery.trim()"
       class="text-center py-8 text-zinc-500 text-sm"
     >
-      <span v-if="semanticSearchEnabled">
-        No documents semantically matching "{{ searchQuery.trim() }}"
-      </span>
-      <span v-else> No documents matching "{{ searchQuery.trim() }}" </span>
+      No files matching "{{ searchQuery.trim() }}"
     </div>
 
-    <!-- Document rows -->
+    <!-- File rows -->
     <div
       v-else
-      class="space-y-2"
+      class="space-y-1.5"
     >
       <!-- Top pagination -->
       <div
@@ -812,101 +578,139 @@ function onChunkUpdated(chunkId: string, newText: string) {
       </div>
 
       <div
-        v-for="group in pagedGroups"
-        :key="group.sourceFile"
-        class="rounded-lg border border-zinc-800 overflow-hidden"
+        v-for="file in pagedFiles"
+        :key="file.fileName"
+        draggable="true"
+        class="group/row flex items-center gap-3 px-3 py-2.5 rounded-lg border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/40 transition-colors"
+        :class="{ 'opacity-50': !file.supported, 'cursor-pointer': file.supported }"
+        @click="openDocumentModal(file.fileName)"
+        @dragstart.stop="startDocumentDrag($event, file.fileName)"
       >
-        <!-- Group header -->
-        <div
-          draggable="true"
-          class="group/row flex items-center gap-3 px-3 py-2.5 bg-zinc-800/30 hover:bg-zinc-800/60 transition-colors cursor-pointer"
-          @click="toggleExpandGroup(group.sourceFile)"
-          @dragstart.stop="startDocumentDrag($event, group.sourceFile)"
+        <input
+          v-if="file.supported"
+          type="checkbox"
+          class="rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500/30"
+          :checked="selectedFiles.has(file.fileName)"
+          @click.stop
+          @change.stop.prevent="toggleSelectFile(file.fileName)"
         >
-          <input
-            type="checkbox"
-            class="rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500/30"
-            :checked="selectedGroups.has(group.sourceFile)"
-            @click.stop
-            @change.stop="toggleSelectGroup(group.sourceFile)"
+        <div
+          v-else
+          class="w-4 h-4 shrink-0"
+        />
+
+        <!-- File type icon -->
+        <Icon
+          :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
+          class="w-4 h-4 shrink-0"
+          :class="file.supported ? 'text-zinc-400' : 'text-zinc-600'"
+        />
+
+        <!-- Name + meta -->
+        <div class="flex-1 min-w-0">
+          <div
+            class="text-sm truncate"
+            :class="file.supported ? 'text-zinc-200' : 'text-zinc-500'"
           >
-          <Icon
-            icon="lucide:file-text"
-            class="w-4 h-4 text-zinc-400 shrink-0"
-          />
-          <span class="flex-1 text-sm text-zinc-200 truncate">
-            {{ group.sourceFile || "Untitled" }}
-          </span>
-          <span
-            v-if="group.createdAt"
-            class="text-[11px] text-zinc-600 shrink-0"
-          >
-            {{
-              new Date(group.createdAt).toLocaleDateString(undefined, {
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-              })
-            }}
-          </span>
-          <span class="text-xs text-zinc-500 shrink-0">
-            {{ group.chunkCount }} chunk{{ group.chunkCount !== 1 ? "s" : "" }}
-          </span>
-          <!-- Update button on hover -->
-          <button
-            class="p-1 rounded text-zinc-600 hover:text-blue-400 transition-colors shrink-0 opacity-0 group-hover/row:opacity-100"
-            :class="{ 'opacity-100!': reingestingGroup === group.sourceFile }"
-            title="Update document (re-ingest)"
-            @click.stop="startReingest(group.sourceFile)"
-          >
-            <Icon
-              :icon="
-                reingestingGroup === group.sourceFile
-                  ? 'lucide:loader-2'
-                  : 'lucide:refresh-cw'
-              "
-              class="w-3.5 h-3.5"
-              :class="{ 'animate-spin': reingestingGroup === group.sourceFile }"
-            />
-          </button>
-          <Icon
-            v-if="!groupChunksLoading.has(group.sourceFile)"
-            icon="lucide:eye"
-            class="w-4 h-4 text-zinc-500 shrink-0"
-            title="View document"
-          />
-          <Icon
-            v-else
-            icon="lucide:loader-2"
-            class="w-4 h-4 text-zinc-500 shrink-0 animate-spin"
-          />
+            {{ file.fileName }}
+          </div>
+          <div class="text-[11px] text-zinc-600 flex items-center gap-2 mt-0.5">
+            <span>{{ formatFileSize(file.size) }}</span>
+            <span>·</span>
+            <span>{{ new Date(file.modifiedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) }}</span>
+            <template v-if="file.supported && file.status === 'indexed' && file.chunkCount">
+              <span>·</span>
+              <span>{{ file.chunkCount }} chunk{{ file.chunkCount !== 1 ? "s" : "" }}</span>
+            </template>
+          </div>
         </div>
+
+        <!-- Status indicator -->
+        <div
+          class="flex items-center gap-1.5 shrink-0"
+          :title="statusLabel(file.status)"
+        >
+          <Icon
+            :icon="statusIcon(file.status)"
+            class="w-3.5 h-3.5"
+            :class="statusClass(file.status)"
+          />
+          <span
+            class="text-[11px] hidden sm:inline"
+            :class="statusClass(file.status)"
+          >
+            {{ statusLabel(file.status) }}
+          </span>
+        </div>
+
+        <!-- Re-index button -->
+        <button
+          v-if="file.supported && (file.status === 'needs_reindex' || file.status === 'not_indexed')"
+          :disabled="reindexingFile === file.fileName"
+          class="shrink-0 flex items-center gap-1 px-2 py-1 text-xs bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded transition-colors disabled:opacity-50"
+          title="Re-index this file"
+          @click.stop="reindexFile(file.fileName)"
+        >
+          <Icon
+            :icon="reindexingFile === file.fileName ? 'lucide:loader-2' : 'lucide:refresh-cw'"
+            class="w-3.5 h-3.5"
+            :class="{ 'animate-spin': reindexingFile === file.fileName }"
+          />
+          Re-index
+        </button>
+
+        <!-- Re-index complete icon (idle state for indexed) — only shown on hover -->
+        <button
+          v-else-if="file.supported && file.status === 'indexed'"
+          class="shrink-0 p-1 text-zinc-600 hover:text-zinc-400 transition-colors opacity-0 group-hover/row:opacity-100"
+          title="Force re-index"
+          :disabled="reindexingFile === file.fileName"
+          @click.stop="reindexFile(file.fileName)"
+        >
+          <Icon
+            :icon="reindexingFile === file.fileName ? 'lucide:loader-2' : 'lucide:refresh-cw'"
+            class="w-3.5 h-3.5"
+            :class="{ 'animate-spin': reindexingFile === file.fileName }"
+          />
+        </button>
+      </div>
+
+      <!-- Bottom pagination -->
+      <div
+        v-if="totalPages > 1"
+        class="flex items-center justify-center gap-2 mt-4"
+      >
+        <button
+          :disabled="page === 0"
+          class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
+          @click="page = Math.max(0, page - 1)"
+        >
+          Prev
+        </button>
+        <span class="text-xs text-zinc-500">{{ page + 1 }} / {{ totalPages }}</span>
+        <button
+          :disabled="page >= totalPages - 1"
+          class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
+          @click="page = Math.min(totalPages - 1, page + 1)"
+        >
+          Next
+        </button>
       </div>
     </div>
 
-    <!-- Bottom pagination -->
-    <div
-      v-if="totalPages > 1"
-      class="flex items-center justify-center gap-2 mt-4"
-    >
-      <button
-        :disabled="page === 0"
-        class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
-        @click="page = Math.max(0, page - 1)"
-      >
-        Prev
-      </button>
-      <span class="text-xs text-zinc-500">{{ page + 1 }} / {{ totalPages }}</span>
-      <button
-        :disabled="page >= totalPages - 1"
-        class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
-        @click="page = Math.min(totalPages - 1, page + 1)"
-      >
-        Next
-      </button>
-    </div>
+    <!-- Document Viewer Modal -->
+    <MemoryDocumentModal
+      :show="showDocumentModal"
+      :space-id="spaceId"
+      :source-file="modalFileName"
+      :chunk-count="files.find((f) => f.fileName === modalFileName)?.chunkCount ?? 0"
+      :chunks="fileChunks.get(modalFileName) ?? []"
+      :loading="fileChunksLoading.has(modalFileName)"
+      @close="showDocumentModal = false"
+      @chunk-updated="onChunkUpdated"
+    />
 
-    <!-- Hidden file inputs -->
+    <!-- Hidden file input -->
     <input
       ref="fileInput"
       type="file"
@@ -914,13 +718,6 @@ function onChunkUpdated(chunkId: string, newText: string) {
       accept=".txt,.md,.markdown,.json,.csv,.log,.xml,.yaml,.yml,.html,.htm,.toml,.ini,.cfg,.conf,.rst,.tex,.py,.js,.ts,.java,.c,.cpp,.h,.hpp,.go,.rs,.rb,.php,.sh,.bat,.ps1,.sql,.r,.swift,.kt,.docx,.pptx,.xlsx,.odt,.odp,.ods,.pdf,.rtf"
       class="hidden"
       @change="handleFileUpload"
-    >
-    <input
-      ref="reingestFileInput"
-      type="file"
-      accept=".txt,.md,.markdown,.json,.csv,.log,.xml,.yaml,.yml,.html,.htm,.toml,.ini,.cfg,.conf,.rst,.tex,.py,.js,.ts,.java,.c,.cpp,.h,.hpp,.go,.rs,.rb,.php,.sh,.bat,.ps1,.sql,.r,.swift,.kt,.docx,.pptx,.xlsx,.odt,.odp,.ods,.pdf,.rtf"
-      class="hidden"
-      @change="handleReingestFile"
     >
 
     <!-- Move Dialog -->
@@ -930,13 +727,9 @@ function onChunkUpdated(chunkId: string, newText: string) {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
         @click.self="showMoveDialog = false"
       >
-        <div
-          class="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-xl"
-        >
+        <div class="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-xl">
           <h3 class="text-base font-medium text-zinc-200 mb-2">
-            Move {{ selectedGroups.size }} document{{
-              selectedGroups.size !== 1 ? "s" : ""
-            }}
+            Move {{ selectedFiles.size }} file{{ selectedFiles.size !== 1 ? "s" : "" }}
           </h3>
           <p class="text-sm text-zinc-500 mb-4">
             Select the target memory space:
@@ -947,7 +740,7 @@ function onChunkUpdated(chunkId: string, newText: string) {
               :key="space.id"
               :disabled="moving"
               class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-zinc-800 hover:border-blue-500/50 hover:bg-blue-500/5 transition-colors text-left disabled:opacity-50"
-              @click="moveSelectedGroups(space.id)"
+              @click="moveSelectedFiles(space.id)"
             >
               <Icon
                 icon="lucide:database"
@@ -958,20 +751,13 @@ function onChunkUpdated(chunkId: string, newText: string) {
                   {{ space.name }}
                 </div>
                 <div class="text-xs text-zinc-500">
-                  {{ space.documentCount }} document{{
-                    space.documentCount !== 1 ? "s" : ""
-                  }}
+                  {{ space.fileCount }} file{{ space.fileCount !== 1 ? "s" : "" }}
                 </div>
               </div>
               <Icon
-                v-if="moving"
-                icon="lucide:loader-2"
-                class="w-4 h-4 text-zinc-500 animate-spin shrink-0"
-              />
-              <Icon
-                v-else
-                icon="lucide:chevron-right"
+                :icon="moving ? 'lucide:loader-2' : 'lucide:chevron-right'"
                 class="w-4 h-4 text-zinc-600 shrink-0"
+                :class="{ 'animate-spin': moving }"
               />
             </button>
           </div>
@@ -986,19 +772,5 @@ function onChunkUpdated(chunkId: string, newText: string) {
         </div>
       </div>
     </Teleport>
-
-    <!-- Document Viewer Modal -->
-    <MemoryDocumentModal
-      :show="showDocumentModal"
-      :space-id="spaceId"
-      :source-file="modalSourceFile"
-      :chunk-count="
-        groups.find((g) => g.sourceFile === modalSourceFile)?.chunkCount || 0
-      "
-      :chunks="groupChunks.get(modalSourceFile) || []"
-      :loading="groupChunksLoading.has(modalSourceFile)"
-      @close="showDocumentModal = false"
-      @chunk-updated="onChunkUpdated"
-    />
   </div>
 </template>

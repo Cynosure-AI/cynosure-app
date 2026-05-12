@@ -90,7 +90,7 @@ function toggle(id: string) {
             {{ space.name }}
           </div>
           <div class="text-[11px] text-zinc-500">
-            {{ space.documentCount }} document{{ space.documentCount !== 1 ? 's' : '' }}
+            {{ space.fileCount }} document{{ space.fileCount !== 1 ? 's' : '' }}
           </div>
         </div>
         <Icon

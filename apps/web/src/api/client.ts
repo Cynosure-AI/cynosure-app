@@ -1,7 +1,7 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage } from './http'
 import type {
   LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryResponse,
-  AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace,
+  AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus,
   AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType,
   MetricsSummary,
 } from './types'
@@ -282,14 +282,27 @@ export const api = {
   memorySpaces: {
     list: () =>
       get<MemorySpace[]>('/api/memory-spaces'),
-    create: (name: string, description?: string) =>
-      post<MemorySpace>('/api/memory-spaces', { name, description }),
-    update: (id: string, data: { name?: string; description?: string }) =>
+    create: (name: string, description?: string, folderPath?: string) =>
+      post<MemorySpace>('/api/memory-spaces', { name, description, folderPath }),
+    update: (id: string, data: { name?: string; description?: string; folderPath?: string }) =>
       put<MemorySpace>(`/api/memory-spaces/${encodeURIComponent(id)}`, data),
     remove: (id: string) =>
       del<{ success: boolean }>(`/api/memory-spaces/${encodeURIComponent(id)}`),
     reorder: (ids: string[]) =>
       put<{ success: boolean }>('/api/memory-spaces/reorder', { ids }),
+    /** List files in the space folder with their index status. Hash computation is async server-side. */
+    listFiles: (spaceId: string) =>
+      get<MemoryFileStatus[]>(`/api/memory-spaces/${encodeURIComponent(spaceId)}/files`),
+    reindexFile: (spaceId: string, fileName: string) =>
+      post<{ success: boolean; chunksStored: number; fileName: string }>(
+        `/api/memory-spaces/${encodeURIComponent(spaceId)}/reingest-file`,
+        { fileName }
+      ),
+    deleteFile: (spaceId: string, fileName: string) =>
+      del<{ success: boolean }>(
+        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}`
+      ),
+    /** Legacy: list indexed source files from LanceDB (no disk status). */
     listGroups: (spaceId: string) =>
       get<{ sourceFile: string; chunkCount: number; createdAt: number }[]>(
         `/api/memory-spaces/${encodeURIComponent(spaceId)}/groups`
@@ -306,9 +319,9 @@ export const api = {
       post<{ success: boolean; chunksStored: number; fileName: string }>(
         `/api/memory-spaces/${encodeURIComponent(spaceId)}/ingest-file`, { fileName, content }
       ),
-    reingestFile: (spaceId: string, sourceFile: string, content: string) =>
+    reingestFile: (spaceId: string, fileName: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string }>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/reingest-file`, { sourceFile, content }
+        `/api/memory-spaces/${encodeURIComponent(spaceId)}/reingest-file`, { fileName }
       ),
     deleteGroups: (spaceId: string, sourceFiles: string[]) =>
       post<{ success: boolean }>(
