@@ -66,6 +66,12 @@ export const useChatStore = defineStore('chat', () => {
   // ── Composables ──
 
   const streaming = useChatStreaming(activeConversationId, messages, conversations, contextWindow)
+  const isConversationLocked = computed(() => {
+    const convId = activeConversationId.value
+    return streaming.isStreaming.value ||
+      activePostActions.value.size > 0 ||
+      (Boolean(convId) && (agentStore.isExecuting || agentStore.awaitingHITLConvIds.has(convId!)))
+  })
 
   async function loadConversations(): Promise<void> {
     const agentId = agentConfig.activeAgentId.value
@@ -204,6 +210,16 @@ export const useChatStore = defineStore('chat', () => {
 
       // Restore execution steps so tool calls render as grouped cards
       await agentStore.restoreForConversation(id)
+
+      // If we navigated into a conversation after its websocket start events
+      // already fired, hydrate the lock state from the server-side instance list.
+      try {
+        const instances = await api.instances.list()
+        const activeInstance = instances.find((instance) => instance.conversationId === id)
+        agentStore.setConversationExecutionState(id, Boolean(activeInstance))
+      } catch {
+        // Non-critical; live websocket events will still update state.
+      }
 
       // Restore the full session config snapshot.
       // Legacy conversations without config_json fall back to agent defaults.
@@ -442,6 +458,7 @@ export const useChatStore = defineStore('chat', () => {
     loadingMessages,
     activeConversation,
     activePostActions,
+    isConversationLocked,
 
     // Streaming (delegated)
     isStreaming: streaming.isStreaming,
