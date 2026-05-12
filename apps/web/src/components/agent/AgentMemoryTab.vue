@@ -144,7 +144,7 @@ onMounted(() => loadSpaces())
             </div>
           </div>
           <span class="text-xs text-zinc-500 shrink-0">
-            {{ space.documentCount }} doc{{ space.documentCount !== 1 ? 's' : '' }}
+            {{ space.fileCount }} doc{{ space.fileCount !== 1 ? 's' : '' }}
           </span>
           <button
             class="p-1 rounded text-zinc-600 hover:text-red-400 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
@@ -211,7 +211,7 @@ onMounted(() => loadSpaces())
                 </div>
               </div>
               <span class="text-xs text-zinc-500 shrink-0">
-                {{ space.documentCount }} doc{{ space.documentCount !== 1 ? 's' : '' }}
+                {{ space.fileCount }} doc{{ space.fileCount !== 1 ? 's' : '' }}
               </span>
             </button>
           </div>

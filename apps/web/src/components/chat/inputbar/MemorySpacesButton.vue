@@ -69,7 +69,7 @@ const memorySpaceCount = computed(() => selectedMemorySpaces.value.length)
               {{ s.name }}
             </div>
             <div class="text-zinc-500 text-[10px]">
-              {{ s.documentCount }} docs
+              {{ s.fileCount }} docs
             </div>
           </div>
         </div>

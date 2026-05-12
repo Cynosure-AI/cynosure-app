@@ -32,6 +32,7 @@ import { registerCronJobRoutes } from './routes/cron-jobs.js'
 import { registerBackupRoutes } from './routes/backup.js'
 import { registerChannelRoutes } from './routes/channels.js'
 import { registerMemorySpacesRoutes } from './routes/memory-spaces.js'
+import { watchMemorySpace, stopAllMemorySpaceWatchers } from './core/memory/memory-space-watcher.js'
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { addClient, broadcast, startHeartbeat } from './ws.js'
@@ -271,6 +272,16 @@ async function registerWebUi(app: FastifyInstance, startedAt: string): Promise<v
   })
 }
 
+function startMemorySpaceWatchers(): void {
+  const db = getDb()
+  const rows = db
+    .prepare("SELECT id, folder_path FROM memory_spaces WHERE folder_path IS NOT NULL AND folder_path != ''")
+    .all() as { id: string; folder_path: string }[]
+  for (const row of rows) {
+    watchMemorySpace(row.id, row.folder_path)
+  }
+}
+
 async function startServer(options: StartServerOptions): Promise<RunningServer> {
   if (options.dataDir) {
     process.env.CYNOSURE_DATA_DIR = options.dataDir
@@ -428,6 +439,9 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   await getRAGStore().initialize()
   registerBuiltInTools()
 
+  // Start filesystem watchers for all existing memory space folders
+  startMemorySpaceWatchers()
+
   // Set the server base URL so MCP HTTP transport can construct OAuth callback URLs
   getMcpManager().setServerBaseUrl(`http://127.0.0.1:${options.port}`)
   await loadSavedMcpServers()
@@ -462,6 +476,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       }
       stopCronScheduler()
       await getChannelManager().stopAll()
+      await stopAllMemorySpaceWatchers()
 
       await app.close()
 

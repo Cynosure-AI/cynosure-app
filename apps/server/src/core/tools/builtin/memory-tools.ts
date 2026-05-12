@@ -3,6 +3,7 @@ import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import { getRAGStore } from '../../memory/rag.js'
+import { readTextFile, writeTextFile, fileExists, replaceMarkdownSection, backupToRevisions } from '../../memory/memory-file-manager.js'
 
 export interface MemoryToolOptions {
     /** SQL filter covering all assigned memory spaces, e.g. `spaceId IN ('...', '...')`. */
@@ -23,6 +24,16 @@ function getKnownMemorySpaces(): MemorySpaceRef[] {
             .all() as MemorySpaceRef[]
     } catch {
         return []
+    }
+}
+
+function getSpaceFolderPath(spaceId: string): string | undefined {
+    try {
+        const db = getDb()
+        const row = db.prepare('SELECT folder_path FROM memory_spaces WHERE id = ?').get(spaceId) as { folder_path: string } | undefined
+        return row?.folder_path || undefined
+    } catch {
+        return undefined
     }
 }
 
@@ -350,22 +361,23 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
 
 /**
  * Create a `memory_create` tool that lets the LLM store new memory entries.
+ * Writes a Markdown file to the space folder and indexes it.
  */
 export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedSpaces = [] } = opts
     return {
         name: 'memory_create',
         description:
-            '[Experimental] Create a new memory entry with a title and content. ' +
-            'The content will be chunked and embedded for later semantic retrieval. ' +
+            'Create a new memory entry with a title and content. ' +
+            'Writes a Markdown file to the memory space folder and indexes it for semantic retrieval. ' +
             'Use this to persistently store notes, findings, or any information worth remembering. ' +
             'If no explicit "space" is provided, the entry is stored in the default memory space. ' +
             'Provide "space" to store in a specific assigned space.',
         parameters: {
             type: 'object',
             properties: {
-                title: { type: 'string', description: 'A short descriptive title for the memory entry (used as file name, e.g. "project-notes", "meeting-summary").' },
-                content: { type: 'string', description: 'The text content to store in memory.' },
+                title: { type: 'string', description: 'A short descriptive title for the memory entry (used as the file name, e.g. "project-notes" or "meeting-summary"). Will have .md appended automatically.' },
+                content: { type: 'string', description: 'The Markdown text content to store in memory.' },
                 space: { type: 'string', description: 'Optional memory space name or ID. If multiple spaces are assigned and you want to save elsewhere, specify it here.' }
             },
             required: ['title', 'content']
@@ -374,97 +386,100 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
         execute: async (params: unknown) => {
             const { title, content, space } = params as { title: string; content: string; space?: string }
 
-            // For creates, don't try smart title-based resolution (new entries)
             const resolved = await resolveTargetSpace(assignedSpaces, space)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
             const mem = getAgentMemory()
-            const uniqueTitle = await mem.resolveUniqueSourceFile(title, resolved.spaceId)
-            const chunks = await mem.store(content, uniqueTitle, resolved.spaceId)
 
-            return { success: true, output: `Memory "${uniqueTitle}" created in "${resolved.spaceName}" (${chunks} chunk${chunks !== 1 ? 's' : ''} stored).` }
+            // Ensure .md extension
+            const fileName = title.endsWith('.md') ? title : `${title}.md`
+
+            const result = await mem.storeAsFile(content, fileName, resolved.spaceId)
+            return {
+                success: true,
+                output: `Memory "${result.fileName}" created in "${resolved.spaceName}" (${result.chunkCount} chunk${result.chunkCount !== 1 ? 's' : ''} indexed).`
+            }
         }
     }
 }
 
 /**
- * Create a `memory_update` tool that lets the LLM replace the content
- * of an existing memory entry (delete old chunks, re-ingest new content).
+ * Create a `memory_update` tool that lets the LLM update an existing memory file.
+ * Supports full replacement or section-level replacement by heading.
  */
 export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedSpaces = [] } = opts
     return {
         name: 'memory_update',
         description:
-            'Update an existing memory entry. Auto-matches the title to find the entry; if multiple spaces contain the same title, space parameter is required. ' +
-            'By default, replaces all content and re-chunks/re-embeds. Use chunkStartIndex and chunkEndIndex to update only specific chunks while preserving others.',
+            'Update an existing memory file. Auto-matches the title to find the file; if multiple spaces contain the same title, space parameter is required. ' +
+            'By default, replaces all content and re-indexes the file. ' +
+            'Use "sectionHeading" to replace only the content under a specific Markdown heading (e.g. "## Results") while preserving all other sections.',
         parameters: {
             type: 'object',
             properties: {
-                title: { type: 'string', description: 'The title (source file name) of the memory entry to update. Auto-matched across assigned spaces.' },
-                content: { type: 'string', description: 'The new text content. Replaces all content by default, or specific chunks if using chunkStartIndex/chunkEndIndex.' },
+                title: { type: 'string', description: 'The title (file name without .md) of the memory entry to update.' },
+                content: { type: 'string', description: 'The new text content. Replaces all content by default, or just the named section if sectionHeading is provided.' },
                 space: { type: 'string', description: 'Memory space name or ID. Required only when the title exists in multiple spaces; otherwise auto-selected.' },
-                chunkStartIndex: { type: 'number', description: 'Optional: zero-based index of the first chunk to replace. Omit to replace entire content.' },
-                chunkEndIndex: { type: 'number', description: 'Optional: zero-based index of the last chunk to replace (inclusive). Required if chunkStartIndex is provided.' }
+                sectionHeading: { type: 'string', description: 'Optional Markdown heading (e.g. "## Results") identifying the section to replace. If the heading is not found it will be appended as a new section.' }
             },
             required: ['title', 'content']
         },
         timeout: 30_000,
         execute: async (params: unknown) => {
-            const { title, content, space, chunkStartIndex, chunkEndIndex } = params as {
-                title: string; content: string; space?: string; chunkStartIndex?: number; chunkEndIndex?: number
+            const { title, content, space, sectionHeading } = params as {
+                title: string; content: string; space?: string; sectionHeading?: string
             }
 
-            // Validate chunk indices if provided
-            if ((chunkStartIndex !== undefined || chunkEndIndex !== undefined) &&
-                (chunkStartIndex === undefined || chunkEndIndex === undefined)) {
-                return { success: false, output: 'Both chunkStartIndex and chunkEndIndex are required when updating specific chunks.' }
-            }
-            if (chunkStartIndex !== undefined && chunkEndIndex !== undefined && chunkStartIndex > chunkEndIndex) {
-                return { success: false, output: 'chunkStartIndex must be less than or equal to chunkEndIndex.' }
-            }
-
-            // For updates, use smart title-based resolution to find the right space
             const resolved = await resolveTargetSpace(assignedSpaces, space, title)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
             const mem = getAgentMemory()
-            const rag = getRAGStore()
-
-            // Check and replace only inside the resolved target space. If the
-            // same title exists elsewhere, leave that other space untouched.
             const targetFilter = `spaceId = ${sqlString(resolved.spaceId)}`
-            const existingCount = await mem.countChunks(title, targetFilter)
-            if (existingCount === 0) {
+            const existingCount = await mem.countChunks(title.endsWith('.md') ? title : `${title}.md`, targetFilter)
+            const fileName = title.endsWith('.md') ? title : `${title}.md`
+
+            // Every memory must correlate to a file on disk
+            const folderPath = getSpaceFolderPath(resolved.spaceId)
+            if (!folderPath) {
+                return { success: false, output: `Memory space "${resolved.spaceName}" has no folder configured. Cannot update memory.` }
+            }
+            const existsOnDisk = fileExists(folderPath, fileName)
+
+            if (existingCount === 0 && !existsOnDisk) {
                 return { success: false, output: `No memory entry found with title "${title}" in "${resolved.spaceName}". Use memory_create to create a new entry.` }
             }
 
-            let deleted = 0
-            let chunks = 0
+            if (sectionHeading?.trim()) {
+                // Section replacement — requires the file to exist on disk
+                if (!existsOnDisk) {
+                    return { success: false, output: `Section replacement requires the file "${fileName}" to exist on disk. Use full content replacement instead.` }
+                }
 
-            // Handle chunk-specific updates
-            if (chunkStartIndex !== undefined && chunkEndIndex !== undefined) {
-                // Delete only specified chunks
-                const escapedSource = title.replace(/'/g, "''")
-                const chunkFilter = `sourceFile = '${escapedSource}' AND chunkIndex >= ${chunkStartIndex} AND chunkIndex <= ${chunkEndIndex} AND ${targetFilter}`
-                await rag.deleteByFilter('permanent_memory', chunkFilter)
-                deleted = chunkEndIndex - chunkStartIndex + 1
+                let fileContent: string
+                try {
+                    fileContent = readTextFile(folderPath, fileName)
+                } catch {
+                    return { success: false, output: `Could not read file "${fileName}" from space folder.` }
+                }
 
-                // Re-ingest the new content into the target space
-                chunks = await mem.store(content, title, resolved.spaceId)
+                const updatedContent = replaceMarkdownSection(fileContent, sectionHeading.trim(), content)
+                writeTextFile(folderPath, fileName, updatedContent)
 
+                // Re-index the updated file
+                const chunks = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
                 return {
                     success: true,
-                    output: `Memory "${title}" updated in "${resolved.spaceName}" (chunks ${chunkStartIndex}–${chunkEndIndex} replaced, ${deleted} old chunk${deleted !== 1 ? 's' : ''} removed, ${chunks} new chunk${chunks !== 1 ? 's' : ''} stored).`
+                    output: `Section "${sectionHeading}" in "${fileName}" updated in "${resolved.spaceName}" (${chunks} chunk${chunks !== 1 ? 's' : ''} re-indexed).`
                 }
             } else {
-                // Full replacement: delete all chunks and re-ingest
-                deleted = await rag.deleteBySource('permanent_memory', title, targetFilter)
-                chunks = await mem.store(content, title, resolved.spaceId)
-
+                // Full replacement — backup original (if it exists on disk) then write directly
+                if (existsOnDisk) backupToRevisions(folderPath, fileName)
+                writeTextFile(folderPath, fileName, content)
+                const chunks = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
                 return {
                     success: true,
-                    output: `Memory "${title}" updated in "${resolved.spaceName}" (${deleted} old chunk${deleted !== 1 ? 's' : ''} removed, ${chunks} new chunk${chunks !== 1 ? 's' : ''} stored).`
+                    output: `Memory "${fileName}" fully updated in "${resolved.spaceName}" (${chunks} chunk${chunks !== 1 ? 's' : ''} re-indexed).`
                 }
             }
         }

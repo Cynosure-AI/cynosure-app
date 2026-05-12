@@ -156,10 +156,24 @@ export interface MemorySpace {
     id: string
     name: string
     description: string
+    folderPath: string
     sortOrder: number
     isDefault: boolean
     createdAt: number
-    documentCount: number
+    fileCount: number
+}
+
+export interface MemoryFileStatus {
+    fileName: string
+    extension: string
+    size: number
+    modifiedAt: number
+    supported: boolean
+    textDirect: boolean
+    /** 'indexed' | 'needs_reindex' | 'not_indexed' | 'unsupported' */
+    status: 'indexed' | 'needs_reindex' | 'not_indexed' | 'unsupported'
+    chunkCount?: number
+    lastIndexedAt?: number
 }
 
 // ── Instances / Cron / Channels ──────────────────────────────────────────────

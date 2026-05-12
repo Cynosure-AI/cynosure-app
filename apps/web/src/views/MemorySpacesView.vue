@@ -16,6 +16,7 @@ const showCreateDialog = ref(false);
 const editingSpace = ref<MemorySpace | null>(null);
 const spaceName = ref("");
 const spaceDescription = ref("");
+const spaceFolderPath = ref("");
 const showDeleteConfirm = ref(false);
 const pendingDeleteSpace = ref<MemorySpace | null>(null);
 
@@ -164,6 +165,7 @@ function openCreateDialog() {
   editingSpace.value = null;
   spaceName.value = "";
   spaceDescription.value = "";
+  spaceFolderPath.value = "";
   showCreateDialog.value = true;
 }
 
@@ -171,6 +173,7 @@ function openEditDialog(space: MemorySpace) {
   editingSpace.value = space;
   spaceName.value = space.name;
   spaceDescription.value = space.description;
+  spaceFolderPath.value = space.folderPath || "";
   showCreateDialog.value = true;
 }
 
@@ -178,14 +181,19 @@ async function saveSpace() {
   if (!spaceName.value.trim()) return;
   try {
     if (editingSpace.value) {
-      await api.memorySpaces.update(editingSpace.value.id, {
+      const updateData: { name?: string; description?: string; folderPath?: string } = {
         name: spaceName.value.trim(),
         description: spaceDescription.value,
-      });
+      };
+      if (!editingSpace.value.isDefault && spaceFolderPath.value.trim()) {
+        updateData.folderPath = spaceFolderPath.value.trim();
+      }
+      await api.memorySpaces.update(editingSpace.value.id, updateData);
     } else {
       const space = await api.memorySpaces.create(
         spaceName.value.trim(),
         spaceDescription.value,
+        spaceFolderPath.value.trim() || undefined,
       );
       selectedSpaceId.value = space.id;
     }
@@ -388,8 +396,8 @@ onMounted(() => loadSpaces());
               </span>
             </div>
             <div class="text-xs text-zinc-500">
-              {{ space.documentCount }} document{{
-                space.documentCount !== 1 ? "s" : ""
+              {{ space.fileCount }} file{{
+                space.fileCount !== 1 ? "s" : ""
               }}
             </div>
           </button>
@@ -439,6 +447,18 @@ onMounted(() => loadSpaces());
                   class="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
                   placeholder="What kind of knowledge is stored here"
                 >
+              </div>
+              <div v-if="!editingSpace?.isDefault">
+                <label class="block text-xs text-zinc-400 mb-1">Folder path (optional)</label>
+                <input
+                  v-model="spaceFolderPath"
+                  type="text"
+                  class="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 font-mono"
+                  placeholder="Leave empty to use default app data folder"
+                >
+                <p class="mt-1 text-[11px] text-zinc-600">
+                  Point to any folder on disk. Files in it become the memory content.
+                </p>
               </div>
             </div>
             <div class="flex justify-end gap-2 mt-5">
