@@ -128,7 +128,7 @@ const gridLines = computed(() => {
       <div
         v-for="line in gridLines"
         :key="line"
-        class="absolute left-6 right-0 border-t border-theme-800/60"
+        class="absolute left-6 right-0 border-theme-800/60"
         :style="{ bottom: (line / maxMessages * 100) + '%' }"
       >
         <span class="absolute -left-6 -top-2 text-[9px] text-theme-600 w-5 text-right">

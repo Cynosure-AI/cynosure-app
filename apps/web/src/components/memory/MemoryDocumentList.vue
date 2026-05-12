@@ -376,7 +376,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         </button>
         <button
           :disabled="uploading"
-          class="px-3 py-1.5 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+          class="px-3 py-1.5 bg-theme-900/60 hover:bg-theme-800/60 border border-theme-800 text-theme-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
           @click="fileInput?.click()"
         >
           <Icon
@@ -530,7 +530,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           v-model="searchQuery"
           type="text"
           placeholder="Search files…"
-          class="w-full pl-9 pr-3 py-2 text-sm bg-theme-800/60 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500 transition-colors"
+          class="w-full pl-9 pr-3 py-2 text-sm bg-theme-900/60 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-600 transition-colors"
           @input="page = 0"
         >
       </div>
@@ -539,13 +539,13 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
     <!-- Empty states -->
     <div
       v-if="files.length === 0 && !filesLoading"
-      class="text-center py-8 text-theme-500 text-sm"
+      class="rounded-xl border border-theme-800 bg-theme-950/45 text-center py-10 text-theme-500 text-sm"
     >
       No files in this space yet. Upload files to get started.
     </div>
     <div
       v-else-if="filteredFiles.length === 0 && searchQuery.trim()"
-      class="text-center py-8 text-theme-500 text-sm"
+      class="rounded-xl border border-theme-800 bg-theme-950/45 text-center py-10 text-theme-500 text-sm"
     >
       No files matching "{{ searchQuery.trim() }}"
     </div>
@@ -553,12 +553,12 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
     <!-- File rows -->
     <div
       v-else
-      class="space-y-1.5"
+      class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45"
     >
       <!-- Top pagination -->
       <div
         v-if="totalPages > 1"
-        class="flex items-center justify-center gap-2 mb-2"
+        class="flex items-center justify-center gap-2 px-4 py-2 border-b border-theme-800/70 bg-theme-900/40"
       >
         <button
           :disabled="page === 0"
@@ -581,7 +581,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         v-for="file in pagedFiles"
         :key="file.fileName"
         draggable="true"
-        class="group/row flex items-center gap-3 px-3 py-2.5 rounded-lg border border-theme-800 hover:border-theme-700 hover:bg-theme-800/40 transition-colors"
+        class="group/row flex items-center gap-3 px-4 py-3 border-b border-theme-800/70 last:border-b-0 hover:bg-theme-800/30 transition-colors"
         :class="{ 'opacity-50': !file.supported, 'cursor-pointer': file.supported }"
         @click="openDocumentModal(file.fileName)"
         @dragstart.stop="startDocumentDrag($event, file.fileName)"
@@ -589,7 +589,8 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <input
           v-if="file.supported"
           type="checkbox"
-          class="rounded border-theme-600 bg-theme-800 text-accent-500 focus:ring-accent-500/30"
+          class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 opacity-0 group-hover/row:opacity-100 transition-opacity"
+          :class="{ 'opacity-100': selectedFiles.size > 0 || selectedFiles.has(file.fileName) }"
           :checked="selectedFiles.has(file.fileName)"
           @click.stop
           @change.stop.prevent="toggleSelectFile(file.fileName)"
@@ -678,7 +679,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       <!-- Bottom pagination -->
       <div
         v-if="totalPages > 1"
-        class="flex items-center justify-center gap-2 mt-4"
+        class="flex items-center justify-center gap-2 px-4 py-2 border-t border-theme-800/70 bg-theme-900/40"
       >
         <button
           :disabled="page === 0"
