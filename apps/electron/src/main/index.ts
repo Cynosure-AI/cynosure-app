@@ -7,6 +7,7 @@ import { existsSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import ElectronStore from 'electron-store'
 import appIcon from '../../build/icon.png?asset'
+import trayProgressIcon from '../../build/tray_progress.png?asset'
 
 // ── Configuration ──────────────────────────────────────────────────────────────
 
@@ -16,6 +17,55 @@ let serverPort = PREFERRED_PORT
 let serverProcess: ChildProcess | null = null
 let tray: Tray | null = null
 let isQuitting = false
+let activeTasks = 0
+let trayWs: WebSocket | null = null
+
+// ── Tray icon helpers ─────────────────────────────────────────────────────────
+
+const trayNormalIcon = nativeImage.createFromPath(appIcon).resize({ width: 16, height: 16 })
+const trayBusyIcon = nativeImage.createFromPath(trayProgressIcon).resize({ width: 16, height: 16 })
+
+function updateTrayIcon(): void {
+    if (!tray || isQuitting || tray.isDestroyed()) return
+    tray.setImage(activeTasks > 0 ? trayBusyIcon : trayNormalIcon)
+}
+
+function connectTrayMonitor(): void {
+    if (trayWs) return
+
+    const wsUrl = `ws://127.0.0.1:${serverPort}/ws`
+    const ws = new WebSocket(wsUrl)
+    trayWs = ws
+
+    ws.addEventListener('message', (ev: MessageEvent) => {
+        try {
+            const msg = JSON.parse(ev.data as string) as { event: string; data: { event?: string } }
+            if (msg.event !== 'agent:execution-update') return
+            const sub = msg.data?.event
+            if (sub === 'task:started') {
+                activeTasks++
+                updateTrayIcon()
+            } else if (sub === 'task:completed' || sub === 'task:error') {
+                activeTasks = Math.max(0, activeTasks - 1)
+                updateTrayIcon()
+            }
+        } catch {
+            // ignore malformed messages
+        }
+    })
+
+    ws.addEventListener('close', () => {
+        trayWs = null
+        activeTasks = 0
+        updateTrayIcon()
+        // Reconnect after a short delay unless quitting
+        if (!isQuitting) setTimeout(connectTrayMonitor, 3000)
+    })
+
+    ws.addEventListener('error', () => {
+        ws.close()
+    })
+}
 
 // ── Find a free port ───────────────────────────────────────────────────────────
 
@@ -240,9 +290,7 @@ function registerAppProtocol(): void {
 // ── Window ─────────────────────────────────────────────────────────────────────
 
 function createTray(win: BrowserWindow): Tray {
-    const icon = nativeImage.createFromPath(appIcon)
-    const trayIcon = icon.resize({ width: 16, height: 16 })
-    const newTray = new Tray(trayIcon)
+    const newTray = new Tray(trayNormalIcon)
 
     const contextMenu = Menu.buildFromTemplate([
         {
@@ -364,11 +412,13 @@ app.whenReady().then(async () => {
 
     registerAppProtocol()
 
-    // Start the server in the background — the UI handles reconnection. 
-    // If server should start first, simply await it
-    startServer().catch((err) => {
-        console.error('[electron] Server failed to start:', err)
-    })
+    // Start the server in the background — the UI handles reconnection.
+    // Once ready, connect the tray monitor WS to track active tasks.
+    startServer()
+        .then(() => connectTrayMonitor())
+        .catch((err) => {
+            console.error('[electron] Server failed to start:', err)
+        })
 
     // Show the UI immediately — the web app's WebSocket logic will auto-connect
     // once the server is ready. This avoids a blank wait while MCPs load.
@@ -406,6 +456,8 @@ function killServer(): void {
 
 app.on('before-quit', () => {
     isQuitting = true
+    trayWs?.close()
+    trayWs = null
     tray?.destroy()
     killServer()
 })
