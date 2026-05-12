@@ -17,7 +17,7 @@ const attachedAudio = ref<{ url: string; name: string }[]>([])
 
 async function send(): Promise<void> {
   const content = inputText.value.trim()
-  if (!content || chatStore.isStreaming) return
+  if (!content || chatStore.isConversationLocked) return
   const images = attachedImages.value.map((i) => i.url)
   const files = attachedFiles.value.map((f) => ({ name: f.name, content: f.content }))
   const audio = attachedAudio.value.map((a) => a.url)
@@ -118,7 +118,7 @@ function removeAudio(idx: number): void {
 function onKeydown(e: KeyboardEvent): void {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
-    if (!chatStore.isStreaming) send()
+    if (!chatStore.isConversationLocked) send()
   }
 }
 

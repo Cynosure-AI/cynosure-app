@@ -364,6 +364,25 @@ export const useAgentStore = defineStore('agent', () => {
     executionConversationId.value = null
   }
 
+  function setConversationExecutionState(conversationId: string, executing: boolean, taskId?: string | null): void {
+    if (executing) {
+      executionConversationId.value = conversationId
+      if (activeViewConversationId.value === conversationId) {
+        isExecuting.value = true
+        activeTaskId.value = taskId || activeTaskId.value
+      }
+      return
+    }
+
+    if (executionConversationId.value === conversationId) {
+      executionConversationId.value = null
+      if (activeViewConversationId.value === conversationId) {
+        isExecuting.value = false
+        activeTaskId.value = null
+      }
+    }
+  }
+
   async function restoreForConversation(conversationId: string): Promise<void> {
     const savedSteps = stepsPerConversation.get(conversationId)
 
@@ -381,7 +400,7 @@ export const useAgentStore = defineStore('agent', () => {
     // Always check DB for pending HITL requests — needed after a hard reload
     // (live WS events are lost on reload, but DB entries persist until resolved)
     if (!hitlQueue.value.some(h => h.conversationId === conversationId)) {
-      loadHITLFromApi(conversationId)
+      await loadHITLFromApi(conversationId)
     }
   }
 
@@ -455,6 +474,7 @@ export const useAgentStore = defineStore('agent', () => {
     handleExecutionUpdate,
     clearExecution,
     clearExecutionState,
+    setConversationExecutionState,
     restoreForConversation,
     setActiveViewConversation,
   }

@@ -96,15 +96,7 @@ const hasPendingHITLForActiveConversation = computed(() => {
   return agentStore.awaitingHITLConvIds.has(convId);
 });
 
-const hasActiveConversation = computed(() => !!chatStore.activeConversationId);
-
-const showCancelButton = computed(
-  () =>
-    chatStore.isStreaming ||
-    chatStore.activePostActions.size > 0 ||
-    (hasActiveConversation.value &&
-      (agentStore.isExecuting || hasPendingHITLForActiveConversation.value)),
-);
+const showCancelButton = computed(() => chatStore.isConversationLocked);
 
 function onCancelClick(): void {
   if (
@@ -190,7 +182,7 @@ async function toggleMic(): Promise<void> {
     <button
       class="p-1.5 text-theme-500 hover:text-theme-300 rounded-lg transition-colors shrink-0 focus:outline-none"
       title="Attach file"
-      :disabled="chatStore.isStreaming"
+      :disabled="chatStore.isConversationLocked"
       aria-label="Attach file"
       @click="emit('attach')"
     >
