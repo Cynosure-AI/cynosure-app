@@ -2,31 +2,31 @@
    Light Theme
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Variable overrides: remap zinc scale to light tones ── */
+/* ── Variable overrides: remap the neutral scale to light tones ── */
 [data-theme="light"] {
-  --color-zinc-950: #f7f8fb;
-  --color-zinc-900: #eef0f6;
-  --color-zinc-800: #dce2f0;
-  --color-zinc-700: #c0c8d8;
-  --color-zinc-600: #9ca3af;
-  --color-zinc-500: #6b7280;
-  --color-zinc-400: #4b5563;
-  --color-zinc-300: #374151;
-  --color-zinc-200: #1f2937;
-  --color-zinc-100: #111827;
+  --color-theme-950: #f7f8fb;
+  --color-theme-900: #eef0f6;
+  --color-theme-800: #dce2f0;
+  --color-theme-700: #c0c8d8;
+  --color-theme-600: #9ca3af;
+  --color-theme-500: #6b7280;
+  --color-theme-400: #4b5563;
+  --color-theme-300: #374151;
+  --color-theme-200: #1f2937;
+  --color-theme-100: #111827;
   color-scheme: light;
 }
 
 /* ── Text selection ── */
 [data-theme="light"] ::selection {
-  background: rgba(59, 130, 246, 0.25);
-  color: #111827;
+  background: color-mix(in srgb, var(--color-accent-500) 25%, transparent);
+  color: var(--color-theme-100);
 }
 
 /* ── Markdown rendering overrides ── */
 [data-theme="light"] .msg-markdown :not(pre) > code {
   background: rgba(229, 231, 235, 0.6);
-  color: #2563eb;
+  color: var(--color-accent-600);
 }
 [data-theme="light"] .msg-markdown strong {
   color: rgba(24, 24, 27, 1);

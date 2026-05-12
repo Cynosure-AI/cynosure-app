@@ -54,8 +54,8 @@ async function doExport(): Promise<void> {
 </script>
 
 <template>
-  <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 space-y-4">
-    <p class="text-xs text-zinc-500">
+  <div class="bg-theme-800 border border-theme-700 rounded-xl p-4 space-y-4">
+    <p class="text-xs text-theme-500">
       Select which modules to include in the backup file.
     </p>
 
@@ -64,22 +64,22 @@ async function doExport(): Promise<void> {
         v-for="(meta, key) in moduleLabels"
         :key="key"
         class="flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer"
-        :class="exportModules[key as keyof typeof exportModules] ? 'border-blue-500/40 bg-blue-500/5' : 'border-zinc-700 bg-zinc-900 hover:border-zinc-600'"
+        :class="exportModules[key as keyof typeof exportModules] ? 'border-accent-500/40 bg-accent-500/5' : 'border-theme-700 bg-theme-900 hover:border-theme-600'"
       >
         <input
           v-model="exportModules[key as keyof typeof exportModules]"
           type="checkbox"
-          class="mt-0.5 h-4 w-4 accent-blue-600 shrink-0"
+          class="mt-0.5 h-4 w-4 accent-accent-600 shrink-0"
         >
         <div>
           <div class="flex items-center gap-1.5">
             <Icon
               :icon="meta.icon"
-              class="w-3.5 h-3.5 text-zinc-400"
+              class="w-3.5 h-3.5 text-theme-400"
             />
-            <span class="text-sm font-medium text-zinc-200">{{ meta.label }}</span>
+            <span class="text-sm font-medium text-theme-200">{{ meta.label }}</span>
           </div>
-          <p class="text-[11px] text-zinc-500 mt-0.5">{{ meta.description }}</p>
+          <p class="text-[11px] text-theme-500 mt-0.5">{{ meta.description }}</p>
         </div>
       </label>
     </div>
@@ -93,7 +93,7 @@ async function doExport(): Promise<void> {
 
     <button
       :disabled="exporting || !Object.values(exportModules).some(Boolean)"
-      class="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+      class="w-full px-4 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
       @click="doExport"
     >
       <Icon

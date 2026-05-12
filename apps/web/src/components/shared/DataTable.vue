@@ -119,12 +119,12 @@ const anySelected = computed(() => props.selectedIds.length > 0)
 <template>
   <div
     v-if="items.length"
-    class="rounded-xl border border-zinc-800 overflow-hidden bg-zinc-950/45"
+    class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45"
   >
     <!-- Header Row -->
     <div
       v-if="showHeader"
-      class="hidden md:grid gap-3 md:gap-4 md:px-5 md:py-3 text-[11px] tracking-wider uppercase text-zinc-400 bg-zinc-900/70 border-b border-zinc-800 dt-grid items-start"
+      class="hidden md:grid gap-3 md:gap-4 md:px-5 md:py-3 text-[11px] tracking-wider uppercase text-theme-400 bg-theme-900/70 border-b border-theme-800 dt-grid items-start"
       :style="{ '--dt-desktop-cols': desktopGridColsTemplate, '--dt-tablet-cols': tabletGridColsTemplate, '--dt-mobile-cols': mobileGridColsTemplate }"
     >
       <!-- Select All Checkbox (hidden on mobile) -->
@@ -135,7 +135,7 @@ const anySelected = computed(() => props.selectedIds.length > 0)
       >
         <input
           type="checkbox"
-          class="h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-blue-500 focus:ring-blue-500/60 cursor-pointer"
+          class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer"
           :checked="allSelected"
           :indeterminate="someSelected"
           @change="toggleSelectAll"
@@ -157,7 +157,7 @@ const anySelected = computed(() => props.selectedIds.length > 0)
       <div
         v-for="item in items"
         :key="item.id"
-        class="group border-b border-zinc-800/70 last:border-b-0 cursor-pointer hover:bg-zinc-800/30 transition-colors"
+        class="group border-b border-theme-800/70 last:border-b-0 cursor-pointer hover:bg-theme-800/30 transition-colors"
         :class="rowClass?.(item)"
         @click="handleRowClick(item, $event)"
       >
@@ -174,7 +174,7 @@ const anySelected = computed(() => props.selectedIds.length > 0)
           >
             <input
               type="checkbox"
-              class="h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-blue-500 focus:ring-blue-500/60 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+              class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
               :class="{ 'opacity-100': anySelected || isSelected(item.id) }"
               :checked="isSelected(item.id)"
               @change="toggleSelection(item.id)"
@@ -207,7 +207,7 @@ const anySelected = computed(() => props.selectedIds.length > 0)
   <!-- Empty State -->
   <div
     v-else
-    class="text-center py-10 text-zinc-500"
+    class="text-center py-10 text-theme-500"
   >
     {{ emptyMessage }}
   </div>

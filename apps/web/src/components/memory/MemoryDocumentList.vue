@@ -293,8 +293,8 @@ function statusClass(status: MemoryFileStatus["status"]) {
   switch (status) {
     case "indexed": return "text-green-400";
     case "needs_reindex": return "text-orange-400";
-    case "not_indexed": return "text-blue-400";
-    default: return "text-zinc-600";
+    case "not_indexed": return "text-accent-400";
+    default: return "text-theme-600";
   }
 }
 
@@ -337,11 +337,11 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
     <!-- Space header -->
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
-        <h2 class="text-lg font-medium text-zinc-200">
+        <h2 class="text-lg font-medium text-theme-200">
           {{ currentSpace?.name }}
         </h2>
         <button
-          class="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+          class="p-1 text-theme-500 hover:text-theme-300 transition-colors"
           title="Edit space"
           @click="emit('editSpace')"
         >
@@ -353,7 +353,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <button
           :disabled="currentSpace?.isDefault"
           :title="currentSpace?.isDefault ? 'Cannot delete the default memory space' : 'Delete space'"
-          class="p-1 text-zinc-500 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-zinc-500"
+          class="p-1 text-theme-500 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-theme-500"
           @click="emit('deleteSpace')"
         >
           <Icon
@@ -376,7 +376,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         </button>
         <button
           :disabled="uploading"
-          class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+          class="px-3 py-1.5 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
           @click="fileInput?.click()"
         >
           <Icon
@@ -392,7 +392,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
     <!-- Folder path hint -->
     <div
       v-if="currentSpace?.folderPath"
-      class="mb-3 flex items-center gap-1.5 text-xs text-zinc-600"
+      class="mb-3 flex items-center gap-1.5 text-xs text-theme-600"
     >
       <Icon
         icon="lucide:folder"
@@ -404,7 +404,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
     <!-- Upload progress -->
     <div
       v-if="uploading"
-      class="mb-4 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-300"
+      class="mb-4 px-3 py-2 bg-accent-500/10 border border-accent-500/20 rounded-lg text-xs text-accent-300"
     >
       Uploading {{ uploadProgress.current }}/{{ uploadProgress.total }}…
     </div>
@@ -427,7 +427,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <span class="truncate">{{ r.fileName }}</span>
         <span
           v-if="!r.error"
-          class="text-zinc-500"
+          class="text-theme-500"
         >{{ r.chunks }} chunks</span>
         <span
           v-else
@@ -435,7 +435,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         >{{ r.error }}</span>
       </div>
       <button
-        class="text-xs text-zinc-500 hover:text-zinc-300 px-1"
+        class="text-xs text-theme-500 hover:text-theme-300 px-1"
         @click="uploadResults = []"
       >
         Clear
@@ -444,20 +444,20 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
 
     <!-- Toolbar -->
     <div class="flex items-center justify-between mb-2">
-      <div class="text-xs text-zinc-500">
+      <div class="text-xs text-theme-500">
         {{ filteredFiles.length }} file{{ filteredFiles.length !== 1 ? "s" : "" }}
       </div>
       <div class="flex items-center gap-2">
         <template v-if="selectedFiles.size > 0">
           <button
-            class="flex items-center gap-1 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+            class="flex items-center gap-1 px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
             @click="selectedFiles = new Set()"
           >
             Clear
           </button>
           <button
             v-if="!allFilteredSelected"
-            class="flex items-center gap-1 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+            class="flex items-center gap-1 px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
             @click="selectAll"
           >
             Select all {{ filteredFiles.length }}
@@ -465,7 +465,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           <button
             v-if="spaces.length > 1"
             :disabled="moving"
-            class="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded transition-colors"
+            class="flex items-center gap-1 px-2 py-1 text-xs bg-accent-500/10 text-accent-400 hover:bg-accent-500/20 rounded transition-colors"
             @click="showMoveDialog = true"
           >
             <Icon
@@ -490,13 +490,13 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         </template>
         <template v-else-if="files.length > 0">
           <button
-            class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+            class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
             @click="selectAllOnPage"
           >
             Select page
           </button>
           <button
-            class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+            class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
             @click="selectAll"
           >
             Select all {{ filteredFiles.length }}
@@ -504,7 +504,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         </template>
         <button
           :disabled="filesLoading"
-          class="px-2 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
+          class="px-2 py-1.5 text-xs text-theme-400 hover:text-theme-200"
           @click="loadFiles"
         >
           <Icon
@@ -524,13 +524,13 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       <div class="relative">
         <Icon
           icon="lucide:search"
-          class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500"
+          class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-theme-500"
         />
         <input
           v-model="searchQuery"
           type="text"
           placeholder="Search files…"
-          class="w-full pl-9 pr-3 py-2 text-sm bg-zinc-800/60 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
+          class="w-full pl-9 pr-3 py-2 text-sm bg-theme-800/60 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500 transition-colors"
           @input="page = 0"
         >
       </div>
@@ -539,13 +539,13 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
     <!-- Empty states -->
     <div
       v-if="files.length === 0 && !filesLoading"
-      class="text-center py-8 text-zinc-500 text-sm"
+      class="text-center py-8 text-theme-500 text-sm"
     >
       No files in this space yet. Upload files to get started.
     </div>
     <div
       v-else-if="filteredFiles.length === 0 && searchQuery.trim()"
-      class="text-center py-8 text-zinc-500 text-sm"
+      class="text-center py-8 text-theme-500 text-sm"
     >
       No files matching "{{ searchQuery.trim() }}"
     </div>
@@ -562,15 +562,15 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       >
         <button
           :disabled="page === 0"
-          class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
           @click="page = Math.max(0, page - 1)"
         >
           Prev
         </button>
-        <span class="text-xs text-zinc-500">{{ page + 1 }} / {{ totalPages }}</span>
+        <span class="text-xs text-theme-500">{{ page + 1 }} / {{ totalPages }}</span>
         <button
           :disabled="page >= totalPages - 1"
-          class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
           @click="page = Math.min(totalPages - 1, page + 1)"
         >
           Next
@@ -581,7 +581,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         v-for="file in pagedFiles"
         :key="file.fileName"
         draggable="true"
-        class="group/row flex items-center gap-3 px-3 py-2.5 rounded-lg border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/40 transition-colors"
+        class="group/row flex items-center gap-3 px-3 py-2.5 rounded-lg border border-theme-800 hover:border-theme-700 hover:bg-theme-800/40 transition-colors"
         :class="{ 'opacity-50': !file.supported, 'cursor-pointer': file.supported }"
         @click="openDocumentModal(file.fileName)"
         @dragstart.stop="startDocumentDrag($event, file.fileName)"
@@ -589,7 +589,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <input
           v-if="file.supported"
           type="checkbox"
-          class="rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500/30"
+          class="rounded border-theme-600 bg-theme-800 text-accent-500 focus:ring-accent-500/30"
           :checked="selectedFiles.has(file.fileName)"
           @click.stop
           @change.stop.prevent="toggleSelectFile(file.fileName)"
@@ -603,18 +603,18 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <Icon
           :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
           class="w-4 h-4 shrink-0"
-          :class="file.supported ? 'text-zinc-400' : 'text-zinc-600'"
+          :class="file.supported ? 'text-theme-400' : 'text-theme-600'"
         />
 
         <!-- Name + meta -->
         <div class="flex-1 min-w-0">
           <div
             class="text-sm truncate"
-            :class="file.supported ? 'text-zinc-200' : 'text-zinc-500'"
+            :class="file.supported ? 'text-theme-200' : 'text-theme-500'"
           >
             {{ file.fileName }}
           </div>
-          <div class="text-[11px] text-zinc-600 flex items-center gap-2 mt-0.5">
+          <div class="text-[11px] text-theme-600 flex items-center gap-2 mt-0.5">
             <span>{{ formatFileSize(file.size) }}</span>
             <span>·</span>
             <span>{{ new Date(file.modifiedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) }}</span>
@@ -662,7 +662,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <!-- Re-index complete icon (idle state for indexed) — only shown on hover -->
         <button
           v-else-if="file.supported && file.status === 'indexed'"
-          class="shrink-0 p-1 text-zinc-600 hover:text-zinc-400 transition-colors opacity-0 group-hover/row:opacity-100"
+          class="shrink-0 p-1 text-theme-600 hover:text-theme-400 transition-colors opacity-0 group-hover/row:opacity-100"
           title="Force re-index"
           :disabled="reindexingFile === file.fileName"
           @click.stop="reindexFile(file.fileName)"
@@ -682,15 +682,15 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       >
         <button
           :disabled="page === 0"
-          class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
           @click="page = Math.max(0, page - 1)"
         >
           Prev
         </button>
-        <span class="text-xs text-zinc-500">{{ page + 1 }} / {{ totalPages }}</span>
+        <span class="text-xs text-theme-500">{{ page + 1 }} / {{ totalPages }}</span>
         <button
           :disabled="page >= totalPages - 1"
-          class="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
           @click="page = Math.min(totalPages - 1, page + 1)"
         >
           Next
@@ -727,11 +727,11 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
         @click.self="showMoveDialog = false"
       >
-        <div class="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-xl">
-          <h3 class="text-base font-medium text-zinc-200 mb-2">
+        <div class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-md shadow-xl">
+          <h3 class="text-base font-medium text-theme-200 mb-2">
             Move {{ selectedFiles.size }} file{{ selectedFiles.size !== 1 ? "s" : "" }}
           </h3>
-          <p class="text-sm text-zinc-500 mb-4">
+          <p class="text-sm text-theme-500 mb-4">
             Select the target memory space:
           </p>
           <div class="space-y-2 max-h-60 overflow-y-auto">
@@ -739,31 +739,31 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
               v-for="space in spaces.filter((s) => s.id !== spaceId)"
               :key="space.id"
               :disabled="moving"
-              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-zinc-800 hover:border-blue-500/50 hover:bg-blue-500/5 transition-colors text-left disabled:opacity-50"
+              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-theme-800 hover:border-accent-500/50 hover:bg-accent-500/5 transition-colors text-left disabled:opacity-50"
               @click="moveSelectedFiles(space.id)"
             >
               <Icon
                 icon="lucide:database"
-                class="w-4 h-4 text-zinc-400 shrink-0"
+                class="w-4 h-4 text-theme-400 shrink-0"
               />
               <div class="flex-1 min-w-0">
-                <div class="text-sm text-zinc-200 truncate">
+                <div class="text-sm text-theme-200 truncate">
                   {{ space.name }}
                 </div>
-                <div class="text-xs text-zinc-500">
+                <div class="text-xs text-theme-500">
                   {{ space.fileCount }} file{{ space.fileCount !== 1 ? "s" : "" }}
                 </div>
               </div>
               <Icon
                 :icon="moving ? 'lucide:loader-2' : 'lucide:chevron-right'"
-                class="w-4 h-4 text-zinc-600 shrink-0"
+                class="w-4 h-4 text-theme-600 shrink-0"
                 :class="{ 'animate-spin': moving }"
               />
             </button>
           </div>
           <div class="flex justify-end mt-4">
             <button
-              class="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-200"
+              class="px-3 py-1.5 text-sm text-theme-400 hover:text-theme-200"
               @click="showMoveDialog = false"
             >
               Cancel

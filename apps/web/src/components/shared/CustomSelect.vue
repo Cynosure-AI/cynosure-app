@@ -228,7 +228,7 @@ onBeforeUnmount(() =>
       role="combobox"
       :aria-expanded="isOpen"
       tabindex="0"
-      class="w-full flex items-center gap-2 bg-zinc-900 border border-zinc-600 text-zinc-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer select-none"
+      class="w-full flex items-center gap-2 bg-theme-900 border border-theme-600 text-theme-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-accent-500 cursor-pointer select-none"
       :class="size === 'md' ? 'text-sm px-3 py-2' : 'text-xs px-2.5 py-1.5'"
       @click="toggle"
       @keydown="handleKeydown"
@@ -244,12 +244,12 @@ onBeforeUnmount(() =>
         <Icon
           v-else-if="selectedOption?.iconName"
           :icon="selectedOption.iconName"
-          class="w-3.5 h-3.5 text-zinc-400"
+          class="w-3.5 h-3.5 text-theme-400"
         />
         <Icon
           v-else
           :icon="placeholderIcon"
-          class="w-3.5 h-3.5 text-zinc-500"
+          class="w-3.5 h-3.5 text-theme-500"
         />
       </span>
 
@@ -261,7 +261,7 @@ onBeforeUnmount(() =>
       <!-- Chevron -->
       <Icon
         icon="lucide:chevron-down"
-        class="w-3 h-3 text-zinc-500 shrink-0 transition-transform duration-150"
+        class="w-3 h-3 text-theme-500 shrink-0 transition-transform duration-150"
         :class="{ 'rotate-180': isOpen }"
       />
     </button>
@@ -271,7 +271,7 @@ onBeforeUnmount(() =>
       v-if="isOpen"
       ref="listRef"
       role="listbox"
-      class="absolute z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
+      class="absolute z-50 bg-theme-900 border border-theme-700 rounded-lg shadow-xl overflow-hidden"
       :class="[
         dropdownWidth,
         dropUp ? 'bottom-full mb-1' : 'top-full mt-1',
@@ -293,7 +293,7 @@ onBeforeUnmount(() =>
           type="text"
           placeholder="Search…"
           autocomplete="off"
-          class="w-full bg-zinc-700/60 border border-zinc-600 rounded-md px-2.5 py-1 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          class="w-full bg-theme-700/60 border border-theme-600 rounded-md px-2.5 py-1 text-xs text-theme-200 placeholder:text-theme-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
           @keydown.esc.prevent="isOpen = false"
           @keydown.arrow-down.prevent="handleKeydown"
           @keydown.arrow-up.prevent="handleKeydown"
@@ -307,7 +307,7 @@ onBeforeUnmount(() =>
       >
         <div
           v-if="filterable && filterQuery && !filteredAllOptions.length"
-          class="px-3 py-2 text-xs text-zinc-500 italic"
+          class="px-3 py-2 text-xs text-theme-500 italic"
         >
           No results
         </div>
@@ -318,9 +318,9 @@ onBeforeUnmount(() =>
           <!-- Group header -->
           <div
             v-if="group.label"
-            class="px-2.5 pb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500"
+            class="px-2.5 pb-2 text-[10px] font-semibold uppercase tracking-wider text-theme-500"
             :class="[
-              gi > 0 ? 'pt-2 border-t border-zinc-800' : 'pt-1.5',
+              gi > 0 ? 'pt-2 border-t border-theme-800' : 'pt-1.5',
               props.stickyGroupHeaders ? 'select-group-header' : ''
             ]"
           >
@@ -341,17 +341,17 @@ onBeforeUnmount(() =>
             class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer transition-colors"
             :class="[
               opt.disabled
-                ? 'text-zinc-600 cursor-not-allowed'
+                ? 'text-theme-600 cursor-not-allowed'
                 : opt.value === modelValue
-                  ? 'text-zinc-100'
-                  : 'text-zinc-300',
+                  ? 'text-theme-100'
+                  : 'text-theme-300',
               opt.disabled
                 ? ''
                 : opt.value === focusedValue
-                  ? 'bg-zinc-700/80'
+                  ? 'bg-theme-700/80'
                   : opt.value === modelValue
-                    ? 'bg-blue-600/15 hover:bg-blue-600/25'
-                    : 'hover:bg-zinc-800',
+                    ? 'bg-accent-600/15 hover:bg-accent-600/25'
+                    : 'hover:bg-theme-800',
             ]"
             @click="selectOption(opt.value)"
             @mouseenter="!opt.disabled && (focusedValue = opt.value)"
@@ -371,7 +371,7 @@ onBeforeUnmount(() =>
                 v-else-if="opt.iconName"
                 :icon="opt.iconName"
                 class="w-3.5 h-3.5"
-                :class="opt.disabled ? 'text-zinc-600' : 'text-zinc-400'"
+                :class="opt.disabled ? 'text-theme-600' : 'text-theme-400'"
               />
             </span>
 
@@ -390,7 +390,7 @@ onBeforeUnmount(() =>
             <Icon
               v-if="opt.value === modelValue"
               icon="lucide:check"
-              class="w-3 h-3 text-blue-400 shrink-0"
+              class="w-3 h-3 text-accent-400 shrink-0"
             />
           </button>
         </template>
@@ -411,7 +411,7 @@ onBeforeUnmount(() =>
     position: sticky;
     top: -5px;
     z-index: 1;
-    background: color-mix(in oklab, var(--color-zinc-900) 97%, transparent);
+    background: color-mix(in oklab, var(--color-theme-900) 97%, transparent);
     backdrop-filter: blur(2px);
   }
 }

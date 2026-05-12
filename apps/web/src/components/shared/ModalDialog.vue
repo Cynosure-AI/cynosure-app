@@ -8,8 +8,8 @@ defineProps<{
   title: string
   /** Iconify icon name for the header badge */
   icon?: string
-  /** Color theme for the icon badge: 'blue' | 'red' | 'amber' */
-  iconColor?: 'blue' | 'red' | 'amber'
+  /** Color theme for the icon badge: 'accent' | 'red' | 'amber' */
+  iconColor?: 'accent' | 'red' | 'amber'
   /** Max width class (default: 'max-w-md') */
   maxWidth?: string
   /** Max height class for the dialog panel (default: 'max-h-[90vh]') */
@@ -34,7 +34,7 @@ const emit = defineEmits<{
     >
       <div
         v-bind="$attrs"
-        class="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full flex flex-col"
+        class="bg-theme-900 border border-theme-800 rounded-2xl shadow-2xl w-full flex flex-col"
         :class="[
           maxWidth || 'max-w-md',
           maxHeight || 'max-h-[90vh]',
@@ -50,7 +50,7 @@ const emit = defineEmits<{
               v-if="icon"
               class="p-2 rounded-lg"
               :class="{
-                'bg-blue-500/20 text-blue-400': iconColor === 'blue' || !iconColor,
+                'bg-accent-500/20 text-accent-400': iconColor === 'accent' || !iconColor,
                 'bg-red-500/20 text-red-400': iconColor === 'red',
                 'bg-amber-500/20 text-amber-400': iconColor === 'amber',
               }"
@@ -60,7 +60,7 @@ const emit = defineEmits<{
                 class="w-6 h-6"
               />
             </div>
-            <h3 class="text-lg font-semibold text-zinc-100">
+            <h3 class="text-lg font-semibold text-theme-100">
               {{ title }}
             </h3>
           </div>

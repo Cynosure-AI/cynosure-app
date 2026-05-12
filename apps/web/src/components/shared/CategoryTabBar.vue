@@ -135,13 +135,13 @@ function onCatDragEnd() {
 </script>
 
 <template>
-  <div class="flex items-center gap-1 border-b border-zinc-800 overflow-x-auto overflow-y-hidden scrollbar-none">
+  <div class="flex items-center gap-1 border-b border-theme-800 overflow-x-auto overflow-y-hidden scrollbar-none">
     <!-- All tab -->
     <button
       class="flex items-center gap-1.5 px-4 py-2.5 text-sm transition-colors border-b-2 -mb-px whitespace-nowrap shrink-0"
       :class="modelValue === ''
-        ? 'text-blue-400 border-blue-400'
-        : 'text-zinc-500 border-transparent hover:text-zinc-300'"
+        ? 'text-accent-400 border-accent-400'
+        : 'text-theme-500 border-transparent hover:text-theme-300'"
       @click="emit('update:modelValue', '')"
       @dragover="onDragOver($event, '')"
       @dragleave="onDragLeave($event, '')"
@@ -159,8 +159,8 @@ function onCatDragEnd() {
       v-if="showUncategorized"
       class="flex items-center gap-1.5 px-4 py-2.5 text-sm transition-colors border-b-2 -mb-px whitespace-nowrap shrink-0"
       :class="modelValue === '__uncategorized__'
-        ? 'text-blue-400 border-blue-400'
-        : 'text-zinc-500 border-transparent hover:text-zinc-300'"
+        ? 'text-accent-400 border-accent-400'
+        : 'text-theme-500 border-transparent hover:text-theme-300'"
       @click="emit('update:modelValue', '__uncategorized__')"
       @dragover="onDragOver($event, '')"
       @dragleave="onDragLeave($event, '')"
@@ -185,23 +185,23 @@ function onCatDragEnd() {
       <!-- Drop indicator: left edge (before) -->
       <div
         v-if="catDropTarget === cat && catDropPos === 'before'"
-        class="absolute inset-y-1 left-0 w-0.5 rounded-full bg-blue-400 z-10 pointer-events-none"
+        class="absolute inset-y-1 left-0 w-0.5 rounded-full bg-accent-400 z-10 pointer-events-none"
       />
       <!-- Drop indicator: right edge (after) -->
       <div
         v-if="catDropTarget === cat && catDropPos === 'after'"
-        class="absolute inset-y-1 right-0 w-0.5 rounded-full bg-blue-400 z-10 pointer-events-none"
+        class="absolute inset-y-1 right-0 w-0.5 rounded-full bg-accent-400 z-10 pointer-events-none"
       />
       <!-- Inline rename input -->
       <div
         v-if="editingTab === cat"
-        class="flex items-center gap-1 px-1 border-b-2 border-blue-400 -mb-px"
+        class="flex items-center gap-1 px-1 border-b-2 border-accent-400 -mb-px"
       >
         <input
           ref="editInputRef"
           v-model="editingName"
           type="text"
-          class="w-28 px-2 py-1 bg-zinc-800 border border-zinc-600 rounded text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          class="w-28 px-2 py-1 bg-theme-800 border border-theme-600 rounded text-xs text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
           @keydown.enter="commitRename(cat)"
           @keydown.escape="cancelRename"
           @blur="commitRename(cat)"
@@ -214,9 +214,9 @@ function onCatDragEnd() {
         class="flex items-center gap-1.5 px-4 py-2.5 text-sm transition-all border-b-2 -mb-px whitespace-nowrap cursor-grab active:cursor-grabbing"
         :class="[
           modelValue === cat
-            ? 'text-blue-400 border-blue-400'
-            : 'text-zinc-500 border-transparent hover:text-zinc-300',
-          dragOverTab === cat ? 'bg-blue-500/10 text-blue-400' : '',
+            ? 'text-accent-400 border-accent-400'
+            : 'text-theme-500 border-transparent hover:text-theme-300',
+          dragOverTab === cat ? 'bg-accent-500/10 text-accent-400' : '',
           catReorderFrom === cat ? 'opacity-40' : ''
         ]"
         @click="emit('update:modelValue', cat)"
@@ -228,7 +228,7 @@ function onCatDragEnd() {
       </button>
       <button
         v-if="editingTab !== cat"
-        class="opacity-0 group-hover:opacity-100 p-0.5 text-zinc-600 hover:text-red-400 transition-all -ml-1 mr-1"
+        class="opacity-0 group-hover:opacity-100 p-0.5 text-theme-600 hover:text-red-400 transition-all -ml-1 mr-1"
         title="Remove category"
         @click.stop="emit('remove', cat)"
       >
@@ -249,7 +249,7 @@ function onCatDragEnd() {
           v-model="newCategoryName"
           type="text"
           placeholder="Category name"
-          class="w-28 px-2 py-1 bg-zinc-800 border border-zinc-600 rounded text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          class="w-28 px-2 py-1 bg-theme-800 border border-theme-600 rounded text-xs text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
           autofocus
           @keydown.enter="addCategory"
           @keydown.escape="cancelAdd"
@@ -264,7 +264,7 @@ function onCatDragEnd() {
           />
         </button>
         <button
-          class="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+          class="p-1 text-theme-500 hover:text-theme-300 transition-colors"
           @click="cancelAdd"
         >
           <Icon
@@ -275,7 +275,7 @@ function onCatDragEnd() {
       </div>
       <button
         v-else
-        class="flex items-center gap-1 px-3 py-2.5 text-xs text-zinc-600 hover:text-zinc-400 transition-colors border-b-2 border-transparent"
+        class="flex items-center gap-1 px-3 py-2.5 text-xs text-theme-600 hover:text-theme-400 transition-colors border-b-2 border-transparent"
         @click="showAddInput = true"
       >
         <Icon

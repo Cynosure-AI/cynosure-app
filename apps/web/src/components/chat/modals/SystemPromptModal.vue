@@ -33,30 +33,30 @@ function close(): void {
     :show="modelValue"
     title="System Prompt"
     icon="lucide:scroll-text"
-    icon-color="blue"
+    icon-color="accent"
     max-width="max-w-xl"
     @close="close"
   >
-    <p class="text-xs text-zinc-500 mb-3">
+    <p class="text-xs text-theme-500 mb-3">
       Prepended as a system message alongside the built-in agentic instructions — does not replace them.
     </p>
     <textarea
       v-model="draft"
       placeholder="Optional system instructions..."
       rows="20"
-      class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 font-mono resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+      class="w-full bg-theme-800 border border-theme-700 rounded-lg px-3 py-2 text-sm text-theme-100 font-mono resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
     />
 
     <template #actions>
       <div class="flex justify-end gap-2">
         <button
-          class="px-4 py-2 text-sm rounded-lg bg-zinc-700 text-zinc-300 hover:bg-zinc-600 transition-colors"
+          class="px-4 py-2 text-sm rounded-lg bg-theme-700 text-theme-300 hover:bg-theme-600 transition-colors"
           @click="close"
         >
           Cancel
         </button>
         <button
-          class="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-colors"
+          class="px-4 py-2 text-sm rounded-lg bg-accent-600 text-white hover:bg-accent-500 transition-colors"
           @click="save"
         >
           Save

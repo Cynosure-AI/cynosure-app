@@ -1,30 +1,30 @@
 <template>
   <div class="max-w-2xl mx-auto px-4 py-6 w-full">
     <div class="mb-6">
-      <h2 class="text-xl font-bold text-zinc-100">
+      <h2 class="text-xl font-bold text-theme-100">
         Install Cynosure MCP
       </h2>
-      <p class="text-sm text-zinc-500 mt-1">
+      <p class="text-sm text-theme-500 mt-1">
         Let your AI agents configure Cynosure itself — create agents, manage memory spaces, and more,
         all through natural language.
       </p>
     </div>
 
-    <div class="bg-zinc-800/50 border border-zinc-700/60 rounded-xl overflow-hidden">
+    <div class="bg-theme-800/50 border border-theme-700/60 rounded-xl overflow-hidden">
       <!-- Header -->
-      <div class="flex items-center gap-4 p-5 border-b border-zinc-700/40">
-        <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+      <div class="flex items-center gap-4 p-5 border-b border-theme-700/40">
+        <div class="w-12 h-12 rounded-xl bg-accent-500/10 border border-accent-500/20 flex items-center justify-center shrink-0">
           <Icon
             icon="lucide:settings-2"
-            class="w-6 h-6 text-blue-400"
+            class="w-6 h-6 text-accent-400"
           />
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
-            <span class="font-semibold text-zinc-100">Cynosure MCP</span>
-            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium">Official</span>
+            <span class="font-semibold text-theme-100">Cynosure MCP</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-500/20 text-accent-400 font-medium">Official</span>
           </div>
-          <div class="text-xs text-zinc-500 mt-0.5">
+          <div class="text-xs text-theme-500 mt-0.5">
             @cynosure-mcp/cynosure · npm
           </div>
         </div>
@@ -49,20 +49,20 @@
         >
           <Icon
             :icon="feat.icon"
-            class="w-4 h-4 mt-0.5 text-zinc-500 shrink-0"
+            class="w-4 h-4 mt-0.5 text-theme-500 shrink-0"
           />
           <div>
-            <span class="text-sm text-zinc-300 font-medium">{{ feat.label }}</span>
-            <span class="text-sm text-zinc-500"> — {{ feat.desc }}</span>
+            <span class="text-sm text-theme-300 font-medium">{{ feat.label }}</span>
+            <span class="text-sm text-theme-500"> — {{ feat.desc }}</span>
           </div>
         </div>
       </div>
 
       <!-- Actions -->
-      <div class="px-5 py-4 border-t border-zinc-700/40 flex items-center gap-3">
+      <div class="px-5 py-4 border-t border-theme-700/40 flex items-center gap-3">
         <button
           v-if="!installed"
-          class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+          class="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
           :disabled="installing"
           @click="install"
         >
@@ -75,7 +75,7 @@
         </button>
         <button
           v-else
-          class="flex items-center gap-2 px-4 py-2 bg-zinc-700 text-zinc-400 text-sm font-medium rounded-lg cursor-default"
+          class="flex items-center gap-2 px-4 py-2 bg-theme-700 text-theme-400 text-sm font-medium rounded-lg cursor-default"
           disabled
         >
           <Icon
@@ -101,14 +101,14 @@
     </div>
 
     <!-- Info box -->
-    <div class="mt-4 flex items-start gap-2.5 text-xs text-zinc-500 bg-zinc-900/60 border border-zinc-800 rounded-lg px-4 py-3">
+    <div class="mt-4 flex items-start gap-2.5 text-xs text-theme-500 bg-theme-900/60 border border-theme-800 rounded-lg px-4 py-3">
       <Icon
         icon="lucide:info"
         class="w-3.5 h-3.5 mt-0.5 shrink-0"
       />
       <span>
         This step is optional. You can install Cynosure MCP later from
-        <strong class="text-zinc-400">Settings → MCPs</strong>.
+        <strong class="text-theme-400">Settings → MCPs</strong>.
         Requires Node.js and npx to be available.
       </span>
     </div>

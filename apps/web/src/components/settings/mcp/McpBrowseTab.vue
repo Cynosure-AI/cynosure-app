@@ -226,18 +226,18 @@ onMounted(() => {
     <div class="relative flex-1">
       <Icon
         icon="lucide:search"
-        class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"
+        class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-500"
       />
       <input
         v-model="registrySearch"
         type="text"
         placeholder="Search MCP servers..."
-        class="w-full pl-9 pr-3 py-2 bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+        class="w-full pl-9 pr-3 py-2 bg-theme-800 border border-theme-700 text-theme-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
       >
     </div>
     <select
       v-model="registrySource"
-      class="bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+      class="bg-theme-800 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
     >
       <option value="official">
         Official Registry
@@ -260,7 +260,7 @@ onMounted(() => {
   >
     <template #col-server="{ item }">
       <div class="min-w-0 flex items-start gap-3">
-        <div class="w-10 h-10 rounded-lg bg-zinc-700/70 flex items-center justify-center shrink-0 overflow-hidden">
+        <div class="w-10 h-10 rounded-lg bg-theme-700/70 flex items-center justify-center shrink-0 overflow-hidden">
           <img
             v-if="item.server.icons?.length"
             :src="item.server.icons[0].src"
@@ -270,31 +270,31 @@ onMounted(() => {
           <Icon
             v-else
             icon="lucide:puzzle"
-            class="w-5 h-5 text-zinc-400"
+            class="w-5 h-5 text-theme-400"
           />
         </div>
 
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2 flex-wrap">
             <button
-              class="font-medium text-zinc-100 text-sm hover:underline hover:text-zinc-50 transition-colors text-left"
+              class="font-medium text-theme-100 text-sm hover:underline hover:text-theme-50 transition-colors text-left"
               @click="selectedRegistryServer = item"
             >
               {{ getDisplayName(item.server) }}
             </button>
-            <span class="text-xs text-zinc-500">v{{ item.server.version }}</span>
+            <span class="text-xs text-theme-500">v{{ item.server.version }}</span>
           </div>
-          <p class="text-xs text-zinc-400 mt-1 line-clamp-2">
+          <p class="text-xs text-theme-400 mt-1 line-clamp-2">
             {{ item.server.description || 'No description' }}
           </p>
-          <div class="flex items-center gap-3 mt-2 text-xs text-zinc-600">
+          <div class="flex items-center gap-3 mt-2 text-xs text-theme-600">
             <span class="truncate">{{ item.server.name }}</span>
             <a
               v-if="item.server.repository?.url"
               :href="item.server.repository.url"
               target="_blank"
               rel="noopener"
-              class="flex items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
+              class="flex items-center gap-1 text-theme-500 hover:text-theme-300 transition-colors shrink-0"
             >
               <Icon
                 icon="lucide:github"
@@ -305,16 +305,16 @@ onMounted(() => {
 
           <div
             v-if="addingRegistryId === entryId(item.server) && getInstallInfo(item.server)?.envVars.length"
-            class="mt-3 p-3 border border-zinc-700 rounded-lg bg-zinc-900/60 space-y-2"
+            class="mt-3 p-3 border border-theme-700 rounded-lg bg-theme-900/60 space-y-2"
           >
-            <p class="text-xs text-zinc-400 mb-1">
+            <p class="text-xs text-theme-400 mb-1">
               Required configuration:
             </p>
             <div
               v-for="ev in getInstallInfo(item.server)!.envVars"
               :key="ev.name"
             >
-              <label class="block text-xs text-zinc-400 mb-1">
+              <label class="block text-xs text-theme-400 mb-1">
                 {{ ev.name }}
                 <span
                   v-if="ev.required"
@@ -322,26 +322,26 @@ onMounted(() => {
                 >*</span>
                 <span
                   v-if="ev.description"
-                  class="text-zinc-600 ml-1"
+                  class="text-theme-600 ml-1"
                 >- {{ ev.description }}</span>
               </label>
               <input
                 v-model="registryEnv[ev.name]"
                 type="text"
                 :placeholder="ev.name"
-                class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
               >
             </div>
             <div class="flex gap-2 justify-end mt-2">
               <button
-                class="px-3 py-1.5 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-md transition-colors"
+                class="px-3 py-1.5 text-xs bg-theme-700 hover:bg-theme-600 text-theme-300 rounded-md transition-colors"
                 @click="cancelRegistryAdd"
               >
                 Cancel
               </button>
               <button
                 :disabled="isLoading(entryId(item.server)) || getInstallInfo(item.server)!.envVars.some(v => v.required && !registryEnv[v.name])"
-                class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
+                class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
                 @click="addFromRegistry(item)"
               >
                 {{ isLoading(entryId(item.server)) ? 'Adding...' : 'Confirm & Add' }}
@@ -370,12 +370,12 @@ onMounted(() => {
             : tag === 'pypi'
               ? 'bg-indigo-500/15 text-indigo-300'
               : tag === 'smithery'
-                ? 'bg-blue-500/15 text-blue-300'
+                ? 'bg-accent-500/15 text-accent-300'
                 : tag === 'local'
                   ? 'bg-emerald-500/15 text-emerald-300'
                   : tag === 'remote'
                     ? 'bg-violet-500/15 text-violet-300'
-                    : 'bg-zinc-700/60 text-zinc-400'"
+                    : 'bg-theme-700/60 text-theme-400'"
         >
           {{ tag }}
         </span>
@@ -385,13 +385,13 @@ onMounted(() => {
     <template #col-actions="{ item }">
       <div class="flex items-center gap-2 md:justify-start md:pt-0.5">
         <button
-          class="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-md transition-colors"
+          class="px-3 py-1.5 text-xs bg-theme-800 hover:bg-theme-700 text-theme-300 border border-theme-700 rounded-md transition-colors"
           @click="selectedRegistryServer = item"
         >
           Details
         </button>
         <template v-if="isInstalled(item.server)">
-          <span class="text-xs text-zinc-500 flex items-center gap-1">
+          <span class="text-xs text-theme-500 flex items-center gap-1">
             <Icon
               icon="lucide:check"
               class="w-3.5 h-3.5"
@@ -401,14 +401,14 @@ onMounted(() => {
         <template v-else-if="getInstallInfo(item.server)">
           <button
             :disabled="isLoading(entryId(item.server))"
-            class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
+            class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
             @click="addFromRegistry(item)"
           >
             {{ isLoading(entryId(item.server)) ? 'Adding...' : 'Add' }}
           </button>
         </template>
         <template v-else>
-          <span class="text-xs text-zinc-600">Not installable</span>
+          <span class="text-xs text-theme-600">Not installable</span>
         </template>
       </div>
     </template>
@@ -418,14 +418,14 @@ onMounted(() => {
   <div class="flex justify-center py-6">
     <button
       v-if="registryHasMore && !registryLoading"
-      class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm rounded-lg transition-colors"
+      class="px-4 py-2 bg-theme-800 hover:bg-theme-700 text-theme-300 text-sm rounded-lg transition-colors"
       @click="loadRegistry"
     >
       Load More
     </button>
     <div
       v-else-if="registryLoading"
-      class="flex items-center gap-2 text-zinc-500 text-sm"
+      class="flex items-center gap-2 text-theme-500 text-sm"
     >
       <Icon
         icon="lucide:loader-2"
@@ -435,13 +435,13 @@ onMounted(() => {
     </div>
     <p
       v-else-if="registryServers.length === 0"
-      class="text-zinc-500 text-sm"
+      class="text-theme-500 text-sm"
     >
       No servers found{{ registrySearch ? ` for "${registrySearch}"` : '' }}
     </p>
     <p
       v-else
-      class="text-zinc-600 text-xs"
+      class="text-theme-600 text-xs"
     >
       End of results
     </p>
@@ -453,26 +453,26 @@ onMounted(() => {
     class="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
     @click.self="selectedRegistryServer = null"
   >
-    <div class="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[85vh]">
-      <div class="flex items-center justify-between p-4 border-b border-zinc-800 shrink-0">
+    <div class="bg-theme-900 border border-theme-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[85vh]">
+      <div class="flex items-center justify-between p-4 border-b border-theme-800 shrink-0">
         <div class="flex items-center gap-3">
           <Icon
             v-if="!selectedRegistryServer.server.icons?.[0]?.src"
             icon="lucide:box"
-            class="w-6 h-6 text-zinc-400"
+            class="w-6 h-6 text-theme-400"
           />
           <img
             v-else
             :src="selectedRegistryServer.server.icons[0].src"
             class="w-8 h-8 rounded shrink-0 object-cover"
           >
-          <h3 class="text-lg font-medium text-zinc-100">
+          <h3 class="text-lg font-medium text-theme-100">
             {{ getDisplayName(selectedRegistryServer.server) }}
           </h3>
-          <span class="text-xs text-zinc-500">v{{ selectedRegistryServer.server.version }}</span>
+          <span class="text-xs text-theme-500">v{{ selectedRegistryServer.server.version }}</span>
         </div>
         <button
-          class="p-2 text-zinc-400 hover:text-zinc-200 transition-colors"
+          class="p-2 text-theme-400 hover:text-theme-200 transition-colors"
           @click="selectedRegistryServer = null"
         >
           <Icon
@@ -482,19 +482,19 @@ onMounted(() => {
         </button>
       </div>
 
-      <div class="p-6 overflow-y-auto space-y-6 text-sm text-zinc-300">
+      <div class="p-6 overflow-y-auto space-y-6 text-sm text-theme-300">
         <div v-if="selectedRegistryServer.server.description">
-          <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+          <h4 class="text-xs font-semibold uppercase tracking-wider text-theme-500 mb-2">
             Description
           </h4>
           <p>{{ selectedRegistryServer.server.description }}</p>
         </div>
 
         <div v-if="getInstallInfo(selectedRegistryServer.server)">
-          <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+          <h4 class="text-xs font-semibold uppercase tracking-wider text-theme-500 mb-2">
             Installation Details
           </h4>
-          <div class="bg-zinc-950 p-3 rounded-lg font-mono text-xs border border-zinc-800 wrap-break-word whitespace-pre-wrap">
+          <div class="bg-theme-950 p-3 rounded-lg font-mono text-xs border border-theme-800 wrap-break-word whitespace-pre-wrap">
             {{ getInstallInfo(selectedRegistryServer.server)!.command }} {{ getInstallInfo(selectedRegistryServer.server)!.args.join(' ') }}
           </div>
 
@@ -502,17 +502,17 @@ onMounted(() => {
             v-if="getInstallInfo(selectedRegistryServer.server)!.envVars.length > 0"
             class="mt-4"
           >
-            <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+            <h4 class="text-xs font-semibold uppercase tracking-wider text-theme-500 mb-2">
               Environment Variables
             </h4>
             <div class="space-y-2">
               <div
                 v-for="env in getInstallInfo(selectedRegistryServer.server)!.envVars"
                 :key="env.name"
-                class="flex flex-col gap-1 bg-zinc-800/50 p-3 rounded-lg border border-zinc-800"
+                class="flex flex-col gap-1 bg-theme-800/50 p-3 rounded-lg border border-theme-800"
               >
                 <div class="flex items-center gap-2">
-                  <span class="font-mono text-zinc-200">{{ env.name }}</span>
+                  <span class="font-mono text-theme-200">{{ env.name }}</span>
                   <span
                     v-if="env.required"
                     class="text-[10px] uppercase bg-red-900/30 text-red-400 px-1.5 py-0.5 rounded"
@@ -520,7 +520,7 @@ onMounted(() => {
                 </div>
                 <p
                   v-if="env.description"
-                  class="text-xs text-zinc-500 mt-1"
+                  class="text-xs text-theme-500 mt-1"
                 >
                   {{ env.description }}
                 </p>
@@ -530,7 +530,7 @@ onMounted(() => {
         </div>
 
         <div>
-          <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+          <h4 class="text-xs font-semibold uppercase tracking-wider text-theme-500 mb-2">
             Metadata
           </h4>
           <div class="flex flex-col gap-2">
@@ -538,12 +538,12 @@ onMounted(() => {
               v-if="selectedRegistryServer.server.repository?.url"
               class="flex gap-2"
             >
-              <span class="text-zinc-500 w-24">Repository:</span>
+              <span class="text-theme-500 w-24">Repository:</span>
               <a
                 :href="selectedRegistryServer.server.repository.url"
                 target="_blank"
                 rel="noopener"
-                class="text-blue-400 hover:underline inline-flex items-center gap-1"
+                class="text-accent-400 hover:underline inline-flex items-center gap-1"
               >
                 {{ selectedRegistryServer.server.repository.url }}
                 <Icon
@@ -556,12 +556,12 @@ onMounted(() => {
               v-if="selectedRegistryServer.server.websiteUrl"
               class="flex gap-2"
             >
-              <span class="text-zinc-500 w-24">Website:</span>
+              <span class="text-theme-500 w-24">Website:</span>
               <a
                 :href="selectedRegistryServer.server.websiteUrl"
                 target="_blank"
                 rel="noopener"
-                class="text-blue-400 hover:underline inline-flex items-center gap-1"
+                class="text-accent-400 hover:underline inline-flex items-center gap-1"
               >
                 {{ selectedRegistryServer.server.websiteUrl }}
                 <Icon
@@ -574,7 +574,7 @@ onMounted(() => {
               v-if="selectedRegistryServer.server.isRemote || (selectedRegistryServer.server as any).isLocal"
               class="flex items-center gap-2"
             >
-              <span class="text-zinc-500 w-24">Hosting:</span>
+              <span class="text-theme-500 w-24">Hosting:</span>
               <span
                 v-if="(selectedRegistryServer.server as any).isLocal"
                 class="text-green-400"
@@ -589,9 +589,9 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="p-4 border-t border-zinc-800 shrink-0 bg-zinc-900/50 rounded-b-xl flex justify-end">
+      <div class="p-4 border-t border-theme-800 shrink-0 bg-theme-900/50 rounded-b-xl flex justify-end">
         <button
-          class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm rounded-lg transition-colors border border-zinc-700"
+          class="px-4 py-2 bg-theme-800 hover:bg-theme-700 text-theme-300 text-sm rounded-lg transition-colors border border-theme-700"
           @click="selectedRegistryServer = null"
         >
           Close

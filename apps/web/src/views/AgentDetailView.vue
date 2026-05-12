@@ -49,7 +49,7 @@ const tabs = [
       <!-- Back + Title -->
       <div class="flex items-center gap-3 mb-6">
         <button
-          class="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+          class="p-1.5 text-theme-500 hover:text-theme-300 transition-colors"
           @click="router.push('/agents')"
         >
           <Icon
@@ -58,7 +58,7 @@ const tabs = [
           />
         </button>
         <div
-          class="w-9 h-9 rounded-lg bg-linear-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden shrink-0"
+          class="w-9 h-9 rounded-lg bg-linear-to-br from-accent-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden shrink-0"
         >
           <img
             v-if="agent.iconUrl"
@@ -69,16 +69,16 @@ const tabs = [
           <Icon
             v-else
             icon="lucide:bot"
-            class="w-5 h-5 text-blue-400"
+            class="w-5 h-5 text-accent-400"
           />
         </div>
         <div>
-          <h1 class="text-2xl font-bold text-zinc-100">
+          <h1 class="text-2xl font-bold text-theme-100">
             {{ agent.name }}
           </h1>
           <p
             v-if="agent.description"
-            class="text-sm text-zinc-500 mt-0.5"
+            class="text-sm text-theme-500 mt-0.5"
           >
             {{ agent.description }}
           </p>
@@ -86,7 +86,7 @@ const tabs = [
       </div>
 
       <!-- Tabs -->
-      <div class="w-full overflow-x-auto overflow-y-hidden mb-6 border-b border-zinc-800">
+      <div class="w-full overflow-x-auto overflow-y-hidden mb-6 border-b border-theme-800">
         <div class="flex gap-1 whitespace-nowrap min-w-max items-center">
           <button
             v-for="tab in tabs"
@@ -94,8 +94,8 @@ const tabs = [
             class="flex items-center gap-2 px-4 py-2 text-sm transition-colors border-b-2 -mb-px flex-shrink-0"
             :class="
               activeTab === tab.id
-                ? 'text-blue-400 border-blue-400'
-                : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                ? 'text-accent-400 border-accent-400'
+                : 'text-theme-500 border-transparent hover:text-theme-300'
             "
             @click="activeTab = tab.id"
           >

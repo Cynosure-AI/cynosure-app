@@ -26,9 +26,9 @@ const props = withDefaults(
     headerLabel: 'Details',
     headerIcon: undefined,
     headerClass:
-      'flex w-full items-center gap-2 px-3 py-2 text-left text-sm rounded-lg transition-colors border border-zinc-700/40 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-700/60',
-    headerTextClass: 'font-medium text-zinc-300',
-    chevronClass: 'w-3.5 h-3.5 text-zinc-500',
+      'flex w-full items-center gap-2 px-3 py-2 text-left text-sm rounded-lg transition-colors border border-theme-700/40 bg-theme-800/50 hover:bg-theme-800 hover:border-theme-700/60',
+    headerTextClass: 'font-medium text-theme-300',
+    chevronClass: 'w-3.5 h-3.5 text-theme-500',
     chevronIcon: 'lucide:chevron-down',
     keyboardShortcuts: false,
   }
@@ -137,7 +137,7 @@ watch(
       <Icon
         v-if="headerIcon"
         :icon="headerIcon"
-        class="w-3.5 h-3.5 shrink-0 text-zinc-400"
+        class="w-3.5 h-3.5 shrink-0 text-theme-400"
       />
       <span :class="headerTextClass">{{ headerLabel }}</span>
       <slot

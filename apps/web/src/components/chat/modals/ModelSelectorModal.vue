@@ -92,7 +92,7 @@ function onSelectionChange(selection: {
     :show="visible"
     title="Select Provider / Model"
     icon="lucide:cpu"
-    icon-color="blue"
+    icon-color="accent"
     max-width="max-w-lg"
     :overflow-visible="true"
     :body-overflow-visible="true"
@@ -100,10 +100,10 @@ function onSelectionChange(selection: {
   >
     <div class="space-y-3">
       <div
-        class="rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-2 text-xs text-zinc-500"
+        class="rounded-lg border border-theme-700 bg-theme-900/50 px-3 py-2 text-xs text-theme-500"
       >
         Current default:
-        <span class="text-zinc-300">{{ defaultModelLabel }}</span>
+        <span class="text-theme-300">{{ defaultModelLabel }}</span>
       </div>
 
       <ProviderModelSelect
