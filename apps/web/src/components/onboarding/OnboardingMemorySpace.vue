@@ -1,33 +1,33 @@
 <template>
   <div class="max-w-2xl mx-auto px-4 py-6 w-full space-y-4">
     <div class="mb-5">
-      <h2 class="text-xl font-bold text-zinc-100">
+      <h2 class="text-xl font-bold text-theme-100">
         Memory Space Ready
       </h2>
-      <p class="text-sm text-zinc-500 mt-1">
+      <p class="text-sm text-theme-500 mt-1">
         Cynosure includes a default memory space automatically. You can upload documents now,
         and create additional spaces later from the Memory section.
       </p>
     </div>
 
     <!-- Space creation -->
-    <div class="bg-zinc-800/50 border border-zinc-700/60 rounded-xl p-5 space-y-4">
-      <h3 class="text-sm font-semibold text-zinc-200">
+    <div class="bg-theme-800/50 border border-theme-700/60 rounded-xl p-5 space-y-4">
+      <h3 class="text-sm font-semibold text-theme-200">
         Active Space
       </h3>
 
       <div v-if="!createdSpace && !loadingSpace">
-        <label class="block text-xs font-medium text-zinc-400 mb-1.5">Space Name</label>
+        <label class="block text-xs font-medium text-theme-400 mb-1.5">Space Name</label>
         <div class="flex gap-2">
           <input
             v-model="spaceName"
             type="text"
             placeholder="e.g. Personal Knowledge Base"
-            class="flex-1 bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+            class="flex-1 bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
             @keydown.enter="createSpace"
           >
           <button
-            class="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors shrink-0"
+            class="flex items-center gap-1.5 px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors shrink-0"
             :disabled="!spaceName.trim() || creatingSpace"
             @click="createSpace"
           >
@@ -49,7 +49,7 @@
 
       <div
         v-else-if="loadingSpace"
-        class="flex items-center gap-2 text-zinc-500 text-sm"
+        class="flex items-center gap-2 text-theme-500 text-sm"
       >
         <Icon
           icon="lucide:loader-2"
@@ -68,10 +68,10 @@
           class="w-5 h-5 text-emerald-400 shrink-0"
         />
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-zinc-100">
+          <p class="text-sm font-medium text-theme-100">
             {{ createdSpace?.name }}
           </p>
-          <p class="text-xs text-zinc-500">
+          <p class="text-xs text-theme-500">
             Memory space ready
           </p>
         </div>
@@ -86,15 +86,15 @@
     <Transition name="slide-down">
       <div
         v-if="createdSpace"
-        class="bg-zinc-800/50 border border-zinc-700/60 rounded-xl p-5 space-y-4"
+        class="bg-theme-800/50 border border-theme-700/60 rounded-xl p-5 space-y-4"
       >
         <div class="flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-zinc-200">
-            Add Documents <span class="font-normal text-zinc-500">(optional)</span>
+          <h3 class="text-sm font-semibold text-theme-200">
+            Add Documents <span class="font-normal text-theme-500">(optional)</span>
           </h3>
-          <span class="text-xs text-zinc-600">txt, md, pdf, docx, and more</span>
+          <span class="text-xs text-theme-600">txt, md, pdf, docx, and more</span>
         </div>
-        <p class="text-xs text-zinc-500">
+        <p class="text-xs text-theme-500">
           Upload documents now to give your agents immediate context. You can always add more later.
         </p>
 
@@ -102,8 +102,8 @@
         <div
           class="border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer"
           :class="dragging
-            ? 'border-blue-500 bg-blue-500/5'
-            : 'border-zinc-700 hover:border-zinc-500'"
+            ? 'border-accent-500 bg-accent-500/5'
+            : 'border-theme-700 hover:border-theme-500'"
           @click="fileInput?.click()"
           @dragover.prevent="dragging = true"
           @dragleave.prevent="dragging = false"
@@ -112,9 +112,9 @@
           <Icon
             :icon="uploading ? 'lucide:loader-2' : 'lucide:upload-cloud'"
             class="w-8 h-8 mx-auto mb-2"
-            :class="[uploading ? 'animate-spin text-blue-400' : 'text-zinc-500']"
+            :class="[uploading ? 'animate-spin text-accent-400' : 'text-theme-500']"
           />
-          <p class="text-sm text-zinc-400">
+          <p class="text-sm text-theme-400">
             {{ uploading ? `Uploading ${uploadProgress.current} / ${uploadProgress.total}…` : 'Click or drag files here to upload' }}
           </p>
           <input
@@ -145,7 +145,7 @@
             <span class="font-medium truncate">{{ r.fileName }}</span>
             <span
               v-if="!r.error"
-              class="text-zinc-500 shrink-0"
+              class="text-theme-500 shrink-0"
             >{{ r.chunks }} chunk{{ r.chunks !== 1 ? 's' : '' }}</span>
             <span
               v-else

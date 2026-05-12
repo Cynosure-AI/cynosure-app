@@ -86,13 +86,13 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
     <button
       type="button"
       :disabled="disabled"
-      class="w-full flex items-center justify-between bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-zinc-200 hover:border-zinc-500 focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+      class="w-full flex items-center justify-between bg-theme-900 border border-theme-700 rounded px-2.5 py-1.5 text-sm text-theme-200 hover:border-theme-500 focus:outline-none focus:border-accent-500 disabled:opacity-50 disabled:cursor-not-allowed"
       @click="isOpen = !isOpen"
     >
       <span class="truncate">{{ summary }}</span>
       <Icon
         icon="lucide:chevron-down"
-        class="w-4 h-4 text-zinc-400 shrink-0 ml-2 transition-transform"
+        class="w-4 h-4 text-theme-400 shrink-0 ml-2 transition-transform"
         :class="isOpen ? 'rotate-180' : ''"
       />
     </button>
@@ -100,18 +100,18 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
     <!-- Dropdown -->
     <div
       v-if="isOpen"
-      class="absolute z-10 mt-1 w-full rounded border border-zinc-700 bg-zinc-900 shadow-lg"
+      class="absolute z-10 mt-1 w-full rounded border border-theme-700 bg-theme-900 shadow-lg"
     >
       <!-- Filter input -->
       <div
         v-if="options.length > 8"
-        class="p-1.5 border-b border-zinc-700"
+        class="p-1.5 border-b border-theme-700"
       >
         <input
           v-model="filterQuery"
           type="text"
           placeholder="Filter..."
-          class="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-blue-500"
+          class="w-full bg-theme-800 border border-theme-700 rounded px-2 py-1 text-xs text-theme-300 focus:outline-none focus:border-accent-500"
         >
       </div>
 
@@ -123,23 +123,23 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
         <label
           v-for="opt in filteredOptions"
           :key="opt.value"
-          class="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-800 cursor-pointer text-sm text-zinc-300"
+          class="flex items-center gap-2 px-3 py-1.5 hover:bg-theme-800 cursor-pointer text-sm text-theme-300"
         >
           <input
             type="checkbox"
             :checked="isSelected(opt.value)"
-            class="accent-blue-500"
+            class="accent-accent-500"
             @change="toggle(opt.value)"
           >
           <span>{{ opt.label }}</span>
           <span
             v-if="opt.hint"
-            class="text-zinc-500 text-xs ml-auto"
+            class="text-theme-500 text-xs ml-auto"
           >{{ opt.hint }}</span>
         </label>
         <div
           v-if="filteredOptions.length === 0"
-          class="px-3 py-2 text-xs text-zinc-500"
+          class="px-3 py-2 text-xs text-theme-500"
         >
           No matches
         </div>

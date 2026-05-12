@@ -174,17 +174,17 @@ onMounted(() => {
     <BaseCard class="p-5">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
             <Icon
               icon="lucide:mic"
-              class="w-5 h-5 text-zinc-400"
+              class="w-5 h-5 text-theme-400"
             />
           </div>
           <div>
-            <h3 class="text-sm font-medium text-zinc-200">
+            <h3 class="text-sm font-medium text-theme-200">
               Enable Voice Input
             </h3>
-            <p class="text-xs text-zinc-500 mt-0.5">
+            <p class="text-xs text-theme-500 mt-0.5">
               Show microphone button in the chat input bar
             </p>
           </div>
@@ -196,17 +196,17 @@ onMounted(() => {
     <!-- Model & Quantization -->
     <BaseCard class="p-5 space-y-4">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:brain-circuit"
-            class="w-5 h-5 text-zinc-400"
+            class="w-5 h-5 text-theme-400"
           />
         </div>
         <div>
-          <h3 class="text-sm font-medium text-zinc-200">
+          <h3 class="text-sm font-medium text-theme-200">
             Model &amp; Quantization
           </h3>
-          <p class="text-xs text-zinc-500 mt-0.5">
+          <p class="text-xs text-theme-500 mt-0.5">
             All models support 99 languages including English and German
           </p>
         </div>
@@ -214,7 +214,7 @@ onMounted(() => {
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div class="space-y-1.5">
-          <label class="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">Model</label>
+          <label class="text-[11px] font-medium text-theme-500 uppercase tracking-wider">Model</label>
           <CustomSelect
             v-model="prefs.whisperModel"
             :groups="modelGroups"
@@ -222,7 +222,7 @@ onMounted(() => {
           />
         </div>
         <div class="space-y-1.5">
-          <label class="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">Quantization</label>
+          <label class="text-[11px] font-medium text-theme-500 uppercase tracking-wider">Quantization</label>
           <CustomSelect
             v-model="prefs.whisperQuantization"
             :groups="quantizationGroups"
@@ -233,17 +233,17 @@ onMounted(() => {
 
       <div
         v-if="selectedModelInfo"
-        class="rounded-lg bg-zinc-800/60 border border-zinc-700/50 p-3"
+        class="rounded-lg bg-theme-800/60 border border-theme-700/50 p-3"
       >
         <div class="flex items-center gap-2 text-xs">
           <Icon
             icon="lucide:info"
-            class="w-3.5 h-3.5 text-blue-400 shrink-0"
+            class="w-3.5 h-3.5 text-accent-400 shrink-0"
           />
-          <span class="text-zinc-400">
-            <span class="text-zinc-300 font-medium">{{ selectedModelInfo.label }}</span>
+          <span class="text-theme-400">
+            <span class="text-theme-300 font-medium">{{ selectedModelInfo.label }}</span>
             - {{ selectedModelInfo.description }}.
-            Download size: <span class="text-zinc-300">{{ selectedModelInfo.size }}</span>.
+            Download size: <span class="text-theme-300">{{ selectedModelInfo.size }}</span>.
             Cached in browser after first download.
           </span>
         </div>
@@ -253,17 +253,17 @@ onMounted(() => {
     <!-- Language -->
     <BaseCard class="p-5 space-y-4">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:languages"
-            class="w-5 h-5 text-zinc-400"
+            class="w-5 h-5 text-theme-400"
           />
         </div>
         <div>
-          <h3 class="text-sm font-medium text-zinc-200">
+          <h3 class="text-sm font-medium text-theme-200">
             Language
           </h3>
-          <p class="text-xs text-zinc-500 mt-0.5">
+          <p class="text-xs text-theme-500 mt-0.5">
             Language used for speech recognition
           </p>
         </div>
@@ -279,17 +279,17 @@ onMounted(() => {
     <!-- Microphone -->
     <BaseCard class="p-5 space-y-4">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:mic"
-            class="w-5 h-5 text-zinc-400"
+            class="w-5 h-5 text-theme-400"
           />
         </div>
         <div>
-          <h3 class="text-sm font-medium text-zinc-200">
+          <h3 class="text-sm font-medium text-theme-200">
             Microphone
           </h3>
-          <p class="text-xs text-zinc-500 mt-0.5">
+          <p class="text-xs text-theme-500 mt-0.5">
             Select which microphone to use for voice input
           </p>
         </div>
@@ -303,14 +303,14 @@ onMounted(() => {
 
       <div
         v-if="micDevices.length === 0"
-        class="rounded-lg bg-zinc-800/60 border border-zinc-700/50 p-3"
+        class="rounded-lg bg-theme-800/60 border border-theme-700/50 p-3"
       >
         <div class="flex items-center gap-2 text-xs">
           <Icon
             icon="lucide:info"
             class="w-3.5 h-3.5 text-amber-400 shrink-0"
           />
-          <span class="text-zinc-400">
+          <span class="text-theme-400">
             No microphones detected. Please allow microphone access when prompted.
           </span>
         </div>
@@ -320,17 +320,17 @@ onMounted(() => {
     <!-- Download & Cache -->
     <BaseCard class="p-5 space-y-4">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:download"
-            class="w-5 h-5 text-zinc-400"
+            class="w-5 h-5 text-theme-400"
           />
         </div>
         <div class="flex-1">
-          <h3 class="text-sm font-medium text-zinc-200">
+          <h3 class="text-sm font-medium text-theme-200">
             Download &amp; Cache
           </h3>
-          <p class="text-xs text-zinc-500 mt-0.5">
+          <p class="text-xs text-theme-500 mt-0.5">
             Download the model now, or it will be downloaded automatically on first use
           </p>
         </div>
@@ -340,13 +340,13 @@ onMounted(() => {
         <div
           class="w-2 h-2 rounded-full shrink-0"
           :class="{
-            'bg-zinc-600': status === 'idle',
+            'bg-theme-600': status === 'idle',
             'bg-amber-500 animate-pulse': isLoading,
             'bg-green-500': isModelReady,
             'bg-red-500': status === 'error',
           }"
         />
-        <span class="text-xs text-zinc-400">
+        <span class="text-xs text-theme-400">
           <template v-if="status === 'idle'">
             Not loaded
           </template>
@@ -375,10 +375,10 @@ onMounted(() => {
           class="space-y-1"
         >
           <div class="flex items-center justify-between text-[11px]">
-            <span class="text-zinc-400 truncate max-w-[60%]">
+            <span class="text-theme-400 truncate max-w-[60%]">
               {{ entry.name }}
             </span>
-            <span class="text-zinc-500 tabular-nums">
+            <span class="text-theme-500 tabular-nums">
               <template v-if="entry.done">
                 <Icon
                   icon="lucide:check"
@@ -393,10 +393,10 @@ onMounted(() => {
               </template>
             </span>
           </div>
-          <div class="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+          <div class="w-full bg-theme-800 rounded-full h-1.5 overflow-hidden">
             <div
               class="h-full rounded-full transition-all duration-300"
-              :class="entry.done ? 'bg-green-500' : 'bg-blue-500'"
+              :class="entry.done ? 'bg-green-500' : 'bg-accent-500'"
               :style="{ width: `${Math.round(entry.progress)}%` }"
             />
           </div>
@@ -406,10 +406,10 @@ onMounted(() => {
       <div class="flex items-center gap-3">
         <button
           :disabled="isLoading"
-          class="px-4 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500"
+          class="px-4 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-accent-500"
           :class="isLoading
-            ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
-            : 'bg-blue-600 hover:bg-blue-500 text-white'"
+            ? 'bg-theme-700 text-theme-500 cursor-not-allowed'
+            : 'bg-accent-600 hover:bg-accent-500 text-white'"
           @click="downloadModel"
         >
           <Icon
@@ -419,7 +419,7 @@ onMounted(() => {
           {{ isModelReady ? 'Re-download' : 'Download Now' }}
         </button>
         <button
-          class="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors focus:outline-none focus:ring-1 focus:ring-zinc-500"
+          class="px-4 py-2 rounded-lg text-sm font-medium text-theme-400 hover:text-theme-200 bg-theme-800 hover:bg-theme-700 border border-theme-700 transition-colors focus:outline-none focus:ring-1 focus:ring-theme-500"
           @click="deleteCache"
         >
           <Icon
@@ -432,29 +432,29 @@ onMounted(() => {
 
       <div
         v-if="downloadedModels.length > 0"
-        class="border-t border-zinc-700 pt-4 space-y-2"
+        class="border-t border-theme-700 pt-4 space-y-2"
       >
-        <h4 class="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+        <h4 class="text-[11px] font-medium text-theme-500 uppercase tracking-wider">
           Cached Models
         </h4>
         <div
           v-for="dl in downloadedModels"
           :key="`${dl.model}-${dl.quantization}`"
-          class="flex items-center gap-3 rounded-lg bg-zinc-800/60 border border-zinc-700/40 px-3 py-2"
+          class="flex items-center gap-3 rounded-lg bg-theme-800/60 border border-theme-700/40 px-3 py-2"
         >
           <Icon
             icon="lucide:check-circle-2"
             class="w-4 h-4 text-green-400 shrink-0"
           />
-          <span class="text-xs text-zinc-300 flex-1 truncate">
+          <span class="text-xs text-theme-300 flex-1 truncate">
             {{ modelLabel(dl.model) }}
           </span>
-          <span class="text-[11px] text-zinc-500 bg-zinc-700/60 px-1.5 py-0.5 rounded font-mono uppercase">
+          <span class="text-[11px] text-theme-500 bg-theme-700/60 px-1.5 py-0.5 rounded font-mono uppercase">
             {{ dl.quantization }}
           </span>
           <span
             v-if="dl.model === prefs.whisperModel && dl.quantization === prefs.whisperQuantization"
-            class="text-[10px] text-blue-400 font-medium"
+            class="text-[10px] text-accent-400 font-medium"
           >
             active
           </span>
@@ -465,31 +465,31 @@ onMounted(() => {
     <!-- How it works -->
     <BaseCard class="p-5 space-y-3">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-zinc-900 flex items-center justify-center">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:help-circle"
-            class="w-5 h-5 text-zinc-400"
+            class="w-5 h-5 text-theme-400"
           />
         </div>
-        <h3 class="text-sm font-medium text-zinc-200">
+        <h3 class="text-sm font-medium text-theme-200">
           How it works
         </h3>
       </div>
-      <div class="space-y-2 text-xs text-zinc-500 pl-12">
+      <div class="space-y-2 text-xs text-theme-500 pl-12">
         <p>
-          <span class="text-zinc-300 font-medium">100% local</span> - The Whisper model runs
+          <span class="text-theme-300 font-medium">100% local</span> - The Whisper model runs
           entirely in your browser using WebAssembly. No audio data leaves your device.
         </p>
         <p>
-          <span class="text-zinc-300 font-medium">First use</span> - The model is downloaded
+          <span class="text-theme-300 font-medium">First use</span> - The model is downloaded
           from Hugging Face Hub and cached in your browser's storage. Subsequent uses are instant.
         </p>
         <p>
-          <span class="text-zinc-300 font-medium">Languages</span> - Supports 99 languages
+          <span class="text-theme-300 font-medium">Languages</span> - Supports 99 languages
           with automatic language detection. Works well with English and German.
         </p>
         <p>
-          <span class="text-zinc-300 font-medium">Web Worker</span> - Transcription runs in a
+          <span class="text-theme-300 font-medium">Web Worker</span> - Transcription runs in a
           background thread so the UI stays responsive.
         </p>
       </div>

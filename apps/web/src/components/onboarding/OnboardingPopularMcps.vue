@@ -1,12 +1,12 @@
 <template>
   <div class="max-w-2xl mx-auto px-4 py-6 w-full">
     <div class="mb-6">
-      <h2 class="text-xl font-bold text-zinc-100">
+      <h2 class="text-xl font-bold text-theme-100">
         Add Popular Tools
       </h2>
-      <p class="text-sm text-zinc-500 mt-1">
+      <p class="text-sm text-theme-500 mt-1">
         Install popular MCP servers to supercharge your agents. All are optional — you can add more
-        later in <strong class="text-zinc-400">Settings → MCPs</strong>.
+        later in <strong class="text-theme-400">Settings → MCPs</strong>.
       </p>
     </div>
 
@@ -14,7 +14,7 @@
       <div
         v-for="mcp in mcpOptions"
         :key="mcp.id"
-        class="bg-zinc-800/50 border border-zinc-700/60 rounded-xl overflow-hidden"
+        class="bg-theme-800/50 border border-theme-700/60 rounded-xl overflow-hidden"
       >
         <div class="flex items-center gap-4 p-4">
           <!-- Icon -->
@@ -32,17 +32,17 @@
           <!-- Info -->
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
-              <span class="text-sm font-semibold text-zinc-100">{{ mcp.name }}</span>
+              <span class="text-sm font-semibold text-theme-100">{{ mcp.name }}</span>
               <span
                 v-if="mcp.badge"
                 class="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
                 :class="mcp.badgeClass"
               >{{ mcp.badge }}</span>
             </div>
-            <p class="text-xs text-zinc-500 mt-0.5">
+            <p class="text-xs text-theme-500 mt-0.5">
               {{ mcp.description }}
             </p>
-            <p class="text-[11px] text-zinc-600 mt-0.5 font-mono">
+            <p class="text-[11px] text-theme-600 mt-0.5 font-mono">
               {{ mcp.packageId }}
             </p>
           </div>
@@ -61,7 +61,7 @@
             </div>
             <button
               v-else
-              class="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-zinc-300 text-xs font-medium rounded-lg transition-colors"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-theme-700 hover:bg-theme-600 disabled:opacity-50 text-theme-300 text-xs font-medium rounded-lg transition-colors"
               :disabled="loadingId === mcp.id"
               @click="installMcp(mcp)"
             >
@@ -78,16 +78,16 @@
         <!-- Expandable env config for servers that need it -->
         <div
           v-if="expandedId === mcp.id && mcp.envVars?.length"
-          class="px-4 pb-4 border-t border-zinc-700/40 pt-4 space-y-3"
+          class="px-4 pb-4 border-t border-theme-700/40 pt-4 space-y-3"
         >
-          <p class="text-xs text-zinc-400 font-medium">
+          <p class="text-xs text-theme-400 font-medium">
             Configuration Required
           </p>
           <div
             v-for="envVar in mcp.envVars"
             :key="envVar.name"
           >
-            <label class="block text-xs text-zinc-500 mb-1">
+            <label class="block text-xs text-theme-500 mb-1">
               {{ envVar.label }}
               <span
                 v-if="envVar.required"
@@ -98,12 +98,12 @@
               v-model="envValues[mcp.id + ':' + envVar.name]"
               :type="envVar.secret ? 'password' : 'text'"
               :placeholder="envVar.placeholder"
-              class="w-full bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
             >
           </div>
           <div class="flex gap-2">
             <button
-              class="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+              class="flex items-center gap-1.5 px-3 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
               :disabled="loadingId === mcp.id || !canInstallWithEnv(mcp)"
               @click="installWithEnv(mcp)"
             >
@@ -115,7 +115,7 @@
               {{ loadingId === mcp.id ? 'Installing…' : 'Install' }}
             </button>
             <button
-              class="px-3 py-2 text-zinc-500 hover:text-zinc-300 text-xs transition-colors"
+              class="px-3 py-2 text-theme-500 hover:text-theme-300 text-xs transition-colors"
               @click="expandedId = null"
             >
               Cancel
@@ -136,7 +136,7 @@
     <!-- Filesystem path note -->
     <div
       v-if="filesystemExpanded"
-      class="mt-3 flex items-start gap-2 text-xs text-zinc-500 bg-zinc-900/60 border border-zinc-800 rounded-lg px-4 py-3"
+      class="mt-3 flex items-start gap-2 text-xs text-theme-500 bg-theme-900/60 border border-theme-800 rounded-lg px-4 py-3"
     >
       <Icon
         icon="lucide:info"
@@ -196,7 +196,7 @@ const mcpOptions: McpOption[] = [
     iconBg: 'bg-amber-500/10',
     iconColor: 'text-amber-400',
     badge: 'npm',
-    badgeClass: 'bg-zinc-600/60 text-zinc-300',
+    badgeClass: 'bg-theme-600/60 text-theme-300',
     command: 'npx',
     args: ['-y', 'chrome-devtools-mcp@latest'],
     installId: 'chrome-devtools-mcp',
@@ -210,7 +210,7 @@ const mcpOptions: McpOption[] = [
     iconBg: 'bg-red-500/10',
     iconColor: 'text-red-400',
     badge: 'Smithery',
-    badgeClass: 'bg-blue-500/20 text-blue-400',
+    badgeClass: 'bg-accent-500/20 text-accent-400',
     command: 'npx',
     args: ['-y', '@smithery/cli@latest', 'run', 'gmail'],
     installId: 'gmail',
@@ -221,8 +221,8 @@ const mcpOptions: McpOption[] = [
     description: 'Read and write files and directories on your machine.',
     packageId: '@modelcontextprotocol/server-filesystem',
     icon: 'lucide:folder-open',
-    iconBg: 'bg-zinc-600/40',
-    iconColor: 'text-zinc-300',
+    iconBg: 'bg-theme-600/40',
+    iconColor: 'text-theme-300',
     badge: 'Official',
     badgeClass: 'bg-emerald-500/20 text-emerald-400',
     command: 'npx',
@@ -244,10 +244,10 @@ const mcpOptions: McpOption[] = [
     description: 'Manage repos, issues, PRs, workflows and more — full GitHub API access via Smithery.',
     packageId: 'github (Smithery)',
     icon: 'lucide:github',
-    iconBg: 'bg-zinc-600/40',
-    iconColor: 'text-zinc-100',
+    iconBg: 'bg-theme-600/40',
+    iconColor: 'text-theme-100',
     badge: 'Smithery',
-    badgeClass: 'bg-blue-500/20 text-blue-400',
+    badgeClass: 'bg-accent-500/20 text-accent-400',
     command: 'npx',
     args: ['-y', '@smithery/cli@latest', 'run', 'github'],
     installId: 'github',
@@ -261,7 +261,7 @@ const mcpOptions: McpOption[] = [
     iconBg: 'bg-violet-500/10',
     iconColor: 'text-violet-400',
     badge: 'npm',
-    badgeClass: 'bg-zinc-600/60 text-zinc-300',
+    badgeClass: 'bg-theme-600/60 text-theme-300',
     command: 'npx',
     args: ['-y', '@cynosure-mcp/computer-controller'],
     installId: '@cynosure-mcp/computer-controller',
@@ -275,7 +275,7 @@ const mcpOptions: McpOption[] = [
     iconBg: 'bg-red-500/10',
     iconColor: 'text-red-400',
     badge: 'npm',
-    badgeClass: 'bg-zinc-600/60 text-zinc-300',
+    badgeClass: 'bg-theme-600/60 text-theme-300',
     command: 'npx',
     args: ['-y', '@cynosure-mcp/youtube-video-downloader'],
     installId: '@cynosure-mcp/youtube-video-downloader',

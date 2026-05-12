@@ -238,15 +238,15 @@ onMounted(() => scrollToBottom())
     >
       <Icon
         icon="lucide:loader-2"
-        class="w-8 h-8 text-zinc-500 animate-spin"
+        class="w-8 h-8 text-theme-500 animate-spin"
       />
-      <span class="text-sm text-zinc-500 mt-3">Loading conversation…</span>
+      <span class="text-sm text-theme-500 mt-3">Loading conversation…</span>
     </div>
 
     <!-- Empty state -->
     <div
       v-else-if="chatStore.messages.length === 0"
-      class="flex flex-col items-center justify-center h-full text-zinc-400"
+      class="flex flex-col items-center justify-center h-full text-theme-400"
     >
       <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-indigo-500/10 to-purple-500/10 rounded-3xl border border-white/5 shadow-xl">
         <Icon
@@ -257,20 +257,20 @@ onMounted(() => scrollToBottom())
       <template v-if="!wsConnected">
         <Icon
           icon="lucide:loader-2"
-          class="w-8 h-8 text-zinc-500 animate-spin mb-4"
+          class="w-8 h-8 text-theme-500 animate-spin mb-4"
         />
-        <h2 class="text-xl font-semibold text-zinc-200 tracking-tight">
+        <h2 class="text-xl font-semibold text-theme-200 tracking-tight">
           Initializing…
         </h2>
-        <p class="text-sm mt-2 text-zinc-500 max-w-sm text-center">
+        <p class="text-sm mt-2 text-theme-500 max-w-sm text-center">
           Connecting to server and loading your data.
         </p>
       </template>
       <template v-else>
-        <h2 class="text-xl font-semibold text-zinc-200 tracking-tight">
+        <h2 class="text-xl font-semibold text-theme-200 tracking-tight">
           How can I help you today?
         </h2>
-        <p class="text-sm mt-2 text-zinc-500 max-w-sm text-center">
+        <p class="text-sm mt-2 text-theme-500 max-w-sm text-center">
           Type a message below to begin a new conversation, or choose an agent to assist you.
         </p>
       </template>
@@ -377,27 +377,27 @@ onMounted(() => scrollToBottom())
                   v-bind="triggerAttrs"
                   class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-colors group"
                   :class="expanded
-                    ? 'bg-zinc-800/80 border border-zinc-700/60'
-                    : 'bg-zinc-800/40 hover:bg-zinc-800/70 border border-zinc-800/40 hover:border-zinc-700/40'"
+                    ? 'bg-theme-800/80 border border-theme-700/60'
+                    : 'bg-theme-800/40 hover:bg-theme-800/70 border border-theme-800/40 hover:border-theme-700/40'"
                   @click="toggle"
                   @keydown="onTriggerKeydown"
                 >
                   <Icon
                     icon="lucide:wrench"
-                    class="w-3.5 h-3.5 text-zinc-500 shrink-0"
+                    class="w-3.5 h-3.5 text-theme-500 shrink-0"
                   />
-                  <span class="text-zinc-400 truncate flex-1 text-left">
+                  <span class="text-theme-400 truncate flex-1 text-left">
                     {{ entry.msg.content.slice(0, 80) }}{{ entry.msg.content.length > 80 ? '…' : '' }}
                   </span>
                   <Icon
                     icon="lucide:chevron-down"
-                    class="w-3 h-3 text-zinc-600 shrink-0 transition-transform"
+                    class="w-3 h-3 text-theme-600 shrink-0 transition-transform"
                     :class="{ 'rotate-180': expanded }"
                   />
                 </button>
               </template>
               <div class="mt-1.5 ml-3">
-                <pre class="text-[10px] text-zinc-400 whitespace-pre-wrap break-all bg-zinc-900/60 border border-zinc-700/30 rounded-lg px-3 py-2 max-h-60 overflow-y-auto font-mono">{{ entry.msg.content }}</pre>
+                <pre class="text-[10px] text-theme-400 whitespace-pre-wrap break-all bg-theme-900/60 border border-theme-700/30 rounded-lg px-3 py-2 max-h-60 overflow-y-auto font-mono">{{ entry.msg.content }}</pre>
               </div>
             </CollapsibleSection>
           </div>
@@ -409,10 +409,10 @@ onMounted(() => scrollToBottom())
         v-if="agentStore.isExecuting && !chatStore.isStreaming"
         class="px-4 py-2"
       >
-        <div class="max-w-[80%] ml-10 flex items-center gap-2 text-xs text-zinc-500">
+        <div class="max-w-[80%] ml-10 flex items-center gap-2 text-xs text-theme-500">
           <Icon
             icon="svg-spinners:ring-resize"
-            class="w-3.5 h-3.5 text-blue-400"
+            class="w-3.5 h-3.5 text-accent-400"
           />
           <span>Working…</span>
         </div>
@@ -426,15 +426,15 @@ onMounted(() => scrollToBottom())
         <div
           v-for="action in chatStore.activePostActions"
           :key="action"
-          class="max-w-[80%] ml-10 flex items-center gap-2 text-xs text-zinc-500 py-0.5"
+          class="max-w-[80%] ml-10 flex items-center gap-2 text-xs text-theme-500 py-0.5"
         >
           <Icon
             icon="svg-spinners:ring-resize"
-            class="w-3 h-3 text-zinc-500"
+            class="w-3 h-3 text-theme-500"
           />
           <span>{{ postActionLabel(action) }}</span>
           <button
-            class="ml-1 text-zinc-600 hover:text-red-400 transition-colors"
+            class="ml-1 text-theme-600 hover:text-red-400 transition-colors"
             title="Cancel"
             @click="chatStore.cancelPostActions()"
           >

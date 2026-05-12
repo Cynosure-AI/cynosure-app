@@ -280,7 +280,7 @@ defineExpose({ loadServers })
   <div>
     <div class="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
       <button
-        class="h-10 px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors self-start"
+        class="h-10 px-4 bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium rounded-lg transition-colors self-start"
         @click="showAddForm ? cancelForm() : (showAddForm = true)"
       >
         {{ showAddForm ? 'Cancel' : 'Add Manually' }}
@@ -290,13 +290,13 @@ defineExpose({ loadServers })
         <div class="relative flex-1">
           <Icon
             icon="lucide:search"
-            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-500"
           />
           <input
             v-model="installedFilter"
             type="text"
             placeholder="Filter installed servers..."
-            class="h-10 w-full pl-9 pr-3 bg-zinc-900/80 border border-zinc-700 text-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+            class="h-10 w-full pl-9 pr-3 bg-theme-900/80 border border-theme-700 text-theme-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
           >
         </div>
       </div>
@@ -304,53 +304,53 @@ defineExpose({ loadServers })
 
     <div
       v-if="showAddForm"
-      class="bg-zinc-900/60 border border-zinc-700 rounded-xl p-4 mb-6 space-y-4"
+      class="bg-theme-900/60 border border-theme-700 rounded-xl p-4 mb-6 space-y-4"
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="block text-sm text-zinc-400 mb-1">Custom name</label>
+          <label class="block text-sm text-theme-400 mb-1">Custom name</label>
           <input
             v-model="newServer.name"
             type="text"
             placeholder="Use original MCP name"
-            class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
           >
         </div>
         <div>
-          <label class="block text-sm text-zinc-400 mb-1">Command</label>
+          <label class="block text-sm text-theme-400 mb-1">Command</label>
           <input
             v-model="newServer.command"
             type="text"
             placeholder="npx"
-            class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
           >
         </div>
       </div>
       <div>
-        <label class="block text-sm text-zinc-400 mb-1">Description</label>
+        <label class="block text-sm text-theme-400 mb-1">Description</label>
         <textarea
           v-model="newServer.description"
           rows="2"
           placeholder="What this MCP server is useful for"
-          class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+          class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
         />
       </div>
       <div>
-        <label class="block text-sm text-zinc-400 mb-1">Arguments (one per line)</label>
+        <label class="block text-sm text-theme-400 mb-1">Arguments (one per line)</label>
         <textarea
           v-model="newServer.args"
           rows="3"
           placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir"
-          class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+          class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
         />
       </div>
       <div>
-        <label class="block text-sm text-zinc-400 mb-1">Environment Variables (KEY=VALUE, one per line)</label>
+        <label class="block text-sm text-theme-400 mb-1">Environment Variables (KEY=VALUE, one per line)</label>
         <textarea
           v-model="newServer.env"
           rows="2"
           placeholder="API_KEY=sk-..."
-          class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+          class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
         />
       </div>
       <div
@@ -361,7 +361,7 @@ defineExpose({ loadServers })
       </div>
       <button
         :disabled="!newServer.command || isLoading('add')"
-        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded-lg transition-colors"
+        class="w-full px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
         @click="addServer"
       >
         {{ isLoading('add') ? 'Connecting...' : pendingAddId ? 'Save & Reconnect' : 'Add Server' }}
@@ -382,49 +382,49 @@ defineExpose({ loadServers })
         >
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs text-zinc-400 mb-1">Custom name</label>
+              <label class="block text-xs text-theme-400 mb-1">Custom name</label>
               <input
                 v-model="editServer.name"
                 type="text"
                 :placeholder="originalServerName(server)"
-                class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
             </div>
             <div>
-              <label class="block text-xs text-zinc-400 mb-1">Command</label>
+              <label class="block text-xs text-theme-400 mb-1">Command</label>
               <input
                 v-model="editServer.command"
                 type="text"
-                class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
             </div>
           </div>
           <div>
-            <label class="block text-xs text-zinc-400 mb-1">Description</label>
+            <label class="block text-xs text-theme-400 mb-1">Description</label>
             <textarea
               v-model="editServer.description"
               rows="2"
               :placeholder="server.description || server.serverInfo?.description || 'What this MCP server is useful for'"
-              class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
             />
           </div>
           <div>
-            <label class="block text-xs text-zinc-400 mb-1">Arguments (one per line)</label>
+            <label class="block text-xs text-theme-400 mb-1">Arguments (one per line)</label>
             <textarea
               v-model="editServer.args"
               rows="3"
-              class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500"
             />
           </div>
           <div>
-            <label class="block text-xs text-zinc-400 mb-1">Environment Variables</label>
+            <label class="block text-xs text-theme-400 mb-1">Environment Variables</label>
             <template v-if="server.envHints?.length">
               <div class="space-y-2">
                 <div
                   v-for="hint in server.envHints"
                   :key="hint.name"
                 >
-                  <label class="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
+                  <label class="flex items-center gap-1.5 text-xs text-theme-400 mb-1">
                     <span class="font-mono">{{ hint.name }}</span>
                     <span
                       v-if="hint.required"
@@ -432,24 +432,24 @@ defineExpose({ loadServers })
                     >*</span>
                     <span
                       v-if="hint.description"
-                      class="text-zinc-400/70 font-normal"
+                      class="text-theme-400/70 font-normal"
                     >- {{ hint.description }}</span>
                   </label>
                   <input
                     v-model="editEnvFields[hint.name]"
                     :type="hint.sensitive ? 'password' : 'text'"
                     :placeholder="hint.name"
-                    class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+                    class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
                   >
                 </div>
               </div>
               <div class="mt-2">
-                <label class="block text-[11px] text-zinc-500 mb-1">Additional env vars (KEY=VALUE, one per line)</label>
+                <label class="block text-[11px] text-theme-500 mb-1">Additional env vars (KEY=VALUE, one per line)</label>
                 <textarea
                   v-model="editServer.env"
                   rows="2"
                   placeholder="EXTRA_VAR=value"
-                  class="w-full resize-y bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+                  class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
                 />
               </div>
             </template>
@@ -457,7 +457,7 @@ defineExpose({ loadServers })
               <textarea
                 v-model="editServer.env"
                 rows="3"
-                class="w-full resize-y bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+                class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
                 placeholder="API_KEY=sk-..."
               />
             </template>
@@ -470,14 +470,14 @@ defineExpose({ loadServers })
           </div>
           <div class="flex gap-2 justify-end">
             <button
-              class="px-3 py-1.5 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-md transition-colors"
+              class="px-3 py-1.5 text-xs bg-theme-700 hover:bg-theme-600 text-theme-300 rounded-md transition-colors"
               @click="cancelEditing"
             >
               Cancel
             </button>
             <button
               :disabled="!editServer.command || isLoading(server.id)"
-              class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
+              class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
               @click="saveEditing(server.id)"
             >
               {{ isLoading(server.id) ? 'Saving...' : 'Save & Reconnect' }}
@@ -499,7 +499,7 @@ defineExpose({ loadServers })
             <div
               v-else
               class="w-10 h-10 rounded-lg flex items-center justify-center"
-              :class="server.connected ? 'bg-blue-500/15 text-blue-300' : 'bg-zinc-700/50 text-zinc-500'"
+              :class="server.connected ? 'bg-accent-500/15 text-accent-300' : 'bg-theme-700/50 text-theme-500'"
             >
               <Icon
                 icon="lucide:plug"
@@ -507,27 +507,27 @@ defineExpose({ loadServers })
               />
             </div>
             <div
-              class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-zinc-900"
-              :class="server.connected ? 'bg-emerald-500' : server.enabled ? 'bg-blue-400' : 'bg-zinc-500'"
+              class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-theme-900"
+              :class="server.connected ? 'bg-emerald-500' : server.enabled ? 'bg-accent-400' : 'bg-theme-500'"
             />
           </div>
 
           <div class="min-w-0">
-            <div class="text-sm font-medium text-zinc-100 truncate">
+            <div class="text-sm font-medium text-theme-100 truncate">
               {{ server.name || server.serverInfo?.title }}
             </div>
             <div
               v-if="server.description || server.serverInfo?.description"
-              class="text-xs text-zinc-400 mt-0.5 line-clamp-2"
+              class="text-xs text-theme-400 mt-0.5 line-clamp-2"
             >
               {{ server.description || server.serverInfo?.description }}
             </div>
-            <div class="text-xs text-zinc-500 mt-1 truncate font-mono">
+            <div class="text-xs text-theme-500 mt-1 truncate font-mono">
               {{ server.command }} {{ server.args.join(' ') }}
             </div>
             <div
               v-if="server.envHints?.length && server.envHints.some(h => h.required && !server.env[h.name])"
-              class="text-[11px] text-blue-400/90 mt-1"
+              class="text-[11px] text-accent-400/90 mt-1"
             >
               Requires: {{ server.envHints.filter(h => h.required && !server.env[h.name]).map(h => h.name).join(', ') }}
             </div>
@@ -546,7 +546,7 @@ defineExpose({ loadServers })
         <span
           v-if="!editingId || editingId !== server.id"
           class="inline-flex items-center text-[11px] px-2 py-1 rounded-md"
-          :class="server.toolCount > 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-700/60 text-zinc-400'"
+          :class="server.toolCount > 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-theme-700/60 text-theme-400'"
         >
           {{ server.toolCount }} {{ server.toolCount === 1 ? 'tool' : 'tools' }}
         </span>
@@ -557,11 +557,11 @@ defineExpose({ loadServers })
         <span
           v-if="!editingId || editingId !== server.id"
           class="inline-flex items-center gap-1.5 text-xs"
-          :class="server.connected ? 'text-emerald-400' : server.enabled ? (server.pendingAuthUrl ? 'text-blue-400' : 'text-red-400') : 'text-zinc-500'"
+          :class="server.connected ? 'text-emerald-400' : server.enabled ? (server.pendingAuthUrl ? 'text-accent-400' : 'text-red-400') : 'text-theme-500'"
         >
           <span
             class="w-1.5 h-1.5 rounded-full"
-            :class="server.connected ? 'bg-emerald-400' : server.enabled ? (server.pendingAuthUrl ? 'bg-blue-400' : 'bg-red-400') : 'bg-zinc-500'"
+            :class="server.connected ? 'bg-emerald-400' : server.enabled ? (server.pendingAuthUrl ? 'bg-accent-400' : 'bg-red-400') : 'bg-theme-500'"
           />
           {{ server.connected ? 'Connected' : server.enabled ? (server.pendingAuthUrl ? 'Authorization required' : 'Disconnected') : 'Disabled' }}
         </span>
@@ -574,7 +574,7 @@ defineExpose({ loadServers })
           class="flex flex-wrap items-center gap-1.5"
         >
           <button
-            class="px-2.5 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors"
+            class="px-2.5 py-1.5 text-xs bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-md transition-colors"
             @click="startEditing(server)"
           >
             Edit
@@ -582,7 +582,7 @@ defineExpose({ loadServers })
 
           <button
             v-if="server.enabled && server.pendingAuthUrl && authInProgress !== server.id"
-            class="px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-md transition-colors"
+            class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-white rounded-md transition-colors"
             @click="startAuth(server)"
           >
             Authorize
@@ -590,14 +590,14 @@ defineExpose({ loadServers })
           <button
             v-else-if="server.enabled && server.pendingAuthUrl && authInProgress === server.id"
             :disabled="isLoading(server.id)"
-            class="px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-md transition-colors"
+            class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
             @click="finishAuth(server.id)"
           >
             {{ isLoading(server.id) ? 'Reconnecting...' : 'Reconnect' }}
           </button>
           <button
             v-else-if="server.enabled"
-            class="px-2.5 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition-colors"
+            class="px-2.5 py-1.5 text-xs bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-md transition-colors"
             :disabled="isLoading(server.id)"
             @click="reconnectServer(server.id)"
           >
@@ -605,7 +605,7 @@ defineExpose({ loadServers })
           </button>
 
           <button
-            class="p-1.5 text-zinc-600 hover:text-red-400 rounded-md hover:bg-red-500/10 transition-colors"
+            class="p-1.5 text-theme-600 hover:text-red-400 rounded-md hover:bg-red-500/10 transition-colors"
             @click="removeServer(server.id)"
           >
             <Icon
@@ -616,7 +616,7 @@ defineExpose({ loadServers })
 
           <button
             v-if="server.enabled && !server.pendingAuthUrl && (server.origin === 'smithery.ai' || server.args.some(a => /^https?:\/\//.test(a) || a === 'mcp-remote'))"
-            class="p-1.5 text-zinc-600 hover:text-blue-400 rounded-md hover:bg-blue-500/10 transition-colors"
+            class="p-1.5 text-theme-600 hover:text-accent-400 rounded-md hover:bg-accent-500/10 transition-colors"
             :disabled="isLoading(server.id)"
             title="Clear cached OAuth tokens and re-authorize"
             @click="reauthServer(server.id)"
@@ -644,11 +644,11 @@ defineExpose({ loadServers })
 
     <div
       v-else-if="servers.length === 0 && !showAddForm"
-      class="text-center py-10 text-zinc-500"
+      class="text-center py-10 text-theme-500"
     >
       <Icon
         icon="lucide:plug"
-        class="w-8 h-8 mx-auto mb-2 text-zinc-600"
+        class="w-8 h-8 mx-auto mb-2 text-theme-600"
       />
       <p class="text-lg mb-2">
         No MCP servers installed
@@ -657,7 +657,7 @@ defineExpose({ loadServers })
         Browse the registry to discover and add servers, or add one manually.
       </p>
       <button
-        class="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+        class="text-sm text-accent-400 hover:text-accent-300 transition-colors"
         @click="emit('goToBrowse')"
       >
         Browse Registry ->

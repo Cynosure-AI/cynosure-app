@@ -1,10 +1,10 @@
 <template>
   <div class="max-w-2xl mx-auto px-4 py-6 w-full">
     <div class="mb-5">
-      <h2 class="text-xl font-bold text-zinc-100">
+      <h2 class="text-xl font-bold text-theme-100">
         Connect an AI Provider
       </h2>
-      <p class="text-sm text-zinc-500 mt-1">
+      <p class="text-sm text-theme-500 mt-1">
         You need at least one provider to use Cynosure. You can add more later in Settings.
       </p>
     </div>
@@ -14,15 +14,15 @@
       v-if="providerStore.providers.length"
       class="mb-5 space-y-2"
     >
-      <div class="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">
+      <div class="text-xs font-medium text-theme-400 uppercase tracking-wider mb-2">
         Added Providers
       </div>
       <div
         v-for="provider in providerStore.providers"
         :key="provider.id"
-        class="flex items-center gap-3 bg-zinc-800/60 border border-zinc-700/60 rounded-xl px-4 py-3"
+        class="flex items-center gap-3 bg-theme-800/60 border border-theme-700/60 rounded-xl px-4 py-3"
       >
-        <div class="w-8 h-8 rounded-lg bg-zinc-900 flex items-center justify-center p-1 shrink-0">
+        <div class="w-8 h-8 rounded-lg bg-theme-900 flex items-center justify-center p-1 shrink-0">
           <img
             v-if="providerLogos[provider.type]"
             :src="providerLogos[provider.type].dark"
@@ -31,23 +31,23 @@
           >
           <span
             v-else
-            class="text-sm font-bold text-zinc-400"
+            class="text-sm font-bold text-theme-400"
           >{{ provider.type[0].toUpperCase() }}</span>
         </div>
         <div class="flex-1 min-w-0">
-          <div class="text-sm font-medium text-zinc-200">
+          <div class="text-sm font-medium text-theme-200">
             {{ provider.name }}
           </div>
-          <div class="text-xs text-zinc-500 truncate">
+          <div class="text-xs text-theme-500 truncate">
             {{ provider.defaultModel }} · {{ provider.type }}
           </div>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-          <span class="text-xs text-zinc-500">Added</span>
+          <span class="text-xs text-theme-500">Added</span>
         </div>
         <button
-          class="p-1.5 text-zinc-600 hover:text-red-400 transition-colors"
+          class="p-1.5 text-theme-600 hover:text-red-400 transition-colors"
           @click="providerStore.removeProvider(provider.id)"
         >
           <Icon
@@ -74,14 +74,14 @@
           <p class="text-sm font-semibold text-emerald-300">
             Provider added successfully!
           </p>
-          <p class="text-xs text-zinc-400 mt-0.5">
-            <span class="text-zinc-200 font-medium">{{ lastAddedProvider }}</span> is ready to use.
+          <p class="text-xs text-theme-400 mt-0.5">
+            <span class="text-theme-200 font-medium">{{ lastAddedProvider }}</span> is ready to use.
             You can add more providers or continue to the next step.
           </p>
         </div>
       </div>
       <button
-        class="flex items-center gap-1.5 px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors"
+        class="flex items-center gap-1.5 px-3 py-2 bg-theme-700 hover:bg-theme-600 text-theme-300 text-sm rounded-lg transition-colors"
         @click="lastAddedProvider = null"
       >
         <Icon
@@ -95,10 +95,10 @@
     <!-- Add provider form -->
     <div
       v-else
-      class="bg-zinc-800/50 border border-zinc-700/60 rounded-xl p-5 space-y-4"
+      class="bg-theme-800/50 border border-theme-700/60 rounded-xl p-5 space-y-4"
     >
       <div class="flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-zinc-200">
+        <h3 class="text-sm font-semibold text-theme-200">
           {{ providerStore.providers.length ? 'Add Another Provider' : 'Add Your First Provider' }}
         </h3>
         <div class="flex items-center gap-2">
@@ -113,10 +113,10 @@
 
       <!-- Provider type -->
       <div>
-        <label class="block text-xs font-medium text-zinc-400 mb-1.5">Provider Type</label>
+        <label class="block text-xs font-medium text-theme-400 mb-1.5">Provider Type</label>
         <select
           v-model="form.type"
-          class="w-full bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
           @change="onTypeChange"
         >
           <option
@@ -132,39 +132,39 @@
       <div class="grid grid-cols-2 gap-3">
         <!-- Name -->
         <div>
-          <label class="block text-xs font-medium text-zinc-400 mb-1.5">Display Name</label>
+          <label class="block text-xs font-medium text-theme-400 mb-1.5">Display Name</label>
           <input
             v-model="form.name"
             type="text"
             placeholder="e.g. My OpenAI"
-            class="w-full bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+            class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
           >
         </div>
 
         <!-- Base URL (local providers) -->
         <div v-if="hasEditableBaseUrl">
-          <label class="block text-xs font-medium text-zinc-400 mb-1.5">Base URL</label>
+          <label class="block text-xs font-medium text-theme-400 mb-1.5">Base URL</label>
           <input
             v-model="form.baseUrl"
             type="text"
             :placeholder="defaultBaseUrls[form.type]"
-            class="w-full bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+            class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
           >
         </div>
 
         <!-- API Key (cloud providers) -->
         <div v-else>
-          <label class="block text-xs font-medium text-zinc-400 mb-1.5">API Key</label>
+          <label class="block text-xs font-medium text-theme-400 mb-1.5">API Key</label>
           <div class="relative">
             <input
               v-model="form.apiKey"
               :type="showApiKey ? 'text' : 'password'"
               placeholder="sk-..."
-              class="w-full bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
             >
             <button
               type="button"
-              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-theme-500 hover:text-theme-300 transition-colors"
               @click="showApiKey = !showApiKey"
             >
               <Icon
@@ -178,7 +178,7 @@
 
       <!-- Model -->
       <div>
-        <label class="block text-xs font-medium text-zinc-400 mb-1.5">Default Model</label>
+        <label class="block text-xs font-medium text-theme-400 mb-1.5">Default Model</label>
         <div class="flex gap-2">
           <div class="relative flex-1">
             <input
@@ -186,12 +186,12 @@
               v-model="form.defaultModel"
               type="text"
               :placeholder="defaultModels[form.type] || 'Enter model name'"
-              class="w-full bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
             >
             <select
               v-else
               v-model="form.defaultModel"
-              class="w-full bg-zinc-900 border border-zinc-600 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
             >
               <option
                 v-for="m in fetchedModels"
@@ -203,7 +203,7 @@
             </select>
           </div>
           <button
-            class="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors shrink-0 flex items-center gap-1.5 disabled:opacity-50"
+            class="px-3 py-2 bg-theme-700 hover:bg-theme-600 text-theme-300 text-sm rounded-lg transition-colors shrink-0 flex items-center gap-1.5 disabled:opacity-50"
             :disabled="loadingModels || (!form.apiKey && !hasEditableBaseUrl)"
             @click="fetchModels"
           >
@@ -227,7 +227,7 @@
 
       <!-- Add button -->
       <button
-        class="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+        class="w-full px-4 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
         :disabled="!canAdd || saving"
         @click="addProvider"
       >

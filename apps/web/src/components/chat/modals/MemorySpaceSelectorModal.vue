@@ -51,7 +51,7 @@ function toggle(id: string) {
     :show="visible"
     title="Memory Spaces"
     icon="lucide:brain"
-    icon-color="blue"
+    icon-color="accent"
     max-width="max-w-sm"
     @close="visible = false"
   >
@@ -59,13 +59,13 @@ function toggle(id: string) {
     <div class="overflow-y-auto space-y-1 max-h-80">
       <div
         v-if="loading"
-        class="text-sm text-zinc-500 text-center py-6"
+        class="text-sm text-theme-500 text-center py-6"
       >
         Loading…
       </div>
       <div
         v-else-if="spaces.length === 0"
-        class="text-sm text-zinc-500 text-center py-6"
+        class="text-sm text-theme-500 text-center py-6"
       >
         No memory spaces created yet
       </div>
@@ -74,29 +74,29 @@ function toggle(id: string) {
         :key="space.id"
         class="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg transition-colors text-left"
         :class="selected.includes(space.id)
-          ? 'bg-blue-600/15 border border-blue-500/30'
-          : 'hover:bg-zinc-800 border border-transparent'"
+          ? 'bg-accent-600/15 border border-accent-500/30'
+          : 'hover:bg-theme-800 border border-transparent'"
         @click="toggle(space.id)"
       >
-        <div class="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
+        <div class="w-7 h-7 rounded-lg bg-theme-800 flex items-center justify-center shrink-0">
           <Icon
             icon="lucide:brain"
             class="w-3.5 h-3.5"
-            :class="selected.includes(space.id) ? 'text-blue-400' : 'text-zinc-500'"
+            :class="selected.includes(space.id) ? 'text-accent-400' : 'text-theme-500'"
           />
         </div>
         <div class="flex-1 min-w-0">
-          <div class="text-sm text-zinc-200 truncate">
+          <div class="text-sm text-theme-200 truncate">
             {{ space.name }}
           </div>
-          <div class="text-[11px] text-zinc-500">
+          <div class="text-[11px] text-theme-500">
             {{ space.fileCount }} document{{ space.fileCount !== 1 ? 's' : '' }}
           </div>
         </div>
         <Icon
           v-if="selected.includes(space.id)"
           icon="mdi:check-circle"
-          class="w-4 h-4 text-blue-400 shrink-0"
+          class="w-4 h-4 text-accent-400 shrink-0"
         />
       </button>
     </div>

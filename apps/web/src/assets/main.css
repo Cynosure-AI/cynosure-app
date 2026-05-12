@@ -7,14 +7,40 @@
 @import "./themes/midnight-purple.css";
 @import "./themes/cyberpunk.css";
 
+@theme {
+  --color-theme-50: #fafafa;
+  --color-theme-100: #f4f4f5;
+  --color-theme-200: #e4e4e7;
+  --color-theme-300: #d4d4d8;
+  --color-theme-400: #a1a1aa;
+  --color-theme-500: #71717a;
+  --color-theme-600: #52525b;
+  --color-theme-700: #3f3f46;
+  --color-theme-800: #27272a;
+  --color-theme-900: #18181b;
+  --color-theme-950: #09090b;
+
+  --color-accent-50: #eff6ff;
+  --color-accent-100: #dbeafe;
+  --color-accent-200: #bfdbfe;
+  --color-accent-300: #93c5fd;
+  --color-accent-400: #60a5fa;
+  --color-accent-500: #3b82f6;
+  --color-accent-600: #2563eb;
+  --color-accent-700: #1d4ed8;
+  --color-accent-800: #1e40af;
+  --color-accent-900: #1e3a8a;
+  --color-accent-950: #172554;
+}
+
 /* Custom dark variant based on data-theme attribute */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="arasaka"], [data-theme="arasaka"] *, [data-theme="midnight-purple"], [data-theme="midnight-purple"] *, [data-theme="cyberpunk"], [data-theme="cyberpunk"] *));
 @custom-variant arasaka (&:where([data-theme="arasaka"], [data-theme="arasaka"] *));
 
 /* ── Global defaults ── */
 body {
-  background-color: var(--color-zinc-950);
-  color: var(--color-zinc-100);
+  background-color: var(--color-theme-950);
+  color: var(--color-theme-100);
 }
 
 button:hover {

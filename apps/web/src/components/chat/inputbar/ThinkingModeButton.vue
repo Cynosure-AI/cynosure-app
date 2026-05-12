@@ -9,10 +9,10 @@ const chatStore = useChatStore()
 <template>
   <HoverTooltip :max-width="260">
     <button
-      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500"
+      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-accent-500"
       :class="chatStore.sessionThinkingEnabled
-        ? 'text-blue-400 hover:text-blue-300'
-        : 'text-zinc-500 hover:text-zinc-300'"
+        ? 'text-accent-400 hover:text-accent-300'
+        : 'text-theme-500 hover:text-theme-300'"
       aria-label="Thinking mode"
       @click="chatStore.sessionThinkingEnabled = !chatStore.sessionThinkingEnabled; chatStore.markOverridesModified()"
     >
@@ -22,13 +22,13 @@ const chatStore = useChatStore()
       />
     </button>
     <template #content>
-      <div class="font-medium text-zinc-300 mb-1.5">
+      <div class="font-medium text-theme-300 mb-1.5">
         Thinking Mode
       </div>
-      <div :class="chatStore.sessionThinkingEnabled ? 'text-emerald-400' : 'text-zinc-500'">
+      <div :class="chatStore.sessionThinkingEnabled ? 'text-emerald-400' : 'text-theme-500'">
         {{ chatStore.sessionThinkingEnabled ? 'Enabled' : 'Disabled' }}
       </div>
-      <div class="text-zinc-600 text-[10px] mt-1.5 border-t border-zinc-800 pt-1.5">
+      <div class="text-theme-600 text-[10px] mt-1.5 border-t border-theme-800 pt-1.5">
         Click to toggle extended reasoning
       </div>
     </template>

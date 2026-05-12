@@ -30,30 +30,30 @@ function onAutoRoutingUpdate(enabled: boolean): void {
     :show="visible"
     title="Tool Access"
     icon="mdi:tools"
-    icon-color="blue"
+    icon-color="accent"
     max-width="max-w-2xl"
     @close="closeModal"
   >
-    <div class="mb-3 rounded-xl border border-zinc-700 bg-zinc-900 p-3">
+    <div class="mb-3 rounded-xl border border-theme-700 bg-theme-900 p-3">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
-            <span class="text-xs font-medium text-zinc-200">Auto-select tools</span>
+            <span class="text-xs font-medium text-theme-200">Auto-select tools</span>
             <span
               v-if="chatStore.sessionAutoToolRouting"
-              class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300"
+              class="text-[10px] px-1.5 py-0.5 rounded bg-accent-500/10 text-accent-300"
             >
               Routing
             </span>
           </div>
-          <p class="mt-1 text-[11px] text-zinc-500">
+          <p class="mt-1 text-[11px] text-theme-500">
             Uses recent context to choose automatically a fitting tool collection. Selected tools are preferred in the decision-making. Router model is configured in Preferences.
           </p>
         </div>
         <ToggleSwitch
           :model-value="chatStore.sessionAutoToolRouting"
           size="md"
-          color="blue"
+          color="accent"
           @update:model-value="onAutoRoutingUpdate"
         />
       </div>

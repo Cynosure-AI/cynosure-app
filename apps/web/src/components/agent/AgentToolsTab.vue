@@ -24,26 +24,26 @@ function removeMissing() {
 
 <template>
   <div class="flex flex-col h-[75vh]">
-    <div class="mb-3 shrink-0 rounded-lg border border-zinc-700 bg-zinc-900/70 px-4 py-3">
+    <div class="mb-3 shrink-0 rounded-lg border border-theme-700 bg-theme-900/70 px-4 py-3">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
             <Icon
               icon="lucide:route"
-              class="h-4 w-4 text-blue-400"
+              class="h-4 w-4 text-accent-400"
             />
-            <p class="text-sm font-medium text-zinc-200">
+            <p class="text-sm font-medium text-theme-200">
               Auto-select tools
             </p>
           </div>
-          <p class="mt-1 text-xs text-zinc-500">
+          <p class="mt-1 text-xs text-theme-500">
             Let this agent route each request through the tools selected below. Non-chosen tools are automatically omitted from the agent context. If none are selected, it will automatically choose from all available tools.
           </p>
         </div>
         <ToggleSwitch
           :model-value="agent.autoToolRouting"
           size="md"
-          color="blue"
+          color="accent"
           @update:model-value="emit('update', 'autoToolRouting', $event)"
         />
       </div>

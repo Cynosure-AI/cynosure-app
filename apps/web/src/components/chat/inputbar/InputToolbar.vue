@@ -174,7 +174,7 @@ async function toggleMic(): Promise<void> {
   >
     <div
       v-if="showMobileDrawer"
-      class="lg:hidden flex items-center gap-1 px-2 py-1.5 border-b border-zinc-700/50"
+      class="lg:hidden flex items-center gap-1 px-2 py-1.5 border-b border-theme-700/50"
     >
       <ToolsButton />
       <SubAgentsButton />
@@ -188,7 +188,7 @@ async function toggleMic(): Promise<void> {
   <div class="flex items-center gap-1 px-2 pb-2 pt-0.5">
     <!-- Left: action buttons -->
     <button
-      class="p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg transition-colors shrink-0 focus:outline-none"
+      class="p-1.5 text-theme-500 hover:text-theme-300 rounded-lg transition-colors shrink-0 focus:outline-none"
       title="Attach file"
       :disabled="chatStore.isStreaming"
       aria-label="Attach file"
@@ -201,15 +201,15 @@ async function toggleMic(): Promise<void> {
     </button>
 
     <!--Vertical separator-->
-    <div class="hidden md:block w-px h-6 bg-zinc-700/80" />
+    <div class="hidden md:block w-px h-6 bg-theme-700/80" />
 
     <!-- Mobile: single tune button to open drawer -->
     <button
       class="lg:hidden p-1.5 rounded-lg transition-colors shrink-0 focus:outline-none"
       :class="
         showMobileDrawer
-          ? 'text-blue-400 bg-zinc-700/50'
-          : 'text-zinc-500 hover:text-zinc-300'
+          ? 'text-accent-400 bg-theme-700/50'
+          : 'text-theme-500 hover:text-theme-300'
       "
       title="Chat settings"
       aria-label="Chat settings"
@@ -236,14 +236,14 @@ async function toggleMic(): Promise<void> {
     <!-- Mobile: provider/model selector as a button that opens a modal -->
     <button
       v-if="currentProviderId"
-      class="lg:hidden max-w-44 flex items-center gap-1 px-2 py-1.5 rounded-lg  text-zinc-300 hover:text-zinc-100 transition-colors shrink min-w-0"
+      class="lg:hidden max-w-44 flex items-center gap-1 px-2 py-1.5 rounded-lg  text-theme-300 hover:text-theme-100 transition-colors shrink min-w-0"
       aria-label="Select provider and model"
       @click="showModelModal = true"
     >
       <span class="truncate text-xs">{{ mobileModelLabel }}</span>
       <Icon
         icon="lucide:chevron-down"
-        class="h-3.5 w-3.5 text-zinc-500 shrink-0"
+        class="h-3.5 w-3.5 text-theme-500 shrink-0"
       />
     </button>
 
@@ -276,7 +276,7 @@ async function toggleMic(): Promise<void> {
       placement="above"
     >
       <button
-        class="p-1.5 text-zinc-600 rounded-lg shrink-0 cursor-not-allowed focus:outline-none"
+        class="p-1.5 text-theme-600 rounded-lg shrink-0 cursor-not-allowed focus:outline-none"
         title="Voice input"
         disabled
         aria-label="Voice input (requires model download)"
@@ -311,7 +311,7 @@ async function toggleMic(): Promise<void> {
               ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.4)] animate-whisper-glow cursor-wait'
               : whisperStatus === 'loading'
                 ? 'text-amber-400 cursor-wait'
-                : 'text-zinc-500 hover:text-zinc-300'
+                : 'text-theme-500 hover:text-theme-300'
         "
         :title="
           whisperStatus === 'recording'
@@ -385,7 +385,7 @@ async function toggleMic(): Promise<void> {
     <button
       v-else
       :disabled="!canSend"
-      class="p-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
+      class="p-1.5 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
       title="Send"
       aria-label="Send message"
       @click="emit('send')"

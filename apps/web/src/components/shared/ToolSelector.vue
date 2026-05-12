@@ -132,20 +132,20 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
 </script>
 
 <template>
-  <div class="flex flex-col h-full rounded-xl border border-zinc-700 bg-zinc-800">
-    <div class="flex items-center justify-between px-4 py-2.5 border-b border-zinc-700 shrink-0">
-      <span class="text-[10px] text-zinc-500">
+  <div class="flex flex-col h-full rounded-xl border border-theme-700 bg-theme-800">
+    <div class="flex items-center justify-between px-4 py-2.5 border-b border-theme-700 shrink-0">
+      <span class="text-[10px] text-theme-500">
         {{ modelValue.length }}/{{ agentStore.availableTools.length }} enabled
       </span>
       <div class="flex items-center gap-3">
         <button
-          class="text-[11px] text-blue-400 hover:text-blue-300 transition-colors"
+          class="text-[11px] text-accent-400 hover:text-accent-300 transition-colors"
           @click="selectAllTools"
         >
           Enable all
         </button>
         <button
-          class="text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
+          class="text-[11px] text-theme-400 hover:text-theme-200 transition-colors"
           @click="clearAllTools"
         >
           Disable all
@@ -153,17 +153,17 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
       </div>
     </div>
 
-    <div class="px-4 py-2 border-b border-zinc-800 shrink-0">
+    <div class="px-4 py-2 border-b border-theme-800 shrink-0">
       <input
         v-model="toolFilterText"
         type="text"
         placeholder="Search tools..."
-        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        class="w-full bg-theme-800 border border-theme-700 rounded-lg px-3 py-1.5 text-xs text-theme-200 placeholder-theme-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
       >
     </div>
 
     <div :class="[scrollable ? 'overflow-y-auto min-h-0' : '', 'flex-1']">
-      <div class="divide-y divide-zinc-800">
+      <div class="divide-y divide-theme-800">
         <template
           v-for="group in groupedTools"
           :key="group.namespace.id"
@@ -174,9 +174,9 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
               @update:model-value="setNamespaceExpanded(group.namespace.id, $event)"
             >
               <template #trigger="{ expanded, toggle }">
-                <div class="flex items-center gap-3 sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm px-3 py-2 border-b border-zinc-800/50">
+                <div class="flex items-center gap-3 sticky top-0 z-10 bg-theme-900/95 backdrop-blur-sm px-3 py-2 border-b border-theme-800/50">
                   <button
-                    class="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+                    class="p-1 text-theme-500 hover:text-theme-300 transition-colors"
                     @click="toggle"
                   >
                     <Icon
@@ -192,10 +192,10 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
                       class="inline-flex items-center justify-center h-4 w-4 rounded border cursor-pointer"
                       :class="[
                         isNamespaceAllSelected(group)
-                          ? 'bg-blue-600 border-blue-600'
+                          ? 'bg-accent-600 border-accent-600'
                           : isNamespacePartiallySelected(group)
-                            ? 'bg-blue-600 border-blue-600'
-                            : 'border-zinc-500 bg-transparent'
+                            ? 'bg-accent-600 border-accent-600'
+                            : 'border-theme-500 bg-transparent'
                       ]"
                       @click="toggleNamespace(group)"
                     >
@@ -217,11 +217,11 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
                   >
                     <p
                       class="text-[11px] uppercase tracking-wider "
-                      :class="group.namespace.id === 'builtin' ? 'text-blue-400' : ''"
+                      :class="group.namespace.id === 'builtin' ? 'text-accent-400' : ''"
                     >
                       {{ group.namespace.label }}
                     </p>
-                    <p class="text-[10px] text-zinc-600 mt-0.5">
+                    <p class="text-[10px] text-theme-600 mt-0.5">
                       {{ group.tools.filter((t) => isSelected(t)).length }}/{{ group.tools.length }} selected
                     </p>
                   </div>
@@ -232,19 +232,19 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
                 <label
                   v-for="tool in group.tools"
                   :key="toolKey(tool)"
-                  class="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-zinc-800/70 cursor-pointer"
+                  class="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-theme-800/70 cursor-pointer"
                   :title="displayToolDescription(tool)"
                 >
                   <div class="flex items-start gap-2 flex-1 min-w-0">
                     <input
                       type="checkbox"
-                      class="mt-0.5 h-4 w-4 accent-blue-600 shrink-0"
+                      class="mt-0.5 h-4 w-4 accent-accent-600 shrink-0"
                       :checked="isSelected(tool)"
                       @change="toggleTool(tool)"
                     >
                     <div class="min-w-0 flex-1">
-                      <p class="text-xs text-zinc-200 font-medium">{{ displayToolName(tool) }}</p>
-                      <p class="text-[10px] text-zinc-500 leading-snug wrap-break-word">
+                      <p class="text-xs text-theme-200 font-medium">{{ displayToolName(tool) }}</p>
+                      <p class="text-[10px] text-theme-500 leading-snug wrap-break-word">
                         {{ displayToolDescription(tool) }}
                       </p>
                     </div>
@@ -279,7 +279,7 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
 
         <div
           v-if="filteredTools.length === 0"
-          class="px-4 py-6 text-center text-xs text-zinc-500"
+          class="px-4 py-6 text-center text-xs text-theme-500"
         >
           <template v-if="toolFilterText">
             No tools match "{{ toolFilterText }}"

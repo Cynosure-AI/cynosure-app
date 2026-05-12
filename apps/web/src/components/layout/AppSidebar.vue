@@ -137,7 +137,7 @@ const settingsItems: NavItem[] = [
 
 <template>
   <aside
-    class="bg-zinc-950 flex flex-col h-full shrink-0 transition-all duration-200 overflow-hidden"
+    class="bg-theme-950 flex flex-col h-full shrink-0 transition-all duration-200 overflow-hidden"
     :class="sidebarCollapsed ? 'w-60 md:w-16 sidebar-collapsed' : 'w-60'"
   >
     <!-- Brand -->
@@ -157,15 +157,15 @@ const settingsItems: NavItem[] = [
       <div class="relative">
         <button
           ref="bellBtnRef"
-          class="p-1.5 rounded-lg hover:bg-zinc-800 transition-colors relative"
+          class="p-1.5 rounded-lg hover:bg-theme-800 transition-colors relative"
           @click.stop="showNotifications = !showNotifications"
         >
           <Icon
             icon="lucide:bell"
             class="w-4 h-4"
             :class="notificationStore.unreadCount > 0
-              ? 'text-blue-400'
-              : 'text-zinc-500'
+              ? 'text-accent-400'
+              : 'text-theme-500'
             "
           />
           <span
@@ -192,24 +192,24 @@ const settingsItems: NavItem[] = [
           >
             <div
               v-if="showNotifications"
-              class="w-80 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden z-200"
+              class="w-80 bg-theme-900 border border-theme-700 rounded-xl shadow-2xl overflow-hidden z-200"
               :style="notifPopoverStyle"
               @click.stop
             >
               <!-- Header -->
-              <div class="flex items-center justify-between px-3 py-2.5 border-b border-zinc-800">
-                <span class="text-xs font-semibold text-zinc-200">Notifications</span>
+              <div class="flex items-center justify-between px-3 py-2.5 border-b border-theme-800">
+                <span class="text-xs font-semibold text-theme-200">Notifications</span>
                 <div class="flex items-center gap-1">
                   <button
                     v-if="notificationStore.unreadCount > 0"
-                    class="text-[10px] text-blue-400 hover:text-blue-300 transition-colors px-1.5 py-0.5"
+                    class="text-[10px] text-accent-400 hover:text-accent-300 transition-colors px-1.5 py-0.5"
                     @click.stop="notificationStore.markAllRead()"
                   >
                     Mark all read
                   </button>
                   <button
                     v-if="notificationStore.notifications.length > 0"
-                    class="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-1.5 py-0.5"
+                    class="text-[10px] text-theme-500 hover:text-theme-300 transition-colors px-1.5 py-0.5"
                     @click.stop="notificationStore.removeAll()"
                   >
                     Clear all
@@ -221,7 +221,7 @@ const settingsItems: NavItem[] = [
               <div class="max-h-72 overflow-y-auto">
                 <div
                   v-if="notificationStore.notifications.length === 0"
-                  class="px-3 py-6 text-center text-xs text-zinc-500"
+                  class="px-3 py-6 text-center text-xs text-theme-500"
                 >
                   No notifications yet
                 </div>
@@ -230,8 +230,8 @@ const settingsItems: NavItem[] = [
                   :key="notif.id"
                   role="button"
                   tabindex="0"
-                  class="w-full text-left px-3 py-2.5 hover:bg-zinc-800/60 transition-colors border-b border-zinc-800/50 last:border-0 flex gap-2.5 cursor-pointer"
-                  :class="{ 'bg-zinc-800/30': !notif.read }"
+                  class="w-full text-left px-3 py-2.5 hover:bg-theme-800/60 transition-colors border-b border-theme-800/50 last:border-0 flex gap-2.5 cursor-pointer"
+                  :class="{ 'bg-theme-800/30': !notif.read }"
                   @click="navigateToNotification(notif)"
                 >
                   <!-- Severity indicator -->
@@ -247,7 +247,7 @@ const settingsItems: NavItem[] = [
                       :class="{
                         'text-red-400': notif.severity === 'critical',
                         'text-amber-400': notif.severity === 'warning',
-                        'text-blue-400': notif.severity === 'info',
+                        'text-accent-400': notif.severity === 'info',
                       }"
                     />
                   </div>
@@ -255,26 +255,26 @@ const settingsItems: NavItem[] = [
                     <div class="flex items-center gap-1.5">
                       <span
                         v-if="!notif.read"
-                        class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"
+                        class="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0"
                       />
-                      <span class="text-xs font-medium text-zinc-200 truncate">{{ notif.title }}</span>
+                      <span class="text-xs font-medium text-theme-200 truncate">{{ notif.title }}</span>
                     </div>
-                    <p class="text-[11px] text-zinc-500 mt-0.5 line-clamp-2">
+                    <p class="text-[11px] text-theme-500 mt-0.5 line-clamp-2">
                       {{ notif.body }}
                     </p>
                     <div class="flex items-center gap-2 mt-1">
-                      <span class="text-[10px] text-zinc-600">
+                      <span class="text-[10px] text-theme-600">
                         {{ agentDefs.get(notif.agentId)?.name || "Agent" }}
                       </span>
-                      <span class="text-[10px] text-zinc-600">·</span>
-                      <span class="text-[10px] text-zinc-600">{{
+                      <span class="text-[10px] text-theme-600">·</span>
+                      <span class="text-[10px] text-theme-600">{{
                         formatTimeAgo(notif.createdAt)
                       }}</span>
                     </div>
                   </div>
                   <!-- Delete button -->
                   <button
-                    class="mt-1 shrink-0 text-zinc-600 hover:text-zinc-300 transition-colors"
+                    class="mt-1 shrink-0 text-theme-600 hover:text-theme-300 transition-colors"
                     @click.stop="notificationStore.remove(notif.id)"
                   >
                     <Icon
@@ -441,7 +441,7 @@ const settingsItems: NavItem[] = [
           />
           <div
             v-if="instances.length"
-            class="rounded-full flex justify-center items-center bg-blue-400 text-xs text-white w-5 h-5 ml-2"
+            class="rounded-full flex justify-center items-center bg-accent-400 text-xs text-white w-5 h-5 ml-2"
           >
             <span v-if="instances.length > 9">9+</span>
             <span v-else>{{ instances.length }}</span>
@@ -482,9 +482,9 @@ const settingsItems: NavItem[] = [
     </nav>
 
     <!-- Collapse toggle (desktop only) -->
-    <div class="shrink-0 hidden md:block px-3 py-1 border-t border-zinc-800/50">
+    <div class="shrink-0 hidden md:block px-3 py-1 border-t border-theme-800/50">
       <button
-        class="w-full flex items-center gap-2.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-colors"
+        class="w-full flex items-center gap-2.5 rounded-lg text-theme-500 hover:text-theme-300 hover:bg-theme-800/50 transition-colors"
         :class="sidebarCollapsed ? 'justify-center p-2' : 'px-2 py-1.5'"
         :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
         @click="toggleCollapse"
@@ -504,7 +504,7 @@ const settingsItems: NavItem[] = [
     <!-- Status Footer -->
     <div class="status-section px-3 py-3 shrink-0 relative">
       <button
-        class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-800/60 transition-colors text-left"
+        class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-theme-800/60 transition-colors text-left"
         @click="showStatusPopover = !showStatusPopover"
       >
         <span
@@ -512,16 +512,16 @@ const settingsItems: NavItem[] = [
           :class="{
             'bg-red-500 animate-pulse': !wsConnected,
             'bg-amber-500 animate-pulse': wsConnected && hasAwaitingApproval,
-            'bg-blue-500 animate-pulse':
+            'bg-accent-500 animate-pulse':
               wsConnected && instances.length > 0 && !hasAwaitingApproval,
             'bg-emerald-500':
               wsConnected &&
               instances.length === 0 &&
               providerStore.providers.length > 0,
-            'bg-zinc-600': wsConnected && !providerStore.providers.length,
+            'bg-theme-600': wsConnected && !providerStore.providers.length,
           }"
         />
-        <span class="text-[11px] text-zinc-400 truncate flex-1">
+        <span class="text-[11px] text-theme-400 truncate flex-1">
           <template v-if="!wsConnected">Connecting...</template>
           <template v-else-if="hasAwaitingApproval">Needs Attention</template>
           <template v-else-if="instances.length > 0">Agents Running...</template>
@@ -530,7 +530,7 @@ const settingsItems: NavItem[] = [
         </span>
         <Icon
           icon="lucide:chevron-up"
-          class="w-3 h-3 text-zinc-600 shrink-0 transition-transform"
+          class="w-3 h-3 text-theme-600 shrink-0 transition-transform"
           :class="{ 'rotate-180': showStatusPopover }"
         />
       </button>
@@ -569,7 +569,7 @@ const settingsItems: NavItem[] = [
   border-radius: 0.5rem;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: var(--color-zinc-400, #a1a1aa);
+  color: var(--color-theme-400, #a1a1aa);
   cursor: pointer;
   margin-bottom: 2px;
   transition: all 150ms ease;
@@ -577,20 +577,20 @@ const settingsItems: NavItem[] = [
 }
 
 .nav-item:hover {
-  color: var(--color-zinc-100, #f4f4f5);
-  background-color: var(--color-zinc-800, #27272a);
+  color: var(--color-theme-100, #f4f4f5);
+  background-color: var(--color-theme-800, #27272a);
 }
 
 .nav-item.active {
-  color: var(--color-zinc-100, #f4f4f5);
-  background-color: var(--color-zinc-800, #27272a);
-  box-shadow: inset 3px 0 0 var(--color-blue-500, #3b82f6);
+  color: var(--color-theme-100, #f4f4f5);
+  background-color: var(--color-theme-800, #27272a);
+  box-shadow: inset 3px 0 0 var(--color-accent-500, #3b82f6);
 }
 
 .section-label {
   font-size: 0.7rem;
   font-weight: 600;
-  color: var(--color-zinc-500, #71717a);
+  color: var(--color-theme-500, #71717a);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 1.25rem 0.75rem 0.5rem;
@@ -599,7 +599,7 @@ const settingsItems: NavItem[] = [
 .section-separator {
   height: 1px;
   margin: 0.5rem 0.75rem 0;
-  background-color: var(--color-zinc-800, #27272a);
+  background-color: var(--color-theme-800, #27272a);
   opacity: 0.6;
 }
 

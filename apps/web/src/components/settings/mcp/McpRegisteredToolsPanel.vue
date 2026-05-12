@@ -134,7 +134,7 @@ function setNamespaceExpanded(nsId: string, expanded: boolean): void {
   <div class="flex flex-col overflow-hidden">
     <!-- Header bar -->
     <div class="flex items-center justify-between px-4 py-2.5 shrink-0">
-      <span class="text-[10px] text-zinc-500">
+      <span class="text-[10px] text-theme-500">
         {{ autoApprovedCount }}/{{ mcpTools.length }} auto-confirmed
       </span>
       <div class="flex items-center gap-3">
@@ -145,7 +145,7 @@ function setNamespaceExpanded(nsId: string, expanded: boolean): void {
           Auto-confirm all
         </button>
         <button
-          class="text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
+          class="text-[11px] text-theme-400 hover:text-theme-200 transition-colors"
           @click="askAll"
         >
           Ask for all
@@ -154,12 +154,12 @@ function setNamespaceExpanded(nsId: string, expanded: boolean): void {
     </div>
 
     <!-- Search -->
-    <div class="px-4 py-2 border-t border-zinc-800 shrink-0">
+    <div class="px-4 py-2 border-t border-theme-800 shrink-0">
       <input
         v-model="filterText"
         type="text"
         placeholder="Search tools..."
-        class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        class="w-full bg-theme-800 border border-theme-700 rounded-lg px-3 py-1.5 text-xs text-theme-200 placeholder-theme-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
       >
     </div>
 
@@ -182,13 +182,13 @@ function setNamespaceExpanded(nsId: string, expanded: boolean): void {
               >
                 <Icon
                   icon="mdi:chevron-down"
-                  class="h-3 w-3 text-zinc-500 transition-transform"
+                  class="h-3 w-3 text-theme-500 transition-transform"
                   :class="{ '-rotate-90': !expanded }"
                 />
                 <span class="text-[11px] uppercase tracking-wider font-semibold ">
                   {{ group.namespace.label }}
                 </span>
-                <span class="text-[10px] text-zinc-600">
+                <span class="text-[10px] text-theme-600">
                   {{ namespaceAutoApprovedCount(group) }}/{{ group.tools.length }} auto
                 </span>
               </button>
@@ -200,7 +200,7 @@ function setNamespaceExpanded(nsId: string, expanded: boolean): void {
                     ? 'text-green-400 hover:bg-green-500/10'
                     : namespaceApprovalState(group) === 'none'
                       ? 'text-amber-400 hover:bg-amber-500/10'
-                      : 'text-blue-300 hover:bg-blue-500/10'
+                      : 'text-accent-300 hover:bg-accent-500/10'
                 "
                 role="checkbox"
                 :aria-checked="namespaceApprovalState(group) === 'partial' ? 'mixed' : namespaceApprovalState(group) === 'all'"
@@ -231,13 +231,13 @@ function setNamespaceExpanded(nsId: string, expanded: boolean): void {
             <div
               v-for="tool in group.tools"
               :key="tool.name"
-              class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-zinc-800/60 transition-colors"
+              class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-theme-800/60 transition-colors"
               :title="displayDescription(tool)"
             >
               <!-- Tool info -->
               <div class="flex-1 min-w-0">
-                <span class="text-xs text-zinc-200 font-medium block">{{ displayName(tool) }}</span>
-                <p class="text-[10px] text-zinc-500 leading-snug truncate">
+                <span class="text-xs text-theme-200 font-medium block">{{ displayName(tool) }}</span>
+                <p class="text-[10px] text-theme-500 leading-snug truncate">
                   {{ displayDescription(tool) }}
                 </p>
               </div>
@@ -271,7 +271,7 @@ function setNamespaceExpanded(nsId: string, expanded: boolean): void {
       <!-- Empty state -->
       <div
         v-if="filteredTools.length === 0"
-        class="px-4 py-8 text-center text-xs text-zinc-500"
+        class="px-4 py-8 text-center text-xs text-theme-500"
       >
         <template v-if="filterText">
           No tools match "{{ filterText }}"

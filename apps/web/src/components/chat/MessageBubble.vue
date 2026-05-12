@@ -262,9 +262,9 @@ const imageGridClass = computed(() => {
       class="shrink-0 mt-0.5 hidden md:flex flex-col items-center gap-0.5"
     >
       <div
-        class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold overflow-hidden shadow-sm ring-1 ring-zinc-700/50 transition-opacity"
+        class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold overflow-hidden shadow-sm ring-1 ring-theme-700/50 transition-opacity"
         :class="[
-          agentIconUrl ? 'bg-zinc-800' : 'bg-linear-to-br from-zinc-700 to-zinc-900 text-zinc-300',
+          agentIconUrl ? 'bg-theme-800' : 'bg-linear-to-br from-theme-700 to-theme-900 text-theme-300',
           agentId ? 'cursor-pointer hover:opacity-80' : ''
         ]"
         @click="agentId ? router.push(`/agents/${agentId}`) : undefined"
@@ -284,7 +284,7 @@ const imageGridClass = computed(() => {
       </div>
       <span
         v-if="agentName"
-        class="text-[10px] text-zinc-500 max-w-15 truncate leading-tight"
+        class="text-[10px] text-theme-500 max-w-15 truncate leading-tight"
         :title="agentName"
       >{{ agentName }}</span>
     </div>
@@ -293,8 +293,8 @@ const imageGridClass = computed(() => {
     <div
       class="relative md:max-w-[85%] max-w-[90%] rounded-3xl px-5 py-3 text-[15px] leading-relaxed shadow-sm transition-all"
       :class="[
-        isUser ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-zinc-800/60 border text-zinc-200 rounded-tl-sm',
-        isError && !isUser ? 'border-red-500/40' : !isUser ? 'border-zinc-700/50' : '',
+        isUser ? 'bg-accent-600 text-white rounded-tr-sm' : 'bg-theme-800/60 border text-theme-200 rounded-tl-sm',
+        isError && !isUser ? 'border-red-500/40' : !isUser ? 'border-theme-700/50' : '',
         isEditing ? 'w-[85%] md:w-[80%]' : ''
       ]"
     >
@@ -305,7 +305,7 @@ const imageGridClass = computed(() => {
       >
         <button
           v-if="isUser && !isEditing"
-          class="p-1 rounded-md bg-zinc-700/80 text-zinc-400 hover:text-zinc-100 text-[10px]"
+          class="p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
           title="Edit"
           @click="startEditing"
         >
@@ -316,7 +316,7 @@ const imageGridClass = computed(() => {
         </button>
         <button
           v-if="isUser"
-          class="p-1 rounded-md bg-zinc-700/80 text-zinc-400 hover:text-zinc-100 text-[10px]"
+          class="p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
           title="Retry"
           @click="$emit('retry')"
         >
@@ -326,7 +326,7 @@ const imageGridClass = computed(() => {
           />
         </button>
         <button
-          class="p-1 rounded-md bg-zinc-700/80 text-zinc-400 hover:text-zinc-100 text-[10px]"
+          class="p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
           :title="copied ? 'Copied!' : 'Copy'"
           @click="copyContent"
         >
@@ -358,7 +358,7 @@ const imageGridClass = computed(() => {
           </template>
 
           <div
-            class="border-t border-indigo-500/20 px-3 py-2.5 text-[13px] leading-relaxed text-zinc-400 whitespace-pre-wrap max-h-64 overflow-y-auto font-mono"
+            class="border-t border-indigo-500/20 px-3 py-2.5 text-[13px] leading-relaxed text-theme-400 whitespace-pre-wrap max-h-64 overflow-y-auto font-mono"
           >
             {{ thinking }}
           </div>
@@ -480,7 +480,7 @@ const imageGridClass = computed(() => {
           v-for="(url, idx) in imageDataUrls"
           :key="idx"
           :src="url"
-          class="w-full max-h-[70vh] rounded-lg border border-zinc-600 cursor-pointer hover:opacity-80 transition-opacity object-contain bg-zinc-950/50"
+          class="w-full max-h-[70vh] rounded-lg border border-theme-600 cursor-pointer hover:opacity-80 transition-opacity object-contain bg-theme-950/50"
           title="Click to enlarge"
           @click="lightboxSrc = url"
         >
@@ -489,13 +489,13 @@ const imageGridClass = computed(() => {
       <!-- Streaming cursor -->
       <span
         v-if="isStreaming"
-        class="inline-block w-2 h-4 bg-zinc-400 animate-pulse ml-0.5"
+        class="inline-block w-2 h-4 bg-theme-400 animate-pulse ml-0.5"
       />
 
       <!-- Message metadata (assistant) -->
       <div
         v-if="!isUser && !isStreaming && (model || promptTokens)"
-        class="mt-2 pt-1.5 border-t border-zinc-700/50 flex items-center gap-3 text-xs text-zinc-500"
+        class="mt-2 pt-1.5 border-t border-theme-700/50 flex items-center gap-3 text-xs text-theme-500"
       >
         <span v-if="model">{{ model }}</span>
         <span
@@ -510,7 +510,7 @@ const imageGridClass = computed(() => {
     <!-- User avatar -->
     <div
       v-if="isUser"
-      class="w-8 h-8 hidden rounded-full md:flex items-center justify-center text-xs font-medium shrink-0 mt-0.5 bg-linear-to-br from-blue-500 to-blue-700 text-white shadow-sm ring-1 ring-white/10"
+      class="w-8 h-8 hidden rounded-full md:flex items-center justify-center text-xs font-medium shrink-0 mt-0.5 bg-linear-to-br from-accent-500 to-accent-700 text-white shadow-sm ring-1 ring-white/10"
     >
       U
     </div>
@@ -526,7 +526,7 @@ const imageGridClass = computed(() => {
       @keydown.escape="lightboxSrc = null"
     >
       <button
-        class="absolute top-4 right-4 p-2 rounded-full bg-zinc-800/80 text-zinc-300 hover:text-white hover:bg-zinc-700 transition-colors z-10"
+        class="absolute top-4 right-4 p-2 rounded-full bg-theme-800/80 text-theme-300 hover:text-white hover:bg-theme-700 transition-colors z-10"
         title="Close"
         @click="lightboxSrc = null"
       >
@@ -647,20 +647,20 @@ const imageGridClass = computed(() => {
   border-collapse: collapse;
   margin: 0.75rem 0;
   font-size: 0.85rem;
-  border: 1px solid var(--color-zinc-700);
+  border: 1px solid var(--color-theme-700);
   border-radius: 0.5rem;
   overflow: hidden;
 }
 .msg-markdown thead {
-  background: var(--color-zinc-700);
+  background: var(--color-theme-700);
 }
 .msg-markdown th {
   padding: 0.5rem 0.75rem;
   text-align: left;
   font-weight: 600;
-  color: var(--color-zinc-100);
-  border-bottom: 2px solid var(--color-zinc-600);
-  border-right: 1px solid var(--color-zinc-600);
+  color: var(--color-theme-100);
+  border-bottom: 2px solid var(--color-theme-600);
+  border-right: 1px solid var(--color-theme-600);
   white-space: nowrap;
 }
 .msg-markdown th:last-child {
@@ -668,9 +668,9 @@ const imageGridClass = computed(() => {
 }
 .msg-markdown td {
   padding: 0.4rem 0.75rem;
-  border-bottom: 1px solid var(--color-zinc-700);
-  border-right: 1px solid var(--color-zinc-700);
-  color: var(--color-zinc-300);
+  border-bottom: 1px solid var(--color-theme-700);
+  border-right: 1px solid var(--color-theme-700);
+  color: var(--color-theme-300);
 }
 .msg-markdown td:last-child {
   border-right: none;
@@ -679,13 +679,13 @@ const imageGridClass = computed(() => {
   border-bottom: none;
 }
 .msg-markdown tbody tr:nth-child(even) {
-  background: var(--color-zinc-800);
+  background: var(--color-theme-800);
 }
 .msg-markdown tbody tr:nth-child(odd) {
-  background: color-mix(in srgb, var(--color-zinc-800) 40%, var(--color-zinc-900));
+  background: color-mix(in srgb, var(--color-theme-800) 40%, var(--color-theme-900));
 }
 .msg-markdown tbody tr:hover {
-  background: var(--color-zinc-700);
+  background: var(--color-theme-700);
 }
 
 /* ── Code block wrapper ── */

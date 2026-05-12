@@ -278,18 +278,18 @@ onMounted(() => loadSpaces());
           !dropTargetSpaceId &&
           !draggedSpaceId
       "
-      class="absolute inset-0 z-40 flex items-center justify-center bg-blue-500/10 border-2 border-dashed border-blue-500/40 rounded-xl pointer-events-none"
+      class="absolute inset-0 z-40 flex items-center justify-center bg-accent-500/10 border-2 border-dashed border-accent-500/40 rounded-xl pointer-events-none"
     >
       <div class="text-center">
         <Icon
           icon="lucide:upload-cloud"
-          class="w-12 h-12 text-blue-400 mx-auto mb-2"
+          class="w-12 h-12 text-accent-400 mx-auto mb-2"
         />
-        <p class="text-blue-300 font-medium">
+        <p class="text-accent-300 font-medium">
           Drop files to ingest into
           {{ selectedSpace?.name || "selected space" }}
         </p>
-        <p class="text-blue-400/60 text-sm mt-1">
+        <p class="text-accent-400/60 text-sm mt-1">
           Files will be chunked and indexed automatically
         </p>
       </div>
@@ -297,15 +297,15 @@ onMounted(() => loadSpaces());
     <div class="max-w-4xl mx-auto px-6 py-6">
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h1 class="text-2xl font-bold text-zinc-100">
+          <h1 class="text-2xl font-bold text-theme-100">
             Memory Spaces
           </h1>
-          <p class="text-sm text-zinc-500 mt-1">
+          <p class="text-sm text-theme-500 mt-1">
             Shared knowledge bases that can be assigned to multiple agents.
           </p>
         </div>
         <button
-          class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          class="px-3 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
           @click="openCreateDialog"
         >
           <Icon
@@ -319,7 +319,7 @@ onMounted(() => loadSpaces());
       <!-- Space selector cards -->
       <div
         v-if="spacesLoading && spaces.length === 0"
-        class="flex items-center gap-2 py-8 justify-center text-zinc-500"
+        class="flex items-center gap-2 py-8 justify-center text-theme-500"
       >
         <Icon
           icon="lucide:loader-2"
@@ -334,12 +334,12 @@ onMounted(() => loadSpaces());
       >
         <Icon
           icon="lucide:database"
-          class="w-10 h-10 text-zinc-600 mx-auto mb-3"
+          class="w-10 h-10 text-theme-600 mx-auto mb-3"
         />
-        <p class="text-zinc-400 mb-1">
+        <p class="text-theme-400 mb-1">
           No memory spaces yet
         </p>
-        <p class="text-sm text-zinc-600">
+        <p class="text-sm text-theme-600">
           Create a space to start organizing knowledge for your agents.
         </p>
       </div>
@@ -354,11 +354,11 @@ onMounted(() => loadSpaces());
             class="rounded-xl border px-4 py-3 text-left transition-all min-w-0 relative"
             :class="[
               selectedSpaceId === space.id
-                ? 'border-blue-500/50 bg-blue-500/10'
-                : 'border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800',
+                ? 'border-accent-500/50 bg-accent-500/10'
+                : 'border-theme-700 bg-theme-800/60 hover:bg-theme-800',
               space.isDefault ? 'cursor-default' : 'cursor-grab active:cursor-grabbing',
               dropTargetSpaceId === space.id
-                ? 'ring-2 ring-blue-400 border-blue-400/50 bg-blue-500/15'
+                ? 'ring-2 ring-accent-400 border-accent-400/50 bg-accent-500/15'
                 : '',
               draggedSpaceId === space.id ? 'opacity-40' : '',
             ]"
@@ -373,29 +373,29 @@ onMounted(() => loadSpaces());
             <!-- Drop indicator: left edge (before) -->
             <div
               v-if="dragOverSpaceId === space.id && dropPosition === 'before'"
-              class="absolute inset-y-2 left-0 w-0.5 rounded-full bg-blue-400 pointer-events-none z-10"
+              class="absolute inset-y-2 left-0 w-0.5 rounded-full bg-accent-400 pointer-events-none z-10"
             />
             <!-- Drop indicator: right edge (after) -->
             <div
               v-if="dragOverSpaceId === space.id && dropPosition === 'after'"
-              class="absolute inset-y-2 right-0 w-0.5 rounded-full bg-blue-400 pointer-events-none z-10"
+              class="absolute inset-y-2 right-0 w-0.5 rounded-full bg-accent-400 pointer-events-none z-10"
             />
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:database"
-                class="w-4 h-4 text-zinc-400"
+                class="w-4 h-4 text-theme-400"
               />
-              <span class="text-sm font-medium text-zinc-200 truncate">{{
+              <span class="text-sm font-medium text-theme-200 truncate">{{
                 space.name
               }}</span>
               <span
                 v-if="space.isDefault"
-                class="text-[10px] px-1.5 py-0.5 rounded border border-blue-400/40 text-blue-300"
+                class="text-[10px] px-1.5 py-0.5 rounded border border-accent-400/40 text-accent-300"
               >
                 default
               </span>
             </div>
-            <div class="text-xs text-zinc-500">
+            <div class="text-xs text-theme-500">
               {{ space.fileCount }} file{{
                 space.fileCount !== 1 ? "s" : ""
               }}
@@ -423,54 +423,54 @@ onMounted(() => loadSpaces());
           @click.self="showCreateDialog = false"
         >
           <div
-            class="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-xl"
+            class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-md shadow-xl"
           >
-            <h3 class="text-base font-medium text-zinc-200 mb-4">
+            <h3 class="text-base font-medium text-theme-200 mb-4">
               {{ editingSpace ? "Edit Space" : "New Memory Space" }}
             </h3>
             <div class="space-y-3">
               <div>
-                <label class="block text-xs text-zinc-400 mb-1">Name</label>
+                <label class="block text-xs text-theme-400 mb-1">Name</label>
                 <input
                   v-model="spaceName"
                   type="text"
-                  class="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500"
                   placeholder="e.g. Company Knowledge"
                   @keydown.enter="saveSpace"
                 >
               </div>
               <div>
-                <label class="block text-xs text-zinc-400 mb-1">Description (optional)</label>
+                <label class="block text-xs text-theme-400 mb-1">Description (optional)</label>
                 <input
                   v-model="spaceDescription"
                   type="text"
-                  class="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500"
                   placeholder="What kind of knowledge is stored here"
                 >
               </div>
               <div v-if="!editingSpace?.isDefault">
-                <label class="block text-xs text-zinc-400 mb-1">Folder path (optional)</label>
+                <label class="block text-xs text-theme-400 mb-1">Folder path (optional)</label>
                 <input
                   v-model="spaceFolderPath"
                   type="text"
-                  class="w-full px-3 py-2 text-sm bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 font-mono"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500 font-mono"
                   placeholder="Leave empty to use default app data folder"
                 >
-                <p class="mt-1 text-[11px] text-zinc-600">
+                <p class="mt-1 text-[11px] text-theme-600">
                   Point to any folder on disk. Files in it become the memory content.
                 </p>
               </div>
             </div>
             <div class="flex justify-end gap-2 mt-5">
               <button
-                class="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-200"
+                class="px-3 py-1.5 text-sm text-theme-400 hover:text-theme-200"
                 @click="showCreateDialog = false"
               >
                 Cancel
               </button>
               <button
                 :disabled="!spaceName.trim()"
-                class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg disabled:opacity-50"
+                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg disabled:opacity-50"
                 @click="saveSpace"
               >
                 {{ editingSpace ? "Save" : "Create" }}
@@ -488,9 +488,9 @@ onMounted(() => loadSpaces());
         icon-color="red"
         @close="showDeleteConfirm = false"
       >
-        <p class="text-zinc-400 leading-relaxed">
+        <p class="text-theme-400 leading-relaxed">
           Are you sure you want to delete
-          <strong class="text-zinc-200">{{ pendingDeleteSpace?.name }}</strong>? All documents and chunks in this space will be permanently removed.
+          <strong class="text-theme-200">{{ pendingDeleteSpace?.name }}</strong>? All documents and chunks in this space will be permanently removed.
           This action cannot be undone.
         </p>
         <template #actions>
@@ -501,7 +501,7 @@ onMounted(() => loadSpaces());
             Delete Space
           </button>
           <button
-            class="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-center font-medium transition-colors"
+            class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
             @click="showDeleteConfirm = false"
           >
             Cancel

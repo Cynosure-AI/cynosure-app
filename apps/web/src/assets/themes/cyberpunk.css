@@ -5,29 +5,29 @@
 /* ── Variable overrides ── */
 [data-theme="cyberpunk"] {
   /* Base: cold dark industrial tones */
-  --color-zinc-950: #111114;
-  --color-zinc-900: #181819;
-  --color-zinc-800: #202028;
-  --color-zinc-700: #2c2c38;
-  --color-zinc-600: #383848;
-  --color-zinc-500: #55556a;
-  --color-zinc-400: #7a7a92;
-  --color-zinc-300: #a0a0b4;
-  --color-zinc-200: #c4c4d0;
-  --color-zinc-100: #e8e8f0;
+  --color-theme-950: #111114;
+  --color-theme-900: #181819;
+  --color-theme-800: #202028;
+  --color-theme-700: #2c2c38;
+  --color-theme-600: #383848;
+  --color-theme-500: #55556a;
+  --color-theme-400: #7a7a92;
+  --color-theme-300: #a0a0b4;
+  --color-theme-200: #c4c4d0;
+  --color-theme-100: #e8e8f0;
 
-  /* Accent: Cyberpunk 2077 yellow mapped onto the blue scale */
-  --color-blue-50: #fffef0;
-  --color-blue-100: #fefce8;
-  --color-blue-200: #fef9c3;
-  --color-blue-300: #fef08a;
-  --color-blue-400: #fde047;
-  --color-blue-500: #f9f002;
-  --color-blue-600: #d4c800;
-  --color-blue-700: #a89e00;
-  --color-blue-800: #827a00;
-  --color-blue-900: #5c5700;
-  --color-blue-950: #363300;
+  /* Accent: Cyberpunk 2077 yellow */
+  --color-accent-50: #fffef0;
+  --color-accent-100: #fefce8;
+  --color-accent-200: #fef9c3;
+  --color-accent-300: #fef08a;
+  --color-accent-400: #fde047;
+  --color-accent-500: #f9f002;
+  --color-accent-600: #d4c800;
+  --color-accent-700: #a89e00;
+  --color-accent-800: #827a00;
+  --color-accent-900: #5c5700;
+  --color-accent-950: #363300;
 
   /* Cyberpunk palette vars */
   --cp-yellow: #f9f002;
@@ -116,23 +116,23 @@
   text-shadow: 0 0 5px var(--cp-yellow-glow);
 }
 
-/* ── Black text on yellow accent backgrounds (blue→yellow remap) ── */
-[data-theme="cyberpunk"] .bg-blue-600,
-[data-theme="cyberpunk"] .bg-blue-500,
-[data-theme="cyberpunk"] .bg-blue-400 {
+/* ── Black text on yellow accent backgrounds ── */
+[data-theme="cyberpunk"] .bg-accent-600,
+[data-theme="cyberpunk"] .bg-accent-500,
+[data-theme="cyberpunk"] .bg-accent-400 {
   color: #060608;
 }
-[data-theme="cyberpunk"] .bg-blue-600 .text-white,
-[data-theme="cyberpunk"] .bg-blue-500 .text-white,
-[data-theme="cyberpunk"] .bg-blue-400 .text-white,
-[data-theme="cyberpunk"] .text-white.bg-blue-600,
-[data-theme="cyberpunk"] .text-white.bg-blue-500,
-[data-theme="cyberpunk"] .text-white.bg-blue-400 {
+[data-theme="cyberpunk"] .bg-accent-600 .text-white,
+[data-theme="cyberpunk"] .bg-accent-500 .text-white,
+[data-theme="cyberpunk"] .bg-accent-400 .text-white,
+[data-theme="cyberpunk"] .text-white.bg-accent-600,
+[data-theme="cyberpunk"] .text-white.bg-accent-500,
+[data-theme="cyberpunk"] .text-white.bg-accent-400 {
   color: #060608;
 }
-/* Gradient backgrounds (from-blue-* to-blue-*) — force dark icon/text */
-[data-theme="cyberpunk"] .from-blue-500 .text-white,
-[data-theme="cyberpunk"] .from-blue-400 .text-white {
+/* Gradient accent backgrounds — force dark icon/text */
+[data-theme="cyberpunk"] .from-accent-500 .text-white,
+[data-theme="cyberpunk"] .from-accent-400 .text-white {
   color: #060608;
 }
 
@@ -153,8 +153,8 @@
 }
 
 /* ── Green accent border-right on primary buttons ── */
-[data-theme="cyberpunk"] button.bg-blue-600,
-[data-theme="cyberpunk"] button.bg-blue-500 {
+[data-theme="cyberpunk"] button.bg-accent-600,
+[data-theme="cyberpunk"] button.bg-accent-500 {
   border-right: 2px solid var(--cp-green);
 }
 

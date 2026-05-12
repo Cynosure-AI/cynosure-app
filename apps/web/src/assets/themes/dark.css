@@ -2,11 +2,11 @@
    Dark Theme
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Variable overrides: slightly lighter than default Tailwind zinc ── */
+/* ── Variable overrides: slightly lighter than the default neutral scale ── */
 [data-theme="dark"] {
-  --color-zinc-950: #141417;
-  --color-zinc-900: #202024;
-  --color-zinc-800: #2f2f33;
-  --color-zinc-700: #47474e;
+  --color-theme-950: #141417;
+  --color-theme-900: #202024;
+  --color-theme-800: #2f2f33;
+  --color-theme-700: #47474e;
   color-scheme: dark;
 }

@@ -324,15 +324,15 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
     <div class="max-w-6xl mx-auto py-8 px-6">
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h1 class="text-2xl font-bold text-zinc-100">
+          <h1 class="text-2xl font-bold text-theme-100">
             My Agents
           </h1>
-          <p class="text-sm text-zinc-500 mt-1">
+          <p class="text-sm text-theme-500 mt-1">
             Create and manage AI agents with custom configurations. Drag and drop the name column to reorder or organize into categories.
           </p>
         </div>
         <button
-          class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors"
+          class="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors"
           @click="showCreateDialog = true"
         >
           <Icon
@@ -361,17 +361,17 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
         <div class="relative flex-1">
           <Icon
             icon="lucide:search"
-            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-500"
           />
           <input
             v-model="searchQuery"
             type="text"
             placeholder="Search agents by name or description…"
-            class="w-full pl-10 pr-9 py-2 bg-zinc-800/60 border border-zinc-700/60 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500/60 focus:border-blue-500/40 transition-colors"
+            class="w-full pl-10 pr-9 py-2 bg-theme-800/60 border border-theme-700/60 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500/60 focus:border-accent-500/40 transition-colors"
           >
           <button
             v-if="searchQuery"
-            class="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-theme-500 hover:text-theme-300 transition-colors"
             @click="searchQuery = ''"
           >
             <Icon
@@ -385,10 +385,10 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
       <!-- Bulk edit bar -->
       <div
         v-if="isBulkMode"
-        class="mb-5 flex flex-col gap-3 rounded-xl border border-blue-500/30 bg-blue-500/8 px-4 py-3 md:flex-row md:items-center md:justify-between"
+        class="mb-5 flex flex-col gap-3 rounded-xl border border-accent-500/30 bg-accent-500/8 px-4 py-3 md:flex-row md:items-center md:justify-between"
       >
         <div
-          class="text-sm text-zinc-200"
+          class="text-sm text-theme-200"
         >
           {{ selectedAgentCount }} agent{{ selectedAgentCount === 1 ? '' : 's' }} selected
         </div>
@@ -417,14 +417,14 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
           </div>
           <div class="flex items-center gap-2">
             <button
-              class="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
+              class="px-3 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
               :disabled="!hasBulkProviderModelSelection && !bulkCategory"
               @click="applyBulkChanges"
             >
               Apply
             </button>
             <button
-              class="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
+              class="px-3 py-2 rounded-lg bg-theme-800 hover:bg-theme-700 text-theme-300 text-sm font-medium transition-colors"
               @click="clearBulkSelection"
             >
               Clear
@@ -450,7 +450,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
             class="flex items-start gap-3 min-w-0 cursor-grab active:cursor-grabbing"
             :class="{
               'opacity-60': dragReorderId === item.id,
-              'ring-1 ring-blue-500/70 ring-inset rounded-lg': dropTargetId === item.id,
+              'ring-1 ring-accent-500/70 ring-inset rounded-lg': dropTargetId === item.id,
             }"
             draggable="true"
             @dragstart="onReorderDragStart($event, item.id)"
@@ -459,7 +459,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
             @drop="onReorderDrop($event, item.id)"
             @dragend="onReorderDragEnd"
           >
-            <div class="w-9 h-9 shrink-0 rounded-lg bg-linear-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden">
+            <div class="w-9 h-9 shrink-0 rounded-lg bg-linear-to-br from-accent-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden">
               <img
                 v-if="item.iconUrl"
                 :src="item.iconUrl"
@@ -469,11 +469,11 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
               <Icon
                 v-else
                 icon="lucide:bot"
-                class="w-4 h-4 text-blue-400"
+                class="w-4 h-4 text-accent-400"
               />
             </div>
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium text-zinc-100 truncate flex items-center gap-1">
+              <div class="text-sm font-medium text-theme-100 truncate flex items-center gap-1">
                 {{ item.name }}
                 <Icon
                   v-if="agentsWithIssues.has(item.id)"
@@ -483,11 +483,11 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
               </div>
               <div
                 v-if="item.description"
-                class="text-xs text-zinc-500 truncate"
+                class="text-xs text-theme-500 truncate"
               >
                 {{ item.description }}
               </div>
-              <div class="text-xs text-zinc-500 truncate mt-1 md:hidden">
+              <div class="text-xs text-theme-500 truncate mt-1 md:hidden">
                 {{ item.model || 'No model selected' }}
               </div>
             </div>
@@ -504,10 +504,10 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
               class="w-5 h-5 rounded object-contain shrink-0"
             >
             <div class="flex flex-col gap-0.5 min-w-0">
-              <div class="text-sm text-zinc-200 font-medium">
+              <div class="text-sm text-theme-200 font-medium">
                 {{ getProviderName(item) }}
               </div>
-              <div class="text-xs text-zinc-500 truncate">
+              <div class="text-xs text-theme-500 truncate">
                 {{ item.model }}
               </div>
             </div>
@@ -516,8 +516,8 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
 
         <!-- Metadata column (tools, subagents, created date) -->
         <template #col-metadata="{ item }">
-          <div class="flex items-center gap-3 text-xs text-zinc-500">
-            <span class="flex items-center gap-1 bg-zinc-700/50 px-1.5 py-0.5 rounded">
+          <div class="flex items-center gap-3 text-xs text-theme-500">
+            <span class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded">
               <Icon
                 icon="lucide:wrench"
                 class="w-3 h-3"
@@ -526,7 +526,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
             </span>
             <span
               v-if="item.subAgents?.length"
-              class="flex items-center gap-1 bg-zinc-700/50 px-1.5 py-0.5 rounded"
+              class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded"
             >
               <Icon
                 icon="lucide:users"
@@ -548,7 +548,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
         <template #col-actions="{ item }">
           <div class="flex items-center gap-1">
             <button
-              class="p-1.5 text-zinc-500 hover:text-blue-400 rounded-md transition-all"
+              class="p-1.5 text-theme-500 hover:text-accent-400 rounded-md transition-all"
               title="Duplicate agent"
               @click.stop="duplicateAgent(item.id)"
             >
@@ -558,7 +558,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
               />
             </button>
             <button
-              class="p-1.5 text-zinc-500 hover:text-red-400 rounded-md transition-all"
+              class="p-1.5 text-theme-500 hover:text-red-400 rounded-md transition-all"
               title="Delete agent"
               @click.stop="confirmDelete(item)"
             >
@@ -577,17 +577,17 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
         class="p-12 text-center"
       >
         <div
-          class="w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center mx-auto mb-4"
+          class="w-16 h-16 rounded-2xl bg-accent-500/10 flex items-center justify-center mx-auto mb-4"
         >
           <Icon
             icon="lucide:bot"
-            class="w-8 h-8 text-blue-400"
+            class="w-8 h-8 text-accent-400"
           />
         </div>
-        <h3 class="text-lg font-medium text-zinc-200 mb-2">
+        <h3 class="text-lg font-medium text-theme-200 mb-2">
           {{ searchQuery ? 'No Matching Agents' : activeCategory ? 'No Agents in This Category' : 'No Agents Yet' }}
         </h3>
-        <p class="text-sm text-zinc-500 max-w-md mx-auto mb-6">
+        <p class="text-sm text-theme-500 max-w-md mx-auto mb-6">
           {{ searchQuery
             ? 'No agents match your search. Try a different term or clear the search.'
             : activeCategory
@@ -596,7 +596,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
           }}
         </p>
         <button
-          class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors"
+          class="inline-flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors"
           @click="showCreateDialog = true"
         >
           <Icon
@@ -614,39 +614,39 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
           @click.self="showCreateDialog = false"
         >
-          <div class="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
-            <h2 class="text-lg font-semibold text-zinc-100 mb-4">
+          <div class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <h2 class="text-lg font-semibold text-theme-100 mb-4">
               Create New Agent
             </h2>
             <div class="space-y-4">
               <div>
-                <label class="block text-sm text-zinc-400 mb-1.5">Name</label>
+                <label class="block text-sm text-theme-400 mb-1.5">Name</label>
                 <input
                   v-model="newName"
                   type="text"
                   placeholder="My Agent"
-                  class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
                   @keydown.enter="createAgent"
                 >
               </div>
               <div>
-                <label class="block text-sm text-zinc-400 mb-1.5">Description</label>
+                <label class="block text-sm text-theme-400 mb-1.5">Description</label>
                 <textarea
                   v-model="newDescription"
                   placeholder="What does this agent do?"
-                  class="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none h-20"
+                  class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none h-20"
                 />
               </div>
             </div>
             <div class="flex justify-end gap-2 mt-6">
               <button
-                class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+                class="px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors"
                 @click="showCreateDialog = false"
               >
                 Cancel
               </button>
               <button
-                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 :disabled="!newName.trim()"
                 @click="createAgent"
               >
@@ -665,8 +665,8 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
         icon-color="red"
         @close="showDeleteConfirm = false"
       >
-        <p class="text-zinc-400 leading-relaxed">
-          Are you sure you want to delete <strong class="text-zinc-200">{{ pendingDeleteName }}</strong>? This action cannot be undone.
+        <p class="text-theme-400 leading-relaxed">
+          Are you sure you want to delete <strong class="text-theme-200">{{ pendingDeleteName }}</strong>? This action cannot be undone.
         </p>
         <template #actions>
           <button
@@ -676,7 +676,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
             Delete Agent
           </button>
           <button
-            class="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-center font-medium transition-colors"
+            class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
             @click="showDeleteConfirm = false"
           >
             Cancel

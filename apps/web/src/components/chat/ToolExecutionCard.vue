@@ -31,7 +31,7 @@ const prefs = usePreferencesStore()
 const expanded = ref(prefs.autoExpandToolCalls)
 const lightboxSrc = ref<string | null>(null)
 const statusMeta: Record<string, { label: string; icon: string; color: string }> = {
-  'routing-tools': { label: 'Tool routing', icon: 'lucide:route', color: 'text-blue-300' },
+  'routing-tools': { label: 'Tool routing', icon: 'lucide:route', color: 'text-accent-300' },
   'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-amber-400' },
   denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-red-400' },
   executing: { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-400' },
@@ -41,12 +41,12 @@ const statusMeta: Record<string, { label: string; icon: string; color: string }>
   'ma-subagent-failed': { label: 'Sub-agent failed', icon: 'lucide:x', color: 'text-red-400' },
   'ma-done': { label: 'Complete', icon: 'lucide:check-circle-2', color: 'text-emerald-400' },
   'ma-error': { label: 'Error', icon: 'lucide:alert-circle', color: 'text-red-400' },
-  'ma-file': { label: 'File', icon: 'lucide:file-text', color: 'text-zinc-400' },
-  'memory-retrieved': { label: 'Memory retrieved', icon: 'lucide:brain', color: 'text-blue-300' },
+  'ma-file': { label: 'File', icon: 'lucide:file-text', color: 'text-theme-400' },
+  'memory-retrieved': { label: 'Memory retrieved', icon: 'lucide:brain', color: 'text-accent-300' },
 }
 
 function meta(s: string) {
-  return statusMeta[s] ?? { label: s, icon: 'lucide:circle', color: 'text-zinc-400' }
+  return statusMeta[s] ?? { label: s, icon: 'lucide:circle', color: 'text-theme-400' }
 }
 
 /** Current phase — the last meaningful status in this iteration */
@@ -134,8 +134,8 @@ const maContext = computed(() => {
             class="w-full flex items-center gap-2 px-3 py-2 rounded-2xl text-[13px] font-medium transition-all group shadow-sm"
             :class="[
               isExpanded
-                ? 'bg-zinc-800 border border-zinc-700/60 shadow-md'
-                : 'bg-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-700/50 border border-transparent',
+                ? 'bg-theme-800 border border-theme-700/60 shadow-md'
+                : 'bg-theme-800/60 hover:bg-theme-800 hover:border-theme-700/50 border border-transparent',
             ]"
             @click="toggle"
           >
@@ -145,8 +145,8 @@ const maContext = computed(() => {
               class="w-3.5 h-3.5 shrink-0"
               :class="[
                 currentPhase.label === 'Denied' ? 'text-red-400' :
-                currentPhase.label === 'Tool routing' ? 'text-blue-300' :
-                toolNames.length && !results.length ? (isActive ? 'text-blue-400' : 'text-zinc-500') :
+                currentPhase.label === 'Tool routing' ? 'text-accent-300' :
+                toolNames.length && !results.length ? (isActive ? 'text-accent-400' : 'text-theme-500') :
                 allSuccess ? 'text-emerald-400' :
                 anyFailed ? 'text-red-400' :
                 currentPhase.color
@@ -170,16 +170,16 @@ const maContext = computed(() => {
                 <span
                   v-for="name in toolNames.slice(0, 3)"
                   :key="name"
-                  class="inline-flex items-center rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-300 font-medium truncate max-w-35"
+                  class="inline-flex items-center rounded-md bg-accent-500/10 px-1.5 py-0.5 text-[10px] text-accent-300 font-medium truncate max-w-35"
                 >{{ name }}</span>
                 <span
                   v-if="toolNames.length > 3"
-                  class="text-[10px] text-zinc-500"
+                  class="text-[10px] text-theme-500"
                 >+{{ toolNames.length - 3 }}</span>
               </template>
               <span
                 v-else
-                class="text-zinc-400"
+                class="text-theme-400"
                 :class="currentPhase.color"
               >{{ currentPhase.label }}</span>
             </div>
@@ -194,13 +194,13 @@ const maContext = computed(() => {
             <!-- Elapsed -->
             <span
               v-if="elapsedMs > 0"
-              class="text-[10px] text-zinc-600 tabular-nums shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              class="text-[10px] text-theme-600 tabular-nums shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
             >{{ formatElapsed(elapsedMs) }}</span>
 
             <!-- Expand icon -->
             <Icon
               icon="lucide:chevron-down"
-              class="w-3 h-3 text-zinc-600 shrink-0 transition-transform"
+              class="w-3 h-3 text-theme-600 shrink-0 transition-transform"
               :class="{ 'rotate-180': isExpanded }"
             />
           </button>
@@ -209,11 +209,11 @@ const maContext = computed(() => {
         <!-- Streaming text (always visible when actively streaming) -->
         <div
           v-if="streamingText && isActive"
-          class="mt-1.5 ml-3 px-3 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/30"
+          class="mt-1.5 ml-3 px-3 py-2 rounded-lg bg-theme-800/50 border border-theme-700/30"
         >
-          <span class="text-[10px] text-zinc-500 font-medium block mb-0.5">{{ streamingText.label }}</span>
-          <p class="text-[11px] text-zinc-400 whitespace-pre-wrap">
-            {{ streamingText.text }}<span class="inline-block w-1.5 h-3 bg-zinc-400/60 animate-pulse ml-0.5 align-middle" />
+          <span class="text-[10px] text-theme-500 font-medium block mb-0.5">{{ streamingText.label }}</span>
+          <p class="text-[11px] text-theme-400 whitespace-pre-wrap">
+            {{ streamingText.text }}<span class="inline-block w-1.5 h-3 bg-theme-400/60 animate-pulse ml-0.5 align-middle" />
           </p>
         </div>
 
@@ -227,18 +227,18 @@ const maContext = computed(() => {
             <div
               v-for="(tc, i) in toolCallArgs"
               :key="i"
-              class="rounded-lg bg-zinc-900/60 border border-zinc-700/30 px-3 py-2"
+              class="rounded-lg bg-theme-900/60 border border-theme-700/30 px-3 py-2"
             >
               <div class="flex items-center gap-1.5 mb-1">
                 <Icon
                   icon="lucide:terminal"
-                  class="w-3 h-3 text-blue-400"
+                  class="w-3 h-3 text-accent-400"
                 />
-                <span class="text-[11px] text-blue-300 font-medium">{{ tc.name }}</span>
+                <span class="text-[11px] text-accent-300 font-medium">{{ tc.name }}</span>
               </div>
               <pre
                 v-if="tc.arguments && tc.arguments !== '{}'"
-                class="text-[10px] text-zinc-500 whitespace-pre-wrap break-all bg-zinc-950/50 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono"
+                class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-950/50 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono"
               >{{ prettifyJson(tc.arguments) }}</pre>
             </div>
           </div>
@@ -264,13 +264,13 @@ const maContext = computed(() => {
                 />
                 <span
                   class="text-[11px] font-medium"
-                  :class="r.success ? 'text-zinc-300' : 'text-red-300'"
+                  :class="r.success ? 'text-theme-300' : 'text-red-300'"
                 >{{ r.name }}</span>
               </div>
               <pre
                 class="text-[10px] whitespace-pre-wrap break-all rounded px-2 py-1.5 max-h-64 overflow-y-auto font-mono"
                 :class="r.success
-                  ? 'text-zinc-400 bg-zinc-900/50'
+                  ? 'text-theme-400 bg-theme-900/50'
                   : 'text-red-300/80 bg-red-950/30'"
               >{{ prettifyJson(r.output) }}</pre>
               <!-- Image thumbnails -->
@@ -282,7 +282,7 @@ const maContext = computed(() => {
                   v-for="(img, ii) in r.images"
                   :key="ii"
                   :src="img"
-                  class="h-24 rounded-lg border border-zinc-600 object-cover cursor-pointer hover:border-blue-500 transition-colors"
+                  class="h-24 rounded-lg border border-theme-600 object-cover cursor-pointer hover:border-accent-500 transition-colors"
                   :title="`Click to enlarge — Image ${ii + 1} from ${r.name}`"
                   @click.stop="lightboxSrc = img"
                 >
@@ -310,7 +310,7 @@ const maContext = computed(() => {
       @keydown.escape="lightboxSrc = null"
     >
       <button
-        class="absolute top-4 right-4 p-2 rounded-full bg-zinc-800/80 text-zinc-300 hover:text-white hover:bg-zinc-700 transition-colors z-10"
+        class="absolute top-4 right-4 p-2 rounded-full bg-theme-800/80 text-theme-300 hover:text-white hover:bg-theme-700 transition-colors z-10"
         title="Close"
         @click="lightboxSrc = null"
       >
