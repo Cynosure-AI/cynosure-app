@@ -107,7 +107,9 @@ export const api = {
       titleModel?: string,
       autoToolRouting?: boolean,
       toolRouterProviderId?: string,
-      toolRouterModel?: string
+      toolRouterModel?: string,
+      compactProviderId?: string,
+      compactModel?: string
     ) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, {
         content,
@@ -128,6 +130,8 @@ export const api = {
         autoToolRouting,
         toolRouterProviderId: toolRouterProviderId || undefined,
         toolRouterModel: toolRouterModel || undefined,
+        compactProviderId: compactProviderId || undefined,
+        compactModel: compactModel || undefined,
         titleProviderId: titleProviderId || undefined,
         titleModel: titleModel || undefined
       }),
@@ -196,6 +200,15 @@ export const api = {
     onPostAction: (
       cb: (data: { conversationId: string; action: string; status: 'started' | 'completed' }) => void
     ) => onWsEvent('chat:post-action', cb as WsHandler),
+    onCompactEvent: (
+      cb: (data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }) => void
+    ) => onWsEvent('chat:compact-event', cb as WsHandler),
+    onCompactStart: (
+      cb: (data: { conversationId: string }) => void
+    ) => onWsEvent('chat:compact-start', cb as WsHandler),
+    onCompactError: (
+      cb: (data: { conversationId: string; error: string }) => void
+    ) => onWsEvent('chat:compact-error', cb as WsHandler),
     getPostActions: (conversationId: string) =>
       get<{ actions: string[] }>(`/api/chat/post-actions?conversationId=${encodeURIComponent(conversationId)}`),
     cancelPostActions: (conversationId: string) =>

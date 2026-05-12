@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
+import { COMPACT_EVENT_PREFIX, applyCompactStrategy } from '../core/agent/context-compactor.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor } from '../core/agent/agent-executor.js'
@@ -163,17 +164,19 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       memorySpaceIds?: string[]
       overrideSubAgents?: boolean
       thinkingEnabled?: boolean
-      contextStrategy?: 'sliding-window' | 'truncate-middle' | 'none'
+      contextStrategy?: ContextStrategy
       autoToolRouting?: boolean
       toolRouterProviderId?: string
       toolRouterModel?: string
+      compactProviderId?: string
+      compactModel?: string
       titleProviderId?: string
       titleModel?: string
     }
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
       const db = getDb()
       const toolRegistry = getToolRegistry()
       const selectedToolKeys = Array.isArray(allowedTools)
@@ -255,10 +258,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       // Filter out sub-agent intermediate messages.
       // Keep: user messages, main-agent assistant messages + their tool results.
       // Drop: sub-agent assistant messages and their tool results.
+      // Also drop compact event markers — they are UI-only and must never reach LLM context.
       const convRow = db.prepare('SELECT agent_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null } | undefined
       const mainAgentId: string | null = convRow?.agent_id || null
       const keptToolCallIds = new Set<string>()
       const filteredRows = historyRows.filter((row) => {
+        if (row.role === 'system' && row.content.startsWith(COMPACT_EVENT_PREFIX)) return false
         if (row.role === 'user') return true
         if (row.role === 'assistant') {
           const isMainAgent = row.agent_id === null || row.agent_id === mainAgentId
@@ -405,10 +410,27 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           : agentMaxCtx
       }
 
-      // Trim message history if it exceeds the model's context window
+      // Apply context strategy (trim or compact) to fit the model's context window
       const contextStrategy = reqContextStrategy || 'sliding-window'
       let initialContextEstimate: number | undefined
-      if (contextWindow) {
+      if (contextStrategy === 'compact' && contextWindow) {
+        const compactResult = await applyCompactStrategy({
+          messages,
+          historyRows,
+          filteredRows,
+          contextWindow,
+          gateway,
+          providerId,
+          responseModel,
+          compactProviderId: reqCompactProviderId || undefined,
+          compactModel: reqCompactModel || undefined,
+          conversationId,
+          db,
+          broadcast,
+        })
+        messages = compactResult.messages
+        initialContextEstimate = compactResult.initialContextEstimate
+      } else if (contextWindow) {
         initialContextEstimate = estimateTotalTokens(messages)
         messages = trimMessagesToContextLimit(messages, contextWindow, undefined, contextStrategy)
       }

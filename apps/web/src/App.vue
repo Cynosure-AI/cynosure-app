@@ -123,6 +123,9 @@ onMounted(async () => {
     api.chat.onSubAgentStreamEnd((data) => chatStore.handleSubAgentStreamEnd(data)),
     api.chat.onTitleUpdated((data) => chatStore.handleTitleUpdated(data)),
     api.chat.onNewMessage((data) => chatStore.handleNewMessage(data)),
+    api.chat.onCompactEvent((data) => chatStore.handleCompactEvent(data)),
+    api.chat.onCompactStart((data) => chatStore.handleCompactStart(data)),
+    api.chat.onCompactError((data) => chatStore.handleCompactError(data)),
     api.chat.onPostAction((data) => chatStore.handlePostAction(data)),
     // Agent event listeners
     api.agent.onHITLRequest((data) => {

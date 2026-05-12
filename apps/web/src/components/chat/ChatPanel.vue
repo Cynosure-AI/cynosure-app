@@ -6,6 +6,7 @@ import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { wsConnected } from '../../api/http'
 import MessageBubble from '../chat/MessageBubble.vue'
 import ToolExecutionCard from '../chat/ToolExecutionCard.vue'
+import ContextCompactCard from '../chat/ContextCompactCard.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import { Icon } from '@iconify/vue'
@@ -82,6 +83,7 @@ type TimelineEntry =
   | { type: 'message'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'tool-group'; group: ToolGroup; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'tool-fallback'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: boolean }
+  | { type: 'compact-event'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: false }
 
 const unifiedTimeline = computed(() => {
   const entries: TimelineEntry[] = []
@@ -89,6 +91,13 @@ const unifiedTimeline = computed(() => {
   const mainAgentId = chatStore.activeAgentId
 
   for (const msg of chatStore.messages) {
+    // Compact event markers — rendered as divider cards, not regular messages
+    if (msg.compactEventData) {
+      entries.push({ type: 'compact-event', msg, ts: msg.createdAt, key: `ce-${msg.id}` })
+      continue
+    }
+    // Skip plain system messages (agent prompts etc. are not shown to user)
+    if (msg.role === 'system') continue
     // When we have execution steps, hide tool messages (shown via ToolExecutionCard)
     if (hasExecSteps && msg.role === 'tool') continue
     // Always hide empty assistant messages (tool-calling bookkeeping, no visible content)
@@ -341,6 +350,15 @@ onMounted(() => scrollToBottom())
           :iteration="entry.group.iteration"
           :steps="entry.group.steps"
           :is-active="agentStore.isExecuting && entry.key === lastToolGroupKey"
+        />
+
+        <!-- Context compact event card -->
+        <ContextCompactCard
+          v-else-if="entry.type === 'compact-event' && entry.msg.compactEventData"
+          :summary="entry.msg.compactEventData.summary"
+          :compacted-message-count="entry.msg.compactEventData.compactedMessageCount"
+          :model="entry.msg.compactEventData.model"
+          :created-at="entry.msg.compactEventData.createdAt"
         />
 
         <!-- Fallback tool result (historical, no execution steps available) -->
