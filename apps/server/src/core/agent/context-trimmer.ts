@@ -4,9 +4,10 @@ import type { ChatMessage } from '../gateway/providers/base.provider.js'
  * Context window management strategy.
  * - 'sliding-window': Keep most recent messages (default)
  * - 'truncate-middle': Keep first + last messages, drop the middle
+ * - 'compact': Summarize the conversation and continue from the summary
  * - 'none': No trimming — send everything, let the provider reject if too long
  */
-export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'none'
+export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 
 /**
  * Fraction of context window to target when trimming.
@@ -58,6 +59,10 @@ export function trimMessagesToContextLimit(
     strategy: ContextStrategy = 'sliding-window',
 ): ChatMessage[] {
     if (strategy === 'none') return messages
+    // 'compact' is handled before the executor starts (in the chat route).
+    // Within a multi-round execution, fall back to sliding-window so the executor
+    // can still trim context if it grows during tool-calling rounds.
+    if (strategy === 'compact') strategy = 'sliding-window'
 
     const maxTokens = Math.floor(contextWindow * threshold)
 

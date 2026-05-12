@@ -136,7 +136,9 @@ export function useChatMessages(
             prefs.titleModel || undefined,
             executionRun.autoToolRouting,
             prefs.toolRouterProviderId || undefined,
-            prefs.toolRouterModel || undefined
+            prefs.toolRouterModel || undefined,
+            prefs.compactProviderId || undefined,
+            prefs.compactModel || undefined
         )
     }
 

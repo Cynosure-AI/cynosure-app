@@ -39,6 +39,8 @@ export interface DisplayMessage {
   createdAt: number
   isStreaming?: boolean
   isError?: boolean
+  /** Set when this message is a compact event marker */
+  compactEventData?: { summary: string; compactedMessageCount: number; model: string; createdAt: number }
 }
 
 export const useChatStore = defineStore('chat', () => {
@@ -126,25 +128,34 @@ export const useChatStore = defineStore('chat', () => {
       const response = await api.chat.getMessages(id)
       const rows = response.messages
       const lastContextTokens = response.lastContextTokens
-      messages.value = rows.map((r: StoredMessage) => ({
-        id: r.id,
-        role: r.role as DisplayMessage['role'],
-        content: r.content,
-        thinking: r.thinking || undefined,
-        imageDataUrls: r.imageDataUrls || undefined,
-        audioDataUrls: r.audioDataUrls || undefined,
-        fileAttachments: r.fileAttachments || undefined,
-        agentId: r.agentId || undefined,
-        agentName: r.agentName || undefined,
-        agentIconUrl: r.agentIconUrl ?? undefined,
-        provider: r.provider || undefined,
-        model: r.model || undefined,
-        promptTokens: r.promptTokens || undefined,
-        completionTokens: r.completionTokens || undefined,
-        contextTokens: r.contextTokens || undefined,
-        latencyMs: r.latencyMs || undefined,
-        createdAt: r.createdAt
-      }))
+      const COMPACT_EVENT_PREFIX = '[CONTEXT_COMPACT_EVENT] '
+      messages.value = rows.map((r: StoredMessage) => {
+        const base: DisplayMessage = {
+          id: r.id,
+          role: r.role as DisplayMessage['role'],
+          content: r.content,
+          thinking: r.thinking || undefined,
+          imageDataUrls: r.imageDataUrls || undefined,
+          audioDataUrls: r.audioDataUrls || undefined,
+          fileAttachments: r.fileAttachments || undefined,
+          agentId: r.agentId || undefined,
+          agentName: r.agentName || undefined,
+          agentIconUrl: r.agentIconUrl ?? undefined,
+          provider: r.provider || undefined,
+          model: r.model || undefined,
+          promptTokens: r.promptTokens || undefined,
+          completionTokens: r.completionTokens || undefined,
+          contextTokens: r.contextTokens || undefined,
+          latencyMs: r.latencyMs || undefined,
+          createdAt: r.createdAt
+        }
+        if (r.role === 'system' && r.content.startsWith(COMPACT_EVENT_PREFIX)) {
+          try {
+            base.compactEventData = JSON.parse(r.content.slice(COMPACT_EVENT_PREFIX.length))
+          } catch { /* ignore */ }
+        }
+        return base
+      })
 
       // Hydrate server-side post-action state
       try {
@@ -455,6 +466,9 @@ export const useChatStore = defineStore('chat', () => {
     handleSubAgentStreamEnd: streaming.handleSubAgentStreamEnd,
     handleTitleUpdated: streaming.handleTitleUpdated,
     handleNewMessage: streaming.handleNewMessage,
+    handleCompactEvent: streaming.handleCompactEvent,
+    handleCompactStart: streaming.handleCompactStart,
+    handleCompactError: streaming.handleCompactError,
 
     // Messages (delegated)
     sendMessage: chatMessages.sendMessage,

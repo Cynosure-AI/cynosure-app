@@ -28,6 +28,11 @@ const contextStrategyOptions: {
     description: "Keeps the first and last messages, trimming the middle",
   },
   {
+    value: "compact",
+    label: "Compact (Summarize)",
+    description: "Summarizes older messages using the active model, then continues from the summary",
+  },
+  {
     value: "none",
     label: "No Trimming",
     description: "Sends all messages - may fail if context is exceeded",
@@ -48,6 +53,14 @@ function onTitleSelection(selection: {
 }): void {
   prefs.titleProviderId = selection.providerId;
   prefs.titleModel = selection.model;
+}
+
+function onCompactSelection(selection: {
+  providerId: string;
+  model: string;
+}): void {
+  prefs.compactProviderId = selection.providerId;
+  prefs.compactModel = selection.model;
 }
 </script>
 
@@ -166,6 +179,22 @@ function onTitleSelection(selection: {
           {{ opt.label }} - {{ opt.description }}
         </option>
       </select>
+
+      <div
+        v-if="prefs.contextStrategy === 'compact'"
+        class="pt-1 border-t border-zinc-700"
+      >
+        <label class="block text-xs text-zinc-400 mb-1.5">Summarization Provider / Model</label>
+        <ProviderModelSelect
+          :provider-id="prefs.compactProviderId"
+          :model-value="prefs.compactModel"
+          :providers="providerStore.providers"
+          include-default
+          default-label="Use chat provider"
+          placeholder="Use chat provider"
+          @change="onCompactSelection"
+        />
+      </div>
     </BaseCard>
   </div>
 </template>

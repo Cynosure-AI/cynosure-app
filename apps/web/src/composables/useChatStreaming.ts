@@ -49,6 +49,9 @@ export interface ChatStreamingState {
     handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void
     handleTitleUpdated(data: { conversationId: string; title: string }): void
     handleNewMessage(data: { conversationId: string; message: { id: string; conversationId: string; role: string; content: string; createdAt: number; agentId?: string; agentName?: string; agentIconUrl?: string | null } }): void
+    handleCompactEvent(data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }): void
+    handleCompactStart(data: { conversationId: string }): void
+    handleCompactError(data: { conversationId: string; error: string }): void
 }
 
 export function useChatStreaming(
@@ -477,6 +480,41 @@ export function useChatStreaming(
         }
     }
 
+    function handleCompactEvent(data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }): void {
+        if (data.conversationId !== activeConversationId.value) return
+        // Avoid duplicates (e.g. if page reloads and event re-fires)
+        if (messages.value.some(m => m.id === data.messageId)) return
+        // Remove any pending compact placeholder
+        const pendingIdx = messages.value.findIndex(m => m.id === `compact-pending-${data.conversationId}`)
+        if (pendingIdx !== -1) messages.value.splice(pendingIdx, 1)
+        messages.value.push({
+            id: data.messageId,
+            role: 'system',
+            content: `[CONTEXT_COMPACT_EVENT] ${JSON.stringify({ summary: data.summary, compactedMessageCount: data.compactedMessageCount, model: data.model, createdAt: data.createdAt })}`,
+            compactEventData: { summary: data.summary, compactedMessageCount: data.compactedMessageCount, model: data.model, createdAt: data.createdAt },
+            createdAt: data.createdAt,
+        })
+    }
+
+    function handleCompactStart(data: { conversationId: string }): void {
+        if (data.conversationId !== activeConversationId.value) return
+        const pendingId = `compact-pending-${data.conversationId}`
+        if (messages.value.some(m => m.id === pendingId)) return
+        messages.value.push({
+            id: pendingId,
+            role: 'system',
+            content: '',
+            compactEventData: { summary: '', compactedMessageCount: 0, model: '', createdAt: Date.now() },
+            createdAt: Date.now(),
+        })
+    }
+
+    function handleCompactError(data: { conversationId: string }): void {
+        if (data.conversationId !== activeConversationId.value) return
+        const pendingIdx = messages.value.findIndex(m => m.id === `compact-pending-${data.conversationId}`)
+        if (pendingIdx !== -1) messages.value.splice(pendingIdx, 1)
+    }
+
     return {
         isStreaming,
         currentStreamId,
@@ -503,5 +541,8 @@ export function useChatStreaming(
         handleSubAgentStreamEnd,
         handleTitleUpdated,
         handleNewMessage,
+        handleCompactEvent,
+        handleCompactStart,
+        handleCompactError,
     }
 }
