@@ -58,7 +58,7 @@ export const useChatStore = defineStore('chat', () => {
   const postActionsMap = new Map<string, Set<string>>()
   const postActionsTrigger = ref(0)
   const activePostActions = computed(() => {
-    postActionsTrigger.value // track changes
+    void postActionsTrigger.value // track changes
     if (!activeConversationId.value) return new Set<string>()
     return postActionsMap.get(activeConversationId.value) || new Set<string>()
   })

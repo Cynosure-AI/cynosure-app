@@ -83,7 +83,7 @@ function onMaxCtxBlur() {
 <template>
   <div class="space-y-4">
     <!-- Auto-approve tools -->
-    <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
+    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
@@ -91,11 +91,11 @@ function onMaxCtxBlur() {
               icon="lucide:shield-check"
               class="w-4 h-4 text-amber-400"
             />
-            <h3 class="text-sm font-medium text-zinc-200">
+            <h3 class="text-sm font-medium text-theme-200">
               Auto-Approve All Tools
             </h3>
           </div>
-          <p class="text-xs text-zinc-500 leading-relaxed">
+          <p class="text-xs text-theme-500 leading-relaxed">
             When enabled, this agent will execute all tool calls without
             requiring manual approval. This applies to chat, sub-agent
             delegations, and cron jobs. When disabled, tool calls follow
@@ -112,7 +112,7 @@ function onMaxCtxBlur() {
     </div>
 
     <!-- Tool Router Model -->
-    <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
+    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
       <div class="flex items-start gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
@@ -120,18 +120,18 @@ function onMaxCtxBlur() {
               icon="lucide:route"
               class="w-4 h-4 text-emerald-400"
             />
-            <h3 class="text-sm font-medium text-zinc-200">
+            <h3 class="text-sm font-medium text-theme-200">
               Tool Router Model
             </h3>
           </div>
-          <p class="text-xs text-zinc-500 leading-relaxed">
+          <p class="text-xs text-theme-500 leading-relaxed">
             Override the provider and model this agent uses when auto tool
             routing is enabled. Leave blank to use the global router settings
             from Preferences.
           </p>
 
-          <div class="mt-4 pt-4 border-t border-zinc-700">
-            <label class="block text-xs text-zinc-400 mb-1.5">Provider / Model</label>
+          <div class="mt-4 pt-4 border-t border-theme-700">
+            <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
             <ProviderModelSelect
               :provider-id="agent.toolRouterProviderId || ''"
               :model-value="agent.toolRouterModel || ''"
@@ -146,7 +146,7 @@ function onMaxCtxBlur() {
     </div>
 
     <!-- Thinking / Reasoning -->
-    <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
+    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
@@ -154,11 +154,11 @@ function onMaxCtxBlur() {
               icon="lucide:brain"
               class="w-4 h-4 text-indigo-400"
             />
-            <h3 class="text-sm font-medium text-zinc-200">
+            <h3 class="text-sm font-medium text-theme-200">
               Thinking / Reasoning
             </h3>
           </div>
-          <p class="text-xs text-zinc-500 leading-relaxed">
+          <p class="text-xs text-theme-500 leading-relaxed">
             When enabled, models that support reasoning tokens will output their
             chain-of-thought before responding. This improves answer quality for
             complex tasks but uses more tokens. Applies to providers like OpenAI
@@ -175,7 +175,7 @@ function onMaxCtxBlur() {
     </div>
 
     <!-- Max Context Tokens -->
-    <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
+    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
@@ -183,11 +183,11 @@ function onMaxCtxBlur() {
               icon="lucide:ruler"
               class="w-4 h-4 text-amber-400"
             />
-            <h3 class="text-sm font-medium text-zinc-200">
+            <h3 class="text-sm font-medium text-theme-200">
               Max Context Tokens
             </h3>
           </div>
-          <p class="text-xs text-zinc-500 leading-relaxed">
+          <p class="text-xs text-theme-500 leading-relaxed">
             Set a hard cap on the number of tokens sent to the model. When set,
             the context trimmer will trigger at this limit instead of the
             model's full context window. Useful to reduce costs and mitigate the
@@ -203,10 +203,10 @@ function onMaxCtxBlur() {
               min="2048"
               step="2048"
               placeholder="e.g. 16384"
-              class="w-40 bg-zinc-900 border border-zinc-600 rounded-lg px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/50"
+              class="w-40 bg-theme-900 border border-theme-600 rounded-lg px-3 py-1.5 text-sm text-theme-200 placeholder-theme-600 focus:outline-none focus:border-amber-500/50"
               @blur="onMaxCtxBlur"
             >
-            <span class="ml-2 text-xs text-zinc-600">tokens</span>
+            <span class="ml-2 text-xs text-theme-600">tokens</span>
           </div>
         </div>
         <ToggleSwitch

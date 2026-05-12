@@ -97,8 +97,8 @@ function toggleExpand(index: number): void {
       </div>
     </div>
 
-    <div class="w-full max-w-[85%] rounded-xl border border-amber-500/30 bg-zinc-800 shadow-lg shadow-black/20 overflow-hidden flex flex-col">
-      <div class="flex items-center justify-between px-4 py-2.5 bg-amber-500/5 border-b border-zinc-700/50">
+    <div class="w-full max-w-[85%] rounded-xl border border-amber-500/30 bg-theme-800 shadow-lg shadow-black/20 overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between px-4 py-2.5 bg-amber-500/5 border-b border-theme-700/50">
         <span class="text-sm font-semibold text-amber-500 tracking-wide uppercase text-[11px]">Action Required</span>
         <div class="flex items-center gap-2">
           <span
@@ -108,7 +108,7 @@ function toggleExpand(index: number): void {
           >
             1 of {{ agentStore.hitlQueue.length }}
           </span>
-          <span class="text-xs font-medium text-zinc-400 bg-zinc-900/50 px-2 py-0.5 rounded-full border border-zinc-700/50">
+          <span class="text-xs font-medium text-theme-400 bg-theme-900/50 px-2 py-0.5 rounded-full border border-theme-700/50">
             {{ agentStore.pendingHITL.toolCalls.length }} tool{{ agentStore.pendingHITL.toolCalls.length > 1 ? 's' : '' }} requested
           </span>
         </div>
@@ -121,12 +121,12 @@ function toggleExpand(index: number): void {
           class="flex flex-col gap-1.5"
         >
           <div class="flex items-center justify-between">
-            <span class="rounded-md bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[11px] text-blue-400 font-mono font-medium">
-              <span class="text-blue-500/50 mr-1">ƒ</span>{{ tc.name }}
+            <span class="rounded-md bg-accent-500/10 border border-accent-500/20 px-2 py-0.5 text-[11px] text-accent-400 font-mono font-medium">
+              <span class="text-accent-500/50 mr-1">ƒ</span>{{ tc.name }}
             </span>
             <button
               v-if="formatArgs(tc.arguments).length > 250"
-              class="text-[10px] font-medium text-zinc-500 hover:text-zinc-300 transition-colors uppercase tracking-wider"
+              class="text-[10px] font-medium text-theme-500 hover:text-theme-300 transition-colors uppercase tracking-wider"
               @click="toggleExpand(i)"
             >
               {{ expandedArgs.has(i) ? 'Show Less' : 'Show More' }}
@@ -135,7 +135,7 @@ function toggleExpand(index: number): void {
           
           <pre
             v-if="tc.arguments"
-            class="mt-0.5 text-[11px] text-zinc-300 whitespace-pre-wrap break-all bg-zinc-950/50 border border-zinc-700/50 rounded-lg p-2.5 overflow-x-auto max-h-40 overflow-y-auto shadow-inner font-mono leading-relaxed custom-scrollbar"
+            class="mt-0.5 text-[11px] text-theme-300 whitespace-pre-wrap break-all bg-theme-950/50 border border-theme-700/50 rounded-lg p-2.5 overflow-x-auto max-h-40 overflow-y-auto shadow-inner font-mono leading-relaxed custom-scrollbar"
           >{{ expandedArgs.has(i) ? formatArgs(tc.arguments) : truncateArgs(tc.arguments) }}</pre>
         </div>
       </div>
@@ -149,7 +149,7 @@ function toggleExpand(index: number): void {
             v-model="denyReason"
             type="text"
             placeholder="Why is this being denied? (optional)"
-            class="w-full rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none transition-all shadow-inner"
+            class="w-full rounded-lg border border-theme-600 bg-theme-900 px-3 py-2 text-xs text-theme-100 placeholder-theme-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none transition-all shadow-inner"
             autofocus
             @keydown.enter="deny"
             @keydown.escape="cancelDeny"
@@ -157,10 +157,10 @@ function toggleExpand(index: number): void {
         </div>
       </Transition>
 
-      <div class="flex items-center justify-end gap-2 px-4 py-2.5 border-t border-zinc-700/50 bg-zinc-800/80">
+      <div class="flex items-center justify-end gap-2 px-4 py-2.5 border-t border-theme-700/50 bg-theme-800/80">
         <button
           v-if="showReasonInput"
-          class="rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/50 transition-all focus:outline-none focus:ring-2 focus:ring-zinc-500"
+          class="rounded-lg px-3 py-1.5 text-xs font-medium text-theme-400 hover:text-theme-100 hover:bg-theme-700/50 transition-all focus:outline-none focus:ring-2 focus:ring-theme-500"
           @click="cancelDeny"
         >
           Cancel
@@ -169,7 +169,7 @@ function toggleExpand(index: number): void {
           class="rounded-lg px-4 py-1.5 text-xs font-semibold transition-all focus:outline-none focus:ring-2"
           :class="showReasonInput 
             ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 focus:ring-red-500' 
-            : 'bg-zinc-700/50 text-zinc-300 border border-zinc-600/50 hover:bg-zinc-700 hover:text-white focus:ring-zinc-500'"
+            : 'bg-theme-700/50 text-theme-300 border border-theme-600/50 hover:bg-theme-700 hover:text-white focus:ring-theme-500'"
           @click="deny"
         >
           {{ showReasonInput ? 'Confirm Deny' : 'Deny Request' }}
@@ -201,7 +201,7 @@ function toggleExpand(index: number): void {
           <!-- Dropdown menu -->
           <div
             v-if="showApproveDropdown"
-            class="absolute right-0 bottom-full mb-1 w-52 rounded-lg border border-zinc-700 bg-zinc-800 shadow-lg shadow-black/40 overflow-hidden z-50"
+            class="absolute right-0 bottom-full mb-1 w-52 rounded-lg border border-theme-700 bg-theme-800 shadow-lg shadow-black/40 overflow-hidden z-50"
           >
             <button
               class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
@@ -210,16 +210,16 @@ function toggleExpand(index: number): void {
               Allow in this Session
             </button>
             <button
-              class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-zinc-700/50"
+              class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-theme-700/50"
               @click="approveAll"
             >
               {{ approveAllLabel }}
             </button>
 
             <!--Separator-->
-            <span class="block h-px bg-zinc-600 my-1" />
+            <span class="block h-px bg-theme-600 my-1" />
             <button
-              class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-zinc-700/50"
+              class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-theme-700/50"
               @click="approveAllToolsSession"
             >
               Allow All Tools in this Session

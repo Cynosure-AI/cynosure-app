@@ -228,7 +228,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
   <div>
     <div class="flex items-center justify-end mb-4">
       <button
-        class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+        class="px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg transition-colors"
         @click="showAddForm ? cancelForm() : startAddProvider()"
       >
         {{ showAddForm ? 'Cancel' : 'Add Provider' }}
@@ -238,11 +238,11 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
     <!-- Add Provider Form -->
     <div
       v-if="showAddForm"
-      class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 mb-6 space-y-4"
+      class="bg-theme-800 border border-theme-700 rounded-xl p-4 mb-6 space-y-4"
     >
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-sm text-zinc-400 mb-1">Type</label>
+          <label class="block text-sm text-theme-400 mb-1">Type</label>
           <div class="flex items-center gap-2">
             <img
               v-if="providerLogos[newProvider.type]"
@@ -258,7 +258,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
             >
             <select
               v-model="newProvider.type"
-              class="flex-1 bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="flex-1 bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
               @change="onTypeChange"
             >
               <option value="openai">
@@ -292,38 +292,38 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
           </div>
         </div>
         <div>
-          <label class="block text-sm text-zinc-400 mb-1">Name</label>
+          <label class="block text-sm text-theme-400 mb-1">Name</label>
           <input
             v-model="newProvider.name"
             type="text"
             placeholder="My Provider"
-            class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
           >
         </div>
       </div>
 
       <div v-if="hasEditableBaseUrl">
-        <label class="block text-sm text-zinc-400 mb-1">Base URL</label>
+        <label class="block text-sm text-theme-400 mb-1">Base URL</label>
         <input
           v-model="newProvider.baseUrl"
           type="text"
           :placeholder="defaultBaseUrls[newProvider.type]"
-          class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+          class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
         >
       </div>
 
       <div>
-        <label class="block text-sm text-zinc-400 mb-1">API Key</label>
+        <label class="block text-sm text-theme-400 mb-1">API Key</label>
         <div class="relative">
           <input
             v-model="newProvider.apiKey"
             :type="showApiKey ? 'text' : 'password'"
             placeholder="sk-..."
-            class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
           >
           <button
             type="button"
-            class="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+            class="absolute right-2 top-1/2 -translate-y-1/2 text-theme-500 hover:text-theme-300 transition-colors"
             :title="showApiKey ? 'Hide API key' : 'Show API key'"
             @click="showApiKey = !showApiKey"
           >
@@ -336,7 +336,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
       </div>
 
       <div>
-        <label class="block text-sm text-zinc-400 mb-1">Default Model</label>
+        <label class="block text-sm text-theme-400 mb-1">Default Model</label>
         <div class="flex gap-2">
           <div class="flex-1">
             <CustomSelect
@@ -352,13 +352,13 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
               v-model="newProvider.defaultModel"
               type="text"
               placeholder="gpt-4o"
-              class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
             >
           </div>
           <button
             type="button"
             :disabled="loadingModels"
-            class="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors whitespace-nowrap"
+            class="px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:bg-theme-800 disabled:text-theme-600 text-theme-300 text-sm rounded-lg transition-colors whitespace-nowrap"
             @click="fetchModelsForNew"
           >
             {{ loadingModels ? 'Loading…' : 'Fetch Models' }}
@@ -368,7 +368,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
 
       <button
         :disabled="!canSaveProvider"
-        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded-lg transition-colors"
+        class="w-full px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
         @click="addProvider"
       >
         Add Provider
@@ -394,10 +394,10 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
           />
         </template>
 
-        <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 mt-2 mb-1 space-y-4">
+        <div class="bg-theme-800 border border-theme-700 rounded-xl p-4 mt-2 mb-1 space-y-4">
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm text-zinc-400 mb-1">Type</label>
+              <label class="block text-sm text-theme-400 mb-1">Type</label>
               <div class="flex items-center gap-2">
                 <img
                   v-if="providerLogos[newProvider.type]"
@@ -413,7 +413,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
                 >
                 <select
                   v-model="newProvider.type"
-                  class="flex-1 bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  class="flex-1 bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
                   @change="onTypeChange"
                 >
                   <option value="openai">
@@ -447,38 +447,38 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
               </div>
             </div>
             <div>
-              <label class="block text-sm text-zinc-400 mb-1">Name</label>
+              <label class="block text-sm text-theme-400 mb-1">Name</label>
               <input
                 v-model="newProvider.name"
                 type="text"
                 placeholder="My Provider"
-                class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
               >
             </div>
           </div>
 
           <div v-if="hasEditableBaseUrl">
-            <label class="block text-sm text-zinc-400 mb-1">Base URL</label>
+            <label class="block text-sm text-theme-400 mb-1">Base URL</label>
             <input
               v-model="newProvider.baseUrl"
               type="text"
               :placeholder="defaultBaseUrls[newProvider.type]"
-              class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
             >
           </div>
 
           <div>
-            <label class="block text-sm text-zinc-400 mb-1">API Key</label>
+            <label class="block text-sm text-theme-400 mb-1">API Key</label>
             <div class="relative">
               <input
                 v-model="newProvider.apiKey"
                 :type="showApiKey ? 'text' : 'password'"
                 placeholder="sk-..."
-                class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
               >
               <button
                 type="button"
-                class="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-theme-500 hover:text-theme-300 transition-colors"
                 :title="showApiKey ? 'Hide API key' : 'Show API key'"
                 @click="showApiKey = !showApiKey"
               >
@@ -491,7 +491,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
           </div>
 
           <div>
-            <label class="block text-sm text-zinc-400 mb-1">Default Model</label>
+            <label class="block text-sm text-theme-400 mb-1">Default Model</label>
             <div class="flex gap-2">
               <div class="flex-1">
                 <CustomSelect
@@ -507,13 +507,13 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
                   v-model="newProvider.defaultModel"
                   type="text"
                   placeholder="gpt-4o"
-                  class="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-600"
+                  class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
                 >
               </div>
               <button
                 type="button"
                 :disabled="loadingModels"
-                class="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-zinc-300 text-sm rounded-lg transition-colors whitespace-nowrap"
+                class="px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:bg-theme-800 disabled:text-theme-600 text-theme-300 text-sm rounded-lg transition-colors whitespace-nowrap"
                 @click="fetchModelsForEdit(provider.id)"
               >
                 {{ loadingModels ? 'Loading…' : 'Refresh' }}
@@ -524,14 +524,14 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
           <div class="flex justify-end gap-2">
             <button
               type="button"
-              class="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-sm rounded-lg transition-colors"
+              class="px-4 py-2 bg-theme-700 hover:bg-theme-600 text-theme-200 text-sm rounded-lg transition-colors"
               @click="cancelEditProvider"
             >
               Cancel
             </button>
             <button
               :disabled="!canSaveProvider"
-              class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded-lg transition-colors"
+              class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
               @click="addProvider"
             >
               Save Changes
@@ -542,7 +542,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
 
       <div
         v-if="providerStore.providers.length === 0 && !showAddForm"
-        class="text-center py-12 text-zinc-500"
+        class="text-center py-12 text-theme-500"
       >
         <p class="text-lg mb-2">
           No providers configured

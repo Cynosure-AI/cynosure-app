@@ -2,13 +2,13 @@
 const props = withDefaults(
   defineProps<{
     modelValue: boolean
-    /** Track color when on. Default: 'blue' */
-    color?: 'blue' | 'emerald' | 'green' | 'amber' | 'purple' | 'red' | 'indigo'
+    /** Track color when on. Default: 'accent' */
+    color?: 'accent' | 'emerald' | 'green' | 'amber' | 'purple' | 'red' | 'indigo'
     /** Toggle size. 'sm' = compact list rows, 'md' = dialogs, 'lg' = settings cards */
     size?: 'sm' | 'md' | 'lg'
     disabled?: boolean
   }>(),
-  { color: 'blue', size: 'lg', disabled: false },
+  { color: 'accent', size: 'lg', disabled: false },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
@@ -18,7 +18,7 @@ function toggle(): void {
 }
 
 const onColors: Record<string, string> = {
-  blue: 'bg-blue-600',
+  accent: 'bg-accent-600',
   emerald: 'bg-emerald-500',
   green: 'bg-green-500',
   amber: 'bg-amber-500',
@@ -28,9 +28,9 @@ const onColors: Record<string, string> = {
 }
 
 const offColors: Record<string, string> = {
-  sm: 'bg-zinc-700',
-  md: 'bg-zinc-700',
-  lg: 'bg-zinc-600',
+  sm: 'bg-theme-700',
+  md: 'bg-theme-700',
+  lg: 'bg-theme-600',
 }
 
 /*

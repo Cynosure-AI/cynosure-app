@@ -156,7 +156,7 @@ defineExpose({ processFiles })
 </script>
 
 <template>
-  <div class="border-t border-zinc-800 bg-zinc-900 px-4 py-3 flex items-end gap-3">
+  <div class="border-t border-theme-800 bg-theme-900 px-4 py-3 flex items-end gap-3">
     <div class="max-w-5xl mx-auto flex-1 min-w-0">
       <!-- Attached images preview -->
       <div
@@ -171,7 +171,7 @@ defineExpose({ processFiles })
           <img
             :src="img.url"
             :alt="img.name"
-            class="h-16 w-16 rounded-lg object-cover border border-zinc-700"
+            class="h-16 w-16 rounded-lg object-cover border border-theme-700"
           >
           <button
             class="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-600 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -194,13 +194,13 @@ defineExpose({ processFiles })
         <div
           v-for="(file, idx) in attachedFiles"
           :key="idx"
-          class="relative group flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5"
+          class="relative group flex items-center gap-1.5 rounded-lg border border-theme-700 bg-theme-800 px-2.5 py-1.5"
         >
           <Icon
             icon="mdi:file-document-outline"
-            class="h-4 w-4 text-zinc-400 shrink-0"
+            class="h-4 w-4 text-theme-400 shrink-0"
           />
-          <span class="text-xs text-zinc-300 max-w-32 truncate">{{ file.name }}</span>
+          <span class="text-xs text-theme-300 max-w-32 truncate">{{ file.name }}</span>
           <button
             class="ml-1 h-4 w-4 rounded-full bg-red-600 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
             aria-label="Remove file"
@@ -222,13 +222,13 @@ defineExpose({ processFiles })
         <div
           v-for="(audio, idx) in attachedAudio"
           :key="idx"
-          class="relative group flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5"
+          class="relative group flex items-center gap-1.5 rounded-lg border border-theme-700 bg-theme-800 px-2.5 py-1.5"
         >
           <Icon
             icon="mdi:music-note"
-            class="h-4 w-4 text-zinc-400 shrink-0"
+            class="h-4 w-4 text-theme-400 shrink-0"
           />
-          <span class="text-xs text-zinc-300 max-w-32 truncate">{{ audio.name }}</span>
+          <span class="text-xs text-theme-300 max-w-32 truncate">{{ audio.name }}</span>
           <button
             class="ml-1 h-4 w-4 rounded-full bg-red-600 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
             aria-label="Remove audio"
@@ -246,7 +246,7 @@ defineExpose({ processFiles })
       <SaveAgentModal />
 
       <!-- Input area: textarea + bottom bar inside a unified container -->
-      <div class="rounded-xl border border-zinc-700 bg-zinc-800 focus-within:ring-1 focus-within:ring-blue-500">
+      <div class="rounded-xl border border-theme-700 bg-theme-800 focus-within:ring-1 focus-within:ring-accent-500">
         <input
           ref="fileInputRef"
           type="file"
@@ -261,7 +261,7 @@ defineExpose({ processFiles })
           v-model="inputText"
           placeholder="Type a message..."
           rows="1"
-          class="w-full bg-transparent text-zinc-100 px-4 pt-3 pb-2 text-sm resize-none focus:outline-none placeholder-zinc-500"
+          class="w-full bg-transparent text-theme-100 px-4 pt-3 pb-2 text-sm resize-none focus:outline-none placeholder-theme-500"
           aria-label="Type a message"
           @keydown="onKeydown"
           @input="autoResize"

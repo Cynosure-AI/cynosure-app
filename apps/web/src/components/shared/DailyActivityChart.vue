@@ -116,7 +116,7 @@ const gridLines = computed(() => {
 
 <template>
   <BaseCard class="p-4 mb-6">
-    <h3 class="text-xs font-medium text-zinc-400 mb-3">
+    <h3 class="text-xs font-medium text-theme-400 mb-3">
       Daily Activity
     </h3>
 
@@ -128,10 +128,10 @@ const gridLines = computed(() => {
       <div
         v-for="line in gridLines"
         :key="line"
-        class="absolute left-6 right-0 border-t border-zinc-800/60"
+        class="absolute left-6 right-0 border-t border-theme-800/60"
         :style="{ bottom: (line / maxMessages * 100) + '%' }"
       >
-        <span class="absolute -left-6 -top-2 text-[9px] text-zinc-600 w-5 text-right">
+        <span class="absolute -left-6 -top-2 text-[9px] text-theme-600 w-5 text-right">
           {{ line }}
         </span>
       </div>
@@ -150,20 +150,20 @@ const gridLines = computed(() => {
           <!-- Bar -->
           <div
             v-if="day.messages > 0"
-            class="w-full rounded-t-sm bg-blue-500/60 transition-colors cursor-default"
-            :class="hoveredIndex === i ? 'bg-blue-400/90' : ''"
+            class="w-full rounded-t-sm bg-accent-500/60 transition-colors cursor-default"
+            :class="hoveredIndex === i ? 'bg-accent-400/90' : ''"
             :style="{ height: (day.messages / maxMessages * 100) + '%' }"
           />
 
 
 
           <!-- Tick mark -->
-          <div class="absolute w-px bg-zinc-700/80 h-full bottom-0 left-0" />
+          <div class="absolute w-px bg-theme-700/80 h-full bottom-0 left-0" />
 
           <!-- Date label -->
           <span
             v-if="i % labelInterval === 0 || i === filledData.length - 1"
-            class="absolute -bottom-4 text-[9px] text-zinc-600 whitespace-nowrap"
+            class="absolute -bottom-4 text-[9px] text-theme-600 whitespace-nowrap"
           >
             {{ shortDate(day.date) }}
           </span>
@@ -179,24 +179,24 @@ const gridLines = computed(() => {
       <Transition name="fade">
         <div
           v-if="hoveredDay && hoveredDay.messages > 0"
-          class="w-72 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl shadow-black/40 p-2.5 text-xs pointer-events-none z-9999"
+          class="w-72 rounded-lg border border-theme-700 bg-theme-900 shadow-xl shadow-black/40 p-2.5 text-xs pointer-events-none z-9999"
           :style="popoverStyle"
         >
-          <div class="font-medium text-zinc-300 mb-1.5">
+          <div class="font-medium text-theme-300 mb-1.5">
             {{ shortDate(hoveredDay.date) }}
           </div>
-          <div class="flex justify-between text-zinc-400 mb-0.5">
-            <span>Messages</span><span class="text-zinc-300">{{ hoveredDay.messages }}</span>
+          <div class="flex justify-between text-theme-400 mb-0.5">
+            <span>Messages</span><span class="text-theme-300">{{ hoveredDay.messages }}</span>
           </div>
-          <div class="flex justify-between text-zinc-400 mb-0.5">
-            <span>Conversations</span><span class="text-zinc-300">{{ hoveredDay.conversations }}</span>
+          <div class="flex justify-between text-theme-400 mb-0.5">
+            <span>Conversations</span><span class="text-theme-300">{{ hoveredDay.conversations }}</span>
           </div>
-          <div class="flex justify-between text-zinc-400">
-            <span>Tokens</span><span class="text-zinc-300">{{ formatNumber(hoveredDay.tokens) }}</span>
+          <div class="flex justify-between text-theme-400">
+            <span>Tokens</span><span class="text-theme-300">{{ formatNumber(hoveredDay.tokens) }}</span>
           </div>
           <div
             v-if="hoveredDay.estimatedCost != null"
-            class="flex justify-between text-zinc-400 mt-0.5"
+            class="flex justify-between text-theme-400 mt-0.5"
           >
             <span>Est. Cost</span>
             <span class="text-amber-400">
@@ -205,10 +205,10 @@ const gridLines = computed(() => {
           </div>
 
           <template v-if="hoveredDay.models?.length">
-            <div class="border-t border-zinc-800 mt-2 pt-1.5 mb-1">
+            <div class="border-t border-theme-800 mt-2 pt-1.5 mb-1">
               <!-- header row -->
               <div
-                class="grid text-[10px] text-zinc-500 uppercase tracking-wider mb-1"
+                class="grid text-[10px] text-theme-500 uppercase tracking-wider mb-1"
                 style="grid-template-columns: 1fr 2.5rem 3.5rem;"
               >
                 <span>Model</span>
@@ -219,14 +219,14 @@ const gridLines = computed(() => {
               <div
                 v-for="m in hoveredDay.models.slice(0, 6)"
                 :key="m.model"
-                class="grid items-baseline text-zinc-400 mb-0.5"
+                class="grid items-baseline text-theme-400 mb-0.5"
                 style="grid-template-columns: 1fr 2.5rem 3.5rem;"
               >
-                <span class="truncate text-zinc-300 pr-2">{{ m.model }}</span>
+                <span class="truncate text-theme-300 pr-2">{{ m.model }}</span>
                 <span class="text-right tabular-nums">{{ m.messages }}</span>
                 <span
                   class="text-right tabular-nums"
-                  :class="m.estimatedCost != null ? 'text-amber-400' : 'text-zinc-600'"
+                  :class="m.estimatedCost != null ? 'text-amber-400' : 'text-theme-600'"
                 >
                   <template v-if="m.estimatedCost != null">
                     ${{ m.estimatedCost < 0.01 ? m.estimatedCost.toFixed(4) : m.estimatedCost.toFixed(2) }}
@@ -236,7 +236,7 @@ const gridLines = computed(() => {
               </div>
               <div
                 v-if="hoveredDay.models.length > 6"
-                class="text-zinc-600 text-[10px] mt-0.5"
+                class="text-theme-600 text-[10px] mt-0.5"
               >
                 +{{ hoveredDay.models.length - 6 }} more
               </div>

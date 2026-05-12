@@ -49,7 +49,7 @@ const displayModel = computed(() => {
     :max-width="200"
   >
     <button
-      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-500 hover:text-zinc-300"
+      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-accent-500 text-theme-500 hover:text-theme-300"
       aria-label="Select model"
       @click="showModal = true"
     >
@@ -59,10 +59,10 @@ const displayModel = computed(() => {
       />
     </button>
     <template #content>
-      <div class="font-medium text-zinc-300 mb-1">
+      <div class="font-medium text-theme-300 mb-1">
         Model
       </div>
-      <div class="text-xs text-zinc-400">
+      <div class="text-xs text-theme-400">
         {{ displayModel }}
       </div>
     </template>

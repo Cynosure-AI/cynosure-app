@@ -45,11 +45,11 @@ onMounted(() =>
       </IconUpload>
 
       <div>
-        <label class="block text-sm text-zinc-400 mb-1.5">Name</label>
+        <label class="block text-sm text-theme-400 mb-1.5">Name</label>
         <input
           :value="agent.name"
           type="text"
-          class="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
           @change="
             emit('update', 'name', ($event.target as HTMLInputElement).value)
           "
@@ -57,10 +57,10 @@ onMounted(() =>
       </div>
 
       <div>
-        <label class="block text-sm text-zinc-400 mb-1.5">Description</label>
+        <label class="block text-sm text-theme-400 mb-1.5">Description</label>
         <textarea
           :value="agent.description"
-          class="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none h-20"
+          class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none h-20"
           @change="
             emit(
               'update',
@@ -75,8 +75,8 @@ onMounted(() =>
     <!-- ── Model ─────────────────────────────────────────────── -->
     <BaseCard class="p-5 space-y-4">
       <div>
-        <label class="block text-sm text-zinc-400 mb-1.5">Provider / Model</label>
-        <p class="text-xs text-zinc-600 mb-2">
+        <label class="block text-sm text-theme-400 mb-1.5">Provider / Model</label>
+        <p class="text-xs text-theme-600 mb-2">
           Overrides the provider's default model for this agent. Leave empty to
           use the provider default.
         </p>
@@ -101,8 +101,8 @@ onMounted(() =>
 
     <!-- ── System Prompt ──────────────────────────────────────── -->
     <BaseCard class="p-5">
-      <label class="block text-sm text-zinc-400 mb-1.5">System Prompt</label>
-      <p class="text-xs text-zinc-600 mb-2">
+      <label class="block text-sm text-theme-400 mb-1.5">System Prompt</label>
+      <p class="text-xs text-theme-600 mb-2">
         Prepended as a system message alongside the built-in agentic
         instructions — does not replace them.
       </p>
@@ -110,7 +110,7 @@ onMounted(() =>
         ref="systemPromptRef"
         :value="agent.systemPrompt"
         placeholder="Optional system instructions..."
-        class="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none font-mono min-h-64"
+        class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none font-mono min-h-64"
         style="field-sizing: content"
         @change="
           emit(

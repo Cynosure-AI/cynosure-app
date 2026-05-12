@@ -17,10 +17,10 @@ const tabs: TabDef<BackupTab>[] = [
   <div class="h-full overflow-y-auto">
     <div class="max-w-3xl mx-auto py-8 px-6">
       <div class="mb-6">
-        <h1 class="text-2xl font-bold text-zinc-100">
+        <h1 class="text-2xl font-bold text-theme-100">
           Backup & Restore
         </h1>
-        <p class="text-sm text-zinc-500 mt-1">
+        <p class="text-sm text-theme-500 mt-1">
           Export your Cynosure configuration as a zip file, or restore from a previous backup
         </p>
       </div>

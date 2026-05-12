@@ -79,16 +79,16 @@ function onDrop(e: DragEvent) {
 
           <div
             v-if="isDragOver"
-            class="absolute inset-0 z-50 flex items-center justify-center bg-zinc-900/80 border-2 border-dashed border-blue-500 rounded-lg pointer-events-none"
+            class="absolute inset-0 z-50 flex items-center justify-center bg-theme-900/80 border-2 border-dashed border-accent-500 rounded-lg pointer-events-none"
           >
             <div class="text-center">
               <div class="text-4xl mb-2">
                 📎
               </div>
-              <div class="text-blue-400 text-sm font-medium">
+              <div class="text-accent-400 text-sm font-medium">
                 Drop files here
               </div>
-              <div class="text-zinc-500 text-xs mt-1">
+              <div class="text-theme-500 text-xs mt-1">
                 Images &amp; text files supported
               </div>
             </div>
