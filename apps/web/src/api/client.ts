@@ -288,6 +288,10 @@ export const api = {
       get<{ ocrEnabled: boolean; ocrLanguage: string }>('/api/memory/parser/config'),
     configureParser: (opts: { ocrEnabled: boolean; ocrLanguage?: string }) =>
       post<{ success: boolean; ocrEnabled: boolean; ocrLanguage: string }>('/api/memory/parser/configure', opts),
+    getRerankerConfig: () =>
+      get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
+    configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>
+      post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/configure', opts),
     onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>
       onWsEvent('memory:reembed-progress', cb as WsHandler)
   },
