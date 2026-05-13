@@ -344,10 +344,6 @@ export const api = {
       post<{ success: boolean; moved: number }>(
         `/api/memory-spaces/${encodeURIComponent(spaceId)}/move-groups`, { sourceFiles, targetSpaceId }
       ),
-    updateEntry: (spaceId: string, entryId: string, text: string) =>
-      put<{ success: boolean }>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/entries/${encodeURIComponent(entryId)}`, { text }
-      ),
   },
 
   mcp: {

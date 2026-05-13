@@ -99,6 +99,13 @@ async function reindexFile(fileName: string) {
   try {
     const res = await api.memorySpaces.reindexFile(props.spaceId, fileName);
     if (res.success) {
+      if (res.fileName !== fileName) {
+        const selected = new Set(selectedFiles.value);
+        selected.delete(fileName);
+        selectedFiles.value = selected;
+        await loadFiles();
+        return;
+      }
       const idx = files.value.findIndex((f) => f.fileName === fileName);
       if (idx !== -1) {
         files.value[idx] = {
@@ -261,14 +268,6 @@ function openDocumentModal(fileName: string) {
   modalFileName.value = fileName;
   showDocumentModal.value = true;
   loadFileChunks(fileName);
-}
-
-function onChunkUpdated(chunkId: string, newText: string) {
-  const chunks = fileChunks.value.get(modalFileName.value);
-  if (!chunks) return;
-  const newMap = new Map(fileChunks.value);
-  newMap.set(modalFileName.value, chunks.map((c) => (c.id === chunkId ? { ...c, text: newText } : c)));
-  fileChunks.value = newMap;
 }
 
 // --- Drag ---
@@ -708,7 +707,6 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       :chunks="fileChunks.get(modalFileName) ?? []"
       :loading="fileChunksLoading.has(modalFileName)"
       @close="showDocumentModal = false"
-      @chunk-updated="onChunkUpdated"
     />
 
     <!-- Hidden file input -->
