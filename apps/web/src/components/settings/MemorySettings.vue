@@ -365,18 +365,18 @@ async function manualClearDb() {
 
       <div class="space-y-3">
         <div>
-          <label class="block text-xs text-theme-400 mb-1">Chunk Size (characters)</label>
+          <label class="block text-xs text-theme-400 mb-1">Chunk Size (tokens)</label>
           <input
             v-model.number="chunkSize"
             type="number"
-            min="100"
-            max="10000"
+            min="64"
+            max="4096"
             step="64"
             class="w-40 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
           >
         </div>
         <div>
-          <label class="block text-xs text-theme-400 mb-1">Chunk Overlap (characters)</label>
+          <label class="block text-xs text-theme-400 mb-1">Chunk Overlap (tokens)</label>
           <input
             v-model.number="chunkOverlap"
             type="number"
