@@ -467,7 +467,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 writeTextFile(folderPath, fileName, updatedContent)
 
                 // Re-index the updated file
-                const chunks = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
+                const { chunkCount: chunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
                 return {
                     success: true,
                     output: `Section "${sectionHeading}" in "${fileName}" updated in "${resolved.spaceName}" (${chunks} chunk${chunks !== 1 ? 's' : ''} re-indexed).`
@@ -476,7 +476,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 // Full replacement — backup original (if it exists on disk) then write directly
                 if (existsOnDisk) backupToRevisions(folderPath, fileName)
                 writeTextFile(folderPath, fileName, content)
-                const chunks = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
+                const { chunkCount: chunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
                 return {
                     success: true,
                     output: `Memory "${fileName}" fully updated in "${resolved.spaceName}" (${chunks} chunk${chunks !== 1 ? 's' : ''} re-indexed).`

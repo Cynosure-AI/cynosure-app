@@ -7,7 +7,7 @@
  */
 import { createHash } from 'crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkSync, copyFileSync } from 'fs'
-import { join, extname } from 'path'
+import { basename, join, extname } from 'path'
 
 // ---------------------------------------------------------------------------
 // Extension sets
@@ -144,6 +144,28 @@ export function backupToRevisions(folderPath: string, fileName: string): string 
     const dest = join(revisionsFolder, backupName)
     copyFileSync(sourcePath, dest)
     return dest
+}
+
+/**
+ * Move a file to the `revisions/` subfolder.
+ * Used when imported binary/source documents are converted to canonical Markdown.
+ */
+export function moveToRevisions(folderPath: string, fileName: string): string | undefined {
+    const sourcePath = join(folderPath, fileName)
+    if (!existsSync(sourcePath)) return undefined
+
+    const backupPath = backupToRevisions(folderPath, fileName)
+    if (!backupPath) return undefined
+
+    unlinkSync(sourcePath)
+    return backupPath
+}
+
+export function toMarkdownFileName(fileName: string): string {
+    const baseName = basename(fileName)
+    const dotIdx = baseName.lastIndexOf('.')
+    const base = dotIdx > 0 ? baseName.slice(0, dotIdx) : baseName
+    return `${base}.md`
 }
 
 export function fileExists(folderPath: string, fileName: string): boolean {

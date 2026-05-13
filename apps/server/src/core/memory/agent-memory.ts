@@ -1,6 +1,5 @@
 import { getMemoryParser, type RetrievedChunk } from './parser.js'
 import { getRAGStore } from './rag.js'
-import { getEmbeddingProvider } from './embedding.js'
 import { getDb } from '../../db/database.js'
 import {
     ensureFolder,
@@ -8,15 +7,21 @@ import {
     readTextFile,
     deleteFile,
     computeFileHash,
-    fileExists,
     resolveUniqueFileName,
     PLAIN_TEXT_EXTENSIONS,
+    moveToRevisions,
+    toMarkdownFileName,
 } from './memory-file-manager.js'
 import { join } from 'path'
 import { readFileSync } from 'fs'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 
 const TABLE_NAME = 'permanent_memory'
+
+export interface ReindexFileResult {
+    fileName: string
+    chunkCount: number
+}
 
 // ---------------------------------------------------------------------------
 // DB helpers
@@ -121,7 +126,7 @@ export class AgentMemory {
         folderPath: string,
         fileName: string,
         spaceId: string,
-    ): Promise<number> {
+    ): Promise<ReindexFileResult> {
         const filePath = join(folderPath, fileName)
         const ragStore = getRAGStore()
 
@@ -132,7 +137,19 @@ export class AgentMemory {
             text = readTextFile(folderPath, fileName)
         } else if (isParseableDocument(fileName)) {
             const buf = readFileSync(filePath)
-            text = await parseDocument(buf, fileName)
+            text = this.withImportMetadata(await parseDocument(buf, fileName), fileName)
+            const mdName = resolveUniqueFileName(folderPath, toMarkdownFileName(fileName))
+            const mdPath = writeTextFile(folderPath, mdName, text)
+
+            moveToRevisions(folderPath, fileName)
+
+            await ragStore.deleteBySources(TABLE_NAME, [fileName, mdName], `spaceId = '${spaceId.replace(/'/g, "''")}'`)
+            removeFileIndex(spaceId, fileName)
+
+            const count = await this.ingestText(text, mdName, spaceId)
+            const hash = computeFileHash(mdPath)
+            upsertFileIndex(spaceId, mdName, hash, count)
+            return { fileName: mdName, chunkCount: count }
         } else {
             throw new Error(`Unsupported file type: ${ext}`)
         }
@@ -143,7 +160,7 @@ export class AgentMemory {
         const count = await this.ingestText(text, fileName, spaceId)
         const hash = computeFileHash(filePath)
         upsertFileIndex(spaceId, fileName, hash, count)
-        return count
+        return { fileName, chunkCount: count }
     }
 
     /**
@@ -158,7 +175,7 @@ export class AgentMemory {
     ): Promise<{ fileName: string; chunkCount: number }> {
         ensureFolder(folderPath)
         // Always save as .md regardless of the original extension
-        const mdName = fileName.replace(/\.[^.]+$/, '.md') || `${fileName}.md`
+        const mdName = toMarkdownFileName(fileName)
         const uniqueName = resolveUniqueFileName(folderPath, mdName)
         const filePath = writeTextFile(folderPath, uniqueName, parsedContent)
         const hash = computeFileHash(filePath)
@@ -168,6 +185,18 @@ export class AgentMemory {
         const count = await this.ingestText(parsedContent, uniqueName, spaceId)
         upsertFileIndex(spaceId, uniqueName, hash, count)
         return { fileName: uniqueName, chunkCount: count }
+    }
+
+    private withImportMetadata(content: string, originalFileName: string): string {
+        return [
+            '---',
+            `importedFrom: ${JSON.stringify(originalFileName)}`,
+            `importedAt: ${JSON.stringify(new Date().toISOString())}`,
+            '---',
+            '',
+            content.trim(),
+            '',
+        ].join('\n')
     }
 
     // -----------------------------------------------------------------------
@@ -224,17 +253,6 @@ export class AgentMemory {
     /** Delete vectors by source file without touching the physical file. */
     async deleteBySource(sourceFile: string, filter?: string): Promise<number> {
         return getRAGStore().deleteBySource(TABLE_NAME, sourceFile, filter)
-    }
-
-    // -----------------------------------------------------------------------
-    // Chunk update (used by the old chunk-edit UI)
-    // -----------------------------------------------------------------------
-
-    async updateChunk(chunkId: string, newText: string): Promise<void> {
-        const embedder = getEmbeddingProvider()
-        const ragStore = getRAGStore()
-        const result = await embedder.embed(newText)
-        await ragStore.updateChunkById(TABLE_NAME, chunkId, newText, result.vector)
     }
 
     // -----------------------------------------------------------------------

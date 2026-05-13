@@ -567,25 +567,6 @@ export class RAGStore {
     this.db = null
   }
 
-  /** Update the text and vector of a single chunk by its ID. */
-  async updateChunkById(tableName: string, id: string, newText: string, newVector: number[]): Promise<void> {
-    if (!this.db) return
-    try {
-      const table = await this.openExistingTable(tableName)
-      if (!table) return
-      const escapedId = id.replace(/'/g, "''")
-      await table.update({
-        where: `id = '${escapedId}'`,
-        values: { text: newText, vector: newVector }
-      })
-      this.ftsIndexCurrent.delete(tableName)
-      await this.rebuildFtsIndex(tableName)
-    } catch (err) {
-      console.error('[rag] updateChunkById error:', (err as Error).message)
-      throw err
-    }
-  }
-
   /** Update the spaceId for documents matching a filter. */
   async updateSpaceId(tableName: string, filter: string, newSpaceId: string): Promise<void> {
     if (!this.db || !filter) return

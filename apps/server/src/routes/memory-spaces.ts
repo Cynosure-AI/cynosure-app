@@ -226,8 +226,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
         const mem = getAgentMemory()
         try {
-            const count = await mem.reindexFile(row.folder_path, req.params.fileName, row.id)
-            return { success: true, chunkCount: count }
+            const result = await mem.reindexFile(row.folder_path, req.params.fileName, row.id)
+            return { success: true, chunkCount: result.chunkCount, fileName: result.fileName }
         } catch (err) {
             return reply.status(500).send({ error: (err as Error).message || 'Failed to reindex file' })
         }
@@ -287,8 +287,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
         try {
             const mem = getAgentMemory()
-            const count = await mem.reindexFile(row.folder_path, fileName, row.id)
-            return { success: true, chunksStored: count, fileName }
+            const result = await mem.reindexFile(row.folder_path, fileName, row.id)
+            return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
         } catch (err) {
             return reply.status(500).send({ error: (err as Error).message || 'Failed to reingest file' })
         }
@@ -320,20 +320,12 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         return rag.listDocuments('permanent_memory', filter)
     })
 
-    // PUT /api/memory-spaces/:id/entries/:entryId — update a single chunk's text and re-embed
+    // PUT /api/memory-spaces/:id/entries/:entryId — legacy vector-only edits are disabled.
+    // Memory files are the source of truth; updates must go through file-backed writes.
     app.put<{ Params: { id: string; entryId: string }; Body: { text: string } }>('/:id/entries/:entryId', async (req, reply) => {
-        const db = getDb()
-        const row = db.prepare('SELECT id FROM memory_spaces WHERE id = ?').get(req.params.id) as { id: string } | undefined
-        if (!row) return reply.status(404).send({ error: 'Space not found' })
-        const { text } = req.body
-        if (typeof text !== 'string' || !text.trim()) return reply.status(400).send({ error: 'text is required' })
-        try {
-            const mem = getAgentMemory()
-            await mem.updateChunk(req.params.entryId, text.trim())
-            return { success: true }
-        } catch (err) {
-            return reply.status(500).send({ error: (err as Error).message || 'Failed to update chunk' })
-        }
+        return reply.status(409).send({
+            error: 'Chunk-level vector edits are disabled because memory files are the source of truth. Edit the Markdown file and reindex it instead.',
+        })
     })
 
     // POST /api/memory-spaces/:id/delete-groups — delete files from a space

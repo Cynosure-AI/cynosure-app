@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import { api } from '../../api/client'
 
 interface MemoryEntry {
   id: string
@@ -22,51 +21,14 @@ const props = defineProps<{
   loading: boolean
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   close: []
-  chunkUpdated: [chunkId: string, newText: string]
 }>()
 
 const sortedChunks = computed(() =>
   [...props.chunks].sort((a, b) => (a.chunkIndex ?? 0) - (b.chunkIndex ?? 0))
 )
 
-// --- Inline chunk editing ---
-const editingChunkId = ref<string | null>(null)
-const editingText = ref('')
-const savingChunkId = ref<string | null>(null)
-const editError = ref<string | null>(null)
-
-function startEdit(chunk: MemoryEntry) {
-  editingChunkId.value = chunk.id
-  editingText.value = chunk.text
-  editError.value = null
-}
-
-function cancelEdit() {
-  editingChunkId.value = null
-  editingText.value = ''
-  editError.value = null
-}
-
-async function saveChunk(chunk: MemoryEntry) {
-  const newText = editingText.value.trim()
-  if (!newText || newText === chunk.text) {
-    cancelEdit()
-    return
-  }
-  savingChunkId.value = chunk.id
-  editError.value = null
-  try {
-    await api.memorySpaces.updateEntry(props.spaceId, chunk.id, newText)
-    emit('chunkUpdated', chunk.id, newText)
-    cancelEdit()
-  } catch (err) {
-    editError.value = (err as Error).message || 'Failed to save'
-  } finally {
-    savingChunkId.value = null
-  }
-}
 </script>
 
 <template>
@@ -129,61 +91,11 @@ async function saveChunk(chunk: MemoryEntry) {
                   <span class="text-[9px] font-mono text-theme-500 tracking-wide uppercase">
                     Chunk #{{ (chunk.chunkIndex ?? 0) + 1 }}
                   </span>
-                  <button
-                    v-if="editingChunkId !== chunk.id"
-                    class="opacity-0 group-hover:opacity-100 p-1 text-theme-600 hover:text-theme-300 rounded transition-all"
-                    title="Edit chunk"
-                    @click="startEdit(chunk)"
-                  >
-                    <Icon
-                      icon="lucide:pencil"
-                      class="w-3 h-3"
-                    />
-                  </button>
                 </div>
 
-                <!-- View mode -->
                 <pre
-                  v-if="editingChunkId !== chunk.id"
                   class="text-xs text-theme-400 whitespace-pre-wrap font-mono leading-relaxed"
                 >{{ chunk.text }}</pre>
-
-                <!-- Edit mode -->
-                <template v-else>
-                  <textarea
-                    v-model="editingText"
-                    class="w-full text-xs text-theme-200 bg-theme-800 border border-theme-600 rounded-lg p-2 font-mono leading-relaxed resize-y focus:outline-none focus:border-theme-400 transition-colors"
-                    rows="6"
-                    :disabled="savingChunkId === chunk.id"
-                  />
-                  <div
-                    v-if="editError"
-                    class="mt-1 text-xs text-red-400"
-                  >
-                    {{ editError }}
-                  </div>
-                  <div class="flex items-center gap-2 mt-2">
-                    <button
-                      :disabled="savingChunkId === chunk.id || !editingText.trim()"
-                      class="flex items-center gap-1 px-2.5 py-1 text-xs bg-accent-500/15 text-accent-400 hover:bg-accent-500/25 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      @click="saveChunk(chunk)"
-                    >
-                      <Icon
-                        :icon="savingChunkId === chunk.id ? 'lucide:loader-2' : 'lucide:check'"
-                        class="w-3 h-3"
-                        :class="{ 'animate-spin': savingChunkId === chunk.id }"
-                      />
-                      {{ savingChunkId === chunk.id ? 'Saving…' : 'Save & re-embed' }}
-                    </button>
-                    <button
-                      :disabled="savingChunkId === chunk.id"
-                      class="px-2.5 py-1 text-xs text-theme-500 hover:text-theme-300 transition-colors disabled:opacity-50"
-                      @click="cancelEdit"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </template>
               </div>
             </div>
           </template>
