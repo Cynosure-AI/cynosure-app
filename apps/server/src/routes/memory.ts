@@ -198,8 +198,8 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     Body: { chunkSize: number; chunkOverlap: number }
   }>('/chunking/configure', async (req, reply) => {
     const { chunkSize, chunkOverlap } = req.body
-    if (!chunkSize || chunkSize < 100 || chunkSize > 10000) {
-      return reply.status(400).send({ error: 'chunkSize must be between 100 and 10000' })
+    if (!chunkSize || chunkSize < 64 || chunkSize > 4096) {
+      return reply.status(400).send({ error: 'chunkSize must be between 64 and 4096 tokens' })
     }
     if (chunkOverlap === undefined || chunkOverlap < 0 || chunkOverlap >= chunkSize) {
       return reply.status(400).send({ error: 'chunkOverlap must be >= 0 and < chunkSize' })

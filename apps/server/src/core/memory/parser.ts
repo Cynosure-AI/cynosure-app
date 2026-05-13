@@ -22,6 +22,10 @@ export interface RetrievedChunk {
   totalChunks?: number
 }
 
+/** Average characters per token — used to convert token-based chunk settings to the
+ * character counts that RecursiveCharacterTextSplitter expects. */
+const CHARS_PER_TOKEN = 4
+
 /**
  * Parser pipeline: chunk → embed → store in LanceDB.
  * Also handles retrieval: embed query → search → return ranked results.
@@ -42,7 +46,7 @@ export class MemoryParser {
       const row = db.prepare("SELECT value_json FROM settings WHERE key = 'chunking'").get() as { value_json: string } | undefined
       if (row) {
         const cfg = JSON.parse(row.value_json) as { chunkSize?: number; chunkOverlap?: number }
-        if (cfg.chunkSize && cfg.chunkSize >= 100) this.chunkSize = cfg.chunkSize
+        if (cfg.chunkSize && cfg.chunkSize >= 64) this.chunkSize = cfg.chunkSize
         if (cfg.chunkOverlap !== undefined && cfg.chunkOverlap >= 0) this.chunkOverlap = cfg.chunkOverlap
       }
     } catch { /* DB not ready yet — use defaults */ }
@@ -194,11 +198,11 @@ export class MemoryParser {
   private async chunk(text: string): Promise<string[]> {
     const trimmed = text.trim()
     if (!trimmed) return []
-    if (trimmed.length <= this.chunkSize) return [trimmed]
+    if (trimmed.length <= this.chunkSize * CHARS_PER_TOKEN) return [trimmed]
 
     const splitter = RecursiveCharacterTextSplitter.fromLanguage('markdown', {
-      chunkSize: this.chunkSize,
-      chunkOverlap: this.chunkOverlap,
+      chunkSize: this.chunkSize * CHARS_PER_TOKEN,
+      chunkOverlap: this.chunkOverlap * CHARS_PER_TOKEN,
     })
 
     const docs = await splitter.createDocuments([trimmed])
