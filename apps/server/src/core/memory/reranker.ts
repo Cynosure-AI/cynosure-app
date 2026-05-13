@@ -1,0 +1,141 @@
+import { getDb } from '../../db/database.js'
+import { getGateway } from '../gateway/gateway.js'
+import type { SearchResult } from './rag.js'
+
+export interface MemoryRerankerConfig {
+  enabled: boolean
+  providerId?: string
+  model: string
+  candidateCount: number
+}
+
+interface OpenRouterRerankResponse {
+  results?: Array<{
+    index?: number
+    relevance_score?: number
+  }>
+}
+
+const SETTINGS_KEY = 'memoryReranker'
+const DEFAULT_CONFIG: MemoryRerankerConfig = {
+  enabled: false,
+  model: 'cohere/rerank-4-fast',
+  candidateCount: 12
+}
+
+const ALLOWED_MODELS = new Set([
+  'cohere/rerank-v3.5',
+  'cohere/rerank-4-fast',
+  'cohere/rerank-4-pro'
+])
+
+function normalizeConfig(config: Partial<MemoryRerankerConfig> | undefined): MemoryRerankerConfig {
+  const candidateCount = Number.isFinite(config?.candidateCount)
+    ? Math.round(config!.candidateCount as number)
+    : DEFAULT_CONFIG.candidateCount
+
+  return {
+    enabled: !!config?.enabled,
+    providerId: config?.providerId?.trim() || undefined,
+    model: config?.model && ALLOWED_MODELS.has(config.model) ? config.model : DEFAULT_CONFIG.model,
+    candidateCount: Math.min(50, Math.max(3, candidateCount))
+  }
+}
+
+export class MemoryReranker {
+  getConfig(): MemoryRerankerConfig {
+    try {
+      const db = getDb()
+      const row = db.prepare('SELECT value_json FROM settings WHERE key = ?').get(SETTINGS_KEY) as { value_json: string } | undefined
+      if (!row) return { ...DEFAULT_CONFIG }
+      return normalizeConfig(JSON.parse(row.value_json) as Partial<MemoryRerankerConfig>)
+    } catch {
+      return { ...DEFAULT_CONFIG }
+    }
+  }
+
+  saveConfig(config: Partial<MemoryRerankerConfig>): MemoryRerankerConfig {
+    const normalized = normalizeConfig(config)
+    const db = getDb()
+    db.prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (?, ?)').run(SETTINGS_KEY, JSON.stringify(normalized))
+    return normalized
+  }
+
+  getCandidateCount(topK: number): number {
+    const config = this.getConfig()
+    return config.enabled ? Math.max(topK, config.candidateCount) : topK
+  }
+
+  async rerank(query: string, results: SearchResult[], topK: number): Promise<SearchResult[]> {
+    const config = this.getConfig()
+    if (!config.enabled || results.length <= 1) return results.slice(0, topK)
+
+    const provider = this.resolveOpenRouterProvider(config.providerId)
+    if (!provider) return results.slice(0, topK)
+
+    const baseUrl = provider.config.baseUrl.replace(/\/+$/, '')
+    const res = await fetch(`${baseUrl}/rerank`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${provider.config.apiKey || ''}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://cynosure.app',
+        'X-OpenRouter-Title': 'Cynosure'
+      },
+      body: JSON.stringify({
+        model: config.model,
+        query,
+        documents: results.map((r) => r.text),
+        top_n: Math.min(topK, results.length)
+      })
+    })
+
+    if (!res.ok) {
+      throw new Error(`OpenRouter rerank failed: ${res.status} ${res.statusText}`)
+    }
+
+    const data = await res.json() as OpenRouterRerankResponse
+    const reranked = (data.results || [])
+      .map((item) => {
+        if (item.index == null) return null
+        const result = results[item.index]
+        if (!result) return null
+        return {
+          ...result,
+          score: typeof item.relevance_score === 'number' ? item.relevance_score : result.score
+        }
+      })
+      .filter((item): item is SearchResult => item != null)
+
+    return reranked.length > 0 ? reranked : results.slice(0, topK)
+  }
+
+  private resolveOpenRouterProvider(providerId: string | undefined) {
+    const gateway = getGateway()
+    if (providerId) {
+      const provider = gateway.getProvider(providerId)
+      return provider?.config.type === 'openrouter' ? provider : undefined
+    }
+
+    try {
+      const active = gateway.getLastUsedProvider()
+      if (active.config.type === 'openrouter') return active
+    } catch {
+      // Fall through to any registered OpenRouter provider.
+    }
+
+    for (const provider of gateway.getAllProviders().values()) {
+      if (provider.config.type === 'openrouter') return provider
+    }
+    return undefined
+  }
+}
+
+let rerankerInstance: MemoryReranker | null = null
+
+export function getMemoryReranker(): MemoryReranker {
+  if (!rerankerInstance) {
+    rerankerInstance = new MemoryReranker()
+  }
+  return rerankerInstance
+}

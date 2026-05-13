@@ -8,6 +8,7 @@ import MultiSelect from '../shared/MultiSelect.vue'
 import ProviderSelect from '../shared/ProviderSelect.vue'
 import CustomSelect from '../shared/CustomSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
+import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 const providerStore = useProviderStore()
 
@@ -31,6 +32,19 @@ const chunkSaving = ref(false)
 const ocrEnabled = ref(false)
 const ocrLanguage = ref('eng')
 const ocrSaving = ref(false)
+
+// Reranker state
+const rerankEnabled = ref(false)
+const rerankProviderId = ref('')
+const rerankModel = ref('cohere/rerank-4-fast')
+const rerankCandidateCount = ref(12)
+const rerankSaving = ref(false)
+
+const RERANK_MODEL_OPTIONS = [
+  { value: 'cohere/rerank-4-fast', label: 'Cohere Rerank 4 Fast', hint: 'cohere/rerank-4-fast' },
+  { value: 'cohere/rerank-4-pro', label: 'Cohere Rerank 4 Pro', hint: 'cohere/rerank-4-pro' },
+  { value: 'cohere/rerank-v3.5', label: 'Cohere Rerank v3.5', hint: 'cohere/rerank-v3.5' },
+]
 
 const OCR_LANGUAGE_OPTIONS = [
   { value: 'eng', label: 'English', hint: 'eng' },
@@ -80,6 +94,20 @@ const embModelGroups = computed(() => [
   },
 ])
 
+const rerankModelGroups = computed(() => [
+  {
+    options: RERANK_MODEL_OPTIONS.map((m) => ({
+      value: m.value,
+      label: m.label,
+      tag: m.hint,
+    })),
+  },
+])
+
+const openRouterProviders = computed(() =>
+  providerStore.providers.filter((provider) => provider.type === 'openrouter')
+)
+
 // Confirmation dialog
 const showDropConfirm = ref(false)
 
@@ -112,6 +140,7 @@ onMounted(async () => {
   await loadEmbeddingConfig()
   await loadChunkingConfig()
   await loadParserConfig()
+  await loadRerankerConfig()
 })
 
 async function loadEmbeddingConfig() {
@@ -153,6 +182,18 @@ async function loadParserConfig() {
   } catch { /* defaults */ }
 }
 
+async function loadRerankerConfig() {
+  try {
+    const config = await api.memory.getRerankerConfig()
+    rerankEnabled.value = config.enabled
+    rerankProviderId.value = config.providerId || openRouterProviders.value[0]?.id || ''
+    rerankModel.value = config.model
+    rerankCandidateCount.value = config.candidateCount
+  } catch {
+    rerankProviderId.value = openRouterProviders.value[0]?.id || ''
+  }
+}
+
 async function toggleOcr() {
   ocrSaving.value = true
   try {
@@ -168,6 +209,23 @@ async function saveOcrLanguage() {
     await api.memory.configureParser({ ocrEnabled: ocrEnabled.value, ocrLanguage: ocrLanguage.value.trim() || 'eng' })
   } catch { /* error handling */ }
   ocrSaving.value = false
+}
+
+async function saveReranker() {
+  rerankSaving.value = true
+  try {
+    const res = await api.memory.configureReranker({
+      enabled: rerankEnabled.value,
+      providerId: rerankProviderId.value || undefined,
+      model: rerankModel.value,
+      candidateCount: rerankCandidateCount.value
+    })
+    rerankEnabled.value = res.enabled
+    rerankProviderId.value = res.providerId || rerankProviderId.value
+    rerankModel.value = res.model
+    rerankCandidateCount.value = res.candidateCount
+  } catch { /* error handling */ }
+  rerankSaving.value = false
 }
 
 async function fetchEmbModels(providerId: string) {
@@ -347,6 +405,76 @@ async function manualClearDb() {
       >
         <span v-if="embSaving">Saving...</span>
         <span v-else>Save Embedding Config</span>
+      </button>
+    </BaseCard>
+
+    <!-- Reranking -->
+    <BaseCard class="p-5 space-y-4 mb-4">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h3 class="text-sm font-medium text-theme-200 mb-1">
+            Retrieval Reranker
+          </h3>
+          <p class="text-xs text-theme-500">
+            Optionally send the best hybrid-search candidates to an OpenRouter rerank model before memory is injected into chat context.
+            This can improve relevance at the cost of one extra search request.
+          </p>
+        </div>
+        <ToggleSwitch
+          v-model="rerankEnabled"
+          :disabled="rerankSaving"
+        />
+      </div>
+
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label class="block text-xs text-theme-400 mb-1">OpenRouter Provider</label>
+          <ProviderSelect
+            v-model="rerankProviderId"
+            :providers="openRouterProviders"
+            placeholder="Select OpenRouter provider"
+          />
+          <p
+            v-if="openRouterProviders.length === 0"
+            class="text-xs text-amber-400 mt-1"
+          >
+            Add an OpenRouter provider before enabling reranking.
+          </p>
+        </div>
+
+        <div>
+          <label class="block text-xs text-theme-400 mb-1">Model</label>
+          <CustomSelect
+            v-model="rerankModel"
+            :groups="rerankModelGroups"
+            placeholder="Select rerank model"
+            dropdown-width="min-w-full"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs text-theme-400 mb-1">Candidate Pool</label>
+          <input
+            v-model.number="rerankCandidateCount"
+            type="number"
+            min="3"
+            max="50"
+            step="1"
+            class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          >
+          <p class="text-xs text-theme-500 mt-1">
+            More candidates can improve recall but increase rerank latency.
+          </p>
+        </div>
+      </div>
+
+      <button
+        :disabled="rerankSaving || (rerankEnabled && !rerankProviderId)"
+        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+        @click="saveReranker"
+      >
+        <span v-if="rerankSaving">Saving...</span>
+        <span v-else>Save Reranker Config</span>
       </button>
     </BaseCard>
 

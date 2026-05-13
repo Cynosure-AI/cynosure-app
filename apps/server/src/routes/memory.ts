@@ -4,6 +4,7 @@ import { getMemoryAggregator } from '../core/memory/memory-aggregator.js'
 import { getHistoryStore } from '../core/memory/history.js'
 import { getEmbeddingProvider } from '../core/memory/embedding.js'
 import { getMemoryParser } from '../core/memory/parser.js'
+import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemorySpaceFilter, getDefaultMemorySpace } from '../core/memory/memory-space-scope.js'
 import { getDb } from '../db/database.js'
@@ -233,5 +234,24 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       "INSERT OR REPLACE INTO settings (key, value_json) VALUES ('documentParser', ?)"
     ).run(JSON.stringify({ ocrEnabled: !!ocrEnabled, ocrLanguage: lang }))
     return { success: true, ocrEnabled: !!ocrEnabled, ocrLanguage: lang }
+  })
+
+  // GET /api/memory/reranker/config — get optional external reranker config
+  app.get('/reranker/config', async () => {
+    return getMemoryReranker().getConfig()
+  })
+
+  // POST /api/memory/reranker/configure — enable/configure OpenRouter reranking
+  app.post<{ Body: Partial<MemoryRerankerConfig> }>('/reranker/configure', async (req, reply) => {
+    if (req.body.enabled && req.body.providerId) {
+      const provider = getGateway().getProvider(req.body.providerId)
+      if (!provider) return reply.status(400).send({ error: 'Reranker provider not found' })
+      if (provider.config.type !== 'openrouter') {
+        return reply.status(400).send({ error: 'Reranking currently requires an OpenRouter provider' })
+      }
+    }
+
+    const config = getMemoryReranker().saveConfig(req.body)
+    return { success: true, ...config }
   })
 }

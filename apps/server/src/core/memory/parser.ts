@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid'
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 import { getEmbeddingProvider } from './embedding.js'
 import { getRAGStore, type VectorDocument } from './rag.js'
+import { getMemoryReranker } from './reranker.js'
 import { getDb } from '../../db/database.js'
 
 export interface DocumentMeta {
@@ -170,11 +171,17 @@ export class MemoryParser {
   ): Promise<RetrievedChunk[]> {
     const embedder = getEmbeddingProvider()
     const ragStore = getRAGStore()
+    const reranker = getMemoryReranker()
 
     const { vector } = await embedder.embed(query)
-    const results = await ragStore.hybridSearch(tableName, vector, query, topK, filter)
+    const candidateCount = reranker.getCandidateCount(topK)
+    const results = await ragStore.hybridSearch(tableName, vector, query, candidateCount, filter)
+    const ranked = await reranker.rerank(query, results, topK).catch((err) => {
+      console.warn('[memory-reranker] Rerank failed, using hybrid ranking:', err)
+      return results.slice(0, topK)
+    })
 
-    return results.map((r) => ({
+    return ranked.map((r) => ({
       id: r.id,
       text: r.text,
       source: r.source,
