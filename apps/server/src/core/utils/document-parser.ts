@@ -33,7 +33,7 @@ function getParserConfig(): { ocrEnabled: boolean; ocrLanguage: string } {
 }
 
 /** Parse a document buffer and return structured Markdown text */
-export async function parseDocument(buffer: Buffer, filename: string): Promise<string> {
+export async function parseDocument(buffer: Buffer, _filename: string): Promise<string> {
     const { ocrEnabled: ocr, ocrLanguage } = getParserConfig()
     const ast = await parseOffice(buffer, {
         outputErrorToConsole: false,
@@ -90,6 +90,7 @@ function nodeToMarkdown(node: OfficeContentNode, depth = 0): string {
         }
 
         case 'paragraph':
+        case 'text':
             return node.text || ''
 
         case 'list':
@@ -97,6 +98,15 @@ function nodeToMarkdown(node: OfficeContentNode, depth = 0): string {
 
         case 'table':
             return tableToMarkdown(node)
+
+        case 'sheet':
+            return sheetToMarkdown(node)
+
+        case 'row':
+            return rowToMarkdown(node)
+
+        case 'cell':
+            return cellText(node)
 
         case 'note':
             return `> **Note${meta?.noteType ? ` (${meta.noteType})` : ''}:** ${node.text || ''}`
@@ -108,7 +118,9 @@ function nodeToMarkdown(node: OfficeContentNode, depth = 0): string {
             return `[Chart: ${meta?.attachmentName || 'embedded chart'}]`
 
         default:
-            // For any other node types, just return text content
+            if (node.children?.length) {
+                return node.children.map(child => nodeToMarkdown(child, depth + 1)).filter(Boolean).join('\n\n')
+            }
             return node.text || ''
     }
 }
@@ -126,29 +138,73 @@ function tableToMarkdown(tableNode: OfficeContentNode): string {
     const rows = (tableNode.children || []).filter(r => r.type === 'row')
     if (!rows.length) return ''
 
-    const tableRows: string[][] = rows.map(row =>
-        (row.children || [])
-            .filter(c => c.type === 'cell')
-            .map(cell => (cell.text || '').replace(/\|/g, '\\|').replace(/\n/g, ' ').trim())
-    )
+    const tableRows = rows.map(rowToCells)
 
     if (!tableRows.length || !tableRows[0].length) return ''
 
-    // Normalize column count
+    return rowsToMarkdownTable(tableRows)
+}
+
+function sheetToMarkdown(sheetNode: OfficeContentNode): string {
+    const meta = sheetNode.metadata as Record<string, unknown> | undefined
+    const sheetName = typeof meta?.sheetName === 'string' ? meta.sheetName : undefined
+    const rows = (sheetNode.children || []).filter(r => r.type === 'row')
+    const tableRows = rows.map(rowToCells).filter(r => r.some(cell => cell.trim()))
+    const parts: string[] = []
+
+    if (sheetName) parts.push(`## ${sheetName}`)
+    if (tableRows.length) parts.push(rowsToMarkdownTable(tableRows))
+
+    const nonRows = (sheetNode.children || [])
+        .filter(child => child.type !== 'row')
+        .map(child => nodeToMarkdown(child))
+        .filter(Boolean)
+    parts.push(...nonRows)
+
+    return parts.join('\n\n')
+}
+
+function rowToMarkdown(rowNode: OfficeContentNode): string {
+    return rowToCells(rowNode).filter(Boolean).join(' | ')
+}
+
+function rowToCells(rowNode: OfficeContentNode): string[] {
+    const cells = (rowNode.children || []).filter(c => c.type === 'cell')
+    const row: string[] = []
+
+    for (const cell of cells) {
+        const meta = cell.metadata as Record<string, unknown> | undefined
+        const col = typeof meta?.col === 'number' ? meta.col : row.length
+        row[col] = escapeTableCell(cellText(cell))
+    }
+
+    return row.map(cell => cell || '')
+}
+
+function cellText(cellNode: OfficeContentNode): string {
+    if (cellNode.text?.trim()) return cellNode.text.trim()
+    if (!cellNode.children?.length) return ''
+    return cellNode.children.map(child => cellText(child)).join('').trim()
+}
+
+function rowsToMarkdownTable(tableRows: string[][]): string {
     const colCount = Math.max(...tableRows.map(r => r.length))
     const normalized = tableRows.map(r => {
-        while (r.length < colCount) r.push('')
-        return r
+        const copy = [...r]
+        while (copy.length < colCount) copy.push('')
+        return copy
     })
 
     const lines: string[] = []
-    // Header row
     lines.push('| ' + normalized[0].join(' | ') + ' |')
     lines.push('| ' + normalized[0].map(() => '---').join(' | ') + ' |')
-    // Data rows
     for (let i = 1; i < normalized.length; i++) {
         lines.push('| ' + normalized[i].join(' | ') + ' |')
     }
 
     return lines.join('\n')
+}
+
+function escapeTableCell(value: string): string {
+    return value.replace(/\|/g, '\\|').replace(/\n/g, ' ').trim()
 }
