@@ -1,5 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 
+type RegistryServerEntry = {
+    server: Record<string, unknown>
+    _meta?: Record<string, unknown>
+}
+
 export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<void> {
     // GET /api/mcp/registry — proxy to MCP registries (official, smithery, glama)
     app.get<{
@@ -8,7 +13,7 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
         const { search, cursor, limit, registry: registrySource } = req.query
         const targetLimit = parseInt(limit || '20', 10)
         let currentCursor = cursor || ''
-        const collectedServers: any[] = []
+        const collectedServers: RegistryServerEntry[] = []
 
         try {
             if (registrySource === 'smithery') {
@@ -26,6 +31,21 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
                 if (data.servers && Array.isArray(data.servers)) {
                     for (const s of data.servers) {
                         if (s.remote && !s.isDeployed && !s.name) continue;
+                        let remotes: Array<{ type: string; url: string }> | undefined
+                        if (s.remote && s.isDeployed) {
+                            const detailUrl = `https://api.smithery.ai/servers/${encodeURI(s.qualifiedName)}`
+                            try {
+                                const detailRes = await fetch(detailUrl)
+                                if (detailRes.ok) {
+                                    const detail = await detailRes.json()
+                                    const deploymentUrl = detail.deploymentUrl
+                                        || detail.connections?.find((conn: { type?: string; deploymentUrl?: string }) => conn.type === 'http' && conn.deploymentUrl)?.deploymentUrl
+                                    if (deploymentUrl) remotes = [{ type: 'streamable-http', url: deploymentUrl }]
+                                }
+                            } catch {
+                                // Keep the registry row usable via Smithery CLI if detail lookup fails.
+                            }
+                        }
                         collectedServers.push({
                             server: {
                                 name: s.qualifiedName,
@@ -35,9 +55,11 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
                                 websiteUrl: s.homepage,
                                 icons: s.iconUrl ? [{ src: s.iconUrl, mimeType: 'image/png' }] : undefined,
                                 isRemote: !!s.remote,
+                                remotes,
                                 packages: [{
                                     registryType: 'smithery',
                                     identifier: s.qualifiedName,
+                                    transport: { type: 'stdio' },
                                     command: 'npx',
                                     env: []
                                 }]

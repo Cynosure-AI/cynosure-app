@@ -78,7 +78,18 @@ const tableColumns: Column[] = [
   { key: 'enable', label: 'Enable', width: '56px', hideOnMobile: true},
 ]
 
-const newServer = reactive({ name: '', description: '', command: '', args: '', env: '' })
+type AddMode = 'local' | 'remote'
+
+const newServer = reactive({
+  mode: 'local' as AddMode,
+  name: '',
+  description: '',
+  command: '',
+  args: '',
+  env: '',
+  remoteUrl: '',
+  bearerToken: '',
+})
 const pendingAddId = ref<string | null>(null)
 const editServer = reactive({ name: '', description: '', command: '', args: '', env: '' })
 const editEnvFields = reactive<Record<string, string>>({})
@@ -104,12 +115,53 @@ function textToEnv(text: string): Record<string, string> {
   return env
 }
 
+function resetNewServer(): void {
+  Object.assign(newServer, {
+    mode: 'local',
+    name: '',
+    description: '',
+    command: '',
+    args: '',
+    env: '',
+    remoteUrl: '',
+    bearerToken: '',
+  })
+}
+
+function remoteTokenEnvName(): string {
+  const source = newServer.name.trim() || newServer.remoteUrl.trim() || 'remote'
+  const slug = source.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '')
+  return `MCP_${slug || 'REMOTE'}_TOKEN`
+}
+
+function buildRemoteArgs(): string[] {
+  const args = ['--transport', 'streamable-http', '--url', newServer.remoteUrl.trim()]
+  const token = newServer.bearerToken.trim()
+  if (token) args.push(`--bearer-token-env=${token.startsWith('$') ? token.slice(1) : remoteTokenEnvName()}`)
+  return args
+}
+
+function buildRemoteEnv(): Record<string, string> {
+  const token = newServer.bearerToken.trim()
+  if (!token || token.startsWith('$')) return {}
+  return { [remoteTokenEnvName()]: token }
+}
+
+const canSubmitNewServer = computed(() => {
+  if (newServer.mode === 'remote') return /^https?:\/\//.test(newServer.remoteUrl.trim())
+  return !!newServer.command.trim()
+})
+
 async function addServer(): Promise<void> {
-  if (!newServer.command) return
+  if (!canSubmitNewServer.value) return
   setLoading('add', true)
   try {
-    const args = newServer.args ? newServer.args.split('\n').map(a => a.trim()).filter(Boolean) : []
-    const env = textToEnv(newServer.env)
+    const isRemote = newServer.mode === 'remote'
+    const command = isRemote ? 'remote' : newServer.command.trim()
+    const args = isRemote
+      ? buildRemoteArgs()
+      : (newServer.args ? newServer.args.split('\n').map(a => a.trim()).filter(Boolean) : [])
+    const env = isRemote ? buildRemoteEnv() : textToEnv(newServer.env)
     const customName = newServer.name.trim() || null
 
     // If we already created a server that failed to connect, update it instead of creating a duplicate
@@ -117,7 +169,7 @@ async function addServer(): Promise<void> {
       const result = await api.mcp.updateServer(pendingAddId.value, {
         customName,
         description: newServer.description,
-        command: newServer.command,
+        command,
         args,
         env,
       })
@@ -125,7 +177,7 @@ async function addServer(): Promise<void> {
         actionError.value['add'] = result.error
       } else {
         showAddForm.value = false
-        Object.assign(newServer, { name: '', description: '', command: '', args: '', env: '' })
+        resetNewServer()
         actionError.value = {}
         pendingAddId.value = null
       }
@@ -133,9 +185,10 @@ async function addServer(): Promise<void> {
       const result = await api.mcp.addServer({
         customName,
         description: newServer.description,
-        command: newServer.command,
+        command,
         args,
         env: Object.keys(env).length ? env : undefined,
+        origin: isRemote ? 'remote' : undefined,
       })
       if (result.error) {
         actionError.value['add'] = result.error
@@ -145,7 +198,7 @@ async function addServer(): Promise<void> {
         }
       } else {
         showAddForm.value = false
-        Object.assign(newServer, { name: '', description: '', command: '', args: '', env: '' })
+        resetNewServer()
         actionError.value = {}
         pendingAddId.value = null
       }
@@ -158,7 +211,7 @@ async function addServer(): Promise<void> {
 
 function cancelForm(): void {
   showAddForm.value = false
-  Object.assign(newServer, { name: '', description: '', command: '', args: '', env: '' })
+  resetNewServer()
   delete actionError.value['add']
   pendingAddId.value = null
 }
@@ -306,6 +359,23 @@ defineExpose({ loadServers })
       v-if="showAddForm"
       class="bg-theme-900/60 border border-theme-700 rounded-xl p-4 mb-6 space-y-4"
     >
+      <div class="grid grid-cols-2 gap-1 rounded-lg bg-theme-950/70 border border-theme-800 p-1">
+        <button
+          class="h-8 rounded-md text-sm transition-colors"
+          :class="newServer.mode === 'local' ? 'bg-theme-700 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
+          @click="newServer.mode = 'local'"
+        >
+          Local
+        </button>
+        <button
+          class="h-8 rounded-md text-sm transition-colors"
+          :class="newServer.mode === 'remote' ? 'bg-theme-700 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
+          @click="newServer.mode = 'remote'"
+        >
+          Remote
+        </button>
+      </div>
+
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm text-theme-400 mb-1">Custom name</label>
@@ -316,7 +386,16 @@ defineExpose({ loadServers })
             class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
           >
         </div>
-        <div>
+        <div v-if="newServer.mode === 'remote'">
+          <label class="block text-sm text-theme-400 mb-1">URL</label>
+          <input
+            v-model="newServer.remoteUrl"
+            type="url"
+            placeholder="https://mcp.example.com/mcp"
+            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+          >
+        </div>
+        <div v-else>
           <label class="block text-sm text-theme-400 mb-1">Command</label>
           <input
             v-model="newServer.command"
@@ -335,16 +414,32 @@ defineExpose({ loadServers })
           class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
         />
       </div>
-      <div>
-        <label class="block text-sm text-theme-400 mb-1">Arguments (one per line)</label>
-        <textarea
-          v-model="newServer.args"
-          rows="3"
-          placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir"
-          class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-        />
-      </div>
-      <div>
+      <template v-if="newServer.mode === 'local'">
+        <div>
+          <label class="block text-sm text-theme-400 mb-1">Arguments (one per line)</label>
+          <textarea
+            v-model="newServer.args"
+            rows="3"
+            placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir"
+            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+          />
+        </div>
+      </template>
+      <template v-else>
+        <div>
+          <label class="block text-sm text-theme-400 mb-1">Bearer token</label>
+          <input
+            v-model="newServer.bearerToken"
+            type="password"
+            placeholder="Leave blank for OAuth, paste a token, or use $MCP_BEARER_TOKEN"
+            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+          >
+          <p class="mt-1 text-xs text-theme-500">
+            Remote MCP servers normally authenticate with OAuth. Use this only for servers that accept an Authorization bearer token.
+          </p>
+        </div>
+      </template>
+      <div v-if="newServer.mode === 'local'">
         <label class="block text-sm text-theme-400 mb-1">Environment Variables (KEY=VALUE, one per line)</label>
         <textarea
           v-model="newServer.env"
@@ -360,7 +455,7 @@ defineExpose({ loadServers })
         {{ actionError['add'] }}
       </div>
       <button
-        :disabled="!newServer.command || isLoading('add')"
+        :disabled="!canSubmitNewServer || isLoading('add')"
         class="w-full px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
         @click="addServer"
       >
