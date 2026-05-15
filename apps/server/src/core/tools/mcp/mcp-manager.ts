@@ -64,6 +64,12 @@ export type AuthCompleteCallback = (serverId: string, tools: ToolDefinition[], c
 const AUTH_WAIT_TIMEOUT_MS = 5 * 60 * 1000
 /** How long to wait for a standard MCP server to connect before timing out (60 seconds) */
 const STANDARD_TIMEOUT_MS = 60 * 1000
+const REMOTE_COMMAND = 'remote'
+
+type ParsedRemoteConfig = {
+    url: string
+    headers: Record<string, string>
+}
 
 export class McpManager {
     private connections = new Map<string, McpConnection>()
@@ -103,18 +109,19 @@ export class McpManager {
         // Clear any stale auth state from previous attempts
         this.pendingAuths.delete(config.id)
 
-        // Use HTTP transport for detected remote servers (Smithery, mcp-remote, etc.)
-        const remoteUrl = McpManager.extractRemoteUrl(config.args)
-        if (remoteUrl && this.serverBaseUrl) {
+        // Use HTTP transport for detected remote servers (manual remote, registry remotes, mcp-remote, Smithery, etc.)
+        const remote = this.parseRemoteConfig(config)
+        if (remote && this.serverBaseUrl) {
             try {
-                return await this.connectHttp(config, remoteUrl)
+                return await this.connectHttp(config, remote.url, remote.headers)
             } catch (err) {
                 // Auth-related errors should not fallback to stdio
                 if (err instanceof UnauthorizedError ||
                     (err as Error).message?.includes('Authorization required')) {
                     throw err
                 }
-                // Non-auth error — fall back to stdio transport
+                // Non-auth error — fall back to stdio transport for wrapper commands only.
+                if (config.command === REMOTE_COMMAND) throw err
                 console.warn(`HTTP transport failed for "${config.name}", falling back to stdio:`, (err as Error).message)
             }
         }
@@ -123,7 +130,7 @@ export class McpManager {
     }
 
     /** Connect using StreamableHTTP transport (direct HTTP + OAuth). */
-    private async connectHttp(config: McpServerConfig, remoteUrl: string): Promise<ToolDefinition[]> {
+    private async connectHttp(config: McpServerConfig, remoteUrl: string, headers: Record<string, string> = {}): Promise<ToolDefinition[]> {
         const callbackUrl = `${this.serverBaseUrl}/api/mcp/oauth/callback/${encodeURIComponent(config.id)}`
         let authUrl: string | null = null
 
@@ -139,7 +146,8 @@ export class McpManager {
 
         const client = new Client({ name: 'cynosure', version: '1.0.0' })
         const transport = new StreamableHTTPClientTransport(new URL(remoteUrl), {
-            authProvider: provider
+            authProvider: provider,
+            requestInit: Object.keys(headers).length ? { headers } : undefined,
         })
 
         try {
@@ -505,6 +513,9 @@ export class McpManager {
      * or `['@smithery/cli@latest', 'run', '<identifier>']`).
      */
     static extractRemoteUrl(args: string[]): string | null {
+        const explicitUrl = McpManager.getArgValue(args, '--url')
+        if (explicitUrl?.startsWith('http')) return explicitUrl
+
         // mcp-remote pattern: npx -y mcp-remote https://server.url
         const remoteIdx = args.indexOf('mcp-remote')
         if (remoteIdx >= 0 && remoteIdx + 1 < args.length) {
@@ -524,6 +535,57 @@ export class McpManager {
                 return `https://${identifier}.run.tools`
             }
         }
+        return null
+    }
+
+    private parseRemoteConfig(config: McpServerConfig): ParsedRemoteConfig | null {
+        const url = McpManager.extractRemoteUrl(config.args)
+        if (!url) return null
+
+        const headers: Record<string, string> = {}
+        for (const arg of config.args) {
+            if (arg.startsWith('--header=')) {
+                const header = arg.slice('--header='.length)
+                const sepIdx = header.indexOf(':')
+                if (sepIdx > 0) {
+                    const key = header.slice(0, sepIdx).trim()
+                    const value = header.slice(sepIdx + 1).trim()
+                    if (key && value) headers[key] = value
+                }
+            }
+
+            if (arg.startsWith('--header-env=')) {
+                const header = arg.slice('--header-env='.length)
+                const sepIdx = header.indexOf('=')
+                if (sepIdx > 0) {
+                    const key = header.slice(0, sepIdx).trim()
+                    const envName = header.slice(sepIdx + 1).trim()
+                    const value = this.resolveEnvValue(envName, config.env)
+                    if (key && value) headers[key] = value
+                }
+            }
+        }
+
+        const bearerEnv = McpManager.getArgValue(config.args, '--bearer-token-env')
+        const bearerToken = bearerEnv ? this.resolveEnvValue(bearerEnv, config.env) : ''
+        if (bearerToken && !headers.Authorization) {
+            headers.Authorization = `Bearer ${bearerToken}`
+        }
+
+        return { url, headers }
+    }
+
+    private resolveEnvValue(name: string, env?: Record<string, string>): string {
+        return env?.[name] || process.env[name] || ''
+    }
+
+    private static getArgValue(args: string[], name: string): string | null {
+        const eqPrefix = `${name}=`
+        const eqArg = args.find(arg => arg.startsWith(eqPrefix))
+        if (eqArg) return eqArg.slice(eqPrefix.length)
+
+        const idx = args.indexOf(name)
+        if (idx >= 0 && idx + 1 < args.length) return args[idx + 1]
         return null
     }
 

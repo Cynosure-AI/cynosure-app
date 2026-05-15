@@ -24,6 +24,12 @@ const addingRegistryId = ref<string | null>(null)
 const registryEnv = reactive<Record<string, string>>({})
 
 type RegistryRow = McpRegistryServer & { id: string }
+type InstallInfo = {
+  kind: 'local' | 'remote'
+  command: string
+  args: string[]
+  envVars: { name: string; description?: string; required: boolean }[]
+}
 
 const registryRows = computed<RegistryRow[]>(() =>
   registryServers.value.map(entry => ({
@@ -97,11 +103,35 @@ function getDisplayName(srv: McpRegistryServer['server']): string {
   return srv.title || srv.name.split('/').pop() || srv.name
 }
 
-function getInstallInfo(srv: McpRegistryServer['server']): {
-  command: string
-  args: string[]
-  envVars: { name: string; description?: string; required: boolean }[]
-} | null {
+function headerEnvName(header: string): string {
+  return `MCP_HEADER_${header.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'VALUE'}`
+}
+
+function getInstallInfo(srv: McpRegistryServer['server']): InstallInfo | null {
+  const remote = srv.remotes?.find(r => /^https?:\/\//.test(r.url) && (r.type === 'streamable-http' || r.type === 'http'))
+  if (remote) {
+    const envVars = (remote.headers || []).map(header => {
+      const name = headerEnvName(header.name)
+      return {
+        name,
+        description: header.description || `Value for ${header.name}`,
+        required: header.isRequired,
+      }
+    })
+    return {
+      kind: 'remote',
+      command: 'remote',
+      args: [
+        '--transport',
+        'streamable-http',
+        '--url',
+        remote.url,
+        ...(remote.headers || []).map(header => `--header-env=${header.name}=${headerEnvName(header.name)}`),
+      ],
+      envVars,
+    }
+  }
+
   const pkg = srv.packages?.find(p => p.transport?.type === 'stdio' || p.registryType === 'smithery')
   if (pkg) {
     const envVars = (pkg.environmentVariables || []).map(v => ({
@@ -109,9 +139,9 @@ function getInstallInfo(srv: McpRegistryServer['server']): {
       description: v.description,
       required: v.isRequired,
     }))
-    if (pkg.registryType === 'smithery') return { command: 'npx', args: ['-y', '@smithery/cli@latest', 'run', pkg.identifier], envVars }
-    if (pkg.registryType === 'npm') return { command: 'npx', args: ['-y', pkg.identifier], envVars }
-    if (pkg.registryType === 'pypi') return { command: 'uvx', args: [pkg.identifier], envVars }
+    if (pkg.registryType === 'smithery') return { kind: 'local', command: 'npx', args: ['-y', '@smithery/cli@latest', 'run', pkg.identifier], envVars }
+    if (pkg.registryType === 'npm') return { kind: 'local', command: 'npx', args: ['-y', pkg.identifier], envVars }
+    if (pkg.registryType === 'pypi') return { kind: 'local', command: 'uvx', args: [pkg.identifier], envVars }
   }
   return null
 }
@@ -121,6 +151,7 @@ function getTypeTags(srv: McpRegistryServer['server']): string[] {
   const install = getInstallInfo(srv)
   const pkg = srv.packages?.find(p => p.transport?.type === 'stdio' || p.registryType === 'smithery')
 
+  if (install?.kind === 'remote') tags.add('remote')
   if (pkg?.registryType === 'smithery') tags.add('smithery')
   else if (pkg?.registryType === 'npm') tags.add('npm')
   else if (pkg?.registryType === 'pypi') tags.add('pypi')
@@ -128,7 +159,7 @@ function getTypeTags(srv: McpRegistryServer['server']): string[] {
   else if (install?.command === 'uvx') tags.add('pypi')
 
   if ((srv as { isLocal?: boolean }).isLocal) tags.add('local')
-  if (srv.isRemote || (srv as { isRemote?: boolean }).isRemote) tags.add('remote')
+  if (srv.isRemote || (srv as { isRemote?: boolean }).isRemote || srv.remotes?.length) tags.add('remote')
   if (!install && !(srv as { isLocal?: boolean }).isLocal && !srv.isRemote) tags.add('remote only')
 
   return [...tags]
@@ -163,7 +194,9 @@ async function addFromRegistry(srv: McpRegistryServer): Promise<void> {
     }
 
     const pkgType = srv.server.packages?.[0]?.registryType || 'unknown'
-    const originLabel = pkgType === 'smithery' ? 'smithery.ai' : (pkgType === 'npm' ? 'npm' : (pkgType === 'pypi' ? 'pypi' : 'mcp-official'))
+    const originLabel = install.kind === 'remote'
+      ? `${registrySource.value}:remote`
+      : (pkgType === 'smithery' ? 'smithery.ai' : (pkgType === 'npm' ? 'npm' : (pkgType === 'pypi' ? 'pypi' : 'mcp-official')))
     const iconUrl = srv.server.icons?.[0]?.src || undefined
 
     const result = await api.mcp.addServer({
@@ -207,7 +240,8 @@ function cancelRegistryAdd(): void {
 function isInstalled(srv: McpRegistryServer['server']): boolean {
   const install = getInstallInfo(srv)
   if (!install) return false
-  const identifier = install.args[install.args.length - 1]
+  const urlIdx = install.args.indexOf('--url')
+  const identifier = urlIdx >= 0 ? install.args[urlIdx + 1] : install.args[install.args.length - 1]
   return servers.value.some(s => s.args.some(a => a === identifier))
 }
 
