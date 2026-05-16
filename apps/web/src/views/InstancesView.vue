@@ -148,23 +148,51 @@ type TimelineItem =
   | { id: string; kind: "running"; ts: number; running: AgentInstance }
   | { id: string; kind: "history"; ts: number; history: HistoryItem };
 
-const timelineColumns: Column[] = [
-  { key: "entry", label: "Entry", width: "minmax(0, 2.2fr)" },
+function timelineEntryName(item: TimelineItem): string {
+  return item.kind === "running"
+    ? item.running.agentName
+    : item.history.title || "Untitled";
+}
+
+function timelineDetails(item: TimelineItem): string {
+  if (item.kind === "running") {
+    return item.running.model || agentById.value[item.running.agentId]?.model || "";
+  }
+
+  const agent = item.history.agent_id ? agentById.value[item.history.agent_id] : null;
+  return `${agent?.name || "Free Chat"} ${agent?.model || ""}`.trim();
+}
+
+function timelineType(item: TimelineItem): string {
+  return item.kind === "running" ? item.running.type : item.history.origin || "chat";
+}
+
+function timelineStatus(item: TimelineItem): number {
+  if (item.kind === "history") return 0;
+  return item.running.status === "awaiting-approval" ? 2 : 1;
+}
+
+const timelineColumns: Column<TimelineItem>[] = [
+  { key: "entry", label: "Entry", width: "minmax(0, 2.2fr)", sortable: true, sortValue: timelineEntryName },
   {
     key: "details",
     label: "Details",
     width: "minmax(0, 1.7fr)",
     hideOnMobile: true,
+    sortable: true,
+    sortValue: timelineDetails,
   },
-  { key: "time", label: "Time", width: "180px", hideOnMobile: true, hideOnTablet: true },
+  { key: "time", label: "Time", width: "180px", hideOnMobile: true, hideOnTablet: true, sortable: true, sortValue: item => item.ts },
   {
     key: "type",
     label: "Type",
     width: "80px",
     hideOnMobile: true,
     hideOnTablet: true,
+    sortable: true,
+    sortValue: timelineType,
   },
-  { key: "status", label: "Status", width: "170px" },
+  { key: "status", label: "Status", width: "170px", sortable: true, sortValue: timelineStatus },
 ];
 
 // Cache agent lookups so the template doesn't call agentDefs.get() repeatedly per row
