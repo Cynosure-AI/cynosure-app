@@ -471,118 +471,7 @@ defineExpose({ loadServers })
     >
       <!-- Server column -->
       <template #col-server="{ item: server }">
-        <div
-          v-if="editingId === server.id"
-          class="space-y-3 py-2"
-        >
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs text-theme-400 mb-1">Custom name</label>
-              <input
-                v-model="editServer.name"
-                type="text"
-                :placeholder="originalServerName(server)"
-                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
-              >
-            </div>
-            <div>
-              <label class="block text-xs text-theme-400 mb-1">Command</label>
-              <input
-                v-model="editServer.command"
-                type="text"
-                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
-              >
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs text-theme-400 mb-1">Description</label>
-            <textarea
-              v-model="editServer.description"
-              rows="2"
-              :placeholder="server.description || server.serverInfo?.description || 'What this MCP server is useful for'"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-            />
-          </div>
-          <div>
-            <label class="block text-xs text-theme-400 mb-1">Arguments (one per line)</label>
-            <textarea
-              v-model="editServer.args"
-              rows="3"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500"
-            />
-          </div>
-          <div>
-            <label class="block text-xs text-theme-400 mb-1">Environment Variables</label>
-            <template v-if="server.envHints?.length">
-              <div class="space-y-2">
-                <div
-                  v-for="hint in server.envHints"
-                  :key="hint.name"
-                >
-                  <label class="flex items-center gap-1.5 text-xs text-theme-400 mb-1">
-                    <span class="font-mono">{{ hint.name }}</span>
-                    <span
-                      v-if="hint.required"
-                      class="text-red-400/80"
-                    >*</span>
-                    <span
-                      v-if="hint.description"
-                      class="text-theme-400/70 font-normal"
-                    >- {{ hint.description }}</span>
-                  </label>
-                  <input
-                    v-model="editEnvFields[hint.name]"
-                    :type="hint.sensitive ? 'password' : 'text'"
-                    :placeholder="hint.name"
-                    class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-                  >
-                </div>
-              </div>
-              <div class="mt-2">
-                <label class="block text-[11px] text-theme-500 mb-1">Additional env vars (KEY=VALUE, one per line)</label>
-                <textarea
-                  v-model="editServer.env"
-                  rows="2"
-                  placeholder="EXTRA_VAR=value"
-                  class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-                />
-              </div>
-            </template>
-            <template v-else>
-              <textarea
-                v-model="editServer.env"
-                rows="3"
-                class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-                placeholder="API_KEY=sk-..."
-              />
-            </template>
-          </div>
-          <div
-            v-if="actionError['edit']"
-            class="text-xs text-red-400"
-          >
-            {{ actionError['edit'] }}
-          </div>
-          <div class="flex gap-2 justify-end">
-            <button
-              class="px-3 py-1.5 text-xs bg-theme-700 hover:bg-theme-600 text-theme-300 rounded-md transition-colors"
-              @click="cancelEditing"
-            >
-              Cancel
-            </button>
-            <button
-              :disabled="!editServer.command || isLoading(server.id)"
-              class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
-              @click="saveEditing(server.id)"
-            >
-              {{ isLoading(server.id) ? 'Saving...' : 'Save & Reconnect' }}
-            </button>
-          </div>
-        </div>
-        <div
-          v-else
-          class="min-w-0 flex items-start gap-3"
-        >
+        <div class="min-w-0 flex items-start gap-3">
           <div class="relative shrink-0 mt-0.5">
             <img
               v-if="hasUsableIcon(server)"
@@ -734,6 +623,118 @@ defineExpose({ loadServers })
           :title="server.enabled ? 'Disable' : 'Enable'"
           @update:model-value="toggleServer(server.id)"
         />
+      </template>
+
+      <!-- Full-width edit form -->
+      <template #row-expand="{ item: server }">
+        <div
+          v-if="editingId === server.id"
+          class="border-t border-theme-800 px-4 py-4 md:px-5 space-y-3"
+        >
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-theme-400 mb-1">Custom name</label>
+              <input
+                v-model="editServer.name"
+                type="text"
+                :placeholder="originalServerName(server)"
+                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+              >
+            </div>
+            <div>
+              <label class="block text-xs text-theme-400 mb-1">Command</label>
+              <input
+                v-model="editServer.command"
+                type="text"
+                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+              >
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-theme-400 mb-1">Description</label>
+            <textarea
+              v-model="editServer.description"
+              rows="2"
+              :placeholder="server.description || server.serverInfo?.description || 'What this MCP server is useful for'"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            />
+          </div>
+          <div>
+            <label class="block text-xs text-theme-400 mb-1">Arguments (one per line)</label>
+            <textarea
+              v-model="editServer.args"
+              rows="3"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500"
+            />
+          </div>
+          <div>
+            <label class="block text-xs text-theme-400 mb-1">Environment Variables</label>
+            <template v-if="server.envHints?.length">
+              <div class="space-y-2">
+                <div
+                  v-for="hint in server.envHints"
+                  :key="hint.name"
+                >
+                  <label class="flex items-center gap-1.5 text-xs text-theme-400 mb-1">
+                    <span class="font-mono">{{ hint.name }}</span>
+                    <span
+                      v-if="hint.required"
+                      class="text-red-400/80"
+                    >*</span>
+                    <span
+                      v-if="hint.description"
+                      class="text-theme-400/70 font-normal"
+                    >- {{ hint.description }}</span>
+                  </label>
+                  <input
+                    v-model="editEnvFields[hint.name]"
+                    :type="hint.sensitive ? 'password' : 'text'"
+                    :placeholder="hint.name"
+                    class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+                  >
+                </div>
+              </div>
+              <div class="mt-2">
+                <label class="block text-[11px] text-theme-500 mb-1">Additional env vars (KEY=VALUE, one per line)</label>
+                <textarea
+                  v-model="editServer.env"
+                  rows="2"
+                  placeholder="EXTRA_VAR=value"
+                  class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+                />
+              </div>
+            </template>
+            <template v-else>
+              <textarea
+                v-model="editServer.env"
+                rows="3"
+                class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+                placeholder="API_KEY=sk-..."
+              />
+            </template>
+          </div>
+          <div
+            v-if="actionError['edit']"
+            class="text-xs text-red-400"
+          >
+            {{ actionError['edit'] }}
+          </div>
+          <div class="flex gap-2 justify-end">
+            <button
+              class="px-3 py-1.5 text-xs bg-theme-700 hover:bg-theme-600 text-theme-300 rounded-md transition-colors"
+              @click="cancelEditing"
+            >
+              Cancel
+            </button>
+            <button
+              :disabled="!editServer.command || isLoading(server.id)"
+              class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
+              @click="saveEditing(server.id)"
+            >
+              {{ isLoading(server.id) ? 'Saving...' : 'Save & Reconnect' }}
+            </button>
+          </div>
+        </div>
       </template>
     </DataTable>
 
