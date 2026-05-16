@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { api } from '../../../api/client'
 import { Icon } from '@iconify/vue'
 import DataTable from '../../shared/DataTable.vue'
@@ -19,24 +19,6 @@ const editingId = ref<string | null>(null)
 const installedFilter = ref('')
 const brokenIconUrlById = reactive<Record<string, string>>({})
 
-// Keep sorted IDs stable during editing; re-sort only on page load/refresh
-const sortedServerIds = ref<string[]>([])
-
-function updateSortedIds() {
-  sortedServerIds.value = [...servers.value]
-    .sort((a, b) => (a.enabled ? 1 : 0) - (b.enabled ? 1 : 0))
-    .reverse()
-    .map(s => s.id)
-}
-
-onMounted(() => {
-  updateSortedIds()
-})
-
-watch(() => servers.value.length, () => {
-  updateSortedIds()
-})
-
 function hasUsableIcon(server: McpServerInfo): boolean {
   return !!server.icon_url && brokenIconUrlById[server.id] !== server.icon_url
 }
@@ -51,10 +33,7 @@ function originalServerName(server: McpServerInfo): string {
 
 const filteredServers = computed(() => {
   const q = installedFilter.value.trim().toLowerCase()
-  const serverMap = new Map(servers.value.map(s => [s.id, s]))
-  let list = sortedServerIds.value
-    .map(id => serverMap.get(id))
-    .filter((s): s is McpServerInfo => !!s)
+  let list = servers.value
 
   if (q) {
     list = list.filter(s =>
@@ -70,12 +49,12 @@ const filteredServers = computed(() => {
 })
 
 // Table columns definition for DataTable component
-const tableColumns: Column[] = [
-  { key: 'server', label: 'Server', width: 'minmax(0,1.75fr)' },
-  { key: 'tools', label: 'Tools', width: '120px', hideOnMobile: true, hideOnTablet: true },
-  { key: 'status', label: 'Status', width: '120px', hideOnMobile: true },
+const tableColumns: Column<McpServerInfo>[] = [
+  { key: 'server', label: 'Server', width: 'minmax(0,1.75fr)', sortable: true, sortValue: originalServerName },
+  { key: 'tools', label: 'Tools', width: '120px', hideOnMobile: true, hideOnTablet: true, sortable: true, sortValue: server => server.toolCount },
+  { key: 'status', label: 'Status', width: '120px', hideOnMobile: true, sortable: true, sortValue: server => server.connected ? 3 : server.pendingAuthUrl ? 2 : server.enabled ? 1 : 0 },
   { key: 'actions', label: 'Actions', width: '200px' },
-  { key: 'enable', label: 'Enable', width: '56px', hideOnMobile: true},
+  { key: 'enable', label: 'Enable', width: '56px', hideOnMobile: true, sortable: true, sortValue: server => server.enabled },
 ]
 
 type AddMode = 'local' | 'remote'

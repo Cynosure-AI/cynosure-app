@@ -1,13 +1,16 @@
 <script setup lang="ts" generic="T extends { id: string }">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { Icon } from '@iconify/vue'
 
-export interface Column {
+export interface Column<TItem = unknown> {
   key: string
   label: string
   width?: string  // e.g., '120px', 'minmax(0,1.75fr)'
   class?: string   // Custom CSS classes for column content
   hideOnMobile?: boolean
   hideOnTablet?: boolean
+  sortable?: boolean
+  sortValue?: (item: TItem) => string | number | boolean | null | undefined
 }
 
 interface SelectionColumn {
@@ -18,7 +21,7 @@ interface SelectionColumn {
 
 interface Props<TItem> {
   items: TItem[]
-  columns: Column[]
+  columns: Column<TItem>[]
   selectable?: boolean
   selectionColumn?: SelectionColumn
   selectedIds?: string[]
@@ -45,6 +48,8 @@ const emit = defineEmits<{
 }>()
 
 const showSelectableColumn = computed(() => Boolean(props.selectable))
+const sortColumnKey = ref<string | null>(null)
+const sortDirection = ref<'asc' | 'desc'>('asc')
 
 const desktopGridColsTemplate = computed(() => {
   const columnWidths = props.columns.map(col => col.width || 'minmax(0,1fr)').join(' ')
@@ -111,6 +116,54 @@ function isSelected(id: string): boolean {
   return props.selectedIds.includes(id)
 }
 
+function toggleSort(column: Column<T>) {
+  if (!column.sortable) return
+
+  if (sortColumnKey.value !== column.key) {
+    sortColumnKey.value = column.key
+    sortDirection.value = 'asc'
+    return
+  }
+
+  if (sortDirection.value === 'asc') {
+    sortDirection.value = 'desc'
+    return
+  }
+
+  sortColumnKey.value = null
+  sortDirection.value = 'asc'
+}
+
+function sortIcon(column: Column<T>): string {
+  if (!column.sortable || sortColumnKey.value !== column.key) return 'lucide:chevrons-up-down'
+  return sortDirection.value === 'asc' ? 'lucide:chevron-up' : 'lucide:chevron-down'
+}
+
+function valueForSort(item: T, column: Column<T>): string | number | boolean | null | undefined {
+  return column.sortValue
+    ? column.sortValue(item)
+    : (item as Record<string, unknown>)[column.key] as string | number | boolean | null | undefined
+}
+
+function compareValues(a: string | number | boolean | null | undefined, b: string | number | boolean | null | undefined): number {
+  if (a == null && b == null) return 0
+  if (a == null) return 1
+  if (b == null) return -1
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  if (typeof a === 'boolean' && typeof b === 'boolean') return Number(a) - Number(b)
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+}
+
+const sortedItems = computed(() => {
+  if (!sortColumnKey.value) return props.items
+
+  const column = props.columns.find(col => col.key === sortColumnKey.value)
+  if (!column?.sortable) return props.items
+
+  const direction = sortDirection.value === 'asc' ? 1 : -1
+  return [...props.items].sort((a, b) => compareValues(valueForSort(a, column), valueForSort(b, column)) * direction)
+})
+
 const allSelected = computed(() => props.selectedIds.length === props.items.length && props.items.length > 0)
 const someSelected = computed(() => props.selectedIds.length > 0 && props.selectedIds.length < props.items.length)
 const anySelected = computed(() => props.selectedIds.length > 0)
@@ -148,14 +201,30 @@ const anySelected = computed(() => props.selectedIds.length > 0)
         :key="col.key"
         :class="[col.class, responsiveVisibilityClass(col.hideOnMobile, col.hideOnTablet)]"
       >
-        {{ col.label }}
+        <button
+          v-if="col.sortable"
+          type="button"
+          class="inline-flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-theme-200"
+          :aria-sort="sortColumnKey === col.key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
+          @click="toggleSort(col)"
+        >
+          <span class="truncate">{{ col.label }}</span>
+          <Icon
+            :icon="sortIcon(col)"
+            class="h-3.5 w-3.5 shrink-0"
+            :class="sortColumnKey === col.key ? 'text-accent-400' : 'text-theme-600'"
+          />
+        </button>
+        <template v-else>
+          {{ col.label }}
+        </template>
       </div>
     </div>
 
     <!-- Data Rows -->
     <div>
       <div
-        v-for="item in items"
+        v-for="item in sortedItems"
         :key="item.id"
         class="group border-b border-theme-800/70 last:border-b-0 cursor-pointer hover:bg-theme-800/30 transition-colors"
         :class="rowClass?.(item)"
