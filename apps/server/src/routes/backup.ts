@@ -3,25 +3,26 @@ import multipart from '@fastify/multipart'
 import archiver from 'archiver'
 import AdmZip from 'adm-zip'
 import { getDb } from '../db/database.js'
-import { getAppDataDir } from '../core/data-dir.js'
+import { getAppDataDir, getDefaultMemorySpaceDir, getMemorySpacesRootDir } from '../core/data-dir.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import { loadSavedProviders } from './providers.js'
 import { loadSavedMcpServers } from './mcp/index.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
-import { readdirSync, writeFileSync } from 'fs'
-import { getConversationArtifactsDir, cleanupConversationArtifacts } from '../core/artifacts/image-artifacts.js'
+import { writeFileSync } from 'fs'
+import { getConversationArtifactsDir } from '../core/artifacts/image-artifacts.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getMemoryParser } from '../core/memory/parser.js'
 import { getEmbeddingProvider } from '../core/memory/embedding.js'
-import { join } from 'path'
+import { basename, join } from 'path'
 import {
     existsSync,
     mkdirSync,
     rmSync
 } from 'fs'
 import type { LLMProviderConfig } from '../core/gateway/providers/base.provider.js'
-import { nanoid } from 'nanoid'
+import { ensureFolder, listFilesInFolder } from '../core/memory/memory-file-manager.js'
+import { stopAllMemorySpaceWatchers, watchMemorySpace } from '../core/memory/memory-space-watcher.js'
 
 interface ManifestModule {
     count: number
@@ -31,6 +32,12 @@ interface BackupManifest {
     version: 1
     createdAt: string
     modules: Record<string, ManifestModule>
+}
+
+interface MemoryFileBackup {
+    spaceId: string
+    fileName: string
+    archiveName: string
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -199,37 +206,25 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             // --- Memory spaces ---
             if (requested.includes('memory')) {
                 const db = getDb()
-                const spaces = db.prepare('SELECT * FROM memory_spaces ORDER BY created_at').all()
+                const spaces = db.prepare('SELECT * FROM memory_spaces ORDER BY created_at').all() as Record<string, unknown>[]
                 const assignments = db.prepare('SELECT * FROM agent_memory_spaces').all()
+                const files: MemoryFileBackup[] = []
 
-                // Export chunk texts from LanceDB (no vectors — they're re-embedded on import)
-                const ragStore = getRAGStore()
-                const { chunkOverlap } = getMemoryParser().getConfig()
-                const allDocs = await ragStore.listDocuments('permanent_memory')
+                for (const space of spaces) {
+                    const spaceId = String(space.id || '')
+                    const folderPath = typeof space.folder_path === 'string' ? space.folder_path : ''
+                    if (!spaceId || !folderPath) continue
 
-                // Group chunks by (spaceId, sourceFile), sort by chunkIndex
-                type DocGroup = { spaceId: string; sourceFile: string; chunks: string[] }
-                const groupMap = new Map<string, { meta: DocGroup; indexed: { idx: number; text: string }[] }>()
-                for (const doc of allDocs) {
-                    if (!doc.sourceFile) continue
-                    const key = `${doc.spaceId || ''}||${doc.sourceFile}`
-                    if (!groupMap.has(key)) {
-                        groupMap.set(key, {
-                            meta: { spaceId: doc.spaceId || '', sourceFile: doc.sourceFile, chunks: [] },
-                            indexed: []
-                        })
+                    for (const file of listFilesInFolder(folderPath).filter(f => f.supported)) {
+                        const archiveName = `memory/files/${encodeURIComponent(spaceId)}/${encodeURIComponent(file.fileName)}`
+                        archive.file(file.filePath, { name: archiveName })
+                        files.push({ spaceId, fileName: file.fileName, archiveName })
                     }
-                    groupMap.get(key)!.indexed.push({ idx: doc.chunkIndex ?? 0, text: doc.text })
-                }
-                const documents: DocGroup[] = []
-                for (const { meta, indexed } of groupMap.values()) {
-                    meta.chunks = indexed.sort((a, b) => a.idx - b.idx).map(c => c.text)
-                    documents.push(meta)
                 }
 
                 archive.append(JSON.stringify({ spaces, assignments }, null, 2), { name: 'memory/spaces.json' })
-                archive.append(JSON.stringify({ chunkOverlap, documents }, null, 2), { name: 'memory/documents.json' })
-                manifest.modules.memory = { count: documents.length }
+                archive.append(JSON.stringify({ files }, null, 2), { name: 'memory/files.json' })
+                manifest.modules.memory = { count: files.length }
             }
 
             // --- Conversations (agent-linked chat history) ---
@@ -607,6 +602,8 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         if (requestedModules.includes('memory') && manifest.modules.memory) {
             const res = { restored: 0, errors: [] as string[] }
             try {
+                await stopAllMemorySpaceWatchers()
+
                 // Reset LanceDB to avoid stale index references from previous state
                 const ragStore = getRAGStore()
                 await ragStore.close()
@@ -616,7 +613,18 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 }
                 await ragStore.initialize()
 
-                // Restore space metadata and assignments
+                db.prepare('DELETE FROM memory_file_index').run()
+                db.prepare('DELETE FROM agent_memory_spaces').run()
+                db.prepare('DELETE FROM memory_spaces').run()
+
+                const memoryRoot = getMemorySpacesRootDir()
+                if (existsSync(memoryRoot)) {
+                    rmSync(memoryRoot, { recursive: true, force: true })
+                }
+                ensureFolder(memoryRoot)
+
+                // Restore space metadata and assignments. Imported spaces are
+                // placed under the local app data memory root so backups are portable.
                 const spacesEntry = zip.getEntry('memory/spaces.json')
                 if (spacesEntry) {
                     const { spaces, assignments } = JSON.parse(spacesEntry.getData().toString('utf-8')) as {
@@ -624,8 +632,23 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                         assignments: Record<string, unknown>[]
                     }
                     for (const sp of spaces) {
-                        db.prepare('INSERT OR REPLACE INTO memory_spaces (id, name, description, created_at) VALUES (?, ?, ?, ?)')
-                            .run(sp.id, sp.name, sp.description || '', sp.created_at || Date.now())
+                        const id = String(sp.id || '')
+                        if (!id) continue
+                        const folderPath = id === 'default' ? getDefaultMemorySpaceDir() : join(memoryRoot, id)
+                        ensureFolder(folderPath)
+                        db.prepare(`
+                            INSERT OR REPLACE INTO memory_spaces
+                                (id, name, description, folder_path, sort_order, is_default, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        `).run(
+                            id,
+                            sp.name || '',
+                            sp.description || '',
+                            folderPath,
+                            sp.sort_order ?? 0,
+                            sp.is_default ?? (id === 'default' ? 1 : 0),
+                            sp.created_at || Date.now()
+                        )
                     }
                     for (const asg of assignments) {
                         db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
@@ -633,30 +656,42 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                     }
                 }
 
-                // Re-embed and restore document chunks
-                const docsEntry = zip.getEntry('memory/documents.json')
-                if (docsEntry) {
-                    const { chunkOverlap, documents } = JSON.parse(docsEntry.getData().toString('utf-8')) as {
-                        chunkOverlap: number
-                        documents: Array<{ spaceId: string; agentId?: string; sourceFile: string; chunks: string[] }>
-                    }
+                // Restore source files first. Files are the source of truth for
+                // file-backed memory; LanceDB is rebuilt from them.
+                const filesEntry = zip.getEntry('memory/files.json')
+                if (filesEntry) {
+                    const { files } = JSON.parse(filesEntry.getData().toString('utf-8')) as { files: MemoryFileBackup[] }
                     const mem = getAgentMemory()
-                    const overlap = chunkOverlap ?? 64
-                    for (const doc of documents) {
-                        if (!doc.chunks?.length) continue
+                    for (const file of files || []) {
                         try {
-                            // Reconstruct full text by stripping per-chunk overlap
-                            let fullText = doc.chunks[0]
-                            for (let i = 1; i < doc.chunks.length; i++) {
-                                const chunk = doc.chunks[i]
-                                fullText += chunk.length > overlap ? chunk.slice(overlap) : (' ' + chunk)
+                            const safeFileName = basename(file.fileName)
+                            if (!file.spaceId || !safeFileName || safeFileName !== file.fileName) {
+                                throw new Error('Invalid memory file name')
                             }
-                            await mem.store(fullText, doc.sourceFile || undefined, doc.spaceId || undefined)
+
+                            const space = db.prepare('SELECT folder_path FROM memory_spaces WHERE id = ?')
+                                .get(file.spaceId) as { folder_path: string } | undefined
+                            if (!space?.folder_path) throw new Error(`Memory space "${file.spaceId}" not found`)
+
+                            const entry = zip.getEntry(file.archiveName)
+                            if (!entry || entry.isDirectory) throw new Error('File content missing from backup')
+
+                            ensureFolder(space.folder_path)
+                            writeFileSync(join(space.folder_path, safeFileName), entry.getData())
+                            await mem.reindexFile(space.folder_path, safeFileName, file.spaceId)
                             res.restored++
                         } catch (e) {
-                            res.errors.push(`Document "${doc.sourceFile}": ${(e as Error).message}`)
+                            res.errors.push(`File "${file.fileName}": ${(e as Error).message}`)
                         }
                     }
+                }
+
+                const restoredSpaces = db.prepare('SELECT id, folder_path FROM memory_spaces WHERE folder_path != ?').all('') as {
+                    id: string
+                    folder_path: string
+                }[]
+                for (const space of restoredSpaces) {
+                    watchMemorySpace(space.id, space.folder_path)
                 }
             } catch (e) {
                 res.errors.push((e as Error).message)
@@ -852,15 +887,16 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
     })
 
     // ── POST /api/backup/reset ─────────────────────────────────────────────
-    app.post('/reset', async (_req, reply) => {
+    app.post('/reset', async (_req, _reply) => {
         const db = getDb()
+        await stopAllMemorySpaceWatchers()
 
         // Clear all database tables
         const tables = [
             'messages', 'conversations', 'execution_steps', 'execution_logs',
             'tasks', 'pending_hitl', 'notifications', 'tool_approvals',
             'cron_jobs', 'channels',
-            'memory_spaces', 'agent_memory_spaces',
+            'memory_file_index', 'memory_spaces', 'agent_memory_spaces',
             'mcp_servers', 'providers', 'agents',
             'settings'
         ]
@@ -881,6 +917,11 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         const logsDir = join(getAppDataDir(), 'logs')
         if (existsSync(logsDir)) {
             rmSync(logsDir, { recursive: true, force: true })
+        }
+
+        const memoryRoot = getMemorySpacesRootDir()
+        if (existsSync(memoryRoot)) {
+            rmSync(memoryRoot, { recursive: true, force: true })
         }
 
         // Reload in-memory state
