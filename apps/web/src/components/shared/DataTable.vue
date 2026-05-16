@@ -200,6 +200,11 @@ const anySelected = computed(() => props.selectedIds.length > 0)
             </div>
           </template>
         </div>
+        <!-- Full-width expandable section below grid row -->
+        <slot
+          name="row-expand"
+          :item="item"
+        />
       </div>
     </div>
   </div>
