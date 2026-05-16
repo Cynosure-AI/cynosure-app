@@ -85,10 +85,10 @@ const categoryGroups = computed<SelectOptionGroup[]>(() => [
 ])
 
 // Table columns for DataTable component
-const agentTableColumns: Column[] = [
-  { key: 'name', label: 'Name', width: 'minmax(0,1.5fr)' },
-  { key: 'provider', label: 'Provider/Model', width: 'minmax(200px,1fr)', hideOnMobile: true },
-  { key: 'metadata', label: 'Info', width: '200px', hideOnMobile: true },
+const agentTableColumns: Column<AgentDefinition>[] = [
+  { key: 'name', label: 'Name', width: 'minmax(0,1.5fr)', sortable: true, sortValue: agent => agent.name },
+  { key: 'provider', label: 'Provider/Model', width: 'minmax(200px,1fr)', hideOnMobile: true, sortable: true, sortValue: agent => `${getProviderName(agent)} ${agent.model}` },
+  { key: 'metadata', label: 'Info', width: '200px', hideOnMobile: true, sortable: true, sortValue: agent => agent.tools.length + (agent.subAgents?.length || 0) },
   { key: 'actions', label: 'Actions', width: '120px' },
 ]
 
