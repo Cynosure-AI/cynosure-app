@@ -13,6 +13,7 @@ export interface ToolInfo {
   name: string
   executionName: string
   description: string
+  parameters: Record<string, unknown>
   autoApprove: boolean
   namespace: ToolNamespace
   ambiguous: boolean

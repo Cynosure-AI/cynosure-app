@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
 import CollapsibleSection from '../../shared/CollapsibleSection.vue'
+import HoverTooltip from '../../shared/HoverTooltip.vue'
 
 const agentStore = useAgentStore()
 
@@ -97,6 +98,25 @@ function namespaceApprovalLabel(group: NamespaceGroup): string {
   if (state === 'all') return 'all auto'
   if (state === 'none') return 'all ask'
   return 'mixed'
+}
+
+interface ToolParam {
+  name: string
+  type: string
+  required: boolean
+  description?: string
+}
+
+function toolParams(tool: ToolInfo): ToolParam[] {
+  const schema = tool.parameters as { properties?: Record<string, { type?: string; description?: string }>; required?: string[] } | undefined
+  if (!schema?.properties) return []
+  const required = new Set(schema.required ?? [])
+  return Object.entries(schema.properties).map(([name, def]) => ({
+    name,
+    type: def.type ?? 'any',
+    required: required.has(name),
+    description: def.description,
+  }))
 }
 
 async function toggleNamespaceApproval(group: NamespaceGroup): Promise<void> {
@@ -232,15 +252,49 @@ function setNamespaceExpanded(nsId: string, expanded: boolean): void {
               v-for="tool in group.tools"
               :key="tool.name"
               class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-theme-800/60 transition-colors"
-              :title="displayDescription(tool)"
             >
-              <!-- Tool info -->
-              <div class="flex-1 min-w-0">
-                <span class="text-xs text-theme-200 font-medium block">{{ displayName(tool) }}</span>
-                <p class="text-[10px] text-theme-500 leading-snug truncate">
-                  {{ displayDescription(tool) }}
-                </p>
-              </div>
+              <HoverTooltip
+                :block="true"
+                placement="mouse"
+                :max-width="260"
+              >
+                <!-- Tool info -->
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs text-theme-200 font-medium block">{{ displayName(tool) }}</span>
+                  <p class="text-[10px] text-theme-500 leading-snug truncate">
+                    {{ displayDescription(tool) }}
+                  </p>
+                </div>
+                <template #content>
+                  <template v-if="toolParams(tool).length">
+                    <div class="font-medium text-theme-300 mb-1.5">
+                      Parameters
+                    </div>
+                    <div
+                      v-for="param in toolParams(tool)"
+                      :key="param.name"
+                      class="mb-1 last:mb-0"
+                    >
+                      <div class="flex items-baseline gap-1 font-mono text-[10px]">
+                        <span class="text-theme-300">{{ param.name }}</span>
+                        <span class="text-theme-500">: {{ param.type }}{{ param.required ? '' : '?' }}</span>
+                      </div>
+                      <div
+                        v-if="param.description"
+                        class="text-[9px] text-theme-500 pl-2 leading-snug"
+                      >
+                        {{ param.description }}
+                      </div>
+                    </div>
+                  </template>
+                  <div
+                    class="mt-2 pt-1.5 text-[10px] text-theme-400 leading-snug"
+                    :class="toolParams(tool).length ? 'border-t border-theme-800' : ''"
+                  >
+                    {{ displayDescription(tool) }}
+                  </div>
+                </template>
+              </HoverTooltip>
 
               <!-- HITL toggle -->
               <button
