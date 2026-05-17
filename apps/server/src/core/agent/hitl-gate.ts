@@ -12,6 +12,7 @@ export class HITLGate {
   private eventBus = getEventBus()
   private pendingByConversation = new Map<string, string>() // taskId → conversationId
   private sessionApprovals = new Map<string, Set<string>>() // conversationId → Set<toolName>
+  private readonly allToolsApproval = '*'
 
   /** Returns the set of conversationIds that currently have a pending HITL request. */
   getPendingConversationIds(): Set<string> {
@@ -67,9 +68,12 @@ export class HITLGate {
     // Filter to only tool calls that are NOT auto-approved
     // Sub-agent delegation tools (delegate_to_*) are always auto-approved —
     // the sub-agent's own tool calls hit the HITL gate independently.
-    const sessionSet = conversationId ? this.sessionApprovals.get(conversationId) : undefined
+    const sessionSet = conversationId ? this.getSessionApprovals(conversationId) : undefined
     const needsApproval = toolCalls.filter(
-      (tc) => !tc.function.name.startsWith('delegate_to_') && !this.isAutoApproved(tc.function.name) && !sessionSet?.has(tc.function.name)
+      (tc) => !tc.function.name.startsWith('delegate_to_')
+        && !this.isAutoApproved(tc.function.name)
+        && !sessionSet?.has(this.allToolsApproval)
+        && !sessionSet?.has(tc.function.name)
     )
 
     // If every tool call is whitelisted, auto-approve
@@ -117,17 +121,41 @@ export class HITLGate {
   addSessionApproval(conversationId: string, toolNames: string[]): void {
     let set = this.sessionApprovals.get(conversationId)
     if (!set) {
-      set = new Set()
+      set = this.loadSessionApprovals(conversationId)
       this.sessionApprovals.set(conversationId, set)
     }
+    const now = Date.now()
+    const db = getDb()
+    const stmt = db.prepare(
+      'INSERT OR REPLACE INTO session_tool_approvals (conversation_id, tool_name, created_at) VALUES (?, ?, ?)'
+    )
     for (const name of toolNames) {
       set.add(name)
+      stmt.run(conversationId, name, now)
     }
   }
 
   /** Clear all session approvals for a conversation. */
   clearSessionApprovals(conversationId: string): void {
     this.sessionApprovals.delete(conversationId)
+    getDb().prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(conversationId)
+  }
+
+  private getSessionApprovals(conversationId: string): Set<string> {
+    let set = this.sessionApprovals.get(conversationId)
+    if (!set) {
+      set = this.loadSessionApprovals(conversationId)
+      this.sessionApprovals.set(conversationId, set)
+    }
+    return set
+  }
+
+  private loadSessionApprovals(conversationId: string): Set<string> {
+    const rows = getDb()
+      .prepare('SELECT tool_name FROM session_tool_approvals WHERE conversation_id = ?')
+      .all(conversationId) as { tool_name: string }[]
+
+    return new Set(rows.map((row) => row.tool_name))
   }
 }
 

@@ -894,7 +894,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         // Clear all database tables
         const tables = [
             'messages', 'conversations', 'execution_steps', 'execution_logs',
-            'tasks', 'pending_hitl', 'notifications', 'tool_approvals',
+            'tasks', 'pending_hitl', 'notifications', 'tool_approvals', 'session_tool_approvals',
             'cron_jobs', 'channels',
             'memory_file_index', 'memory_spaces', 'agent_memory_spaces',
             'mcp_servers', 'providers', 'agents',
