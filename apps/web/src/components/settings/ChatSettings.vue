@@ -98,6 +98,10 @@ function onCompactSelection(selection: {
           placeholder="Use chat provider"
           @change="onToolRouterSelection"
         />
+        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
+          Tool namespaces are prefiltered with your Memory embedding provider, then confirmed by this router model.
+          If the embedding model changes, router vectors are rebuilt lazily the next time tools are auto-selected.
+        </p>
       </div>
     </BaseCard>
 
