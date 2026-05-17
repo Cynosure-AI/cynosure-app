@@ -9,6 +9,7 @@ import { Icon } from '@iconify/vue'
 import BaseCard from '../components/shared/BaseCard.vue'
 import DataTable from '../components/shared/DataTable.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
+import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import CategoryTabBar from '../components/shared/CategoryTabBar.vue'
 import ProviderModelSelect from '../components/shared/ProviderModelSelect.vue'
 import CustomSelect, { type SelectOptionGroup } from '../components/shared/CustomSelect.vue'
@@ -23,6 +24,7 @@ const prefs = usePreferencesStore()
 const router = useRouter()
 const { logoUrl } = useProviderLogos()
 const AGENT_IDS_MIME = 'application/x-cynosure-agent-ids'
+const TOOLTIP_MAX_TOOLS = 20
 
 const showCreateDialog = ref(false)
 const newName = ref('')
@@ -517,23 +519,72 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
         <!-- Metadata column (tools, subagents, created date) -->
         <template #col-metadata="{ item }">
           <div class="flex items-center gap-3 text-xs text-theme-500">
-            <span class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded">
-              <Icon
-                icon="lucide:wrench"
-                class="w-3 h-3"
-              />
-              {{ item.tools.length }}
-            </span>
-            <span
-              v-if="item.subAgents?.length"
-              class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded"
+            <HoverTooltip
+              :disabled="item.tools.length === 0"
+              placement="mouse"
+              :max-width="220"
             >
-              <Icon
-                icon="lucide:users"
-                class="w-3 h-3"
-              />
-              {{ item.subAgents.length }}
-            </span>
+              <span
+                class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded"
+                :class="item.tools.length > 0 ? 'cursor-default' : ''"
+              >
+                <Icon
+                  icon="lucide:wrench"
+                  class="w-3 h-3"
+                />
+                {{ item.tools.length }}
+              </span>
+              <template #content>
+                <div class="font-medium text-theme-300 mb-1.5">
+                  {{ item.tools.length }} {{ item.tools.length === 1 ? 'tool' : 'tools' }}
+                </div>
+                <div
+                  v-for="key in item.tools.slice(0, TOOLTIP_MAX_TOOLS)"
+                  :key="key"
+                  class="font-mono text-[10px] text-theme-300 truncate py-0.5"
+                >
+                  {{ agentStore.availableTools.find(t => t.key === key)?.name ?? key }}
+                </div>
+                <div
+                  v-if="item.tools.length > TOOLTIP_MAX_TOOLS"
+                  class="text-theme-500 text-[10px] mt-1"
+                >
+                  +{{ item.tools.length - TOOLTIP_MAX_TOOLS }} more
+                </div>
+              </template>
+            </HoverTooltip>
+            <HoverTooltip
+              v-if="item.subAgents?.length"
+              :disabled="item.subAgents.length === 0"
+              placement="mouse"
+              :max-width="220"
+            >
+              <span class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded cursor-default">
+                <Icon
+                  icon="lucide:users"
+                  class="w-3 h-3"
+                />
+                {{ item.subAgents.length }}
+              </span>
+              <template #content>
+                <div class="font-medium text-theme-300 mb-1.5">
+                  {{ item.subAgents.length }} sub-{{ item.subAgents.length === 1 ? 'agent' : 'agents' }}
+                </div>
+                <div
+                  v-for="sa in item.subAgents.slice(0, TOOLTIP_MAX_TOOLS)"
+                  :key="sa.agentId"
+                  class="font-mono text-[10px] text-theme-300 truncate py-0.5"
+                >
+                  {{ agentDefs.get(sa.agentId)?.name ?? sa.codename }}
+                </div>
+                <div
+                  v-if="item.subAgents.length > TOOLTIP_MAX_TOOLS"
+                  class="text-theme-500 text-[10px] mt-1"
+                >
+                  +{{ item.subAgents.length - TOOLTIP_MAX_TOOLS }} more
+                </div>
+              </template>
+            </HoverTooltip>
             <span class="flex items-center gap-1 whitespace-nowrap">
               <Icon
                 icon="lucide:calendar"

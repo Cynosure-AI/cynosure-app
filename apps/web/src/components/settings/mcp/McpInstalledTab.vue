@@ -4,7 +4,9 @@ import { api } from '../../../api/client'
 import { Icon } from '@iconify/vue'
 import DataTable from '../../shared/DataTable.vue'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
+import HoverTooltip from '../../shared/HoverTooltip.vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
+import { useAgentStore } from '../../../stores/agent-runtime.store'
 import type { McpServerInfo } from '../../../api/types'
 import type { Column } from '../../shared/DataTable.vue'
 
@@ -12,7 +14,14 @@ const emit = defineEmits<{
   goToBrowse: []
 }>()
 
+const TOOLTIP_MAX_TOOLS = 20
+
 const { servers, actionError, isLoading, setLoading, loadServers, refreshAll, authInProgress } = useMcpServers()
+const agentStore = useAgentStore()
+
+function serverTools(server: McpServerInfo) {
+  return agentStore.availableTools.filter(t => t.namespace.id === `mcp:${server.id}`)
+}
 
 const showAddForm = ref(false)
 const editingId = ref<string | null>(null)
@@ -506,13 +515,37 @@ defineExpose({ loadServers })
 
       <!-- Tools column -->
       <template #col-tools="{ item: server }">
-        <span
+        <HoverTooltip
           v-if="!editingId || editingId !== server.id"
-          class="inline-flex items-center text-[11px] px-2 py-1 rounded-md"
-          :class="server.toolCount > 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-theme-700/60 text-theme-400'"
+          :disabled="server.toolCount === 0"
+          placement="mouse"
+          :max-width="220"
         >
-          {{ server.toolCount }} {{ server.toolCount === 1 ? 'tool' : 'tools' }}
-        </span>
+          <span
+            class="inline-flex items-center text-[11px] px-2 py-1 rounded-md"
+            :class="server.toolCount > 0 ? 'bg-emerald-500/15 text-emerald-300 cursor-default' : 'bg-theme-700/60 text-theme-400'"
+          >
+            {{ server.toolCount }} {{ server.toolCount === 1 ? 'tool' : 'tools' }}
+          </span>
+          <template #content>
+            <div class="font-medium text-theme-300 mb-1.5">
+              {{ server.toolCount }} {{ server.toolCount === 1 ? 'tool' : 'tools' }}
+            </div>
+            <div
+              v-for="t in serverTools(server).slice(0, TOOLTIP_MAX_TOOLS)"
+              :key="t.key"
+              class="font-mono text-[10px] text-theme-300 truncate py-0.5"
+            >
+              {{ t.name }}
+            </div>
+            <div
+              v-if="server.toolCount > TOOLTIP_MAX_TOOLS"
+              class="text-theme-500 text-[10px] mt-1"
+            >
+              +{{ server.toolCount - TOOLTIP_MAX_TOOLS }} more
+            </div>
+          </template>
+        </HoverTooltip>
       </template>
 
       <!-- Status column -->
