@@ -138,6 +138,14 @@ function createTables(db: Database.Database): void {
       auto_approve INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS session_tool_approvals (
+      conversation_id TEXT NOT NULL,
+      tool_name TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (conversation_id, tool_name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_session_tool_approvals_conversation ON session_tool_approvals(conversation_id);
+
     CREATE TABLE IF NOT EXISTS tool_router_embeddings (
       namespace_id TEXT NOT NULL,
       embedding_provider_id TEXT NOT NULL DEFAULT '',

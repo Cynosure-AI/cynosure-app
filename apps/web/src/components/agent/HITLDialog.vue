@@ -29,8 +29,7 @@ function approveSession(): void {
 
 function approveAllToolsSession(): void {
   showApproveDropdown.value = false
-  const allToolNames = agentStore.availableTools.map(t => t.executionName)
-  agentStore.respondHITL(true, undefined, 'session', allToolNames)
+  agentStore.respondHITL(true, undefined, 'session', ['*'])
   resetState()
 }
 

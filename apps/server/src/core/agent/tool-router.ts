@@ -7,7 +7,7 @@ import type { ChatMessage, ContentPart, ToolDefinition } from '../gateway/provid
 import type { ToolNamespaceMetadata } from '../tools/tool-registry.js'
 
 export const MCP_CANDIDATE_COUNT = 8 // Top-K MCP tool groups selected by embedding similarity and passed to the LLM for final confirmation
-export const CONTEXT_WINDOW_TURNS = 5 // Recent turns included in routing query context AND the window over which used tools stay sticky
+export const CONTEXT_WINDOW_TURNS = 5 // Recent turns included in routing query context
 export const ROUTER_SELECTION_TOOL_NAME = 'select_relevant_tools' // Name of the tool the router LLM calls to confirm its tool selection
 
 const TURN_CHAR_LIMIT = 200 // Max characters taken from each conversation turn when building the router query
@@ -217,7 +217,7 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
     }
 
     const selectedTools = candidateTools.filter(({ name }) => confirmedNames.has(name))
-    const stickyNames = collectStickyToolNames(recentMessages, contextWindowTurns, usedToolNames)
+    const stickyNames = collectStickyToolNames(recentMessages, usedToolNames)
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
     let routedTools: ToolDefinition[] = []
@@ -559,7 +559,6 @@ function isNumberArray(value: unknown): value is number[] {
 
 function collectStickyToolNames(
     recentMessages: ChatMessage[],
-    windowSize: number,
     usedToolNames?: Set<string>,
 ): Set<string> {
     const names = new Set<string>()
@@ -568,7 +567,7 @@ function collectStickyToolNames(
         names.add(usedToolName)
     }
 
-    for (const message of recentMessages.slice(-windowSize)) {
+    for (const message of recentMessages) {
         for (const call of message.toolCalls || []) {
             names.add(call.function.name)
         }

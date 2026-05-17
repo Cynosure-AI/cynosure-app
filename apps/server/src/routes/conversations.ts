@@ -246,6 +246,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }
         cleanupConversationImages([req.params.id])
         db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(req.params.id)
+        db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM conversations WHERE id = ?').run(req.params.id)
         return { success: true }
@@ -261,6 +262,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             cleanupConversationImages(ids.map(r => r.id))
             for (const { id } of ids) {
                 db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
+                db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
             }
             db.prepare(`DELETE FROM conversations WHERE ${filter} AND pinned = 0`).run(...(agentId === '' ? [] : [agentId]))
@@ -269,6 +271,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             cleanupConversationImages(allIds.map(r => r.id))
             for (const { id } of allIds) {
                 db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
+                db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
             }
             db.prepare('DELETE FROM conversations WHERE pinned = 0').run()
