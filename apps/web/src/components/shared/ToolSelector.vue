@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
 import CollapsibleSection from './CollapsibleSection.vue'
+import HoverTooltip from './HoverTooltip.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -96,6 +97,25 @@ function approvalName(tool: ToolInfo): string {
 
 function displayToolDescription(tool: ToolInfo): string {
   return tool.description.replace(/^\[MCP:\s*[^\]]*\]\s*/, '')
+}
+
+interface ToolParam {
+  name: string
+  type: string
+  required: boolean
+  description?: string
+}
+
+function toolParams(tool: ToolInfo): ToolParam[] {
+  const schema = tool.parameters as { properties?: Record<string, { type?: string; description?: string }>; required?: string[] } | undefined
+  if (!schema?.properties) return []
+  const required = new Set(schema.required ?? [])
+  return Object.entries(schema.properties).map(([name, def]) => ({
+    name,
+    type: def.type ?? 'any',
+    required: required.has(name),
+    description: def.description,
+  }))
 }
 
 function toggleNamespace(group: NamespaceGroup): void {
@@ -233,7 +253,6 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
                   v-for="tool in group.tools"
                   :key="toolKey(tool)"
                   class="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-theme-800/70 cursor-pointer"
-                  :title="displayToolDescription(tool)"
                 >
                   <div class="flex items-start gap-2 flex-1 min-w-0">
                     <input
@@ -242,12 +261,47 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
                       :checked="isSelected(tool)"
                       @change="toggleTool(tool)"
                     >
-                    <div class="min-w-0 flex-1">
-                      <p class="text-xs text-theme-200 font-medium">{{ displayToolName(tool) }}</p>
-                      <p class="text-[10px] text-theme-500 leading-snug wrap-break-word">
-                        {{ displayToolDescription(tool) }}
-                      </p>
-                    </div>
+                    <HoverTooltip
+                      :block="true"
+                      placement="mouse"
+                      :max-width="260"
+                    >
+                      <div class="min-w-0 flex-1">
+                        <p class="text-xs text-theme-200 font-medium">{{ displayToolName(tool) }}</p>
+                        <p class="text-[10px] text-theme-500 leading-snug wrap-break-word">
+                          {{ displayToolDescription(tool) }}
+                        </p>
+                      </div>
+                      <template #content>
+                        <template v-if="toolParams(tool).length">
+                          <div class="font-medium text-theme-300 mb-1.5">
+                            Parameters
+                          </div>
+                          <div
+                            v-for="param in toolParams(tool)"
+                            :key="param.name"
+                            class="mb-1 last:mb-0"
+                          >
+                            <div class="flex items-baseline gap-1 font-mono text-[10px]">
+                              <span class="text-theme-300">{{ param.name }}</span>
+                              <span class="text-theme-500">: {{ param.type }}{{ param.required ? '' : '?' }}</span>
+                            </div>
+                            <div
+                              v-if="param.description"
+                              class="text-[9px] text-theme-500 pl-2 leading-snug"
+                            >
+                              {{ param.description }}
+                            </div>
+                          </div>
+                        </template>
+                        <div
+                          class="text-[10px] text-theme-400 leading-snug"
+                          :class="toolParams(tool).length ? 'mt-2 pt-1.5 border-t border-theme-800' : ''"
+                        >
+                          {{ displayToolDescription(tool) }}
+                        </div>
+                      </template>
+                    </HoverTooltip>
                   </div>
 
                   <button

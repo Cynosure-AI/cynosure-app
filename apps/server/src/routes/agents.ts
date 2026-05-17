@@ -162,6 +162,7 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
             name: tool.name,
             executionName: tool.executionName,
             description: tool.description,
+            parameters: tool.parameters,
             autoApprove: approvals[tool.executionName] ?? false,
             namespace: tool.namespace,
             ambiguous: tool.ambiguous,
