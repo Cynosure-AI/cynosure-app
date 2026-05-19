@@ -73,6 +73,10 @@ export interface McpRegistryServer {
             identifier: string
             version: string
             transport: { type: string }
+            arguments?: {
+                value?: string
+                fromEnv?: string
+            }[]
             environmentVariables?: {
                 name: string
                 description?: string
