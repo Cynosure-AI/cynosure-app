@@ -15,7 +15,7 @@ const { servers, actionError, isLoading, setLoading, authInProgress, refreshAll 
 
 const registryServers = ref<McpRegistryServer[]>([])
 const registrySearch = ref('')
-const registrySource = ref<'official' | 'smithery' | 'glama'>('official')
+const registrySource = ref<'recommended' | 'official' | 'smithery' | 'glama'>('recommended')
 const selectedRegistryServer = ref<McpRegistryServer | null>(null)
 const registryCursor = ref<string | undefined>(undefined)
 const registryLoading = ref(false)
@@ -28,6 +28,7 @@ type InstallInfo = {
   kind: 'local' | 'remote'
   command: string
   args: string[]
+  argEnvNames: Set<string>
   envVars: { name: string; description?: string; required: boolean }[]
 }
 
@@ -128,20 +129,23 @@ function getInstallInfo(srv: McpRegistryServer['server']): InstallInfo | null {
         remote.url,
         ...(remote.headers || []).map(header => `--header-env=${header.name}=${headerEnvName(header.name)}`),
       ],
+      argEnvNames: new Set(),
       envVars,
     }
   }
 
   const pkg = srv.packages?.find(p => p.transport?.type === 'stdio' || p.registryType === 'smithery')
   if (pkg) {
+    const packageArgs = (pkg.arguments || []).map(arg => arg.fromEnv ? `\${${arg.fromEnv}}` : (arg.value || '')).filter(Boolean)
+    const argEnvNames = new Set((pkg.arguments || []).map(arg => arg.fromEnv).filter((name): name is string => Boolean(name)))
     const envVars = (pkg.environmentVariables || []).map(v => ({
       name: v.name,
       description: v.description,
       required: v.isRequired,
     }))
-    if (pkg.registryType === 'smithery') return { kind: 'local', command: 'npx', args: ['-y', '@smithery/cli@latest', 'run', pkg.identifier], envVars }
-    if (pkg.registryType === 'npm') return { kind: 'local', command: 'npx', args: ['-y', pkg.identifier], envVars }
-    if (pkg.registryType === 'pypi') return { kind: 'local', command: 'uvx', args: [pkg.identifier], envVars }
+    if (pkg.registryType === 'smithery') return { kind: 'local', command: 'npx', args: ['-y', '@smithery/cli@latest', 'run', pkg.identifier, ...packageArgs], argEnvNames, envVars }
+    if (pkg.registryType === 'npm') return { kind: 'local', command: 'npx', args: ['-y', pkg.identifier, ...packageArgs], argEnvNames, envVars }
+    if (pkg.registryType === 'pypi') return { kind: 'local', command: 'uvx', args: [pkg.identifier, ...packageArgs], argEnvNames, envVars }
   }
   return null
 }
@@ -190,8 +194,12 @@ async function addFromRegistry(srv: McpRegistryServer): Promise<void> {
   try {
     const env: Record<string, string> = {}
     for (const v of install.envVars) {
-      if (registryEnv[v.name]) env[v.name] = registryEnv[v.name]
+      if (registryEnv[v.name] && !install.argEnvNames.has(v.name)) env[v.name] = registryEnv[v.name]
     }
+    const args = install.args.map(arg => {
+      const match = arg.match(/^\$\{([^}]+)\}$/)
+      return match ? registryEnv[match[1]] : arg
+    })
 
     const pkgType = srv.server.packages?.[0]?.registryType || 'unknown'
     const originLabel = install.kind === 'remote'
@@ -202,7 +210,7 @@ async function addFromRegistry(srv: McpRegistryServer): Promise<void> {
     const result = await api.mcp.addServer({
       originalName: getDisplayName(srv.server),
       command: install.command,
-      args: install.args,
+      args,
       env: Object.keys(env).length ? env : undefined,
       icon_url: iconUrl,
       origin: originLabel,
@@ -273,6 +281,9 @@ onMounted(() => {
       v-model="registrySource"
       class="bg-theme-800 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
     >
+      <option value="recommended">
+        Recommended
+      </option>
       <option value="official">
         Official Registry
       </option>
