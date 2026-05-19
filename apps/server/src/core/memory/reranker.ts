@@ -20,7 +20,7 @@ const SETTINGS_KEY = 'memoryReranker'
 const DEFAULT_CONFIG: MemoryRerankerConfig = {
   enabled: false,
   model: 'cohere/rerank-4-fast',
-  candidateCount: 12
+  candidateCount: 30
 }
 
 const ALLOWED_MODELS = new Set([
