@@ -665,7 +665,7 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
           @click.self="showCreateDialog = false"
         >
-          <div class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
+          <div class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-md shadow-xl">
             <h2 class="text-lg font-semibold text-theme-100 mb-4">
               Create New Agent
             </h2>
