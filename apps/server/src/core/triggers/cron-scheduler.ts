@@ -15,6 +15,7 @@ let broadcast: BroadcastFn = () => { }
 /** In-memory map: jobId → scheduled task */
 const tasks = new Map<string, ScheduledTask>()
 const scheduledInfo = new Map<string, { jobId: string; agentId: string; schedule: string; scheduledSince: number }>()
+let missedRunSweep: NodeJS.Timeout | null = null
 
 /** Tracks cron jobs that are actively executing right now: jobId → run info */
 const activeCronRuns = new Map<string, { jobId: string; agentId: string; conversationId: string; startedAt: number }>()
@@ -104,19 +105,24 @@ export function updateCronJob(id: string, input: { name?: string; agentId?: stri
     const existing = db.prepare('SELECT * FROM cron_jobs WHERE id = ?').get(id) as CronJobRow | undefined
     if (!existing) return undefined
     const now = Date.now()
+    const enabled = input.enabled !== undefined ? (input.enabled ? 1 : 0) : existing.enabled
+    const schedule = input.schedule !== undefined ? input.schedule : existing.schedule
+    const shouldResetLastRun = (existing.enabled !== 1 && enabled === 1) || schedule !== existing.schedule
     db.prepare(
-        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, model_override = ?, provider_override = ?, output_channel_id = ?, updated_at = ? WHERE id = ?'
+        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, model_override = ?, provider_override = ?, output_channel_id = ?, updated_at = ?, last_run_at = ? WHERE id = ?'
     ).run(
         input.name !== undefined ? input.name : existing.name,
         input.agentId !== undefined ? input.agentId : existing.agent_id,
-        input.schedule !== undefined ? input.schedule : existing.schedule,
+        schedule,
         input.prompt !== undefined ? input.prompt : existing.prompt,
-        input.enabled !== undefined ? (input.enabled ? 1 : 0) : existing.enabled,
+        enabled,
         input.oneOff !== undefined ? (input.oneOff ? 1 : 0) : existing.one_off,
         input.modelOverride !== undefined ? input.modelOverride : existing.model_override,
         input.providerOverride !== undefined ? input.providerOverride : existing.provider_override,
         input.outputChannelId !== undefined ? input.outputChannelId : (existing.output_channel_id || ''),
-        now, id
+        now,
+        shouldResetLastRun ? now : existing.last_run_at,
+        id
     )
     return getCronJob(id)
 }
@@ -155,7 +161,7 @@ export function getScheduledJobIds(): string[] {
 // ─── Run a cron job ────────────────────────────────────────
 
 /** Run one cron turn for a specific job */
-async function runCronJob(jobId: string, opts?: { force?: boolean }): Promise<void> {
+async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?: number }): Promise<void> {
     const job = getCronJob(jobId)
     if (!job || (!job.enabled && !opts?.force)) return
 
@@ -167,13 +173,16 @@ async function runCronJob(jobId: string, opts?: { force?: boolean }): Promise<vo
     const abortController = new AbortController()
     activeCronAbortControllers.set(jobId, abortController)
 
-    const now = new Date()
+    const runStartedAt = Date.now()
+    const scheduledAt = opts?.scheduledAt ?? runStartedAt
+    const now = new Date(runStartedAt)
+    const scheduledDate = new Date(scheduledAt)
     const userContent = job.prompt
-        ? `Scheduled cron job triggered at ${now.toISOString()}.\n\n${job.prompt}`
-        : `Scheduled cron job triggered at ${now.toISOString()}. Execute your scheduled task as described in your instructions.`
+        ? `Scheduled cron job due at ${scheduledDate.toISOString()} and started at ${now.toISOString()}.\n\n${job.prompt}`
+        : `Scheduled cron job due at ${scheduledDate.toISOString()} and started at ${now.toISOString()}. Execute your scheduled task as described in your instructions.`
 
     try {
-        const { conversationId, result } = await runTriggerExecution({
+        const { result } = await runTriggerExecution({
             agent,
             userContent,
             origin: 'cron',
@@ -199,8 +208,8 @@ async function runCronJob(jobId: string, opts?: { force?: boolean }): Promise<vo
             }
         }
 
-        // Record successful execution time
-        getDb().prepare('UPDATE cron_jobs SET last_run_at = ? WHERE id = ?').run(Date.now(), jobId)
+        // Record the scheduled occurrence that was successfully handled.
+        getDb().prepare('UPDATE cron_jobs SET last_run_at = ? WHERE id = ?').run(scheduledAt, jobId)
 
         // If one-off, disable the cron job after successful execution
         if (job.oneOff) {
@@ -218,6 +227,32 @@ async function runCronJob(jobId: string, opts?: { force?: boolean }): Promise<vo
 
 // ─── Scheduling ────────────────────────────────────────────
 
+function getMissedRunAt(job: CronJobData, now = Date.now()): number | null {
+    const floor = job.lastRunAt ?? job.createdAt
+    if (!floor || floor >= now) return null
+
+    try {
+        const interval = CronExpressionParser.parse(job.schedule, { currentDate: new Date(floor) })
+        const nextFire = interval.next().toDate().getTime()
+        return nextFire <= now ? nextFire : null
+    } catch {
+        return null
+    }
+}
+
+function enqueueMissedCronRuns(reason: 'startup' | 'sweep'): void {
+    const now = Date.now()
+    for (const job of listCronJobs()) {
+        if (!job.enabled || !job.schedule || activeCronRuns.has(job.id)) continue
+
+        const missedRunAt = getMissedRunAt(job, now)
+        if (missedRunAt === null) continue
+
+        console.log(`[cron] Missed execution for job "${job.name || job.id}" (${job.id}) from ${new Date(missedRunAt).toISOString()}, running now (${reason})`)
+        enqueueCoalescedTrigger(`cron:${job.id}`, () => runCronJob(job.id, { scheduledAt: missedRunAt }))
+    }
+}
+
 /** Schedule or reschedule a single cron job by its DB id */
 export function scheduleCronJob(jobId: string): void {
     unscheduleCronJob(jobId)
@@ -231,7 +266,8 @@ export function scheduleCronJob(jobId: string): void {
     }
 
     const task = cron.schedule(job.schedule, () => {
-        enqueueCoalescedTrigger(`cron:${jobId}`, () => runCronJob(jobId))
+        const scheduledAt = Date.now()
+        enqueueCoalescedTrigger(`cron:${jobId}`, () => runCronJob(jobId, { scheduledAt }))
     })
 
     tasks.set(jobId, task)
@@ -240,7 +276,7 @@ export function scheduleCronJob(jobId: string): void {
 
 /** Immediately enqueue a manual run for a cron job, bypassing its enabled state. */
 export function triggerCronJobNow(jobId: string): void {
-    enqueueCoalescedTrigger(`cron:${jobId}`, () => runCronJob(jobId, { force: true }))
+    enqueueCoalescedTrigger(`cron:${jobId}`, () => runCronJob(jobId, { force: true, scheduledAt: Date.now() }))
 }
 
 /** Cancel a running cron execution for a specific job. Returns true if cancelled. */
@@ -276,28 +312,20 @@ export function unscheduleAllForAgent(agentId: string): void {
 /** Initialize cron scheduling for all enabled jobs. Call once on server startup. */
 export function startCronScheduler(broadcastFn: BroadcastFn): void {
     broadcast = broadcastFn
+    if (missedRunSweep) {
+        clearInterval(missedRunSweep)
+        missedRunSweep = null
+    }
 
-    const now = Date.now()
     const jobs = listCronJobs()
     for (const job of jobs) {
         if (!job.enabled || !job.schedule) continue
 
-        // Check if a scheduled fire was missed while the server was down
-        if (job.lastRunAt !== null) {
-            try {
-                const interval = CronExpressionParser.parse(job.schedule, { currentDate: new Date(job.lastRunAt) })
-                const nextFire = interval.next().toDate().getTime()
-                if (nextFire <= now) {
-                    console.log(`[cron] Missed execution for job "${job.name}" (${job.id}), running now`)
-                    enqueueCoalescedTrigger(`cron:${job.id}`, () => runCronJob(job.id))
-                }
-            } catch {
-                // Invalid expression — skip catch-up, regular scheduling will warn
-            }
-        }
-
         scheduleCronJob(job.id)
     }
+
+    enqueueMissedCronRuns('startup')
+    missedRunSweep = setInterval(() => enqueueMissedCronRuns('sweep'), 60_000)
 }
 
 /** Stop all cron tasks. */
@@ -308,4 +336,8 @@ export function stopCronScheduler(): void {
     tasks.clear()
     scheduledInfo.clear()
     activeCronRuns.clear()
+    if (missedRunSweep) {
+        clearInterval(missedRunSweep)
+        missedRunSweep = null
+    }
 }
