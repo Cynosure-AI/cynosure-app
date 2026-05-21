@@ -136,18 +136,20 @@ async function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], spaceParam?:
     }
 
     // --- Smart fallback logic ---
-    // 1. Default space always available as fallback (simplest UX)
-    const defaultSpace = getDefaultMemorySpace()
-    if (defaultSpace) {
-        return { spaceId: defaultSpace.id, spaceName: defaultSpace.name }
-    }
-
-    // 2. Single explicitly assigned space
+    // 1. Single explicitly assigned space — user granted exactly one space in the Chat UI
     if (assignedSpaces.length === 1) {
         return { spaceId: assignedSpaces[0].id, spaceName: assignedSpaces[0].name }
     }
 
-    // 3. Multiple assigned spaces but no default → error
+    // 2. No assigned spaces → fall back to the default space
+    if (assignedSpaces.length === 0) {
+        const defaultSpace = getDefaultMemorySpace()
+        if (defaultSpace) {
+            return { spaceId: defaultSpace.id, spaceName: defaultSpace.name }
+        }
+    }
+
+    // 3. Multiple assigned spaces but no unambiguous match → error
     if (assignedSpaces.length > 1) {
         const listing = assignedSpaces.map(s => `  - "${s.name}" (id: ${s.id})`).join('\n')
         return { error: `Multiple memory spaces are assigned. Please specify which to write to using the 'space' parameter.\nAvailable spaces:\n${listing}` }
