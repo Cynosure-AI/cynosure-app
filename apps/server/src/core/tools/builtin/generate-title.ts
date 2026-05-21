@@ -22,7 +22,7 @@ export function makeGenerateTitleTool(opts: GenerateTitleToolOptions): ToolDefin
         parameters: {
             type: 'object',
             properties: {
-                title: { type: 'string', description: 'Short chat title (3-6 words). No quotes, no punctuation at the end.' }
+                title: { type: 'string', description: 'Short chat title (3-6 words) summarizing the request. No quotes, no punctuation at the end.' }
             },
             required: ['title']
         },
