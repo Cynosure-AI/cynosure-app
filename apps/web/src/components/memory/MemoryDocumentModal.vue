@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
+import { renderMarkdown, handleMarkdownClick } from '../../utils/markdown'
 
 interface MemoryEntry {
   id: string
@@ -93,9 +94,11 @@ const sortedChunks = computed(() =>
                   </span>
                 </div>
 
-                <pre
-                  class="text-xs text-theme-400 whitespace-pre-wrap font-mono leading-relaxed"
-                >{{ chunk.text }}</pre>
+                <div
+                  class="msg-markdown prose dark:prose-invert prose-sm max-w-none text-theme-300"
+                  @click="handleMarkdownClick"
+                  v-html="renderMarkdown(chunk.text)"
+                />
               </div>
             </div>
           </template>
