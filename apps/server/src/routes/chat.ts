@@ -341,7 +341,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           autoToolRouting: reqAutoToolRouting === true,
           toolRouterProviderId: reqToolRouterProviderId || undefined,
           toolRouterModel: reqToolRouterModel || undefined,
-          selectedToolKeys,
+          selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
           hasExplicitToolAllowlist,
         },
       })

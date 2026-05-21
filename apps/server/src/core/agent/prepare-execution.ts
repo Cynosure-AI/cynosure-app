@@ -48,7 +48,7 @@ export interface PrepareExecutionInput {
     recentMessages?: ChatMessage[]
     /** Recently invoked tools that should survive routing for this execution turn */
     usedToolNames?: Set<string>
-    /** Preferred tool registry keys that should be softly favored during routing */
+    /** Explicit tool registry keys that should be fixed into the routed tool set */
     preferredToolKeys?: string[]
     /** Enable context-aware MCP tool routing for this execution */
     autoToolRouting?: boolean
@@ -129,7 +129,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     let tools = toolRegistry.resolveForExecution(toolKeys)
     const preferredToolNames = routingEnabled
         ? toolRegistry
-            .resolveForExecution(input.preferredToolKeys ?? configuredToolKeys)
+            .resolveForExecution(input.preferredToolKeys ?? [])
             .map((tool) => tool.name)
         : []
 
