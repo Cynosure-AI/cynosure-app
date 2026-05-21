@@ -4,7 +4,7 @@ import { getEventBus } from '../telemetry/event-bus.js'
 import { getHITLGate } from './hitl-gate.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import type { ChatMessage, ContentPart, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -232,7 +232,7 @@ export class AgentExecutor {
 
                 // HITL approval
                 if (hitlGate) {
-                    const roundResult = await this.handleHITL(hitlGate, taskId, pendingToolCalls, currentMessages, activeStreamId, round, fullContent, usage, contextTokens, collectedImages)
+                    const roundResult = await this.handleHITL(hitlGate, taskId, pendingToolCalls, currentMessages, activeStreamId, round, fullContent, usage, contextTokens)
                     if (roundResult) {
                         // HITL was denied — update state and continue to the next round
                         ; ({ fullContent, lastRoundThinking, pendingToolCalls, usage, contextTokens, activeStreamId } = roundResult)
@@ -282,10 +282,10 @@ export class AgentExecutor {
                     }))
                 )
 
-                currentMessages = this.maybeTrimContext(currentMessages, contextTokens)
+                currentMessages = this.maybeTrimContext(currentMessages)
                 contextTokens = maxTokens(contextTokens, estimateTotalTokens(currentMessages))
 
-                const roundResult = await this.streamLLMRound(currentMessages, activeStreamId, round)
+                const roundResult = await this.streamLLMRound(currentMessages, activeStreamId)
                 fullContent = roundResult.content
                 fullThinking += roundResult.thinking
                 lastRoundThinking = roundResult.thinking
@@ -373,9 +373,8 @@ export class AgentExecutor {
 
     /**
      * Trim context messages if a context window limit is configured.
-     * Updates `contextTokens` floor from the pre-trim estimate before trimming.
      */
-    private maybeTrimContext(messages: ChatMessage[], contextTokens: number | undefined): ChatMessage[] {
+    private maybeTrimContext(messages: ChatMessage[]): ChatMessage[] {
         if (!this.config.contextWindow) return messages
         return trimMessagesToContextLimit(messages, this.config.contextWindow, undefined, this.config.contextStrategy)
     }
@@ -413,7 +412,6 @@ export class AgentExecutor {
         fullContent: string,
         usage: Usage,
         contextTokens: number | undefined,
-        collectedImages: string[],
     ): Promise<{
         fullContent: string
         lastRoundThinking: string
@@ -451,9 +449,9 @@ export class AgentExecutor {
         )
 
         const updatedContextTokens = maxTokens(contextTokens, estimateTotalTokens(currentMessages))
-        const trimmedMessages = this.maybeTrimContext(currentMessages, updatedContextTokens)
+        const trimmedMessages = this.maybeTrimContext(currentMessages)
 
-        const result = await this.streamLLMRound(trimmedMessages, activeStreamId, round)
+        const result = await this.streamLLMRound(trimmedMessages, activeStreamId)
         return {
             fullContent: result.content,
             lastRoundThinking: result.thinking,
@@ -530,7 +528,6 @@ export class AgentExecutor {
     private async streamLLMRound(
         messages: ChatMessage[],
         currentStreamId: string,
-        round: number,
     ): Promise<{
         content: string
         thinking: string

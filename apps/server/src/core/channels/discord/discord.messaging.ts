@@ -10,7 +10,7 @@ import type { ChatMessage, ContentPart } from '../../gateway/providers/base.prov
 import { nanoid } from 'nanoid'
 import type { DiscordCtx } from './discord.types.js'
 import { handleCommand } from './discord.commands.js'
-import { sendLongMessage, dataUrlToBuffer, extractAttachments } from './discord.api.js'
+import { sendLongMessage, dataUrlToBuffer, extractAttachments, type DiscordSendChannel } from './discord.api.js'
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js'
 import type { Message, Interaction } from 'discord.js'
 
@@ -70,8 +70,8 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         if (handled) return
     }
 
-    let imageDataUrls: string[] = []
-    let audioDataUrls: string[] = []
+    const imageDataUrls: string[] = []
+    const audioDataUrls: string[] = []
     const buffered = ctx.pendingAttachments.get(discordChannelId)
     if (buffered) {
         imageDataUrls.push(...buffered.imageDataUrls)
@@ -246,7 +246,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
             )
             enqueueSend(async () => {
                 if (lines.length && 'send' in msg.channel) {
-                    await (msg.channel as { send: Function }).send(`${prefix}${lines.join('\n')}`.slice(0, 2000)).catch(() => { })
+                    await (msg.channel as DiscordSendChannel).send(`${prefix}${lines.join('\n')}`.slice(0, 2000)).catch(() => { })
                 }
                 for (const r of data.results) {
                     if (r.imageDataUrls?.length && 'send' in msg.channel) {
@@ -254,7 +254,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
                             const { buffer, ext } = dataUrlToBuffer(dataUrl)
                             return { attachment: buffer, name: `tool_${r.name}_${i + 1}.${ext}` }
                         })
-                        await (msg.channel as { send: Function }).send({ files }).catch((e: Error) =>
+                        await (msg.channel as DiscordSendChannel).send({ files }).catch((e: Error) =>
                             console.warn('[Discord] Failed to send tool image:', e.message)
                         )
                     }
@@ -299,7 +299,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
                     const raw = prefix + sa.content
                     const display = raw.length > MAX_LEN ? raw.slice(0, MAX_LEN) + '…' : raw
                     if (!sa.msg && 'send' in msg.channel) {
-                        try { sa.msg = await (msg.channel as { send: Function }).send(display + ' ▍') as Message } catch { }
+                        try { sa.msg = await (msg.channel as DiscordSendChannel).send(display + ' ▍') } catch { }
                     } else if (sa.msg) {
                         await sa.msg.edit(display + ' ▍').catch(() => { })
                     }
@@ -322,7 +322,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
                     : accumulatedContent
                 if (!responseState.msg && 'send' in msg.channel) {
                     try {
-                        responseState.msg = await (msg.channel as { send: Function }).send(display + ' ▍') as Message
+                        responseState.msg = await (msg.channel as DiscordSendChannel).send(display + ' ▍')
                     } catch { }
                 } else if (responseState.msg) {
                     await responseState.msg.edit(display + ' ▍').catch(() => { })
@@ -350,10 +350,10 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
                         await sa.msg.edit(text).catch(() => { })
                     } else {
                         await sa.msg.edit(text.slice(0, 2000)).catch(() => { })
-                        if ('send' in msg.channel) await sendLongMessage(msg.channel as { send: Function }, text.slice(2000))
+                        if ('send' in msg.channel) await sendLongMessage(msg.channel as DiscordSendChannel, text.slice(2000))
                     }
                 } else if ('send' in msg.channel) {
-                    await sendLongMessage(msg.channel as { send: Function }, text)
+                    await sendLongMessage(msg.channel as DiscordSendChannel, text)
                 }
             }
         }
@@ -397,10 +397,10 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
                 await responseState.msg.edit(responseText).catch(() => { })
             } else {
                 await responseState.msg.edit(responseText.slice(0, 2000)).catch(() => { })
-                if ('send' in msg.channel) await sendLongMessage(msg.channel as { send: Function }, responseText.slice(2000))
+                if ('send' in msg.channel) await sendLongMessage(msg.channel as DiscordSendChannel, responseText.slice(2000))
             }
         } else if ('send' in msg.channel) {
-            await sendLongMessage(msg.channel as { send: Function }, responseText)
+            await sendLongMessage(msg.channel as DiscordSendChannel, responseText)
         }
 
         if (result.images?.length && 'send' in msg.channel) {
@@ -408,7 +408,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
                 const { buffer, ext } = dataUrlToBuffer(dataUrl)
                 return { attachment: buffer, name: `image_${i + 1}.${ext}` }
             })
-            await (msg.channel as { send: Function }).send({ files }).catch((e: Error) =>
+            await (msg.channel as DiscordSendChannel).send({ files }).catch((e: Error) =>
                 console.warn('[Discord] Failed to send images:', e.message)
             )
         }
@@ -487,7 +487,7 @@ export function subscribeToHITL(ctx: DiscordCtx): () => void {
 
         const sendHITL = async (): Promise<void> => {
             try {
-                const sentMsg = await (channel as { send: Function }).send({ content: text, components: [row] }) as Message
+                const sentMsg = await (channel as DiscordSendChannel).send({ content: text, components: [row] })
                 ctx.pendingHITL.set(data.taskId, {
                     discordChannelId,
                     messageId: sentMsg.id,

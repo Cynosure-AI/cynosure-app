@@ -2,6 +2,7 @@ import { type Ref } from 'vue'
 import { api } from '../api/client'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
+import { usePreferencesStore } from '../stores/preferences.store'
 import type { SubAgentAssignment } from '../api/types'
 import type { DisplayMessage } from '../stores/chat.store'
 import type { ChatStreamingState } from './useChatStreaming'
@@ -32,6 +33,18 @@ export function useChatMessages(
     },
 ): ChatMessagesApi {
     const agentStore = useAgentStore()
+
+    function createMessageId(): string {
+        if (typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID()
+        }
+
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+            const value = crypto.getRandomValues(new Uint8Array(1))[0] & 15
+            const nibble = char === 'x' ? value : (value & 3) | 8
+            return nibble.toString(16)
+        })
+    }
 
     function toSubAgentCodename(name: string): string {
         return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent'
@@ -65,11 +78,7 @@ export function useChatMessages(
         }
 
         const conversationId = activeConversationId.value!
-        const msgId = typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID()
-            : ([1e7] as any + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c: number) =>
-                (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)
-            )
+        const msgId = createMessageId()
 
         messages.value.push({
             id: msgId,
@@ -112,7 +121,6 @@ export function useChatMessages(
             autoToolRouting: agentConfig.sessionAutoToolRouting.value,
         }
 
-        const { usePreferencesStore } = await import('../stores/preferences.store')
         const prefs = usePreferencesStore()
 
         await api.chat.send(

@@ -70,8 +70,8 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
 
     // ── Extract attachments from this message + any buffered ones ──
     const hasMedia = !!(msg.photo || msg.document || msg.audio || msg.voice || msg.video || msg.video_note)
-    let imageDataUrls: string[] = []
-    let audioDataUrls: string[] = []
+    const imageDataUrls: string[] = []
+    const audioDataUrls: string[] = []
 
     const buffered = ctx.pendingAttachments.get(chatId)
     if (buffered) {

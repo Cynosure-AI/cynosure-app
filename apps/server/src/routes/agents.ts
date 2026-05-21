@@ -11,7 +11,7 @@ import {
     type CreateAgentInput,
     type UpdateAgentInput,
 } from '../core/agents/agent-store.js'
-import { unscheduleAllForAgent, getCronJobsForAgent, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
+import { getCronJobsForAgent, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'

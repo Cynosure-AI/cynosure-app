@@ -5,7 +5,7 @@ type BroadcastFn = (event: string, data: unknown) => void
 
 export async function registerNotificationRoutes(
     app: FastifyInstance,
-    broadcast: BroadcastFn
+    _broadcast: BroadcastFn
 ): Promise<void> {
     // GET /api/notifications — list (optionally filtered, ordered newest first)
     app.get<{ Querystring: { unreadOnly?: string } }>('/', async (req) => {

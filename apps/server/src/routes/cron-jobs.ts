@@ -10,7 +10,6 @@ import {
     unscheduleCronJob,
     getActiveCronRuns,
     triggerCronJobNow,
-    type CronJobData,
 } from '../core/triggers/cron-scheduler.js'
 import { getAgent } from '../core/agents/agent-store.js'
 

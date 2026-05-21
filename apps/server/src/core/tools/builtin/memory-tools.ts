@@ -2,7 +2,6 @@ import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
 import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
-import { getRAGStore } from '../../memory/rag.js'
 import { readTextFile, writeTextFile, fileExists, replaceMarkdownSection, backupToRevisions } from '../../memory/memory-file-manager.js'
 
 export interface MemoryToolOptions {

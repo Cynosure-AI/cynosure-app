@@ -2,7 +2,7 @@
 import type { LLMProviderConfig } from '../../api/types'
 import { useProviderLogos } from '../../composables/useProviderLogos'
 
-const props = defineProps<{
+defineProps<{
   provider: LLMProviderConfig
   isLastUsed: boolean
   isTesting: boolean
