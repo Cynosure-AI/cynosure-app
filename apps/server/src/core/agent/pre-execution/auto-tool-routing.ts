@@ -17,6 +17,7 @@ export interface ApplyAutoToolRoutingInput {
     model: string
     routerModel?: string
     mcpMetadata?: ToolNamespaceMetadata[]
+    /** Explicitly selected tool names that must be included after routing. */
     preferredToolNames?: Set<string>
     usedToolNames?: Set<string>
 }

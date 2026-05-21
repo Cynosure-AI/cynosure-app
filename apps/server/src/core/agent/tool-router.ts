@@ -40,6 +40,7 @@ export interface RouteToolsInput {
     model?: string
     routerModel?: string
     mcpMetadata?: ToolNamespaceMetadata[]
+    /** Explicitly selected tool names that must survive routing. */
     preferredToolNames?: Set<string>
     usedToolNames?: Set<string>
     topK?: number
@@ -195,7 +196,18 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
 
     const query = buildRouterQuery(userQuery, recentMessages, contextWindowTurns)
     const groups = buildMcpGroups(mcpTools, mcpMetadata)
-    const candidateGroupIds = new Set(await embeddingPreFilter(query, groups, topK, preferredToolNames))
+    const fixedTools = preferredToolNames?.size
+        ? allTools.filter(({ name }) => preferredToolNames.has(name))
+        : []
+    const fixedGroupIds = new Set(
+        groups
+            .filter((group) => countPreferredTools(group.tools, preferredToolNames) > 0)
+            .map(({ id }) => id),
+    )
+    const candidateGroupIds = new Set([
+        ...await embeddingPreFilter(query, groups, topK, preferredToolNames),
+        ...fixedGroupIds,
+    ])
 
     const candidateMcpTools = groups
         .filter(({ id }) => candidateGroupIds.has(id))
@@ -226,7 +238,7 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
         getLoadedTools: () => routedTools,
     })
 
-    routedTools = dedupeTools([...selectedTools, ...stickyTools, searchTool])
+    routedTools = dedupeTools([...fixedTools, ...selectedTools, ...stickyTools, searchTool])
     return routedTools
 }
 

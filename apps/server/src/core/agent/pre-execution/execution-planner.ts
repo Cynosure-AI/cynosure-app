@@ -39,15 +39,19 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         autoToolRouting = false,
         toolRouterProviderId,
         toolRouterModel,
-        selectedToolKeys = [],
         hasExplicitToolAllowlist = false,
     } = input
+    const selectedToolKeys = input.selectedToolKeys ?? []
+    const hasRequestToolSelection = input.selectedToolKeys !== undefined
 
     const configuredTools = hasExplicitToolAllowlist
         ? selectedToolKeys
         : (resolvedAgent?.tools?.length
             ? resolvedAgent.tools
             : toolRegistry.listRegisteredTools().map((tool) => tool.key))
+    const fixedToolKeys = hasRequestToolSelection
+        ? selectedToolKeys
+        : (resolvedAgent?.tools ?? [])
 
     const effectiveSubAgents = requestedSubAgents ?? resolvedAgent?.subAgents ?? []
     const preset = resolvedAgent
@@ -78,7 +82,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         autoToolRouting,
         toolRouterProviderId,
         toolRouterModel,
-        preferredToolKeys: selectedToolKeys,
+        preferredToolKeys: fixedToolKeys,
         recentMessages: messages,
         userQuery: userText,
         memorySpaceOverrides,
