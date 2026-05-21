@@ -72,8 +72,8 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         if (handled) return
     }
 
-    let imageDataUrls: string[] = []
-    let audioDataUrls: string[] = []
+    const imageDataUrls: string[] = []
+    const audioDataUrls: string[] = []
 
     const buffered = ctx.pendingAttachments.get(slackChannelId)
     if (buffered) {
@@ -511,7 +511,7 @@ export async function handleHITLAction(
     ctx: SlackCtx,
     actionId: string,
     client: WebClient,
-    body: Record<string, unknown>
+    _body: Record<string, unknown>
 ): Promise<void> {
     const parts = actionId.split(':')
     const taskId = parts[1]

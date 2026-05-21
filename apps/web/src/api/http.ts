@@ -2,53 +2,70 @@ import { ref } from 'vue'
 
 export const BASE_URL = import.meta.env.VITE_API_URL || ''
 
-// ── HTTP helpers ────────────────────────────────────────────────────────────
-
-export async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`, signal ? { signal } : undefined)
-    if (!res.ok) throw new Error(`GET ${path}: ${res.statusText}`)
-    return res.json() as Promise<T>
+interface ElectronBridge {
+    serverPort?: number
 }
 
-export async function post<T>(path: string, body?: unknown): Promise<T> {
-    const opts: RequestInit = { method: 'POST' }
+interface WindowWithElectron extends Window {
+    electron?: ElectronBridge
+}
+
+// ── HTTP helpers ────────────────────────────────────────────────────────────
+
+async function readJson<T>(res: Response): Promise<T> {
+    const text = await res.text()
+    return (text ? JSON.parse(text) : undefined) as T
+}
+
+function errorMessage(method: string, path: string, res: Response, payload: unknown): string {
+    if (payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string') {
+        return payload.error
+    }
+    if (payload && typeof payload === 'object' && 'message' in payload && typeof payload.message === 'string') {
+        return payload.message
+    }
+    return `${method} ${path}: ${res.statusText || res.status}`
+}
+
+async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+    const opts: RequestInit = { method, signal }
     if (body !== undefined) {
         opts.headers = { 'Content-Type': 'application/json' }
         opts.body = JSON.stringify(body)
     }
+
     const res = await fetch(`${BASE_URL}${path}`, opts)
     if (!res.ok) {
-        let msg = `POST ${path}: ${res.statusText}`
-        try { const err = await res.json(); if (err?.error) msg = err.error } catch { /* ignore */ }
-        throw new Error(msg)
+        let payload: unknown
+        try {
+            payload = await readJson<unknown>(res)
+        } catch {
+            payload = undefined
+        }
+        throw new Error(errorMessage(method, path, res, payload))
     }
-    return res.json() as Promise<T>
+
+    return readJson<T>(res)
 }
 
-export async function put<T>(path: string, body?: unknown): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: body !== undefined ? JSON.stringify(body) : undefined
-    })
-    if (!res.ok) throw new Error(`PUT ${path}: ${res.statusText}`)
-    return res.json() as Promise<T>
+export function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+    return request<T>('GET', path, undefined, signal)
 }
 
-export async function patch<T>(path: string, body?: unknown): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: body !== undefined ? JSON.stringify(body) : undefined
-    })
-    if (!res.ok) throw new Error(`PATCH ${path}: ${res.statusText}`)
-    return res.json() as Promise<T>
+export function post<T>(path: string, body?: unknown): Promise<T> {
+    return request<T>('POST', path, body)
 }
 
-export async function del<T>(path: string): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`, { method: 'DELETE' })
-    if (!res.ok) throw new Error(`DELETE ${path}: ${res.statusText}`)
-    return res.json() as Promise<T>
+export function put<T>(path: string, body?: unknown): Promise<T> {
+    return request<T>('PUT', path, body)
+}
+
+export function patch<T>(path: string, body?: unknown): Promise<T> {
+    return request<T>('PATCH', path, body)
+}
+
+export function del<T>(path: string): Promise<T> {
+    return request<T>('DELETE', path)
 }
 
 // ── WebSocket singleton ─────────────────────────────────────────────────────
@@ -59,6 +76,7 @@ export type WsHandler = (data: unknown) => void
 const wsListeners = new Map<string, Set<WsHandler>>()
 let ws: WebSocket | null = null
 let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+const pendingWsMessages: string[] = []
 
 function getWsUrl(): string {
     if (BASE_URL) {
@@ -67,7 +85,7 @@ function getWsUrl(): string {
         return `${protocol}//${url.host}/ws`
     }
     // In Electron with app:// protocol, connect to the embedded server directly
-    const electronApi = (window as any).electron
+    const electronApi = (window as WindowWithElectron).electron
     if (electronApi?.serverPort) {
         return `ws://127.0.0.1:${electronApi.serverPort}/ws`
     }
@@ -82,6 +100,9 @@ function connectWs(): void {
 
     ws.onopen = () => {
         wsConnected.value = true
+        while (pendingWsMessages.length > 0 && ws?.readyState === WebSocket.OPEN) {
+            ws.send(pendingWsMessages.shift()!)
+        }
     }
 
     ws.onmessage = (event) => {
@@ -124,7 +145,10 @@ export function onWsEvent(event: string, handler: WsHandler): () => void {
 
 export function sendWsMessage(event: string, data: unknown): void {
     connectWs()
+    const message = JSON.stringify({ event, data })
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ event, data }))
+        ws.send(message)
+        return
     }
+    pendingWsMessages.push(message)
 }

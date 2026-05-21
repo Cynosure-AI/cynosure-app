@@ -31,7 +31,7 @@ export function makeGenerateTitleTool(opts: GenerateTitleToolOptions): ToolDefin
             const { title: rawTitle } = params as { title: string }
             const db = getDb()
 
-            let title = rawTitle
+            const title = rawTitle
                 .replace(/^["'""''`]+|["'""''`]+$/g, '')
                 .replace(/^Title:\s*/i, '')
                 .replace(/[.!?:;,]+$/, '')

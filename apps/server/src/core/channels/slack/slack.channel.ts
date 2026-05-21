@@ -1,5 +1,4 @@
 import { App } from '@slack/bolt'
-import type { WebClient } from '@slack/web-api'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution } from '../base.channel.js'
 import type { SlackConfig, BroadcastFn, SlackCtx } from './slack.types.js'
 import { handleMessage, handleHITLAction, subscribeToHITL } from './slack.messaging.js'

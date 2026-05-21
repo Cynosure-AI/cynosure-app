@@ -132,7 +132,7 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
 
         // Fallback: parse plain-text response
         if (result.content) {
-            let raw = result.content
+            const raw = result.content
                 .replace(/<think>[\s\S]*?<\/think>/gi, '')
                 .replace(/\*{1,3}/g, '')
                 .replace(/`{1,3}/g, '')

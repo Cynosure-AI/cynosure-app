@@ -5,12 +5,10 @@ import { getActiveChatExecutions, cancelChatExecution } from './chat.js'
 import { cancelPostActions } from '../core/agent/post-execution.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
-import { getDb } from '../db/database.js'
 
 export async function registerInstanceRoutes(app: FastifyInstance): Promise<void> {
     // GET /api/instances — list all actively running agent instances
     app.get('/', async () => {
-        const db = getDb()
         const pendingHITLConversations = getHITLGate().getPendingConversationIds()
         const instances: {
             id: string

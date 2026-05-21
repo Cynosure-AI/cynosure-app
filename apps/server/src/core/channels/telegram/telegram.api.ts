@@ -1,4 +1,4 @@
-import { TELEGRAM_API, type TelegramCtx, type TelegramUpdate } from './telegram.types.js'
+import { TELEGRAM_API, type TelegramCtx } from './telegram.types.js'
 import { formatTelegramMessage } from './telegram.format.js'
 
 export async function sendMessage(ctx: TelegramCtx, chatId: number, text: string): Promise<void> {

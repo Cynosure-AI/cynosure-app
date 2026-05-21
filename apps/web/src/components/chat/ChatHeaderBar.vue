@@ -14,10 +14,6 @@ const providerStore = useProviderStore();
 const agentDefs = useAgentDefinitionsStore();
 const { chatSidebarOpen, toggle: toggleSidebar } = useChatSidebar();
 
-const selectedAgent = computed(() =>
-  chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null,
-);
-
 const conversationTitle = computed(
   () => chatStore.activeConversation?.title || "",
 );

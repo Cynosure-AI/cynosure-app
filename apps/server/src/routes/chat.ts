@@ -314,14 +314,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       // Create AbortController early so sub-agent tools can receive the signal
       const abortController = new AbortController()
 
-      let tools: import('../core/gateway/providers/base.provider.js').ToolDefinition[]
-      let providerId: string | undefined
-      let responseModel: string
-      let responseProvider: string
-      let chatAgentName: string | undefined
-      let chatAgentIconUrl: string | null | undefined
-      let hasSubAgents = false
-
       const planned = await planExecution({
         resolvedAgent,
         conversationId,
@@ -346,13 +338,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         },
       })
 
-      tools = planned.tools
-      providerId = planned.providerId
-      responseProvider = planned.responseProvider
-      responseModel = planned.responseModel
-      hasSubAgents = planned.hasSubAgents
-      chatAgentName = planned.chatAgentName
-      chatAgentIconUrl = planned.chatAgentIconUrl
+      const {
+        tools,
+        providerId,
+        responseProvider,
+        responseModel,
+        hasSubAgents,
+        chatAgentName,
+        chatAgentIconUrl,
+      } = planned
       messages = planned.messages
 
       messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
@@ -547,7 +541,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
   // ─── Active post-actions query ────────────────────────────
 
-  app.get('/post-actions', async (req, reply) => {
+  app.get('/post-actions', async (req) => {
     const { conversationId } = req.query as { conversationId?: string }
     if (conversationId) {
       return { actions: getActiveActions(conversationId) }

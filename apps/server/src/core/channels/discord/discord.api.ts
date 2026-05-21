@@ -1,6 +1,10 @@
-import type { Message } from 'discord.js'
+import type { Message, MessageCreateOptions } from 'discord.js'
 
-export async function sendLongMessage(channel: { send: Function }, text: string): Promise<void> {
+export type DiscordSendChannel = {
+    send: (payload: string | MessageCreateOptions) => Promise<Message>
+}
+
+export async function sendLongMessage(channel: DiscordSendChannel, text: string): Promise<void> {
     const MAX_LEN = 1900
     if (text.length <= MAX_LEN) {
         await channel.send(text).catch(() => { })

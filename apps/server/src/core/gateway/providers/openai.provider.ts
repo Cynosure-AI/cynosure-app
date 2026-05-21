@@ -199,15 +199,20 @@ export class OpenAIProvider extends BaseLLMProvider {
       params.reasoning = { effort: 'medium', summary: 'auto' }
     }
 
-    const response = await (this.client.responses.create as Function)(params, {
-      signal: request.signal
-    }) as {
+    type ResponsesCreate = (
+      requestParams: Record<string, unknown>,
+      options: { signal?: AbortSignal }
+    ) => Promise<{
       id: string
       output_text: string
       output: Array<{ type: string; call_id?: string; name?: string; arguments?: string; result?: string | null; id?: string }>
       model: string
       usage?: { input_tokens: number; output_tokens: number; total_tokens: number }
-    }
+    }>
+
+    const response = await (this.client.responses.create as ResponsesCreate)(params, {
+      signal: request.signal
+    })
 
     const content = response.output_text || ''
     const toolCalls: ToolCall[] = []
