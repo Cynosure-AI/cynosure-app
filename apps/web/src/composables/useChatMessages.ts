@@ -197,7 +197,9 @@ export function useChatMessages(
         if (convId) {
             streaming.streamBuffers.delete(convId)
         }
-        agentStore.clearExecutionState()
+        if (convId) {
+            agentStore.setConversationExecutionState(convId, false)
+        }
 
         if (convId) {
             cancelPostActions()

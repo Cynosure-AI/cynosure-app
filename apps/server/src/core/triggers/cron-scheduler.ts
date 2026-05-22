@@ -165,16 +165,22 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
     const job = getCronJob(jobId)
     if (!job || (!job.enabled && !opts?.force)) return
 
+    const runStartedAt = Date.now()
+    const scheduledAt = opts?.scheduledAt ?? runStartedAt
     const agent = getAgent(job.agentId)
-    if (!agent) return
+    if (!agent) {
+        if (!opts?.force) {
+            getDb().prepare('UPDATE cron_jobs SET last_run_at = ? WHERE id = ?').run(scheduledAt, jobId)
+        }
+        console.warn(`[cron] Skipping job "${job.name || job.id}" (${job.id}) because agent "${job.agentId}" was not found`)
+        return
+    }
 
     activeCronRuns.set(jobId, { jobId, agentId: job.agentId, conversationId: '', startedAt: Date.now() })
 
     const abortController = new AbortController()
     activeCronAbortControllers.set(jobId, abortController)
 
-    const runStartedAt = Date.now()
-    const scheduledAt = opts?.scheduledAt ?? runStartedAt
     const now = new Date(runStartedAt)
     const scheduledDate = new Date(scheduledAt)
     const userContent = job.prompt
@@ -208,9 +214,6 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
             }
         }
 
-        // Record the scheduled occurrence that was successfully handled.
-        getDb().prepare('UPDATE cron_jobs SET last_run_at = ? WHERE id = ?').run(scheduledAt, jobId)
-
         // If one-off, disable the cron job after successful execution
         if (job.oneOff) {
             updateCronJob(jobId, { enabled: false })
@@ -220,6 +223,9 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
         if ((err as Error).name === 'AbortError') return
         // Error already logged by trigger-runner
     } finally {
+        if (!opts?.force) {
+            getDb().prepare('UPDATE cron_jobs SET last_run_at = ? WHERE id = ?').run(scheduledAt, jobId)
+        }
         activeCronRuns.delete(jobId)
         activeCronAbortControllers.delete(jobId)
     }
@@ -232,9 +238,9 @@ function getMissedRunAt(job: CronJobData, now = Date.now()): number | null {
     if (!floor || floor >= now) return null
 
     try {
-        const interval = CronExpressionParser.parse(job.schedule, { currentDate: new Date(floor) })
-        const nextFire = interval.next().toDate().getTime()
-        return nextFire <= now ? nextFire : null
+        const interval = CronExpressionParser.parse(job.schedule, { currentDate: new Date(now) })
+        const latestFire = interval.prev().toDate().getTime()
+        return latestFire > floor && latestFire <= now ? latestFire : null
     } catch {
         return null
     }

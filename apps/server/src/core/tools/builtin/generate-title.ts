@@ -8,6 +8,8 @@ export interface GenerateTitleToolOptions {
     broadcast: BroadcastFn
 }
 
+const MAX_TITLE_LENGTH = 80
+const CONVERT_TITLE_TIMEOUT_MS = 15_000
 /**
  * Create a `generate_title` tool the LLM calls with a short title.
  * Used as a structured-output mechanism for conversation title generation —
@@ -26,7 +28,7 @@ export function makeGenerateTitleTool(opts: GenerateTitleToolOptions): ToolDefin
             },
             required: ['title']
         },
-        timeout: 5_000,
+        timeout: CONVERT_TITLE_TIMEOUT_MS,
         execute: async (params: unknown) => {
             const { title: rawTitle } = params as { title: string }
             const db = getDb()
@@ -37,7 +39,7 @@ export function makeGenerateTitleTool(opts: GenerateTitleToolOptions): ToolDefin
                 .replace(/[.!?:;,]+$/, '')
                 .replace(/\s{2,}/g, ' ')
                 .trim()
-                .slice(0, 80)
+                .slice(0, MAX_TITLE_LENGTH)
 
             if (!title || title.split(/\s+/).length > 10 || /^(the user|this conversation|i |okay|let me)/i.test(title)) {
                 return { success: false, output: 'Title rejected — too long or looks like reasoning.' }

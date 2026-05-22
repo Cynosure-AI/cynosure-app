@@ -6,6 +6,11 @@ import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy }
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
+import { isOrchestrationToolName } from '../tools/builtin/orchestration-tools.js'
+import { ensureOrchestrationStarted, reconcileOrchestrationAfterToolBatch } from './orchestration-state.js'
+
+/** Maximum tool-use rounds for the main (orchestrator) agent per request. */
+export const MAIN_AGENT_MAX_ROUNDS = 50
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -67,6 +72,8 @@ export interface AgentExecutorConfig {
     contextStrategy?: ContextStrategy
     /** Mutable set populated with tool names invoked during this execution turn. */
     usedToolNames?: Set<string>
+    /** Durable orchestration run for the top-level chat executor. */
+    orchestrationRunId?: string
 }
 
 export interface AgentExecutorResult {
@@ -144,7 +151,7 @@ export class AgentExecutor {
     constructor(config: AgentExecutorConfig) {
         this.config = {
             hitl: false,
-            maxRounds: 15,
+            maxRounds: MAIN_AGENT_MAX_ROUNDS,
             saveMessages: true,
             streamMode: 'single',
             emitEvents: true,
@@ -223,15 +230,22 @@ export class AgentExecutor {
             for (let round = 0; round < this.config.maxRounds && pendingToolCalls?.length; round++) {
                 if (this.config.signal?.aborted) break
                 toolRounds = round + 1
+                const visibleToolCalls = pendingToolCalls.filter((tc) => !isOrchestrationToolName(tc.function.name))
+                const hasOrchestrationUpdate = pendingToolCalls.some((tc) => isOrchestrationToolName(tc.function.name))
 
-                this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'choosing-tools', message: 'Selecting tools...' })
-                this.emit('step:tools-chosen', {
-                    taskId, conversationId, iteration: round + 1,
-                    toolCalls: pendingToolCalls.map(tc => ({ name: tc.function.name, arguments: tc.function.arguments }))
-                })
+                if (visibleToolCalls.length) {
+                    if (!hasOrchestrationUpdate) {
+                        this.ensureOrchestrationVisible(visibleToolCalls)
+                    }
+                    this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'choosing-tools', message: 'Selecting tools...' })
+                    this.emit('step:tools-chosen', {
+                        taskId, conversationId, iteration: round + 1,
+                        toolCalls: visibleToolCalls.map(tc => ({ name: tc.function.name, arguments: tc.function.arguments }))
+                    })
+                }
 
                 // HITL approval
-                if (hitlGate) {
+                if (hitlGate && visibleToolCalls.length) {
                     const roundResult = await this.handleHITL(hitlGate, taskId, pendingToolCalls, currentMessages, activeStreamId, round, fullContent, usage, contextTokens)
                     if (roundResult) {
                         // HITL was denied — update state and continue to the next round
@@ -250,7 +264,9 @@ export class AgentExecutor {
                     this.saveAssistantToolCallMessage(conversationId, fullContent, lastRoundThinking, pendingToolCalls)
                 }
 
-                this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'executing', message: `Executing ${pendingToolCalls.length} tool(s)...` })
+                if (visibleToolCalls.length) {
+                    this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'executing', message: `Executing ${visibleToolCalls.length} tool(s)...` })
+                }
 
                 const toolResults = await this.executeToolCalls(pendingToolCalls)
 
@@ -258,10 +274,16 @@ export class AgentExecutor {
                     if (tr.images?.length) collectedImages.push(...tr.images)
                 }
 
-                this.emit('step:executed', {
-                    taskId, conversationId, iteration: round + 1,
-                    results: toolResults.map(tr => ({ name: tr.name, success: tr.success, output: tr.output, images: tr.images, imageDataUrls: tr.imageDataUrls }))
-                })
+                const visibleToolResults = toolResults.filter((tr) => !isOrchestrationToolName(tr.name))
+                if (visibleToolResults.length) {
+                    this.emit('step:executed', {
+                        taskId, conversationId, iteration: round + 1,
+                        results: visibleToolResults.map(tr => ({ name: tr.name, success: tr.success, output: tr.output, images: tr.images, imageDataUrls: tr.imageDataUrls }))
+                    })
+                    if (!hasOrchestrationUpdate) {
+                        this.reconcileOrchestrationProgress(visibleToolResults)
+                    }
+                }
 
                 if (this.config.saveMessages) {
                     this.saveToolResultMessages(conversationId, toolResults)
@@ -601,10 +623,29 @@ export class AgentExecutor {
 
     /** Execute an array of tool calls concurrently and return results in original order. */
     private async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolCallResult[]> {
+        const results = new Array<ToolCallResult>(toolCalls.length)
+        const visibleToolCalls: Array<{ index: number; toolCall: ToolCall }> = []
+
         for (const tc of toolCalls) {
-            this.config.usedToolNames?.add(tc.function.name)
+            if (!isOrchestrationToolName(tc.function.name)) {
+                this.config.usedToolNames?.add(tc.function.name)
+            }
         }
-        return Promise.all(toolCalls.map(tc => this.executeSingleToolCall(tc)))
+
+        for (const [index, toolCall] of toolCalls.entries()) {
+            if (isOrchestrationToolName(toolCall.function.name)) {
+                results[index] = await this.executeSingleToolCall(toolCall)
+            } else {
+                visibleToolCalls.push({ index, toolCall })
+            }
+        }
+
+        const visibleResults = await Promise.all(visibleToolCalls.map(({ toolCall }) => this.executeSingleToolCall(toolCall)))
+        for (const [resultIndex, result] of visibleResults.entries()) {
+            results[visibleToolCalls[resultIndex].index] = result
+        }
+
+        return results
     }
 
     private async executeSingleToolCall(tc: ToolCall): Promise<ToolCallResult> {
@@ -678,6 +719,38 @@ export class AgentExecutor {
         }
     }
 
+    private reconcileOrchestrationProgress(results: ToolCallResult[]): void {
+        const runId = this.config.orchestrationRunId
+        if (!runId || this._sp !== 'chat:stream') return
+        const success = results.every((result) => result.success)
+        const failed = results.find((result) => !result.success)
+        reconcileOrchestrationAfterToolBatch(runId, {
+            success,
+            note: success ? undefined : failed?.output,
+        })
+    }
+
+    private ensureOrchestrationVisible(toolCalls: ToolCall[]): void {
+        const runId = this.config.orchestrationRunId
+        if (!runId || this._sp !== 'chat:stream') return
+        ensureOrchestrationStarted(runId, this.describeToolBatch(toolCalls))
+    }
+
+    private describeToolBatch(toolCalls: ToolCall[]): string {
+        if (toolCalls.length > 1) return `Execute ${toolCalls.length} tool actions`
+        const tc = toolCalls[0]
+        const toolName = tc.function.name.replace(/^delegate_to_/, '').replace(/_agent$/, '').replace(/_/g, ' ')
+        try {
+            const args = JSON.parse(tc.function.arguments) as Record<string, unknown>
+            const text = [args.instructions, args.query, args.url, args.path, args.filePath]
+                .find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+            if (text) return text.trim().slice(0, 120)
+        } catch {
+            // Ignore malformed tool args; fall back to the tool name.
+        }
+        return `Run ${toolName}`
+    }
+
     /** Save the assistant's tool-calling message (thinking + content + tool_calls) to DB. */
     private saveAssistantToolCallMessage(
         conversationId: string,
@@ -686,9 +759,11 @@ export class AgentExecutor {
         toolCalls: ToolCall[],
     ): void {
         const { agentId, providerId, model } = this.config
+        const visibleToolCalls = toolCalls.filter((tc) => !isOrchestrationToolName(tc.function.name))
+        if (!visibleToolCalls.length) return
         getDb().prepare(
             'INSERT INTO messages (id, conversation_id, role, content, thinking, tool_calls_json, agent_id, provider, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(nanoid(), conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(toolCalls), agentId || null, providerId || null, model || null, Date.now())
+        ).run(nanoid(), conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(visibleToolCalls), agentId || null, providerId || null, model || null, Date.now())
     }
 
     /** Save tool result messages to DB and broadcast them to the UI. */
@@ -696,6 +771,7 @@ export class AgentExecutor {
         const { broadcast, agentId, agentName, agentIconUrl } = this.config
         const db = getDb()
         for (const tr of results) {
+            if (isOrchestrationToolName(tr.name)) continue
             const toolMsgId = nanoid()
             const now = Date.now()
             db.prepare(

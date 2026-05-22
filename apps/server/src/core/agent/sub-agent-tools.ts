@@ -6,6 +6,11 @@ import { getDb } from '../../db/database.js'
 import { nanoid } from 'nanoid'
 import type { ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 
+/** Timeout in milliseconds for a single sub-agent tool call. */
+const SUB_AGENT_TIMEOUT_MS = 300_000 // 5 minutes 
+/** Maximum tool-use rounds for a sub-agent per delegation call. */
+const SUB_AGENT_MAX_ROUNDS = 30
+
 type BroadcastFn = (event: string, data: unknown) => void
 
 interface SubAgentToolOptions {
@@ -61,7 +66,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 },
                 required: ['instructions']
             },
-            timeout: 180_000,
+            timeout: SUB_AGENT_TIMEOUT_MS,
             execute: async (params: unknown): Promise<ToolResult> => {
                 const { instructions, context } = params as { instructions: string; context?: string }
 
@@ -97,7 +102,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     providerId: prepared.providerId,
                     model: prepared.model,
                     hitl: !agentData.autoApproveTools,
-                    maxRounds: 10,
+                    maxRounds: SUB_AGENT_MAX_ROUNDS,
                     thinkingEnabled: agentData.thinkingEnabled !== false,
                     signal,
                     streamMode: 'per-round',

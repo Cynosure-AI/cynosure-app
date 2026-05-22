@@ -3,7 +3,7 @@ import type {
   LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryResponse,
   AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus,
   AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType,
-  MetricsSummary,
+  MetricsSummary, OrchestrationState,
 } from './types'
 import type { WsHandler } from './http'
 
@@ -73,6 +73,10 @@ export const api = {
     getPendingHITL: (conversationId: string) =>
       get<{ taskId: string; toolCalls: { name: string; arguments: string }[] }[]>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/hitl`
+      ),
+    getOrchestrationState: (conversationId: string) =>
+      get<OrchestrationState | null>(
+        `/api/chat/conversations/${encodeURIComponent(conversationId)}/orchestration-state`
       ),
     deleteConversation: (conversationId: string) =>
       del<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}`),
@@ -233,7 +237,9 @@ export const api = {
     listTools: () =>
       get<{ key: string; name: string; executionName: string; description: string; parameters: Record<string, unknown>; autoApprove: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools'),
     onExecutionUpdate: (cb: (data: unknown) => void) =>
-      onWsEvent('agent:execution-update', cb)
+      onWsEvent('agent:execution-update', cb),
+    onOrchestrationStateUpdated: (cb: (data: unknown) => void) =>
+      onWsEvent('orchestrator:state-updated', cb)
   },
 
   agents: {
