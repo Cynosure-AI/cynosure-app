@@ -15,6 +15,7 @@ export const SK_TOOL_ROUTER_MODEL = 'cy-tool-router-model'
 export const SK_CONTEXT_STRATEGY = 'cy-context-strategy'
 export const SK_COMPACT_PROVIDER = 'cy-compact-provider'
 export const SK_COMPACT_MODEL = 'cy-compact-model'
+export const SK_PROVIDER_MODEL_FAVORITES = 'cy-provider-model-favorites'
 export const SK_AGENT_CATEGORIES = 'cy-agent-categories'
 export const SK_MA_CATEGORIES = 'cy-ma-categories'
 
@@ -50,6 +51,7 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_TOOL_ROUTER_MODEL,
     SK_COMPACT_PROVIDER,
     SK_COMPACT_MODEL,
+    SK_PROVIDER_MODEL_FAVORITES,
     SK_AGENT_CATEGORIES,
     SK_MA_CATEGORIES,
     SK_WHISPER_MODEL,

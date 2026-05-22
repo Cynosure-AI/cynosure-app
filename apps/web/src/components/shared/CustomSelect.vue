@@ -18,6 +18,10 @@ export interface SelectOption {
   disabled?: boolean;
   /** Small badge shown to the right of the label (e.g. "+3") */
   tag?: string;
+  actionIconName?: string;
+  actionActiveIconName?: string;
+  actionActive?: boolean;
+  actionLabel?: string;
 }
 
 export interface SelectOptionGroup {
@@ -66,6 +70,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   "update:modelValue": [value: string];
   change: [value: string];
+  "option-action": [option: SelectOption];
 }>();
 
 const isOpen = ref(false);
@@ -136,6 +141,11 @@ function selectOption(value: string): void {
   emit("update:modelValue", value);
   emit("change", value);
   isOpen.value = false;
+}
+
+function triggerOptionAction(option: SelectOption): void {
+  if (option.disabled) return;
+  emit("option-action", option);
 }
 
 function handleKeydown(e: KeyboardEvent): void {
@@ -338,7 +348,7 @@ onBeforeUnmount(() =>
             :disabled="opt.disabled"
             :title="opt.tooltip"
             :data-value="opt.value"
-            class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer transition-colors"
+            class="group/select-option w-full flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer transition-colors"
             :class="[
               opt.disabled
                 ? 'text-theme-600 cursor-not-allowed'
@@ -384,6 +394,27 @@ onBeforeUnmount(() =>
               class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-400"
             >
               {{ opt.tag }}
+            </span>
+
+            <!-- Optional row action -->
+            <span
+              v-if="opt.actionIconName"
+              role="button"
+              tabindex="-1"
+              class="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-md transition-all"
+              :class="[
+                opt.actionActive
+                  ? 'text-amber-400 opacity-100 hover:text-amber-300 [&>svg]:fill-current'
+                  : 'text-theme-500 opacity-0 hover:text-amber-400 group-hover/select-option:opacity-100 group-focus-visible/select-option:opacity-100',
+              ]"
+              :title="opt.actionLabel"
+              :aria-label="opt.actionLabel"
+              @click.stop="triggerOptionAction(opt)"
+            >
+              <Icon
+                :icon="opt.actionActive ? (opt.actionActiveIconName || opt.actionIconName) : opt.actionIconName"
+                class="h-3.5 w-3.5"
+              />
             </span>
 
             <!-- Check mark for currently selected value -->

@@ -7,10 +7,12 @@ import CustomSelect, {
 } from "./CustomSelect.vue";
 import { useProviderStore } from "../../stores/provider.store";
 import { useProviderLogos } from "../../composables/useProviderLogos";
+import { SK_PROVIDER_MODEL_FAVORITES } from "../../utils/storage-keys";
 
 interface ProviderModelSelection {
   providerId: string;
   model: string;
+  modelType?: "llm" | "embedding";
   label: string;
   imgSrc?: string | null;
   iconName?: string;
@@ -70,6 +72,7 @@ const sharedModelCache = new Map<string, string[]>();
 
 const providerModels = ref<Record<string, string[]>>({});
 const loadingByProvider = ref<Record<string, boolean>>({});
+const favoriteModels = ref<ProviderModelSelection[]>(loadFavoriteModels());
 
 function cacheKey(providerId: string): string {
   return `${props.modelType}:${providerId}`;
@@ -89,6 +92,86 @@ function decode(value: string): { providerId: string; model: string } {
   } catch {
     return { providerId: "", model: "" };
   }
+}
+
+function favoriteKey(
+  providerId: string,
+  model: string,
+  modelType = props.modelType,
+): string {
+  return `${modelType}:${providerId}:${model}`;
+}
+
+function loadFavoriteModels(): ProviderModelSelection[] {
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(SK_PROVIDER_MODEL_FAVORITES) || "[]",
+    ) as ProviderModelSelection[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((favorite) => favorite.providerId && favorite.model);
+  } catch {
+    return [];
+  }
+}
+
+function persistFavoriteModels(): void {
+  localStorage.setItem(
+    SK_PROVIDER_MODEL_FAVORITES,
+    JSON.stringify(favoriteModels.value),
+  );
+}
+
+function isFavorite(providerId: string, model: string): boolean {
+  return favoriteModels.value.some(
+    (favorite) =>
+      favorite.providerId === providerId &&
+      favorite.model === model &&
+      (favorite.modelType || "llm") === props.modelType,
+  );
+}
+
+function favoriteAction(
+  providerId: string,
+  model: string,
+): Pick<
+  SelectOption,
+  "actionIconName" | "actionActiveIconName" | "actionActive" | "actionLabel"
+> {
+  const active = isFavorite(providerId, model);
+  return {
+    actionIconName: "lucide:star",
+    actionActiveIconName: "lucide:star",
+    actionActive: active,
+    actionLabel: active ? "Remove from favorites" : "Add to favorites",
+  };
+}
+
+function toggleFavorite(option: SelectOption): void {
+  const selection = decode(option.value);
+  if (!selection.providerId || !selection.model) return;
+
+  const key = favoriteKey(selection.providerId, selection.model);
+  if (isFavorite(selection.providerId, selection.model)) {
+    favoriteModels.value = favoriteModels.value.filter(
+      (favorite) =>
+        favoriteKey(favorite.providerId, favorite.model, favorite.modelType) !==
+        key,
+    );
+  } else {
+    const provider = props.providers.find((p) => p.id === selection.providerId);
+    favoriteModels.value = [
+      ...favoriteModels.value,
+      {
+        providerId: selection.providerId,
+        model: selection.model,
+        modelType: props.modelType,
+        label: selection.model,
+        imgSrc: provider ? logoUrl(provider.type) : null,
+      },
+    ];
+  }
+
+  persistFavoriteModels();
 }
 
 async function ensureProviderModels(providerId: string): Promise<void> {
@@ -134,6 +217,7 @@ const selectedEncoded = computed(() =>
 
 const groups = computed((): SelectOptionGroup[] => {
   const topOptions: SelectOption[] = [];
+  const providerById = new Map(props.providers.map((provider) => [provider.id, provider]));
 
   if (props.includeDefault) {
     topOptions.push({
@@ -153,6 +237,23 @@ const groups = computed((): SelectOptionGroup[] => {
       disabled: s.disabled,
     })),
   );
+
+  const favorites: SelectOption[] = favoriteModels.value
+    .filter(
+      (favorite) =>
+        providerById.has(favorite.providerId) &&
+        (favorite.modelType || "llm") === props.modelType,
+    )
+    .map((favorite) => {
+      const provider = providerById.get(favorite.providerId);
+      return {
+        value: encode(favorite.providerId, favorite.model),
+        label: favorite.model,
+        imgSrc: provider ? logoUrl(provider.type) : favorite.imgSrc,
+        tag: provider?.name,
+        ...favoriteAction(favorite.providerId, favorite.model),
+      };
+    });
 
   const providerGroups: SelectOptionGroup[] = props.providers.map(
     (provider) => {
@@ -189,6 +290,7 @@ const groups = computed((): SelectOptionGroup[] => {
             value: encode(provider.id, model),
             label: model,
             imgSrc: logoUrl(provider.type),
+            ...favoriteAction(provider.id, model),
           });
         }
 
@@ -202,6 +304,7 @@ const groups = computed((): SelectOptionGroup[] => {
             label: props.modelValue,
             imgSrc: logoUrl(provider.type),
             tag: "Current",
+            ...favoriteAction(provider.id, props.modelValue),
           });
         }
       }
@@ -213,9 +316,11 @@ const groups = computed((): SelectOptionGroup[] => {
     },
   );
 
-  return topOptions.length
-    ? [{ options: topOptions }, ...providerGroups]
-    : providerGroups;
+  return [
+    ...(favorites.length ? [{ label: "Favorites", options: favorites }] : []),
+    ...(topOptions.length ? [{ options: topOptions }] : []),
+    ...providerGroups,
+  ];
 });
 
 function onSelectionChange(value: string): void {
@@ -240,5 +345,6 @@ function onSelectionChange(value: string): void {
     :sticky-group-headers="true"
     @update:model-value="onSelectionChange"
     @change="onSelectionChange"
+    @option-action="toggleFavorite"
   />
 </template>
