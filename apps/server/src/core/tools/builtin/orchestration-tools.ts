@@ -13,10 +13,11 @@ const ORCHESTRATION_TOOL_NAMES = new Set([
 
 export const ORCHESTRATOR_SYSTEM_PROMPT = [
   '## Stateful Orchestration',
-  'For complex or multi-step requests, maintain a concise visible task list with the orchestration tools.',
-  'Before calling any non-orchestration tool for complex work, call `orchestrator_set_tasks` with the expected steps.',
+  'Maintain a concise visible task list with the orchestration tools when the current request benefits from visible progress tracking.',
+  'When a current or previous visible task list is present, treat follow-up messages as possible task-list updates: continue, replace, expand, shrink, or close the list to match the user\'s latest intent.',
+  'If a follow-up message will use visible execution tools and the visible task list should change, call `orchestrator_set_tasks` or `orchestrator_update_task` before the non-orchestration tools.',
+  'If a completed previous list no longer matches the current request, create a new list for the current request instead of continuing to show the old one.',
   'Create the list once you know the objective, mark exactly one active task as `in_progress`, update tasks as facts change, and complete or block items honestly.',
-  'If a previous visible task list exists after an interruption, continue from that state instead of starting over unless the user asks for a new objective.',
   'Use these tools sparingly: for simple one-step answers, answer normally without creating a task list.',
 ].join('\n')
 
