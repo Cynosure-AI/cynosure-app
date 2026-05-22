@@ -2,6 +2,7 @@ import { getDb } from '../../../db/database.js'
 import { getGateway } from '../../gateway/gateway.js'
 import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../../agent/agent-executor.js'
 import { planExecution } from '../../agent/pre-execution/execution-planner.js'
+import { closeOrchestrationRun } from '../../agent/orchestration-state.js'
 import { generateTitle } from '../../agent/post-execution.js'
 import { getAgent } from '../../agents/agent-store.js'
 import { getToolRegistry } from '../../tools/tool-registry.js'
@@ -208,6 +209,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         agentId: effectiveAgentId,
         agentName: resolvedAgent.name,
         agentIconUrl: resolvedAgent.iconUrl || null,
+        orchestrationRunId: planned.orchestrationRunId,
     })
 
     const eventBus = getEventBus()
@@ -351,6 +353,9 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
 
     try {
         const result = await executor.run(messages)
+        if (planned.orchestrationRunId) {
+            closeOrchestrationRun(planned.orchestrationRunId, 'completed', { summary: result.content.slice(0, 500) })
+        }
 
         executionFinished = true
         if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
@@ -430,6 +435,13 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
             }
         }
     } catch (err) {
+        if (planned.orchestrationRunId) {
+            closeOrchestrationRun(
+                planned.orchestrationRunId,
+                (err as Error).name === 'AbortError' ? 'cancelled' : 'error',
+                { error: (err as Error).name === 'AbortError' ? 'Cancelled' : (err as Error).message }
+            )
+        }
         if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
         const errorMsg = (err as Error).message || 'Unknown error'
         console.error(`[Slack] Agent execution error: ${errorMsg}`)

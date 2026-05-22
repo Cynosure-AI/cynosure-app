@@ -6,12 +6,7 @@ import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../core/agent/agent-executor.js'
 import { planExecution } from '../core/agent/pre-execution/execution-planner.js'
-import {
-  buildOrchestrationStateContext,
-  closeOrchestrationRun,
-  resumeOrCreateOrchestrationRun,
-} from '../core/agent/orchestration-state.js'
-import { makeOrchestrationTools, ORCHESTRATOR_SYSTEM_PROMPT } from '../core/tools/builtin/orchestration-tools.js'
+import { closeOrchestrationRun } from '../core/agent/orchestration-state.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
@@ -338,7 +333,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           providerOverride: providerOverride || undefined,
           modelOverride: model || undefined,
           systemPrompt: systemPrompt || undefined,
-          systemPromptSuffix: ORCHESTRATOR_SYSTEM_PROMPT,
           requestedSubAgents: reqSubAgents,
           memorySpaceOverrides,
           overrideSubAgents: effectiveOverrideSubAgents,
@@ -355,16 +349,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         providerId,
         responseProvider,
         responseModel,
-        hasSubAgents,
+        orchestrationRunId,
         chatAgentName,
         chatAgentIconUrl,
       } = planned
-      const orchestration = resumeOrCreateOrchestrationRun(conversationId, content)
-      const tools = [...plannedTools, ...makeOrchestrationTools(orchestration.runId)]
+      const tools = plannedTools
       messages = planned.messages
 
       messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
-      messages = appendHiddenSystemContext(messages, buildOrchestrationStateContext(orchestration))
 
       const streamId = nanoid()
       activeAbortControllers.set(streamId, abortController)
@@ -463,7 +455,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         contextWindow,
         initialContextEstimate,
         contextStrategy,
-        orchestrationRunId: orchestration.runId,
+        orchestrationRunId,
       })
 
       const executionId = streamId
@@ -472,13 +464,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         conversationId,
         agentId,
         model: responseModel,
-        orchestrationRunId: orchestration.runId,
+        orchestrationRunId,
         startedAt: Date.now()
       })
 
       try {
         const result = await executor.run(messages)
-        closeOrchestrationRun(orchestration.runId, 'completed', { summary: result.content.slice(0, 500) })
+        if (orchestrationRunId) {
+          closeOrchestrationRun(orchestrationRunId, 'completed', { summary: result.content.slice(0, 500) })
+        }
 
         // Save final assistant message with metadata
         const assistantMsgId = nanoid()
@@ -527,12 +521,16 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
-          closeOrchestrationRun(orchestration.runId, 'cancelled', { error: 'Cancelled' })
+          if (orchestrationRunId) {
+            closeOrchestrationRun(orchestrationRunId, 'cancelled', { error: 'Cancelled' })
+          }
           getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
           broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
           return { streamId }
         }
-        closeOrchestrationRun(orchestration.runId, 'error', { error: (err as Error).message })
+        if (orchestrationRunId) {
+          closeOrchestrationRun(orchestrationRunId, 'error', { error: (err as Error).message })
+        }
         getEventBus().emit('task:error', { conversationId, error: (err as Error).message })
         broadcast('chat:stream-error', { streamId, conversationId, error: (err as Error).message })
         return { streamId }
