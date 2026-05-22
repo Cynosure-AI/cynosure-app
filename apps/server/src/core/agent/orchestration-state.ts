@@ -106,9 +106,14 @@ export function closeOrchestrationRun(
   if (!current || current.status !== 'running') return current
 
   const now = Date.now()
+  const items = status === 'completed'
+    ? completeOpenItems(current.items, now)
+    : current.items
   const state: OrchestrationState = {
     ...current,
     status,
+    items,
+    currentTaskId: items.find((item) => item.status === 'in_progress')?.id,
     result,
     updatedAt: now,
     completedAt: now,
@@ -196,17 +201,18 @@ function setTasks(runId: string, params: unknown): ToolResult {
     .filter((task) => task.title.length > 0)
 
   if (!items.length) return { success: false, output: 'At least one task with a title is required.' }
+  const normalizedItems = ensureActiveTask(items, now)
 
   const state: OrchestrationState = {
     ...current,
     objective: String(payload.objective || current.objective).trim().slice(0, 300),
-    items,
-    currentTaskId: items.find((item) => item.status === 'in_progress')?.id,
+    items: normalizedItems,
+    currentTaskId: normalizedItems.find((item) => item.status === 'in_progress')?.id,
     updatedAt: now,
   }
   persistState(state)
   emitState(state)
-  return { success: true, output: JSON.stringify({ runId, tasks: items.map(({ id, title, status }) => ({ id, title, status })) }) }
+  return { success: true, output: JSON.stringify({ runId, tasks: normalizedItems.map(({ id, title, status }) => ({ id, title, status })) }) }
 }
 
 function updateTask(runId: string, params: unknown): ToolResult {
@@ -237,15 +243,16 @@ function updateTask(runId: string, params: unknown): ToolResult {
     }
   })
 
+  const normalizedItems = advanceActiveTask(items, idx, status, now)
   const state: OrchestrationState = {
     ...current,
-    items,
-    currentTaskId: status === 'in_progress' ? items[idx].id : items.find((item) => item.status === 'in_progress')?.id,
+    items: normalizedItems,
+    currentTaskId: normalizedItems.find((item) => item.status === 'in_progress')?.id,
     updatedAt: now,
   }
   persistState(state)
   emitState(state)
-  return { success: true, output: JSON.stringify({ task: items[idx] }) }
+  return { success: true, output: JSON.stringify({ task: normalizedItems[idx] }) }
 }
 
 function completeRun(runId: string, params: unknown): ToolResult {
@@ -336,6 +343,40 @@ function normalizeTaskStatus(status: string | undefined): OrchestrationTaskStatu
 function normalizeRunStatus(status: string): OrchestrationRunStatus {
   if (status === 'completed' || status === 'cancelled' || status === 'error') return status
   return 'running'
+}
+
+function ensureActiveTask(items: OrchestrationTaskItem[], now: number): OrchestrationTaskItem[] {
+  if (items.some((item) => item.status === 'in_progress')) return items
+  if (items.some((item) => item.status === 'completed')) return items
+  const firstPending = items.findIndex((item) => item.status === 'pending')
+  if (firstPending === -1) return items
+  return items.map((item, index) => (
+    index === firstPending ? { ...item, status: 'in_progress', updatedAt: now } : item
+  ))
+}
+
+function advanceActiveTask(
+  items: OrchestrationTaskItem[],
+  updatedIndex: number,
+  status: OrchestrationTaskStatus,
+  now: number,
+): OrchestrationTaskItem[] {
+  if (status === 'in_progress') return items
+  if (status !== 'completed' && status !== 'blocked' && status !== 'cancelled') return items
+  if (items.some((item) => item.status === 'in_progress')) return items
+
+  const nextPending = items.findIndex((item, index) => index > updatedIndex && item.status === 'pending')
+  if (nextPending === -1) return items
+  return items.map((item, index) => (
+    index === nextPending ? { ...item, status: 'in_progress', updatedAt: now } : item
+  ))
+}
+
+function completeOpenItems(items: OrchestrationTaskItem[], now: number): OrchestrationTaskItem[] {
+  return items.map((item) => {
+    if (item.status === 'blocked' || item.status === 'cancelled' || item.status === 'completed') return item
+    return { ...item, status: 'completed', updatedAt: now }
+  })
 }
 
 function cleanNote(note: string | undefined): string | undefined {
