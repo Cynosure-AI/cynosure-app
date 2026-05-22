@@ -7,6 +7,7 @@ import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 import { isOrchestrationToolName } from '../tools/builtin/orchestration-tools.js'
+import { isVisibleExecutionTool } from '../tools/tool-policy.js'
 import { ensureOrchestrationStarted, reconcileOrchestrationAfterToolBatch } from './orchestration-state.js'
 
 /** Maximum tool-use rounds for the main (orchestrator) agent per request. */
@@ -230,7 +231,7 @@ export class AgentExecutor {
             for (let round = 0; round < this.config.maxRounds && pendingToolCalls?.length; round++) {
                 if (this.config.signal?.aborted) break
                 toolRounds = round + 1
-                const visibleToolCalls = pendingToolCalls.filter((tc) => !isOrchestrationToolName(tc.function.name))
+                const visibleToolCalls = pendingToolCalls.filter((tc) => isVisibleExecutionTool(tc.function.name))
                 const hasOrchestrationUpdate = pendingToolCalls.some((tc) => isOrchestrationToolName(tc.function.name))
 
                 if (visibleToolCalls.length) {
@@ -274,7 +275,7 @@ export class AgentExecutor {
                     if (tr.images?.length) collectedImages.push(...tr.images)
                 }
 
-                const visibleToolResults = toolResults.filter((tr) => !isOrchestrationToolName(tr.name))
+                const visibleToolResults = toolResults.filter((tr) => isVisibleExecutionTool(tr.name))
                 if (visibleToolResults.length) {
                     this.emit('step:executed', {
                         taskId, conversationId, iteration: round + 1,
@@ -627,7 +628,7 @@ export class AgentExecutor {
         const visibleToolCalls: Array<{ index: number; toolCall: ToolCall }> = []
 
         for (const tc of toolCalls) {
-            if (!isOrchestrationToolName(tc.function.name)) {
+            if (isVisibleExecutionTool(tc.function.name)) {
                 this.config.usedToolNames?.add(tc.function.name)
             }
         }
@@ -759,7 +760,7 @@ export class AgentExecutor {
         toolCalls: ToolCall[],
     ): void {
         const { agentId, providerId, model } = this.config
-        const visibleToolCalls = toolCalls.filter((tc) => !isOrchestrationToolName(tc.function.name))
+        const visibleToolCalls = toolCalls.filter((tc) => isVisibleExecutionTool(tc.function.name))
         if (!visibleToolCalls.length) return
         getDb().prepare(
             'INSERT INTO messages (id, conversation_id, role, content, thinking, tool_calls_json, agent_id, provider, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -771,7 +772,7 @@ export class AgentExecutor {
         const { broadcast, agentId, agentName, agentIconUrl } = this.config
         const db = getDb()
         for (const tr of results) {
-            if (isOrchestrationToolName(tr.name)) continue
+            if (!isVisibleExecutionTool(tr.name)) continue
             const toolMsgId = nanoid()
             const now = Date.now()
             db.prepare(

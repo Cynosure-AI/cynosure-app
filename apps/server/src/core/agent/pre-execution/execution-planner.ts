@@ -6,10 +6,10 @@ import {
     resumeOrCreateOrchestrationRun,
 } from '../orchestration-state.js'
 import {
-    isOrchestrationToolName,
     makeOrchestrationTools,
     ORCHESTRATOR_SYSTEM_PROMPT,
 } from '../../tools/builtin/orchestration-tools.js'
+import { isVisibleExecutionTool } from '../../tools/tool-policy.js'
 import type { ExecutionPlanInput, ExecutionRequest } from './execution-input.js'
 import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
 
@@ -127,8 +127,8 @@ function applyOrchestrationIfToolCapable(
     tools: ToolDefinition[],
     systemMessages: ChatMessage[],
 ): { tools: ToolDefinition[]; systemMessages: ChatMessage[]; runId?: string } {
-    const hasRealTool = tools.some((tool) => !isOrchestrationToolName(tool.name))
-    if (!hasRealTool) {
+    const hasVisibleExecutionTool = tools.some((tool) => isVisibleExecutionTool(tool.name))
+    if (!hasVisibleExecutionTool) {
         return { tools, systemMessages }
     }
 
