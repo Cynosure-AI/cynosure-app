@@ -30,13 +30,15 @@ const selectedMemorySpaces = computed(() => {
 })
 
 const memorySpaceCount = computed(() => selectedMemorySpaces.value.length)
+const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
 </script>
 
 <template>
   <HoverTooltip :max-width="260">
     <button
-      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-accent-500 text-theme-500 hover:text-theme-300"
+      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-accent-500"
       aria-label="Memory spaces"
+      :class="autoMemoryEnabled ? 'text-accent-400 hover:text-accent-300' : 'text-theme-500 hover:text-theme-300'"
       @click="showModal = true"
     >
       <Icon
@@ -53,6 +55,16 @@ const memorySpaceCount = computed(() => selectedMemorySpaces.value.length)
     <template #content>
       <div class="font-medium text-theme-300 mb-1.5">
         Memory Spaces ({{ memorySpaceCount }} selected)
+      </div>
+      <div
+        class="flex items-center gap-1.5 text-[11px] mb-1.5"
+        :class="autoMemoryEnabled ? 'text-accent-300' : 'text-theme-500'"
+      >
+        <Icon
+          icon="lucide:brain-circuit"
+          class="w-3 h-3"
+        />
+        Auto-memory {{ autoMemoryEnabled ? 'on' : 'off' }}
       </div>
       <template v-if="selectedMemorySpaces.length">
         <div

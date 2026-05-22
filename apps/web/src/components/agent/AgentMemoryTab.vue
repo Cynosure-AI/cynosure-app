@@ -5,6 +5,7 @@ import { api } from '../../api/client'
 import type { AgentDefinition, MemorySpace } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import BaseCard from '../shared/BaseCard.vue'
+import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -58,6 +59,32 @@ onMounted(() => loadSpaces())
 
 <template>
   <div class="space-y-4">
+    <!-- Auto-memory -->
+    <BaseCard class="p-5">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            <Icon
+              icon="lucide:brain-circuit"
+              class="w-4 h-4 text-accent-400"
+            />
+            <h3 class="text-sm font-medium text-theme-200">
+              Auto-memory
+            </h3>
+          </div>
+          <p class="text-xs text-theme-500 leading-relaxed">
+            Automatically retrieve and inject relevant memory snippets before this agent responds.
+          </p>
+        </div>
+        <ToggleSwitch
+          :model-value="agent.autoMemory === true"
+          color="accent"
+          class="mt-0.5"
+          @update:model-value="emit('update', 'autoMemory', $event)"
+        />
+      </div>
+    </BaseCard>
+
     <!-- Memory Spaces -->
     <BaseCard class="p-5">
       <div class="flex items-center justify-between mb-1">

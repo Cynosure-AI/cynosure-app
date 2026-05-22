@@ -12,6 +12,7 @@ export interface ChatAgentConfigApi {
     sessionSystemPrompt: Ref<string>
     sessionThinkingEnabled: Ref<boolean>
     sessionAutoToolRouting: Ref<boolean>
+    sessionAutoMemory: Ref<boolean>
     agentOriginalSystemPrompt: Ref<string>
     freeChatSubAgentIds: Ref<string[]>
     freeChatMemorySpaceIds: Ref<string[]>
@@ -45,8 +46,10 @@ export function useChatAgentConfig(
     const sessionSystemPrompt = ref<string>('')
     const sessionThinkingEnabled = ref<boolean>(true)
     const sessionAutoToolRouting = ref<boolean>(!activeAgentId.value)
+    const sessionAutoMemory = ref<boolean>(false)
     const agentOriginalOverrideSubAgents = ref<boolean>(false)
     const agentOriginalAutoToolRouting = ref<boolean>(false)
+    const agentOriginalAutoMemory = ref<boolean>(false)
     const agentOriginalThinkingEnabled = ref<boolean>(true)
     const agentOriginalSystemPrompt = ref<string>('')
     const agentOriginalModel = ref<string | null>(null)
@@ -75,6 +78,7 @@ export function useChatAgentConfig(
             sessionThinkingEnabled.value !== agentOriginalThinkingEnabled.value ||
             sessionOverrideSubAgents.value !== agentOriginalOverrideSubAgents.value ||
             sessionAutoToolRouting.value !== agentOriginalAutoToolRouting.value ||
+            sessionAutoMemory.value !== agentOriginalAutoMemory.value ||
             sessionProviderOverride.value !== null ||
             (sessionModelOverride.value !== null && sessionModelOverride.value !== agentOriginalModel.value)
         )
@@ -92,6 +96,7 @@ export function useChatAgentConfig(
         sessionThinkingEnabled.value = agentOriginalThinkingEnabled.value
         sessionOverrideSubAgents.value = agentOriginalOverrideSubAgents.value
         sessionAutoToolRouting.value = agentOriginalAutoToolRouting.value
+        sessionAutoMemory.value = agentOriginalAutoMemory.value
         sessionModelOverride.value = null
         sessionProviderOverride.value = null
         userModifiedOverrides.value = false
@@ -136,6 +141,10 @@ export function useChatAgentConfig(
             updates.autoToolRouting = sessionAutoToolRouting.value
         }
 
+        if (sessionAutoMemory.value !== agentOriginalAutoMemory.value) {
+            updates.autoMemory = sessionAutoMemory.value
+        }
+
         if (sessionProviderOverride.value !== null) {
             // Provider changed: save new provider and resolve model
             // If no explicit model override, clear the model to avoid a mismatch
@@ -155,6 +164,7 @@ export function useChatAgentConfig(
         agentOriginalSystemPrompt.value = sessionSystemPrompt.value
         agentOriginalThinkingEnabled.value = sessionThinkingEnabled.value
         agentOriginalAutoToolRouting.value = sessionAutoToolRouting.value
+        agentOriginalAutoMemory.value = sessionAutoMemory.value
         if (updates.providerId !== undefined) agentOriginalProviderId.value = updates.providerId as string
         if ('model' in updates) agentOriginalModel.value = (updates.model as string | null)
         sessionModelOverride.value = null
@@ -188,6 +198,8 @@ export function useChatAgentConfig(
             agentOriginalOverrideSubAgents.value = sessionOverrideSubAgents.value
             sessionAutoToolRouting.value = agent?.autoToolRouting === true
             agentOriginalAutoToolRouting.value = sessionAutoToolRouting.value
+            sessionAutoMemory.value = agent?.autoMemory === true
+            agentOriginalAutoMemory.value = sessionAutoMemory.value
         } else {
             localStorage.removeItem(SK_ACTIVE_AGENT)
             agentStore.clearSelectedTools()
@@ -204,6 +216,8 @@ export function useChatAgentConfig(
             agentOriginalOverrideSubAgents.value = false
             agentOriginalAutoToolRouting.value = true
             sessionAutoToolRouting.value = true
+            agentOriginalAutoMemory.value = false
+            sessionAutoMemory.value = false
             agentOriginalModel.value = null
             agentOriginalProviderId.value = null
         }
@@ -254,6 +268,8 @@ export function useChatAgentConfig(
         const autoRouting = agent.autoToolRouting === true
         sessionAutoToolRouting.value = autoRouting
         agentOriginalAutoToolRouting.value = autoRouting
+        sessionAutoMemory.value = agent.autoMemory === true
+        agentOriginalAutoMemory.value = sessionAutoMemory.value
         sessionModelOverride.value = null
         sessionProviderOverride.value = null
         userModifiedOverrides.value = false
@@ -267,6 +283,7 @@ export function useChatAgentConfig(
         sessionSystemPrompt,
         sessionThinkingEnabled,
         sessionAutoToolRouting,
+        sessionAutoMemory,
         agentOriginalSystemPrompt,
         freeChatSubAgentIds,
         freeChatMemorySpaceIds,
