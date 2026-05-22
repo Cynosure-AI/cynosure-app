@@ -1,7 +1,8 @@
 import { getDb } from '../../../db/database.js'
 import { getGateway } from '../../gateway/gateway.js'
-import { AgentExecutor } from '../../agent/agent-executor.js'
+import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../../agent/agent-executor.js'
 import { planExecution } from '../../agent/pre-execution/execution-planner.js'
+import { closeOrchestrationRun } from '../../agent/orchestration-state.js'
 import { generateTitle } from '../../agent/post-execution.js'
 import { getAgent } from '../../agents/agent-store.js'
 import { getToolRegistry } from '../../tools/tool-registry.js'
@@ -190,7 +191,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
         providerId: planned.providerId,
         model: planned.responseModel,
         hitl: !resolvedAgent.autoApproveTools,
-        maxRounds: planned.hasSubAgents ? 30 : 15,
+        maxRounds: MAIN_AGENT_MAX_ROUNDS,
         thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
         streamMode: 'single',
         signal: execAbort.signal,
@@ -198,6 +199,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
         agentId: effectiveAgentId,
         agentName: resolvedAgent.name,
         agentIconUrl: resolvedAgent.iconUrl || null,
+        orchestrationRunId: planned.orchestrationRunId,
     })
 
     // ── Set up EventBus listeners ──
@@ -335,6 +337,9 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
 
     try {
         const result = await executor.run(messages)
+        if (planned.orchestrationRunId) {
+            closeOrchestrationRun(planned.orchestrationRunId, 'completed', { summary: result.content.slice(0, 500) })
+        }
 
         executionFinished = true
         if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
@@ -386,7 +391,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
                 userMessage: userText,
                 assistantResponse: result.content,
                 broadcast: ctx.broadcast,
-                providerId: planned.providerId,
+                providerId: planned.responseProvider,
                 model: planned.responseModel
             }).catch(() => { })
         }
@@ -418,6 +423,13 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
             }
         }
     } catch (err) {
+        if (planned.orchestrationRunId) {
+            closeOrchestrationRun(
+                planned.orchestrationRunId,
+                (err as Error).name === 'AbortError' ? 'cancelled' : 'error',
+                { error: (err as Error).name === 'AbortError' ? 'Cancelled' : (err as Error).message }
+            )
+        }
         if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
         const errorMsg = (err as Error).message || 'Unknown error'
         console.error(`[Telegram] Agent execution error: ${errorMsg}`)

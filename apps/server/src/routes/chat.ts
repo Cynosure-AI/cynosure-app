@@ -4,8 +4,9 @@ import { getGateway } from '../core/gateway/gateway.js'
 import { COMPACT_EVENT_PREFIX, applyCompactStrategy } from '../core/agent/context-compactor.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
-import { AgentExecutor } from '../core/agent/agent-executor.js'
+import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../core/agent/agent-executor.js'
 import { planExecution } from '../core/agent/pre-execution/execution-planner.js'
+import { closeOrchestrationRun } from '../core/agent/orchestration-state.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
@@ -23,6 +24,7 @@ export interface ActiveChatExecution {
   conversationId: string
   agentId: string | null
   model: string | null
+  orchestrationRunId?: string
   startedAt: number
 }
 
@@ -48,6 +50,10 @@ export function getActiveChatExecutions(): ActiveChatExecution[] {
 export function cancelChatExecution(executionId: string): boolean {
   const controller = activeAbortControllers.get(executionId)
   if (controller) {
+    const execution = activeChatExecutions.get(executionId)
+    if (execution?.orchestrationRunId) {
+      closeOrchestrationRun(execution.orchestrationRunId, 'cancelled', { error: 'Cancelled' })
+    }
     controller.abort()
     activeAbortControllers.delete(executionId)
     return true
@@ -339,14 +345,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       })
 
       const {
-        tools,
+        tools: plannedTools,
         providerId,
         responseProvider,
         responseModel,
-        hasSubAgents,
+        orchestrationRunId,
         chatAgentName,
         chatAgentIconUrl,
       } = planned
+      const tools = plannedTools
       messages = planned.messages
 
       messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
@@ -437,7 +444,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         providerId,
         model: responseModel,
         hitl: resolvedAgent ? !resolvedAgent.autoApproveTools : true,
-        maxRounds: hasSubAgents ? 30 : 15,
+        maxRounds: MAIN_AGENT_MAX_ROUNDS,
         thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
         streamMode: 'single',
         signal: abortController.signal,
@@ -448,6 +455,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         contextWindow,
         initialContextEstimate,
         contextStrategy,
+        orchestrationRunId,
       })
 
       const executionId = streamId
@@ -456,11 +464,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         conversationId,
         agentId,
         model: responseModel,
+        orchestrationRunId,
         startedAt: Date.now()
       })
 
       try {
         const result = await executor.run(messages)
+        if (orchestrationRunId) {
+          closeOrchestrationRun(orchestrationRunId, 'completed', { summary: result.content.slice(0, 500) })
+        }
 
         // Save final assistant message with metadata
         const assistantMsgId = nanoid()
@@ -489,7 +501,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
         if (conv && conv.title === 'New Chat') {
           if (generateTitlePref !== false) {
-            generateTitle({ conversationId, userMessage: content, assistantResponse: result.content, broadcast, providerId: titleProviderIdPref || providerId, model: titleModelPref || responseModel }).catch(() => { })
+            generateTitle({
+              conversationId,
+              userMessage: content,
+              assistantResponse: result.content,
+              broadcast,
+              providerId: titleProviderIdPref || responseProvider,
+              model: titleModelPref || (titleProviderIdPref ? undefined : responseModel)
+            }).catch(() => { })
           } else {
             // Fallback: first few words of the user message
             const words = content.split(/\s+/).slice(0, 6).join(' ')
@@ -502,9 +521,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
+          if (orchestrationRunId) {
+            closeOrchestrationRun(orchestrationRunId, 'cancelled', { error: 'Cancelled' })
+          }
           getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
           broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
           return { streamId }
+        }
+        if (orchestrationRunId) {
+          closeOrchestrationRun(orchestrationRunId, 'error', { error: (err as Error).message })
         }
         getEventBus().emit('task:error', { conversationId, error: (err as Error).message })
         broadcast('chat:stream-error', { streamId, conversationId, error: (err as Error).message })
@@ -522,11 +547,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   app.post<{ Body: { streamId?: string; conversationId?: string } }>('/cancel', async (req) => {
     const { streamId, conversationId } = req.body
     if (streamId) {
-      const controller = activeAbortControllers.get(streamId)
-      if (controller) {
-        controller.abort()
-        activeAbortControllers.delete(streamId)
-      } else {
+      if (!cancelChatExecution(streamId)) {
         // Try cancelling a channel execution (Telegram/Discord/Slack)
         getChannelManager().cancelExecution(streamId)
       }

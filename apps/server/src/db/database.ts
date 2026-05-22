@@ -23,6 +23,23 @@ export function getDb(): Database.Database {
   return db
 }
 
+export function ensureDefaultMemorySpace(database: Database.Database = getDb()): void {
+  const defaultSpaceId = 'default'
+  const defaultFolderPath = getDefaultMemorySpaceDir()
+  mkdirSync(defaultFolderPath, { recursive: true })
+
+  const defaultSpaceExists = database.prepare("SELECT id FROM memory_spaces WHERE id = ?").get(defaultSpaceId)
+  if (!defaultSpaceExists) {
+    const now = Date.now()
+    database.prepare("INSERT INTO memory_spaces (id, name, description, folder_path, sort_order, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(defaultSpaceId, 'Default', 'Default memory space for general knowledge and notes', defaultFolderPath, 0, 1, now)
+    return
+  }
+
+  database.prepare("UPDATE memory_spaces SET folder_path = ?, is_default = 1 WHERE id = ?")
+    .run(defaultFolderPath, defaultSpaceId)
+}
+
 function createTables(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS providers (
@@ -85,6 +102,7 @@ function createTables(db: Database.Database): void {
       result_json TEXT,
       iterations INTEGER DEFAULT 0,
       created_at INTEGER NOT NULL,
+      updated_at INTEGER,
       completed_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_tasks_conversation ON tasks(conversation_id);
@@ -272,19 +290,11 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('mcp_servers', 'custom_name', 'TEXT')
   db.prepare("UPDATE mcp_servers SET original_name = name WHERE original_name IS NULL OR original_name = ''").run()
 
-  // Ensure default memory space exists
-  const defaultSpaceId = 'default'
-  const defaultFolderPath = getDefaultMemorySpaceDir()
-  const defaultSpaceExists = db.prepare("SELECT id FROM memory_spaces WHERE id = ?").get(defaultSpaceId)
-  if (!defaultSpaceExists) {
-    const now = Date.now()
-    db.prepare("INSERT INTO memory_spaces (id, name, description, folder_path, sort_order, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(defaultSpaceId, 'Default', 'Default memory space for general knowledge and notes', defaultFolderPath, 0, 1, now)
-  } else {
-    // Migrate existing default space to have folder_path set
-    db.prepare("UPDATE memory_spaces SET folder_path = ? WHERE id = ? AND (folder_path IS NULL OR folder_path = '')")
-      .run(defaultFolderPath, defaultSpaceId)
-  }
+  // Tasks table: reused for durable top-level orchestrator state.
+  addColumnIfMissing('tasks', 'updated_at', 'INTEGER')
+  db.prepare('UPDATE tasks SET updated_at = created_at WHERE updated_at IS NULL').run()
+
+  ensureDefaultMemorySpace(db)
 
   // Agent table: add columns for DB-only storage (migrating away from filesystem)
   addColumnIfMissing('agents', 'category', "TEXT NOT NULL DEFAULT ''")

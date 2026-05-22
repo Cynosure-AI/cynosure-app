@@ -89,7 +89,7 @@ function onOverrideSubAgentsToggle(value: boolean): void {
 
 
     <!-- Agent list -->
-    <div class="overflow-y-auto space-y-1 max-h-80">
+    <div class="overflow-y-auto space-y-1 ">
       <div
         v-if="filteredAgents.length === 0"
         class="text-sm text-theme-500 text-center py-6"

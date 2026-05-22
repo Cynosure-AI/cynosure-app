@@ -13,6 +13,7 @@
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { makeGenerateTitleTool } from '../tools/built-in-tools.js'
+import type { LLMGateway } from '../gateway/gateway.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -102,23 +103,33 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     try {
         const userSnippet = userMessage.slice(0, 150)
         const assistantSnippet = assistantResponse.slice(0, 300)
+        const titleTarget = resolveTitleTarget(gateway, providerId, model)
+
+        const messages = [
+            {
+                role: 'system' as const,
+                content: 'Generate a short, descriptive chat title for this conversation. Prefer 3-7 words. Do not copy the first words verbatim unless they are already the best summary. /no_think'
+            },
+            {
+                role: 'user' as const,
+                content: `User: "${userSnippet}"\nAssistant: "${assistantSnippet}"`
+            }
+        ]
 
         const result = await gateway.complete({
             messages: [
                 {
                     role: 'system',
-                    content: 'Generate a short chat title for this conversation. Call the generate_title tool with your title. /no_think'
+                    content: `${messages[0].content} Call the generate_title tool with your title.`
                 },
-                {
-                    role: 'user',
-                    content: `User: "${userSnippet}"\nAssistant: "${assistantSnippet}"`
-                }
+                messages[1]
             ],
-            model,
+            model: titleTarget.model,
             signal,
             tools: [titleTool],
+            toolChoice: { type: 'function', name: 'generate_title' },
             maxTokens: 80
-        }, providerId)
+        }, titleTarget.providerId)
 
         if (result.toolCalls?.length) {
             for (const tc of result.toolCalls) {
@@ -130,35 +141,30 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
             }
         }
 
-        // Fallback: parse plain-text response
-        if (result.content) {
-            const raw = result.content
-                .replace(/<think>[\s\S]*?<\/think>/gi, '')
-                .replace(/\*{1,3}/g, '')
-                .replace(/`{1,3}/g, '')
-                .replace(/^#+\s*/gm, '')
-            const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0 && l.length < 80)
-            const candidate = lines[lines.length - 1] || ''
-            const title = candidate
-                .replace(/^["'""''`]+|["'""''`]+$/g, '')
-                .replace(/^Title:\s*/i, '')
-                .replace(/[.!?:;,]+$/, '')
-                .replace(/\s{2,}/g, ' ')
-                .trim()
-                .slice(0, 80)
-
-            if (title && title.split(/\s+/).length <= 10) {
-                await titleTool.execute({ title })
-                return
-            }
-        }
-
         // Final fallback: first words of user message
         applyFallbackTitle(db, conversationId, userMessage, broadcast)
-    } catch {
+    } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+            console.warn('[title] Title generation failed, using fallback title:', err)
+        }
         applyFallbackTitle(db, conversationId, userMessage, broadcast)
     } finally {
         completeAction(conversationId, 'generating-title', broadcast)
+    }
+}
+
+function resolveTitleTarget(
+    gateway: LLMGateway,
+    providerId?: string,
+    model?: string
+): { providerId: string; model: string } {
+    const provider = providerId
+        ? gateway.getProvider(providerId) || gateway.getLastUsedProvider()
+        : gateway.getLastUsedProvider()
+
+    return {
+        providerId: provider.config.id,
+        model: model || provider.config.defaultModel
     }
 }
 

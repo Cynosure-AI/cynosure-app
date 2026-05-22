@@ -3,6 +3,7 @@ import ChatSidebar from '../../components/layout/ChatSidebar.vue'
 import ChatHeaderBar from '../../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import InputBar from '../../components/chat/InputBar.vue'
+import OrchestratorTaskList from '../../components/chat/OrchestratorTaskList.vue'
 import { ref } from 'vue'
 import { useChatSidebar } from '../../composables/useSidebar'
 
@@ -94,6 +95,8 @@ function onDrop(e: DragEvent) {
             </div>
           </div>
         </div>
+
+        <OrchestratorTaskList />
 
         <!-- Input bar (full width of chat column) -->
         <InputBar ref="inputBarRef" />
