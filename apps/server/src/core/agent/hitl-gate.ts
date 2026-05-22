@@ -23,7 +23,7 @@ export class HITLGate {
 
   /** Returns true if the given tool is auto-approved (whitelisted). */
   isAutoApproved(toolName: string): boolean {
-    if (toolName === TOOL_SEARCH_TOOL_NAME) return true
+    if (isSystemAutoApprovedTool(toolName)) return true
     const db = getDb()
     const row = db.prepare('SELECT auto_approve FROM tool_approvals WHERE tool_name = ?').get(toolName) as { auto_approve: number } | undefined
     return row?.auto_approve === 1
@@ -73,8 +73,7 @@ export class HITLGate {
     // the sub-agent's own tool calls hit the HITL gate independently.
     const sessionSet = conversationId ? this.getSessionApprovals(conversationId) : undefined
     const needsApproval = toolCalls.filter(
-      (tc) => !tc.function.name.startsWith('delegate_to_')
-        && !isOrchestrationToolName(tc.function.name)
+      (tc) => !isSystemAutoApprovedTool(tc.function.name)
         && !this.isAutoApproved(tc.function.name)
         && !sessionSet?.has(this.allToolsApproval)
         && !sessionSet?.has(tc.function.name)
@@ -170,4 +169,12 @@ export function getHITLGate(): HITLGate {
     hitlGateInstance = new HITLGate()
   }
   return hitlGateInstance
+}
+
+function isSystemAutoApprovedTool(toolName: string): boolean {
+  return (
+    toolName === TOOL_SEARCH_TOOL_NAME ||
+    toolName.startsWith('delegate_to_') ||
+    isOrchestrationToolName(toolName)
+  )
 }
