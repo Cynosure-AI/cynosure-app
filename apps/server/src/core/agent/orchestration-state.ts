@@ -39,6 +39,11 @@ interface TaskRow {
 }
 
 const STATE_TYPE = 'orchestrator_state'
+const MAX_OBJECTIVE_LENGTH = 300
+const MAX_TASKS = 24
+const MAX_TASK_TITLE_LENGTH = 120
+const MAX_NOTE_LENGTH = 180
+
 export function createOrchestrationRun(conversationId: string, objective: string): OrchestrationState {
   const db = getDb()
   const now = Date.now()
@@ -47,7 +52,7 @@ export function createOrchestrationRun(conversationId: string, objective: string
     runId,
     conversationId,
     status: 'running',
-    objective: objective.trim().slice(0, 300),
+    objective: cleanObjective(objective),
     items: [],
     createdAt: now,
     updatedAt: now,
@@ -64,7 +69,7 @@ export function createOrchestrationRun(conversationId: string, objective: string
 
 export function resumeOrCreateOrchestrationRun(conversationId: string, objective: string): OrchestrationState {
   const latest = getLatestOrchestrationState(conversationId)
-  if (!latest || latest.status === 'completed' || latest.items.length === 0) {
+  if (!latest || latest.status !== 'running' || latest.items.length === 0) {
     return createOrchestrationRun(conversationId, objective)
   }
 
@@ -73,7 +78,7 @@ export function resumeOrCreateOrchestrationRun(conversationId: string, objective
   const state: OrchestrationState = {
     ...latest,
     status: 'running',
-    objective: latest.objective || objective.trim().slice(0, 300),
+    objective: latest.objective || cleanObjective(objective),
     items,
     currentTaskId: items.find((item) => item.status === 'in_progress')?.id,
     result: undefined,
@@ -123,6 +128,10 @@ export function closeOrchestrationRun(
 ): OrchestrationState | null {
   const current = getOrchestrationState(runId)
   if (!current || current.status !== 'running') return current
+  if (!current.items.length) {
+    deleteOrchestrationRun(runId)
+    return null
+  }
 
   const now = Date.now()
   const items = reconcileItemsForClose(current.items, status, result?.error, now)
@@ -147,10 +156,10 @@ export function setOrchestrationTasks(runId: string, params: unknown): { success
 
   const now = Date.now()
   const items = (payload.tasks || [])
-    .slice(0, 24)
+    .slice(0, MAX_TASKS)
     .map((task) => ({
       id: nanoid(8),
-      title: String(task.title || '').trim().slice(0, 120),
+      title: cleanTaskTitle(task.title),
       status: normalizeTaskStatus(task.status),
       note: cleanNote(task.note),
       updatedAt: now,
@@ -162,7 +171,7 @@ export function setOrchestrationTasks(runId: string, params: unknown): { success
 
   const state: OrchestrationState = {
     ...current,
-    objective: String(payload.objective || current.objective).trim().slice(0, 300),
+    objective: cleanObjective(payload.objective || current.objective),
     items: normalizedItems,
     currentTaskId: normalizedItems.find((item) => item.status === 'in_progress')?.id,
     updatedAt: now,
@@ -195,7 +204,7 @@ export function updateOrchestrationTask(runId: string, params: unknown): { succe
     return {
       ...item,
       status,
-      note: cleanNote(payload.note),
+      note: payload.note === undefined ? item.note : cleanNote(payload.note),
       updatedAt: now,
     }
   })
@@ -278,6 +287,10 @@ function getOrchestrationState(runId: string): OrchestrationState | null {
      FROM tasks WHERE id = ?`
   ).get(runId) as TaskRow | undefined
   return row ? fromRow(row) : null
+}
+
+function deleteOrchestrationRun(runId: string): void {
+  getDb().prepare('DELETE FROM tasks WHERE id = ?').run(runId)
 }
 
 function persistState(state: OrchestrationState, completed = false): void {
@@ -367,8 +380,15 @@ function ensureResumedTask(items: OrchestrationTaskItem[], now: number): Orchest
 }
 
 function ensureActiveTask(items: OrchestrationTaskItem[], now: number): OrchestrationTaskItem[] {
-  if (items.some((item) => item.status === 'in_progress')) return items
-  if (items.some((item) => item.status === 'completed')) return items
+  const activeIndex = items.findIndex((item) => item.status === 'in_progress')
+  if (activeIndex !== -1) {
+    return items.map((item, index) => (
+      index !== activeIndex && item.status === 'in_progress'
+        ? { ...item, status: 'pending', updatedAt: now }
+        : item
+    ))
+  }
+
   const firstPending = items.findIndex((item) => item.status === 'pending')
   if (firstPending === -1) return items
   return items.map((item, index) => (
@@ -402,7 +422,7 @@ function reconcileItemsForClose(
   if (status === 'completed') {
     return items.map((item) => (
       item.status === 'in_progress'
-        ? { ...item, status: 'pending', note: item.note || 'Paused after response.', updatedAt: now }
+        ? { ...item, status: 'completed', updatedAt: now }
         : item
     ))
   }
@@ -423,6 +443,14 @@ function reconcileItemsForClose(
 }
 
 function cleanNote(note: string | undefined): string | undefined {
-  const cleaned = String(note || '').trim().slice(0, 180)
+  const cleaned = String(note || '').trim().slice(0, MAX_NOTE_LENGTH)
   return cleaned || undefined
+}
+
+function cleanObjective(objective: string | undefined): string {
+  return String(objective || '').trim().slice(0, MAX_OBJECTIVE_LENGTH)
+}
+
+function cleanTaskTitle(title: string | undefined): string {
+  return String(title || '').trim().slice(0, MAX_TASK_TITLE_LENGTH)
 }
