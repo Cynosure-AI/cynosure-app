@@ -403,6 +403,9 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
     }
     return eventBus.on(eventName, listener)
   })
+  const removeOrchestrationStateListener = eventBus.on('orchestrator:state-updated', (data: unknown) => {
+    broadcast('orchestrator:state-updated', data)
+  })
 
   // Persist execution steps to DB for reload survival
   const stepPersistenceCleanups = setupExecutionStepPersistence(eventBus)
@@ -471,6 +474,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       for (const cleanup of executionListenerCleanups) {
         cleanup()
       }
+      removeOrchestrationStateListener()
       for (const cleanup of stepPersistenceCleanups) {
         cleanup()
       }

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
+import { getLatestOrchestrationState } from '../core/agent/orchestration-state.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { nanoid } from 'nanoid'
 import { unlinkSync } from 'fs'
@@ -222,6 +223,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }))
     })
 
+    // GET /api/chat/conversations/:id/orchestration-state — latest visible orchestration task list
+    app.get<{ Params: { id: string } }>('/conversations/:id/orchestration-state', async (req) => {
+        return getLatestOrchestrationState(req.params.id)
+    })
+
     // PATCH /api/chat/conversations/:id/pin — toggle pinned state
     app.patch<{ Params: { id: string }; Body: { pinned: boolean } }>(
         '/conversations/:id/pin',
@@ -246,6 +252,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }
         cleanupConversationImages([req.params.id])
         db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(req.params.id)
+        db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM conversations WHERE id = ?').run(req.params.id)
@@ -262,6 +269,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             cleanupConversationImages(ids.map(r => r.id))
             for (const { id } of ids) {
                 db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
+                db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
             }
@@ -271,6 +279,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             cleanupConversationImages(allIds.map(r => r.id))
             for (const { id } of allIds) {
                 db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
+                db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
             }
@@ -328,6 +337,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 .prepare('DELETE FROM messages WHERE conversation_id = ? AND created_at >= ?')
                 .run(conversationId, row.created_at)
             db.prepare('DELETE FROM execution_steps WHERE conversation_id = ? AND created_at >= ?')
+                .run(conversationId, row.created_at)
+            db.prepare('DELETE FROM tasks WHERE conversation_id = ? AND created_at >= ?')
                 .run(conversationId, row.created_at)
             return { success: true, deleted: result.changes }
         }

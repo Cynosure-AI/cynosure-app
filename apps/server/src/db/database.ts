@@ -85,6 +85,7 @@ function createTables(db: Database.Database): void {
       result_json TEXT,
       iterations INTEGER DEFAULT 0,
       created_at INTEGER NOT NULL,
+      updated_at INTEGER,
       completed_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_tasks_conversation ON tasks(conversation_id);
@@ -271,6 +272,10 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('mcp_servers', 'original_name', 'TEXT')
   addColumnIfMissing('mcp_servers', 'custom_name', 'TEXT')
   db.prepare("UPDATE mcp_servers SET original_name = name WHERE original_name IS NULL OR original_name = ''").run()
+
+  // Tasks table: reused for durable top-level orchestrator state.
+  addColumnIfMissing('tasks', 'updated_at', 'INTEGER')
+  db.prepare('UPDATE tasks SET updated_at = created_at WHERE updated_at IS NULL').run()
 
   // Ensure default memory space exists
   const defaultSpaceId = 'default'

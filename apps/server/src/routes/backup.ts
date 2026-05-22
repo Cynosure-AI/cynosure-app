@@ -761,12 +761,14 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                         if (t.conversation_id && !importedConversationIds.has(t.conversation_id as string)) continue
                         try {
                             db.prepare(
-                                `INSERT OR REPLACE INTO tasks (id, conversation_id, status, definition_json, result_json, iterations, created_at, completed_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+                                `INSERT OR REPLACE INTO tasks (id, conversation_id, status, definition_json, result_json, iterations, created_at, updated_at, completed_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 t.id, t.conversation_id || null, t.status || 'completed',
                                 t.definition_json || '{}', t.result_json || null,
-                                t.iterations ?? 0, t.created_at || Date.now(), t.completed_at || null
+                                t.iterations ?? 0, t.created_at || Date.now(),
+                                t.updated_at || t.created_at || Date.now(),
+                                t.completed_at || null
                             )
                         } catch (e) {
                             res.errors.push(`Task: ${(e as Error).message}`)
@@ -841,13 +843,18 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                     for (const s of steps) {
                         try {
                             db.prepare(
-                                `INSERT OR REPLACE INTO execution_steps (id, conversation_id, task_id, iteration, status, message, plan, tool_calls_json, result_json, tokens_used, created_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                `INSERT OR REPLACE INTO execution_steps (id, conversation_id, task_id, iteration, status, message, plan, tool_calls_json, results_json, evaluation_json, ma_codename, ma_agent_name, ma_phase, created_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 s.id, s.conversation_id, s.task_id || null, s.iteration ?? 0,
                                 s.status, s.message || null, s.plan || null,
-                                s.tool_calls_json || null, s.result_json || null,
-                                s.tokens_used ?? null, s.created_at || Date.now()
+                                s.tool_calls_json || null,
+                                s.results_json || s.result_json || null,
+                                s.evaluation_json || null,
+                                s.ma_codename || null,
+                                s.ma_agent_name || null,
+                                s.ma_phase || null,
+                                s.created_at || Date.now()
                             )
                             res.restored++
                         } catch (e) {
