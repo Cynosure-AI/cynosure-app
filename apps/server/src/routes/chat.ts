@@ -4,7 +4,7 @@ import { getGateway } from '../core/gateway/gateway.js'
 import { COMPACT_EVENT_PREFIX, applyCompactStrategy } from '../core/agent/context-compactor.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
-import { AgentExecutor } from '../core/agent/agent-executor.js'
+import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../core/agent/agent-executor.js'
 import { planExecution } from '../core/agent/pre-execution/execution-planner.js'
 import {
   buildOrchestrationStateContext,
@@ -452,7 +452,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         providerId,
         model: responseModel,
         hitl: resolvedAgent ? !resolvedAgent.autoApproveTools : true,
-        maxRounds: hasSubAgents ? 30 : 15,
+        maxRounds: MAIN_AGENT_MAX_ROUNDS,
         thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
         streamMode: 'single',
         signal: abortController.signal,

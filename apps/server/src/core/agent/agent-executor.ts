@@ -9,6 +9,9 @@ import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 import { isOrchestrationToolName } from '../tools/builtin/orchestration-tools.js'
 import { ensureOrchestrationStarted, reconcileOrchestrationAfterToolBatch } from './orchestration-state.js'
 
+/** Maximum tool-use rounds for the main (orchestrator) agent per request. */
+export const MAIN_AGENT_MAX_ROUNDS = 50
+
 type BroadcastFn = (event: string, data: unknown) => void
 
 export interface AgentExecutorConfig {
@@ -148,7 +151,7 @@ export class AgentExecutor {
     constructor(config: AgentExecutorConfig) {
         this.config = {
             hitl: false,
-            maxRounds: 15,
+            maxRounds: MAIN_AGENT_MAX_ROUNDS,
             saveMessages: true,
             streamMode: 'single',
             emitEvents: true,

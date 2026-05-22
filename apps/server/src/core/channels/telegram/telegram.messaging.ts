@@ -1,6 +1,6 @@
 import { getDb } from '../../../db/database.js'
 import { getGateway } from '../../gateway/gateway.js'
-import { AgentExecutor } from '../../agent/agent-executor.js'
+import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../../agent/agent-executor.js'
 import { planExecution } from '../../agent/pre-execution/execution-planner.js'
 import { generateTitle } from '../../agent/post-execution.js'
 import { getAgent } from '../../agents/agent-store.js'
@@ -190,7 +190,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
         providerId: planned.providerId,
         model: planned.responseModel,
         hitl: !resolvedAgent.autoApproveTools,
-        maxRounds: planned.hasSubAgents ? 30 : 15,
+        maxRounds: MAIN_AGENT_MAX_ROUNDS,
         thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
         streamMode: 'single',
         signal: execAbort.signal,
