@@ -157,6 +157,11 @@ defineExpose({ processFiles })
 
 <template>
   <div class="border-t border-theme-800 bg-theme-900 px-4 py-3 flex items-end gap-3">
+    <!--Placeholder to even out the context ring space so the input is centered-->
+    <div class="hidden sm:flex w-10 items-center justify-center" />
+
+
+    <!-- Main input area -->
     <div class="max-w-5xl mx-auto flex-1 min-w-0">
       <!-- Attached images preview -->
       <div
@@ -278,7 +283,7 @@ defineExpose({ processFiles })
     </div>
 
     <!-- Context window usage ring — pinned to the far right of the bar -->
-    <div class="hidden sm:block">
+    <div class="hidden sm:flex w-10 items-center justify-center">
       <ContextRing />
     </div>
   </div>
