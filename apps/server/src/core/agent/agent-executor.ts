@@ -8,7 +8,7 @@ import type { ChatMessage, ToolCall, ToolDefinition, ToolResult } from '../gatew
 import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 import { isOrchestrationToolName } from '../tools/builtin/orchestration-tools.js'
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
-import { ensureOrchestrationStarted, reconcileOrchestrationAfterToolBatch } from './orchestration-state.js'
+import { reconcileOrchestrationAfterToolBatch } from './orchestration-state.js'
 
 /** Maximum tool-use rounds for the main (orchestrator) agent per request. */
 export const MAIN_AGENT_MAX_ROUNDS = 50
@@ -235,9 +235,6 @@ export class AgentExecutor {
                 const hasOrchestrationUpdate = pendingToolCalls.some((tc) => isOrchestrationToolName(tc.function.name))
 
                 if (visibleToolCalls.length) {
-                    if (!hasOrchestrationUpdate) {
-                        this.ensureOrchestrationVisible(visibleToolCalls)
-                    }
                     this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'choosing-tools', message: 'Selecting tools...' })
                     this.emit('step:tools-chosen', {
                         taskId, conversationId, iteration: round + 1,
@@ -729,27 +726,6 @@ export class AgentExecutor {
             success,
             note: success ? undefined : failed?.output,
         })
-    }
-
-    private ensureOrchestrationVisible(toolCalls: ToolCall[]): void {
-        const runId = this.config.orchestrationRunId
-        if (!runId || this._sp !== 'chat:stream') return
-        ensureOrchestrationStarted(runId, this.describeToolBatch(toolCalls))
-    }
-
-    private describeToolBatch(toolCalls: ToolCall[]): string {
-        if (toolCalls.length > 1) return `Execute ${toolCalls.length} tool actions`
-        const tc = toolCalls[0]
-        const toolName = tc.function.name.replace(/^delegate_to_/, '').replace(/_agent$/, '').replace(/_/g, ' ')
-        try {
-            const args = JSON.parse(tc.function.arguments) as Record<string, unknown>
-            const text = [args.instructions, args.query, args.url, args.path, args.filePath]
-                .find((value): value is string => typeof value === 'string' && value.trim().length > 0)
-            if (text) return text.trim().slice(0, 120)
-        } catch {
-            // Ignore malformed tool args; fall back to the tool name.
-        }
-        return `Run ${toolName}`
     }
 
     /** Save the assistant's tool-calling message (thinking + content + tool_calls) to DB. */
