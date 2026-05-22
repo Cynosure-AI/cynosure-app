@@ -41,7 +41,7 @@ const registryRows = computed<RegistryRow[]>(() =>
 
 const registryTableColumns: Column<RegistryRow>[] = [
   { key: 'server', label: 'Server', width: 'minmax(0,4fr)', sortable: true, sortValue: item => getDisplayName(item.server) },
-  { key: 'type', label: 'Type', width: 'minmax(180px,1fr)', hideOnMobile: true, sortable: true, sortValue: item => getTypeTags(item.server).join(' ') },
+  { key: 'type', label: 'Type', width: 'minmax(180px,1fr)', sortable: true, sortValue: item => getTypeTags(item.server).join(' ') },
   { key: 'actions', label: 'Actions', width: 'minmax(200px,1fr)', sortable: true, sortValue: item => isInstalled(item.server) ? 2 : getInstallInfo(item.server) ? 1 : 0 },
 ]
 
