@@ -89,8 +89,8 @@ const categoryGroups = computed<SelectOptionGroup[]>(() => [
 // Table columns for DataTable component
 const agentTableColumns: Column<AgentDefinition>[] = [
   { key: 'name', label: 'Name', width: 'minmax(0,1.5fr)', sortable: true, sortValue: agent => agent.name },
-  { key: 'provider', label: 'Provider/Model', width: 'minmax(200px,1fr)', hideOnMobile: true, sortable: true, sortValue: agent => `${getProviderName(agent)} ${agent.model}` },
-  { key: 'metadata', label: 'Info', width: '200px', hideOnMobile: true, sortable: true, sortValue: agent => agent.tools.length + (agent.subAgents?.length || 0) },
+  { key: 'provider', label: 'Provider/Model', width: 'minmax(200px,1fr)', sortable: true, sortValue: agent => `${getProviderName(agent)} ${agent.model}` },
+  { key: 'metadata', label: 'Info', width: '200px', sortable: true, sortValue: agent => agent.tools.length + (agent.subAgents?.length || 0) },
   { key: 'actions', label: 'Actions', width: '120px' },
 ]
 
@@ -441,7 +441,6 @@ function handleReorderCategory(payload: { from: string; to: string; before: bool
         :items="filteredAgents"
         :columns="agentTableColumns"
         :selectable="true"
-        :selection-column="{ hideOnMobile: true }"
         :selected-ids="bulkSelectionIds"
         @update:selected-ids="bulkSelectionIds = $event"
         @row-click="onRowClick($event.id)"

@@ -134,9 +134,9 @@ const filteredCronJobs = computed(() => {
 const tableColumns: Column<CronJob>[] = [
   { key: 'job', label: 'Job', width: 'minmax(0,1.7fr)', sortable: true, sortValue: job => job.name || job.agentName },
   { key: 'schedule', label: 'Schedule', width: 'minmax(0,1.3fr)', sortable: true, sortValue: job => job.nextRunAt ?? Number.MAX_SAFE_INTEGER },
-  { key: 'status', label: 'Status', width: '140px', hideOnMobile: true, hideOnTablet: true, sortable: true, sortValue: job => job.isRunning ? 2 : job.enabled ? 1 : 0 },
-  { key: 'actions', label: 'Actions', width: '170px', hideOnMobile: true },
-  { key: 'enable', label: 'Enable', width: '72px', hideOnMobile: true, sortable: true, sortValue: job => job.enabled },
+  { key: 'status', label: 'Status', width: '140px', sortable: true, sortValue: job => job.isRunning ? 2 : job.enabled ? 1 : 0 },
+  { key: 'actions', label: 'Actions', width: '170px' },
+  { key: 'enable', label: 'Enable', width: '72px', sortable: true, sortValue: job => job.enabled },
 ]
 
 function openCronJob(job: CronJob) {
