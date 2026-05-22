@@ -49,6 +49,9 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         autoToolRouting,
         toolRouterProviderId,
         toolRouterModel,
+        autoMemory,
+        memoryRouterProviderId,
+        memoryRouterModel,
         hasExplicitToolAllowlist = false,
     } = input
     const selectedToolKeys = input.selectedToolKeys ?? []
@@ -76,6 +79,9 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
             autoToolRouting: autoToolRouting === true,
             toolRouterProviderId,
             toolRouterModel,
+            autoMemory,
+            memoryRouterProviderId,
+            memoryRouterModel,
         })
 
     const prepared = await prepareAgentExecution({
@@ -93,6 +99,9 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         autoToolRouting,
         toolRouterProviderId,
         toolRouterModel,
+        autoMemory,
+        memoryRouterProviderId,
+        memoryRouterModel,
         preferredToolKeys: fixedToolKeys,
         recentMessages: messages,
         userQuery: userText,

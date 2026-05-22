@@ -83,6 +83,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         model: planned.responseModel,
         providerId: planned.providerId,
         thinkingEnabled: agent.thinkingEnabled !== false,
+        autoMemory: agent.autoMemory === true,
     })
     db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(chatConfig, conversationId)
 
