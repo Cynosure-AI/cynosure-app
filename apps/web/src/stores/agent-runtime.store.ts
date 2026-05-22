@@ -382,6 +382,9 @@ export const useAgentStore = defineStore('agent', () => {
     activeTaskId.value = null
     hitlQueue.value = []
     executionConversationId.value = null
+  }
+
+  function clearOrchestrationState(): void {
     orchestrationState.value = null
   }
 
@@ -518,6 +521,7 @@ export const useAgentStore = defineStore('agent', () => {
     handleOrchestrationStateUpdated,
     clearExecution,
     clearExecutionState,
+    clearOrchestrationState,
     setConversationExecutionState,
     restoreForConversation,
     setActiveViewConversation,

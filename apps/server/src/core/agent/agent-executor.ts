@@ -6,7 +6,7 @@ import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy }
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
-import { isOrchestrationToolName } from './orchestration-state.js'
+import { isOrchestrationToolName } from '../tools/builtin/orchestration-tools.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 

@@ -1,7 +1,7 @@
 import type { ToolCall } from '../gateway/providers/base.provider.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getDb } from '../../db/database.js'
-import { isOrchestrationToolName } from './orchestration-state.js'
+import { isOrchestrationToolName } from '../tools/builtin/orchestration-tools.js'
 
 export interface ApprovalResult {
   approved: boolean

@@ -1,7 +1,6 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
-import type { ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 
 export type OrchestrationTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
 export type OrchestrationRunStatus = 'running' | 'completed' | 'cancelled' | 'error'
@@ -40,23 +39,6 @@ interface TaskRow {
 }
 
 const STATE_TYPE = 'orchestrator_state'
-const ORCHESTRATION_TOOL_NAMES = new Set([
-  'orchestrator_set_tasks',
-  'orchestrator_update_task',
-  'orchestrator_complete',
-])
-
-export const ORCHESTRATOR_SYSTEM_PROMPT = [
-  '## Stateful Orchestration',
-  'For complex or multi-step requests, maintain a concise visible task list with the orchestration tools.',
-  'Create the list once you know the objective, mark exactly one active task as `in_progress` when useful, update tasks as facts change, and complete or block items honestly.',
-  'Use these tools sparingly: for simple one-step answers, answer normally without creating a task list.',
-].join('\n')
-
-export function isOrchestrationToolName(name: string): boolean {
-  return ORCHESTRATION_TOOL_NAMES.has(name)
-}
-
 export function createOrchestrationRun(conversationId: string, objective: string): OrchestrationState {
   const db = getDb()
   const now = Date.now()
@@ -78,6 +60,43 @@ export function createOrchestrationRun(conversationId: string, objective: string
 
   emitState(state)
   return state
+}
+
+export function resumeOrCreateOrchestrationRun(conversationId: string, objective: string): OrchestrationState {
+  const latest = getLatestOrchestrationState(conversationId)
+  if (!latest || latest.status === 'completed' || latest.items.length === 0) {
+    return createOrchestrationRun(conversationId, objective)
+  }
+
+  const now = Date.now()
+  const items = ensureResumedTask(latest.items, now)
+  const state: OrchestrationState = {
+    ...latest,
+    status: 'running',
+    objective: latest.objective || objective.trim().slice(0, 300),
+    items,
+    currentTaskId: items.find((item) => item.status === 'in_progress')?.id,
+    result: undefined,
+    updatedAt: now,
+    completedAt: undefined,
+  }
+  persistState(state)
+  emitState(state)
+  return state
+}
+
+export function buildOrchestrationStateContext(state: OrchestrationState): string | null {
+  if (!state.items.length) return null
+  const lines = state.items.map((item) => {
+    const note = item.note ? `; note=${item.note}` : ''
+    return `- id=${item.id}; status=${item.status}; title=${item.title}${note}`
+  })
+  return [
+    'Current visible orchestration state for this conversation:',
+    `objective=${state.objective}`,
+    ...lines,
+    'Continue from this state. Prefer updating existing task ids over replacing the whole list unless the user changed the objective.',
+  ].join('\n')
 }
 
 export function getLatestOrchestrationState(conversationId: string): OrchestrationState | null {
@@ -106,14 +125,12 @@ export function closeOrchestrationRun(
   if (!current || current.status !== 'running') return current
 
   const now = Date.now()
-  const items = status === 'completed'
-    ? completeOpenItems(current.items, now)
-    : current.items
+  const items = reconcileItemsForClose(current.items, status, result?.error, now)
   const state: OrchestrationState = {
     ...current,
     status,
     items,
-    currentTaskId: items.find((item) => item.status === 'in_progress')?.id,
+    currentTaskId: undefined,
     result,
     updatedAt: now,
     completedAt: now,
@@ -123,74 +140,14 @@ export function closeOrchestrationRun(
   return state
 }
 
-export function makeOrchestrationTools(runId: string): ToolDefinition[] {
-  return [
-    {
-      name: 'orchestrator_set_tasks',
-      description: 'Create or replace the visible orchestration task list for this request. Use only for complex or multi-step work.',
-      timeout: 5_000,
-      parameters: {
-        type: 'object',
-        properties: {
-          objective: { type: 'string', description: 'Short statement of the overall user goal.' },
-          tasks: {
-            type: 'array',
-            minItems: 1,
-            maxItems: 12,
-            items: {
-              type: 'object',
-              properties: {
-                title: { type: 'string', description: 'Concise task label.' },
-                status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'blocked', 'cancelled'] },
-                note: { type: 'string', description: 'Optional short status note.' },
-              },
-              required: ['title'],
-            },
-          },
-        },
-        required: ['objective', 'tasks'],
-      },
-      execute: async (params) => setTasks(runId, params),
-    },
-    {
-      name: 'orchestrator_update_task',
-      description: 'Update one visible orchestration task by taskId or exact title.',
-      timeout: 5_000,
-      parameters: {
-        type: 'object',
-        properties: {
-          taskId: { type: 'string', description: 'Task id returned by orchestrator_set_tasks.' },
-          title: { type: 'string', description: 'Exact task title if taskId is unavailable.' },
-          status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'blocked', 'cancelled'] },
-          note: { type: 'string', description: 'Optional short status note.' },
-        },
-        required: ['status'],
-      },
-      execute: async (params) => updateTask(runId, params),
-    },
-    {
-      name: 'orchestrator_complete',
-      description: 'Close the visible orchestration state when the overall request is complete.',
-      timeout: 5_000,
-      parameters: {
-        type: 'object',
-        properties: {
-          summary: { type: 'string', description: 'Short final result summary.' },
-        },
-      },
-      execute: async (params) => completeRun(runId, params),
-    },
-  ]
-}
-
-function setTasks(runId: string, params: unknown): ToolResult {
+export function setOrchestrationTasks(runId: string, params: unknown): { success: boolean; output: string } {
   const payload = params as { objective?: string; tasks?: Array<{ title?: string; status?: string; note?: string }> }
   const current = getOrchestrationState(runId)
   if (!current) return { success: false, output: 'Orchestration run not found.' }
 
   const now = Date.now()
   const items = (payload.tasks || [])
-    .slice(0, 12)
+    .slice(0, 24)
     .map((task) => ({
       id: nanoid(8),
       title: String(task.title || '').trim().slice(0, 120),
@@ -215,7 +172,7 @@ function setTasks(runId: string, params: unknown): ToolResult {
   return { success: true, output: JSON.stringify({ runId, tasks: normalizedItems.map(({ id, title, status }) => ({ id, title, status })) }) }
 }
 
-function updateTask(runId: string, params: unknown): ToolResult {
+export function updateOrchestrationTask(runId: string, params: unknown): { success: boolean; output: string } {
   const payload = params as { taskId?: string; title?: string; status?: string; note?: string }
   const current = getOrchestrationState(runId)
   if (!current) return { success: false, output: 'Orchestration run not found.' }
@@ -255,7 +212,7 @@ function updateTask(runId: string, params: unknown): ToolResult {
   return { success: true, output: JSON.stringify({ task: normalizedItems[idx] }) }
 }
 
-function completeRun(runId: string, params: unknown): ToolResult {
+export function completeOrchestrationRunFromTool(runId: string, params: unknown): { success: boolean; output: string } {
   const payload = params as { summary?: string }
   const state = closeOrchestrationRun(runId, 'completed', { summary: cleanNote(payload.summary) })
   if (!state) return { success: false, output: 'Orchestration run not found.' }
@@ -345,6 +302,17 @@ function normalizeRunStatus(status: string): OrchestrationRunStatus {
   return 'running'
 }
 
+function ensureResumedTask(items: OrchestrationTaskItem[], now: number): OrchestrationTaskItem[] {
+  if (items.some((item) => item.status === 'in_progress')) return items
+  const firstOpen = items.findIndex((item) => item.status !== 'completed')
+  if (firstOpen === -1) return items
+  return items.map((item, index) => (
+    index === firstOpen
+      ? { ...item, status: 'in_progress', note: item.status === 'pending' ? item.note : 'Resumed after interruption.', updatedAt: now }
+      : item
+  ))
+}
+
 function ensureActiveTask(items: OrchestrationTaskItem[], now: number): OrchestrationTaskItem[] {
   if (items.some((item) => item.status === 'in_progress')) return items
   if (items.some((item) => item.status === 'completed')) return items
@@ -377,6 +345,29 @@ function completeOpenItems(items: OrchestrationTaskItem[], now: number): Orchest
     if (item.status === 'blocked' || item.status === 'cancelled' || item.status === 'completed') return item
     return { ...item, status: 'completed', updatedAt: now }
   })
+}
+
+function reconcileItemsForClose(
+  items: OrchestrationTaskItem[],
+  status: Exclude<OrchestrationRunStatus, 'running'>,
+  error: string | undefined,
+  now: number,
+): OrchestrationTaskItem[] {
+  if (status === 'completed') return completeOpenItems(items, now)
+
+  if (status === 'cancelled') {
+    return items.map((item) => (
+      item.status === 'in_progress'
+        ? { ...item, status: 'cancelled', note: 'Cancelled by user.', updatedAt: now }
+        : item
+    ))
+  }
+
+  return items.map((item) => (
+    item.status === 'in_progress'
+      ? { ...item, status: 'blocked', note: cleanNote(error) || 'Stopped before completion.', updatedAt: now }
+      : item
+  ))
 }
 
 function cleanNote(note: string | undefined): string | undefined {

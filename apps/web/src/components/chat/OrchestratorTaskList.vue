@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import type { OrchestrationTaskItem, OrchestrationTaskStatus } from '../../api/types'
 
 const agentStore = useAgentStore()
+const expanded = ref(false)
 
 const state = computed(() => agentStore.orchestrationState)
 const shouldShow = computed(() => Boolean(state.value?.items.length))
@@ -13,7 +14,7 @@ const totalCount = computed(() => state.value?.items.length ?? 0)
 
 const visibleItems = computed(() => {
   const items = state.value?.items ?? []
-  if (items.length <= 7) return items
+  if (expanded.value || items.length <= 7) return items
 
   const active = items.filter((item) => item.status !== 'completed')
   const completed = items.filter((item) => item.status === 'completed')
@@ -22,10 +23,11 @@ const visibleItems = computed(() => {
 
 const hiddenCompletedCount = computed(() => {
   const items = state.value?.items ?? []
-  if (items.length <= 7) return 0
+  if (expanded.value || items.length <= 7) return 0
   const visibleIds = new Set(visibleItems.value.map((item) => item.id))
   return items.filter((item) => item.status === 'completed' && !visibleIds.has(item.id)).length
 })
+const canExpand = computed(() => (state.value?.items.length ?? 0) > 7)
 
 const statusMeta: Record<OrchestrationTaskStatus, { icon: string; cls: string }> = {
   pending: { icon: 'lucide:circle', cls: 'text-theme-500' },
@@ -62,9 +64,25 @@ function itemClass(item: OrchestrationTaskItem): string {
         <div class="text-[11px] text-theme-500 shrink-0">
           {{ completedCount }}/{{ totalCount }}
         </div>
+        <button
+          v-if="canExpand"
+          class="h-6 w-6 flex items-center justify-center rounded-md text-theme-500 hover:text-theme-200 hover:bg-theme-800 transition-colors shrink-0"
+          :title="expanded ? 'Collapse tasks' : 'Expand tasks'"
+          :aria-label="expanded ? 'Collapse tasks' : 'Expand tasks'"
+          @click="expanded = !expanded"
+        >
+          <Icon
+            icon="lucide:chevron-down"
+            class="w-3.5 h-3.5 transition-transform"
+            :class="{ 'rotate-180': expanded }"
+          />
+        </button>
       </div>
 
-      <div class="mt-1 grid gap-1">
+      <div
+        class="mt-1 grid gap-1 overflow-y-auto pr-1"
+        :class="expanded ? 'max-h-72' : 'max-h-56'"
+      >
         <div
           v-for="item in visibleItems"
           :key="item.id"
@@ -90,7 +108,7 @@ function itemClass(item: OrchestrationTaskItem): string {
         </div>
 
         <div
-          v-if="hiddenCompletedCount > 0"
+          v-if="hiddenCompletedCount > 0 && !expanded"
           class="h-6 flex items-center gap-2 px-1 text-[11px] text-theme-500"
         >
           <Icon

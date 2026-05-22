@@ -7,11 +7,11 @@ import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor } from '../core/agent/agent-executor.js'
 import { planExecution } from '../core/agent/pre-execution/execution-planner.js'
 import {
+  buildOrchestrationStateContext,
   closeOrchestrationRun,
-  createOrchestrationRun,
-  makeOrchestrationTools,
-  ORCHESTRATOR_SYSTEM_PROMPT,
+  resumeOrCreateOrchestrationRun,
 } from '../core/agent/orchestration-state.js'
+import { makeOrchestrationTools, ORCHESTRATOR_SYSTEM_PROMPT } from '../core/tools/builtin/orchestration-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
@@ -29,6 +29,7 @@ export interface ActiveChatExecution {
   conversationId: string
   agentId: string | null
   model: string | null
+  orchestrationRunId?: string
   startedAt: number
 }
 
@@ -54,6 +55,10 @@ export function getActiveChatExecutions(): ActiveChatExecution[] {
 export function cancelChatExecution(executionId: string): boolean {
   const controller = activeAbortControllers.get(executionId)
   if (controller) {
+    const execution = activeChatExecutions.get(executionId)
+    if (execution?.orchestrationRunId) {
+      closeOrchestrationRun(execution.orchestrationRunId, 'cancelled', { error: 'Cancelled' })
+    }
     controller.abort()
     activeAbortControllers.delete(executionId)
     return true
@@ -354,11 +359,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         chatAgentName,
         chatAgentIconUrl,
       } = planned
-      const orchestration = createOrchestrationRun(conversationId, content)
+      const orchestration = resumeOrCreateOrchestrationRun(conversationId, content)
       const tools = [...plannedTools, ...makeOrchestrationTools(orchestration.runId)]
       messages = planned.messages
 
       messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
+      messages = appendHiddenSystemContext(messages, buildOrchestrationStateContext(orchestration))
 
       const streamId = nanoid()
       activeAbortControllers.set(streamId, abortController)
@@ -465,6 +471,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         conversationId,
         agentId,
         model: responseModel,
+        orchestrationRunId: orchestration.runId,
         startedAt: Date.now()
       })
 
@@ -534,11 +541,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   app.post<{ Body: { streamId?: string; conversationId?: string } }>('/cancel', async (req) => {
     const { streamId, conversationId } = req.body
     if (streamId) {
-      const controller = activeAbortControllers.get(streamId)
-      if (controller) {
-        controller.abort()
-        activeAbortControllers.delete(streamId)
-      } else {
+      if (!cancelChatExecution(streamId)) {
         // Try cancelling a channel execution (Telegram/Discord/Slack)
         getChannelManager().cancelExecution(streamId)
       }
