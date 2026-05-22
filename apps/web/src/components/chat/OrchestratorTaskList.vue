@@ -5,29 +5,12 @@ import { useAgentStore } from '../../stores/agent-runtime.store'
 import type { OrchestrationTaskItem, OrchestrationTaskStatus } from '../../api/types'
 
 const agentStore = useAgentStore()
-const expanded = ref(false)
+const collapsed = ref(false)
 
 const state = computed(() => agentStore.orchestrationState)
 const shouldShow = computed(() => Boolean(state.value?.items.length))
 const completedCount = computed(() => state.value?.items.filter((item) => item.status === 'completed').length ?? 0)
 const totalCount = computed(() => state.value?.items.length ?? 0)
-
-const visibleItems = computed(() => {
-  const items = state.value?.items ?? []
-  if (expanded.value || items.length <= 7) return items
-
-  const active = items.filter((item) => item.status !== 'completed')
-  const completed = items.filter((item) => item.status === 'completed')
-  return [...active, ...completed.slice(Math.max(0, completed.length - Math.max(0, 7 - active.length)))]
-})
-
-const hiddenCompletedCount = computed(() => {
-  const items = state.value?.items ?? []
-  if (expanded.value || items.length <= 7) return 0
-  const visibleIds = new Set(visibleItems.value.map((item) => item.id))
-  return items.filter((item) => item.status === 'completed' && !visibleIds.has(item.id)).length
-})
-const canExpand = computed(() => (state.value?.items.length ?? 0) > 7)
 
 const statusMeta: Record<OrchestrationTaskStatus, { icon: string; cls: string }> = {
   pending: { icon: 'lucide:circle', cls: 'text-theme-500' },
@@ -52,39 +35,46 @@ function itemClass(item: OrchestrationTaskItem): string {
   >
     <div class="max-w-5xl mx-auto rounded-lg border border-theme-800 bg-theme-950/60 px-3 py-2">
       <div class="h-7 flex items-center gap-3 min-w-0">
-        <Icon
-          icon="lucide:list-checks"
-          class="w-4 h-4 text-accent-400 shrink-0"
-        />
+        <button
+          class="h-6 w-6 flex items-center justify-center rounded-md text-accent-400 hover:text-accent-300 hover:bg-theme-800 transition-colors shrink-0"
+          :title="collapsed ? 'Show tasks' : 'Hide tasks'"
+          :aria-label="collapsed ? 'Show tasks' : 'Hide tasks'"
+          @click="collapsed = !collapsed"
+        >
+          <Icon
+            icon="lucide:list-checks"
+            class="w-4 h-4"
+          />
+        </button>
         <div class="min-w-0 flex-1">
           <div class="text-xs font-medium text-theme-200 truncate">
-            {{ state.objective }}
+            Tasks {{ completedCount }}/{{ totalCount }}
+            <span class="text-theme-500 font-normal">
+              - {{ state.objective }}
+            </span>
           </div>
         </div>
-        <div class="text-[11px] text-theme-500 shrink-0">
-          {{ completedCount }}/{{ totalCount }}
-        </div>
         <button
-          v-if="canExpand"
           class="h-6 w-6 flex items-center justify-center rounded-md text-theme-500 hover:text-theme-200 hover:bg-theme-800 transition-colors shrink-0"
-          :title="expanded ? 'Collapse tasks' : 'Expand tasks'"
-          :aria-label="expanded ? 'Collapse tasks' : 'Expand tasks'"
-          @click="expanded = !expanded"
+          :title="collapsed ? 'Show tasks' : 'Hide tasks'"
+          :aria-label="collapsed ? 'Show tasks' : 'Hide tasks'"
+          @click="collapsed = !collapsed"
         >
           <Icon
             icon="lucide:chevron-down"
             class="w-3.5 h-3.5 transition-transform"
-            :class="{ 'rotate-180': expanded }"
+            :class="{ '-rotate-90': collapsed }"
           />
         </button>
       </div>
 
       <div
+        v-if="!collapsed"
         class="mt-1 grid gap-1 overflow-y-auto pr-1"
-        :class="expanded ? 'max-h-72' : 'max-h-56'"
+        style="max-height: min(18rem, 34vh);"
       >
         <div
-          v-for="item in visibleItems"
+          v-for="item in state.items"
           :key="item.id"
           class="h-8 flex items-center gap-2 min-w-0 rounded-md px-1"
         >
@@ -107,16 +97,6 @@ function itemClass(item: OrchestrationTaskItem): string {
           </span>
         </div>
 
-        <div
-          v-if="hiddenCompletedCount > 0 && !expanded"
-          class="h-6 flex items-center gap-2 px-1 text-[11px] text-theme-500"
-        >
-          <Icon
-            icon="lucide:ellipsis"
-            class="w-3.5 h-3.5"
-          />
-          <span>{{ hiddenCompletedCount }} completed hidden</span>
-        </div>
       </div>
     </div>
   </div>
