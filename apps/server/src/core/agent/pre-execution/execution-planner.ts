@@ -46,7 +46,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         requestedSubAgents,
         memorySpaceOverrides,
         overrideSubAgents = true,
-        autoToolRouting = false,
+        autoToolRouting,
         toolRouterProviderId,
         toolRouterModel,
         hasExplicitToolAllowlist = false,
@@ -73,7 +73,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         : presetFromAgentless({
             tools: configuredTools,
             subAgents: effectiveSubAgents,
-            autoToolRouting,
+            autoToolRouting: autoToolRouting === true,
             toolRouterProviderId,
             toolRouterModel,
         })
