@@ -17,6 +17,7 @@ const agentDefs = useAgentDefinitionsStore()
 const scrollContainer = ref<HTMLDivElement | null>(null)
 const expandedFallback = ref<Set<string>>(new Set())
 const fullHeightSubAgentGroups = reactive(new Set<string>())
+const SCROLL_BOTTOM_THRESHOLD = 120
 
 const activeAgentIconUrl = computed(() => {
   if (!chatStore.activeAgentId) return null
@@ -44,23 +45,27 @@ function resolveAgentName(msg: DisplayMessage): string | null | undefined {
   return activeAgentName.value
 }
 
-function isNearBottom(): boolean {
-  if (!scrollContainer.value) return true
-  const { scrollTop, scrollHeight, clientHeight } = scrollContainer.value
-  return scrollHeight - scrollTop - clientHeight < 150
+function isNearScrollBottom(el: HTMLElement, threshold = SCROLL_BOTTOM_THRESHOLD): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < threshold
 }
 
-function scrollToBottom(): void {
+function scrollElementToBottom(el: HTMLElement): void {
+  el.scrollTop = el.scrollHeight
+}
+
+function isMainNearBottom(): boolean {
+  return scrollContainer.value ? isNearScrollBottom(scrollContainer.value) : true
+}
+
+function scrollMainToBottom(): void {
   nextTick(() => {
-    if (scrollContainer.value) {
-      scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
-    }
+    if (scrollContainer.value) scrollElementToBottom(scrollContainer.value)
   })
 }
 
-function scrollToBottomIfNear(): void {
-  if (!isNearBottom()) return
-  scrollToBottom()
+function scrollMainToBottomIfNear(): void {
+  if (!isMainNearBottom()) return
+  scrollMainToBottom()
 }
 
 // ─── Post-action labels ─────────────────────────────────────
@@ -250,20 +255,58 @@ function setFallbackExpanded(id: string, expanded: boolean): void {
   else expandedFallback.value.delete(id)
 }
 
+// ─── Sub-agent box scroll ───────────────────────────────────
+
+/** Map of sub-agent group key → its scrollable body element. */
+const subAgentScrollRefs = new Map<string, HTMLElement>()
+const initializedSubAgentScrolls = new Set<string>()
+
+function registerSubAgentScroll(key: string, el: unknown): void {
+  if (!(el instanceof HTMLElement)) {
+    subAgentScrollRefs.delete(key)
+    initializedSubAgentScrolls.delete(key)
+    return
+  }
+  subAgentScrollRefs.set(key, el)
+  if (initializedSubAgentScrolls.has(key)) return
+  initializedSubAgentScrolls.add(key)
+  nextTick(() => scrollElementToBottom(el))
+}
+
+function scrollSubAgentBoxesIfNear(): void {
+  const boxesToScroll: HTMLElement[] = []
+  const activeKeys = new Set<string>()
+  for (const entry of unifiedTimeline.value) {
+    if (entry.type !== 'sub-agent-group') continue
+    activeKeys.add(entry.key)
+    const el = subAgentScrollRefs.get(entry.key)
+    if (el && isNearScrollBottom(el)) boxesToScroll.push(el)
+  }
+  for (const key of subAgentScrollRefs.keys()) {
+    if (!activeKeys.has(key)) {
+      subAgentScrollRefs.delete(key)
+      initializedSubAgentScrolls.delete(key)
+    }
+  }
+  nextTick(() => {
+    for (const el of boxesToScroll) scrollElementToBottom(el)
+  })
+}
+
 // Scroll triggers
-watch(() => chatStore.messages.length, scrollToBottom)
-watch(() => chatStore.messages[chatStore.messages.length - 1]?.content, scrollToBottomIfNear)
-watch(() => chatStore.messages[chatStore.messages.length - 1]?.imageDataUrls?.length, scrollToBottomIfNear)
-watch(() => agentStore.executionSteps.length, scrollToBottomIfNear)
-watch(() => agentStore.pendingHITL, scrollToBottomIfNear)
+watch(() => chatStore.messages.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
+watch(() => chatStore.messages[chatStore.messages.length - 1]?.content, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
+watch(() => chatStore.messages[chatStore.messages.length - 1]?.imageDataUrls?.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
+watch(() => agentStore.executionSteps.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
+watch(() => agentStore.pendingHITL, scrollMainToBottomIfNear)
 // When loading finishes the spinner is replaced by rendered messages — scroll then
 watch(() => chatStore.loadingMessages, (isLoading) => {
-  if (!isLoading) scrollToBottom()
+  if (!isLoading) scrollMainToBottom()
 })
 
 // Scroll to bottom when mounting into an already-loaded conversation
 // (e.g. navigating here from InstancesView after selectConversation was called)
-onMounted(() => scrollToBottom())
+onMounted(() => scrollMainToBottom())
 </script>
 
 <template>
@@ -377,6 +420,7 @@ onMounted(() => scrollToBottom())
             </button>
             <!-- Body: always visible, limited height by default, full height when toggled -->
             <div
+              :ref="(el) => registerSubAgentScroll(entry.key, el)"
               class="border-t border-indigo-500/15 py-2 overflow-y-auto"
               :class="fullHeightSubAgentGroups.has(entry.key) ? '' : 'max-h-80'"
             >
