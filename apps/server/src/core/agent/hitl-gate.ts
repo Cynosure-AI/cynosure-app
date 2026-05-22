@@ -2,6 +2,7 @@ import type { ToolCall } from '../gateway/providers/base.provider.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getDb } from '../../db/database.js'
 import { isOrchestrationToolName } from '../tools/builtin/orchestration-tools.js'
+import { TOOL_SEARCH_TOOL_NAME } from '../tools/builtin/expand-available-toolset.js'
 
 export interface ApprovalResult {
   approved: boolean
@@ -22,6 +23,7 @@ export class HITLGate {
 
   /** Returns true if the given tool is auto-approved (whitelisted). */
   isAutoApproved(toolName: string): boolean {
+    if (toolName === TOOL_SEARCH_TOOL_NAME) return true
     const db = getDb()
     const row = db.prepare('SELECT auto_approve FROM tool_approvals WHERE tool_name = ?').get(toolName) as { auto_approve: number } | undefined
     return row?.auto_approve === 1

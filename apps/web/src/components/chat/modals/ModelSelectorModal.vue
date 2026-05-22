@@ -82,7 +82,9 @@ function onSelectionChange(selection: {
     }
   }
 
-  chatStore.markOverridesModified();
+  if (chatStore.activeAgentId) {
+    chatStore.markOverridesModified();
+  }
   visible.value = false;
 }
 </script>

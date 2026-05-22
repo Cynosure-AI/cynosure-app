@@ -129,7 +129,9 @@ function onModelProviderOverride(selection: {
     }
   }
 
-  chatStore.markOverridesModified();
+  if (chatStore.activeAgentId) {
+    chatStore.markOverridesModified();
+  }
 }
 
 // ─── Whisper / voice input ──────────────────
