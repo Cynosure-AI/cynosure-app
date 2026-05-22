@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import multipart from '@fastify/multipart'
 import archiver from 'archiver'
 import AdmZip from 'adm-zip'
-import { getDb } from '../db/database.js'
+import { ensureDefaultMemorySpace, getDb } from '../db/database.js'
 import { getAppDataDir, getDefaultMemorySpaceDir, getMemorySpacesRootDir } from '../core/data-dir.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import { loadSavedProviders } from './providers.js'
@@ -23,6 +23,7 @@ import {
 import type { LLMProviderConfig } from '../core/gateway/providers/base.provider.js'
 import { ensureFolder, listFilesInFolder } from '../core/memory/memory-file-manager.js'
 import { stopAllMemorySpaceWatchers, watchMemorySpace } from '../core/memory/memory-space-watcher.js'
+import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 
 interface ManifestModule {
     count: number
@@ -527,9 +528,13 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                     ) as Record<string, unknown>[]
                     for (const job of jobs) {
                         try {
+                            if (job.id) unscheduleCronJob(String(job.id))
+                            const now = Date.now()
                             db.prepare(
-                                `INSERT OR REPLACE INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                `INSERT OR REPLACE INTO cron_jobs
+                                    (id, name, agent_id, schedule, prompt, enabled, one_off, model_override,
+                                     provider_override, output_channel_id, output_target, created_at, updated_at, last_run_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 job.id,
                                 job.name || '',
@@ -538,9 +543,15 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 job.prompt || '',
                                 job.enabled ?? 1,
                                 job.one_off ?? 0,
-                                job.created_at || Date.now(),
-                                job.updated_at || Date.now()
+                                job.model_override || '',
+                                job.provider_override || '',
+                                job.output_channel_id || '',
+                                job.output_target || '',
+                                job.created_at || now,
+                                job.updated_at || now,
+                                typeof job.last_run_at === 'number' ? job.last_run_at : now
                             )
+                            if ((job.enabled ?? 1) === 1 && job.id) scheduleCronJob(String(job.id))
                             res.restored++
                         } catch (e) {
                             res.errors.push(`Cron job: ${(e as Error).message}`)
@@ -626,14 +637,18 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 // Restore space metadata and assignments. Imported spaces are
                 // placed under the local app data memory root so backups are portable.
                 const spacesEntry = zip.getEntry('memory/spaces.json')
+                const spaceIdMap = new Map<string, string>()
                 if (spacesEntry) {
                     const { spaces, assignments } = JSON.parse(spacesEntry.getData().toString('utf-8')) as {
                         spaces: Record<string, unknown>[]
                         assignments: Record<string, unknown>[]
                     }
                     for (const sp of spaces) {
-                        const id = String(sp.id || '')
-                        if (!id) continue
+                        const importedId = String(sp.id || '')
+                        if (!importedId) continue
+                        const isDefault = sp.is_default === 1 || sp.is_default === true || importedId === 'default'
+                        const id = isDefault ? 'default' : importedId
+                        spaceIdMap.set(importedId, id)
                         const folderPath = id === 'default' ? getDefaultMemorySpaceDir() : join(memoryRoot, id)
                         ensureFolder(folderPath)
                         db.prepare(`
@@ -646,14 +661,18 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                             sp.description || '',
                             folderPath,
                             sp.sort_order ?? 0,
-                            sp.is_default ?? (id === 'default' ? 1 : 0),
+                            id === 'default' ? 1 : 0,
                             sp.created_at || Date.now()
                         )
                     }
+                    ensureDefaultMemorySpace(db)
                     for (const asg of assignments) {
+                        const mappedSpaceId = spaceIdMap.get(String(asg.space_id || '')) || asg.space_id
                         db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
-                            .run(asg.agent_id, asg.space_id)
+                            .run(asg.agent_id, mappedSpaceId)
                     }
+                } else {
+                    ensureDefaultMemorySpace(db)
                 }
 
                 // Restore source files first. Files are the source of truth for
@@ -668,17 +687,18 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                             if (!file.spaceId || !safeFileName || safeFileName !== file.fileName) {
                                 throw new Error('Invalid memory file name')
                             }
+                            const targetSpaceId = spaceIdMap.get(file.spaceId) || file.spaceId
 
                             const space = db.prepare('SELECT folder_path FROM memory_spaces WHERE id = ?')
-                                .get(file.spaceId) as { folder_path: string } | undefined
-                            if (!space?.folder_path) throw new Error(`Memory space "${file.spaceId}" not found`)
+                                .get(targetSpaceId) as { folder_path: string } | undefined
+                            if (!space?.folder_path) throw new Error(`Memory space "${targetSpaceId}" not found`)
 
                             const entry = zip.getEntry(file.archiveName)
                             if (!entry || entry.isDirectory) throw new Error('File content missing from backup')
 
                             ensureFolder(space.folder_path)
                             writeFileSync(join(space.folder_path, safeFileName), entry.getData())
-                            await mem.reindexFile(space.folder_path, safeFileName, file.spaceId)
+                            await mem.reindexFile(space.folder_path, safeFileName, targetSpaceId)
                             res.restored++
                         } catch (e) {
                             res.errors.push(`File "${file.fileName}": ${(e as Error).message}`)
@@ -897,6 +917,10 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
     app.post('/reset', async (_req, _reply) => {
         const db = getDb()
         await stopAllMemorySpaceWatchers()
+        const existingCronJobs = db.prepare('SELECT id FROM cron_jobs').all() as { id: string }[]
+        for (const job of existingCronJobs) {
+            unscheduleCronJob(job.id)
+        }
 
         // Clear all database tables
         const tables = [
@@ -930,6 +954,8 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         if (existsSync(memoryRoot)) {
             rmSync(memoryRoot, { recursive: true, force: true })
         }
+        ensureDefaultMemorySpace(db)
+        watchMemorySpace('default', getDefaultMemorySpaceDir())
 
         // Reload in-memory state
         try {
