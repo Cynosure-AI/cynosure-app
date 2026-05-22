@@ -5,6 +5,8 @@ import type { AgentDefinition, SubAgentAssignment } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import AgentSelect from '../shared/AgentSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
+import DataTable from '../shared/DataTable.vue'
+import type { Column } from '../shared/DataTable.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
@@ -91,6 +93,19 @@ function getAgentName(id: string): string {
 function getAgentIcon(id: string): string | null {
   return agentDefs.get(id)?.iconUrl || null
 }
+
+type SubAgentItem = SubAgentAssignment & { id: string }
+
+const subAgentItems = computed<SubAgentItem[]>(() =>
+  (props.agent.subAgents || []).map(sa => ({ ...sa, id: sa.agentId }))
+)
+
+const subAgentColumns: Column<SubAgentItem>[] = [
+  { key: 'agent', label: 'Agent', width: 'minmax(0, 2fr)' },
+  { key: 'codename', label: 'Codename', width: 'minmax(0, 1.5fr)' },
+  { key: 'role', label: 'Role', width: 'minmax(0, 2fr)' },
+  { key: 'actions', label: '', width: '48px' },
+]
 </script>
 
 <template>
@@ -185,95 +200,71 @@ function getAgentIcon(id: string): string | null {
       </div>
     </div>
 
-    <!-- Sub-agents list -->
-    <div
-      v-if="(agent.subAgents || []).length"
-      class="space-y-3"
+    <!-- Sub-agents table -->
+    <DataTable
+      :items="subAgentItems"
+      :columns="subAgentColumns"
+      empty-message="No sub-agents assigned yet. Use 'Add Sub-Agent' to get started."
     >
-      <div
-        v-for="sa in agent.subAgents"
-        :key="sa.agentId"
-        class="rounded-xl border bg-theme-800/60 p-4"
-        :class="agentDefs.get(sa.agentId) ? 'border-theme-700' : 'border-amber-500/30'"
-      >
-        <div class="flex items-start justify-between mb-3">
-          <div class="flex items-center gap-3">
-            <div
-              class="w-8 h-8 rounded-lg bg-linear-to-br from-accent-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden"
+      <template #col-agent="{ item }">
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-lg bg-linear-to-br from-accent-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden shrink-0">
+            <img
+              v-if="getAgentIcon(item.agentId)"
+              :src="getAgentIcon(item.agentId)!"
+              alt=""
+              class="w-full h-full object-cover"
             >
-              <img
-                v-if="getAgentIcon(sa.agentId)"
-                :src="getAgentIcon(sa.agentId)!"
-                alt=""
-                class="w-full h-full object-cover"
-              >
-              <Icon
-                v-else
-                icon="lucide:bot"
-                class="w-4 h-4 text-accent-400"
-              />
-            </div>
-            <div>
-              <span class="text-sm font-medium text-theme-200">{{ getAgentName(sa.agentId) }}</span>
-              <span class="ml-2 text-xs text-violet-400/80 bg-violet-400/10 px-1.5 py-0.5 rounded font-mono">{{ sa.codename }}</span>
-              <Icon
-                v-if="!agentDefs.get(sa.agentId)"
-                icon="lucide:alert-triangle"
-                class="w-3.5 h-3.5 text-amber-400 ml-1.5 inline-block"
-              />
-            </div>
-          </div>
-          <button
-            class="p-1.5 text-theme-500 hover:text-red-400 rounded-md transition-all"
-            @click="removeSubAgent(sa.agentId)"
-          >
             <Icon
-              icon="lucide:trash-2"
-              class="w-4 h-4"
+              v-else
+              icon="lucide:bot"
+              class="w-3.5 h-3.5 text-accent-400"
             />
-          </button>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3 ml-11">
-          <div>
-            <label class="block text-xs text-theme-500 mb-1">Codename</label>
-            <input
-              :value="sa.codename"
-              type="text"
-              class="w-full px-2.5 py-1.5 bg-theme-900 border border-theme-600 rounded-lg text-xs text-theme-200 font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
-              @change="updateSubAgentCodename(sa.agentId, ($event.target as HTMLInputElement).value)"
-            >
           </div>
-          <div>
-            <label class="block text-xs text-theme-500 mb-1">Role</label>
-            <input
-              :value="sa.role"
-              type="text"
-              placeholder="What this agent specializes in"
-              class="w-full px-2.5 py-1.5 bg-theme-900 border border-theme-600 rounded-lg text-xs text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
-              @change="updateSubAgentRole(sa.agentId, ($event.target as HTMLInputElement).value)"
-            >
+          <div class="min-w-0 flex items-center gap-1.5">
+            <span class="text-sm font-medium text-theme-200 truncate">{{ getAgentName(item.agentId) }}</span>
+            <Icon
+              v-if="!agentDefs.get(item.agentId)"
+              icon="lucide:alert-triangle"
+              class="w-3.5 h-3.5 text-amber-400 shrink-0"
+            />
           </div>
         </div>
-      </div>
-    </div>
+      </template>
 
-    <!-- Empty state -->
-    <BaseCard
-      v-else
-      class="p-8 text-center"
-    >
-      <Icon
-        icon="lucide:users"
-        class="w-8 h-8 text-theme-600 mx-auto mb-3"
-      />
-      <p class="text-sm text-theme-500 mb-1">
-        No sub-agents assigned
-      </p>
-      <p class="text-xs text-theme-600 max-w-sm mx-auto">
-        Add agents from your library and assign them codenames. The orchestrator will plan tasks and delegate to sub-agents automatically.
-      </p>
-    </BaseCard>
+      <template #col-codename="{ item }">
+        <input
+          :value="item.codename"
+          type="text"
+          class="w-full px-2.5 py-1.5 bg-theme-900 border border-theme-600 rounded-lg text-xs text-theme-200 font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
+          @click.stop
+          @change="updateSubAgentCodename(item.agentId, ($event.target as HTMLInputElement).value)"
+        >
+      </template>
+
+      <template #col-role="{ item }">
+        <input
+          :value="item.role"
+          type="text"
+          placeholder="What this agent specializes in"
+          class="w-full px-2.5 py-1.5 bg-theme-900 border border-theme-600 rounded-lg text-xs text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          @click.stop
+          @change="updateSubAgentRole(item.agentId, ($event.target as HTMLInputElement).value)"
+        >
+      </template>
+
+      <template #col-actions="{ item }">
+        <button
+          class="p-1.5 text-theme-500 hover:text-red-400 rounded-md transition-all"
+          @click.stop="removeSubAgent(item.agentId)"
+        >
+          <Icon
+            icon="lucide:trash-2"
+            class="w-4 h-4"
+          />
+        </button>
+      </template>
+    </DataTable>
 
     <!-- How it works -->
     <BaseCard class="p-5">
