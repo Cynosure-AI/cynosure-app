@@ -11,6 +11,7 @@ const state = computed(() => agentStore.orchestrationState)
 const shouldShow = computed(() => Boolean(state.value?.items.length))
 const completedCount = computed(() => state.value?.items.filter((item) => item.status === 'completed').length ?? 0)
 const totalCount = computed(() => state.value?.items.length ?? 0)
+const activeTask = computed(() => state.value?.items.find((item) => item.status === 'in_progress') ?? null)
 
 const statusMeta: Record<OrchestrationTaskStatus, { icon: string; cls: string }> = {
   pending: { icon: 'lucide:circle', cls: 'text-theme-500' },
@@ -49,8 +50,19 @@ function itemClass(item: OrchestrationTaskItem): string {
         <div class="min-w-0 flex-1">
           <div class="text-xs font-medium text-theme-200 truncate">
             Tasks {{ completedCount }}/{{ totalCount }}
-            <span class="text-theme-500 font-normal">
-              - {{ state.objective }}
+            <span class="text-theme-500 font-normal"> - {{ state.objective }}</span>
+          </div>
+          <div
+            v-if="collapsed && activeTask"
+            class="flex items-center gap-1.5 mt-0.5"
+          >
+            <Icon
+              :icon="statusMeta[activeTask.status].icon"
+              class="w-3 h-3 shrink-0"
+              :class="statusMeta[activeTask.status].cls"
+            />
+            <span class="text-[11px] text-theme-300 truncate">
+              {{ activeTask.title }}
             </span>
           </div>
         </div>
@@ -96,7 +108,6 @@ function itemClass(item: OrchestrationTaskItem): string {
             {{ item.note }}
           </span>
         </div>
-
       </div>
     </div>
   </div>
