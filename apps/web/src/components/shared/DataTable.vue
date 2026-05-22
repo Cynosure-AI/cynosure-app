@@ -7,16 +7,12 @@ export interface Column<TItem = unknown> {
   label: string
   width?: string  // e.g., '120px', 'minmax(0,1.75fr)'
   class?: string   // Custom CSS classes for column content
-  hideOnMobile?: boolean
-  hideOnTablet?: boolean
   sortable?: boolean
   sortValue?: (item: TItem) => string | number | boolean | null | undefined
 }
 
 interface SelectionColumn {
   width?: string
-  hideOnMobile?: boolean
-  hideOnTablet?: boolean
 }
 
 interface Props<TItem> {
@@ -36,7 +32,6 @@ const props = withDefaults(defineProps<Props<T>>(), {
   selectedIds: () => [],
   selectionColumn: () => ({
     width: '40px',
-    hideOnMobile: false,
   }),
   rowClass: undefined,
 })
@@ -51,40 +46,23 @@ const showSelectableColumn = computed(() => Boolean(props.selectable))
 const sortColumnKey = ref<string | null>(null)
 const sortDirection = ref<'asc' | 'desc'>('asc')
 
-const desktopGridColsTemplate = computed(() => {
-  const columnWidths = props.columns.map(col => col.width || 'minmax(0,1fr)').join(' ')
+// Ensure fr-based column widths have a minimum so they don't collapse to 0
+// when the grid overflows its container (min-width: max-content doesn't expand fr units).
+function withFrMinimum(width: string, minPx = 150): string {
+  const bare = /^(\d*\.?\d+fr)$/.test(width.trim())
+  const zeroMinmax = /^minmax\(\s*0\s*,\s*(\d*\.?\d+fr)\s*\)$/.test(width.trim())
+  if (bare) return `minmax(${minPx}px, ${width.trim()})`
+  if (zeroMinmax) return width.trim().replace(/^minmax\(\s*0\s*,/, `minmax(${minPx}px,`)
+  return width
+}
+
+const gridColsTemplate = computed(() => {
+  const columnWidths = props.columns
+    .map(col => withFrMinimum(col.width || 'minmax(0, 1fr)'))
+    .join(' ')
   const selectionWidth = props.selectionColumn?.width || '40px'
   return showSelectableColumn.value ? `${selectionWidth} ${columnWidths}` : columnWidths
 })
-
-const mobileGridColsTemplate = computed(() => {
-  const columnWidths = props.columns
-    .filter(col => !col.hideOnMobile)
-    .map(col => col.width || 'minmax(0,1fr)')
-    .join(' ')
-
-  const includeSelection = showSelectableColumn.value && !props.selectionColumn?.hideOnMobile
-  const selectionWidth = props.selectionColumn?.width || '40px'
-  return includeSelection ? `${selectionWidth} ${columnWidths}` : columnWidths
-})
-
-const tabletGridColsTemplate = computed(() => {
-  const columnWidths = props.columns
-    .filter(col => !col.hideOnTablet)
-    .map(col => col.width || 'minmax(0,1fr)')
-    .join(' ')
-
-  const includeSelection = showSelectableColumn.value && !props.selectionColumn?.hideOnTablet
-  const selectionWidth = props.selectionColumn?.width || '40px'
-  return includeSelection ? `${selectionWidth} ${columnWidths}` : columnWidths
-})
-
-function responsiveVisibilityClass(hideOnMobile?: boolean, hideOnTablet?: boolean): string {
-  if (hideOnMobile && hideOnTablet) return 'hidden lg:block'
-  if (hideOnMobile) return 'hidden md:block'
-  if (hideOnTablet) return 'md:hidden lg:block'
-  return ''
-}
 
 function toggleSelection(id: string) {
   const current = new Set(props.selectedIds)
@@ -172,19 +150,18 @@ const anySelected = computed(() => props.selectedIds.length > 0)
 <template>
   <div
     v-if="items.length"
-    class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45"
+    class="rounded-xl border border-theme-800 overflow-x-auto bg-theme-950/45"
   >
     <!-- Header Row -->
     <div
       v-if="showHeader"
-      class="hidden md:grid gap-3 md:gap-4 md:px-5 md:py-3 text-[11px] tracking-wider uppercase text-theme-400 bg-theme-900/70 border-b border-theme-800 dt-grid items-start"
-      :style="{ '--dt-desktop-cols': desktopGridColsTemplate, '--dt-tablet-cols': tabletGridColsTemplate, '--dt-mobile-cols': mobileGridColsTemplate }"
+      class="grid gap-4 px-5 py-3 text-[11px] tracking-wider uppercase text-theme-400 bg-theme-900/70 border-b border-theme-800 dt-grid items-start"
+      :style="{ '--dt-cols': gridColsTemplate }"
     >
-      <!-- Select All Checkbox (hidden on mobile) -->
+      <!-- Select All Checkbox -->
       <div
         v-if="showSelectableColumn"
         class="flex items-center"
-        :class="responsiveVisibilityClass(props.selectionColumn?.hideOnMobile, props.selectionColumn?.hideOnTablet)"
       >
         <input
           type="checkbox"
@@ -199,7 +176,7 @@ const anySelected = computed(() => props.selectedIds.length > 0)
       <div
         v-for="col in columns"
         :key="col.key"
-        :class="[col.class, responsiveVisibilityClass(col.hideOnMobile, col.hideOnTablet)]"
+        :class="col.class"
       >
         <button
           v-if="col.sortable"
@@ -231,14 +208,13 @@ const anySelected = computed(() => props.selectedIds.length > 0)
         @click="handleRowClick(item, $event)"
       >
         <div
-          class="grid gap-3 md:gap-4 px-4 py-4 md:px-5 items-start dt-grid"
-          :style="{ '--dt-desktop-cols': desktopGridColsTemplate, '--dt-tablet-cols': tabletGridColsTemplate, '--dt-mobile-cols': mobileGridColsTemplate }"
+          class="grid gap-4 px-5 py-4 items-start dt-grid"
+          :style="{ '--dt-cols': gridColsTemplate }"
         >
-          <!-- Selection Checkbox (hidden on mobile) -->
+          <!-- Selection Checkbox -->
           <div
             v-if="showSelectableColumn"
-            class="flex items-center md:pt-1"
-            :class="responsiveVisibilityClass(props.selectionColumn?.hideOnMobile, props.selectionColumn?.hideOnTablet)"
+            class="flex items-center pt-1"
             @click.stop
           >
             <input
@@ -255,7 +231,7 @@ const anySelected = computed(() => props.selectedIds.length > 0)
             v-for="col in columns"
             :key="col.key"
           >
-            <div :class="responsiveVisibilityClass(col.hideOnMobile, col.hideOnTablet)">
+            <div>
               <slot
                 :name="`col-${col.key}`"
                 :item="item"
@@ -289,19 +265,10 @@ const anySelected = computed(() => props.selectedIds.length > 0)
 
 <style scoped>
 .dt-grid {
-  grid-template-columns: var(--dt-desktop-cols);
-}
-
-@media (max-width: 767px) {
-  .dt-grid {
-    grid-template-columns: var(--dt-mobile-cols);
-  }
-
-}
-
-@media (min-width: 768px) and (max-width: 1023px) {
-  .dt-grid {
-    grid-template-columns: var(--dt-tablet-cols);
-  }
+  grid-template-columns: var(--dt-cols);
+  /* min-content respects minmax() minimums, triggering overflow-x scroll
+     when column minimums sum to more than the viewport width. */
+  min-width: min-content;
+  width: 100%;
 }
 </style>

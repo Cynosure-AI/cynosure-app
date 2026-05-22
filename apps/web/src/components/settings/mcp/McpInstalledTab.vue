@@ -60,10 +60,10 @@ const filteredServers = computed(() => {
 // Table columns definition for DataTable component
 const tableColumns: Column<McpServerInfo>[] = [
   { key: 'server', label: 'Server', width: 'minmax(0,1.75fr)', sortable: true, sortValue: originalServerName },
-  { key: 'tools', label: 'Tools', width: '120px', hideOnMobile: true, hideOnTablet: true, sortable: true, sortValue: server => server.toolCount },
-  { key: 'status', label: 'Status', width: '120px', hideOnMobile: true, sortable: true, sortValue: server => server.connected ? 3 : server.pendingAuthUrl ? 2 : server.enabled ? 1 : 0 },
+  { key: 'tools', label: 'Tools', width: '120px', sortable: true, sortValue: server => server.toolCount },
+  { key: 'status', label: 'Status', width: '120px', sortable: true, sortValue: server => server.connected ? 3 : server.pendingAuthUrl ? 2 : server.enabled ? 1 : 0 },
   { key: 'actions', label: 'Actions', width: '200px' },
-  { key: 'enable', label: 'Enable', width: '56px', hideOnMobile: true, sortable: true, sortValue: server => server.enabled },
+  { key: 'enable', label: 'Enable', width: '56px', sortable: true, sortValue: server => server.enabled },
 ]
 
 type AddMode = 'local' | 'remote'
