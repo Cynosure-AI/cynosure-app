@@ -35,18 +35,23 @@ function itemClass(item: OrchestrationTaskItem): string {
     class="border-t border-theme-800 bg-theme-900/95 px-4 py-2"
   >
     <div class="max-w-5xl mx-auto rounded-lg border border-theme-800 bg-theme-950/60 px-3 py-2">
-      <div class="h-7 flex items-center gap-3 min-w-0">
-        <button
-          class="h-6 w-6 flex items-center justify-center rounded-md text-accent-400 hover:text-accent-300 hover:bg-theme-800 transition-colors shrink-0"
+      <button
+        type="button"
+        class="h-7 w-full flex items-center gap-3 min-w-0 rounded-md text-left hover:bg-theme-900/60 transition-colors"
+        :title="collapsed ? 'Show tasks' : 'Hide tasks'"
+        :aria-label="collapsed ? 'Show tasks' : 'Hide tasks'"
+        :aria-expanded="!collapsed"
+        @click="collapsed = !collapsed"
+      >
+        <span
+          class="h-6 w-6 flex items-center justify-center rounded-md text-accent-400 shrink-0"
           :title="collapsed ? 'Show tasks' : 'Hide tasks'"
-          :aria-label="collapsed ? 'Show tasks' : 'Hide tasks'"
-          @click="collapsed = !collapsed"
         >
           <Icon
             icon="lucide:list-checks"
             class="w-4 h-4"
           />
-        </button>
+        </span>
         <div class="min-w-0 flex-1">
           <div class="text-xs font-medium text-theme-200 truncate">
             Tasks {{ completedCount }}/{{ totalCount }}
@@ -66,19 +71,14 @@ function itemClass(item: OrchestrationTaskItem): string {
             </span>
           </div>
         </div>
-        <button
-          class="h-6 w-6 flex items-center justify-center rounded-md text-theme-500 hover:text-theme-200 hover:bg-theme-800 transition-colors shrink-0"
-          :title="collapsed ? 'Show tasks' : 'Hide tasks'"
-          :aria-label="collapsed ? 'Show tasks' : 'Hide tasks'"
-          @click="collapsed = !collapsed"
-        >
+        <span class="h-6 w-6 flex items-center justify-center rounded-md text-theme-500 shrink-0">
           <Icon
             icon="lucide:chevron-down"
             class="w-3.5 h-3.5 transition-transform"
             :class="{ '-rotate-90': collapsed }"
           />
-        </button>
-      </div>
+        </span>
+      </button>
 
       <div
         v-if="!collapsed"
