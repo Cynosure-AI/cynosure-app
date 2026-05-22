@@ -14,7 +14,6 @@ import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { makeGenerateTitleTool } from '../tools/built-in-tools.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import type { CompletionResponse } from '../gateway/providers/base.provider.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -117,38 +116,20 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
             }
         ]
 
-        let result: CompletionResponse
-        try {
-            result = await gateway.complete({
-                messages: [
-                    {
-                        role: 'system',
-                        content: `${messages[0].content} Call the generate_title tool with your title.`
-                    },
-                    messages[1]
-                ],
-                model: titleTarget.model,
-                signal,
-                tools: [titleTool],
-                toolChoice: { type: 'function', name: 'generate_title' },
-                maxTokens: 80
-            }, titleTarget.providerId)
-        } catch (err) {
-            if ((err as Error).name === 'AbortError') throw err
-            console.warn('[title] Structured title generation failed, retrying without tool call:', err)
-            result = await gateway.complete({
-                messages: [
-                    {
-                        role: 'system',
-                        content: `${messages[0].content} Return only the title text, with no quotes or explanation.`
-                    },
-                    messages[1]
-                ],
-                model: titleTarget.model,
-                signal,
-                maxTokens: 80
-            }, titleTarget.providerId)
-        }
+        const result = await gateway.complete({
+            messages: [
+                {
+                    role: 'system',
+                    content: `${messages[0].content} Call the generate_title tool with your title.`
+                },
+                messages[1]
+            ],
+            model: titleTarget.model,
+            signal,
+            tools: [titleTool],
+            toolChoice: { type: 'function', name: 'generate_title' },
+            maxTokens: 80
+        }, titleTarget.providerId)
 
         if (result.toolCalls?.length) {
             for (const tc of result.toolCalls) {
@@ -157,29 +138,6 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
                     await titleTool.execute(args)
                     return
                 }
-            }
-        }
-
-        // Fallback: parse plain-text response
-        if (result.content) {
-            const raw = result.content
-                .replace(/<think>[\s\S]*?<\/think>/gi, '')
-                .replace(/\*{1,3}/g, '')
-                .replace(/`{1,3}/g, '')
-                .replace(/^#+\s*/gm, '')
-            const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0 && l.length < 80)
-            const candidate = lines[lines.length - 1] || ''
-            const title = candidate
-                .replace(/^["'""''`]+|["'""''`]+$/g, '')
-                .replace(/^Title:\s*/i, '')
-                .replace(/[.!?:;,]+$/, '')
-                .replace(/\s{2,}/g, ' ')
-                .trim()
-                .slice(0, 80)
-
-            if (title && title.split(/\s+/).length <= 10) {
-                await titleTool.execute({ title })
-                return
             }
         }
 
