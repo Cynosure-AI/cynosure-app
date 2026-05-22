@@ -14,6 +14,7 @@ const ORCHESTRATION_TOOL_NAMES = new Set([
 export const ORCHESTRATOR_SYSTEM_PROMPT = [
   '## Stateful Orchestration',
   'For complex or multi-step requests, maintain a concise visible task list with the orchestration tools.',
+  'Before calling any non-orchestration tool for complex work, call `orchestrator_set_tasks` with the expected steps.',
   'Create the list once you know the objective, mark exactly one active task as `in_progress`, update tasks as facts change, and complete or block items honestly.',
   'If a previous visible task list exists after an interruption, continue from that state instead of starting over unless the user asks for a new objective.',
   'Use these tools sparingly: for simple one-step answers, answer normally without creating a task list.',
