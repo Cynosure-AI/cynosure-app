@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed, onMounted } from 'vue'
+import { ref, watch, nextTick, computed, onMounted, reactive } from 'vue'
 import { useChatStore, type DisplayMessage } from '../../stores/chat.store'
 import { useAgentStore, type ExecutionStep } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
@@ -16,6 +16,7 @@ const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const scrollContainer = ref<HTMLDivElement | null>(null)
 const expandedFallback = ref<Set<string>>(new Set())
+const fullHeightSubAgentGroups = reactive(new Set<string>())
 
 const activeAgentIconUrl = computed(() => {
   if (!chatStore.activeAgentId) return null
@@ -84,6 +85,7 @@ type TimelineEntry =
   | { type: 'tool-group'; group: ToolGroup; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'tool-fallback'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'compact-event'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: false }
+  | { type: 'sub-agent-group'; codename: string; agentName: string | null; agentId: string | null; entries: TimelineEntry[]; ts: number; key: string; isSubAgent?: false }
 
 const unifiedTimeline = computed(() => {
   const entries: TimelineEntry[] = []
@@ -182,7 +184,26 @@ const unifiedTimeline = computed(() => {
       if (!byCodename.has(key)) { byCodename.set(key, []); order.push(key) }
       byCodename.get(key)!.push(e)
     }
-    for (const key of order) result.push(...byCodename.get(key)!)
+    for (const codename of order) {
+      const innerEntries = byCodename.get(codename)!
+      let agentName: string | null = null
+      let agentId: string | null = null
+      for (const e of innerEntries) {
+        if (e.type === 'message' && e.msg.agentName) agentName = agentName ?? e.msg.agentName
+        if (e.type === 'message' && e.msg.agentId) agentId = agentId ?? e.msg.agentId
+        if (e.type === 'tool-group' && e.group.steps[0]?.maAgentName) agentName = agentName ?? e.group.steps[0].maAgentName
+        if (agentName && agentId) break
+      }
+      result.push({
+        type: 'sub-agent-group',
+        codename,
+        agentName,
+        agentId,
+        entries: innerEntries,
+        ts: innerEntries[0].ts,
+        key: `sag-${codename}-${innerEntries[0].ts}`
+      })
+    }
     subBatch = []
   }
 
@@ -204,6 +225,25 @@ const lastToolGroupKey = computed(() => {
   const groups = unifiedTimeline.value.filter(e => e.type === 'tool-group')
   return groups.length ? groups[groups.length - 1].key : null
 })
+
+/** Key of the sub-agent group currently being executed */
+const activeSubAgentGroupKey = computed(() => {
+  if (!agentStore.isExecuting) return null
+  for (const entry of unifiedTimeline.value) {
+    if (entry.type === 'sub-agent-group') {
+      if (entry.entries.some(e => e.key === lastToolGroupKey.value)) return entry.key
+    }
+  }
+  return null
+})
+
+function toggleSubAgentFullHeight(key: string): void {
+  if (fullHeightSubAgentGroups.has(key)) {
+    fullHeightSubAgentGroups.delete(key)
+  } else {
+    fullHeightSubAgentGroups.add(key)
+  }
+}
 
 function setFallbackExpanded(id: string, expanded: boolean): void {
   if (expanded) expandedFallback.value.add(id)
@@ -285,39 +325,136 @@ onMounted(() => scrollToBottom())
         v-for="entry in unifiedTimeline"
         :key="entry.key"
       >
-        <!-- Sub-agent wrapper: indented with left border to show nesting -->
+        <!-- Sub-agent group: collapsible box for a delegated sub-agent's activity -->
         <div
-          v-if="entry.isSubAgent"
-          class="ml-6 pl-3 border-l-2 border-indigo-500/20"
+          v-if="entry.type === 'sub-agent-group'"
+          class="mx-3 md:mx-4 my-2"
         >
-          <MessageBubble
-            v-if="entry.type === 'message'"
-            :role="entry.msg.role"
-            :message-id="entry.msg.id"
-            :content="entry.msg.content"
-            :thinking="entry.msg.thinking"
-            :image-data-urls="entry.msg.imageDataUrls"
-            :audio-data-urls="entry.msg.audioDataUrls"
-            :file-attachments="entry.msg.fileAttachments"
-            :agent-id="resolveAgentId(entry.msg)"
-            :agent-icon-url="resolveAgentIconUrl(entry.msg)"
-            :agent-name="resolveAgentName(entry.msg)"
-            :model="entry.msg.model"
-            :prompt-tokens="entry.msg.promptTokens"
-            :completion-tokens="entry.msg.completionTokens"
-            :context-tokens="entry.msg.contextTokens"
-            :latency-ms="entry.msg.latencyMs"
-            :is-streaming="entry.msg.isStreaming"
-            :is-error="entry.msg.isError"
-            @retry="chatStore.retryFromMessage(entry.msg.id)"
-            @edit="(content) => chatStore.editMessage(entry.msg.id, content)"
-          />
-          <ToolExecutionCard
-            v-else-if="entry.type === 'tool-group'"
-            :iteration="entry.group.iteration"
-            :steps="entry.group.steps"
-            :is-active="agentStore.isExecuting && entry.key === lastToolGroupKey"
-          />
+          <div class="rounded-2xl border border-indigo-500/25 bg-indigo-950/10 overflow-hidden">
+            <!-- Header -->
+            <button
+              class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-indigo-500/5 transition-colors"
+              :title="fullHeightSubAgentGroups.has(entry.key) ? 'Collapse to compact view' : 'Expand to full height'"
+              @click="toggleSubAgentFullHeight(entry.key)"
+            >
+              <!-- Sub-agent avatar -->
+              <div class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-indigo-500/30 bg-theme-800">
+                <img
+                  v-if="entry.agentId && agentDefs.get(entry.agentId)?.iconUrl"
+                  :src="agentDefs.get(entry.agentId)!.iconUrl!"
+                  class="w-full h-full object-cover"
+                  alt=""
+                >
+                <Icon
+                  v-else
+                  icon="lucide:bot"
+                  class="w-3.5 h-3.5 text-indigo-400"
+                />
+              </div>
+              <!-- Agent name + codename -->
+              <div class="flex-1 min-w-0 flex items-baseline gap-1.5">
+                <span class="text-[13px] font-medium text-indigo-300 truncate">{{ entry.agentName || entry.codename }}</span>
+                <span
+                  v-if="entry.agentName && entry.agentName !== entry.codename"
+                  class="text-[10px] text-indigo-400/50 truncate shrink-0"
+                >{{ entry.codename }}</span>
+              </div>
+              <!-- Running indicator -->
+              <Icon
+                v-if="activeSubAgentGroupKey === entry.key"
+                icon="svg-spinners:ring-resize"
+                class="w-3.5 h-3.5 text-indigo-400 shrink-0"
+              />
+              <!-- Step count badge -->
+              <span class="text-[10px] text-indigo-400/50 tabular-nums shrink-0">
+                {{ entry.entries.length }} step{{ entry.entries.length !== 1 ? 's' : '' }}
+              </span>
+              <!-- Height toggle icon -->
+              <Icon
+                :icon="fullHeightSubAgentGroups.has(entry.key) ? 'lucide:minimize-2' : 'lucide:maximize-2'"
+                class="w-3.5 h-3.5 text-indigo-400/50 shrink-0"
+              />
+            </button>
+            <!-- Body: always visible, limited height by default, full height when toggled -->
+            <div
+              class="border-t border-indigo-500/15 py-2 overflow-y-auto"
+              :class="fullHeightSubAgentGroups.has(entry.key) ? '' : 'max-h-80'"
+            >
+              <template
+                v-for="inner in entry.entries"
+                :key="inner.key"
+              >
+                <MessageBubble
+                  v-if="inner.type === 'message'"
+                  :role="inner.msg.role"
+                  :message-id="inner.msg.id"
+                  :content="inner.msg.content"
+                  :thinking="inner.msg.thinking"
+                  :image-data-urls="inner.msg.imageDataUrls"
+                  :audio-data-urls="inner.msg.audioDataUrls"
+                  :file-attachments="inner.msg.fileAttachments"
+                  :agent-id="resolveAgentId(inner.msg)"
+                  :agent-icon-url="resolveAgentIconUrl(inner.msg)"
+                  :agent-name="resolveAgentName(inner.msg)"
+                  :model="inner.msg.model"
+                  :prompt-tokens="inner.msg.promptTokens"
+                  :completion-tokens="inner.msg.completionTokens"
+                  :context-tokens="inner.msg.contextTokens"
+                  :latency-ms="inner.msg.latencyMs"
+                  :is-streaming="inner.msg.isStreaming"
+                  :is-error="inner.msg.isError"
+                  @retry="chatStore.retryFromMessage(inner.msg.id)"
+                  @edit="(content) => chatStore.editMessage(inner.msg.id, content)"
+                />
+                <ToolExecutionCard
+                  v-else-if="inner.type === 'tool-group'"
+                  :iteration="inner.group.iteration"
+                  :steps="inner.group.steps"
+                  :is-active="agentStore.isExecuting && inner.key === lastToolGroupKey"
+                />
+                <div
+                  v-else-if="inner.type === 'tool-fallback'"
+                  class="px-4 py-1.5"
+                >
+                  <div class="max-w-[80%] ml-10">
+                    <CollapsibleSection
+                      :model-value="expandedFallback.has(inner.msg.id)"
+                      :keyboard-shortcuts="true"
+                      @update:model-value="setFallbackExpanded(inner.msg.id, $event)"
+                    >
+                      <template #trigger="{ expanded, toggle, triggerAttrs, onTriggerKeydown }">
+                        <button
+                          v-bind="triggerAttrs"
+                          class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-colors group"
+                          :class="expanded
+                            ? 'bg-theme-800/80 border border-theme-700/60'
+                            : 'bg-theme-800/40 hover:bg-theme-800/70 border border-theme-800/40 hover:border-theme-700/40'"
+                          @click="toggle"
+                          @keydown="onTriggerKeydown"
+                        >
+                          <Icon
+                            icon="lucide:wrench"
+                            class="w-3.5 h-3.5 text-theme-500 shrink-0"
+                          />
+                          <span class="text-theme-400 truncate flex-1 text-left">
+                            {{ inner.msg.content.slice(0, 80) }}{{ inner.msg.content.length > 80 ? '…' : '' }}
+                          </span>
+                          <Icon
+                            icon="lucide:chevron-down"
+                            class="w-3 h-3 text-theme-600 shrink-0 transition-transform"
+                            :class="{ 'rotate-180': expanded }"
+                          />
+                        </button>
+                      </template>
+                      <div class="mt-1.5 ml-3">
+                        <pre class="text-[10px] text-theme-400 whitespace-pre-wrap break-all bg-theme-900/60 border border-theme-700/30 rounded-lg px-3 py-2 max-h-60 overflow-y-auto font-mono">{{ inner.msg.content }}</pre>
+                      </div>
+                    </CollapsibleSection>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
         </div>
 
         <!-- Regular message (user / assistant) -->
