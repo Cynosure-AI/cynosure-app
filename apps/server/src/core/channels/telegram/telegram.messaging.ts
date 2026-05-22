@@ -386,7 +386,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
                 userMessage: userText,
                 assistantResponse: result.content,
                 broadcast: ctx.broadcast,
-                providerId: planned.providerId,
+                providerId: planned.responseProvider,
                 model: planned.responseModel
             }).catch(() => { })
         }

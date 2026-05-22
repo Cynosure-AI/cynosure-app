@@ -13,6 +13,8 @@
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { makeGenerateTitleTool } from '../tools/built-in-tools.js'
+import type { LLMGateway } from '../gateway/gateway.js'
+import type { CompletionResponse } from '../gateway/providers/base.provider.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -102,23 +104,51 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     try {
         const userSnippet = userMessage.slice(0, 150)
         const assistantSnippet = assistantResponse.slice(0, 300)
+        const titleTarget = resolveTitleTarget(gateway, providerId, model)
 
-        const result = await gateway.complete({
-            messages: [
-                {
-                    role: 'system',
-                    content: 'Generate a short chat title for this conversation. Call the generate_title tool with your title. /no_think'
-                },
-                {
-                    role: 'user',
-                    content: `User: "${userSnippet}"\nAssistant: "${assistantSnippet}"`
-                }
-            ],
-            model,
-            signal,
-            tools: [titleTool],
-            maxTokens: 80
-        }, providerId)
+        const messages = [
+            {
+                role: 'system' as const,
+                content: 'Generate a short, descriptive chat title for this conversation. Prefer 3-7 words. Do not copy the first words verbatim unless they are already the best summary. /no_think'
+            },
+            {
+                role: 'user' as const,
+                content: `User: "${userSnippet}"\nAssistant: "${assistantSnippet}"`
+            }
+        ]
+
+        let result: CompletionResponse
+        try {
+            result = await gateway.complete({
+                messages: [
+                    {
+                        role: 'system',
+                        content: `${messages[0].content} Call the generate_title tool with your title.`
+                    },
+                    messages[1]
+                ],
+                model: titleTarget.model,
+                signal,
+                tools: [titleTool],
+                toolChoice: { type: 'function', name: 'generate_title' },
+                maxTokens: 80
+            }, titleTarget.providerId)
+        } catch (err) {
+            if ((err as Error).name === 'AbortError') throw err
+            console.warn('[title] Structured title generation failed, retrying without tool call:', err)
+            result = await gateway.complete({
+                messages: [
+                    {
+                        role: 'system',
+                        content: `${messages[0].content} Return only the title text, with no quotes or explanation.`
+                    },
+                    messages[1]
+                ],
+                model: titleTarget.model,
+                signal,
+                maxTokens: 80
+            }, titleTarget.providerId)
+        }
 
         if (result.toolCalls?.length) {
             for (const tc of result.toolCalls) {
@@ -155,10 +185,28 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
 
         // Final fallback: first words of user message
         applyFallbackTitle(db, conversationId, userMessage, broadcast)
-    } catch {
+    } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+            console.warn('[title] Title generation failed, using fallback title:', err)
+        }
         applyFallbackTitle(db, conversationId, userMessage, broadcast)
     } finally {
         completeAction(conversationId, 'generating-title', broadcast)
+    }
+}
+
+function resolveTitleTarget(
+    gateway: LLMGateway,
+    providerId?: string,
+    model?: string
+): { providerId: string; model: string } {
+    const provider = providerId
+        ? gateway.getProvider(providerId) || gateway.getLastUsedProvider()
+        : gateway.getLastUsedProvider()
+
+    return {
+        providerId: provider.config.id,
+        model: model || provider.config.defaultModel
     }
 }
 

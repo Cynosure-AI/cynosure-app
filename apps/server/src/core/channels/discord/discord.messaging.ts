@@ -381,7 +381,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
                 userMessage: userText,
                 assistantResponse: result.content,
                 broadcast: ctx.broadcast,
-                providerId: planned.providerId,
+                providerId: planned.responseProvider,
                 model: planned.responseModel
             }).catch(() => { })
         }

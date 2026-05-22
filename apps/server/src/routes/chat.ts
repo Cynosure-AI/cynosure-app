@@ -507,7 +507,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
         if (conv && conv.title === 'New Chat') {
           if (generateTitlePref !== false) {
-            generateTitle({ conversationId, userMessage: content, assistantResponse: result.content, broadcast, providerId: titleProviderIdPref || providerId, model: titleModelPref || responseModel }).catch(() => { })
+            generateTitle({
+              conversationId,
+              userMessage: content,
+              assistantResponse: result.content,
+              broadcast,
+              providerId: titleProviderIdPref || responseProvider,
+              model: titleModelPref || (titleProviderIdPref ? undefined : responseModel)
+            }).catch(() => { })
           } else {
             // Fallback: first few words of the user message
             const words = content.split(/\s+/).slice(0, 6).join(' ')
