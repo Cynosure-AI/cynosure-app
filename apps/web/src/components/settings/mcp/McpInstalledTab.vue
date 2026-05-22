@@ -7,6 +7,7 @@ import ToggleSwitch from '../../shared/ToggleSwitch.vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
 import { useAgentStore } from '../../../stores/agent-runtime.store'
+import ModalDialog from '../../shared/ModalDialog.vue'
 import type { McpServerInfo } from '../../../api/types'
 import type { Column } from '../../shared/DataTable.vue'
 
@@ -308,9 +309,18 @@ async function reauthServer(id: string): Promise<void> {
   }
 }
 
-async function removeServer(id: string): Promise<void> {
-  await api.mcp.removeServer(id)
-  delete actionError.value[id]
+const confirmDeleteId = ref<string | null>(null)
+const serverToDelete = computed(() => servers.value.find(s => s.id === confirmDeleteId.value) ?? null)
+
+function promptRemoveServer(id: string): void {
+  confirmDeleteId.value = id
+}
+
+async function confirmRemoveServer(): Promise<void> {
+  if (!confirmDeleteId.value) return
+  await api.mcp.removeServer(confirmDeleteId.value)
+  delete actionError.value[confirmDeleteId.value]
+  confirmDeleteId.value = null
   await refreshAll()
 }
 
@@ -602,7 +612,7 @@ defineExpose({ loadServers })
 
           <button
             class="p-1.5 text-theme-600 hover:text-red-400 rounded-md hover:bg-red-500/10 transition-colors"
-            @click="removeServer(server.id)"
+            @click="promptRemoveServer(server.id)"
           >
             <Icon
               icon="lucide:trash-2"
@@ -771,5 +781,37 @@ defineExpose({ loadServers })
         Browse Registry ->
       </button>
     </div>
+
+    <ModalDialog
+      :show="!!confirmDeleteId"
+      title="Remove MCP Server"
+      icon="lucide:trash-2"
+      icon-color="red"
+      @close="confirmDeleteId = null"
+    >
+      <template #default>
+        <p class="text-sm text-theme-300">
+          Are you sure you want to remove
+          <span class="font-medium text-theme-100">{{ serverToDelete?.name || serverToDelete?.serverInfo?.title || 'this server' }}</span>?
+          This action cannot be undone.
+        </p>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <button
+            class="px-4 py-2 text-sm bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-lg transition-colors"
+            @click="confirmDeleteId = null"
+          >
+            Cancel
+          </button>
+          <button
+            class="px-4 py-2 text-sm bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors"
+            @click="confirmRemoveServer"
+          >
+            Remove
+          </button>
+        </div>
+      </template>
+    </ModalDialog>
   </div>
 </template>
