@@ -219,6 +219,59 @@ export function completeOrchestrationRunFromTool(runId: string, params: unknown)
   return { success: true, output: 'Orchestration completed.' }
 }
 
+export function reconcileOrchestrationAfterToolBatch(
+  runId: string,
+  result: { success: boolean; note?: string },
+): OrchestrationState | null {
+  const current = getOrchestrationState(runId)
+  if (!current || current.status !== 'running') return current
+
+  const activeIndex = current.items.findIndex((item) => item.status === 'in_progress')
+  if (activeIndex === -1) return current
+
+  const now = Date.now()
+  const activeStatus: OrchestrationTaskStatus = result.success ? 'completed' : 'blocked'
+  const items = current.items.map((item, index) => (
+    index === activeIndex
+      ? { ...item, status: activeStatus, note: cleanNote(result.note) ?? item.note, updatedAt: now }
+      : item
+  ))
+  const normalizedItems = advanceActiveTask(items, activeIndex, activeStatus, now)
+
+  const state: OrchestrationState = {
+    ...current,
+    items: normalizedItems,
+    currentTaskId: normalizedItems.find((item) => item.status === 'in_progress')?.id,
+    updatedAt: now,
+  }
+  persistState(state)
+  emitState(state)
+  return state
+}
+
+export function ensureOrchestrationStarted(runId: string, title: string): OrchestrationState | null {
+  const current = getOrchestrationState(runId)
+  if (!current || current.status !== 'running' || current.items.length > 0) return current
+
+  const now = Date.now()
+  const item: OrchestrationTaskItem = {
+    id: nanoid(8),
+    title: title.trim().slice(0, 120) || 'Work through request',
+    status: 'in_progress',
+    note: 'Started from tool execution.',
+    updatedAt: now,
+  }
+  const state: OrchestrationState = {
+    ...current,
+    items: [item],
+    currentTaskId: item.id,
+    updatedAt: now,
+  }
+  persistState(state)
+  emitState(state)
+  return state
+}
+
 function getOrchestrationState(runId: string): OrchestrationState | null {
   const row = getDb().prepare(
     `SELECT id, conversation_id, status, definition_json, result_json, iterations, created_at, updated_at, completed_at
@@ -340,20 +393,19 @@ function advanceActiveTask(
   ))
 }
 
-function completeOpenItems(items: OrchestrationTaskItem[], now: number): OrchestrationTaskItem[] {
-  return items.map((item) => {
-    if (item.status === 'blocked' || item.status === 'cancelled' || item.status === 'completed') return item
-    return { ...item, status: 'completed', updatedAt: now }
-  })
-}
-
 function reconcileItemsForClose(
   items: OrchestrationTaskItem[],
   status: Exclude<OrchestrationRunStatus, 'running'>,
   error: string | undefined,
   now: number,
 ): OrchestrationTaskItem[] {
-  if (status === 'completed') return completeOpenItems(items, now)
+  if (status === 'completed') {
+    return items.map((item) => (
+      item.status === 'in_progress'
+        ? { ...item, status: 'pending', note: item.note || 'Paused after response.', updatedAt: now }
+        : item
+    ))
+  }
 
   if (status === 'cancelled') {
     return items.map((item) => (

@@ -7,6 +7,7 @@ import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 import { isOrchestrationToolName } from '../tools/builtin/orchestration-tools.js'
+import { ensureOrchestrationStarted, reconcileOrchestrationAfterToolBatch } from './orchestration-state.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -68,6 +69,8 @@ export interface AgentExecutorConfig {
     contextStrategy?: ContextStrategy
     /** Mutable set populated with tool names invoked during this execution turn. */
     usedToolNames?: Set<string>
+    /** Durable orchestration run for the top-level chat executor. */
+    orchestrationRunId?: string
 }
 
 export interface AgentExecutorResult {
@@ -225,8 +228,12 @@ export class AgentExecutor {
                 if (this.config.signal?.aborted) break
                 toolRounds = round + 1
                 const visibleToolCalls = pendingToolCalls.filter((tc) => !isOrchestrationToolName(tc.function.name))
+                const hasOrchestrationUpdate = pendingToolCalls.some((tc) => isOrchestrationToolName(tc.function.name))
 
                 if (visibleToolCalls.length) {
+                    if (!hasOrchestrationUpdate) {
+                        this.ensureOrchestrationVisible(visibleToolCalls)
+                    }
                     this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'choosing-tools', message: 'Selecting tools...' })
                     this.emit('step:tools-chosen', {
                         taskId, conversationId, iteration: round + 1,
@@ -270,6 +277,9 @@ export class AgentExecutor {
                         taskId, conversationId, iteration: round + 1,
                         results: visibleToolResults.map(tr => ({ name: tr.name, success: tr.success, output: tr.output, images: tr.images, imageDataUrls: tr.imageDataUrls }))
                     })
+                    if (!hasOrchestrationUpdate) {
+                        this.reconcileOrchestrationProgress(visibleToolResults)
+                    }
                 }
 
                 if (this.config.saveMessages) {
@@ -687,6 +697,38 @@ export class AgentExecutor {
             this.config.tools.push(tool)
             existingNames.add(tool.name)
         }
+    }
+
+    private reconcileOrchestrationProgress(results: ToolCallResult[]): void {
+        const runId = this.config.orchestrationRunId
+        if (!runId || this._sp !== 'chat:stream') return
+        const success = results.every((result) => result.success)
+        const failed = results.find((result) => !result.success)
+        reconcileOrchestrationAfterToolBatch(runId, {
+            success,
+            note: success ? undefined : failed?.output,
+        })
+    }
+
+    private ensureOrchestrationVisible(toolCalls: ToolCall[]): void {
+        const runId = this.config.orchestrationRunId
+        if (!runId || this._sp !== 'chat:stream') return
+        ensureOrchestrationStarted(runId, this.describeToolBatch(toolCalls))
+    }
+
+    private describeToolBatch(toolCalls: ToolCall[]): string {
+        if (toolCalls.length > 1) return `Execute ${toolCalls.length} tool actions`
+        const tc = toolCalls[0]
+        const toolName = tc.function.name.replace(/^delegate_to_/, '').replace(/_agent$/, '').replace(/_/g, ' ')
+        try {
+            const args = JSON.parse(tc.function.arguments) as Record<string, unknown>
+            const text = [args.instructions, args.query, args.url, args.path, args.filePath]
+                .find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+            if (text) return text.trim().slice(0, 120)
+        } catch {
+            // Ignore malformed tool args; fall back to the tool name.
+        }
+        return `Run ${toolName}`
     }
 
     /** Save the assistant's tool-calling message (thinking + content + tool_calls) to DB. */

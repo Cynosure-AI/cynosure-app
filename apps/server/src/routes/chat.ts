@@ -463,6 +463,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         contextWindow,
         initialContextEstimate,
         contextStrategy,
+        orchestrationRunId: orchestration.runId,
       })
 
       const executionId = streamId
