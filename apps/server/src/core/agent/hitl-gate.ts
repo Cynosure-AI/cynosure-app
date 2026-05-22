@@ -1,8 +1,7 @@
 import type { ToolCall } from '../gateway/providers/base.provider.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getDb } from '../../db/database.js'
-import { isOrchestrationToolName } from '../tools/builtin/orchestration-tools.js'
-import { TOOL_SEARCH_TOOL_NAME } from '../tools/builtin/expand-available-toolset.js'
+import { isSystemAutoApprovedTool } from '../tools/tool-policy.js'
 
 export interface ApprovalResult {
   approved: boolean
@@ -68,9 +67,8 @@ export class HITLGate {
     signal?: AbortSignal,
     conversationId?: string
   ): Promise<ApprovalResult> {
-    // Filter to only tool calls that are NOT auto-approved
-    // Sub-agent delegation tools (delegate_to_*) are always auto-approved —
-    // the sub-agent's own tool calls hit the HITL gate independently.
+    // Only ask for approval on user-visible tool actions that are not already
+    // allowed by system policy, saved user preferences, or this conversation.
     const sessionSet = conversationId ? this.getSessionApprovals(conversationId) : undefined
     const needsApproval = toolCalls.filter(
       (tc) => !isSystemAutoApprovedTool(tc.function.name)
@@ -169,12 +167,4 @@ export function getHITLGate(): HITLGate {
     hitlGateInstance = new HITLGate()
   }
   return hitlGateInstance
-}
-
-function isSystemAutoApprovedTool(toolName: string): boolean {
-  return (
-    toolName === TOOL_SEARCH_TOOL_NAME ||
-    toolName.startsWith('delegate_to_') ||
-    isOrchestrationToolName(toolName)
-  )
 }
