@@ -400,7 +400,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
                 userMessage: userText,
                 assistantResponse: result.content,
                 broadcast: ctx.broadcast,
-                providerId: planned.providerId,
+                providerId: planned.responseProvider,
                 model: planned.responseModel
             }).catch(() => { })
         }
