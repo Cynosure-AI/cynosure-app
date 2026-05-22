@@ -138,6 +138,9 @@ onMounted(async () => {
     api.agent.onExecutionUpdate((data) => {
       if (isExecutionUpdatePayload(data)) agentStore.handleExecutionUpdate(data)
     }),
+    api.agent.onOrchestrationStateUpdated((data) => {
+      agentStore.handleOrchestrationStateUpdated(data)
+    }),
     api.mcp.onAuthNeeded(handleMcpAuth),
     api.mcp.onAuthComplete(handleMcpAuthComplete),
     api.notifications.onCreated((data) => notificationStore.addFromWs(data))

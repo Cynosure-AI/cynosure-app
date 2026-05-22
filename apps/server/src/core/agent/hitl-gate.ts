@@ -1,6 +1,7 @@
 import type { ToolCall } from '../gateway/providers/base.provider.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getDb } from '../../db/database.js'
+import { isOrchestrationToolName } from './orchestration-state.js'
 
 export interface ApprovalResult {
   approved: boolean
@@ -71,6 +72,7 @@ export class HITLGate {
     const sessionSet = conversationId ? this.getSessionApprovals(conversationId) : undefined
     const needsApproval = toolCalls.filter(
       (tc) => !tc.function.name.startsWith('delegate_to_')
+        && !isOrchestrationToolName(tc.function.name)
         && !this.isAutoApproved(tc.function.name)
         && !sessionSet?.has(this.allToolsApproval)
         && !sessionSet?.has(tc.function.name)

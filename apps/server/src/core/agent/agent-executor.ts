@@ -6,6 +6,7 @@ import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy }
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
+import { isOrchestrationToolName } from './orchestration-state.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -223,15 +224,18 @@ export class AgentExecutor {
             for (let round = 0; round < this.config.maxRounds && pendingToolCalls?.length; round++) {
                 if (this.config.signal?.aborted) break
                 toolRounds = round + 1
+                const visibleToolCalls = pendingToolCalls.filter((tc) => !isOrchestrationToolName(tc.function.name))
 
-                this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'choosing-tools', message: 'Selecting tools...' })
-                this.emit('step:tools-chosen', {
-                    taskId, conversationId, iteration: round + 1,
-                    toolCalls: pendingToolCalls.map(tc => ({ name: tc.function.name, arguments: tc.function.arguments }))
-                })
+                if (visibleToolCalls.length) {
+                    this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'choosing-tools', message: 'Selecting tools...' })
+                    this.emit('step:tools-chosen', {
+                        taskId, conversationId, iteration: round + 1,
+                        toolCalls: visibleToolCalls.map(tc => ({ name: tc.function.name, arguments: tc.function.arguments }))
+                    })
+                }
 
                 // HITL approval
-                if (hitlGate) {
+                if (hitlGate && visibleToolCalls.length) {
                     const roundResult = await this.handleHITL(hitlGate, taskId, pendingToolCalls, currentMessages, activeStreamId, round, fullContent, usage, contextTokens)
                     if (roundResult) {
                         // HITL was denied — update state and continue to the next round
@@ -250,7 +254,9 @@ export class AgentExecutor {
                     this.saveAssistantToolCallMessage(conversationId, fullContent, lastRoundThinking, pendingToolCalls)
                 }
 
-                this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'executing', message: `Executing ${pendingToolCalls.length} tool(s)...` })
+                if (visibleToolCalls.length) {
+                    this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'executing', message: `Executing ${visibleToolCalls.length} tool(s)...` })
+                }
 
                 const toolResults = await this.executeToolCalls(pendingToolCalls)
 
@@ -258,10 +264,13 @@ export class AgentExecutor {
                     if (tr.images?.length) collectedImages.push(...tr.images)
                 }
 
-                this.emit('step:executed', {
-                    taskId, conversationId, iteration: round + 1,
-                    results: toolResults.map(tr => ({ name: tr.name, success: tr.success, output: tr.output, images: tr.images, imageDataUrls: tr.imageDataUrls }))
-                })
+                const visibleToolResults = toolResults.filter((tr) => !isOrchestrationToolName(tr.name))
+                if (visibleToolResults.length) {
+                    this.emit('step:executed', {
+                        taskId, conversationId, iteration: round + 1,
+                        results: visibleToolResults.map(tr => ({ name: tr.name, success: tr.success, output: tr.output, images: tr.images, imageDataUrls: tr.imageDataUrls }))
+                    })
+                }
 
                 if (this.config.saveMessages) {
                     this.saveToolResultMessages(conversationId, toolResults)
@@ -602,7 +611,9 @@ export class AgentExecutor {
     /** Execute an array of tool calls concurrently and return results in original order. */
     private async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolCallResult[]> {
         for (const tc of toolCalls) {
-            this.config.usedToolNames?.add(tc.function.name)
+            if (!isOrchestrationToolName(tc.function.name)) {
+                this.config.usedToolNames?.add(tc.function.name)
+            }
         }
         return Promise.all(toolCalls.map(tc => this.executeSingleToolCall(tc)))
     }
@@ -686,9 +697,11 @@ export class AgentExecutor {
         toolCalls: ToolCall[],
     ): void {
         const { agentId, providerId, model } = this.config
+        const visibleToolCalls = toolCalls.filter((tc) => !isOrchestrationToolName(tc.function.name))
+        if (!visibleToolCalls.length) return
         getDb().prepare(
             'INSERT INTO messages (id, conversation_id, role, content, thinking, tool_calls_json, agent_id, provider, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(nanoid(), conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(toolCalls), agentId || null, providerId || null, model || null, Date.now())
+        ).run(nanoid(), conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(visibleToolCalls), agentId || null, providerId || null, model || null, Date.now())
     }
 
     /** Save tool result messages to DB and broadcast them to the UI. */
@@ -696,6 +709,7 @@ export class AgentExecutor {
         const { broadcast, agentId, agentName, agentIconUrl } = this.config
         const db = getDb()
         for (const tr of results) {
+            if (isOrchestrationToolName(tr.name)) continue
             const toolMsgId = nanoid()
             const now = Date.now()
             db.prepare(

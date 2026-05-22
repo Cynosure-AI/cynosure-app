@@ -231,6 +231,30 @@ export interface ExecutionStepRecord {
     createdAt: number
 }
 
+export type OrchestrationTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
+export type OrchestrationRunStatus = 'running' | 'completed' | 'cancelled' | 'error'
+
+export interface OrchestrationTaskItem {
+    id: string
+    title: string
+    status: OrchestrationTaskStatus
+    note?: string
+    updatedAt: number
+}
+
+export interface OrchestrationState {
+    runId: string
+    conversationId: string
+    status: OrchestrationRunStatus
+    objective: string
+    items: OrchestrationTaskItem[]
+    currentTaskId?: string
+    result?: { summary?: string; error?: string }
+    createdAt: number
+    updatedAt: number
+    completedAt?: number
+}
+
 export type ChannelType = 'telegram' | 'discord' | 'slack'
 
 

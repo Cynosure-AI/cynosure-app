@@ -6,6 +6,12 @@ import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor } from '../core/agent/agent-executor.js'
 import { planExecution } from '../core/agent/pre-execution/execution-planner.js'
+import {
+  closeOrchestrationRun,
+  createOrchestrationRun,
+  makeOrchestrationTools,
+  ORCHESTRATOR_SYSTEM_PROMPT,
+} from '../core/agent/orchestration-state.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
@@ -327,6 +333,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           providerOverride: providerOverride || undefined,
           modelOverride: model || undefined,
           systemPrompt: systemPrompt || undefined,
+          systemPromptSuffix: ORCHESTRATOR_SYSTEM_PROMPT,
           requestedSubAgents: reqSubAgents,
           memorySpaceOverrides,
           overrideSubAgents: effectiveOverrideSubAgents,
@@ -339,7 +346,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       })
 
       const {
-        tools,
+        tools: plannedTools,
         providerId,
         responseProvider,
         responseModel,
@@ -347,6 +354,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         chatAgentName,
         chatAgentIconUrl,
       } = planned
+      const orchestration = createOrchestrationRun(conversationId, content)
+      const tools = [...plannedTools, ...makeOrchestrationTools(orchestration.runId)]
       messages = planned.messages
 
       messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
@@ -461,6 +470,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       try {
         const result = await executor.run(messages)
+        closeOrchestrationRun(orchestration.runId, 'completed', { summary: result.content.slice(0, 500) })
 
         // Save final assistant message with metadata
         const assistantMsgId = nanoid()
@@ -502,10 +512,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
+          closeOrchestrationRun(orchestration.runId, 'cancelled', { error: 'Cancelled' })
           getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
           broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
           return { streamId }
         }
+        closeOrchestrationRun(orchestration.runId, 'error', { error: (err as Error).message })
         getEventBus().emit('task:error', { conversationId, error: (err as Error).message })
         broadcast('chat:stream-error', { streamId, conversationId, error: (err as Error).message })
         return { streamId }
