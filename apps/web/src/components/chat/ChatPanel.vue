@@ -16,6 +16,7 @@ const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const scrollContainer = ref<HTMLDivElement | null>(null)
 const expandedFallback = ref<Set<string>>(new Set())
+const collapsedSubAgentGroups = reactive(new Set<string>())
 const fullHeightSubAgentGroups = reactive(new Set<string>())
 const SCROLL_BOTTOM_THRESHOLD = 120
 
@@ -250,6 +251,15 @@ function toggleSubAgentFullHeight(key: string): void {
   }
 }
 
+function toggleSubAgentCollapsed(key: string): void {
+  if (collapsedSubAgentGroups.has(key)) {
+    collapsedSubAgentGroups.delete(key)
+  } else {
+    collapsedSubAgentGroups.add(key)
+    fullHeightSubAgentGroups.delete(key)
+  }
+}
+
 function setFallbackExpanded(id: string, expanded: boolean): void {
   if (expanded) expandedFallback.value.add(id)
   else expandedFallback.value.delete(id)
@@ -260,6 +270,14 @@ function setFallbackExpanded(id: string, expanded: boolean): void {
 /** Map of sub-agent group key → its scrollable body element. */
 const subAgentScrollRefs = new Map<string, HTMLElement>()
 const initializedSubAgentScrolls = new Set<string>()
+
+function collapseVisibleSubAgentGroups(): void {
+  nextTick(() => {
+    for (const entry of unifiedTimeline.value) {
+      if (entry.type === 'sub-agent-group') collapsedSubAgentGroups.add(entry.key)
+    }
+  })
+}
 
 function registerSubAgentScroll(key: string, el: unknown): void {
   if (!(el instanceof HTMLElement)) {
@@ -301,12 +319,21 @@ watch(() => agentStore.executionSteps.length, () => { scrollMainToBottomIfNear()
 watch(() => agentStore.pendingHITL, scrollMainToBottomIfNear)
 // When loading finishes the spinner is replaced by rendered messages — scroll then
 watch(() => chatStore.loadingMessages, (isLoading) => {
-  if (!isLoading) scrollMainToBottom()
+  if (isLoading) {
+    collapsedSubAgentGroups.clear()
+    fullHeightSubAgentGroups.clear()
+    return
+  }
+  scrollMainToBottom()
+  collapseVisibleSubAgentGroups()
 })
 
 // Scroll to bottom when mounting into an already-loaded conversation
 // (e.g. navigating here from InstancesView after selectConversation was called)
-onMounted(() => scrollMainToBottom())
+onMounted(() => {
+  scrollMainToBottom()
+  collapseVisibleSubAgentGroups()
+})
 </script>
 
 <template>
@@ -375,11 +402,7 @@ onMounted(() => scrollMainToBottom())
         >
           <div class="rounded-2xl border border-indigo-500/25 bg-indigo-950/10 overflow-hidden">
             <!-- Header -->
-            <button
-              class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-indigo-500/5 transition-colors"
-              :title="fullHeightSubAgentGroups.has(entry.key) ? 'Collapse to compact view' : 'Expand to full height'"
-              @click="toggleSubAgentFullHeight(entry.key)"
-            >
+            <div class="w-full flex items-center gap-2.5 px-3 py-2.5">
               <!-- Sub-agent avatar -->
               <div class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-indigo-500/30 bg-theme-800">
                 <img
@@ -412,14 +435,32 @@ onMounted(() => scrollMainToBottom())
               <span class="text-[10px] text-indigo-400/50 tabular-nums shrink-0">
                 {{ entry.entries.length }} step{{ entry.entries.length !== 1 ? 's' : '' }}
               </span>
+              <button
+                v-if="!collapsedSubAgentGroups.has(entry.key)"
+                class="w-7 h-7 rounded-lg flex items-center justify-center text-indigo-400/50 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors shrink-0"
+                :title="fullHeightSubAgentGroups.has(entry.key) ? 'Collapse to compact view' : 'Expand to full height'"
+                @click="toggleSubAgentFullHeight(entry.key)"
+              >
+                <Icon
+                  :icon="fullHeightSubAgentGroups.has(entry.key) ? 'lucide:minimize-2' : 'lucide:maximize-2'"
+                  class="w-3.5 h-3.5"
+                />
+              </button>
               <!-- Height toggle icon -->
-              <Icon
-                :icon="fullHeightSubAgentGroups.has(entry.key) ? 'lucide:minimize-2' : 'lucide:maximize-2'"
-                class="w-3.5 h-3.5 text-indigo-400/50 shrink-0"
-              />
-            </button>
-            <!-- Body: always visible, limited height by default, full height when toggled -->
+              <button
+                class="w-7 h-7 rounded-lg flex items-center justify-center text-indigo-400/50 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors shrink-0"
+                :title="collapsedSubAgentGroups.has(entry.key) ? 'Expand sub-agent steps' : 'Collapse sub-agent steps'"
+                @click="toggleSubAgentCollapsed(entry.key)"
+              >
+                <Icon
+                  :icon="collapsedSubAgentGroups.has(entry.key) ? 'lucide:chevron-down' : 'lucide:chevron-up'"
+                  class="w-4 h-4"
+                />
+              </button>
+            </div>
+            <!-- Body: limited height by default, full height when toggled -->
             <div
+              v-if="!collapsedSubAgentGroups.has(entry.key)"
               :ref="(el) => registerSubAgentScroll(entry.key, el)"
               class="border-t border-indigo-500/15 py-2 overflow-y-auto"
               :class="fullHeightSubAgentGroups.has(entry.key) ? '' : 'max-h-80'"
