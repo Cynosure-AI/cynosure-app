@@ -46,10 +46,10 @@ export function useChatAgentConfig(
     const sessionSystemPrompt = ref<string>('')
     const sessionThinkingEnabled = ref<boolean>(true)
     const sessionAutoToolRouting = ref<boolean>(!activeAgentId.value)
-    const sessionAutoMemory = ref<boolean>(false)
+    const sessionAutoMemory = ref<boolean>(true)
     const agentOriginalOverrideSubAgents = ref<boolean>(false)
     const agentOriginalAutoToolRouting = ref<boolean>(false)
-    const agentOriginalAutoMemory = ref<boolean>(false)
+    const agentOriginalAutoMemory = ref<boolean>(true)
     const agentOriginalThinkingEnabled = ref<boolean>(true)
     const agentOriginalSystemPrompt = ref<string>('')
     const agentOriginalModel = ref<string | null>(null)
@@ -216,8 +216,8 @@ export function useChatAgentConfig(
             agentOriginalOverrideSubAgents.value = false
             agentOriginalAutoToolRouting.value = true
             sessionAutoToolRouting.value = true
-            agentOriginalAutoMemory.value = false
-            sessionAutoMemory.value = false
+            agentOriginalAutoMemory.value = true
+            sessionAutoMemory.value = true
             agentOriginalModel.value = null
             agentOriginalProviderId.value = null
         }
