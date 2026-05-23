@@ -301,6 +301,7 @@ onMounted(() => {
     :items="registryRows"
     :columns="registryTableColumns"
     :row-class="registryRowClass"
+    :loading="registryLoading"
     empty-message="No servers found"
   >
     <template #col-server="{ item }">
