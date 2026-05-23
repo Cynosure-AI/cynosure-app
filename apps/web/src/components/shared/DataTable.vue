@@ -23,6 +23,7 @@ interface Props<TItem> {
   selectedIds?: string[]
   showHeader?: boolean
   emptyMessage?: string
+  loading?: boolean
   rowClass?: (item: TItem) => string | undefined
 }
 
@@ -256,7 +257,7 @@ const anySelected = computed(() => props.selectedIds.length > 0)
 
   <!-- Empty State -->
   <div
-    v-else
+    v-else-if="!loading"
     class="text-center py-10 text-theme-500"
   >
     {{ emptyMessage }}
