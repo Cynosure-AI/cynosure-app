@@ -7,8 +7,9 @@ import MemorySettings from '../../components/settings/MemorySettings.vue'
 import ChatSettings from '../../components/settings/ChatSettings.vue'
 import SpeechToTextSettings from '../../components/settings/SpeechToTextSettings.vue'
 import AppearanceSettings from '../../components/settings/AppearanceSettings.vue'
+import BackupSettings from '../../components/settings/BackupSettings.vue'
 
-type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'appearance'
+type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'appearance' | 'backup'
 
 interface SettingsCategory {
   id: SettingsCategoryId
@@ -66,6 +67,13 @@ const categories: SettingsCategory[] = [
     description: 'Customize theme, chat display preferences, and setup guide access.',
     icon: 'lucide:palette',
     component: AppearanceSettings
+  },
+  {
+    id: 'backup',
+    label: 'Backup & Restore',
+    description: 'Export your configuration as a zip file or restore from a previous backup.',
+    icon: 'lucide:archive',
+    component: BackupSettings
   }
 ]
 
@@ -216,6 +224,20 @@ const sections: SettingsSection[] = [
     label: 'Setup Guide',
     description: 'Re-run onboarding to configure providers, memory, and MCPs.',
     terms: ['setup guide', 'onboarding', 'redo setup', 'configure providers', 'memory', 'mcps']
+  },
+  {
+    id: 'backup-export',
+    categoryId: 'backup',
+    label: 'Export Backup',
+    description: 'Download your configuration as a zip file.',
+    terms: ['backup', 'export', 'download', 'zip', 'agents', 'providers', 'settings', 'conversations', 'memory spaces']
+  },
+  {
+    id: 'backup-import',
+    categoryId: 'backup',
+    label: 'Import & Restore',
+    description: 'Restore from a previous backup zip file.',
+    terms: ['backup', 'import', 'restore', 'upload', 'zip', 'reset', 'factory reset']
   }
 ]
 
