@@ -43,6 +43,11 @@ body {
   color: var(--color-theme-100);
 }
 
+/* ── Main content area: always keep rounded corners regardless of theme ── */
+main.rounded-xl {
+  border-radius: 0.75rem;
+}
+
 button:hover {
   cursor: pointer;
 }
