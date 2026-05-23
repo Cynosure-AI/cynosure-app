@@ -110,8 +110,7 @@ const router = createRouter({
     },
     {
       path: '/settings/backup',
-      name: 'settings-backup',
-      component: () => import('@/views/settings/BackupSettingsView.vue')
+      redirect: { name: 'settings', query: { category: 'backup' } }
     },
     {
       path: '/settings/speech-to-text',

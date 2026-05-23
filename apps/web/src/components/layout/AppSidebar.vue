@@ -131,7 +131,6 @@ const triggerItems: NavItem[] = [
 const settingsItems: NavItem[] = [
   { to: "/settings", icon: "lucide:settings", label: "Settings", exact: true },
   { to: "/settings/mcp", icon: "lucide:plug", label: "MCPs" },
-  { to: "/settings/backup", icon: "lucide:archive", label: "Backup" },
 ];
 </script>
 
