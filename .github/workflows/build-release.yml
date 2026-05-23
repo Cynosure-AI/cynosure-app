@@ -45,6 +45,7 @@ jobs:
             apps/electron/release/*.AppImage
             apps/electron/release/*.deb
           if-no-files-found: error
+          retention-days: 1 # Automatically deletes after 24 hours
 
   # ── Windows Build ────────────────────────────────────────────────────────────
   build-windows:
@@ -78,6 +79,7 @@ jobs:
           # Only the installer — exclude .blockmap (auto-update delta files)
           path: apps/electron/release/*.exe
           if-no-files-found: error
+          retention-days: 1 # Automatically deletes after 24 hours
 
   # ── Draft Release ────────────────────────────────────────────────────────────
   draft-release:
