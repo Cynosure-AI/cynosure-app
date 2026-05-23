@@ -11,6 +11,15 @@ import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 const providerStore = useProviderStore()
+const props = withDefaults(defineProps<{
+  visibleSections?: string[]
+}>(), {
+  visibleSections: () => []
+})
+
+function showSection(id: string): boolean {
+  return props.visibleSections.length === 0 || props.visibleSections.includes(id)
+}
 
 // Embedding state
 const embProviderId = ref('')
@@ -334,16 +343,27 @@ async function manualClearDb() {
 </script>
 
 <template>
-  <div>
+  <div class="space-y-4">
     <!-- Memory Write Permissions -->
-    <BaseCard class="p-5 space-y-4 mb-4">
-      <div>
-        <h3 class="text-sm font-medium text-theme-200 mb-1">
-          Memory Write Permissions
-        </h3>
-        <p class="text-xs text-theme-500">
-          Read-only memory tools are always allowed. Creating or updating memories asks for approval unless enabled here, approved for the session, or allowed by the active agent.
-        </p>
+    <BaseCard
+      v-if="showSection('write-permissions')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
+          <Icon
+            icon="lucide:shield-check"
+            class="w-5 h-5 text-theme-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Memory Write Permissions
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Read-only memory tools are always allowed. Creating or updating memories asks for approval unless enabled here, approved for the session, or allowed by the active agent.
+          </p>
+        </div>
       </div>
 
       <div class="space-y-2">
@@ -400,19 +420,26 @@ async function manualClearDb() {
     </BaseCard>
 
     <!-- Embedding Model -->
-    <BaseCard class="p-5 space-y-4 mb-4">
-      <div>
-        <h3 class="text-sm font-medium text-theme-200 mb-1">
-          Embedding Model
-        </h3>
-        <p class="text-xs text-theme-500">
-          Select which provider and model to use for generating vector embeddings.
-          Changing the model will offer to re-embed existing memories or drop them.
-        </p>
-        <p class="text-xs text-theme-500 mt-1">
-          For local embeddings we recommend <span class="text-theme-300 font-medium">mxbai-embed-large</span> for
-          best retrieval quality.
-        </p>
+    <BaseCard
+      v-if="showSection('embedding-model')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
+          <Icon
+            icon="lucide:layers"
+            class="w-5 h-5 text-theme-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Embedding Model
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Select the provider and model for vector embeddings. Changing the model will offer to re-embed existing memories or drop them.
+            For local embeddings, <span class="text-theme-300 font-medium">mxbai-embed-large</span> gives the best retrieval quality.
+          </p>
+        </div>
       </div>
 
       <div class="space-y-3">
@@ -499,20 +526,32 @@ async function manualClearDb() {
     </BaseCard>
 
     <!-- Reranking -->
-    <BaseCard class="p-5 space-y-4 mb-4">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h3 class="text-sm font-medium text-theme-200 mb-1">
-            Retrieval Reranker
-          </h3>
-          <p class="text-xs text-theme-500">
-            Optionally send the best hybrid-search candidates to an OpenRouter rerank model before memory is injected into chat context.
-            This can improve relevance at the cost of one extra search request.
-          </p>
+    <BaseCard
+      v-if="showSection('reranker')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-center justify-between">
+        <div class="flex items-start gap-3 min-w-0">
+          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
+            <Icon
+              icon="lucide:list-filter"
+              class="w-5 h-5 text-theme-400"
+            />
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-theme-200">
+              Retrieval Reranker
+            </h3>
+            <p class="text-xs text-theme-500 mt-0.5">
+              Optionally send the best hybrid-search candidates to an OpenRouter rerank model before memory is injected into chat context.
+              This can improve relevance at the cost of one extra search request.
+            </p>
+          </div>
         </div>
         <ToggleSwitch
           v-model="rerankEnabled"
           :disabled="rerankSaving"
+          class="shrink-0 ml-4"
         />
       </div>
 
@@ -569,16 +608,26 @@ async function manualClearDb() {
     </BaseCard>
 
     <!-- Chunking -->
-    <BaseCard class="p-5 space-y-4 mb-4">
-      <div>
-        <h3 class="text-sm font-medium text-theme-200 mb-1">
-          Chunking
-        </h3>
-        <p class="text-xs text-theme-500">
-          Controls how documents are split before embedding. Larger chunks retain more context,
-          smaller chunks improve retrieval precision. Overlap ensures context isn't lost at chunk boundaries.
-          Sections and headings are also taken into account to avoid splitting in the middle of important content.
-        </p>
+    <BaseCard
+      v-if="showSection('chunking')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
+          <Icon
+            icon="lucide:scissors"
+            class="w-5 h-5 text-theme-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Chunking
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Controls how documents are split before embedding. Larger chunks retain more context,
+            smaller chunks improve retrieval precision. Overlap ensures context isn't lost at chunk boundaries.
+          </p>
+        </div>
       </div>
 
       <div class="space-y-3">
@@ -617,29 +666,34 @@ async function manualClearDb() {
     </BaseCard>
 
     <!-- Document Parsing – OCR -->
-    <BaseCard class="p-5 space-y-4 mb-4">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h3 class="text-sm font-medium text-theme-200 mb-1">
-            OCR for Document Images
-          </h3>
-          <p class="text-xs text-theme-500">
-            When enabled, images embedded in uploaded documents (PDFs, DOCX, PPTX, etc.) will be
-            processed with OCR to extract visible text. Useful for scanned documents, diagrams with
-            labels, or presentations with text inside images. Increases processing time.
-          </p>
+    <BaseCard
+      v-if="showSection('ocr')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-center justify-between">
+        <div class="flex items-start gap-3 min-w-0">
+          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
+            <Icon
+              icon="lucide:scan-text"
+              class="w-5 h-5 text-theme-400"
+            />
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-theme-200">
+              OCR for Document Images
+            </h3>
+            <p class="text-xs text-theme-500 mt-0.5">
+              When enabled, images embedded in uploaded documents (PDFs, DOCX, PPTX, etc.) will be
+              processed with OCR to extract visible text. Useful for scanned documents and presentations with text inside images.
+            </p>
+          </div>
         </div>
-        <button
+        <ToggleSwitch
+          :model-value="ocrEnabled"
           :disabled="ocrSaving"
-          class="shrink-0 mt-0.5 relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none"
-          :class="ocrEnabled ? 'bg-accent-600' : 'bg-theme-600'"
-          @click="toggleOcr"
-        >
-          <span
-            class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-            :class="ocrEnabled ? 'translate-x-6' : 'translate-x-1'"
-          />
-        </button>
+          class="shrink-0 ml-4"
+          @update:model-value="toggleOcr"
+        />
       </div>
 
       <!-- OCR Language Multi-select -->
@@ -656,15 +710,26 @@ async function manualClearDb() {
     </BaseCard>
 
     <!-- Danger Zone -->
-    <div class="rounded-xl mt-4 border border-red-900/50 bg-theme-800 p-5 space-y-3">
-      <div>
-        <h3 class="text-sm font-medium text-theme-200 mb-1">
-          Danger Zone
-        </h3>
-        <p class="text-xs text-theme-500">
-          Clear all stored vector embeddings. This will remove all permanent memories across all agents.
-          You will need to re-upload any knowledge files afterwards.
-        </p>
+    <div
+      v-if="showSection('vector-database')"
+      class="rounded-xl border border-red-900/50 bg-theme-800 p-5 space-y-4"
+    >
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-lg bg-red-950/60 flex items-center justify-center shrink-0">
+          <Icon
+            icon="lucide:trash-2"
+            class="w-5 h-5 text-red-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Vector Database
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Clear all stored vector embeddings. This will remove all permanent memories across all agents.
+            You will need to re-upload any knowledge files afterwards.
+          </p>
+        </div>
       </div>
       <button
         class="px-4 py-2 bg-red-600/80 hover:bg-red-500 text-white text-sm rounded-lg transition-colors"

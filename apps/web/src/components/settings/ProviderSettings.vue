@@ -11,6 +11,11 @@ import { Icon } from '@iconify/vue'
 const { providerLogos } = useProviderLogos()
 
 const providerStore = useProviderStore()
+const props = withDefaults(defineProps<{
+  visibleSections?: string[]
+}>(), {
+  visibleSections: () => []
+})
 
 const showAddForm = ref(false)
 const editingProviderId = ref<string | null>(null)
@@ -65,6 +70,10 @@ const resolvedBaseUrl = computed(() => getProviderBaseUrl(newProvider.type, newP
 const canSaveProvider = computed(() =>
   Boolean(newProvider.name && newProvider.defaultModel && (!hasEditableBaseUrl.value || newProvider.baseUrl))
 )
+
+function showSection(id: string): boolean {
+  return props.visibleSections.length === 0 || props.visibleSections.includes(id)
+}
 
 function getProviderBaseUrl(type: ProviderType, baseUrl?: string): string {
   if (providerTypesWithEditableBaseUrl.has(type)) {
@@ -226,7 +235,10 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
 
 <template>
   <div>
-    <div class="flex items-center justify-end mb-4">
+    <div
+      v-if="showSection('provider-actions')"
+      class="flex items-center justify-end mb-4"
+    >
       <button
         class="px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg transition-colors"
         @click="showAddForm ? cancelForm() : startAddProvider()"
@@ -237,7 +249,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
 
     <!-- Add Provider Form -->
     <div
-      v-if="showAddForm"
+      v-if="showSection('provider-actions') && showAddForm"
       class="bg-theme-800 border border-theme-700 rounded-xl p-4 mb-6 space-y-4"
     >
       <div class="grid grid-cols-2 gap-4">
@@ -376,7 +388,10 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
     </div>
 
     <!-- Provider List -->
-    <div class="space-y-3">
+    <div
+      v-if="showSection('provider-actions')"
+      class="space-y-3"
+    >
       <CollapsibleSection
         v-for="provider in providerStore.providers"
         :key="provider.id"

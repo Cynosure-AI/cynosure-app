@@ -11,6 +11,15 @@ import BaseCard from "../shared/BaseCard.vue";
 
 const prefs = usePreferencesStore();
 const providerStore = useProviderStore();
+const props = withDefaults(defineProps<{
+  visibleSections?: string[]
+}>(), {
+  visibleSections: () => []
+})
+
+function showSection(id: string): boolean {
+  return props.visibleSections.length === 0 || props.visibleSections.includes(id)
+}
 
 const contextStrategyOptions: {
   value: ContextStrategy;
@@ -75,7 +84,10 @@ function onCompactSelection(selection: {
 <template>
   <div class="space-y-4">
     <!-- Tool Router -->
-    <BaseCard class="p-5 space-y-4">
+    <BaseCard
+      v-if="showSection('tool-router')"
+      class="p-5 space-y-4"
+    >
       <div class="flex items-center gap-3">
         <div
           class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center"
@@ -114,7 +126,10 @@ function onCompactSelection(selection: {
     </BaseCard>
 
     <!-- Memory Router -->
-    <BaseCard class="p-5 space-y-4">
+    <BaseCard
+      v-if="showSection('memory-router')"
+      class="p-5 space-y-4"
+    >
       <div class="flex items-center gap-3">
         <div
           class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center"
@@ -152,7 +167,10 @@ function onCompactSelection(selection: {
     </BaseCard>
 
     <!-- Generate Chat Titles -->
-    <BaseCard class="p-5 space-y-4">
+    <BaseCard
+      v-if="showSection('generated-titles')"
+      class="p-5 space-y-4"
+    >
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div
@@ -193,7 +211,10 @@ function onCompactSelection(selection: {
     </BaseCard>
 
     <!-- Context Strategy -->
-    <BaseCard class="p-5 space-y-3">
+    <BaseCard
+      v-if="showSection('context-strategy')"
+      class="p-5 space-y-3"
+    >
       <div class="flex items-center gap-3">
         <div
           class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center"
@@ -216,10 +237,7 @@ function onCompactSelection(selection: {
       <select
         :value="prefs.contextStrategy"
         class="w-full bg-theme-900 border border-theme-600 rounded-lg px-3 py-2 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-        @change="
-          prefs.contextStrategy = ($event.target as HTMLSelectElement)
-            .value as ContextStrategy
-        "
+        @change="prefs.contextStrategy = ($event.target as HTMLSelectElement).value as ContextStrategy"
       >
         <option
           v-for="opt in contextStrategyOptions"
