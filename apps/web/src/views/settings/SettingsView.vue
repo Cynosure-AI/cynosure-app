@@ -263,7 +263,11 @@ const matchingSections = computed(() => {
 })
 
 const visibleCategoryGroups = computed(() => {
-  return categories
+  const visibleCategories = isSearching.value
+    ? categories
+    : categories.filter((category) => category.id === activeCategoryId.value)
+
+  return visibleCategories
     .map((category) => {
       const visibleSections = isSearching.value
         ? matchingSections.value.filter((section) => section.categoryId === category.id)
