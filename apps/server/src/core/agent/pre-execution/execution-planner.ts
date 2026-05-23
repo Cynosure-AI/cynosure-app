@@ -3,7 +3,9 @@ import { presetFromAgent, presetFromAgentless } from '../execution-preset.js'
 import { toExecutionPlanInput } from './execution-input.js'
 import {
     buildOrchestrationStateContext,
+    getLatestOrchestrationState,
     resumeOrCreateOrchestrationRun,
+    type OrchestrationState,
 } from '../orchestration-state.js'
 import {
     makeOrchestrationTools,
@@ -132,8 +134,9 @@ function applyOrchestrationIfToolCapable(
         return { tools, systemMessages }
     }
 
+    const previousOrchestration = getLatestOrchestrationState(conversationId)
     const orchestration = resumeOrCreateOrchestrationRun(conversationId, objective)
-    const orchestrationContext = buildOrchestrationStateContext(orchestration)
+    const orchestrationContext = buildOrchestrationTurnContext(orchestration, previousOrchestration)
     const mergedSystemMessages = appendSystemContext(
         appendSystemContext(systemMessages, ORCHESTRATOR_SYSTEM_PROMPT),
         orchestrationContext,
@@ -144,6 +147,29 @@ function applyOrchestrationIfToolCapable(
         systemMessages: mergedSystemMessages,
         runId: orchestration.runId,
     }
+}
+
+function buildOrchestrationTurnContext(
+    current: OrchestrationState,
+    previous: OrchestrationState | null,
+): string | null {
+    const currentContext = buildOrchestrationStateContext(current)
+    if (currentContext) return currentContext
+    if (!previous || previous.runId === current.runId || !previous.items.length) return null
+
+    const lines = previous.items.map((item) => {
+        const note = item.note ? `; note=${item.note}` : ''
+        return `- id=${item.id}; status=${item.status}; title=${item.title}${note}`
+    })
+
+    return [
+        'Previous visible orchestration state for this conversation:',
+        `objective=${previous.objective}`,
+        ...lines,
+        'A new empty orchestration run is active for the current user message.',
+        'If the current message continues, expands, or changes this work and you will use visible execution tools, call orchestrator_set_tasks with the task list that should now be visible before using non-orchestration tools.',
+        'If the previous list is still genuinely in progress after an interruption, use the prior task content as context and recreate the needed visible list for this run.',
+    ].join('\n')
 }
 
 function appendSystemContext(messages: ChatMessage[], context: string | null): ChatMessage[] {

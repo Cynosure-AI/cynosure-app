@@ -258,29 +258,6 @@ export function reconcileOrchestrationAfterToolBatch(
   return state
 }
 
-export function ensureOrchestrationStarted(runId: string, title: string): OrchestrationState | null {
-  const current = getOrchestrationState(runId)
-  if (!current || current.status !== 'running' || current.items.length > 0) return current
-
-  const now = Date.now()
-  const item: OrchestrationTaskItem = {
-    id: nanoid(8),
-    title: title.trim().slice(0, 120) || 'Work through request',
-    status: 'in_progress',
-    note: 'Started from tool execution.',
-    updatedAt: now,
-  }
-  const state: OrchestrationState = {
-    ...current,
-    items: [item],
-    currentTaskId: item.id,
-    updatedAt: now,
-  }
-  persistState(state)
-  emitState(state)
-  return state
-}
-
 function getOrchestrationState(runId: string): OrchestrationState | null {
   const row = getDb().prepare(
     `SELECT id, conversation_id, status, definition_json, result_json, iterations, created_at, updated_at, completed_at
