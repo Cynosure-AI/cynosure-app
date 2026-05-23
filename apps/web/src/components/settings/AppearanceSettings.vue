@@ -10,6 +10,15 @@ import BaseCard from '../shared/BaseCard.vue'
 const prefs = usePreferencesStore()
 const onboardingStore = useOnboardingStore()
 const router = useRouter()
+const props = withDefaults(defineProps<{
+  visibleSections?: string[]
+}>(), {
+  visibleSections: () => []
+})
+
+function showSection(id: string): boolean {
+  return props.visibleSections.length === 0 || props.visibleSections.includes(id)
+}
 
 function redoOnboarding() {
   onboardingStore.reset()
@@ -28,7 +37,10 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
 <template>
   <div class="space-y-4">
     <!-- Theme -->
-    <BaseCard class="p-5 space-y-4">
+    <BaseCard
+      v-if="showSection('theme')"
+      class="p-5 space-y-4"
+    >
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
@@ -106,7 +118,10 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
     </BaseCard>
 
     <!-- Auto-expand Thinking -->
-    <BaseCard class="p-5">
+    <BaseCard
+      v-if="showSection('auto-expand-thinking')"
+      class="p-5"
+    >
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
@@ -129,7 +144,10 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
     </BaseCard>
 
     <!-- Auto-expand Tool Calls -->
-    <BaseCard class="p-5">
+    <BaseCard
+      v-if="showSection('auto-expand-tool-calls')"
+      class="p-5"
+    >
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
@@ -152,7 +170,10 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
     </BaseCard>
 
     <!-- Onboarding -->
-    <BaseCard class="p-5">
+    <BaseCard
+      v-if="showSection('setup-guide')"
+      class="p-5"
+    >
       <div class="flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">

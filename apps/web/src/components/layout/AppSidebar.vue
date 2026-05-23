@@ -110,7 +110,8 @@ async function navigateToNotification(notif: {
   }
 }
 
-function isActive(path: string): boolean {
+function isActive(path: string, exact = false): boolean {
+  if (exact) return route.path === path;
   return route.path === path || route.path.startsWith(path + "/");
 }
 
@@ -128,9 +129,8 @@ const triggerItems: NavItem[] = [
 ];
 
 const settingsItems: NavItem[] = [
-  { to: "/settings/ai", icon: "lucide:sparkles", label: "AI Settings" },
+  { to: "/settings", icon: "lucide:settings", label: "Settings", exact: true },
   { to: "/settings/mcp", icon: "lucide:plug", label: "MCPs" },
-  { to: "/settings/appearance", icon: "lucide:palette", label: "Appearance" },
   { to: "/settings/backup", icon: "lucide:archive", label: "Backup" },
 ];
 </script>
@@ -336,7 +336,7 @@ const settingsItems: NavItem[] = [
         <RouterLink
           :to="item.to"
           class="nav-item"
-          :class="{ active: isActive(item.to) }"
+          :class="{ active: isActive(item.to, item.exact) }"
         >
           <Icon
             :icon="item.icon"
@@ -467,7 +467,7 @@ const settingsItems: NavItem[] = [
         <RouterLink
           :to="item.to"
           class="nav-item"
-          :class="{ active: isActive(item.to) }"
+          :class="{ active: isActive(item.to, item.exact) }"
         >
           <Icon
             :icon="item.icon"

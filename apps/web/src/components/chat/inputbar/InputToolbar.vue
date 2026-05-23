@@ -287,7 +287,7 @@ async function toggleMic(): Promise<void> {
             class="h-4 w-4 text-amber-400 mt-0.5 shrink-0"
           />
           <span>Voice input requires a Whisper model to be downloaded first. Open
-            AI Settings → Speech to Text to download a model.</span>
+            Settings → Voice to download a model.</span>
         </div>
       </template>
     </HoverTooltip>

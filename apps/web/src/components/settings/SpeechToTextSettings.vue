@@ -10,6 +10,15 @@ import type { SelectOptionGroup } from '../shared/CustomSelect.vue'
 
 const prefs = usePreferencesStore()
 const { status, progress, fileProgress, downloadedModels, errorMessage, loadModel, clearDownloadedModels, dispose } = useWhisper()
+const props = withDefaults(defineProps<{
+  visibleSections?: string[]
+}>(), {
+  visibleSections: () => []
+})
+
+function showSection(id: string): boolean {
+  return props.visibleSections.length === 0 || props.visibleSections.includes(id)
+}
 
 const whisperModels: { id: string; label: string; size: string; description: string }[] = [
   { id: 'onnx-community/whisper-tiny', label: 'Whisper Tiny', size: '~75 MB', description: 'Fastest, lower accuracy' },
@@ -171,7 +180,10 @@ onMounted(() => {
 <template>
   <div class="space-y-4">
     <!-- Enable/Disable -->
-    <BaseCard class="p-5">
+    <BaseCard
+      v-if="showSection('enable-voice')"
+      class="p-5"
+    >
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
@@ -194,7 +206,10 @@ onMounted(() => {
     </BaseCard>
 
     <!-- Model & Quantization -->
-    <BaseCard class="p-5 space-y-4">
+    <BaseCard
+      v-if="showSection('voice-model')"
+      class="p-5 space-y-4"
+    >
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
@@ -251,7 +266,10 @@ onMounted(() => {
     </BaseCard>
 
     <!-- Language -->
-    <BaseCard class="p-5 space-y-4">
+    <BaseCard
+      v-if="showSection('voice-language')"
+      class="p-5 space-y-4"
+    >
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
@@ -277,7 +295,10 @@ onMounted(() => {
     </BaseCard>
 
     <!-- Microphone -->
-    <BaseCard class="p-5 space-y-4">
+    <BaseCard
+      v-if="showSection('microphone')"
+      class="p-5 space-y-4"
+    >
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
@@ -318,7 +339,10 @@ onMounted(() => {
     </BaseCard>
 
     <!-- Download & Cache -->
-    <BaseCard class="p-5 space-y-4">
+    <BaseCard
+      v-if="showSection('download-cache')"
+      class="p-5 space-y-4"
+    >
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
@@ -463,7 +487,10 @@ onMounted(() => {
     </BaseCard>
 
     <!-- How it works -->
-    <BaseCard class="p-5 space-y-3">
+    <BaseCard
+      v-if="showSection('voice-help')"
+      class="p-5 space-y-3"
+    >
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon

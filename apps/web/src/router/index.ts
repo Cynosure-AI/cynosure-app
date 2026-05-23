@@ -74,16 +74,22 @@ const router = createRouter({
     // Settings
     {
       path: '/settings',
-      redirect: '/settings/ai'
+      name: 'settings',
+      component: () => import('@/views/settings/SettingsView.vue')
     },
     {
       path: '/settings/ai',
-      name: 'settings-ai',
-      component: () => import('@/views/settings/AISettingsView.vue')
+      redirect: (to) => {
+        const tab = typeof to.query.tab === 'string' ? to.query.tab : 'providers'
+        const category = tab === 'speech-to-text' || tab === 'memory' || tab === 'chat'
+          ? tab
+          : 'providers'
+        return { name: 'settings', query: { category } }
+      }
     },
     {
       path: '/settings/providers',
-      redirect: { name: 'settings-ai', query: { tab: 'providers' } }
+      redirect: { name: 'settings', query: { category: 'providers' } }
     },
     {
       path: '/settings/mcp',
@@ -92,16 +98,15 @@ const router = createRouter({
     },
     {
       path: '/settings/memory',
-      redirect: { name: 'settings-ai', query: { tab: 'memory' } }
+      redirect: { name: 'settings', query: { category: 'memory' } }
     },
     {
       path: '/settings/appearance',
-      name: 'settings-appearance',
-      component: () => import('@/views/settings/AppearanceView.vue')
+      redirect: { name: 'settings', query: { category: 'appearance' } }
     },
     {
       path: '/settings/preferences',
-      redirect: { name: 'settings-appearance' }
+      redirect: { name: 'settings', query: { category: 'appearance' } }
     },
     {
       path: '/settings/backup',
@@ -110,7 +115,7 @@ const router = createRouter({
     },
     {
       path: '/settings/speech-to-text',
-      redirect: { name: 'settings-ai', query: { tab: 'speech-to-text' } }
+      redirect: { name: 'settings', query: { category: 'speech-to-text' } }
     }
   ]
 })
