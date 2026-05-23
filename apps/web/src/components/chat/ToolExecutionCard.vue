@@ -31,7 +31,8 @@ const prefs = usePreferencesStore()
 const expanded = ref(prefs.autoExpandToolCalls)
 const lightboxSrc = ref<string | null>(null)
 const statusMeta: Record<string, { label: string; icon: string; color: string }> = {
-  'routing-tools': { label: 'Tool routing', icon: 'lucide:route', color: 'text-accent-300' },
+  'routing-tools': { label: 'Auto tool routing', icon: 'lucide:route', color: 'text-accent-300' },
+  'routing-memory': { label: 'Auto Memories', icon: 'lucide:brain-circuit', color: 'text-accent-300' },
   'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-amber-400' },
   denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-red-400' },
   executing: { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-400' },
@@ -49,12 +50,24 @@ function meta(s: string) {
   return statusMeta[s] ?? { label: s, icon: 'lucide:circle', color: 'text-theme-400' }
 }
 
+function isMemoryCall(call: { arguments: string }): boolean {
+  try {
+    return JSON.parse(call.arguments || '{}')?.type === 'memory'
+  } catch {
+    return false
+  }
+}
+
 /** Current phase — the last meaningful status in this iteration */
 const currentPhase = computed(() => {
   if (!props.steps.length) return meta('executing')
   const last = props.steps[props.steps.length - 1]
   return meta(last.status)
 })
+
+const currentStatus = computed(() => props.steps[props.steps.length - 1]?.status ?? 'executing')
+const isToolRouting = computed(() => currentStatus.value === 'routing-tools')
+const isMemoryRouting = computed(() => currentStatus.value === 'routing-memory')
 
 /** All tool names from this iteration */
 const toolNames = computed(() => {
@@ -141,11 +154,11 @@ const maContext = computed(() => {
           >
             <!-- Status icon -->
             <Icon
-              :icon="currentPhase.label === 'Denied' ? 'lucide:shield-x' : currentPhase.label === 'Tool routing' ? 'lucide:route' : toolNames.length && !results.length ? (isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash') : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
+              :icon="currentPhase.label === 'Denied' ? 'lucide:shield-x' : isToolRouting || isMemoryRouting ? currentPhase.icon : toolNames.length && !results.length ? (isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash') : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
               class="w-3.5 h-3.5 shrink-0"
               :class="[
                 currentPhase.label === 'Denied' ? 'text-red-400' :
-                currentPhase.label === 'Tool routing' ? 'text-accent-300' :
+                isToolRouting || isMemoryRouting ? 'text-accent-300' :
                 toolNames.length && !results.length ? (isActive ? 'text-accent-400' : 'text-theme-500') :
                 allSuccess ? 'text-emerald-400' :
                 anyFailed ? 'text-red-400' :
@@ -166,6 +179,11 @@ const maContext = computed(() => {
 
             <!-- Tool names -->
             <div class="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
+              <span
+                v-if="(isToolRouting || isMemoryRouting) && toolNames.length"
+                class="text-theme-400 shrink-0"
+                :class="currentPhase.color"
+              >{{ currentPhase.label }}</span>
               <template v-if="toolNames.length">
                 <span
                   v-for="name in toolNames.slice(0, 3)"
@@ -231,7 +249,7 @@ const maContext = computed(() => {
             >
               <div class="flex items-center gap-1.5 mb-1">
                 <Icon
-                  icon="lucide:terminal"
+                  :icon="isMemoryCall(tc) ? 'lucide:brain' : 'lucide:terminal'"
                   class="w-3 h-3 text-accent-400"
                 />
                 <span class="text-[11px] text-accent-300 font-medium">{{ tc.name }}</span>

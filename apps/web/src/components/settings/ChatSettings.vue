@@ -47,6 +47,14 @@ function onToolRouterSelection(selection: {
   prefs.toolRouterModel = selection.model;
 }
 
+function onMemoryRouterSelection(selection: {
+  providerId: string;
+  model: string;
+}): void {
+  prefs.memoryRouterProviderId = selection.providerId;
+  prefs.memoryRouterModel = selection.model;
+}
+
 function onTitleSelection(selection: {
   providerId: string;
   model: string;
@@ -101,6 +109,44 @@ function onCompactSelection(selection: {
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
           Tool namespaces are prefiltered with your Memory embedding provider, then confirmed by this router model.
           If the embedding model changes, router vectors are rebuilt lazily the next time tools are auto-selected.
+        </p>
+      </div>
+    </BaseCard>
+
+    <!-- Memory Router -->
+    <BaseCard class="p-5 space-y-4">
+      <div class="flex items-center gap-3">
+        <div
+          class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center"
+        >
+          <Icon
+            icon="lucide:brain-circuit"
+            class="w-5 h-5 text-theme-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Memory Router
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Provider and model used to detect which memories a request needs
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-1 border-t border-theme-700">
+        <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
+        <ProviderModelSelect
+          :provider-id="prefs.memoryRouterProviderId"
+          :model-value="prefs.memoryRouterModel"
+          :providers="providerStore.providers"
+          include-default
+          default-label="Use chat provider"
+          placeholder="Use chat provider"
+          @change="onMemoryRouterSelection"
+        />
+        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
+          Auto-memory retrieves candidate chunks with Memory search, then confirms useful snippets with this router model.
         </p>
       </div>
     </BaseCard>

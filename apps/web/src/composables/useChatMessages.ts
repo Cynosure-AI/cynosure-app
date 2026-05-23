@@ -28,6 +28,7 @@ export function useChatMessages(
         sessionSystemPrompt: Ref<string>
         sessionThinkingEnabled: Ref<boolean>
         sessionAutoToolRouting: Ref<boolean>
+        sessionAutoMemory: Ref<boolean>
         freeChatSubAgentIds: Ref<string[]>
         freeChatMemorySpaceIds: Ref<string[]>
     },
@@ -119,6 +120,7 @@ export function useChatMessages(
             overrideSubAgents: agentConfig.sessionOverrideSubAgents.value,
             thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
             autoToolRouting: agentConfig.sessionAutoToolRouting.value,
+            autoMemory: agentConfig.sessionAutoMemory.value,
         }
 
         const prefs = usePreferencesStore()
@@ -145,6 +147,9 @@ export function useChatMessages(
             executionRun.autoToolRouting,
             prefs.toolRouterProviderId || undefined,
             prefs.toolRouterModel || undefined,
+            executionRun.autoMemory,
+            activeAgent?.memoryRouterProviderId || prefs.memoryRouterProviderId || undefined,
+            activeAgent?.memoryRouterModel || prefs.memoryRouterModel || undefined,
             prefs.compactProviderId || undefined,
             prefs.compactModel || undefined
         )

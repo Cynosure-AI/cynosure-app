@@ -5,6 +5,7 @@ import { api } from '../../../api/client'
 import type { MemorySpace } from '../../../api/types'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../../shared/ModalDialog.vue'
+import ToggleSwitch from '../../shared/ToggleSwitch.vue'
 
 const chatStore = useChatStore()
 
@@ -44,6 +45,11 @@ function toggle(id: string) {
   }
   chatStore.markOverridesModified()
 }
+
+function toggleAutoMemory(enabled: boolean) {
+  chatStore.sessionAutoMemory = enabled
+  chatStore.markOverridesModified()
+}
 </script>
 
 <template>
@@ -55,6 +61,30 @@ function toggle(id: string) {
     max-width="max-w-sm"
     @close="visible = false"
   >
+    <div class="mb-4 rounded-lg border border-theme-700 bg-theme-900/50 p-3 flex items-start justify-between gap-3">
+      <div class="flex items-start gap-3 min-w-0">
+        <div class="w-7 h-7 rounded-lg bg-theme-800 flex items-center justify-center shrink-0">
+          <Icon
+            icon="lucide:brain-circuit"
+            class="w-3.5 h-3.5 text-accent-400"
+          />
+        </div>
+        <div class="min-w-0">
+          <div class="text-sm text-theme-200">
+            Auto-memory
+          </div>
+          <div class="text-[11px] text-theme-500 leading-relaxed">
+            Retrieve relevant snippets from selected spaces before sending.
+          </div>
+        </div>
+      </div>
+      <ToggleSwitch
+        :model-value="chatStore.sessionAutoMemory"
+        class="mt-0.5 shrink-0"
+        @update:model-value="toggleAutoMemory"
+      />
+    </div>
+
     <!-- Space list -->
     <div class="overflow-y-auto space-y-1 max-h-80">
       <div

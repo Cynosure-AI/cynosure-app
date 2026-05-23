@@ -66,6 +66,7 @@ export const api = {
           overrideSubAgents?: boolean
           thinkingEnabled?: boolean
           autoToolRouting?: boolean
+          autoMemory?: boolean
         }
       }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
     getExecutionSteps: (conversationId: string) =>
@@ -112,6 +113,9 @@ export const api = {
       autoToolRouting?: boolean,
       toolRouterProviderId?: string,
       toolRouterModel?: string,
+      autoMemory?: boolean,
+      memoryRouterProviderId?: string,
+      memoryRouterModel?: string,
       compactProviderId?: string,
       compactModel?: string
     ) =>
@@ -134,6 +138,9 @@ export const api = {
         autoToolRouting,
         toolRouterProviderId: toolRouterProviderId || undefined,
         toolRouterModel: toolRouterModel || undefined,
+        autoMemory,
+        memoryRouterProviderId: memoryRouterProviderId || undefined,
+        memoryRouterModel: memoryRouterModel || undefined,
         compactProviderId: compactProviderId || undefined,
         compactModel: compactModel || undefined,
         titleProviderId: titleProviderId || undefined,

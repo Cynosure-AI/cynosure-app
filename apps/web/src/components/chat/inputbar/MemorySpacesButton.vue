@@ -30,6 +30,7 @@ const selectedMemorySpaces = computed(() => {
 })
 
 const memorySpaceCount = computed(() => selectedMemorySpaces.value.length)
+const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
 </script>
 
 <template>
@@ -44,15 +45,39 @@ const memorySpaceCount = computed(() => selectedMemorySpaces.value.length)
         class="h-5 w-5"
       />
       <span
-        v-if="memorySpaceCount > 0"
-        class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-accent-600"
+        v-if="autoMemoryEnabled || memorySpaceCount > 0"
+        class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none"
+        :class="autoMemoryEnabled ? 'bg-emerald-600' : 'bg-accent-600'"
       >
-        {{ memorySpaceCount }}
+        <Icon
+          v-if="autoMemoryEnabled"
+          icon="lucide:sparkles"
+          class="w-2.5 h-2.5"
+        />
+        <template v-else>
+          {{ memorySpaceCount }}
+        </template>
       </span>
     </button>
     <template #content>
       <div class="font-medium text-theme-300 mb-1.5">
         Memory Spaces ({{ memorySpaceCount }} selected)
+      </div>
+      <div
+        v-if="autoMemoryEnabled"
+        class="mb-1.5 px-1 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px]"
+      >
+        Auto-selection enabled
+      </div>
+      <div
+        v-else
+        class="flex items-center gap-1.5 text-[11px] mb-1.5 text-theme-500"
+      >
+        <Icon
+          icon="lucide:brain-circuit"
+          class="w-3 h-3"
+        />
+        Auto-memory off
       </div>
       <template v-if="selectedMemorySpaces.length">
         <div

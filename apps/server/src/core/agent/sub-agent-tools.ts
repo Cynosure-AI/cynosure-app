@@ -30,6 +30,10 @@ interface SubAgentToolOptions {
     toolRouterProviderId?: string
     /** Request/global model fallback for sub-agent tool routing */
     toolRouterModel?: string
+    /** Request/global provider fallback for sub-agent memory routing */
+    memoryRouterProviderId?: string
+    /** Request/global model fallback for sub-agent memory routing */
+    memoryRouterModel?: string
 }
 
 /**
@@ -40,7 +44,7 @@ interface SubAgentToolOptions {
  * sub-agent's own tools, provider, and model.
  */
 export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition[] {
-    const { subAgents, conversationId, broadcast, signal, modelOverride, providerOverride, toolRouterProviderId, toolRouterModel } = options
+    const { subAgents, conversationId, broadcast, signal, modelOverride, providerOverride, toolRouterProviderId, toolRouterModel, memoryRouterProviderId, memoryRouterModel } = options
     const tools: ToolDefinition[] = []
 
     for (const assignment of subAgents) {
@@ -86,6 +90,9 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     includeSubAgents: false,
                     toolRouterProviderId,
                     toolRouterModel,
+                    memoryRouterProviderId,
+                    memoryRouterModel,
+                    userQuery: userMessage,
                 })
 
                 // Sub-agent executor emits EventBus step events (for timeline cards)

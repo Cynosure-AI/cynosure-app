@@ -1,5 +1,6 @@
 import { isOrchestrationToolName } from './builtin/orchestration-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from './builtin/expand-available-toolset.js'
+import { isMemoryReadToolName } from './builtin/memory-tools.js'
 
 /**
  * Tool policy lives here so approval and UI visibility decisions use the same
@@ -15,7 +16,8 @@ export function isSystemAutoApprovedTool(toolName: string): boolean {
   return (
     toolName === TOOL_SEARCH_TOOL_NAME ||
     isSubAgentDelegationTool(toolName) ||
-    isOrchestrationToolName(toolName)
+    isOrchestrationToolName(toolName) ||
+    isMemoryReadToolName(toolName)
   )
 }
 

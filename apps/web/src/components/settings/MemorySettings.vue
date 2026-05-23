@@ -46,6 +46,13 @@ const RERANK_MODEL_OPTIONS = [
   { value: 'cohere/rerank-v3.5', label: 'Cohere Rerank v3.5', hint: 'cohere/rerank-v3.5' },
 ]
 
+const MEMORY_CREATE_TOOL = 'memory_create'
+const MEMORY_UPDATE_TOOL = 'memory_update'
+
+const memoryCreateAutoApprove = ref(false)
+const memoryUpdateAutoApprove = ref(false)
+const memoryPermissionSaving = ref<string | null>(null)
+
 const OCR_LANGUAGE_OPTIONS = [
   { value: 'eng', label: 'English', hint: 'eng' },
   { value: 'deu', label: 'German', hint: 'deu' },
@@ -137,11 +144,30 @@ const clearingDb = ref(false)
 
 onMounted(async () => {
   await providerStore.loadProviders()
+  await loadMemoryToolApprovals()
   await loadEmbeddingConfig()
   await loadChunkingConfig()
   await loadParserConfig()
   await loadRerankerConfig()
 })
+
+async function loadMemoryToolApprovals() {
+  try {
+    const approvals = await api.agent.getToolApprovals()
+    memoryCreateAutoApprove.value = approvals[MEMORY_CREATE_TOOL] === true
+    memoryUpdateAutoApprove.value = approvals[MEMORY_UPDATE_TOOL] === true
+  } catch { /* defaults */ }
+}
+
+async function setMemoryToolApproval(toolName: string, autoApprove: boolean) {
+  memoryPermissionSaving.value = toolName
+  try {
+    await api.agent.setToolApproval(toolName, autoApprove)
+    if (toolName === MEMORY_CREATE_TOOL) memoryCreateAutoApprove.value = autoApprove
+    if (toolName === MEMORY_UPDATE_TOOL) memoryUpdateAutoApprove.value = autoApprove
+  } catch { /* keep previous value */ }
+  memoryPermissionSaving.value = null
+}
 
 async function loadEmbeddingConfig() {
   try {
@@ -309,6 +335,70 @@ async function manualClearDb() {
 
 <template>
   <div>
+    <!-- Memory Write Permissions -->
+    <BaseCard class="p-5 space-y-4 mb-4">
+      <div>
+        <h3 class="text-sm font-medium text-theme-200 mb-1">
+          Memory Write Permissions
+        </h3>
+        <p class="text-xs text-theme-500">
+          Read-only memory tools are always allowed. Creating or updating memories asks for approval unless enabled here, approved for the session, or allowed by the active agent.
+        </p>
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-start justify-between gap-4 rounded-lg border border-theme-700 bg-theme-900/40 p-3">
+          <div class="flex items-start gap-3 min-w-0">
+            <div class="w-7 h-7 rounded-lg bg-theme-800 flex items-center justify-center shrink-0">
+              <Icon
+                icon="lucide:file-plus-2"
+                class="w-3.5 h-3.5 text-accent-400"
+              />
+            </div>
+            <div class="min-w-0">
+              <div class="text-sm text-theme-200">
+                Allow memory creation
+              </div>
+              <div class="text-[11px] text-theme-500 leading-relaxed">
+                Auto-approve persistent writes from the memory_create tool.
+              </div>
+            </div>
+          </div>
+          <ToggleSwitch
+            :model-value="memoryCreateAutoApprove"
+            :disabled="memoryPermissionSaving === MEMORY_CREATE_TOOL"
+            class="mt-0.5 shrink-0"
+            @update:model-value="setMemoryToolApproval(MEMORY_CREATE_TOOL, $event)"
+          />
+        </div>
+
+        <div class="flex items-start justify-between gap-4 rounded-lg border border-theme-700 bg-theme-900/40 p-3">
+          <div class="flex items-start gap-3 min-w-0">
+            <div class="w-7 h-7 rounded-lg bg-theme-800 flex items-center justify-center shrink-0">
+              <Icon
+                icon="lucide:file-pen-line"
+                class="w-3.5 h-3.5 text-accent-400"
+              />
+            </div>
+            <div class="min-w-0">
+              <div class="text-sm text-theme-200">
+                Allow memory updates
+              </div>
+              <div class="text-[11px] text-theme-500 leading-relaxed">
+                Auto-approve persistent edits from the memory_update tool.
+              </div>
+            </div>
+          </div>
+          <ToggleSwitch
+            :model-value="memoryUpdateAutoApprove"
+            :disabled="memoryPermissionSaving === MEMORY_UPDATE_TOOL"
+            class="mt-0.5 shrink-0"
+            @update:model-value="setMemoryToolApproval(MEMORY_UPDATE_TOOL, $event)"
+          />
+        </div>
+      </div>
+    </BaseCard>
+
     <!-- Embedding Model -->
     <BaseCard class="p-5 space-y-4 mb-4">
       <div>
