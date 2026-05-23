@@ -36,9 +36,8 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
 <template>
   <HoverTooltip :max-width="260">
     <button
-      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-accent-500"
+      class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-accent-500 text-theme-500 hover:text-theme-300"
       aria-label="Memory spaces"
-      :class="autoMemoryEnabled ? 'text-accent-400 hover:text-accent-300' : 'text-theme-500 hover:text-theme-300'"
       @click="showModal = true"
     >
       <Icon
@@ -46,10 +45,18 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
         class="h-5 w-5"
       />
       <span
-        v-if="memorySpaceCount > 0"
-        class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none bg-accent-600"
+        v-if="autoMemoryEnabled || memorySpaceCount > 0"
+        class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none"
+        :class="autoMemoryEnabled ? 'bg-emerald-600' : 'bg-accent-600'"
       >
-        {{ memorySpaceCount }}
+        <Icon
+          v-if="autoMemoryEnabled"
+          icon="lucide:sparkles"
+          class="w-2.5 h-2.5"
+        />
+        <template v-else>
+          {{ memorySpaceCount }}
+        </template>
       </span>
     </button>
     <template #content>
@@ -57,14 +64,20 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
         Memory Spaces ({{ memorySpaceCount }} selected)
       </div>
       <div
-        class="flex items-center gap-1.5 text-[11px] mb-1.5"
-        :class="autoMemoryEnabled ? 'text-accent-300' : 'text-theme-500'"
+        v-if="autoMemoryEnabled"
+        class="mb-1.5 px-1 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px]"
+      >
+        Auto-selection enabled
+      </div>
+      <div
+        v-else
+        class="flex items-center gap-1.5 text-[11px] mb-1.5 text-theme-500"
       >
         <Icon
           icon="lucide:brain-circuit"
           class="w-3 h-3"
         />
-        Auto-memory {{ autoMemoryEnabled ? 'on' : 'off' }}
+        Auto-memory off
       </div>
       <template v-if="selectedMemorySpaces.length">
         <div
