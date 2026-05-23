@@ -11,6 +11,15 @@ import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 const providerStore = useProviderStore()
+const props = withDefaults(defineProps<{
+  visibleSections?: string[]
+}>(), {
+  visibleSections: () => []
+})
+
+function showSection(id: string): boolean {
+  return props.visibleSections.length === 0 || props.visibleSections.includes(id)
+}
 
 // Embedding state
 const embProviderId = ref('')
@@ -336,7 +345,10 @@ async function manualClearDb() {
 <template>
   <div>
     <!-- Memory Write Permissions -->
-    <BaseCard class="p-5 space-y-4 mb-4">
+    <BaseCard
+      v-if="showSection('write-permissions')"
+      class="p-5 space-y-4 mb-4"
+    >
       <div>
         <h3 class="text-sm font-medium text-theme-200 mb-1">
           Memory Write Permissions
@@ -400,7 +412,10 @@ async function manualClearDb() {
     </BaseCard>
 
     <!-- Embedding Model -->
-    <BaseCard class="p-5 space-y-4 mb-4">
+    <BaseCard
+      v-if="showSection('embedding-model')"
+      class="p-5 space-y-4 mb-4"
+    >
       <div>
         <h3 class="text-sm font-medium text-theme-200 mb-1">
           Embedding Model
@@ -499,7 +514,10 @@ async function manualClearDb() {
     </BaseCard>
 
     <!-- Reranking -->
-    <BaseCard class="p-5 space-y-4 mb-4">
+    <BaseCard
+      v-if="showSection('reranker')"
+      class="p-5 space-y-4 mb-4"
+    >
       <div class="flex items-start justify-between gap-4">
         <div>
           <h3 class="text-sm font-medium text-theme-200 mb-1">
@@ -569,7 +587,10 @@ async function manualClearDb() {
     </BaseCard>
 
     <!-- Chunking -->
-    <BaseCard class="p-5 space-y-4 mb-4">
+    <BaseCard
+      v-if="showSection('chunking')"
+      class="p-5 space-y-4 mb-4"
+    >
       <div>
         <h3 class="text-sm font-medium text-theme-200 mb-1">
           Chunking
@@ -617,7 +638,10 @@ async function manualClearDb() {
     </BaseCard>
 
     <!-- Document Parsing – OCR -->
-    <BaseCard class="p-5 space-y-4 mb-4">
+    <BaseCard
+      v-if="showSection('ocr')"
+      class="p-5 space-y-4 mb-4"
+    >
       <div class="flex items-start justify-between gap-4">
         <div>
           <h3 class="text-sm font-medium text-theme-200 mb-1">
@@ -656,7 +680,10 @@ async function manualClearDb() {
     </BaseCard>
 
     <!-- Danger Zone -->
-    <div class="rounded-xl mt-4 border border-red-900/50 bg-theme-800 p-5 space-y-3">
+    <div
+      v-if="showSection('vector-database')"
+      class="rounded-xl mt-4 border border-red-900/50 bg-theme-800 p-5 space-y-3"
+    >
       <div>
         <h3 class="text-sm font-medium text-theme-200 mb-1">
           Danger Zone
