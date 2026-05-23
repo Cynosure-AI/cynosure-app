@@ -9,8 +9,9 @@
 
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
-import { hydrateBuiltInTools } from '../tools/built-in-tools.js'
+import { getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../tools/built-in-tools.js'
 import { applyAutoToolRouting } from './pre-execution/auto-tool-routing.js'
+import { applyAutoMemoryRouting } from './pre-execution/auto-memory-routing.js'
 import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
@@ -56,6 +57,12 @@ export interface PrepareExecutionInput {
     toolRouterProviderId?: string
     /** Optional model override for the router confirmation pass */
     toolRouterModel?: string
+    /** Enable automatic memory retrieval for this execution. */
+    autoMemory?: boolean
+    /** Optional provider override for the memory router confirmation pass */
+    memoryRouterProviderId?: string
+    /** Optional model override for the memory router confirmation pass */
+    memoryRouterModel?: string
 
     // ── Sub-agents ──
 
@@ -180,6 +187,17 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         })
     }
 
+    // ── 2c. Runtime memory tools ──
+    // Memory tools are not manually selectable. When a turn has an explicit
+    // memory scope or automatic memory retrieval enabled, provide the read and
+    // write memory tools with the same scoped hydration used by selected tools.
+
+    const runtimeMemoryEnabled = isRuntimeMemoryEnabled(preset, input.autoMemory, memorySpaceOverrides)
+    if (runtimeMemoryEnabled) {
+        const memoryTools = toolRegistry.resolveForExecution(getBuiltInMemoryToolKeys())
+        tools = dedupeToolsByName([...tools, ...memoryTools])
+    }
+
     // ── 3. Sub-agent delegation tools ──
 
     const effectiveSubAgents = includeSubAgents
@@ -204,6 +222,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             providerOverride: subAgentProviderOverride,
             toolRouterProviderId: input.toolRouterProviderId,
             toolRouterModel: input.toolRouterModel,
+            memoryRouterProviderId: input.memoryRouterProviderId,
+            memoryRouterModel: input.memoryRouterModel,
         })
         tools = [...tools, ...subAgentTools]
     }
@@ -237,6 +257,39 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         systemMessages.unshift({ role: 'system', content: effectiveSystemPrompt })
     }
 
+    // ── 6. Auto-memory context ──
+
+    if (isAutoMemoryEnabled(preset, input.autoMemory)) {
+        const useAgentRouterProvider = preset.memoryRouterProviderId === AGENT_ROUTER_PROVIDER
+        const useAgentRouterModel = preset.memoryRouterModel === AGENT_ROUTER_MODEL
+        const router = resolveRouterProviderModel({
+            gateway,
+            fallbackProviderId: providerModel.providerId,
+            fallbackModel: providerModel.model,
+            agentRouterProviderId: useAgentRouterProvider ? preset.providerId : (preset.memoryRouterProviderId || undefined),
+            agentRouterModel: useAgentRouterModel ? (preset.model || undefined) : (preset.memoryRouterModel || undefined),
+            requestRouterProviderId: input.memoryRouterProviderId,
+            requestRouterModel: useAgentRouterProvider ? undefined : input.memoryRouterModel,
+        })
+
+        const memoryContext = await applyAutoMemoryRouting({
+            enabled: true,
+            conversationId,
+            userQuery: input.userQuery,
+            recentMessages: input.recentMessages,
+            gateway,
+            providerId: router.providerId,
+            model: providerModel.model,
+            routerModel: router.model,
+            agentId: preset.id === '__agentless__' ? undefined : preset.id,
+            memorySpaceIds: memorySpaceOverrides?.map((space) => space.id),
+        })
+
+        if (memoryContext) {
+            systemMessages.push({ role: 'system', content: memoryContext })
+        }
+    }
+
     return {
         tools,
         providerId: providerModel.providerId,
@@ -244,6 +297,31 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         systemMessages,
         hasSubAgents,
     }
+}
+
+function isAutoMemoryEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
+    if (sessionEnabled === true) return true
+    if (sessionEnabled === false) return false
+    return preset.autoMemory === true
+}
+
+function isRuntimeMemoryEnabled(
+    preset: ExecutionPreset,
+    sessionEnabled: boolean | undefined,
+    memorySpaceOverrides: { id: string; name: string }[] | undefined,
+): boolean {
+    return Boolean(memorySpaceOverrides?.length) || isAutoMemoryEnabled(preset, sessionEnabled)
+}
+
+function dedupeToolsByName(tools: ToolDefinition[]): ToolDefinition[] {
+    const seen = new Set<string>()
+    const result: ToolDefinition[] = []
+    for (const tool of tools) {
+        if (seen.has(tool.name)) continue
+        seen.add(tool.name)
+        result.push(tool)
+    }
+    return result
 }
 
 function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {

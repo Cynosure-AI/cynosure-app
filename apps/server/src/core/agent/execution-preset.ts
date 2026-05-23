@@ -10,6 +10,9 @@ export interface ExecutionPreset {
     autoToolRouting?: boolean
     toolRouterProviderId?: string
     toolRouterModel?: string
+    autoMemory?: boolean
+    memoryRouterProviderId?: string
+    memoryRouterModel?: string
     toolRoutingEnabled?: boolean
     disableToolRouting?: boolean
 }
@@ -31,6 +34,9 @@ export function presetFromAgent(
         autoToolRouting: agent.autoToolRouting,
         toolRouterProviderId: agent.toolRouterProviderId,
         toolRouterModel: agent.toolRouterModel,
+        autoMemory: agent.autoMemory,
+        memoryRouterProviderId: agent.memoryRouterProviderId,
+        memoryRouterModel: agent.memoryRouterModel,
     }
 }
 
@@ -40,6 +46,9 @@ export function presetFromAgentless(options: {
     autoToolRouting: boolean
     toolRouterProviderId?: string
     toolRouterModel?: string
+    autoMemory?: boolean
+    memoryRouterProviderId?: string
+    memoryRouterModel?: string
 }): ExecutionPreset {
     return {
         id: '__agentless__',
@@ -48,5 +57,8 @@ export function presetFromAgentless(options: {
         autoToolRouting: options.autoToolRouting,
         toolRouterProviderId: options.toolRouterProviderId,
         toolRouterModel: options.toolRouterModel,
+        autoMemory: options.autoMemory,
+        memoryRouterProviderId: options.memoryRouterProviderId,
+        memoryRouterModel: options.memoryRouterModel,
     }
 }

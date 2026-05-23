@@ -21,6 +21,11 @@ export {
     makeMemorySearchTool,
     makeMemoryCreateTool,
     makeMemoryUpdateTool,
+    MEMORY_READ_TOOL_NAMES,
+    MEMORY_WRITE_TOOL_NAMES,
+    MEMORY_TOOL_NAMES,
+    isMemoryToolName,
+    isMemoryReadToolName,
     type MemoryToolOptions,
 } from "./builtin/memory-tools.js";
 export {
@@ -37,11 +42,13 @@ import {
     makeMemorySearchTool,
     makeMemoryCreateTool,
     makeMemoryUpdateTool,
+    MEMORY_TOOL_NAMES,
 } from "./builtin/memory-tools.js";
 
 type BroadcastFn = (event: string, data: unknown) => void;
 
-const BUILTIN_NAMESPACE: ToolNamespace = { id: "builtin", label: "Built-in" };
+export const BUILTIN_NAMESPACE_ID = "builtin";
+const BUILTIN_NAMESPACE: ToolNamespace = { id: BUILTIN_NAMESPACE_ID, label: "Built-in" };
 
 type BuiltInToolSpec = Pick<
     ToolDefinition,
@@ -216,6 +223,14 @@ const BUILTIN_TOOL_SPECS = [
 export const BUILTIN_TOOL_NAMES = BUILTIN_TOOL_SPECS.map((tool) => tool.name);
 
 export type BuiltinToolName = (typeof BUILTIN_TOOL_SPECS)[number]["name"];
+
+export function isBuiltInMemoryToolKey(toolKey: string): boolean {
+    return MEMORY_TOOL_NAMES.some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+}
+
+export function getBuiltInMemoryToolKeys(): string[] {
+    return MEMORY_TOOL_NAMES.map((toolName) => `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+}
 
 /**
  * Register stub versions of the built-in tools in the global ToolRegistry

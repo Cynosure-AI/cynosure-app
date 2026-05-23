@@ -24,6 +24,9 @@ export interface AgentConfig {
     autoToolRouting: boolean
     toolRouterProviderId: string
     toolRouterModel: string
+    autoMemory: boolean
+    memoryRouterProviderId: string
+    memoryRouterModel: string
     thinkingEnabled: boolean
     maxContextTokens: number | null
     sortOrder: number
@@ -55,12 +58,15 @@ export type CreateAgentInput = {
     autoToolRouting?: boolean
     toolRouterProviderId?: string
     toolRouterModel?: string
+    autoMemory?: boolean
+    memoryRouterProviderId?: string
+    memoryRouterModel?: string
     thinkingEnabled?: boolean
     maxContextTokens?: number | null
     sortOrder?: number
 }
 
-export type UpdateAgentInput = Partial<Omit<CreateAgentInput, 'codename'> & { codename?: string; subAgents?: SubAgentAssignment[]; autoApproveTools?: boolean; autoToolRouting?: boolean }>
+export type UpdateAgentInput = Partial<Omit<CreateAgentInput, 'codename'> & { codename?: string; subAgents?: SubAgentAssignment[]; autoApproveTools?: boolean; autoToolRouting?: boolean; autoMemory?: boolean }>
 
 // ---- Helpers ----
 
@@ -134,6 +140,9 @@ interface AgentRow {
     auto_tool_routing: number
     tool_router_provider_id: string
     tool_router_model: string
+    auto_memory: number
+    memory_router_provider_id: string
+    memory_router_model: string
     thinking_enabled: number
     max_context_tokens: number | null
     sort_order: number
@@ -164,6 +173,9 @@ function rowToAgentData(row: AgentRow): AgentData {
         autoToolRouting: row.auto_tool_routing === 1,
         toolRouterProviderId: row.tool_router_provider_id || '',
         toolRouterModel: row.tool_router_model || '',
+        autoMemory: row.auto_memory === 1,
+        memoryRouterProviderId: row.memory_router_provider_id || '',
+        memoryRouterModel: row.memory_router_model || '',
         thinkingEnabled: row.thinking_enabled !== 0,
         maxContextTokens: typeof row.max_context_tokens === 'number' ? row.max_context_tokens : null,
         sortOrder: typeof row.sort_order === 'number' ? row.sort_order : 0,
@@ -214,8 +226,9 @@ export function createAgent(input: CreateAgentInput): AgentData {
     db.prepare(
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, max_context_tokens,
-            override_sub_agents, auto_tool_routing, tool_router_provider_id, tool_router_model, sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            override_sub_agents, auto_tool_routing, tool_router_provider_id, tool_router_model,
+            auto_memory, memory_router_provider_id, memory_router_model, sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.name,
@@ -235,6 +248,9 @@ export function createAgent(input: CreateAgentInput): AgentData {
         input.autoToolRouting === true ? 1 : 0,
         input.toolRouterProviderId || '',
         input.toolRouterModel || '',
+        input.autoMemory === true ? 1 : 0,
+        input.memoryRouterProviderId || '',
+        input.memoryRouterModel || '',
         typeof input.sortOrder === 'number' ? input.sortOrder : 0,
         input.cronPrompt || '',
         iconData,
@@ -268,6 +284,9 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     const updatedAutoToolRouting = input.autoToolRouting !== undefined ? input.autoToolRouting : (existing.auto_tool_routing === 1)
     const updatedToolRouterProviderId = input.toolRouterProviderId !== undefined ? (input.toolRouterProviderId || '') : (existing.tool_router_provider_id || '')
     const updatedToolRouterModel = input.toolRouterModel !== undefined ? (input.toolRouterModel || '') : (existing.tool_router_model || '')
+    const updatedAutoMemory = input.autoMemory !== undefined ? input.autoMemory : (existing.auto_memory === 1)
+    const updatedMemoryRouterProviderId = input.memoryRouterProviderId !== undefined ? (input.memoryRouterProviderId || '') : (existing.memory_router_provider_id || '')
+    const updatedMemoryRouterModel = input.memoryRouterModel !== undefined ? (input.memoryRouterModel || '') : (existing.memory_router_model || '')
     const updatedThinkingEnabled = input.thinkingEnabled !== undefined ? input.thinkingEnabled : (existing.thinking_enabled !== 0)
     const updatedMaxContextTokens = input.maxContextTokens !== undefined
         ? (typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null)
@@ -293,7 +312,8 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     db.prepare(
         `UPDATE agents SET name = ?, description = ?, provider_id = ?, model = ?, system_prompt = ?, tools_json = ?,
          codename = ?, category = ?, sub_agents_json = ?, auto_approve_tools = ?,
-            thinking_enabled = ?, max_context_tokens = ?, override_sub_agents = ?, auto_tool_routing = ?, tool_router_provider_id = ?, tool_router_model = ?, sort_order = ?, cron_prompt = ?,
+            thinking_enabled = ?, max_context_tokens = ?, override_sub_agents = ?, auto_tool_routing = ?, tool_router_provider_id = ?, tool_router_model = ?,
+            auto_memory = ?, memory_router_provider_id = ?, memory_router_model = ?, sort_order = ?, cron_prompt = ?,
          icon_data = ?, icon_mime = ?, updated_at = ?
          WHERE id = ?`
     ).run(
@@ -313,6 +333,9 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         updatedAutoToolRouting ? 1 : 0,
         updatedToolRouterProviderId,
         updatedToolRouterModel,
+        updatedAutoMemory ? 1 : 0,
+        updatedMemoryRouterProviderId,
+        updatedMemoryRouterModel,
         updatedSortOrder,
         updatedCronPrompt,
         iconData,
@@ -343,8 +366,9 @@ export function duplicateAgent(id: string): AgentData | null {
     db.prepare(
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, max_context_tokens,
-            override_sub_agents, auto_tool_routing, tool_router_provider_id, tool_router_model, sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            override_sub_agents, auto_tool_routing, tool_router_provider_id, tool_router_model,
+            auto_memory, memory_router_provider_id, memory_router_model, sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         newId,
         newName,
@@ -364,6 +388,9 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.auto_tool_routing,
         existing.tool_router_provider_id,
         existing.tool_router_model,
+        existing.auto_memory,
+        existing.memory_router_provider_id,
+        existing.memory_router_model,
         existing.sort_order,
         existing.cron_prompt,
         existing.icon_data,

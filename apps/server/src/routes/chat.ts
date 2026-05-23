@@ -174,6 +174,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       autoToolRouting?: boolean
       toolRouterProviderId?: string
       toolRouterModel?: string
+      autoMemory?: boolean
+      memoryRouterProviderId?: string
+      memoryRouterModel?: string
       compactProviderId?: string
       compactModel?: string
       titleProviderId?: string
@@ -182,7 +185,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
       const db = getDb()
       const toolRegistry = getToolRegistry()
       const selectedToolKeys = Array.isArray(allowedTools)
@@ -313,6 +316,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const effectiveOverrideSubAgents = overrideSubAgents !== undefined
         ? overrideSubAgents
         : (resolvedAgent?.overrideSubAgents === true)
+      const effectiveAutoMemory = reqAutoMemory !== undefined
+        ? reqAutoMemory === true
+        : (resolvedAgent?.autoMemory === true)
 
       // Resolve memory space overrides (request body ids -> { id, name } objects)
       const memorySpaceOverrides = resolveMemorySpaceOverrides(db, reqMemorySpaceIds)
@@ -339,6 +345,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : undefined,
           toolRouterProviderId: reqToolRouterProviderId || undefined,
           toolRouterModel: reqToolRouterModel || undefined,
+          autoMemory: effectiveAutoMemory,
+          memoryRouterProviderId: reqMemoryRouterProviderId || undefined,
+          memoryRouterModel: reqMemoryRouterModel || undefined,
           selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
           hasExplicitToolAllowlist,
         },
@@ -389,6 +398,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         overrideSubAgents: effectiveOverrideSubAgents,
         thinkingEnabled: reqThinkingEnabled ?? true,
         autoToolRouting: reqAutoToolRouting === true,
+        autoMemory: effectiveAutoMemory,
       }
       db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
         JSON.stringify(chatConfig),

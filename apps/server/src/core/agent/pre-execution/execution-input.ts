@@ -25,6 +25,9 @@ export interface ExecutionRequest {
         autoToolRouting?: boolean
         toolRouterProviderId?: string
         toolRouterModel?: string
+        autoMemory?: boolean
+        memoryRouterProviderId?: string
+        memoryRouterModel?: string
         selectedToolKeys?: string[]
         hasExplicitToolAllowlist?: boolean
     }
@@ -49,6 +52,9 @@ export interface ExecutionPlanInput {
     autoToolRouting?: boolean
     toolRouterProviderId?: string
     toolRouterModel?: string
+    autoMemory?: boolean
+    memoryRouterProviderId?: string
+    memoryRouterModel?: string
     selectedToolKeys?: string[]
     hasExplicitToolAllowlist?: boolean
 }
@@ -74,6 +80,9 @@ export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanIn
         autoToolRouting: run.autoToolRouting,
         toolRouterProviderId: run.toolRouterProviderId,
         toolRouterModel: run.toolRouterModel,
+        autoMemory: run.autoMemory,
+        memoryRouterProviderId: run.memoryRouterProviderId,
+        memoryRouterModel: run.memoryRouterModel,
         selectedToolKeys: run.selectedToolKeys,
         hasExplicitToolAllowlist: run.hasExplicitToolAllowlist,
     }

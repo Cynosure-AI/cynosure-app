@@ -12,6 +12,8 @@ export const SK_TITLE_PROVIDER = 'cy-title-provider'
 export const SK_TITLE_MODEL = 'cy-title-model'
 export const SK_TOOL_ROUTER_PROVIDER = 'cy-tool-router-provider'
 export const SK_TOOL_ROUTER_MODEL = 'cy-tool-router-model'
+export const SK_MEMORY_ROUTER_PROVIDER = 'cy-memory-router-provider'
+export const SK_MEMORY_ROUTER_MODEL = 'cy-memory-router-model'
 export const SK_CONTEXT_STRATEGY = 'cy-context-strategy'
 export const SK_COMPACT_PROVIDER = 'cy-compact-provider'
 export const SK_COMPACT_MODEL = 'cy-compact-model'
@@ -49,6 +51,8 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_TITLE_MODEL,
     SK_TOOL_ROUTER_PROVIDER,
     SK_TOOL_ROUTER_MODEL,
+    SK_MEMORY_ROUTER_PROVIDER,
+    SK_MEMORY_ROUTER_MODEL,
     SK_COMPACT_PROVIDER,
     SK_COMPACT_MODEL,
     SK_PROVIDER_MODEL_FAVORITES,
