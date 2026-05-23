@@ -9,7 +9,7 @@
 
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
-import { hydrateBuiltInTools } from '../tools/built-in-tools.js'
+import { getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../tools/built-in-tools.js'
 import { applyAutoToolRouting } from './pre-execution/auto-tool-routing.js'
 import { applyAutoMemoryRouting } from './pre-execution/auto-memory-routing.js'
 import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
@@ -187,6 +187,17 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         })
     }
 
+    // ── 2c. Runtime memory tools ──
+    // Memory tools are not manually selectable. When a turn has an explicit
+    // memory scope or automatic memory retrieval enabled, provide the read and
+    // write memory tools with the same scoped hydration used by selected tools.
+
+    const runtimeMemoryEnabled = isRuntimeMemoryEnabled(preset, input.autoMemory, memorySpaceOverrides)
+    if (runtimeMemoryEnabled) {
+        const memoryTools = toolRegistry.resolveForExecution(getBuiltInMemoryToolKeys())
+        tools = dedupeToolsByName([...tools, ...memoryTools])
+    }
+
     // ── 3. Sub-agent delegation tools ──
 
     const effectiveSubAgents = includeSubAgents
@@ -292,6 +303,25 @@ function isAutoMemoryEnabled(preset: ExecutionPreset, sessionEnabled?: boolean):
     if (sessionEnabled === true) return true
     if (sessionEnabled === false) return false
     return preset.autoMemory === true
+}
+
+function isRuntimeMemoryEnabled(
+    preset: ExecutionPreset,
+    sessionEnabled: boolean | undefined,
+    memorySpaceOverrides: { id: string; name: string }[] | undefined,
+): boolean {
+    return Boolean(memorySpaceOverrides?.length) || isAutoMemoryEnabled(preset, sessionEnabled)
+}
+
+function dedupeToolsByName(tools: ToolDefinition[]): ToolDefinition[] {
+    const seen = new Set<string>()
+    const result: ToolDefinition[] = []
+    for (const tool of tools) {
+        if (seen.has(tool.name)) continue
+        seen.add(tool.name)
+        result.push(tool)
+    }
+    return result
 }
 
 function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {

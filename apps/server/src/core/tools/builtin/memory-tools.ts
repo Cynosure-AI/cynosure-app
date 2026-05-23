@@ -4,6 +4,34 @@ import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import { readTextFile, writeTextFile, fileExists, replaceMarkdownSection, backupToRevisions } from '../../memory/memory-file-manager.js'
 
+export const MEMORY_READ_TOOL_NAMES = [
+    'memory_list_documents',
+    'memory_retrieve_chunks',
+    'memory_semantic_search',
+] as const
+
+export const MEMORY_WRITE_TOOL_NAMES = [
+    'memory_create',
+    'memory_update',
+] as const
+
+export const MEMORY_TOOL_NAMES = [
+    ...MEMORY_READ_TOOL_NAMES,
+    ...MEMORY_WRITE_TOOL_NAMES,
+] as const
+
+export type MemoryReadToolName = (typeof MEMORY_READ_TOOL_NAMES)[number]
+export type MemoryWriteToolName = (typeof MEMORY_WRITE_TOOL_NAMES)[number]
+export type MemoryToolName = (typeof MEMORY_TOOL_NAMES)[number]
+
+export function isMemoryToolName(toolName: string): toolName is MemoryToolName {
+    return (MEMORY_TOOL_NAMES as readonly string[]).includes(toolName)
+}
+
+export function isMemoryReadToolName(toolName: string): toolName is MemoryReadToolName {
+    return (MEMORY_READ_TOOL_NAMES as readonly string[]).includes(toolName)
+}
+
 export interface MemoryToolOptions {
     /** SQL filter covering all assigned memory spaces, e.g. `spaceId IN ('...', '...')`. */
     spaceFilter?: string

@@ -15,6 +15,7 @@ import { getCronJobsForAgent, unscheduleCronJob } from '../core/triggers/cron-sc
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
+import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 
 export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promise<void> {
     // GET /api/agents — list all
@@ -157,6 +158,7 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
         const gate = getHITLGate()
         const approvals = gate.getAllApprovals()
         const items = registry.listRegisteredTools()
+            .filter((tool) => !isBuiltInMemoryToolKey(tool.key))
         return items.map((tool) => ({
             key: tool.key,
             name: tool.name,
