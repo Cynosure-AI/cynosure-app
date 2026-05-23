@@ -1,6 +1,7 @@
 import { prepareAgentExecution } from '../prepare-execution.js'
 import { presetFromAgent, presetFromAgentless } from '../execution-preset.js'
 import { toExecutionPlanInput } from './execution-input.js'
+import { isBuiltInMemoryToolKey } from '../../tools/built-in-tools.js'
 import {
     buildOrchestrationStateContext,
     resumeOrCreateOrchestrationRun,
@@ -54,18 +55,20 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         memoryRouterModel,
         hasExplicitToolAllowlist = false,
     } = input
-    const selectedToolKeys = input.selectedToolKeys ?? []
+    const selectedToolKeys = stripRuntimeMemoryToolKeys(input.selectedToolKeys ?? [])
     const hasRequestToolSelection = input.selectedToolKeys !== undefined
 
-    const allRegisteredToolKeys = toolRegistry.listRegisteredTools().map((tool) => tool.key)
+    const allRegisteredToolKeys = toolRegistry.listRegisteredTools()
+        .map((tool) => tool.key)
+        .filter((key) => !isBuiltInMemoryToolKey(key))
     const configuredTools = hasExplicitToolAllowlist
         ? selectedToolKeys
         : resolvedAgent
-            ? (resolvedAgent.tools.length ? resolvedAgent.tools : (autoToolRouting ? allRegisteredToolKeys : []))
+            ? (stripRuntimeMemoryToolKeys(resolvedAgent.tools).length ? stripRuntimeMemoryToolKeys(resolvedAgent.tools) : (autoToolRouting ? allRegisteredToolKeys : []))
             : allRegisteredToolKeys
     const fixedToolKeys = hasRequestToolSelection
         ? selectedToolKeys
-        : (resolvedAgent?.tools ?? [])
+        : stripRuntimeMemoryToolKeys(resolvedAgent?.tools ?? [])
 
     const effectiveSubAgents = requestedSubAgents ?? resolvedAgent?.subAgents ?? []
     const preset = resolvedAgent
@@ -128,6 +131,10 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         chatAgentName: resolvedAgent?.name,
         chatAgentIconUrl: resolvedAgent?.iconUrl || null,
     }
+}
+
+function stripRuntimeMemoryToolKeys(toolKeys: string[]): string[] {
+    return toolKeys.filter((key) => !isBuiltInMemoryToolKey(key))
 }
 
 function applyOrchestrationIfToolCapable(
