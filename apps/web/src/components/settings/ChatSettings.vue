@@ -234,22 +234,36 @@ function onCompactSelection(selection: {
           </p>
         </div>
       </div>
-      <select
-        :value="prefs.contextStrategy"
-        class="w-full bg-theme-900 border border-theme-600 rounded-lg px-3 py-2 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-        @change="
-          prefs.contextStrategy = ($event.target as HTMLSelectElement)
-            .value as ContextStrategy
-        "
-      >
-        <option
+      <div class="space-y-2">
+        <button
           v-for="opt in contextStrategyOptions"
           :key="opt.value"
-          :value="opt.value"
+          type="button"
+          class="w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all"
+          :class="prefs.contextStrategy === opt.value
+            ? 'border-accent-500 bg-accent-500/10'
+            : 'border-theme-700 bg-theme-900/40 hover:border-theme-600 hover:bg-theme-800/40'"
+          @click="prefs.contextStrategy = opt.value as ContextStrategy"
         >
-          {{ opt.label }} - {{ opt.description }}
-        </option>
-      </select>
+          <div
+            class="mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors"
+            :class="prefs.contextStrategy === opt.value ? 'border-accent-500' : 'border-theme-600'"
+          >
+            <div
+              v-if="prefs.contextStrategy === opt.value"
+              class="h-2 w-2 rounded-full bg-accent-500"
+            />
+          </div>
+          <div>
+            <div class="text-sm font-medium text-theme-200">
+              {{ opt.label }}
+            </div>
+            <div class="text-xs text-theme-500 mt-0.5">
+              {{ opt.description }}
+            </div>
+          </div>
+        </button>
+      </div>
 
       <div
         v-if="prefs.contextStrategy === 'compact'"

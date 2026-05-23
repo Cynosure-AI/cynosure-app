@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import ProviderSettings from '../../components/settings/ProviderSettings.vue'
@@ -28,6 +28,8 @@ interface SettingsSection {
 
 const route = useRoute()
 const router = useRouter()
+
+const searchInputRef = ref<HTMLInputElement | null>(null)
 
 const categories: SettingsCategory[] = [
   {
@@ -282,15 +284,29 @@ const resultCountLabel = computed(() => {
   return `${count} matching setting${count === 1 ? '' : 's'}`
 })
 
+const matchCountByCategory = computed(() => {
+  const counts = new Map<SettingsCategoryId, number>()
+  if (!isSearching.value) return counts
+  for (const section of matchingSections.value) {
+    counts.set(section.categoryId, (counts.get(section.categoryId) ?? 0) + 1)
+  }
+  return counts
+})
+
 watch(activeCategoryId, (category) => {
   if (route.query.category === category) return
   router.replace({ query: { ...route.query, category } })
 }, { immediate: true })
 
 onMounted(() => {
+  document.addEventListener('keydown', onGlobalKeydown)
   if (typeof route.query.category === 'string') {
     scrollToCategory(activeCategoryId.value)
   }
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', onGlobalKeydown)
 })
 
 function selectCategory(category: SettingsCategoryId): void {
@@ -311,6 +327,28 @@ async function scrollToCategory(category: SettingsCategoryId): Promise<void> {
 
 function clearSearch(): void {
   searchQuery.value = ''
+}
+
+function categoryButtonClass(id: SettingsCategoryId): string {
+  if (!isSearching.value) {
+    return activeCategoryId.value === id
+      ? 'bg-theme-800 text-theme-100 shadow-[inset_3px_0_0_var(--color-accent-500,#3b82f6)]'
+      : 'text-theme-400 hover:bg-theme-800/70 hover:text-theme-200'
+  }
+  return matchCountByCategory.value.get(id)
+    ? 'text-theme-300 hover:bg-theme-800/70 hover:text-theme-200'
+    : 'opacity-40 text-theme-600 pointer-events-none'
+}
+
+function onGlobalKeydown(event: KeyboardEvent): void {
+  if (event.key === '/' && !['INPUT', 'TEXTAREA'].includes((event.target as Element).tagName)) {
+    event.preventDefault()
+    searchInputRef.value?.focus()
+  }
+  if (event.key === 'Escape' && isSearching.value) {
+    clearSearch()
+    searchInputRef.value?.blur()
+  }
 }
 
 function normalize(value: string): string {
@@ -340,7 +378,7 @@ function isSubsequence(needle: string, haystack: string): boolean {
   return false
 }
 
-function scoreText(query: string, text: string): number {
+function scoreText(query: string, text: string, allowSubsequence = true): number {
   const normalizedText = normalize(text)
   if (!normalizedText) return 0
   if (normalizedText === query) return 160
@@ -355,21 +393,29 @@ function scoreText(query: string, text: string): number {
 
   if (tokenMatches.length === queryTokens.length) return 85 + tokenMatches.length
   if (acronym(normalizedText).startsWith(query.replace(/\s/g, ''))) return 70
-  if (query.length >= 3 && isSubsequence(query.replace(/\s/g, ''), normalizedText.replace(/\s/g, ''))) return 35
+  if (allowSubsequence && query.length >= 3 && isSubsequence(query.replace(/\s/g, ''), normalizedText.replace(/\s/g, ''))) return 35
   return 0
 }
 
 function scoreSection(section: SettingsSection, query: string): number {
   const category = categories.find((item) => item.id === section.categoryId)
-  const searchable = [
+
+  // Labels and terms use full fuzzy scoring (including global subsequence)
+  const preciseTargets = [
     section.label,
-    section.description,
     category?.label || '',
-    category?.description || '',
     ...section.terms
   ]
 
-  return Math.max(...searchable.map((text) => scoreText(query, text)))
+  // Long descriptions: exact/prefix/token only — no global subsequence (too many false positives)
+  const broadTargets = [
+    section.description
+  ]
+
+  return Math.max(
+    ...preciseTargets.map((text) => scoreText(query, text, true)),
+    ...broadTargets.map((text) => scoreText(query, text, false))
+  )
 }
 </script>
 
@@ -389,10 +435,8 @@ function scoreSection(section: SettingsSection, query: string): number {
           <button
             v-for="category in categories"
             :key="category.id"
-            class="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors lg:w-full"
-            :class="activeCategoryId === category.id && !isSearching
-              ? 'bg-theme-800 text-theme-100 shadow-[inset_3px_0_0_var(--color-accent-500,#3b82f6)]'
-              : 'text-theme-400 hover:bg-theme-800/70 hover:text-theme-200'"
+            class="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all lg:w-full"
+            :class="categoryButtonClass(category.id)"
             @click="selectCategory(category.id)"
           >
             <Icon
@@ -400,27 +444,41 @@ function scoreSection(section: SettingsSection, query: string): number {
               class="h-4.5 w-4.5 shrink-0"
             />
             <span class="whitespace-nowrap">{{ category.label }}</span>
+            <span
+              v-if="isSearching && matchCountByCategory.get(category.id)"
+              class="ml-auto text-[10px] font-medium bg-accent-600/20 text-accent-400 px-1.5 py-0.5 rounded-full leading-none"
+            >
+              {{ matchCountByCategory.get(category.id) }}
+            </span>
           </button>
         </nav>
       </aside>
 
       <main class="min-w-0 flex-1 overflow-y-auto">
-        <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-          <div class="mb-8">
+        <!-- Sticky search bar -->
+        <div class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 backdrop-blur-sm px-4 py-3 sm:px-6 lg:px-8">
+          <div class="mx-auto max-w-5xl">
             <div class="relative">
               <Icon
                 icon="lucide:search"
                 class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
               />
               <input
+                ref="searchInputRef"
                 v-model="searchQuery"
-                type="search"
+                type="text"
                 placeholder="Search settings..."
                 class="w-full rounded-lg border border-theme-700 bg-theme-900/80 px-9 py-2.5 text-sm text-theme-100 placeholder-theme-600 outline-none transition focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
               >
+              <kbd
+                v-if="!isSearching"
+                class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-theme-600 bg-theme-800 border border-theme-700 rounded"
+              >
+                /
+              </kbd>
               <button
                 v-if="isSearching"
-                class="absolute right-2 top-1/2 rounded-md p-1 text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
+                class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
                 type="button"
                 aria-label="Clear settings search"
                 @click="clearSearch"
@@ -438,7 +496,9 @@ function scoreSection(section: SettingsSection, query: string): number {
               {{ resultCountLabel }}
             </p>
           </div>
+        </div>
 
+        <div class="mx-auto max-w-5xl px-4 pt-6 pb-8 sm:px-6 lg:px-8">
           <div
             v-if="visibleCategoryGroups.length === 0"
             class="rounded-xl border border-theme-800 bg-theme-900/50 px-5 py-10 text-center"
@@ -463,7 +523,7 @@ function scoreSection(section: SettingsSection, query: string): number {
               v-for="{ category, visibleSectionIds } in visibleCategoryGroups"
               :id="`settings-${category.id}`"
               :key="category.id"
-              class="scroll-mt-8"
+              class="scroll-mt-4"
             >
               <div class="mb-5 flex items-start gap-3">
                 <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-theme-900 text-theme-400 ring-1 ring-theme-800">
