@@ -2,7 +2,7 @@ import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
 import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
-import { readTextFile, writeTextFile, fileExists, replaceMarkdownSection, backupToRevisions } from '../../memory/memory-file-manager.js'
+import { readTextFile, writeTextFile, fileExists, backupToRevisions } from '../../memory/memory-file-manager.js'
 
 export const MEMORY_READ_TOOL_NAMES = [
     'memory_list_documents',
@@ -88,6 +88,51 @@ function buildSpaceMap(...spaceGroups: MemorySpaceRef[][]): Map<string, string> 
         for (const space of group) map.set(space.id, space.name)
     }
     return map
+}
+
+function findChunkText(content: string, chunkText: string, fromIndex = 0): { start: number; end: number } | null {
+    const normalizedChunk = chunkText.replace(/\r\n/g, '\n').trim()
+    if (!normalizedChunk) return null
+
+    const normalizedStart = content.indexOf(normalizedChunk, fromIndex)
+    if (normalizedStart < 0) return null
+
+    return { start: normalizedStart, end: normalizedStart + normalizedChunk.length }
+}
+
+function replaceChunkRangeInText(
+    content: string,
+    chunks: { text: string; chunkIndex: number }[],
+    replacement: string,
+): { content: string; startIndex: number; endIndex: number } | { error: string } {
+    const normalizedContent = content.replace(/\r\n/g, '\n')
+    const sorted = [...chunks].sort((a, b) => a.chunkIndex - b.chunkIndex)
+    const first = sorted[0]
+    const last = sorted[sorted.length - 1]
+    if (!first || !last) return { error: 'No indexed chunks were found for the requested range.' }
+
+    const firstMatch = findChunkText(normalizedContent, first.text)
+    if (!firstMatch) {
+        return { error: `Could not locate chunk ${first.chunkIndex} in the source file. The file may have changed since indexing; re-index it before retrying.` }
+    }
+
+    const lastMatch = first.chunkIndex === last.chunkIndex
+        ? firstMatch
+        : findChunkText(normalizedContent, last.text, firstMatch.start)
+
+    if (!lastMatch) {
+        return { error: `Could not locate chunk ${last.chunkIndex} in the source file. The file may have changed since indexing; re-index it before retrying.` }
+    }
+
+    const start = firstMatch.start
+    const end = lastMatch.end
+    const before = normalizedContent.slice(0, start).replace(/\s*$/, '\n\n')
+    const after = normalizedContent.slice(end).replace(/^\s*/, '\n\n')
+    return {
+        content: `${before}${replacement.trim()}${after}`.trim() + '\n',
+        startIndex: first.chunkIndex,
+        endIndex: last.chunkIndex,
+    }
 }
 
 function resolveReadableSpaceFilter(
@@ -434,7 +479,7 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
 
 /**
  * Create a `memory_update` tool that lets the LLM update an existing memory file.
- * Supports full replacement or section-level replacement by heading.
+ * Supports full replacement or targeted replacement by indexed chunk range.
  */
 export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedSpaces = [] } = opts
@@ -443,21 +488,30 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
         description:
             'Update an existing memory file. Auto-matches the title to find the file; if multiple spaces contain the same title, space parameter is required. ' +
             'By default, replaces all content and re-indexes the file. ' +
-            'Use "sectionHeading" to replace only the content under a specific Markdown heading (e.g. "## Results") while preserving all other sections.',
+            'For partial updates, first inspect the relevant chunks with memory_retrieve_chunks, then provide chunkStartIndex and chunkEndIndex. ' +
+            'The replacement content should contain the complete desired text for that chunk range.',
         parameters: {
             type: 'object',
             properties: {
                 title: { type: 'string', description: 'The title (file name without .md) of the memory entry to update.' },
-                content: { type: 'string', description: 'The new text content. Replaces all content by default, or just the named section if sectionHeading is provided.' },
+                content: { type: 'string', description: 'The new text content. Replaces all content by default, or the selected chunk range when chunkStartIndex/chunkEndIndex are provided.' },
                 space: { type: 'string', description: 'Memory space name or ID. Required only when the title exists in multiple spaces; otherwise auto-selected.' },
-                sectionHeading: { type: 'string', description: 'Optional Markdown heading (e.g. "## Results") identifying the section to replace. If the heading is not found it will be appended as a new section.' }
+                chunkStartIndex: { type: 'number', description: 'Optional zero-based first chunk index to replace. Use the chunk index shown by memory_retrieve_chunks or semantic search.' },
+                chunkEndIndex: { type: 'number', description: 'Optional zero-based last chunk index to replace, inclusive. Required when chunkStartIndex is provided.' },
             },
             required: ['title', 'content']
         },
         timeout: 30_000,
         execute: async (params: unknown) => {
-            const { title, content, space, sectionHeading } = params as {
-                title: string; content: string; space?: string; sectionHeading?: string
+            const { title, content, space, chunkStartIndex, chunkEndIndex, sectionHeading } = params as {
+                title: string; content: string; space?: string; chunkStartIndex?: number; chunkEndIndex?: number; sectionHeading?: string
+            }
+
+            if (sectionHeading?.trim()) {
+                return {
+                    success: false,
+                    output: 'Section-heading updates are no longer supported because memories may come from non-Markdown documents. Use memory_retrieve_chunks, then retry memory_update with chunkStartIndex and chunkEndIndex.',
+                }
             }
 
             const resolved = await resolveTargetSpace(assignedSpaces, space, title)
@@ -479,10 +533,17 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 return { success: false, output: `No memory entry found with title "${title}" in "${resolved.spaceName}". Use memory_create to create a new entry.` }
             }
 
-            if (sectionHeading?.trim()) {
-                // Section replacement — requires the file to exist on disk
+            const hasChunkRange = chunkStartIndex !== undefined || chunkEndIndex !== undefined
+            if (hasChunkRange) {
+                if (!Number.isInteger(chunkStartIndex) || !Number.isInteger(chunkEndIndex)) {
+                    return { success: false, output: 'Partial memory updates require integer chunkStartIndex and chunkEndIndex values.' }
+                }
+                if (chunkStartIndex! < 0 || chunkEndIndex! < chunkStartIndex!) {
+                    return { success: false, output: 'Invalid chunk range. chunkEndIndex must be greater than or equal to chunkStartIndex.' }
+                }
+
                 if (!existsOnDisk) {
-                    return { success: false, output: `Section replacement requires the file "${fileName}" to exist on disk. Use full content replacement instead.` }
+                    return { success: false, output: `Chunk replacement requires the file "${fileName}" to exist on disk. Use full content replacement instead.` }
                 }
 
                 let fileContent: string
@@ -492,14 +553,25 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                     return { success: false, output: `Could not read file "${fileName}" from space folder.` }
                 }
 
-                const updatedContent = replaceMarkdownSection(fileContent, sectionHeading.trim(), content)
-                writeTextFile(folderPath, fileName, updatedContent)
+                const chunks = await mem.getChunksByRange(fileName, chunkStartIndex!, chunkEndIndex!, targetFilter)
+                const expectedCount = chunkEndIndex! - chunkStartIndex! + 1
+                if (chunks.length !== expectedCount) {
+                    return {
+                        success: false,
+                        output: `Found ${chunks.length}/${expectedCount} chunks for "${fileName}" in range ${chunkStartIndex}-${chunkEndIndex}. Retrieve the current chunks and retry with a valid range.`,
+                    }
+                }
 
-                // Re-index the updated file
-                const { chunkCount: chunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
+                const replaced = replaceChunkRangeInText(fileContent, chunks, content)
+                if ('error' in replaced) return { success: false, output: replaced.error }
+
+                backupToRevisions(folderPath, fileName)
+                writeTextFile(folderPath, fileName, replaced.content)
+
+                const { chunkCount: indexedChunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
                 return {
                     success: true,
-                    output: `Section "${sectionHeading}" in "${fileName}" updated in "${resolved.spaceName}" (${chunks} chunk${chunks !== 1 ? 's' : ''} re-indexed).`
+                    output: `Chunks ${replaced.startIndex}-${replaced.endIndex} in "${fileName}" updated in "${resolved.spaceName}" (${indexedChunks} chunk${indexedChunks !== 1 ? 's' : ''} re-indexed).`
                 }
             } else {
                 // Full replacement — backup original (if it exists on disk) then write directly
