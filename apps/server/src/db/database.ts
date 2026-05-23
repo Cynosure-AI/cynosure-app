@@ -304,7 +304,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('agents', 'auto_tool_routing', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('agents', 'tool_router_provider_id', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'tool_router_model', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('agents', 'auto_memory', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('agents', 'auto_memory', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('agents', 'memory_router_provider_id', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'memory_router_model', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'thinking_enabled', 'INTEGER NOT NULL DEFAULT 1')
