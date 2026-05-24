@@ -934,7 +934,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             'cron_jobs', 'channels',
             'memory_file_index', 'memory_spaces', 'agent_memory_spaces',
             'mcp_servers', 'providers', 'agents',
-            'settings'
+            'settings', 'tool_router_embeddings'
         ]
         for (const table of tables) {
             try { db.prepare(`DELETE FROM ${table}`).run() } catch { /* table may not exist */ }
@@ -948,6 +948,12 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             rmSync(lanceDir, { recursive: true, force: true })
         }
         await ragStore.initialize()
+
+        // Clear conversation artifacts (generated images, file attachments, etc.)
+        const artifactsDir = join(getAppDataDir(), 'artifacts')
+        if (existsSync(artifactsDir)) {
+            rmSync(artifactsDir, { recursive: true, force: true })
+        }
 
         // Clear logs
         const logsDir = join(getAppDataDir(), 'logs')
