@@ -127,7 +127,6 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
             model: titleTarget.model,
             signal,
             tools: [titleTool],
-            toolChoice: { type: 'function', name: 'generate_title' },
             maxTokens: 80
         }, titleTarget.providerId)
 
@@ -139,6 +138,13 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
                     return
                 }
             }
+        }
+
+        // Text fallback: model responded with text instead of a tool call
+        const rawText = result.content?.trim()
+        if (rawText) {
+            await titleTool.execute({ title: rawText })
+            return
         }
 
         // Final fallback: first words of user message
