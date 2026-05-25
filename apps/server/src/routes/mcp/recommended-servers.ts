@@ -102,6 +102,34 @@ export const recommendedServers: RegistryServerEntry[] = [
     },
     {
         server: {
+            name: 'gmail',
+            title: 'Gmail',
+            description: 'Read, send, search, and manage Gmail through Smithery.',
+            version: 'latest',
+            packages: [{
+                registryType: 'smithery',
+                identifier: 'gmail',
+                version: 'latest',
+                transport: { type: 'stdio' },
+            }],
+        },
+    },
+    {
+        server: {
+            name: 'github',
+            title: 'GitHub',
+            description: 'Manage repositories, issues, pull requests, workflows, and other GitHub resources through Smithery.',
+            version: 'latest',
+            packages: [{
+                registryType: 'smithery',
+                identifier: 'github',
+                version: 'latest',
+                transport: { type: 'stdio' },
+            }],
+        },
+    },
+    {
+        server: {
             name: '@cynosure-mcp/youtube-video-downloader',
             title: 'YouTube Video Downloader',
             description: 'Download video and audio from YouTube and other supported media sites.',
