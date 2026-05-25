@@ -10,7 +10,28 @@
       </p>
     </div>
 
-    <div class="space-y-3">
+    <div
+      v-if="registryLoading"
+      class="flex items-center gap-2 text-sm text-theme-500 py-8"
+    >
+      <Icon
+        icon="lucide:loader-2"
+        class="w-4 h-4 animate-spin"
+      />
+      Loading recommended MCP servers...
+    </div>
+
+    <div
+      v-else-if="registryError"
+      class="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3"
+    >
+      {{ registryError }}
+    </div>
+
+    <div
+      v-else
+      class="space-y-3"
+    >
       <div
         v-for="mcp in mcpOptions"
         :key="mcp.id"
@@ -151,6 +172,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { api } from '../../api/client'
+import type { McpRegistryServer } from '../../api/types'
 import { useMcpServers } from '../../composables/useMcpServers'
 
 const { servers, loadServers } = useMcpServers()
@@ -161,6 +183,8 @@ const installedIds = ref<Set<string>>(new Set())
 const errors = reactive<Record<string, string>>({})
 const envValues = reactive<Record<string, string>>({})
 const filesystemExpanded = ref(false)
+const registryLoading = ref(false)
+const registryError = ref('')
 
 interface EnvVar {
   name: string
@@ -168,6 +192,7 @@ interface EnvVar {
   placeholder: string
   required: boolean
   secret?: boolean
+  description?: string
 }
 
 interface McpOption {
@@ -182,109 +207,100 @@ interface McpOption {
   badgeClass?: string
   command: string
   args: string[]
+  argEnvNames: Set<string>
   envVars?: EnvVar[]
   installId?: string // substring to check if already installed
 }
 
-const mcpOptions: McpOption[] = [
-  {
-    id: 'chrome-devtools',
-    name: 'Chrome DevTools',
-    description: 'Control a Chrome browser — navigate pages, fill forms, take screenshots, run JS.',
-    packageId: 'chrome-devtools-mcp',
-    icon: 'lucide:globe',
-    iconBg: 'bg-amber-500/10',
-    iconColor: 'text-amber-400',
-    badge: 'npm',
-    badgeClass: 'bg-theme-600/60 text-theme-300',
-    command: 'npx',
-    args: ['-y', 'chrome-devtools-mcp@latest'],
-    installId: 'chrome-devtools-mcp',
-  },
-  {
-    id: 'gmail',
-    name: 'Gmail',
-    description: 'Read, send and manage Gmail — search emails, reply, create drafts via Smithery.',
-    packageId: 'gmail (Smithery)',
-    icon: 'lucide:mail',
-    iconBg: 'bg-red-500/10',
-    iconColor: 'text-red-400',
-    badge: 'Smithery',
-    badgeClass: 'bg-accent-500/20 text-accent-400',
-    command: 'npx',
-    args: ['-y', '@smithery/cli@latest', 'run', 'gmail'],
-    installId: 'gmail',
-  },
-  {
-    id: 'filesystem',
-    name: 'Filesystem',
-    description: 'Read and write files and directories on your machine.',
-    packageId: '@modelcontextprotocol/server-filesystem',
-    icon: 'lucide:folder-open',
-    iconBg: 'bg-theme-600/40',
-    iconColor: 'text-theme-300',
-    badge: 'Official',
-    badgeClass: 'bg-emerald-500/20 text-emerald-400',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-filesystem'],
-    envVars: [
-      {
-        name: 'DIRECTORY',
-        label: 'Directory Path',
-        placeholder: '/Users/you/Documents',
-        required: true,
-        secret: false,
-      },
-    ],
-    installId: '@modelcontextprotocol/server-filesystem',
-  },
-  {
-    id: 'github',
-    name: 'GitHub',
-    description: 'Manage repos, issues, PRs, workflows and more — full GitHub API access via Smithery.',
-    packageId: 'github (Smithery)',
-    icon: 'lucide:github',
-    iconBg: 'bg-theme-600/40',
-    iconColor: 'text-theme-100',
-    badge: 'Smithery',
-    badgeClass: 'bg-accent-500/20 text-accent-400',
-    command: 'npx',
-    args: ['-y', '@smithery/cli@latest', 'run', 'github'],
-    installId: 'github',
-  },
-  {
-    id: 'computer-controller',
-    name: 'Computer Controller',
-    description: 'Control your desktop — launch apps, capture screenshots, move mouse, type text and more.',
-    packageId: '@cynosure-mcp/computer-controller',
-    icon: 'lucide:monitor',
-    iconBg: 'bg-violet-500/10',
-    iconColor: 'text-violet-400',
-    badge: 'npm',
-    badgeClass: 'bg-theme-600/60 text-theme-300',
-    command: 'npx',
-    args: ['-y', '@cynosure-mcp/computer-controller'],
-    installId: '@cynosure-mcp/computer-controller',
-  },
-  {
-    id: 'youtube-downloader',
-    name: 'YouTube Downloader',
-    description: 'Download videos and audio from YouTube, Vimeo and more — supports mp4, mp3, and many other formats.',
-    packageId: '@cynosure-mcp/youtube-video-downloader',
-    icon: 'lucide:youtube',
-    iconBg: 'bg-red-500/10',
-    iconColor: 'text-red-400',
-    badge: 'npm',
-    badgeClass: 'bg-theme-600/60 text-theme-300',
-    command: 'npx',
-    args: ['-y', '@cynosure-mcp/youtube-video-downloader'],
-    installId: '@cynosure-mcp/youtube-video-downloader',
-  },
-]
+const mcpOptions = ref<McpOption[]>([])
+
+const iconByName: Record<string, Pick<McpOption, 'icon' | 'iconBg' | 'iconColor'>> = {
+  time: { icon: 'lucide:clock', iconBg: 'bg-cyan-500/10', iconColor: 'text-cyan-400' },
+  tavily: { icon: 'lucide:search', iconBg: 'bg-emerald-500/10', iconColor: 'text-emerald-400' },
+  weather: { icon: 'lucide:cloud-sun', iconBg: 'bg-sky-500/10', iconColor: 'text-sky-400' },
+  chrome: { icon: 'lucide:globe', iconBg: 'bg-amber-500/10', iconColor: 'text-amber-400' },
+  computer: { icon: 'lucide:monitor', iconBg: 'bg-violet-500/10', iconColor: 'text-violet-400' },
+  filesystem: { icon: 'lucide:folder-open', iconBg: 'bg-theme-600/40', iconColor: 'text-theme-300' },
+  gmail: { icon: 'lucide:mail', iconBg: 'bg-red-500/10', iconColor: 'text-red-400' },
+  github: { icon: 'lucide:github', iconBg: 'bg-theme-600/40', iconColor: 'text-theme-100' },
+  youtube: { icon: 'lucide:youtube', iconBg: 'bg-red-500/10', iconColor: 'text-red-400' },
+  cynosure: { icon: 'lucide:sparkles', iconBg: 'bg-accent-500/10', iconColor: 'text-accent-400' },
+  media: { icon: 'lucide:file-cog', iconBg: 'bg-indigo-500/10', iconColor: 'text-indigo-400' },
+}
+
+function slugify(value: string): string {
+  return value.toLowerCase().replace(/^@/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+function getDisplayName(srv: McpRegistryServer['server']): string {
+  return srv.title || srv.name.split('/').pop() || srv.name
+}
+
+function getIcon(srv: McpRegistryServer['server']): Pick<McpOption, 'icon' | 'iconBg' | 'iconColor'> {
+  const haystack = `${srv.name} ${srv.title || ''}`.toLowerCase()
+  const match = Object.entries(iconByName).find(([key]) => haystack.includes(key))
+  return match?.[1] || { icon: 'lucide:puzzle', iconBg: 'bg-theme-600/40', iconColor: 'text-theme-300' }
+}
+
+function getBadge(pkgType: string): Pick<McpOption, 'badge' | 'badgeClass'> {
+  if (pkgType === 'smithery') return { badge: 'Smithery', badgeClass: 'bg-accent-500/20 text-accent-400' }
+  if (pkgType === 'pypi') return { badge: 'PyPI', badgeClass: 'bg-indigo-500/20 text-indigo-300' }
+  return { badge: 'npm', badgeClass: 'bg-theme-600/60 text-theme-300' }
+}
+
+function getInstallOption(entry: McpRegistryServer): McpOption | null {
+  const srv = entry.server
+  const pkg = srv.packages?.find(p => p.transport?.type === 'stdio' || p.registryType === 'smithery')
+  if (!pkg) return null
+
+  const packageArgs = (pkg.arguments || []).map(arg => arg.fromEnv ? `\${${arg.fromEnv}}` : (arg.value || '')).filter(Boolean)
+  const argEnvNames = new Set((pkg.arguments || []).map(arg => arg.fromEnv).filter((name): name is string => Boolean(name)))
+  const pkgType = pkg.registryType
+  const command = pkgType === 'pypi' ? 'uvx' : 'npx'
+  const args = pkgType === 'smithery'
+    ? ['-y', '@smithery/cli@latest', 'run', pkg.identifier, ...packageArgs]
+    : pkgType === 'pypi'
+      ? [pkg.identifier, ...packageArgs]
+      : ['-y', pkg.identifier, ...packageArgs]
+
+  return {
+    id: slugify(srv.name),
+    name: getDisplayName(srv),
+    description: srv.description || 'Recommended MCP server.',
+    packageId: pkgType === 'smithery' ? `${pkg.identifier} (Smithery)` : pkg.identifier,
+    ...getIcon(srv),
+    ...getBadge(pkgType),
+    command,
+    args,
+    argEnvNames,
+    envVars: (pkg.environmentVariables || []).map(v => ({
+      name: v.name,
+      label: v.name,
+      placeholder: v.description || v.name,
+      required: v.isRequired,
+      secret: v.format === 'password' || /token|key|secret|password/i.test(v.name),
+      description: v.description,
+    })),
+    installId: pkg.identifier,
+  }
+}
+
+async function loadRecommendedMcps() {
+  registryLoading.value = true
+  registryError.value = ''
+  try {
+    const data = await api.mcp.searchRegistry({ registry: 'recommended', limit: 50 })
+    mcpOptions.value = data.servers.map(getInstallOption).filter((mcp): mcp is McpOption => Boolean(mcp))
+  } catch (e) {
+    registryError.value = e instanceof Error ? e.message : 'Could not load recommended MCP servers'
+  } finally {
+    registryLoading.value = false
+  }
+}
 
 function checkInstalled() {
   const ids = new Set<string>()
-  for (const mcp of mcpOptions) {
+  for (const mcp of mcpOptions.value) {
     if (!mcp.installId) continue
     if (servers.value.some(s => s.args?.some(a => a.includes(mcp.installId!)))) {
       ids.add(mcp.id)
@@ -294,7 +310,7 @@ function checkInstalled() {
 }
 
 onMounted(async () => {
-  await loadServers()
+  await Promise.all([loadRecommendedMcps(), loadServers()])
   checkInstalled()
 })
 
@@ -319,15 +335,13 @@ async function installWithEnv(mcp: McpOption) {
   const env: Record<string, string> = {}
   for (const v of (mcp.envVars || [])) {
     const val = envValues[mcp.id + ':' + v.name]
-    if (val?.trim()) env[v.name] = val.trim()
+    if (val?.trim() && !mcp.argEnvNames.has(v.name)) env[v.name] = val.trim()
   }
 
-  // For filesystem, append directory to args
-  let args = [...mcp.args]
-  if (mcp.id === 'filesystem' && env['DIRECTORY']) {
-    args = [...mcp.args, env['DIRECTORY']]
-    delete env['DIRECTORY']
-  }
+  const args = mcp.args.map(arg => {
+    const match = arg.match(/^\$\{([^}]+)\}$/)
+    return match ? envValues[mcp.id + ':' + match[1]] : arg
+  })
 
   await doInstall(mcp, env, args)
 }
@@ -343,6 +357,12 @@ async function doInstall(mcp: McpOption, env: Record<string, string>, argsOverri
       env: Object.keys(env).length ? env : undefined,
       origin: mcp.badge?.toLowerCase() === 'smithery' ? 'smithery.ai' : 'npm',
       description: mcp.description,
+      env_hints: mcp.envVars?.length ? mcp.envVars.map(v => ({
+        name: v.name,
+        description: v.description,
+        required: v.required,
+        sensitive: v.secret,
+      })) : undefined,
     })
     await loadServers()
     checkInstalled()
