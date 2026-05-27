@@ -28,7 +28,7 @@
 [data-theme="light"] .bg-theme-800\/80,
 [data-theme="light"] .bg-theme-900,
 [data-theme="light"] .bg-theme-900\/60 {
-  background-color: rgba(255, 255, 255, 0.78);
+  background-color: #ffffff;
 }
 
 [data-theme="light"] .bg-theme-950 {
