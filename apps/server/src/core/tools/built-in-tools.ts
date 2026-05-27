@@ -12,10 +12,6 @@ export {
     type NotificationToolOptions,
 } from "./builtin/notification.js";
 export {
-    makeGenerateTitleTool,
-    type GenerateTitleToolOptions,
-} from "./builtin/generate-title.js";
-export {
     makeMemoryListDocumentsTool,
     makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
