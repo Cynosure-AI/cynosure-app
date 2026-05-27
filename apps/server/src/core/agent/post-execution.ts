@@ -12,8 +12,8 @@
 
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
-import { makeGenerateTitleTool } from '../tools/built-in-tools.js'
 import type { LLMGateway } from '../gateway/gateway.js'
+
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -96,7 +96,6 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     const { conversationId, userMessage, assistantResponse, broadcast, providerId, model } = opts
     const gateway = getGateway()
     const db = getDb()
-    const titleTool = makeGenerateTitleTool({ conversationId, broadcast })
 
     const signal = startAction(conversationId, 'generating-title', broadcast)
 
@@ -105,49 +104,39 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
         const assistantSnippet = assistantResponse.slice(0, 300)
         const titleTarget = resolveTitleTarget(gateway, providerId, model)
 
-        const messages = [
-            {
-                role: 'system' as const,
-                content: 'Generate a short, descriptive chat title for this conversation. Prefer 3-7 words. Do not copy the first words verbatim unless they are already the best summary. /no_think'
-            },
-            {
-                role: 'user' as const,
-                content: `User: "${userSnippet}"\nAssistant: "${assistantSnippet}"`
-            }
-        ]
-
         const result = await gateway.complete({
             messages: [
                 {
-                    role: 'system',
-                    content: `${messages[0].content} Call the generate_title tool with your title.`
+                    role: 'system' as const,
+                    content: 'You are a chat title generator. Output only the title — 3 to 7 words, no punctuation at the end, no quotes, no explanation.'
                 },
-                messages[1]
+                {
+                    role: 'user' as const,
+                    content: `Write a short title for this conversation.\nUser: "${userSnippet}"\nAssistant: "${assistantSnippet}" /no_think`
+                }
             ],
             model: titleTarget.model,
             signal,
-            tools: [titleTool],
-            maxTokens: 80
+            maxTokens: 30
         }, titleTarget.providerId)
 
-        if (result.toolCalls?.length) {
-            for (const tc of result.toolCalls) {
-                if (tc.function.name === 'generate_title') {
-                    const args = JSON.parse(tc.function.arguments)
-                    await titleTool.execute(args)
-                    return
-                }
+        const raw = result.content?.trim()
+        if (raw) {
+            const title = raw
+                .replace(/^["'""''`]+|["'""''`]+$/g, '')
+                .replace(/^Title:\s*/i, '')
+                .replace(/[.!?:;,]+$/, '')
+                .replace(/\s{2,}/g, ' ')
+                .trim()
+                .slice(0, 80)
+
+            if (title && title.split(/\s+/).length <= 10) {
+                db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(title, Date.now(), conversationId)
+                broadcast('chat:title-updated', { conversationId, title })
+                return
             }
         }
 
-        // Text fallback: model responded with text instead of a tool call
-        const rawText = result.content?.trim()
-        if (rawText) {
-            await titleTool.execute({ title: rawText })
-            return
-        }
-
-        // Final fallback: first words of user message
         applyFallbackTitle(db, conversationId, userMessage, broadcast)
     } catch (err) {
         if ((err as Error).name !== 'AbortError') {
