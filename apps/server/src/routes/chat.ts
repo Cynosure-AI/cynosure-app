@@ -9,7 +9,7 @@ import { planExecution } from '../core/agent/pre-execution/execution-planner.js'
 import { closeOrchestrationRun } from '../core/agent/orchestration-state.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { getAgent } from '../core/agents/agent-store.js'
-import { generateTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
+import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
 import type { ChatMessage, ContentPart } from '../core/gateway/providers/base.provider.js'
 import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
@@ -520,9 +520,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
               model: titleModelPref || (titleProviderIdPref ? undefined : responseModel)
             }).catch(() => { })
           } else {
-            // Fallback: first few words of the user message
-            const words = content.split(/\s+/).slice(0, 6).join(' ')
-            const fallback = words.length > 60 ? words.slice(0, 60) + '…' : words
+            const fallback = buildFallbackTitle(content)
             if (fallback) {
               db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(fallback, Date.now(), conversationId)
               broadcast('chat:title-updated', { conversationId, title: fallback })

@@ -92,6 +92,10 @@ export interface GenerateTitleOpts {
     model?: string
 }
 
+const MAX_TITLE_CHARS = 70
+const MIN_TITLE_WORDS = 2
+const MAX_TITLE_WORDS = 8
+
 export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     const { conversationId, userMessage, assistantResponse, broadcast, providerId, model } = opts
     const gateway = getGateway()
@@ -100,41 +104,20 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     const signal = startAction(conversationId, 'generating-title', broadcast)
 
     try {
-        const userSnippet = userMessage.slice(0, 150)
-        const assistantSnippet = assistantResponse.slice(0, 300)
         const titleTarget = resolveTitleTarget(gateway, providerId, model)
 
         const result = await gateway.complete({
-            messages: [
-                {
-                    role: 'system' as const,
-                    content: 'You are a chat title generator. Output only the title — 3 to 7 words, no punctuation at the end, no quotes, no explanation.'
-                },
-                {
-                    role: 'user' as const,
-                    content: `Write a short title for this conversation.\nUser: "${userSnippet}"\nAssistant: "${assistantSnippet}" /no_think`
-                }
-            ],
+            messages: buildTitleMessages(userMessage, assistantResponse),
             model: titleTarget.model,
             signal,
-            maxTokens: 30
+            maxTokens: 40,
+            thinkingEnabled: false
         }, titleTarget.providerId)
 
-        const raw = result.content?.trim()
-        if (raw) {
-            const title = raw
-                .replace(/^["'""''`]+|["'""''`]+$/g, '')
-                .replace(/^Title:\s*/i, '')
-                .replace(/[.!?:;,]+$/, '')
-                .replace(/\s{2,}/g, ' ')
-                .trim()
-                .slice(0, 80)
-
-            if (title && title.split(/\s+/).length <= 10) {
-                db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(title, Date.now(), conversationId)
-                broadcast('chat:title-updated', { conversationId, title })
-                return
-            }
+        const title = normalizeGeneratedTitle(result.content, userMessage)
+        if (title) {
+            updateConversationTitle(db, conversationId, title, broadcast)
+            return
         }
 
         applyFallbackTitle(db, conversationId, userMessage, broadcast)
@@ -146,6 +129,122 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     } finally {
         completeAction(conversationId, 'generating-title', broadcast)
     }
+}
+
+function buildTitleMessages(userMessage: string, assistantResponse: string) {
+    return [
+        {
+            role: 'system' as const,
+            content: [
+                'You create concise, useful chat sidebar titles.',
+                `Return exactly one title, ${MIN_TITLE_WORDS}-${MAX_TITLE_WORDS} words, no quotes, no trailing punctuation.`,
+                'Name the actual task or topic. Do not copy the opening words of the user message.',
+                'Prefer noun phrases such as "Postgres Migration Plan" or action phrases such as "Fix OAuth Callback Error".',
+                'Avoid vague titles: "Help With Code", "Question About This", "User Request", "Conversation Summary".'
+            ].join('\n')
+        },
+        {
+            role: 'user' as const,
+            content: [
+                'Create a title for this conversation.',
+                '',
+                '<user_message>',
+                limitForTitlePrompt(userMessage, 1200),
+                '</user_message>',
+                '',
+                '<assistant_response>',
+                limitForTitlePrompt(assistantResponse, 1600),
+                '</assistant_response>'
+            ].join('\n')
+        }
+    ]
+}
+
+function limitForTitlePrompt(value: string, maxChars: number): string {
+    const normalized = normalizeSourceText(value)
+    if (normalized.length <= maxChars) return normalized
+    return normalized.slice(0, maxChars).replace(/\s+\S*$/, '').trim()
+}
+
+function normalizeSourceText(value: string): string {
+    return value
+        .replace(/```[\s\S]*?```/g, ' code block ')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/https?:\/\/\S+/gi, ' link ')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+function normalizeGeneratedTitle(rawContent: string | undefined, userMessage: string): string | null {
+    const title = cleanGeneratedTitle(extractTitleCandidate(rawContent))
+    if (!isUsableTitle(title, userMessage)) return null
+    return title
+}
+
+function extractTitleCandidate(rawContent: string | undefined): string {
+    const raw = (rawContent || '').trim()
+    if (!raw) return ''
+
+    const jsonTitle = parseJsonTitle(raw)
+    if (jsonTitle) return jsonTitle
+
+    return raw
+        .replace(/^```(?:json|text)?/i, '')
+        .replace(/```$/i, '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find(Boolean) || ''
+}
+
+function parseJsonTitle(raw: string): string | null {
+    try {
+        const parsed = JSON.parse(raw) as { title?: unknown }
+        return typeof parsed.title === 'string' ? parsed.title : null
+    } catch {
+        return null
+    }
+}
+
+function cleanGeneratedTitle(value: string): string {
+    return value
+        .replace(/^[-*#\d.)\s]+/, '')
+        .replace(/^title\s*:\s*/i, '')
+        .replace(/^["'""''`]+|["'""''`]+$/g, '')
+        .replace(/[.!?:;,]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, MAX_TITLE_CHARS)
+        .trim()
+}
+
+function isUsableTitle(title: string, userMessage: string): boolean {
+    if (!title) return false
+    if (/[{}\[\]\n\r]/.test(title)) return false
+
+    const words = title.split(/\s+/).filter(Boolean)
+    if (words.length < MIN_TITLE_WORDS || words.length > MAX_TITLE_WORDS) return false
+
+    const lowered = title.toLowerCase()
+    if (/^(help|question|request|conversation|chat|user request|summary)\b/.test(lowered)) return false
+    if (isCopiedOpening(title, userMessage)) return false
+
+    return true
+}
+
+function isCopiedOpening(title: string, userMessage: string): boolean {
+    const titleWords = toComparableWords(title)
+    if (titleWords.length > 5) return false
+
+    const openingWords = toComparableWords(userMessage).slice(0, titleWords.length)
+    return titleWords.length > 0 && titleWords.join(' ') === openingWords.join(' ')
+}
+
+function toComparableWords(value: string): string[] {
+    return value
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
 }
 
 function resolveTitleTarget(
@@ -169,10 +268,50 @@ function applyFallbackTitle(
     userMessage: string,
     broadcast: BroadcastFn
 ): void {
-    const words = userMessage.split(/\s+/).slice(0, 6).join(' ')
-    const fallback = words.length > 60 ? words.slice(0, 60) + '…' : words
+    const fallback = buildFallbackTitle(userMessage)
     if (fallback) {
-        db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(fallback, Date.now(), conversationId)
-        broadcast('chat:title-updated', { conversationId, title: fallback })
+        updateConversationTitle(db, conversationId, fallback, broadcast)
     }
+}
+
+export function buildFallbackTitle(userMessage: string): string {
+    const text = normalizeSourceText(userMessage)
+        .replace(/^(please\s+)?(can|could|would)\s+you\s+/i, '')
+        .replace(/^(please\s+)?(help\s+me\s+|i\s+need\s+(you\s+to\s+)?|i\s+want\s+(you\s+to\s+)?)/i, '')
+        .trim()
+
+    const sentence = text.split(/[.!?\n]/).find((part) => part.trim())?.trim() || text
+    const intentMatch = sentence.match(/\b(fix|debug|repair|resolve|rework|refactor|implement|add|create|build|update|improve|design|explain|review|write|summarize)\b\s+(.+)/i)
+
+    const phrase = intentMatch
+        ? `${intentMatch[1]} ${intentMatch[2]}`
+        : sentence
+
+    const words = phrase
+        .replace(/[^a-zA-Z0-9+#.\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter((word) => !/^(the|a|an|to|for|of|in|on|and|or|but|with|from|that|this|it|is|are)$/i.test(word))
+        .slice(0, MAX_TITLE_WORDS)
+
+    const fallback = toTitleCase(words.join(' '))
+    return fallback.length > MAX_TITLE_CHARS ? fallback.slice(0, MAX_TITLE_CHARS).trim() : fallback
+}
+
+function toTitleCase(value: string): string {
+    return value.replace(/\b[a-z][a-z0-9+#.-]*/gi, (word) => {
+        if (/[A-Z0-9+#.]/.test(word.slice(1))) return word
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    })
+}
+
+function updateConversationTitle(
+    db: ReturnType<typeof getDb>,
+    conversationId: string,
+    title: string,
+    broadcast: BroadcastFn
+): void {
+    db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(title, Date.now(), conversationId)
+    broadcast('chat:title-updated', { conversationId, title })
 }
