@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import { api } from '../../api/client'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
@@ -17,9 +17,13 @@ const allConversations = ref<Conversation[]>([])
 const allConversationsTotal = ref(0)
 const allConversationsLoading = ref(false)
 const allConversationsError = ref<string | null>(null)
-const allSearchLoadToken = ref(0)
+const allConversationsQuery = ref('')
+const allConversationsRequestToken = ref(0)
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const ALL_PAGE_SIZE = 50
+const MIN_SEARCH_CHARS = 2
+const SEARCH_DEBOUNCE_MS = 250
 
 function sortPinnedFirst(items: Conversation[]): Conversation[] {
   return [...items].sort((a, b) => {
@@ -90,15 +94,50 @@ function mapConversationRow(row: {
 
 const allConversationsHasMore = computed(() => allConversations.value.length < allConversationsTotal.value)
 
-async function loadMoreAllConversations(reset = false): Promise<void> {
-  if (allConversationsLoading.value) return
-  if (!reset && !allConversationsHasMore.value) return
+function normalizedAllSearchQuery(): string {
+  const query = searchQuery.value.trim()
+  return query.length >= MIN_SEARCH_CHARS ? query : ''
+}
 
+function clearPendingSearchLoad(): void {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+}
+
+function clearAllConversationResults(): void {
+  allConversationsRequestToken.value += 1
+  allConversationsQuery.value = ''
+  allConversations.value = []
+  allConversationsTotal.value = 0
+  allConversationsLoading.value = false
+  allConversationsError.value = null
+}
+
+async function loadMoreAllConversations(reset = false, query = allConversationsQuery.value): Promise<void> {
+  const normalizedQuery = query.trim()
+  if (allConversationsLoading.value && !reset) return
+  if (!reset && !allConversationsHasMore.value) return
+  if (reset) {
+    allConversationsRequestToken.value += 1
+    allConversationsQuery.value = normalizedQuery
+    allConversations.value = []
+    allConversationsTotal.value = 0
+  }
+
+  const requestToken = allConversationsRequestToken.value
   allConversationsLoading.value = true
   allConversationsError.value = null
   try {
     const offset = reset ? 0 : allConversations.value.length
-    const res = await api.chat.listConversationsPaginated(ALL_PAGE_SIZE, offset)
+    const res = await api.chat.listConversationsPaginated(
+      ALL_PAGE_SIZE,
+      offset,
+      undefined,
+      normalizedQuery || undefined
+    )
+    if (requestToken !== allConversationsRequestToken.value || normalizedQuery !== allConversationsQuery.value) return
     const page = res.items.map(mapConversationRow)
     if (reset) {
       allConversations.value = page
@@ -107,20 +146,12 @@ async function loadMoreAllConversations(reset = false): Promise<void> {
     }
     allConversationsTotal.value = res.total
   } catch {
+    if (requestToken !== allConversationsRequestToken.value) return
     allConversationsError.value = 'Failed to load conversations'
   } finally {
-    allConversationsLoading.value = false
-  }
-}
-
-async function loadAllPagesForSearch(token: number): Promise<void> {
-  while (
-    showAllConversations.value
-    && searchQuery.value.trim().length > 0
-    && allConversationsHasMore.value
-    && token === allSearchLoadToken.value
-  ) {
-    await loadMoreAllConversations()
+    if (requestToken === allConversationsRequestToken.value) {
+      allConversationsLoading.value = false
+    }
   }
 }
 
@@ -136,7 +167,7 @@ function onConversationListScroll(event: Event): void {
 async function clearHistory(): Promise<void> {
   await chatStore.deleteAllConversations(showAllConversations.value)
   if (showAllConversations.value) {
-    await loadMoreAllConversations(true)
+    await loadMoreAllConversations(true, normalizedAllSearchQuery())
   }
   showClearConfirm.value = false
 }
@@ -172,29 +203,57 @@ function displayTitle(conv: { title: string; origin?: string }): string {
 
 const visibleConversations = computed(() => (
   showAllConversations.value
-    ? sortPinnedFirst(allConversations.value)
+    ? allConversations.value
     : chatStore.sortedConversations
 ))
 
 const filteredConversations = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
+  if (showAllConversations.value) {
+    if (q.length > 0 && q.length < MIN_SEARCH_CHARS) return []
+    return visibleConversations.value
+  }
   if (!q) return visibleConversations.value
   return visibleConversations.value.filter(conv =>
     displayTitle(conv).toLowerCase().includes(q)
   )
 })
 
+const emptyConversationsMessage = computed(() => {
+  if (showAllConversations.value && searchQuery.value.trim().length > 0 && searchQuery.value.trim().length < MIN_SEARCH_CHARS) {
+    return `Type at least ${MIN_SEARCH_CHARS} characters`
+  }
+  return searchQuery.value ? 'No matching conversations' : 'No conversations yet'
+})
+
 watch(showAllConversations, (enabled) => {
+  clearPendingSearchLoad()
   if (enabled) {
-    void loadMoreAllConversations(true)
+    const query = searchQuery.value.trim()
+    if (query.length > 0 && query.length < MIN_SEARCH_CHARS) {
+      clearAllConversationResults()
+      return
+    }
+    void loadMoreAllConversations(true, normalizedAllSearchQuery())
   }
 })
 
 watch(searchQuery, (query) => {
   if (!showAllConversations.value) return
-  if (!query.trim()) return
-  allSearchLoadToken.value += 1
-  void loadAllPagesForSearch(allSearchLoadToken.value)
+  clearPendingSearchLoad()
+  const trimmed = query.trim()
+  if (trimmed.length > 0 && trimmed.length < MIN_SEARCH_CHARS) {
+    clearAllConversationResults()
+    return
+  }
+  searchDebounceTimer = setTimeout(() => {
+    void loadMoreAllConversations(true, normalizedAllSearchQuery())
+  }, SEARCH_DEBOUNCE_MS)
+})
+
+onBeforeUnmount(() => {
+  clearPendingSearchLoad()
+  allConversationsRequestToken.value += 1
 })
 </script>
 
@@ -337,7 +396,7 @@ watch(searchQuery, (query) => {
         v-if="filteredConversations.length === 0"
         class="px-4 py-8 text-center text-theme-600 text-sm"
       >
-        {{ searchQuery ? 'No matching conversations' : 'No conversations yet' }}
+        {{ emptyConversationsMessage }}
       </div>
 
       <div
