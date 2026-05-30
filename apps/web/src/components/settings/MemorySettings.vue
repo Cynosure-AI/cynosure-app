@@ -187,6 +187,7 @@ async function loadEmbeddingConfig() {
     if (embProviderId.value) {
       fetchEmbModels(embProviderId.value)
     }
+    embDirty.value = false
   } catch { /* first load, defaults are fine */ }
 }
 
@@ -277,7 +278,6 @@ watch(embProviderId, (id) => {
   fetchEmbModels(id)
 })
 watch(embModel, () => { embDirty.value = true })
-watch(embDimensions, () => { embDirty.value = true })
 
 async function probeDimensions() {
   if (!embModel.value) return
@@ -293,10 +293,15 @@ async function probeDimensions() {
 }
 
 async function saveEmbeddings() {
+  await probeDimensions()
   // Check if model changed — warn about vector drop
   try {
     const current = await api.memory.getEmbeddingConfig()
-    if (current.model !== embModel.value || current.dimensions !== embDimensions.value) {
+    if (
+      (current.providerId || '') !== embProviderId.value ||
+      current.model !== embModel.value ||
+      current.dimensions !== embDimensions.value
+    ) {
       showDropConfirm.value = true
       return
     }
@@ -307,12 +312,12 @@ async function saveEmbeddings() {
 async function doSaveEmbeddings(reembed: boolean) {
   embSaving.value = true
   try {
-    await api.memory.configureEmbeddings({
+    const res = await api.memory.configureEmbeddings({
       providerId: embProviderId.value || undefined,
       model: embModel.value,
-      dimensions: embDimensions.value,
       reembed
     })
+    embDimensions.value = res.dimensions
     embDirty.value = false
   } catch { /* error handling */ }
   embSaving.value = false
@@ -455,7 +460,15 @@ async function manualClearDb() {
         </div>
 
         <div>
-          <label class="block text-xs text-theme-400 mb-1">Model</label>
+          <div class="flex items-center justify-between gap-3 mb-1">
+            <label class="block text-xs text-theme-400">Model</label>
+            <span
+              v-if="embDimensions"
+              class="text-[11px] text-theme-500 whitespace-nowrap"
+            >
+              {{ embDimensions }} dimensions
+            </span>
+          </div>
           <div class="flex gap-2">
             <CustomSelect
               v-model="embModel"
@@ -484,43 +497,14 @@ async function manualClearDb() {
           </div>
         </div>
 
-        <div>
-          <label class="block text-xs text-theme-400 mb-1">Dimensions</label>
-          <div class="flex gap-2 items-center">
-            <input
-              v-model.number="embDimensions"
-              type="number"
-              min="64"
-              max="8192"
-              class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-            >
-            <button
-              :disabled="embProbing || !embModel"
-              class="px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:bg-theme-800 disabled:text-theme-600 text-theme-300 text-xs rounded-lg transition-colors flex items-center gap-1.5"
-              @click="probeDimensions"
-            >
-              <Icon
-                v-if="embProbing"
-                icon="lucide:loader-2"
-                class="w-3.5 h-3.5 animate-spin"
-              />
-              <Icon
-                v-else
-                icon="lucide:scan-search"
-                class="w-3.5 h-3.5"
-              />
-              Detect
-            </button>
-          </div>
-        </div>
       </div>
 
       <button
-        :disabled="embSaving || !embModel"
+        :disabled="embSaving || embProbing || !embModel"
         class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
         @click="saveEmbeddings"
       >
-        <span v-if="embSaving">Saving...</span>
+        <span v-if="embSaving || embProbing">Saving...</span>
         <span v-else>Save Embedding Config</span>
       </button>
     </BaseCard>
@@ -748,7 +732,7 @@ async function manualClearDb() {
       @close="cancelDrop"
     >
       <p class="text-theme-400 leading-relaxed">
-        Changing the embedding model or dimensions makes existing vectors incompatible.
+        Changing the embedding provider or model makes existing vectors incompatible.
         You can <strong class="text-theme-200">re-embed</strong> all stored memories with the new model to preserve your data,
         or <strong class="text-theme-200">drop</strong> all vectors and re-upload files manually.
       </p>

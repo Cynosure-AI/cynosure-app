@@ -38,7 +38,15 @@
 
       <!-- Model -->
       <div>
-        <label class="block text-xs font-medium text-theme-400 mb-1.5">Embedding Model</label>
+        <div class="flex items-center justify-between gap-3 mb-1.5">
+          <label class="block text-xs font-medium text-theme-400">Embedding Model</label>
+          <span
+            v-if="embDimensions"
+            class="text-[11px] text-theme-500 whitespace-nowrap"
+          >
+            {{ embDimensions }} dimensions
+          </span>
+        </div>
         <div class="flex gap-2">
           <div class="flex-1">
             <input
@@ -68,39 +76,10 @@
         </div>
       </div>
 
-      <!-- Dimensions -->
-      <div>
-        <label class="block text-xs font-medium text-theme-400 mb-1.5">Vector Dimensions</label>
-        <div class="flex gap-2 items-center">
-          <input
-            v-model.number="embDimensions"
-            type="number"
-            min="1"
-            step="1"
-            class="w-32 bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
-          >
-          <button
-            class="flex items-center gap-1.5 px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:opacity-50 text-theme-300 text-sm rounded-lg transition-colors"
-            :disabled="probing || !embModel"
-            @click="probeDimensions"
-          >
-            <Icon
-              :icon="probing ? 'lucide:loader-2' : 'lucide:wand-2'"
-              class="w-3.5 h-3.5"
-              :class="{ 'animate-spin': probing }"
-            />
-            {{ probing ? 'Detecting…' : 'Auto-detect' }}
-          </button>
-        </div>
-        <p class="text-xs text-theme-600 mt-1">
-          Dimensions must match the embedding model output.
-        </p>
-      </div>
-
       <!-- Save embeddings button -->
       <button
         class="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-        :disabled="!embModel || !embDimensions || savingEmb"
+        :disabled="!embModel || savingEmb"
         @click="saveEmbeddings"
       >
         <Icon
@@ -145,9 +124,8 @@ const providerStore = useProviderStore()
 
 const embProviderId = ref('')
 const embModel = ref('')
-const embDimensions = ref(1536)
+const embDimensions = ref(0)
 const embModels = ref<string[]>([])
-const probing = ref(false)
 const savingEmb = ref(false)
 const embSaved = ref(false)
 const embConfigured = ref(false)
@@ -177,29 +155,16 @@ async function fetchEmbModels(providerId: string) {
   } catch { embModels.value = [] }
 }
 
-async function probeDimensions() {
+async function saveEmbeddings() {
   if (!embModel.value) return
-  probing.value = true
+  savingEmb.value = true
+  embSaved.value = false
   try {
-    const res = await api.memory.probeEmbedding({
+    const res = await api.memory.configureEmbeddings({
       providerId: embProviderId.value || undefined,
       model: embModel.value,
     })
     embDimensions.value = res.dimensions
-  } catch { /* probe failed */ }
-  probing.value = false
-}
-
-async function saveEmbeddings() {
-  if (!embModel.value || !embDimensions.value) return
-  savingEmb.value = true
-  embSaved.value = false
-  try {
-    await api.memory.configureEmbeddings({
-      providerId: embProviderId.value || undefined,
-      model: embModel.value,
-      dimensions: embDimensions.value,
-    })
     embSaved.value = true
     embConfigured.value = true
     setTimeout(() => { embSaved.value = false }, 3000)

@@ -14,6 +14,33 @@ import { GoogleGenAI } from '@google/genai'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
+async function detectEmbeddingDimensions(providerId: string | undefined, model: string): Promise<number> {
+  const provider = providerId
+    ? getGateway().getProvider(providerId)
+    : getGateway().getLastUsedProvider()
+  if (!provider) throw new Error('Provider not found')
+
+  if (provider.config.type === 'google') {
+    const client = new GoogleGenAI({ apiKey: provider.config.apiKey || 'not-set' })
+    const res = await client.models.embedContent({
+      model,
+      contents: 'test'
+    })
+    const dimensions = res.embeddings?.[0]?.values?.length || 0
+    if (!dimensions) throw new Error('Embedding response did not include vector values')
+    return dimensions
+  }
+
+  const client = new OpenAI({
+    baseURL: provider.config.baseUrl,
+    apiKey: provider.config.apiKey || 'no-key'
+  })
+  const res = await client.embeddings.create({ model, input: 'test' })
+  const dimensions = res.data[0].embedding.length
+  if (!dimensions) throw new Error('Embedding response did not include vector values')
+  return dimensions
+}
+
 export async function registerMemoryRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   // POST /api/memory/search — search permanent memory
   app.post<{ Body: { query: string; topK?: number; spaceId?: string } }>('/search', async (req) => {
@@ -74,19 +101,23 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const oldConfig = embedder.getConfig()
     const { reembed, ...configOpts } = req.body
 
-    // Check if model or dimensions changed
     const newModel = configOpts.model || oldConfig.model
-    const newDimensions = configOpts.dimensions || oldConfig.dimensions || 1536
-    const modelChanged = oldConfig.model !== newModel || oldConfig.dimensions !== newDimensions
+    const newProviderId = configOpts.providerId ?? oldConfig.providerId
+    const newDimensions = configOpts.dimensions || await detectEmbeddingDimensions(newProviderId, newModel || 'text-embedding-3-small')
+    const resolvedConfig = { ...configOpts, model: newModel, dimensions: newDimensions }
+    const embeddingChanged =
+      oldConfig.providerId !== newProviderId ||
+      oldConfig.model !== newModel ||
+      oldConfig.dimensions !== newDimensions
 
-    if (modelChanged && reembed) {
+    if (embeddingChanged && reembed) {
       // Re-embed flow: read all existing chunks → configure new provider → drop → re-embed → write back
       const rag = getRAGStore()
       const existingDocs = await rag.listDocuments('permanent_memory')
       const chunksToReembed = existingDocs.filter(d => d.id !== '__seed__')
 
       // Configure new provider FIRST so embedBatch uses the new model
-      embedder.configure(configOpts)
+      embedder.configure(resolvedConfig)
 
       // Drop old table (incompatible dimensions)
       await rag.deleteTable('permanent_memory')
@@ -125,20 +156,20 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
         }
 
         broadcast('memory:reembed-progress', { current: totalReembedded, total: totalChunks, status: 'completed' })
-        return { success: true, vectorsDropped: false, reembedded: true, reembeddedCount: totalReembedded }
+        return { success: true, vectorsDropped: false, reembedded: true, reembeddedCount: totalReembedded, dimensions: newDimensions }
       }
 
-      return { success: true, vectorsDropped: false, reembedded: true, reembeddedCount: 0 }
+      return { success: true, vectorsDropped: false, reembedded: true, reembeddedCount: 0, dimensions: newDimensions }
     }
 
-    embedder.configure(configOpts)
+    embedder.configure(resolvedConfig)
 
-    if (modelChanged) {
+    if (embeddingChanged) {
       const rag = getRAGStore()
       await rag.deleteTable('permanent_memory')
     }
 
-    return { success: true, vectorsDropped: modelChanged, reembedded: false, reembeddedCount: 0 }
+    return { success: true, vectorsDropped: embeddingChanged, reembedded: false, reembeddedCount: 0, dimensions: newDimensions }
   })
 
   // GET /api/memory/embeddings/config — get current embedding config
@@ -160,29 +191,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   }>('/embeddings/probe', async (req, reply) => {
     const { providerId, model } = req.body
     try {
-      const provider = providerId
-        ? getGateway().getProvider(providerId)
-        : getGateway().getLastUsedProvider()
-      if (!provider) return reply.status(400).send({ error: 'Provider not found' })
-
-      let dimensions: number
-      if (provider.config.type === 'google') {
-        const client = new GoogleGenAI({ apiKey: provider.config.apiKey || 'not-set' })
-        const res = await client.models.embedContent({
-          model,
-          contents: 'test'
-        })
-        dimensions = res.embeddings?.[0]?.values?.length || 0
-      } else {
-        const client = new OpenAI({
-          baseURL: provider.config.baseUrl,
-          apiKey: provider.config.apiKey || 'no-key'
-        })
-        const res = await client.embeddings.create({ model, input: 'test' })
-        dimensions = res.data[0].embedding.length
-      }
-      if (!dimensions) throw new Error('Embedding response did not include vector values')
-      return { dimensions }
+      return { dimensions: await detectEmbeddingDimensions(providerId, model) }
     } catch (err) {
       return reply.status(500).send({ error: (err as Error).message })
     }
