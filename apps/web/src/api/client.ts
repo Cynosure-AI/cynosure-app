@@ -287,7 +287,7 @@ export const api = {
       model?: string
       dimensions?: number
       reembed?: boolean
-    }) => post<{ success: boolean; vectorsDropped: boolean; reembedded: boolean; reembeddedCount: number }>('/api/memory/embeddings/configure', opts),
+    }) => post<{ success: boolean; vectorsDropped: boolean; reembedded: boolean; reembeddedCount: number; dimensions: number }>('/api/memory/embeddings/configure', opts),
     getEmbeddingConfig: () =>
       get<{ providerId?: string; model: string; dimensions: number }>('/api/memory/embeddings/config'),
     dropVectors: () =>
