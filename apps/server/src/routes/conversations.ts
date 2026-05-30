@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getLatestOrchestrationState } from '../core/agent/orchestration-state.js'
 import { getAgent } from '../core/agents/agent-store.js'
+import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { nanoid } from 'nanoid'
 import { unlinkSync } from 'fs'
 import { cleanupConversationArtifacts, extractFilePathFromFileUrl } from '../core/artifacts/image-artifacts.js'
@@ -120,6 +121,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         let chatConfig: Record<string, unknown> | undefined
         try {
             chatConfig = convRow?.config_json ? JSON.parse(convRow.config_json) : undefined
+            if (chatConfig && Array.isArray(chatConfig.allowedTools)) {
+                chatConfig.allowedTools = chatConfig.allowedTools.filter((toolKey) => (
+                    typeof toolKey === 'string' && !isBuiltInMemoryToolKey(toolKey)
+                ))
+            }
         } catch { /* malformed JSON — ignore */ }
 
         return {

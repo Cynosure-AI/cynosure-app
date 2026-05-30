@@ -8,6 +8,7 @@ import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../core/agent/agent-execut
 import { planExecution } from '../core/agent/pre-execution/execution-planner.js'
 import { closeOrchestrationRun } from '../core/agent/orchestration-state.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
+import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
@@ -378,6 +379,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
               .map((tool) => tool.registryKey)
               .filter((key): key is string => typeof key === 'string' && key.length > 0)
               .filter((key) => toolRegistry.hasKey(key))
+              .filter((key) => !isBuiltInMemoryToolKey(key))
           )
         )
         : []
