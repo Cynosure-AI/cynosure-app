@@ -44,9 +44,10 @@ export const api = {
         `/api/chat/conversations${qs ? `?${qs}` : ''}`
       )
     },
-    listConversationsPaginated: (limit: number, offset: number, sort?: 'updated') => {
+    listConversationsPaginated: (limit: number, offset: number, sort?: 'updated', search?: string) => {
       const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
       if (sort) params.set('sort', sort)
+      if (search) params.set('search', search)
       return get<{ items: { id: string; title: string; agent_id: string | null; ma_workspace_id: string | null; origin: string; pinned: number; created_at: number; updated_at: number; last_user_message: string | null }[]; total: number }>(
         `/api/chat/conversations?${params}`
       )

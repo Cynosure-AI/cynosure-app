@@ -69,6 +69,8 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_conversations_agent ON conversations(agent_id);
     CREATE INDEX IF NOT EXISTS idx_conversations_ma_workspace ON conversations(ma_workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(pinned, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_conversations_title_nocase ON conversations(title COLLATE NOCASE);
 
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,

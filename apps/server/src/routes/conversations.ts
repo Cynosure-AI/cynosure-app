@@ -6,6 +6,10 @@ import { nanoid } from 'nanoid'
 import { unlinkSync } from 'fs'
 import { cleanupConversationArtifacts, extractFilePathFromFileUrl } from '../core/artifacts/image-artifacts.js'
 
+function escapeSqlLike(value: string): string {
+    return value.replace(/[\\%_]/g, (char) => `\\${char}`)
+}
+
 /** Delete image files referenced by messages in the given conversation IDs. */
 function cleanupConversationImages(conversationIds: string[]): void {
     const db = getDb()
@@ -46,27 +50,33 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
     // GET /api/chat/conversations — list (optionally filtered by agent_id or ma_workspace_id)
     // Supports pagination via ?limit=N&offset=N — when limit is set, returns { items, total }
-    app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; limit?: string; offset?: string; sort?: string } }>('/conversations', async (req) => {
+    app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; limit?: string; offset?: string; sort?: string; search?: string } }>('/conversations', async (req) => {
         const db = getDb()
         const { agentId, maWorkspaceId } = req.query
         const limit = req.query.limit ? Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20)) : undefined
         const offset = req.query.offset ? Math.max(0, parseInt(req.query.offset, 10) || 0) : 0
+        const search = req.query.search?.trim()
         const excerpt = `(SELECT SUBSTR(m.content, 1, 120) FROM messages m WHERE m.conversation_id = conversations.id AND m.role = 'user' ORDER BY m.created_at DESC LIMIT 1) AS last_user_message`
         const orderBy = req.query.sort === 'updated'
             ? 'ORDER BY updated_at DESC'
             : 'ORDER BY pinned DESC, updated_at DESC'
 
-        let where = ''
+        const conditions: string[] = []
         const params: unknown[] = []
         if (maWorkspaceId) {
-            where = 'WHERE ma_workspace_id = ?'
+            conditions.push('ma_workspace_id = ?')
             params.push(maWorkspaceId)
         } else if (agentId) {
-            where = 'WHERE agent_id = ?'
+            conditions.push('agent_id = ?')
             params.push(agentId)
         } else if (agentId === '') {
-            where = 'WHERE agent_id IS NULL AND ma_workspace_id IS NULL'
+            conditions.push('agent_id IS NULL AND ma_workspace_id IS NULL')
         }
+        if (search && search.length >= 2) {
+            conditions.push("title COLLATE NOCASE LIKE ? ESCAPE '\\'")
+            params.push(`%${escapeSqlLike(search)}%`)
+        }
+        const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
         if (limit !== undefined) {
             const total = (db.prepare(`SELECT COUNT(*) as count FROM conversations ${where}`).get(...params) as { count: number }).count
