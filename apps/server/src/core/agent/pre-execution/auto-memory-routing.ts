@@ -222,7 +222,7 @@ function emitMemoryRoutingSelection(conversationId: string, taskId: string, memo
             arguments: JSON.stringify({
                 type: 'memory',
                 sourceFile: memory.sourceFile,
-                memorySpace: memory.spaceName,
+                folderPath: memory.spaceName,
                 chunkIndex: memory.chunkIndex,
             }),
         })),

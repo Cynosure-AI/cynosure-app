@@ -1,7 +1,7 @@
 import { getDb } from '../../db/database.js'
-import { listAllMemorySpaceRefs } from './memory-space-folders.js'
+import { listAllMemorySpaceRefs, relativePathForFolder } from './memory-space-folders.js'
 
-export type MemorySpaceRef = { id: string; name: string }
+export type MemorySpaceRef = { id: string; name: string; relativePath?: string }
 
 const DEFAULT_SPACE_ID = 'default'
 
@@ -35,14 +35,20 @@ export function getDefaultMemorySpace(): MemorySpaceRef | undefined {
 export function getAssignedOrDefaultSpaces(agentId: string): MemorySpaceRef[] {
     try {
         const db = getDb()
-        const assigned = db
+        const rows = db
             .prepare(
-                `SELECT ms.id, ms.name
+                `SELECT ms.id, ms.name, ms.folder_path, ms.is_default
          FROM agent_memory_spaces ams
          JOIN memory_spaces ms ON ms.id = ams.space_id
          WHERE ams.agent_id = ?`
             )
-            .all(agentId) as MemorySpaceRef[]
+            .all(agentId) as { id: string; name: string; folder_path: string; is_default: number }[]
+
+        const assigned = rows.map((row) => ({
+            id: row.id,
+            name: row.name,
+            relativePath: row.is_default === 1 ? '' : relativePathForFolder(row.folder_path),
+        }))
 
         if (assigned.length > 0) return assigned
 

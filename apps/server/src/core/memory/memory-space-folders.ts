@@ -235,9 +235,19 @@ export function syncMemorySpacesFromFolders(db: Database.Database): MemorySpaceF
     return rows
 }
 
-export function listAllMemorySpaceRefs(db: Database.Database): { id: string; name: string }[] {
+export function listAllMemorySpaceRefs(db: Database.Database): { id: string; name: string; relativePath: string }[] {
     syncMemorySpacesFromFolders(db)
-    return db.prepare('SELECT id, name FROM memory_spaces ORDER BY is_default DESC, folder_path ASC').all() as { id: string; name: string }[]
+    const rows = db.prepare('SELECT id, name, folder_path, is_default FROM memory_spaces ORDER BY is_default DESC, folder_path ASC').all() as {
+        id: string
+        name: string
+        folder_path: string
+        is_default: number
+    }[]
+    return rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        relativePath: row.is_default === 1 ? '' : relativePathForFolder(row.folder_path),
+    }))
 }
 
 export function renameMemorySpaceFolder(row: MemorySpaceFolderRow, nextRelativePath: string): MemorySpaceFolderRow {
