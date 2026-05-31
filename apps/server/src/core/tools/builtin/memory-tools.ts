@@ -169,8 +169,8 @@ function resolveReadableSpaceFilter(
  * Resolve the target folder for a write operation, with smart name-based fallback.
  * Priority (when no explicit folder param):
  * 1. If title exists in exactly one selected folder → use that
- * 2. If default folder exists → use it for unspecified writes
- * 3. If exactly one folder is selected → use it
+ * 2. If exactly one folder is selected → use it
+ * 3. If default folder exists → use it for unspecified writes
  * 4. If multiple folders are selected and no default exists → error
  * 5. If no folders exist → error
  */
@@ -223,15 +223,15 @@ async function resolveTargetSpace(
     }
 
     // --- Smart fallback logic ---
-    // Unspecified writes always land in the root/default memory folder.
+    // If exactly one space is in scope, omitted "folder" writes target that space.
+    if (assignedSpaces.length === 1) {
+        return { spaceId: assignedSpaces[0].id, spaceName: assignedSpaces[0].name }
+    }
+
+    // Unspecified writes outside a single selected scope land in the root/default memory folder.
     const defaultSpace = getDefaultMemorySpace()
     if (defaultSpace) {
         return { spaceId: defaultSpace.id, spaceName: defaultSpace.name }
-    }
-
-    // If no default exists but exactly one space is in scope, use it.
-    if (assignedSpaces.length === 1) {
-        return { spaceId: assignedSpaces[0].id, spaceName: assignedSpaces[0].name }
     }
 
     // Multiple selected folders but no default or unambiguous match → error
@@ -462,14 +462,14 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
             'Create a new memory entry with a title and content. ' +
             'Writes a Markdown file to the memory folder and indexes it for semantic retrieval. ' +
             'Use this to persistently store notes, findings, or any information worth remembering. ' +
-            'If no explicit "folder" is provided, the entry is stored in the default root memory folder. ' +
+            'If exactly one memory folder is selected, omit "folder" to write there; otherwise omitted "folder" writes to the default root memory folder. ' +
             'Provide "folder" to store in a specific selected folder.',
         parameters: {
             type: 'object',
             properties: {
                 title: { type: 'string', description: 'A short descriptive title for the memory entry (used as the file name, e.g. "project-notes" or "meeting-summary"). Will have .md appended automatically.' },
                 content: { type: 'string', description: 'The Markdown text content to store in memory.' },
-                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Omit to write to the default root folder.' }
+                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Omit to write to the only selected folder, or to the default root folder when no single selected folder is in scope.' }
             },
             required: ['title', 'content']
         },
@@ -505,6 +505,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
         name: 'memory_update',
         description:
             'Update an existing memory file. Auto-matches the title to find the file; if multiple folders contain the same title, folder parameter is required. ' +
+            'If exactly one memory folder is selected, omit "folder" to update there when the title is not found elsewhere in the selected scope. ' +
             'By default, replaces all content and re-indexes the file. ' +
             'For partial updates, first inspect the relevant chunks with memory_retrieve_chunks, then provide chunkStartIndex and chunkEndIndex. ' +
             'The replacement content should contain the complete desired text for that chunk range.',
@@ -513,7 +514,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
             properties: {
                 title: { type: 'string', description: 'The title (file name without .md) of the memory entry to update.' },
                 content: { type: 'string', description: 'The new text content. Replaces all content by default, or the selected chunk range when chunkStartIndex/chunkEndIndex are provided.' },
-                folder: { type: 'string', description: 'Memory folder name, relative path (e.g. "projects/acme"), or ID. Required only when the title exists in multiple folders; otherwise auto-selected.' },
+                folder: { type: 'string', description: 'Memory folder name, relative path (e.g. "projects/acme"), or ID. Required only when the title exists in multiple folders; otherwise auto-selected, including the only selected folder.' },
                 chunkStartIndex: { type: 'number', description: 'Optional zero-based first chunk index to replace. Use the chunk index shown by memory_retrieve_chunks or semantic search.' },
                 chunkEndIndex: { type: 'number', description: 'Optional zero-based last chunk index to replace, inclusive. Required when chunkStartIndex is provided.' },
             },
