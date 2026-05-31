@@ -1,10 +1,16 @@
 import { createHash } from 'crypto'
 import { getEmbeddingProvider } from '../memory/embedding.js'
-import { getDb } from '../../db/database.js'
 import { makeSearchAvailableMcpToolsTool } from '../tools/builtin/expand-available-toolset.js'
+import {
+    loadCachedRouterEmbeddings,
+    pruneRouterEmbeddingCache,
+    saveCachedRouterEmbedding,
+    type RouterEmbeddingScope,
+} from './router-embedding-cache.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolDefinition } from '../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../tools/tool-registry.js'
+import { normalizeToolDescription } from '../tools/tool-description.js'
 
 export const MCP_CANDIDATE_COUNT = 8 // Top-K MCP tool groups selected by embedding similarity and passed to the LLM for final confirmation
 export const CONTEXT_WINDOW_TURNS = 5 // Recent turns included in routing query context
@@ -20,12 +26,6 @@ interface McpToolGroup {
     label: string
     description: string
     tools: ToolDefinition[]
-}
-
-interface RouterEmbeddingScope {
-    providerId: string
-    model: string
-    dimensions: number
 }
 
 export interface RouteToolsInput {
@@ -86,7 +86,7 @@ export async function embeddingPreFilter(
         const embedder = getEmbeddingProvider()
         const scope = getRouterEmbeddingScope(embedder)
         const hashes = new Map(mcpGroups.map((group) => [group.id, groupContentHash(group)]))
-        const cachedVectors = loadCachedRouterEmbeddings(mcpGroups, hashes, scope)
+        const cachedVectors = loadCachedRouterEmbeddings(mcpGroups.map(({ id }) => id), hashes, scope)
         const missingGroups = mcpGroups.filter(({ id }) => !cachedVectors.has(id))
 
         const embeddings = await embedder.embedBatch([
@@ -230,7 +230,7 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
     let routedTools: ToolDefinition[] = []
     const searchTool = makeSearchAvailableMcpToolsTool({
         allTools,
-        getLoadedTools: () => routedTools,
+        getLoadedToolNames: () => new Set(routedTools.map(({ name }) => name)),
     })
 
     routedTools = dedupeTools([...fixedTools, ...selectedTools, ...stickyTools, searchTool])
@@ -314,11 +314,7 @@ function buildMcpGroups(
 }
 
 function compactToolDescription(description: string): string {
-    return description
-        .replace(/^\[MCP:\s*[^\]]*\]\s*/, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, TOOL_DESCRIPTION_LIMIT)
+    return normalizeToolDescription(description, TOOL_DESCRIPTION_LIMIT)
 }
 
 function groupEmbeddingText(group: McpToolGroup): string {
@@ -358,98 +354,6 @@ function getRouterEmbeddingScope(
         providerId: config.providerId || '',
         model: embedder.getModelName(),
         dimensions: embedder.getDimensions(),
-    }
-}
-
-function loadCachedRouterEmbeddings(
-    groups: McpToolGroup[],
-    hashes: Map<string, string>,
-    scope: RouterEmbeddingScope,
-): Map<string, number[]> {
-    const vectors = new Map<string, number[]>()
-
-    try {
-        const stmt = getDb().prepare(`
-            SELECT content_hash, vector_json
-            FROM tool_router_embeddings
-            WHERE namespace_id = ?
-              AND embedding_provider_id = ?
-              AND embedding_model = ?
-              AND embedding_dimensions = ?
-        `)
-
-        for (const group of groups) {
-            const row = stmt.get(group.id, scope.providerId, scope.model, scope.dimensions) as {
-                content_hash: string
-                vector_json: string
-            } | undefined
-
-            if (!row || row.content_hash !== hashes.get(group.id)) continue
-
-            const vector = JSON.parse(row.vector_json) as unknown
-            if (isNumberArray(vector)) vectors.set(group.id, vector)
-        }
-    } catch (err) {
-        console.warn('[tool-router] Failed to read router embedding cache:', err)
-    }
-
-    return vectors
-}
-
-function saveCachedRouterEmbedding(
-    namespaceId: string,
-    contentHash: string,
-    vector: number[],
-    scope: RouterEmbeddingScope,
-): void {
-    try {
-        getDb().prepare(`
-            INSERT INTO tool_router_embeddings (
-                namespace_id,
-                embedding_provider_id,
-                embedding_model,
-                embedding_dimensions,
-                content_hash,
-                vector_json,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(namespace_id, embedding_provider_id, embedding_model, embedding_dimensions)
-            DO UPDATE SET
-                content_hash = excluded.content_hash,
-                vector_json = excluded.vector_json,
-                updated_at = excluded.updated_at
-        `).run(
-            namespaceId,
-            scope.providerId,
-            scope.model,
-            scope.dimensions,
-            contentHash,
-            JSON.stringify(vector),
-            Date.now(),
-        )
-    } catch (err) {
-        console.warn('[tool-router] Failed to write router embedding cache:', err)
-    }
-}
-
-function pruneRouterEmbeddingCache(
-    activeNamespaceIds: string[],
-    scope: RouterEmbeddingScope,
-): void {
-    if (!activeNamespaceIds.length) return
-
-    try {
-        const placeholders = activeNamespaceIds.map(() => '?').join(', ')
-
-        getDb().prepare(`
-            DELETE FROM tool_router_embeddings
-            WHERE embedding_provider_id = ?
-              AND embedding_model = ?
-              AND embedding_dimensions = ?
-              AND namespace_id NOT IN (${placeholders})
-        `).run(scope.providerId, scope.model, scope.dimensions, ...activeNamespaceIds)
-    } catch (err) {
-        console.warn('[tool-router] Failed to prune router embedding cache:', err)
     }
 }
 
@@ -554,10 +458,6 @@ function parseToolSelectionArguments(argumentsJson: string): string[] | null {
 
 function extractStringArray(items: unknown[]): string[] {
     return items.filter((item): item is string => typeof item === 'string')
-}
-
-function isNumberArray(value: unknown): value is number[] {
-    return Array.isArray(value) && value.every((item) => typeof item === 'number')
 }
 
 function collectStickyToolNames(

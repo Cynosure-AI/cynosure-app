@@ -318,11 +318,11 @@ export class McpManager {
     private buildToolDefinitions(
         mcpTools: Array<{ name: string; description?: string; inputSchema?: unknown }>,
         client: Client,
-        config: McpServerConfig
+        _config: McpServerConfig
     ): ToolDefinition[] {
         return mcpTools.map((t) => ({
             name: t.name,
-            description: `[MCP: ${config.name}] ${t.description || t.name}`,
+            description: t.description || t.name,
             parameters: (t.inputSchema as Record<string, unknown>) || { type: 'object', properties: {} },
             timeout: 60000,
             execute: async (params: unknown): Promise<ToolResult> => {
