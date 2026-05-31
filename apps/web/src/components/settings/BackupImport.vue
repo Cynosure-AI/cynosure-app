@@ -12,6 +12,8 @@ const importResults = ref<Record<string, { restored: number; errors: string[] }>
 const previewData = ref<{ version: number; createdAt: string; modules: Record<string, { count: number }> } | null>(null)
 const importModules = reactive<Record<string, boolean>>({})
 const previewing = ref(false)
+const resetting = ref(false)
+const resetError = ref('')
 
 const moduleLabels: Record<string, { label: string; icon: string; description: string }> = {
   agents: { label: 'Agents', icon: 'lucide:bot', description: 'Agent definitions, system prompts, and configuration files' },
