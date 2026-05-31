@@ -9,6 +9,10 @@ import ProviderSelect from '../shared/ProviderSelect.vue'
 import CustomSelect from '../shared/CustomSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
+import {
+  defaultEmbeddingModelForProviderId,
+  withDefaultEmbeddingModel,
+} from '../../utils/embedding-defaults'
 
 const providerStore = useProviderStore()
 const props = withDefaults(defineProps<{
@@ -31,6 +35,7 @@ const embLoadingModels = ref(false)
 const embSaving = ref(false)
 const embDirty = ref(false)
 const embProbing = ref(false)
+const loadingEmbeddingConfig = ref(true)
 
 // Chunking state
 const chunkSize = ref(512)
@@ -179,16 +184,23 @@ async function setMemoryToolApproval(toolName: string, autoApprove: boolean) {
 }
 
 async function loadEmbeddingConfig() {
+  loadingEmbeddingConfig.value = true
   try {
     const config = await api.memory.getEmbeddingConfig()
-    embProviderId.value = config.providerId || ''
-    embModel.value = config.model
-    embDimensions.value = config.dimensions
-    if (embProviderId.value) {
-      fetchEmbModels(embProviderId.value)
+    if (config.providerId) {
+      embProviderId.value = config.providerId
+      embModel.value = config.model
+      embDimensions.value = config.dimensions
+      await fetchEmbModels(embProviderId.value)
+    } else {
+      applyDefaultEmbeddingConfig()
     }
     embDirty.value = false
-  } catch { /* first load, defaults are fine */ }
+  } catch {
+    applyDefaultEmbeddingConfig()
+    embDirty.value = false
+  }
+  loadingEmbeddingConfig.value = false
 }
 
 async function loadChunkingConfig() {
@@ -267,17 +279,32 @@ async function saveReranker() {
 async function fetchEmbModels(providerId: string) {
   if (!providerId) { embModels.value = []; return }
   embLoadingModels.value = true
+  const defaultModel = defaultEmbeddingModelForProviderId(providerId, providerStore.providers)
   try {
-    embModels.value = await providerStore.listModels(providerId, 'embedding')
-  } catch { embModels.value = [] }
+    const models = await providerStore.listModels(providerId, 'embedding')
+    embModels.value = withDefaultEmbeddingModel(models, defaultModel)
+  } catch { embModels.value = withDefaultEmbeddingModel([], defaultModel) }
   embLoadingModels.value = false
 }
 
 watch(embProviderId, (id) => {
+  if (loadingEmbeddingConfig.value) return
   embDirty.value = true
+  const defaultModel = defaultEmbeddingModelForProviderId(id, providerStore.providers)
+  if (defaultModel) embModel.value = defaultModel
   fetchEmbModels(id)
 })
 watch(embModel, () => { embDirty.value = true })
+
+function applyDefaultEmbeddingConfig() {
+  const providerId = providerStore.lastUsedProviderId || providerStore.providers[0]?.id || ''
+  const defaultModel = defaultEmbeddingModelForProviderId(providerId, providerStore.providers)
+  if (!providerId || !defaultModel) return
+  embProviderId.value = providerId
+  embModel.value = defaultModel
+  embDimensions.value = 0
+  fetchEmbModels(providerId)
+}
 
 async function probeDimensions() {
   if (!embModel.value) return
@@ -496,7 +523,6 @@ async function manualClearDb() {
             </button>
           </div>
         </div>
-
       </div>
 
       <button

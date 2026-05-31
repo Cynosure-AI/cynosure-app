@@ -119,6 +119,10 @@ import { ref, watch, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useProviderStore } from '../../stores/provider.store'
 import { api } from '../../api/client'
+import {
+  defaultEmbeddingModelForProviderId,
+  withDefaultEmbeddingModel,
+} from '../../utils/embedding-defaults'
 
 const providerStore = useProviderStore()
 
@@ -129,6 +133,7 @@ const embModels = ref<string[]>([])
 const savingEmb = ref(false)
 const embSaved = ref(false)
 const embConfigured = ref(false)
+const loadingInitialConfig = ref(true)
 
 onMounted(async () => {
   await providerStore.loadProviders()
@@ -140,19 +145,40 @@ onMounted(async () => {
     if (cfg.providerId) {
       fetchEmbModels(cfg.providerId)
       embConfigured.value = true
+    } else {
+      applyDefaultEmbeddingConfig()
     }
-  } catch { /* first run */ }
+  } catch {
+    applyDefaultEmbeddingConfig()
+  }
+  loadingInitialConfig.value = false
 })
 
 watch(embProviderId, (id) => {
+  if (!loadingInitialConfig.value) {
+    embModel.value = defaultEmbeddingModelForProviderId(id, providerStore.providers)
+    embDimensions.value = 0
+  }
   fetchEmbModels(id)
 })
 
 async function fetchEmbModels(providerId: string) {
   if (!providerId) { embModels.value = []; return }
+  const defaultModel = defaultEmbeddingModelForProviderId(providerId, providerStore.providers)
   try {
-    embModels.value = await providerStore.listModels(providerId, 'embedding')
-  } catch { embModels.value = [] }
+    const models = await providerStore.listModels(providerId, 'embedding')
+    embModels.value = withDefaultEmbeddingModel(models, defaultModel)
+  } catch { embModels.value = withDefaultEmbeddingModel([], defaultModel) }
+}
+
+function applyDefaultEmbeddingConfig() {
+  const providerId = providerStore.lastUsedProviderId || providerStore.providers[0]?.id || ''
+  const defaultModel = defaultEmbeddingModelForProviderId(providerId, providerStore.providers)
+  if (!providerId || !defaultModel) return
+  embProviderId.value = providerId
+  embModel.value = defaultModel
+  embDimensions.value = 0
+  fetchEmbModels(providerId)
 }
 
 async function saveEmbeddings() {
