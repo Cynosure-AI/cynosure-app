@@ -8,6 +8,7 @@ import AgentSelect from '../../components/shared/AgentSelect.vue'
 import MultiSelect from '../../components/shared/MultiSelect.vue'
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
+import BaseCard from '../../components/shared/BaseCard.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -222,7 +223,7 @@ onMounted(loadChannel)
 
         <div class="space-y-4">
           <!-- Identity: Name + Agent -->
-          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5 space-y-4">
+          <BaseCard class="p-5 space-y-4">
             <div class="flex items-center gap-2">
               <Icon
                 icon="lucide:tag"
@@ -249,10 +250,10 @@ onMounted(loadChannel)
                 placeholder="Select an agent..."
               />
             </div>
-          </div>
+          </BaseCard>
 
           <!-- Platform (read-only) -->
-          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+          <BaseCard class="p-5">
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:plug"
@@ -283,10 +284,10 @@ onMounted(loadChannel)
                 {{ opt.label }}
               </button>
             </div>
-          </div>
+          </BaseCard>
 
           <!-- Credentials -->
-          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5 space-y-4">
+          <BaseCard class="p-5 space-y-4">
             <div class="flex items-center gap-2">
               <Icon
                 icon="lucide:key-round"
@@ -350,10 +351,10 @@ onMounted(loadChannel)
                 </p>
               </div>
             </template>
-          </div>
+          </BaseCard>
 
           <!-- Allowed Agents -->
-          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+          <BaseCard class="p-5">
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:users"
@@ -371,10 +372,10 @@ onMounted(loadChannel)
               :options="agentOptions"
               placeholder="All agents"
             />
-          </div>
+          </BaseCard>
 
           <!-- Status & Connection -->
-          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+          <BaseCard class="p-5">
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:radio"
@@ -447,7 +448,7 @@ onMounted(loadChannel)
             >
               {{ channel.status.error }}
             </div>
-          </div>
+          </BaseCard>
         </div>
       </template>
     </div>
