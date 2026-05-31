@@ -139,7 +139,7 @@ export function backupToRevisions(folderPath: string, fileName: string): string 
     const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
     const backupName = `${base}-${timestamp}${ext}`
 
-    const revisionsFolder = join(folderPath, 'revisions')
+    const revisionsFolder = join(folderPath, '.revisions')
     ensureFolder(revisionsFolder)
     const dest = join(revisionsFolder, backupName)
     copyFileSync(sourcePath, dest)
