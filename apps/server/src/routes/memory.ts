@@ -181,6 +181,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   app.post('/embeddings/drop', async () => {
     const rag = getRAGStore()
     await rag.deleteTable('permanent_memory')
+    getDb().prepare('DELETE FROM memory_file_index').run()
     return { success: true }
   })
 
