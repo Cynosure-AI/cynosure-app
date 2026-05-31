@@ -3,7 +3,6 @@ import { ref, reactive, onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { api } from '../../api/client'
 import { Icon } from '@iconify/vue'
-import ModalDialog from '../shared/ModalDialog.vue'
 import BaseCard from '../shared/BaseCard.vue'
 
 const importFile = ref<File | null>(null)
@@ -13,12 +12,6 @@ const importResults = ref<Record<string, { restored: number; errors: string[] }>
 const previewData = ref<{ version: number; createdAt: string; modules: Record<string, { count: number }> } | null>(null)
 const importModules = reactive<Record<string, boolean>>({})
 const previewing = ref(false)
-
-// Reset state
-const showResetConfirm = ref(false)
-const resetConfirmText = ref('')
-const resetting = ref(false)
-const resetError = ref('')
 
 const moduleLabels: Record<string, { label: string; icon: string; description: string }> = {
   agents: { label: 'Agents', icon: 'lucide:bot', description: 'Agent definitions, system prompts, and configuration files' },
@@ -323,98 +316,5 @@ onBeforeUnmount(() => {
         </div>
       </BaseCard>
     </section>
-
-    <!-- ═══════════════════ RESET ═══════════════════ -->
-    <section>
-      <h3 class="text-sm font-semibold text-theme-300 mb-3 flex items-center gap-2">
-        <Icon
-          icon="lucide:trash-2"
-          class="w-4 h-4 text-red-400"
-        />
-        Reset Application
-      </h3>
-      <div class="bg-theme-800 border border-red-500/20 rounded-xl p-4 space-y-4">
-        <p class="text-xs text-theme-400">
-          Permanently delete all data and reset Cynosure to a clean state. This removes all agents, providers,
-          conversations, memory spaces, MCP servers, channels, and settings.
-        </p>
-
-        <div class="flex items-center gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20">
-          <Icon
-            icon="lucide:alert-triangle"
-            class="w-4 h-4 text-red-400 shrink-0"
-          />
-          <p class="text-xs text-red-400/90">
-            This action is irreversible. Consider exporting a backup first.
-          </p>
-        </div>
-
-        <div
-          v-if="resetError"
-          class="text-xs text-red-400"
-        >
-          {{ resetError }}
-        </div>
-
-        <button
-          class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-          @click="showResetConfirm = true"
-        >
-          <Icon
-            icon="lucide:trash-2"
-            class="w-4 h-4"
-          />
-          Reset to Clean State
-        </button>
-      </div>
-    </section>
-
-    <!-- Reset confirmation modal -->
-    <ModalDialog
-      :show="showResetConfirm"
-      title="Reset Application"
-      icon="lucide:alert-triangle"
-      icon-color="red"
-      @close="showResetConfirm = false; resetConfirmText = ''"
-    >
-      <p class="text-sm text-theme-400 mb-4">
-        This will permanently delete <strong class="text-theme-200">all data</strong> including agents, providers,
-        conversations, memory, and settings. This cannot be undone.
-      </p>
-      <p class="text-sm text-theme-400 mb-2">
-        Type <strong class="text-red-400">RESET</strong> to confirm:
-      </p>
-      <input
-        v-model="resetConfirmText"
-        type="text"
-        placeholder="Type RESET"
-        class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder-theme-600 focus:outline-none focus:border-red-500/50"
-      >
-      <template #actions>
-        <button
-          :disabled="resetConfirmText !== 'RESET' || resetting"
-          class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-          @click="doReset"
-        >
-          <Icon
-            v-if="resetting"
-            icon="lucide:loader-2"
-            class="w-4 h-4 animate-spin"
-          />
-          <Icon
-            v-else
-            icon="lucide:trash-2"
-            class="w-4 h-4"
-          />
-          {{ resetting ? 'Resetting...' : 'Confirm Reset' }}
-        </button>
-        <button
-          class="w-full px-4 py-2 text-theme-400 hover:text-theme-200 text-sm transition-colors"
-          @click="showResetConfirm = false; resetConfirmText = ''"
-        >
-          Cancel
-        </button>
-      </template>
-    </ModalDialog>
   </div>
 </template>

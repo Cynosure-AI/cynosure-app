@@ -237,7 +237,14 @@ const sections: SettingsSection[] = [
     categoryId: 'backup',
     label: 'Import & Restore',
     description: 'Restore from a previous backup zip file.',
-    terms: ['backup', 'import', 'restore', 'upload', 'zip', 'reset', 'factory reset']
+    terms: ['backup', 'import', 'restore', 'upload', 'zip']
+  },
+  {
+    id: 'backup-reset',
+    categoryId: 'backup',
+    label: 'Reset Application',
+    description: 'Permanently delete all data and return Cynosure to a clean state.',
+    terms: ['reset', 'factory reset', 'wipe', 'delete all', 'clean state', 'start over', 'nuke']
   }
 ]
 
