@@ -4,6 +4,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { api } from '../../api/client'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
+import BaseCard from '../shared/BaseCard.vue'
 
 const importFile = ref<File | null>(null)
 const importing = ref(false)
@@ -145,7 +146,7 @@ onBeforeUnmount(() => {
 
     <!-- ═══════════════════ RESTORE ═══════════════════ -->
     <section>
-      <div class="bg-theme-800 border border-theme-700 rounded-xl p-4 space-y-4">
+      <BaseCard class="p-4 space-y-4">
         <!-- File picker -->
         <div
           v-if="!previewData && !importResults"
@@ -320,7 +321,7 @@ onBeforeUnmount(() => {
         >
           {{ importError }}
         </div>
-      </div>
+      </BaseCard>
     </section>
 
     <!-- ═══════════════════ RESET ═══════════════════ -->
