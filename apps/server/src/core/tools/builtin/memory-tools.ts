@@ -248,10 +248,6 @@ async function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], folderParam?
     }
 }
 
-function folderOrSpaceParam(params: { folder?: string; space?: string }): string | undefined {
-    return params.folder?.trim() || params.space?.trim() || undefined
-}
-
 /**
  * Create a `memory_list_documents` tool that returns all stored
  * document names with their chunk counts.
@@ -271,13 +267,12 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
             properties: {
                 pageIndex: { type: 'number', description: 'Zero-based page index (default: 0). Each page returns up to 100 documents.' },
                 folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the listing. Without this, searches all selected folders.' },
-                space: { type: 'string', description: 'Deprecated alias for folder. Prefer folder.' },
             },
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { pageIndex, folder, space } = (params || {}) as { pageIndex?: number; folder?: string; space?: string }
-            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folderOrSpaceParam({ folder, space }))
+            const { pageIndex, folder } = (params || {}) as { pageIndex?: number; folder?: string }
+            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
             const allFiles = await mem.listSourceFiles(undefined, resolvedScope.filter)
@@ -332,15 +327,14 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
                 sourceFile: { type: 'string', description: 'The source file name exactly as shown in the memory context (e.g. "report.pdf", "notes.md").' },
                 minIndex: { type: 'number', description: 'Minimum chunk index (0-based). Use the Part number minus 1.' },
                 maxIndex: { type: 'number', description: 'Maximum chunk index (0-based, inclusive). Use the Part number minus 1.' },
-                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Use this when the same source file exists in more than one folder.' },
-                space: { type: 'string', description: 'Deprecated alias for folder. Prefer folder.' }
+                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Use this when the same source file exists in more than one folder.' }
             },
             required: ['sourceFile', 'minIndex', 'maxIndex']
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { sourceFile, minIndex, maxIndex, folder, space } = params as { sourceFile: string; minIndex: number; maxIndex: number; folder?: string; space?: string }
-            const requestedFolder = folderOrSpaceParam({ folder, space })
+            const { sourceFile, minIndex, maxIndex, folder } = params as { sourceFile: string; minIndex: number; maxIndex: number; folder?: string }
+            const requestedFolder = folder
             const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, requestedFolder)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
@@ -394,15 +388,14 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             properties: {
                 query: { type: 'string', description: 'A descriptive search query to find relevant memories.' },
                 topK: { type: 'number', description: 'Maximum number of results to return (default: 5, max: 10).' },
-                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the search. Without this, searches all selected folders.' },
-                space: { type: 'string', description: 'Deprecated alias for folder. Prefer folder.' }
+                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the search. Without this, searches all selected folders.' }
             },
             required: ['query']
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { query, topK, folder, space } = params as { query: string; topK?: number; folder?: string; space?: string }
-            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folderOrSpaceParam({ folder, space }))
+            const { query, topK, folder } = params as { query: string; topK?: number; folder?: string }
+            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
 
@@ -472,16 +465,15 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
             properties: {
                 title: { type: 'string', description: 'A short descriptive title for the memory entry (used as the file name, e.g. "project-notes" or "meeting-summary"). Will have .md appended automatically.' },
                 content: { type: 'string', description: 'The Markdown text content to store in memory.' },
-                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Omit to write to the default root folder.' },
-                space: { type: 'string', description: 'Deprecated alias for folder. Prefer folder.' }
+                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Omit to write to the default root folder.' }
             },
             required: ['title', 'content']
         },
         timeout: 30_000,
         execute: async (params: unknown) => {
-            const { title, content, folder, space } = params as { title: string; content: string; folder?: string; space?: string }
+            const { title, content, folder } = params as { title: string; content: string; folder?: string }
 
-            const resolved = await resolveTargetSpace(assignedSpaces, folderOrSpaceParam({ folder, space }))
+            const resolved = await resolveTargetSpace(assignedSpaces, folder)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
             const mem = getAgentMemory()
@@ -517,7 +509,6 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 title: { type: 'string', description: 'The title (file name without .md) of the memory entry to update.' },
                 content: { type: 'string', description: 'The new text content. Replaces all content by default, or the selected chunk range when chunkStartIndex/chunkEndIndex are provided.' },
                 folder: { type: 'string', description: 'Memory folder name, relative path (e.g. "projects/acme"), or ID. Required only when the title exists in multiple folders; otherwise auto-selected.' },
-                space: { type: 'string', description: 'Deprecated alias for folder. Prefer folder.' },
                 chunkStartIndex: { type: 'number', description: 'Optional zero-based first chunk index to replace. Use the chunk index shown by memory_retrieve_chunks or semantic search.' },
                 chunkEndIndex: { type: 'number', description: 'Optional zero-based last chunk index to replace, inclusive. Required when chunkStartIndex is provided.' },
             },
@@ -525,8 +516,8 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
         },
         timeout: 30_000,
         execute: async (params: unknown) => {
-            const { title, content, folder, space, chunkStartIndex, chunkEndIndex, sectionHeading } = params as {
-                title: string; content: string; folder?: string; space?: string; chunkStartIndex?: number; chunkEndIndex?: number; sectionHeading?: string
+            const { title, content, folder, chunkStartIndex, chunkEndIndex, sectionHeading } = params as {
+                title: string; content: string; folder?: string; chunkStartIndex?: number; chunkEndIndex?: number; sectionHeading?: string
             }
 
             if (sectionHeading?.trim()) {
@@ -536,7 +527,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 }
             }
 
-            const resolved = await resolveTargetSpace(assignedSpaces, folderOrSpaceParam({ folder, space }), title)
+            const resolved = await resolveTargetSpace(assignedSpaces, folder, title)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
             const mem = getAgentMemory()
