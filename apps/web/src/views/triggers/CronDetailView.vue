@@ -224,7 +224,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               />
             </button>
             <div
-              class="w-9 h-9 rounded-xl bg-theme-800 flex items-center justify-center shrink-0 overflow-hidden"
+              class="w-9 h-9 rounded-xl bg-linear-to-br from-sky-500/20 to-indigo-500/20 flex items-center justify-center shrink-0 overflow-hidden"
             >
               <img
                 v-if="job.agentIconUrl"
@@ -234,7 +234,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <Icon
                 v-else
                 icon="lucide:clock"
-                class="w-5 h-5 text-theme-400"
+                class="w-5 h-5 text-sky-400"
               />
             </div>
             <div>
@@ -247,27 +247,31 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             </div>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-3">
             <template v-if="job.isRunning">
-              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span class="text-xs text-emerald-400">Executing</span>
+              <span class="flex items-center gap-1.5 text-xs text-emerald-400">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Executing
+              </span>
             </template>
             <template v-else-if="job.enabled">
-              <span class="w-2 h-2 rounded-full bg-sky-500" />
-              <span class="text-xs text-sky-400">Scheduled</span>
+              <span class="flex items-center gap-1.5 text-xs text-sky-400">
+                <span class="w-2 h-2 rounded-full bg-sky-500" />
+                Scheduled
+              </span>
             </template>
             <template v-else>
-              <span class="w-2 h-2 rounded-full bg-theme-600" />
-              <span class="text-xs text-theme-500">Paused</span>
+              <span class="flex items-center gap-1.5 text-xs text-theme-500">
+                <span class="w-2 h-2 rounded-full bg-theme-600" />
+                Paused
+              </span>
             </template>
             <span
               v-if="saveMessage"
               class="text-sm text-green-400"
-            >{{
-              saveMessage
-            }}</span>
+            >{{ saveMessage }}</span>
             <button
-              class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+              class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               :disabled="saving || !dlgGeneratedExpr.trim()"
               @click="save"
             >
@@ -277,32 +281,54 @@ watch(cronPrompt, resizePrompt, { immediate: true });
         </div>
 
         <!-- Form -->
-        <div class="space-y-6">
-          <!-- Name -->
-          <div>
-            <label class="block text-xs text-theme-400 mb-1">Name</label>
-            <input
-              v-model="cronName"
-              type="text"
-              placeholder="e.g. Daily health check"
-              class="w-full bg-theme-800 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
-            >
+        <div class="space-y-4">
+          <!-- Identity: Name + Agent -->
+          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5 space-y-4">
+            <div class="flex items-center gap-2">
+              <Icon
+                icon="lucide:tag"
+                class="w-4 h-4 text-sky-400"
+              />
+              <h3 class="text-sm font-medium text-theme-200">
+                Identity
+              </h3>
+            </div>
+            <div>
+              <label class="block text-xs text-theme-400 mb-1.5">Name</label>
+              <input
+                v-model="cronName"
+                type="text"
+                placeholder="e.g. Daily health check"
+                class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+              >
+            </div>
+            <div>
+              <label class="block text-xs text-theme-400 mb-1.5">Agent</label>
+              <AgentSelect
+                v-model="cronAgentId"
+                :agents="allAgents"
+                placeholder="Select an agent…"
+              />
+            </div>
           </div>
 
-          <!-- Agent -->
-          <div>
-            <label class="block text-xs text-theme-400 mb-1">Agent</label>
-            <AgentSelect
-              v-model="cronAgentId"
-              :agents="allAgents"
-              placeholder="Select an agent…"
-            />
-          </div>
+          <!-- Schedule -->
+          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-1">
+              <Icon
+                icon="lucide:calendar-clock"
+                class="w-4 h-4 text-indigo-400"
+              />
+              <h3 class="text-sm font-medium text-theme-200">
+                Schedule
+              </h3>
+            </div>
+            <p class="text-xs text-theme-500 leading-relaxed mb-4">
+              Define when this job should run. Choose a frequency and configure the timing below.
+            </p>
 
-          <!-- Schedule builder -->
-          <div>
-            <label class="block text-xs text-theme-400 mb-2">Schedule</label>
-            <div class="grid grid-cols-3 gap-1.5 mb-3">
+            <!-- Frequency tabs -->
+            <div class="grid grid-cols-3 gap-1.5 mb-4">
               <button
                 v-for="opt in FREQUENCY_OPTIONS"
                 :key="opt.value"
@@ -311,7 +337,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 :class="
                   dlgFrequency === opt.value
                     ? 'border-accent-500 bg-accent-500/10 text-accent-400'
-                    : 'border-theme-700 bg-theme-800 text-theme-400 hover:text-theme-200 hover:border-theme-600'
+                    : 'border-theme-700 bg-theme-900 text-theme-400 hover:text-theme-200 hover:border-theme-600'
                 "
                 @click="dlgFrequency = opt.value"
               >
@@ -326,12 +352,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <!-- Every X minutes -->
             <div
               v-if="dlgFrequency === 'minutes'"
-              class="flex items-center gap-2 mb-3"
+              class="flex items-center gap-2 mb-4"
             >
               <span class="text-sm text-theme-400">Every</span>
               <select
                 v-model.number="dlgEveryMinutes"
-                class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
                 <option
                   v-for="m in INTERVAL_MINUTES"
@@ -347,12 +373,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <!-- Hourly -->
             <div
               v-else-if="dlgFrequency === 'hourly'"
-              class="flex items-center gap-2 mb-3"
+              class="flex items-center gap-2 mb-4"
             >
               <span class="text-sm text-theme-400">Every hour at minute</span>
               <select
                 v-model.number="dlgAtMinute"
-                class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
                 <option
                   v-for="m in MINUTE_OPTIONS"
@@ -367,12 +393,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <!-- Daily -->
             <div
               v-else-if="dlgFrequency === 'daily'"
-              class="flex items-center gap-2 mb-3"
+              class="flex items-center gap-2 mb-4"
             >
               <span class="text-sm text-theme-400">Every day at</span>
               <select
                 v-model.number="dlgAtHour"
-                class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
                 <option
                   v-for="h in HOUR_OPTIONS"
@@ -385,7 +411,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <span class="text-sm text-theme-400">:</span>
               <select
                 v-model.number="dlgAtMinute"
-                class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
                 <option
                   v-for="m in MINUTE_OPTIONS"
@@ -400,12 +426,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <!-- Weekly -->
             <div
               v-else-if="dlgFrequency === 'weekly'"
-              class="flex items-center gap-2 flex-wrap mb-3"
+              class="flex items-center gap-2 flex-wrap mb-4"
             >
               <span class="text-sm text-theme-400">Every</span>
               <select
                 v-model.number="dlgWeekday"
-                class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
                 <option
                   v-for="(label, i) in WEEKDAYS"
@@ -418,7 +444,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <span class="text-sm text-theme-400">at</span>
               <select
                 v-model.number="dlgAtHour"
-                class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
                 <option
                   v-for="h in HOUR_OPTIONS"
@@ -431,7 +457,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <span class="text-sm text-theme-400">:</span>
               <select
                 v-model.number="dlgAtMinute"
-                class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
                 <option
                   v-for="m in MINUTE_OPTIONS"
@@ -446,12 +472,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <!-- Monthly -->
             <div
               v-else-if="dlgFrequency === 'monthly'"
-              class="flex items-center gap-2 flex-wrap mb-3"
+              class="flex items-center gap-2 flex-wrap mb-4"
             >
               <span class="text-sm text-theme-400">On day</span>
               <select
                 v-model.number="dlgMonthDay"
-                class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
                 <option
                   v-for="d in 28"
@@ -464,7 +490,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <span class="text-sm text-theme-400">at</span>
               <select
                 v-model.number="dlgAtHour"
-                class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
                 <option
                   v-for="h in HOUR_OPTIONS"
@@ -477,7 +503,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <span class="text-sm text-theme-400">:</span>
               <select
                 v-model.number="dlgAtMinute"
-                class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
                 <option
                   v-for="m in MINUTE_OPTIONS"
@@ -492,13 +518,13 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <!-- Custom -->
             <div
               v-else-if="dlgFrequency === 'custom'"
-              class="mb-3"
+              class="mb-4"
             >
               <input
                 v-model="dlgCustomExpr"
                 type="text"
                 placeholder="*/30 * * * *"
-                class="w-full px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono"
+                class="w-full px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono"
               >
               <p class="text-[11px] text-theme-600 mt-1">
                 Standard cron: minute hour day-of-month month day-of-week
@@ -506,33 +532,56 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             </div>
 
             <!-- Schedule summary -->
-            <div
-              class="flex items-center gap-2 px-3 py-2 rounded-lg bg-theme-800/50 border border-theme-800"
-            >
+            <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-theme-900/70 border border-theme-700/50">
               <Icon
                 icon="lucide:calendar-clock"
                 class="w-3.5 h-3.5 text-sky-400 shrink-0"
               />
               <span class="text-xs text-theme-300">{{ dlgHumanReadable }}</span>
-              <code class="ml-auto text-[11px] text-theme-600 font-mono">{{
-                dlgGeneratedExpr
-              }}</code>
+              <code class="ml-auto text-[11px] text-theme-600 font-mono">{{ dlgGeneratedExpr }}</code>
             </div>
           </div>
 
           <!-- One-off -->
-          <label class="flex items-center gap-2 cursor-pointer select-none">
-            <ToggleSwitch
-              v-model="cronOneOff"
-              size="md"
-              color="amber"
-            />
-            <span class="text-sm text-theme-300">One-off (auto-disable after first run)</span>
-          </label>
+          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <Icon
+                    icon="lucide:circle-play"
+                    class="w-4 h-4 text-amber-400"
+                  />
+                  <h3 class="text-sm font-medium text-theme-200">
+                    One-off
+                  </h3>
+                </div>
+                <p class="text-xs text-theme-500 leading-relaxed">
+                  When enabled, the job will automatically disable itself after the first successful run.
+                </p>
+              </div>
+              <ToggleSwitch
+                v-model="cronOneOff"
+                size="md"
+                color="amber"
+                class="mt-0.5"
+              />
+            </div>
+          </div>
 
-          <!-- Provider/Model overrides -->
-          <div>
-            <label class="block text-xs text-theme-400 mb-1">Provider / Model override</label>
+          <!-- Provider / Model override -->
+          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-1">
+              <Icon
+                icon="lucide:cpu"
+                class="w-4 h-4 text-emerald-400"
+              />
+              <h3 class="text-sm font-medium text-theme-200">
+                Provider / Model override
+              </h3>
+            </div>
+            <p class="text-xs text-theme-500 leading-relaxed mb-4">
+              Override the model used for this cron job. Leave as agent default to use the agent's configured model.
+            </p>
             <ProviderModelSelect
               :provider-id="selectedProviderIdForSelector"
               :model-value="selectedModelForSelector"
@@ -545,14 +594,23 @@ watch(cronPrompt, resizePrompt, { immediate: true });
           </div>
 
           <!-- Output Channel -->
-          <div>
-            <label class="block text-xs text-theme-400 mb-1">Output channel (optional)</label>
-            <p class="text-[11px] text-theme-600 mb-1.5">
+          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-1">
+              <Icon
+                icon="lucide:send"
+                class="w-4 h-4 text-violet-400"
+              />
+              <h3 class="text-sm font-medium text-theme-200">
+                Output Channel
+              </h3>
+              <span class="text-[10px] text-theme-600 font-mono ml-1">optional</span>
+            </div>
+            <p class="text-xs text-theme-500 leading-relaxed mb-4">
               Send the agent's result to a messaging channel after each run.
             </p>
             <select
               v-model="cronOutputChannelId"
-              class="w-full bg-theme-800 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
             >
               <option value="">
                 None
@@ -567,14 +625,26 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             </select>
           </div>
 
-          <!-- Prompt -->
-          <div>
-            <label class="block text-xs text-theme-400 mb-1">Cron Prompt</label>
+          <!-- Cron Prompt -->
+          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-1">
+              <Icon
+                icon="lucide:file-clock"
+                class="w-4 h-4 text-sky-400"
+              />
+              <h3 class="text-sm font-medium text-theme-200">
+                Cron Prompt
+              </h3>
+              <span class="text-[10px] text-theme-600 font-mono">CRON.md</span>
+            </div>
+            <p class="text-xs text-theme-500 leading-relaxed mb-4">
+              Describe what the agent should do on each cron trigger — API calls, file checks, data processing, etc.
+            </p>
             <textarea
               ref="promptTextarea"
               v-model="cronPrompt"
               placeholder="Describe what the agent should do on each cron trigger…"
-              class="w-full bg-theme-800 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500 resize-vertical overflow-hidden"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500 resize-vertical overflow-hidden"
               style="min-height: 5rem"
               @input="resizePrompt"
             />
