@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
+import { normalizeToolDescription } from '../tool-description.js'
 
 export const TOOL_SEARCH_TOOL_NAME = 'expand_available_toolset' // Name of the tool the router LLM calls to confirm its tool selection
 
@@ -7,13 +8,14 @@ const TOOL_SEARCH_LIMIT = 12
 
 export interface SearchAvailableMcpToolsOptions {
     allTools: ToolDefinition[]
-    getLoadedTools: () => ToolDefinition[]
+    getLoadedToolNames: () => Set<string>
 }
 
 export function makeSearchAvailableMcpToolsTool(
     opts: SearchAvailableMcpToolsOptions,
 ): ToolDefinition {
-    const { allTools, getLoadedTools } = opts
+    const { allTools, getLoadedToolNames } = opts
+    const dynamicallyLoadedNames = new Set<string>()
 
     return {
         name: TOOL_SEARCH_TOOL_NAME,
@@ -43,19 +45,15 @@ export function makeSearchAvailableMcpToolsTool(
                 return { success: false, output: 'Provide a non-empty capability to search available tools.' }
             }
 
-            const loadedTools = getLoadedTools()
-            const loadedNames = new Set(loadedTools.map(({ name }) => name))
+            const loadedNames = new Set([...getLoadedToolNames(), ...dynamicallyLoadedNames])
             const searchableTools = allTools.filter(
                 (tool) => isMcpTool(tool) && tool.name !== TOOL_SEARCH_TOOL_NAME && !loadedNames.has(tool.name),
             )
 
             const names = lexicalToolSearch(requested_capability, searchableTools, limit)
             const matches = searchableTools.filter(({ name }) => names.includes(name))
-
             for (const tool of matches) {
-                if (loadedNames.has(tool.name)) continue
-                loadedTools.push(tool)
-                loadedNames.add(tool.name)
+                dynamicallyLoadedNames.add(tool.name)
             }
 
             if (!matches.length) {
@@ -143,9 +141,5 @@ function isMcpTool(tool: ToolDefinition): boolean {
 }
 
 function compactToolDescription(description: string): string {
-    return description
-        .replace(/^\[MCP:\s*[^\]]*\]\s*/, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, TOOL_DESCRIPTION_LIMIT)
+    return normalizeToolDescription(description, TOOL_DESCRIPTION_LIMIT)
 }

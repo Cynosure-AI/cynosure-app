@@ -4,34 +4,9 @@ import {
     getAssignedOrDefaultSpaces,
     getAllMemorySpaces,
     getDefaultMemorySpace,
+    type MemorySpaceRef,
 } from "../memory/memory-space-scope.js";
 import { getToolRegistry, type ToolNamespace } from "./tool-registry.js";
-
-// Re-export tool factories so existing imports keep working
-export {
-    makeNotificationTool,
-    type NotificationToolOptions,
-} from "./builtin/notification.js";
-export {
-    makeMemoryListDocumentsTool,
-    makeMemoryRetrieveChunksTool,
-    makeMemorySearchTool,
-    makeMemoryCreateTool,
-    makeMemoryUpdateTool,
-    MEMORY_READ_TOOL_NAMES,
-    MEMORY_WRITE_TOOL_NAMES,
-    MEMORY_TOOL_NAMES,
-    isMemoryToolName,
-    isMemoryReadToolName,
-    type MemoryToolOptions,
-} from "./builtin/memory-tools.js";
-export {
-    makeSearchAvailableMcpToolsTool,
-    TOOL_SEARCH_TOOL_NAME,
-    type SearchAvailableMcpToolsOptions,
-} from "./builtin/expand-available-toolset.js";
-
-// Import for internal hydration use
 import { makeNotificationTool } from "./builtin/notification.js";
 import {
     makeMemoryListDocumentsTool,
@@ -41,6 +16,28 @@ import {
     makeMemoryUpdateTool,
     MEMORY_TOOL_NAMES,
 } from "./builtin/memory-tools.js";
+export {
+    makeNotificationTool,
+    makeMemoryListDocumentsTool,
+    makeMemoryRetrieveChunksTool,
+    makeMemorySearchTool,
+    makeMemoryCreateTool,
+    makeMemoryUpdateTool,
+    MEMORY_TOOL_NAMES,
+};
+export type { NotificationToolOptions } from "./builtin/notification.js";
+export {
+    MEMORY_READ_TOOL_NAMES,
+    MEMORY_WRITE_TOOL_NAMES,
+    isMemoryToolName,
+    isMemoryReadToolName,
+    type MemoryToolOptions,
+} from "./builtin/memory-tools.js";
+export {
+    makeSearchAvailableMcpToolsTool,
+    TOOL_SEARCH_TOOL_NAME,
+    type SearchAvailableMcpToolsOptions,
+} from "./builtin/expand-available-toolset.js";
 
 type BroadcastFn = (event: string, data: unknown) => void;
 
@@ -54,172 +51,61 @@ type BuiltInToolSpec = Pick<
 
 // ─── Built-in tool names (selectable by agents) ────────────
 
-const BUILTIN_TOOL_SPECS = [
-    {
-        name: "create_app_notification",
-        description:
-            "Create a notification for the user. Use this when you find something noteworthy — e.g. completed tasks, new findings, errors, or anything the user should be aware of.",
-        parameters: {
-            type: "object",
-            properties: {
-                title: {
-                    type: "string",
-                    description: "Short notification title (3-10 words)",
-                },
-                body: {
-                    type: "string",
-                    description: "Detailed notification body (1-3 sentences)",
-                },
-                severity: {
-                    type: "string",
-                    enum: ["info", "warning", "critical"],
-                    description: "Notification severity level",
-                },
-            },
-            required: ["title", "body"],
-        },
-        timeout: 5_000,
-    },
-    {
-        name: "memory_list_documents",
-        description:
-            "List memorised documents (source files) with their chunk counts. Paginated — max 100 per page. Searches selected memory folders.",
-        parameters: {
-            type: "object",
-            properties: {
-                pageIndex: {
-                    type: "number",
-                    description: "Zero-based page index (default: 0).",
-                },
-                folder: {
-                    type: "string",
-                    description:
-                        "Optional memory folder name, relative path, or ID to restrict the listing.",
-                },
-            },
-        },
-        timeout: 15_000,
-    },
-    {
-        name: "memory_retrieve_chunks",
-        description:
-            "Retrieve additional chunks from a stored document by source file and chunk index range. Searches selected memory folders; use folder to disambiguate duplicate source files.",
-        parameters: {
-            type: "object",
-            properties: {
-                sourceFile: { type: "string", description: "The source file name." },
-                minIndex: {
-                    type: "number",
-                    description: "Minimum chunk index (0-based).",
-                },
-                maxIndex: {
-                    type: "number",
-                    description: "Maximum chunk index (0-based, inclusive).",
-                },
-                folder: {
-                    type: "string",
-                    description:
-                        "Optional memory folder name, relative path, or ID. Use when the same source file exists in more than one folder.",
-                },
-            },
-            required: ["sourceFile", "minIndex", "maxIndex"],
-        },
-        timeout: 15_000,
-    },
-    {
-        name: "memory_semantic_search",
-        description:
-            "Search through stored memories using a semantic query. Returns the most relevant memory chunks with their memory folder, source, and chunk index. Searches selected memory folders.",
-        parameters: {
-            type: "object",
-            properties: {
-                query: {
-                    type: "string",
-                    description: "A descriptive search query to find relevant memories.",
-                },
-                topK: {
-                    type: "number",
-                    description:
-                        "Maximum number of results to return (default: 5, max: 10).",
-                },
-                folder: {
-                    type: "string",
-                    description:
-                        "Optional memory folder name, relative path, or ID to restrict the search.",
-                },
-            },
-            required: ["query"],
-        },
-        timeout: 15_000,
-    },
-    {
-        name: "memory_create",
-        description:
-            "[Experimental] Create a new memory entry with a title and content. The content will be chunked and embedded for later semantic retrieval.",
-        parameters: {
-            type: "object",
-            properties: {
-                title: {
-                    type: "string",
-                    description: "A short descriptive title for the memory entry.",
-                },
-                content: {
-                    type: "string",
-                    description: "The text content to store in memory.",
-                },
-                folder: {
-                    type: "string",
-                    description:
-                        "Optional memory folder name, relative path, or ID. Omit to write to the default root folder.",
-                },
-            },
-            required: ["title", "content"],
-        },
-        timeout: 30_000,
-    },
-    {
-        name: "memory_update",
-        description:
-            "Update an existing memory entry. Auto-matches the title to find the entry; if multiple folders contain the same title, folder parameter is required. " +
-            "By default, replaces all content. Use chunkStartIndex and chunkEndIndex to update only specific chunks.",
-        parameters: {
-            type: "object",
-            properties: {
-                title: {
-                    type: "string",
-                    description:
-                        "The title (source file name) of the memory entry to update. Auto-matched across selected folders.",
-                },
-                content: {
-                    type: "string",
-                    description:
-                        "The new text content. Replaces all content by default, or specific chunks if using chunkStartIndex/chunkEndIndex.",
-                },
-                folder: {
-                    type: "string",
-                    description:
-                        "Memory folder name, relative path, or ID. Required only when the title exists in multiple folders; otherwise auto-selected.",
-                },
-                chunkStartIndex: {
-                    type: "number",
-                    description:
-                        "Optional: zero-based index of the first chunk to replace. Omit to replace entire content.",
-                },
-                chunkEndIndex: {
-                    type: "number",
-                    description:
-                        "Optional: zero-based index of the last chunk to replace (inclusive). Required if chunkStartIndex is provided.",
-                },
-            },
-            required: ["title", "content"],
-        },
-        timeout: 30_000,
-    },
-] as const satisfies readonly BuiltInToolSpec[];
+interface BuiltInHydrationContext {
+    agentId?: string;
+    conversationId: string;
+    broadcast: BroadcastFn;
+    assignedSpaces: MemorySpaceRef[];
+    spaceFilter?: string;
+}
 
-export const BUILTIN_TOOL_NAMES = BUILTIN_TOOL_SPECS.map((tool) => tool.name);
+const BUILTIN_TOOL_HYDRATORS = {
+    create_app_notification: (ctx: BuiltInHydrationContext) => makeNotificationTool({
+        agentId: ctx.agentId || "",
+        conversationId: ctx.conversationId,
+        broadcast: ctx.broadcast,
+    }),
+    memory_list_documents: (ctx: BuiltInHydrationContext) => makeMemoryListDocumentsTool({
+        spaceFilter: ctx.spaceFilter,
+        assignedSpaces: ctx.assignedSpaces,
+    }),
+    memory_retrieve_chunks: (ctx: BuiltInHydrationContext) => makeMemoryRetrieveChunksTool({
+        spaceFilter: ctx.spaceFilter,
+        assignedSpaces: ctx.assignedSpaces,
+    }),
+    memory_semantic_search: (ctx: BuiltInHydrationContext) => makeMemorySearchTool({
+        spaceFilter: ctx.spaceFilter,
+        assignedSpaces: ctx.assignedSpaces,
+    }),
+    memory_create: (ctx: BuiltInHydrationContext) => makeMemoryCreateTool({
+        assignedSpaces: ctx.assignedSpaces,
+    }),
+    memory_update: (ctx: BuiltInHydrationContext) => makeMemoryUpdateTool({
+        assignedSpaces: ctx.assignedSpaces,
+    }),
+} as const satisfies Record<string, (ctx: BuiltInHydrationContext) => ToolDefinition>;
 
-export type BuiltinToolName = (typeof BUILTIN_TOOL_SPECS)[number]["name"];
+export const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_HYDRATORS);
+
+export type BuiltinToolName = keyof typeof BUILTIN_TOOL_HYDRATORS;
+
+function getBuiltInToolSpecs(): BuiltInToolSpec[] {
+    const specContext: BuiltInHydrationContext = {
+        conversationId: "",
+        broadcast: () => undefined,
+        assignedSpaces: [],
+    };
+
+    return BUILTIN_TOOL_NAMES.map((name) => {
+        const tool = BUILTIN_TOOL_HYDRATORS[name as BuiltinToolName](specContext);
+        return {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
+            timeout: tool.timeout,
+        };
+    });
+}
 
 export function isBuiltInMemoryToolKey(toolKey: string): boolean {
     return MEMORY_TOOL_NAMES.some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
@@ -242,7 +128,7 @@ export function registerBuiltInTools(): void {
         output: "This built-in tool requires agent context.",
     });
 
-    for (const tool of BUILTIN_TOOL_SPECS) {
+    for (const tool of getBuiltInToolSpecs()) {
         registry.register({ ...tool, execute: stub }, BUILTIN_NAMESPACE);
     }
 }
@@ -277,6 +163,14 @@ export function hydrateBuiltInTools(
         (ctx.agentId ? getAssignedOrDefaultSpaces(ctx.agentId) : getDefaultMemorySpaces());
     const spaceFilter = buildMemorySpaceFilter(assignedSpaces);
 
+    const hydrationContext: BuiltInHydrationContext = {
+        agentId: ctx.agentId,
+        conversationId: ctx.conversationId,
+        broadcast: ctx.broadcast,
+        assignedSpaces,
+        spaceFilter,
+    };
+
     return tools.map((t) => {
         const metadata = {
             registryKey: t.registryKey,
@@ -285,50 +179,15 @@ export function hydrateBuiltInTools(
             namespaceLabel: t.namespaceLabel,
             namespaceDescription: t.namespaceDescription,
         };
+        const originalName = t.originalName ?? t.name;
+        const hydrate = BUILTIN_TOOL_HYDRATORS[originalName as BuiltinToolName];
 
-        switch (t.originalName ?? t.name) {
-            case "create_app_notification":
-                return {
-                    ...makeNotificationTool({
-                        agentId: ctx.agentId || "",
-                        conversationId: ctx.conversationId,
-                        broadcast: ctx.broadcast,
-                    }),
-                    name: t.name,
-                    ...metadata,
-                };
-            case "memory_list_documents":
-                return {
-                    ...makeMemoryListDocumentsTool({ spaceFilter, assignedSpaces }),
-                    name: t.name,
-                    ...metadata,
-                };
-            case "memory_retrieve_chunks":
-                return {
-                    ...makeMemoryRetrieveChunksTool({ spaceFilter, assignedSpaces }),
-                    name: t.name,
-                    ...metadata,
-                };
-            case "memory_semantic_search":
-                return {
-                    ...makeMemorySearchTool({ spaceFilter, assignedSpaces }),
-                    name: t.name,
-                    ...metadata,
-                };
-            case "memory_create":
-                return {
-                    ...makeMemoryCreateTool({ assignedSpaces }),
-                    name: t.name,
-                    ...metadata,
-                };
-            case "memory_update":
-                return {
-                    ...makeMemoryUpdateTool({ assignedSpaces }),
-                    name: t.name,
-                    ...metadata,
-                };
-            default:
-                return t;
-        }
+        if (!hydrate) return t;
+
+        return {
+            ...hydrate(hydrationContext),
+            name: t.name,
+            ...metadata,
+        };
     });
 }

@@ -60,6 +60,14 @@ function getKnownMemorySpaces(): MemorySpaceRef[] {
     }
 }
 
+function createKnownMemorySpacesLoader(): () => MemorySpaceRef[] {
+    let cached: MemorySpaceRef[] | undefined
+    return () => {
+        cached ??= getKnownMemorySpaces()
+        return cached
+    }
+}
+
 function getSpaceFolderPath(spaceId: string): string | undefined {
     try {
         const db = getDb()
@@ -153,11 +161,12 @@ function replaceChunkRangeInText(
 function resolveReadableSpaceFilter(
     assignedSpaces: MemorySpaceRef[],
     baseFilter?: string,
-    folderParam?: string
+    folderParam?: string,
+    getKnownSpaces: () => MemorySpaceRef[] = getKnownMemorySpaces,
 ): { filter?: string; space?: MemorySpaceRef } | { error: string } {
     if (!folderParam?.trim()) return { filter: baseFilter }
 
-    const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownMemorySpaces()
+    const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownSpaces()
     const wanted = folderParam.trim()
     const match = findSpaceByIdOrName(candidates, wanted)
     if (!match) {
@@ -179,17 +188,22 @@ function resolveReadableSpaceFilter(
  * 4. If multiple folders are selected and no default exists → error
  * 5. If no folders exist → error
  */
-async function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], folderParam?: string, existingTitle?: string): Promise<{ spaceId: string; spaceName: string } | { error: string }> {
+async function resolveTargetSpace(
+    assignedSpaces: MemorySpaceRef[],
+    folderParam?: string,
+    existingTitle?: string,
+    getKnownSpaces: () => MemorySpaceRef[] = getKnownMemorySpaces,
+): Promise<{ spaceId: string; spaceName: string } | { error: string }> {
     // --- Explicit folder parameter provided ---
     if (folderParam?.trim()) {
         const wanted = folderParam.trim()
-        const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownMemorySpaces()
+        const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownSpaces()
         const match = findSpaceByIdOrName(candidates, wanted)
         if (match) return { spaceId: match.id, spaceName: match.name }
 
         const scopeLabel = assignedSpaces.length > 0 ? 'selected memory folders' : 'existing memory folders'
         return {
-            error: `Memory folder "${wanted}" not found in ${scopeLabel}.\n${formatSpaces(candidates.length > 0 ? candidates : getKnownMemorySpaces())}`
+            error: `Memory folder "${wanted}" not found in ${scopeLabel}.\n${formatSpaces(candidates.length > 0 ? candidates : getKnownSpaces())}`
         }
     }
 
@@ -240,7 +254,7 @@ async function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], folderParam?
     }
 
     // 4. No folders at all
-    const existing = getKnownMemorySpaces()
+    const existing = getKnownSpaces()
     return {
         error:
             'No memory folder is selected for writes. Provide the target memory folder using the "folder" parameter, select one in the conversation, or assign one to the agent.\n' +
@@ -254,6 +268,7 @@ async function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], folderParam?
  */
 export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefinition {
     const { spaceFilter, assignedSpaces = [] } = opts
+    const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_list_documents',
         description:
@@ -272,7 +287,7 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
         timeout: 15_000,
         execute: async (params: unknown) => {
             const { pageIndex, folder } = (params || {}) as { pageIndex?: number; folder?: string }
-            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder)
+            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder, getKnownSpaces)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
             const allFiles = await mem.listSourceFiles(undefined, resolvedScope.filter)
@@ -314,6 +329,7 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
  */
 export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefinition {
     const { spaceFilter, assignedSpaces = [] } = opts
+    const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_retrieve_chunks',
         description:
@@ -335,7 +351,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
         execute: async (params: unknown) => {
             const { sourceFile, minIndex, maxIndex, folder } = params as { sourceFile: string; minIndex: number; maxIndex: number; folder?: string }
             const requestedFolder = folder
-            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, requestedFolder)
+            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, requestedFolder, getKnownSpaces)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
 
@@ -348,7 +364,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
 
             const distinctSpaces = [...new Set(chunks.map(c => c.spaceId).filter((id): id is string => Boolean(id)))]
             if (!requestedFolder && distinctSpaces.length > 1) {
-                const spaceMap = buildSpaceMap(assignedSpaces, getKnownMemorySpaces())
+                const spaceMap = buildSpaceMap(assignedSpaces, getKnownSpaces())
                 const listing = distinctSpaces.map(id => `  - "${spaceMap.get(id) || id}" (id: ${id})`).join('\n')
                 return {
                     success: false,
@@ -357,7 +373,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
             }
 
             const total = await mem.countChunks(sourceFile, resolvedScope.filter)
-            const spaceMap = buildSpaceMap(assignedSpaces, getKnownMemorySpaces())
+            const spaceMap = buildSpaceMap(assignedSpaces, getKnownSpaces())
             const formatted = chunks.map(c => {
                 const location = c.spaceId && !resolvedScope.space
                     ? `[${spaceMap.get(c.spaceId) || c.spaceId} · Part ${c.chunkIndex + 1}/${total}]`
@@ -375,6 +391,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
  */
 export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
     const { spaceFilter, assignedSpaces = [] } = opts
+    const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_semantic_search',
         description:
@@ -395,7 +412,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
         timeout: 15_000,
         execute: async (params: unknown) => {
             const { query, topK, folder } = params as { query: string; topK?: number; folder?: string }
-            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder)
+            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder, getKnownSpaces)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
 
@@ -420,7 +437,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
                 return mem.countChunks(sf, filter)
             }))
             const countMap = new Map(uniqueSourceKeys.map((key, i) => [key, counts[i]]))
-            const spaceMap = buildSpaceMap(assignedSpaces, getKnownMemorySpaces())
+            const spaceMap = buildSpaceMap(assignedSpaces, getKnownSpaces())
 
             const formatted = results.map(r => {
                 const parts: string[] = []
@@ -452,6 +469,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
  */
 export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedSpaces = [] } = opts
+    const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_create',
         description:
@@ -473,7 +491,7 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
         execute: async (params: unknown) => {
             const { title, content, folder } = params as { title: string; content: string; folder?: string }
 
-            const resolved = await resolveTargetSpace(assignedSpaces, folder)
+            const resolved = await resolveTargetSpace(assignedSpaces, folder, undefined, getKnownSpaces)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
             const mem = getAgentMemory()
@@ -496,6 +514,7 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
  */
 export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedSpaces = [] } = opts
+    const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_update',
         description:
@@ -527,7 +546,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 }
             }
 
-            const resolved = await resolveTargetSpace(assignedSpaces, folder, title)
+            const resolved = await resolveTargetSpace(assignedSpaces, folder, title, getKnownSpaces)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
             const mem = getAgentMemory()

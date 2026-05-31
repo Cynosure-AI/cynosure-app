@@ -1,4 +1,5 @@
 import type { ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
+import { normalizeToolDescription } from './tool-description.js'
 
 export interface LLMToolSchema {
   type: 'function'
@@ -58,29 +59,24 @@ export class ToolRegistry {
     return `${namespace.id}::${toolName}`
   }
 
-  private safeSlugForNamespace(namespace: ToolNamespace): string {
-    const labelSlug = namespace.label
+  private safeSlug(value: string, fallback: string): string {
+    return value
       .toLowerCase()
       .replace(/^mcp[-_\s]+/i, '')
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_|_$/g, '')
-
-    const idSlug = namespace.id
       .replace(/^mcp:/, '')
-      .toLowerCase()
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_|_$/g, '')
+      || fallback
+  }
 
+  private safeSlugForNamespace(namespace: ToolNamespace): string {
+    const labelSlug = this.safeSlug(namespace.label, '')
+    const idSlug = this.safeSlug(namespace.id, '')
     return labelSlug || idSlug || 'server'
   }
 
   private safeIdSlugForNamespace(namespace: ToolNamespace): string {
-    return namespace.id
-      .replace(/^mcp:/, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_|_$/g, '')
-      || 'ns'
+    return this.safeSlug(namespace.id, 'ns')
   }
 
   private executionNameFor(entry: ToolEntry, scope?: NameResolutionScope): string {
@@ -106,16 +102,12 @@ export class ToolRegistry {
     return `${uniqueSlug}__${entry.tool.name}`
   }
 
-  private cleanToolDescription(tool: ToolDefinition): string {
-    return tool.description.replace(/^\[MCP:\s*[^\]]*\]\s*/, '').trim()
-  }
-
   private deriveNamespaceDescription(namespace: ToolNamespace, tools: ToolDefinition[]): string | undefined {
     if (namespace.description?.trim()) return namespace.description.trim()
 
     const samples = tools
       .slice(0, 8)
-      .map((tool) => `${tool.name}: ${this.cleanToolDescription(tool)}`)
+      .map((tool) => `${tool.name}: ${normalizeToolDescription(tool.description)}`)
       .join('\n')
       .trim()
 
