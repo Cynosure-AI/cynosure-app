@@ -387,10 +387,10 @@ const settingsItems: NavItem[] = [
             icon="lucide:brain"
             class="w-4.5 h-4.5"
           />
-          <span>Memory Spaces</span>
+          <span>Memory Folders</span>
         </RouterLink>
         <template #content>
-          Memory Spaces
+          Memory Folders
         </template>
       </HoverTooltip>
       <HoverTooltip

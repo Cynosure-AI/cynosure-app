@@ -164,6 +164,9 @@ export interface MemorySpace {
     name: string
     description: string
     folderPath: string
+    relativePath: string
+    depth?: number
+    parentRelativePath?: string | null
     sortOrder: number
     isDefault: boolean
     createdAt: number

@@ -139,7 +139,7 @@ async function saveAsNewAgent() {
     @close="showModal = false"
   >
     <p class="text-sm text-theme-400 mb-4">
-      Create a new agent from the current session configuration, including tools, sub-agents, memory spaces, and system prompt.
+      Create a new agent from the current session configuration, including tools, sub-agents, memory folders, and system prompt.
     </p>
     <div class="space-y-3">
       <div>
@@ -194,7 +194,7 @@ async function saveAsNewAgent() {
             icon="lucide:brain"
             class="w-3 h-3 text-purple-400"
           />
-          {{ chatStore.freeChatMemorySpaceIds.length }} memory space{{ chatStore.freeChatMemorySpaceIds.length !== 1 ? 's' : '' }}
+          {{ chatStore.freeChatMemorySpaceIds.length }} memory folder{{ chatStore.freeChatMemorySpaceIds.length !== 1 ? 's' : '' }}
         </div>
         <div
           v-if="chatStore.sessionSystemPrompt.trim()"

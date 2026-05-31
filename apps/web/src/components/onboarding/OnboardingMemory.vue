@@ -5,7 +5,7 @@
         Set Up Memory
       </h2>
       <p class="text-sm text-theme-500 mt-1">
-        Give your agents searchable, long-term memory. Choose an embedding model and create a memory space.
+        Give your agents searchable, long-term memory. Choose an embedding model and prepare your memory folder.
         You can skip this and configure it later in Settings.
       </p>
     </div>
@@ -106,7 +106,7 @@
             Embeddings configured!
           </p>
           <p class="text-xs text-theme-400 mt-0.5">
-            Click <strong class="text-theme-200">Continue</strong> to set up your first memory space — a place to store and search documents for your agents.
+            Click <strong class="text-theme-200">Continue</strong> to set up your memory folder — a place to store and search documents for your agents.
           </p>
         </div>
       </div>

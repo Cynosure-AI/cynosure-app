@@ -333,7 +333,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
 
 <template>
   <div>
-    <!-- Space header -->
+    <!-- Folder header -->
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
         <h2 class="text-lg font-medium text-theme-200">
@@ -341,7 +341,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         </h2>
         <button
           class="p-1 text-theme-500 hover:text-theme-300 transition-colors"
-          title="Edit space"
+          title="Edit folder"
           @click="emit('editSpace')"
         >
           <Icon
@@ -351,7 +351,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         </button>
         <button
           :disabled="currentSpace?.isDefault"
-          :title="currentSpace?.isDefault ? 'Cannot delete the default memory space' : 'Delete space'"
+          :title="currentSpace?.isDefault ? 'Cannot archive the default memory folder' : 'Archive folder'"
           class="p-1 text-theme-500 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-theme-500"
           @click="emit('deleteSpace')"
         >
@@ -397,6 +397,8 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         icon="lucide:folder"
         class="w-3.5 h-3.5 shrink-0"
       />
+      <span class="truncate font-mono">{{ currentSpace.relativePath || "Default" }}</span>
+      <span class="text-theme-700">|</span>
       <span class="truncate font-mono">{{ currentSpace.folderPath }}</span>
     </div>
 
@@ -540,7 +542,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       v-if="files.length === 0 && !filesLoading"
       class="rounded-xl border border-theme-800 bg-theme-950/45 text-center py-10 text-theme-500 text-sm"
     >
-      No files in this space yet. Upload files to get started.
+      No files in this folder yet. Upload files to get started.
     </div>
     <div
       v-else-if="filteredFiles.length === 0 && searchQuery.trim()"
@@ -731,7 +733,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             Move {{ selectedFiles.size }} file{{ selectedFiles.size !== 1 ? "s" : "" }}
           </h3>
           <p class="text-sm text-theme-500 mb-4">
-            Select the target memory space:
+            Select the target memory folder:
           </p>
           <div class="space-y-2 max-h-60 overflow-y-auto">
             <button

@@ -6,7 +6,7 @@ import { getEmbeddingProvider } from '../core/memory/embedding.js'
 import { getMemoryParser } from '../core/memory/parser.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
-import { buildMemorySpaceFilter, getDefaultMemorySpace } from '../core/memory/memory-space-scope.js'
+import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import OpenAI from 'openai'
@@ -55,8 +55,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
         .get(spaceId.trim()) as { id: string; name: string } | undefined
       filter = row ? buildMemorySpaceFilter([row]) : undefined
     } else {
-      const defaultSpace = getDefaultMemorySpace()
-      filter = defaultSpace ? buildMemorySpaceFilter([defaultSpace]) : undefined
+      filter = buildMemorySpaceFilter(getAllMemorySpaces())
     }
 
     return mem.recall(query, topK, filter)

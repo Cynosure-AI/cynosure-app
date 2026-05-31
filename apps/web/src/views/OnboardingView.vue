@@ -110,7 +110,7 @@
           <!-- Memory -->
           <OnboardingMemory v-else-if="currentStep === STEP_MEMORY" />
 
-          <!-- Memory Space -->
+          <!-- Memory Folder -->
           <OnboardingMemorySpace v-else-if="currentStep === STEP_MEMORY_SPACE" />
 
           <!-- Popular MCPs -->
@@ -269,7 +269,7 @@ const breadcrumbSteps = [
   { id: 'provider',      label: 'AI Provider',    globalIndex: STEP_PROVIDER },
   { id: 'cynosure',      label: 'Cynosure MCP',   globalIndex: STEP_CYNOSURE_MCP },
   { id: 'memory',        label: 'Embeddings',     globalIndex: STEP_MEMORY },
-  { id: 'memory-space',  label: 'Memory Space',   globalIndex: STEP_MEMORY_SPACE },
+  { id: 'memory-space',  label: 'Memory Folder',  globalIndex: STEP_MEMORY_SPACE },
   { id: 'popular-mcps',  label: 'Popular Tools',  globalIndex: STEP_POPULAR_MCPS },
 ]
 

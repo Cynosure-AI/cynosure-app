@@ -76,7 +76,7 @@ function findSpaceByIdOrName(spaces: MemorySpaceRef[], wanted: string): MemorySp
 function makeScopeSummary(assignedSpaces: MemorySpaceRef[]): string {
     if (assignedSpaces.length === 0) {
         const defaultSpace = getDefaultMemorySpace()
-        return defaultSpace ? `Scope: "${defaultSpace.name}" (default).` : 'Scope: no memory spaces.'
+        return defaultSpace ? `Scope: all memory folders; writes default to "${defaultSpace.name}".` : 'Scope: no memory spaces.'
     }
     if (assignedSpaces.length === 1) return `Scope: "${assignedSpaces[0].name}" only.`
     return `Scope: assigned memory spaces only (${assignedSpaces.map(s => `"${s.name}"`).join(', ')}).`
@@ -159,9 +159,9 @@ function resolveReadableSpaceFilter(
  * Resolve the target space for a write operation, with smart name-based fallback.
  * Priority (when no explicit space param):
  * 1. If title exists in exactly one assigned space → use that
- * 2. If default space exists → use it
+ * 2. If default space exists → use it for unspecified writes
  * 3. If exactly one space assigned → use it
- * 4. If multiple spaces assigned → error (need explicit choice)
+ * 4. If multiple spaces assigned and no default exists → error
  * 5. If no spaces exist → error
  */
 async function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], spaceParam?: string, existingTitle?: string): Promise<{ spaceId: string; spaceName: string } | { error: string }> {
@@ -208,20 +208,18 @@ async function resolveTargetSpace(assignedSpaces: MemorySpaceRef[], spaceParam?:
     }
 
     // --- Smart fallback logic ---
-    // 1. Single explicitly assigned space — user granted exactly one space in the Chat UI
+    // Unspecified writes always land in the root/default memory folder.
+    const defaultSpace = getDefaultMemorySpace()
+    if (defaultSpace) {
+        return { spaceId: defaultSpace.id, spaceName: defaultSpace.name }
+    }
+
+    // If no default exists but exactly one space is in scope, use it.
     if (assignedSpaces.length === 1) {
         return { spaceId: assignedSpaces[0].id, spaceName: assignedSpaces[0].name }
     }
 
-    // 2. No assigned spaces → fall back to the default space
-    if (assignedSpaces.length === 0) {
-        const defaultSpace = getDefaultMemorySpace()
-        if (defaultSpace) {
-            return { spaceId: defaultSpace.id, spaceName: defaultSpace.name }
-        }
-    }
-
-    // 3. Multiple assigned spaces but no unambiguous match → error
+    // Multiple assigned spaces but no default or unambiguous match → error
     if (assignedSpaces.length > 1) {
         const listing = assignedSpaces.map(s => `  - "${s.name}" (id: ${s.id})`).join('\n')
         return { error: `Multiple memory spaces are assigned. Please specify which to write to using the 'space' parameter.\nAvailable spaces:\n${listing}` }

@@ -11,9 +11,10 @@ const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 const router = useRouter()
 
-// --- Memory Spaces ---
+// --- Memory Folders ---
 const allSpaces = ref<MemorySpace[]>([])
 const spacesLoading = ref(false)
+const collapsedFolders = ref<Set<string>>(new Set())
 
 const assignedIds = computed(() => new Set(props.agent.memorySpaces ?? []))
 
@@ -25,12 +26,28 @@ const availableSpaces = computed(() =>
   allSpaces.value.filter(s => !assignedIds.value.has(s.id))
 )
 
+const visibleAvailableSpaces = computed(() =>
+  availableSpaces.value.filter((space) => {
+    if (space.isDefault) return true
+    const parts = (space.relativePath || '').split('/')
+    for (let i = 1; i < parts.length; i++) {
+      if (collapsedFolders.value.has(parts.slice(0, i).join('/'))) return false
+    }
+    return true
+  })
+)
+
 const showSpacePicker = ref(false)
 
 async function loadSpaces() {
   spacesLoading.value = true
   try {
-    allSpaces.value = await api.memorySpaces.list()
+    const spaces = await api.memorySpaces.list()
+    allSpaces.value = [...spaces].sort((a, b) => {
+      if (a.isDefault) return -1
+      if (b.isDefault) return 1
+      return (a.relativePath || '').localeCompare(b.relativePath || '')
+    })
   } catch (err) {
     console.error('[memory] Failed to load spaces:', err)
   }
@@ -48,6 +65,23 @@ function assignSpace(spaceId: string) {
 function unassignSpace(spaceId: string) {
   const current = props.agent.memorySpaces ?? []
   emit('update', 'memorySpaces', current.filter((id: string) => id !== spaceId))
+}
+
+function assignAllSpaces() {
+  emit('update', 'memorySpaces', allSpaces.value.map((space) => space.id))
+}
+
+function hasChildren(space: MemorySpace): boolean {
+  const prefix = space.relativePath ? `${space.relativePath}/` : ''
+  return allSpaces.value.some((candidate) => space.isDefault ? Boolean(candidate.relativePath) : candidate.relativePath?.startsWith(prefix))
+}
+
+function toggleCollapsed(space: MemorySpace) {
+  const key = space.relativePath || ''
+  const next = new Set(collapsedFolders.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  collapsedFolders.value = next
 }
 
 function goToMemory() {
@@ -94,10 +128,10 @@ onMounted(() => loadSpaces())
             class="w-4 h-4 text-accent-400"
           />
           <h3 class="text-sm font-medium text-theme-200">
-            Memory Spaces
+            Memory Folders
           </h3>
           <span class="text-xs text-theme-500">
-            ({{ assignedSpaces.length }} assigned)
+            ({{ assignedSpaces.length }} selected)
           </span>
         </div>
         <div class="flex items-center gap-2">
@@ -109,7 +143,7 @@ onMounted(() => loadSpaces())
               icon="lucide:external-link"
               class="w-3 h-3"
             />
-            Manage Spaces
+            Manage Folders
           </button>
           <button
             :disabled="spacesLoading"
@@ -125,11 +159,11 @@ onMounted(() => loadSpaces())
         </div>
       </div>
       <p class="text-xs text-theme-500 mb-4">
-        Assign memory spaces to give this agent access to shared knowledge bases.
-        Documents uploaded to those spaces will be used for retrieval during conversations.
+        Select memory folders to give this agent access to shared knowledge.
+        Documents uploaded to those folders will be used for retrieval during conversations.
       </p>
 
-      <!-- Assigned spaces list -->
+      <!-- Assigned folders list -->
       <div
         v-if="assignedSpaces.length === 0"
         class="text-center py-6 border-2 border-dashed border-theme-700 rounded-lg"
@@ -139,10 +173,10 @@ onMounted(() => loadSpaces())
           class="w-8 h-8 text-theme-700 mx-auto mb-2"
         />
         <p class="text-sm text-theme-500">
-          No memory spaces assigned
+          No memory folders selected
         </p>
         <p class="text-xs text-theme-600 mt-1">
-          Add a space to give this agent access to knowledge documents
+          Select folders to give this agent access to knowledge documents
         </p>
       </div>
 
@@ -156,7 +190,7 @@ onMounted(() => loadSpaces())
           class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-theme-600 bg-theme-900/40 hover:bg-theme-900/60 transition-colors group"
         >
           <Icon
-            icon="lucide:database"
+            :icon="space.isDefault ? 'lucide:hard-drive' : 'lucide:folder'"
             class="w-4 h-4 text-accent-400 shrink-0"
           />
           <div class="flex-1 min-w-0">
@@ -198,49 +232,73 @@ onMounted(() => loadSpaces())
             icon="lucide:plus"
             class="w-4 h-4"
           />
-          {{ availableSpaces.length === 0 ? 'No more spaces available' : 'Add Memory Space' }}
+          {{ availableSpaces.length === 0 ? 'No more folders available' : 'Add Memory Folder' }}
         </button>
 
-        <!-- Space picker dropdown -->
+        <!-- Folder picker dropdown -->
         <div
           v-if="showSpacePicker"
           class="border border-theme-700 bg-theme-900 rounded-lg shadow-xl overflow-hidden"
         >
           <div class="px-3 py-2 border-b border-theme-800 flex items-center justify-between">
-            <span class="text-xs text-theme-400 font-medium">Select a space</span>
-            <button
-              class="text-xs text-theme-500 hover:text-theme-300 transition-colors"
-              @click="showSpacePicker = false"
-            >
-              Cancel
-            </button>
+            <span class="text-xs text-theme-400 font-medium">Select folders</span>
+            <div class="flex items-center gap-2">
+              <button
+                class="text-xs text-accent-400 hover:text-accent-300 transition-colors"
+                @click="assignAllSpaces"
+              >
+                All
+              </button>
+              <button
+                class="text-xs text-theme-500 hover:text-theme-300 transition-colors"
+                @click="showSpacePicker = false"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
           <div class="max-h-48 overflow-y-auto">
-            <button
-              v-for="space in availableSpaces"
+            <div
+              v-for="space in visibleAvailableSpaces"
               :key="space.id"
-              class="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-theme-800 transition-colors text-left"
-              @click="assignSpace(space.id)"
+              class="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-theme-800 transition-colors text-left"
+              :style="{ paddingLeft: `${12 + (space.depth || 0) * 16}px` }"
             >
-              <Icon
-                icon="lucide:database"
-                class="w-4 h-4 text-theme-500 shrink-0"
-              />
-              <div class="flex-1 min-w-0">
-                <div class="text-sm text-theme-200 truncate">
-                  {{ space.name }}
+              <button
+                class="p-0.5 text-theme-500 hover:text-theme-200"
+                :class="{ 'invisible': !hasChildren(space) }"
+                @click.stop="toggleCollapsed(space)"
+              >
+                <Icon
+                  icon="lucide:chevron-down"
+                  class="w-3.5 h-3.5 transition-transform"
+                  :class="{ '-rotate-90': collapsedFolders.has(space.relativePath || '') }"
+                />
+              </button>
+              <button
+                class="flex flex-1 items-center gap-3 min-w-0 text-left"
+                @click="assignSpace(space.id)"
+              >
+                <Icon
+                  :icon="space.isDefault ? 'lucide:hard-drive' : 'lucide:folder'"
+                  class="w-4 h-4 text-theme-500 shrink-0"
+                />
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm text-theme-200 truncate">
+                    {{ space.name }}
+                  </div>
+                  <div
+                    v-if="space.description"
+                    class="text-xs text-theme-500 truncate"
+                  >
+                    {{ space.description }}
+                  </div>
                 </div>
-                <div
-                  v-if="space.description"
-                  class="text-xs text-theme-500 truncate"
-                >
-                  {{ space.description }}
-                </div>
-              </div>
-              <span class="text-xs text-theme-500 shrink-0">
-                {{ space.fileCount }} doc{{ space.fileCount !== 1 ? 's' : '' }}
-              </span>
-            </button>
+                <span class="text-xs text-theme-500 shrink-0">
+                  {{ space.fileCount }} doc{{ space.fileCount !== 1 ? 's' : '' }}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

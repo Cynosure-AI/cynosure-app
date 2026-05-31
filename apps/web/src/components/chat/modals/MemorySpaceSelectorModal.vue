@@ -13,6 +13,7 @@ const visible = defineModel<boolean>({ required: true })
 
 const spaces = ref<MemorySpace[]>([])
 const loading = ref(false)
+const collapsedFolders = ref<Set<string>>(new Set())
 
 watch(visible, async (val) => {
   if (!val) return
@@ -20,8 +21,17 @@ watch(visible, async (val) => {
   try {
     spaces.value = await api.memorySpaces.list()
 
+    spaces.value = [...spaces.value].sort((a, b) => {
+      if (a.isDefault) return -1
+      if (b.isDefault) return 1
+      return (a.relativePath || '').localeCompare(b.relativePath || '')
+    })
+
     const validIds = new Set(spaces.value.map((space) => space.id))
-    const nextSelected = chatStore.freeChatMemorySpaceIds.filter((id) => validIds.has(id))
+    let nextSelected = chatStore.freeChatMemorySpaceIds.length
+      ? chatStore.freeChatMemorySpaceIds.filter((id) => validIds.has(id))
+      : spaces.value.map((space) => space.id)
+    if (nextSelected.length === 0) nextSelected = spaces.value.map((space) => space.id)
     if (nextSelected.length !== chatStore.freeChatMemorySpaceIds.length) {
       chatStore.freeChatMemorySpaceIds.splice(
         0,
@@ -35,10 +45,41 @@ watch(visible, async (val) => {
 })
 
 const selected = computed(() => chatStore.freeChatMemorySpaceIds)
+const allSelected = computed(() => spaces.value.length > 0 && spaces.value.every((space) => selected.value.includes(space.id)))
+
+const visibleSpaces = computed(() =>
+  spaces.value.filter((space) => {
+    if (space.isDefault) return true
+    const parts = (space.relativePath || '').split('/')
+    for (let i = 1; i < parts.length; i++) {
+      if (collapsedFolders.value.has(parts.slice(0, i).join('/'))) return false
+    }
+    return true
+  })
+)
+
+function hasChildren(space: MemorySpace): boolean {
+  const prefix = space.relativePath ? `${space.relativePath}/` : ''
+  return spaces.value.some((candidate) => space.isDefault ? Boolean(candidate.relativePath) : candidate.relativePath?.startsWith(prefix))
+}
+
+function toggleCollapsed(space: MemorySpace) {
+  const key = space.relativePath || ''
+  const next = new Set(collapsedFolders.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  collapsedFolders.value = next
+}
+
+function selectAll() {
+  chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...spaces.value.map((space) => space.id))
+  chatStore.markOverridesModified()
+}
 
 function toggle(id: string) {
   const idx = chatStore.freeChatMemorySpaceIds.indexOf(id)
   if (idx >= 0) {
+    if (chatStore.sessionAutoMemory && chatStore.freeChatMemorySpaceIds.length <= 1) return
     chatStore.freeChatMemorySpaceIds.splice(idx, 1)
   } else {
     chatStore.freeChatMemorySpaceIds.push(id)
@@ -48,6 +89,9 @@ function toggle(id: string) {
 
 function toggleAutoMemory(enabled: boolean) {
   chatStore.sessionAutoMemory = enabled
+  if (enabled && chatStore.freeChatMemorySpaceIds.length === 0 && spaces.value.length > 0) {
+    chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...spaces.value.map((space) => space.id))
+  }
   chatStore.markOverridesModified()
 }
 </script>
@@ -55,7 +99,7 @@ function toggleAutoMemory(enabled: boolean) {
 <template>
   <ModalDialog
     :show="visible"
-    title="Memory Spaces"
+    title="Memory Folders"
     icon="lucide:brain"
     icon-color="accent"
     max-width="max-w-sm"
@@ -74,7 +118,7 @@ function toggleAutoMemory(enabled: boolean) {
             Auto-memory
           </div>
           <div class="text-[11px] text-theme-500 leading-relaxed">
-            Retrieve relevant snippets from selected spaces before sending.
+            Retrieve relevant snippets from selected folders before sending.
           </div>
         </div>
       </div>
@@ -85,7 +129,23 @@ function toggleAutoMemory(enabled: boolean) {
       />
     </div>
 
-    <!-- Space list -->
+    <div
+      v-if="spaces.length > 0"
+      class="mb-2 flex items-center justify-between text-xs"
+    >
+      <span class="text-theme-500">
+        {{ allSelected ? 'All folders selected' : `${selected.length}/${spaces.length} folders selected` }}
+      </span>
+      <button
+        v-if="!allSelected"
+        class="text-accent-400 hover:text-accent-300"
+        @click="selectAll"
+      >
+        Select all
+      </button>
+    </div>
+
+    <!-- Folder list -->
     <div class="overflow-y-auto space-y-1 max-h-80">
       <div
         v-if="loading"
@@ -97,38 +157,54 @@ function toggleAutoMemory(enabled: boolean) {
         v-else-if="spaces.length === 0"
         class="text-sm text-theme-500 text-center py-6"
       >
-        No memory spaces created yet
+        No memory folders found
       </div>
-      <button
-        v-for="space in spaces"
+      <div
+        v-for="space in visibleSpaces"
         :key="space.id"
-        class="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg transition-colors text-left"
+        class="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg transition-colors text-left"
         :class="selected.includes(space.id)
           ? 'bg-accent-600/15 border border-accent-500/30'
           : 'hover:bg-theme-800 border border-transparent'"
-        @click="toggle(space.id)"
+        :style="{ paddingLeft: `${12 + (space.depth || 0) * 16}px` }"
       >
-        <div class="w-7 h-7 rounded-lg bg-theme-800 flex items-center justify-center shrink-0">
+        <button
+          class="p-0.5 text-theme-500 hover:text-theme-200"
+          :class="{ 'invisible': !hasChildren(space) }"
+          @click.stop="toggleCollapsed(space)"
+        >
           <Icon
-            icon="lucide:brain"
-            class="w-3.5 h-3.5"
-            :class="selected.includes(space.id) ? 'text-accent-400' : 'text-theme-500'"
+            icon="lucide:chevron-down"
+            class="w-3.5 h-3.5 transition-transform"
+            :class="{ '-rotate-90': collapsedFolders.has(space.relativePath || '') }"
           />
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="text-sm text-theme-200 truncate">
-            {{ space.name }}
+        </button>
+        <button
+          class="flex items-center gap-3 flex-1 min-w-0 text-left"
+          @click="toggle(space.id)"
+        >
+          <div class="w-7 h-7 rounded-lg bg-theme-800 flex items-center justify-center shrink-0">
+            <Icon
+              :icon="space.isDefault ? 'lucide:hard-drive' : 'lucide:folder'"
+              class="w-3.5 h-3.5"
+              :class="selected.includes(space.id) ? 'text-accent-400' : 'text-theme-500'"
+            />
           </div>
-          <div class="text-[11px] text-theme-500">
-            {{ space.fileCount }} document{{ space.fileCount !== 1 ? 's' : '' }}
+          <div class="flex-1 min-w-0">
+            <div class="text-sm text-theme-200 truncate">
+              {{ space.name }}
+            </div>
+            <div class="text-[11px] text-theme-500">
+              {{ space.fileCount }} document{{ space.fileCount !== 1 ? 's' : '' }}
+            </div>
           </div>
-        </div>
-        <Icon
-          v-if="selected.includes(space.id)"
-          icon="mdi:check-circle"
-          class="w-4 h-4 text-accent-400 shrink-0"
-        />
-      </button>
+          <Icon
+            v-if="selected.includes(space.id)"
+            icon="mdi:check-circle"
+            class="w-4 h-4 text-accent-400 shrink-0"
+          />
+        </button>
+      </div>
     </div>
   </ModalDialog>
 </template>

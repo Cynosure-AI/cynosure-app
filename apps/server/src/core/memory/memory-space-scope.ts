@@ -1,4 +1,5 @@
 import { getDb } from '../../db/database.js'
+import { listAllMemorySpaceRefs } from './memory-space-folders.js'
 
 export type MemorySpaceRef = { id: string; name: string }
 
@@ -29,7 +30,7 @@ export function getDefaultMemorySpace(): MemorySpaceRef | undefined {
 }
 
 /**
- * Return explicitly assigned spaces for an agent, or the default space if none are assigned.
+ * Return explicitly assigned spaces for an agent, or all memory folders if none are assigned.
  */
 export function getAssignedOrDefaultSpaces(agentId: string): MemorySpaceRef[] {
     try {
@@ -45,8 +46,15 @@ export function getAssignedOrDefaultSpaces(agentId: string): MemorySpaceRef[] {
 
         if (assigned.length > 0) return assigned
 
-        const defaultSpace = getDefaultMemorySpace()
-        return defaultSpace ? [defaultSpace] : []
+        return listAllMemorySpaceRefs(db)
+    } catch {
+        return []
+    }
+}
+
+export function getAllMemorySpaces(): MemorySpaceRef[] {
+    try {
+        return listAllMemorySpaceRefs(getDb())
     } catch {
         return []
     }

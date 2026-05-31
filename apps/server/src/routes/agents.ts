@@ -16,12 +16,28 @@ import { getChannelManager } from '../core/channels/channel-manager.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
+import { listAllMemorySpaceRefs } from '../core/memory/memory-space-folders.js'
+
+function defaultMemorySpaceIds(db = getDb()): string[] {
+    return listAllMemorySpaceRefs(db).map((space) => space.id)
+}
+
+function ensureAgentMemoryDefaults(agentId: string, db = getDb()): string[] {
+    const existing = db.prepare('SELECT space_id FROM agent_memory_spaces WHERE agent_id = ?').all(agentId) as { space_id: string }[]
+    if (existing.length > 0) return existing.map((row) => row.space_id)
+
+    const defaults = defaultMemorySpaceIds(db)
+    const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
+    for (const spaceId of defaults) insert.run(agentId, spaceId)
+    return defaults
+}
 
 export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promise<void> {
     // GET /api/agents — list all
     app.get('/', async () => {
         const db = getDb()
         const agents = listAgents()
+        for (const agent of agents) ensureAgentMemoryDefaults(agent.id, db)
         const allLinks = db.prepare('SELECT agent_id, space_id FROM agent_memory_spaces').all() as { agent_id: string; space_id: string }[]
         const linkMap = new Map<string, string[]>()
         for (const row of allLinks) {
@@ -40,8 +56,7 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
             return { error: 'Agent not found' }
         }
         const db = getDb()
-        const spaceRows = db.prepare('SELECT space_id FROM agent_memory_spaces WHERE agent_id = ?').all(agent.id) as { space_id: string }[]
-        return { ...agent, memorySpaces: spaceRows.map(r => r.space_id) }
+        return { ...agent, memorySpaces: ensureAgentMemoryDefaults(agent.id, db) }
     })
 
     // GET /api/agents/:id/icon — serve agent icon
@@ -60,14 +75,12 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     app.post<{ Body: CreateAgentInput & { memorySpaces?: string[] } }>('/', async (req) => {
         const { memorySpaces, ...rest } = req.body
         const agent = createAgent(rest)
-        // Sync memory space assignments if provided
-        if (memorySpaces?.length) {
-            const db = getDb()
-            const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
-            for (const spaceId of memorySpaces) insert.run(agent.id, spaceId)
-        }
+        const assignedMemorySpaces = memorySpaces !== undefined ? memorySpaces : defaultMemorySpaceIds()
+        const db = getDb()
+        const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
+        for (const spaceId of assignedMemorySpaces) insert.run(agent.id, spaceId)
         getChannelManager().refreshAllCommands()
-        return { ...agent, memorySpaces: memorySpaces || [] }
+        return { ...agent, memorySpaces: assignedMemorySpaces }
     })
 
     // PUT /api/agents/:id — update
