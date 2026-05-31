@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getRAGStore } from '../core/memory/rag.js'
+import { andLanceDbFilters, lanceDbEqFilter } from '../core/memory/lancedb-filter.js'
 import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import {
     ensureFolder,
@@ -219,7 +220,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const descendants = db.prepare('SELECT * FROM memory_spaces WHERE id != ? AND folder_path LIKE ?').all(row.id, `${row.folder_path}${row.folder_path.endsWith(sep) ? '' : sep}%`) as MemorySpaceRow[]
         const rowsToDelete = [row, ...descendants]
         for (const target of rowsToDelete) {
-            await rag.deleteByFilter('permanent_memory', `spaceId = '${target.id.replace(/'/g, "''")}'`)
+            await rag.deleteByFilter('permanent_memory', lanceDbEqFilter('spaceId', target.id))
             stopWatchingMemorySpace(target.id)
         }
         archiveMemorySpaceFolder(row)
@@ -384,9 +385,9 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const row = db.prepare('SELECT id FROM memory_spaces WHERE id = ?').get(req.params.id) as { id: string } | undefined
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         const rag = getRAGStore()
-        let filter = `spaceId = '${row.id.replace(/'/g, "''")}'`
+        let filter = lanceDbEqFilter('spaceId', row.id)
         if (req.query.sourceFile) {
-            filter += ` AND sourceFile = '${req.query.sourceFile.replace(/'/g, "''")}'`
+            filter = andLanceDbFilters(filter, lanceDbEqFilter('sourceFile', req.query.sourceFile)) || filter
         }
         return rag.listDocuments('permanent_memory', filter)
     })
@@ -444,12 +445,20 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
             // Update LanceDB sourceFile name if renamed
             if (uniqueName !== sf) {
-                const srcFilter = `spaceId = '${source.id.replace(/'/g, "''")}' AND sourceFile = '${sf.replace(/'/g, "''")}'`
+                const srcFilter = andLanceDbFilters(
+                    lanceDbEqFilter('spaceId', source.id),
+                    lanceDbEqFilter('sourceFile', sf),
+                )
+                if (!srcFilter) continue
                 await rag.updateSourceFile('permanent_memory', srcFilter, uniqueName)
             }
 
             // Move vectors to target space
-            const filter = `spaceId = '${source.id.replace(/'/g, "''")}' AND sourceFile = '${sf.replace(/'/g, "''")}'`
+            const filter = andLanceDbFilters(
+                lanceDbEqFilter('spaceId', source.id),
+                lanceDbEqFilter('sourceFile', sf),
+            )
+            if (!filter) continue
             await rag.updateSpaceId('permanent_memory', filter, target.id)
 
             // Move file index entry

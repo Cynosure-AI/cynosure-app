@@ -1,13 +1,12 @@
-import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
-import { normalizeToolDescription } from '../tool-description.js'
+import type { RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
+import { compactToolDescription } from '../tool-description.js'
 
 export const TOOL_SEARCH_TOOL_NAME = 'expand_available_toolset' // Name of the tool the router LLM calls to confirm its tool selection
 
-const TOOL_DESCRIPTION_LIMIT = 320
 const TOOL_SEARCH_LIMIT = 12
 
 export interface SearchAvailableMcpToolsOptions {
-    allTools: ToolDefinition[]
+    allTools: RegistryAwareToolDefinition[]
     getLoadedToolNames: () => Set<string>
 }
 
@@ -136,10 +135,6 @@ function toolText(tool: ToolDefinition): string {
     return `${tool.name} ${tool.description}`
 }
 
-function isMcpTool(tool: ToolDefinition): boolean {
+function isMcpTool(tool: RegistryAwareToolDefinition): boolean {
     return Boolean(tool.namespaceId?.startsWith('mcp:'))
-}
-
-function compactToolDescription(description: string): string {
-    return normalizeToolDescription(description, TOOL_DESCRIPTION_LIMIT)
 }

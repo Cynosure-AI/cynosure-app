@@ -1,4 +1,4 @@
-import type { ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
+import type { RegisteredToolDefinition, RegistryAwareToolDefinition, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { normalizeToolDescription } from './tool-description.js'
 
 export interface LLMToolSchema {
@@ -114,7 +114,7 @@ export class ToolRegistry {
     return samples || undefined
   }
 
-  private aliasTool(key: string, entry: ToolEntry, executionName: string): ToolDefinition {
+  private aliasTool(key: string, entry: ToolEntry, executionName: string): RegisteredToolDefinition {
     const metadata = {
       registryKey: key,
       originalName: entry.tool.name,
@@ -174,7 +174,7 @@ export class ToolRegistry {
     return [...this.entries.values()].map(({ tool, namespace }) => ({ tool, namespace }))
   }
 
-  getNamespaceMetadataForTools(tools: ToolDefinition[]): ToolNamespaceMetadata[] {
+  getNamespaceMetadataForTools(tools: RegistryAwareToolDefinition[]): ToolNamespaceMetadata[] {
     const groups = new Map<string, { namespace: ToolNamespace; tools: ToolDefinition[] }>()
 
     for (const tool of tools) {
@@ -230,7 +230,7 @@ export class ToolRegistry {
     }))
   }
 
-  getToolDefinitions(): ToolDefinition[] {
+  getToolDefinitions(): RegisteredToolDefinition[] {
     return this.resolveForExecution([...this.entries.keys()])
   }
 
@@ -254,7 +254,7 @@ export class ToolRegistry {
    * receive an LLM-safe execution alias when the bare name is globally
    * ambiguous, e.g. `webfetch__fetch`.
    */
-  resolveForExecution(selectedKeys: string[]): ToolDefinition[] {
+  resolveForExecution(selectedKeys: string[]): RegisteredToolDefinition[] {
     const resolved: Array<{ key: string; entry: ToolEntry }> = []
     for (const keyCandidate of selectedKeys) {
       const key = keyCandidate.trim()
@@ -264,7 +264,7 @@ export class ToolRegistry {
       if (entry) resolved.push({ key, entry })
     }
 
-    const result: ToolDefinition[] = []
+    const result: RegisteredToolDefinition[] = []
     const seen = new Set<string>()
     const selectedByBareName = new Map<string, ToolEntry[]>()
 

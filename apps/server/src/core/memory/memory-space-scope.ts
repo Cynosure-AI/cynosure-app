@@ -1,13 +1,10 @@
 import { getDb } from '../../db/database.js'
+import { lanceDbInFilter } from './lancedb-filter.js'
 import { listAllMemorySpaceRefs, relativePathForFolder } from './memory-space-folders.js'
 
 export type MemorySpaceRef = { id: string; name: string; relativePath?: string }
 
 const DEFAULT_SPACE_ID = 'default'
-
-function sqlString(value: string): string {
-    return `'${value.replace(/'/g, "''")}'`
-}
 
 /**
  * Resolve the default memory space.
@@ -66,13 +63,21 @@ export function getAllMemorySpaces(): MemorySpaceRef[] {
     }
 }
 
+export function getMemorySpaceFolderPath(spaceId: string): string | undefined {
+    try {
+        const db = getDb()
+        const row = db
+            .prepare('SELECT folder_path FROM memory_spaces WHERE id = ?')
+            .get(spaceId) as { folder_path: string } | undefined
+        return row?.folder_path || undefined
+    } catch {
+        return undefined
+    }
+}
+
 /**
  * Build a LanceDB where-clause filter for a set of spaces.
  */
 export function buildMemorySpaceFilter(spaces: Array<{ id: string }>): string | undefined {
-    if (spaces.length === 0) return undefined
-    if (spaces.length === 1) return `spaceId = ${sqlString(spaces[0].id)}`
-
-    const ids = spaces.map((s) => sqlString(s.id)).join(', ')
-    return `spaceId IN (${ids})`
+    return lanceDbInFilter('spaceId', spaces.map((space) => space.id))
 }

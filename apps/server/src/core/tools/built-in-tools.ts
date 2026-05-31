@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "../gateway/providers/base.provider.js";
+import type { RegistryAwareToolDefinition, ToolDefinition } from "../gateway/providers/base.provider.js";
 import {
     buildMemorySpaceFilter,
     getAssignedOrDefaultSpaces,
@@ -150,14 +150,14 @@ function getDefaultMemorySpaces(): { id: string; name: string }[] {
  * built-in stubs with real context-aware implementations.
  */
 export function hydrateBuiltInTools(
-    tools: ToolDefinition[],
+    tools: RegistryAwareToolDefinition[],
     ctx: {
         agentId?: string;
         conversationId: string;
         broadcast: BroadcastFn;
         memorySpaceOverrides?: { id: string; name: string }[];
     },
-): ToolDefinition[] {
+): RegistryAwareToolDefinition[] {
     const assignedSpaces =
         ctx.memorySpaceOverrides ??
         (ctx.agentId ? getAssignedOrDefaultSpaces(ctx.agentId) : getDefaultMemorySpaces());

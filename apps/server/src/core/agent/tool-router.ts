@@ -8,16 +8,15 @@ import {
     type RouterEmbeddingScope,
 } from './router-embedding-cache.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import type { ChatMessage, ContentPart, ToolDefinition } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, ContentPart, RegistryAwareToolDefinition, ToolDefinition } from '../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../tools/tool-registry.js'
-import { normalizeToolDescription } from '../tools/tool-description.js'
+import { compactToolDescription } from '../tools/tool-description.js'
 
 export const MCP_CANDIDATE_COUNT = 8 // Top-K MCP tool groups selected by embedding similarity and passed to the LLM for final confirmation
 export const CONTEXT_WINDOW_TURNS = 5 // Recent turns included in routing query context
 export const ROUTER_SELECTION_TOOL_NAME = 'select_relevant_tools' // Name of the tool the router LLM calls to confirm its tool selection
 
 const TURN_CHAR_LIMIT = 200 // Max characters taken from each conversation turn when building the router query
-const TOOL_DESCRIPTION_LIMIT = 320 // Max characters of a tool description used in embedding/LLM calls
 const MAX_CONFIRMED_TOOLS = 40 // Upper bound on how many tools the LLM confirmation step may select
 const FALLBACK_TOOL_COUNT = 12 // How many tools to fall back to via lexical scoring if LLM confirmation fails
 
@@ -25,13 +24,13 @@ interface McpToolGroup {
     id: string
     label: string
     description: string
-    tools: ToolDefinition[]
+    tools: RegistryAwareToolDefinition[]
 }
 
 export interface RouteToolsInput {
     userQuery: string
     recentMessages?: ChatMessage[]
-    allTools: ToolDefinition[]
+    allTools: RegistryAwareToolDefinition[]
     gateway: LLMGateway
     providerId?: string
     model?: string
@@ -66,7 +65,7 @@ export function buildRouterQuery(
 }
 
 export function shouldRouteTools(
-    tools: ToolDefinition[],
+    tools: RegistryAwareToolDefinition[],
     userQuery?: string,
     opts: { enabled?: boolean } = {},
 ): boolean {
@@ -273,12 +272,12 @@ function messageContentForRouter(content: string | ContentPart[]): string {
     return text || '[multipart content]'
 }
 
-function isMcpTool(tool: ToolDefinition): boolean {
+function isMcpTool(tool: RegistryAwareToolDefinition): boolean {
     return Boolean(tool.namespaceId?.startsWith('mcp:'))
 }
 
 function buildMcpGroups(
-    tools: ToolDefinition[],
+    tools: RegistryAwareToolDefinition[],
     metadata: ToolNamespaceMetadata[],
 ): McpToolGroup[] {
     const metadataById = new Map(metadata.map((item) => [item.id, item]))
@@ -311,10 +310,6 @@ function buildMcpGroups(
     }
 
     return [...groups.values()]
-}
-
-function compactToolDescription(description: string): string {
-    return normalizeToolDescription(description, TOOL_DESCRIPTION_LIMIT)
 }
 
 function groupEmbeddingText(group: McpToolGroup): string {

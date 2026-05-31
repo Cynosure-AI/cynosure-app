@@ -85,7 +85,7 @@ export class MemoryAggregator {
       const counts = await Promise.all(
         uniqueSourceKeys.map(key => {
           const [sf, spaceId] = key.split('\u0000')
-          const filter = spaceId ? `spaceId = '${spaceId.replace(/'/g, "''")}'` : spaceFilter
+          const filter = spaceId ? buildMemorySpaceFilter([{ id: spaceId }]) : spaceFilter
           return permanentMem.countChunks(sf, filter)
         })
       )

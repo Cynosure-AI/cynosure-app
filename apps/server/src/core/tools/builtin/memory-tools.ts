@@ -1,7 +1,7 @@
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
 import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
-import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
+import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getMemorySpaceFolderPath, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import { relativePathForFolder } from '../../memory/memory-space-folders.js'
 import { readTextFile, writeTextFile, fileExists, backupToRevisions } from '../../memory/memory-file-manager.js'
 
@@ -40,10 +40,6 @@ export interface MemoryToolOptions {
     assignedSpaces?: MemorySpaceRef[]
 }
 
-function sqlString(value: string): string {
-    return `'${value.replace(/'/g, "''")}'`
-}
-
 function getKnownMemorySpaces(): MemorySpaceRef[] {
     try {
         const db = getDb()
@@ -65,16 +61,6 @@ function createKnownMemorySpacesLoader(): () => MemorySpaceRef[] {
     return () => {
         cached ??= getKnownMemorySpaces()
         return cached
-    }
-}
-
-function getSpaceFolderPath(spaceId: string): string | undefined {
-    try {
-        const db = getDb()
-        const row = db.prepare('SELECT folder_path FROM memory_spaces WHERE id = ?').get(spaceId) as { folder_path: string } | undefined
-        return row?.folder_path || undefined
-    } catch {
-        return undefined
     }
 }
 
@@ -213,7 +199,7 @@ async function resolveTargetSpace(
         const mem = getAgentMemory()
         const counts = await Promise.all(
             assignedSpaces.map(async (space) => {
-                const filter = `spaceId = ${sqlString(space.id)}`
+                const filter = buildScopeFilter([space])
                 try {
                     return await mem.countChunks(existingTitle, filter)
                 } catch {
@@ -433,7 +419,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             )]
             const counts = await Promise.all(uniqueSourceKeys.map(key => {
                 const [sf, sid] = key.split('\u0000')
-                const filter = sid ? `spaceId = ${sqlString(sid)}` : resolvedScope.filter
+                const filter = sid ? buildScopeFilter([{ id: sid }]) : resolvedScope.filter
                 return mem.countChunks(sf, filter)
             }))
             const countMap = new Map(uniqueSourceKeys.map((key, i) => [key, counts[i]]))
@@ -550,12 +536,12 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
             if ('error' in resolved) return { success: false, output: resolved.error }
 
             const mem = getAgentMemory()
-            const targetFilter = `spaceId = ${sqlString(resolved.spaceId)}`
+            const targetFilter = buildScopeFilter([{ id: resolved.spaceId }])
             const existingCount = await mem.countChunks(title.endsWith('.md') ? title : `${title}.md`, targetFilter)
             const fileName = title.endsWith('.md') ? title : `${title}.md`
 
             // Every memory must correlate to a file on disk
-            const folderPath = getSpaceFolderPath(resolved.spaceId)
+            const folderPath = getMemorySpaceFolderPath(resolved.spaceId)
             if (!folderPath) {
                 return { success: false, output: `Memory folder "${resolved.spaceName}" has no folder configured. Cannot update memory.` }
             }
