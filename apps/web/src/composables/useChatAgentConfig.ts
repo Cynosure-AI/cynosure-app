@@ -19,6 +19,7 @@ export interface ChatAgentConfigApi {
     agentOriginalTools: Ref<string[]>
     agentOriginalSubAgentIds: Ref<string[]>
     agentOriginalMemorySpaceIds: Ref<string[]>
+    freeChatMemorySelectionInitialized: Ref<boolean>
     hasAgentOverrides: ComputedRef<boolean>
     markOverridesModified(): void
     resetAgentOverrides(): void
@@ -56,6 +57,7 @@ export function useChatAgentConfig(
     const agentOriginalProviderId = ref<string | null>(null)
     const freeChatSubAgentIds = ref<string[]>([])
     const freeChatMemorySpaceIds = ref<string[]>([])
+    const freeChatMemorySelectionInitialized = ref<boolean>(false)
     const agentOriginalTools = ref<string[]>([])
     const agentOriginalSubAgentIds = ref<string[]>([])
     const agentOriginalMemorySpaceIds = ref<string[]>([])
@@ -92,6 +94,7 @@ export function useChatAgentConfig(
         agentStore.selectedToolNames = [...agentOriginalTools.value]
         freeChatSubAgentIds.value = [...agentOriginalSubAgentIds.value]
         freeChatMemorySpaceIds.value = [...agentOriginalMemorySpaceIds.value]
+        freeChatMemorySelectionInitialized.value = true
         sessionSystemPrompt.value = agentOriginalSystemPrompt.value
         sessionThinkingEnabled.value = agentOriginalThinkingEnabled.value
         sessionOverrideSubAgents.value = agentOriginalOverrideSubAgents.value
@@ -188,6 +191,7 @@ export function useChatAgentConfig(
             const memSpaceIds = agent?.memorySpaces?.length ? [...agent.memorySpaces] : []
             freeChatMemorySpaceIds.value = [...memSpaceIds]
             agentOriginalMemorySpaceIds.value = [...memSpaceIds]
+            freeChatMemorySelectionInitialized.value = true
             sessionSystemPrompt.value = agent?.systemPrompt || ''
             agentOriginalSystemPrompt.value = agent?.systemPrompt || ''
             agentOriginalModel.value = agent?.model || null
@@ -205,6 +209,7 @@ export function useChatAgentConfig(
             agentStore.clearSelectedTools()
             freeChatSubAgentIds.value = []
             freeChatMemorySpaceIds.value = []
+            freeChatMemorySelectionInitialized.value = false
             agentOriginalTools.value = []
             agentOriginalSubAgentIds.value = []
             agentOriginalMemorySpaceIds.value = []
@@ -255,6 +260,7 @@ export function useChatAgentConfig(
         const memIds = agent.memorySpaces?.length ? [...agent.memorySpaces] : []
         freeChatMemorySpaceIds.value = [...memIds]
         agentOriginalMemorySpaceIds.value = [...memIds]
+        freeChatMemorySelectionInitialized.value = true
         sessionSystemPrompt.value = agent.systemPrompt || ''
         agentOriginalSystemPrompt.value = agent.systemPrompt || ''
         agentOriginalModel.value = agent.model || null
@@ -287,6 +293,7 @@ export function useChatAgentConfig(
         agentOriginalSystemPrompt,
         freeChatSubAgentIds,
         freeChatMemorySpaceIds,
+        freeChatMemorySelectionInitialized,
         agentOriginalTools,
         agentOriginalSubAgentIds,
         agentOriginalMemorySpaceIds,

@@ -31,6 +31,7 @@ export function useChatMessages(
         sessionAutoMemory: Ref<boolean>
         freeChatSubAgentIds: Ref<string[]>
         freeChatMemorySpaceIds: Ref<string[]>
+        freeChatMemorySelectionInitialized: Ref<boolean>
     },
 ): ChatMessagesApi {
     const agentStore = useAgentStore()
@@ -111,12 +112,13 @@ export function useChatMessages(
 
         const tools = agentStore.selectedToolNames
         const baseSystemPrompt = activeAgent?.systemPrompt || undefined
-        if (agentConfig.sessionAutoMemory.value && agentConfig.freeChatMemorySpaceIds.value.length === 0) {
+        if (!agentConfig.freeChatMemorySelectionInitialized.value && agentConfig.freeChatMemorySpaceIds.value.length === 0) {
             try {
                 const spaces = await api.memorySpaces.list()
                 agentConfig.freeChatMemorySpaceIds.value = spaces.map((space) => space.id)
+                agentConfig.freeChatMemorySelectionInitialized.value = true
             } catch {
-                /* server falls back to all folders when no explicit scope is sent */
+                /* keep empty for this turn; a later successful load can initialize the default scope */
             }
         }
         const executionRun = {
@@ -146,7 +148,7 @@ export function useChatMessages(
             msgId,
             audioDataUrls,
             executionRun.subAgents,
-            executionRun.memorySpaceIds.length ? executionRun.memorySpaceIds : undefined,
+            executionRun.memorySpaceIds,
             executionRun.overrideSubAgents,
             executionRun.thinkingEnabled,
             prefs.contextStrategy,
