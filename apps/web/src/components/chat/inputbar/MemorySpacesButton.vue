@@ -16,9 +16,10 @@ const cachedMemorySpaces = ref<MemorySpace[]>([])
 async function loadMemorySpaces() {
   try {
     cachedMemorySpaces.value = await api.memorySpaces.list()
-    if (chatStore.freeChatMemorySpaceIds.length === 0 && cachedMemorySpaces.value.length > 0) {
+    if (!chatStore.freeChatMemorySelectionInitialized && chatStore.freeChatMemorySpaceIds.length === 0 && cachedMemorySpaces.value.length > 0) {
       chatStore.freeChatMemorySpaceIds.splice(0, 0, ...cachedMemorySpaces.value.map((space) => space.id))
     }
+    chatStore.freeChatMemorySelectionInitialized = true
   } catch { /* ignore */ }
 }
 

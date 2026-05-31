@@ -229,13 +229,16 @@ export const useChatStore = defineStore('chat', () => {
         agentConfig.freeChatSubAgentIds.value = cfg.subAgents?.length
           ? cfg.subAgents.map((s: { agentId: string }) => s.agentId)
           : []
-        agentConfig.freeChatMemorySpaceIds.value = cfg.memorySpaceIds?.length ? [...cfg.memorySpaceIds] : []
-        if (!agentConfig.freeChatMemorySpaceIds.value.length && (cfg.autoMemory ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoMemory === true))) {
+        const hasMemorySpaceSnapshot = Object.prototype.hasOwnProperty.call(cfg, 'memorySpaceIds')
+        agentConfig.freeChatMemorySpaceIds.value = Array.isArray(cfg.memorySpaceIds) ? [...cfg.memorySpaceIds] : []
+        agentConfig.freeChatMemorySelectionInitialized.value = hasMemorySpaceSnapshot
+        if (!hasMemorySpaceSnapshot && !agentConfig.freeChatMemorySpaceIds.value.length && (cfg.autoMemory ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoMemory === true))) {
           try {
             const spaces = await api.memorySpaces.list()
             agentConfig.freeChatMemorySpaceIds.value = spaces.map((space) => space.id)
+            agentConfig.freeChatMemorySelectionInitialized.value = true
           } catch {
-            /* keep empty; server-side defaults still apply when no explicit scope is sent */
+            /* keep empty; the next successful memory-space load can initialize the default scope */
           }
         }
         agentConfig.sessionSystemPrompt.value = cfg.systemPrompt ?? ''
@@ -516,6 +519,7 @@ export const useChatStore = defineStore('chat', () => {
     agentOriginalSystemPrompt: agentConfig.agentOriginalSystemPrompt,
     freeChatSubAgentIds: agentConfig.freeChatSubAgentIds,
     freeChatMemorySpaceIds: agentConfig.freeChatMemorySpaceIds,
+    freeChatMemorySelectionInitialized: agentConfig.freeChatMemorySelectionInitialized,
     agentOriginalTools: agentConfig.agentOriginalTools,
     agentOriginalSubAgentIds: agentConfig.agentOriginalSubAgentIds,
     agentOriginalMemorySpaceIds: agentConfig.agentOriginalMemorySpaceIds,

@@ -259,7 +259,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     // ── 6. Auto-memory context ──
 
-    if (isAutoMemoryEnabled(preset, input.autoMemory)) {
+    if (isAutoMemoryEnabled(preset, input.autoMemory) && !hasExplicitEmptyMemoryScope(memorySpaceOverrides)) {
         const useAgentRouterProvider = preset.memoryRouterProviderId === AGENT_ROUTER_PROVIDER
         const useAgentRouterModel = preset.memoryRouterModel === AGENT_ROUTER_MODEL
         const router = resolveRouterProviderModel({
@@ -310,7 +310,14 @@ function isRuntimeMemoryEnabled(
     sessionEnabled: boolean | undefined,
     memorySpaceOverrides: { id: string; name: string }[] | undefined,
 ): boolean {
+    if (hasExplicitEmptyMemoryScope(memorySpaceOverrides)) return false
     return Boolean(memorySpaceOverrides?.length) || isAutoMemoryEnabled(preset, sessionEnabled)
+}
+
+function hasExplicitEmptyMemoryScope(
+    memorySpaceOverrides: { id: string; name: string }[] | undefined,
+): boolean {
+    return Array.isArray(memorySpaceOverrides) && memorySpaceOverrides.length === 0
 }
 
 function dedupeToolsByName(tools: RegistryAwareToolDefinition[]): RegistryAwareToolDefinition[] {

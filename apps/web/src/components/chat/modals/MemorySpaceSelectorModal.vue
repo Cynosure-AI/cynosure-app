@@ -28,10 +28,11 @@ watch(visible, async (val) => {
     })
 
     const validIds = new Set(spaces.value.map((space) => space.id))
-    let nextSelected = chatStore.freeChatMemorySpaceIds.length
-      ? chatStore.freeChatMemorySpaceIds.filter((id) => validIds.has(id))
-      : spaces.value.map((space) => space.id)
-    if (nextSelected.length === 0) nextSelected = spaces.value.map((space) => space.id)
+    let nextSelected = chatStore.freeChatMemorySpaceIds.filter((id) => validIds.has(id))
+    if (!chatStore.freeChatMemorySelectionInitialized && nextSelected.length === 0) {
+      nextSelected = spaces.value.map((space) => space.id)
+      chatStore.freeChatMemorySelectionInitialized = true
+    }
     if (nextSelected.length !== chatStore.freeChatMemorySpaceIds.length) {
       chatStore.freeChatMemorySpaceIds.splice(
         0,
@@ -73,11 +74,13 @@ function toggleCollapsed(space: MemorySpace) {
 
 function selectAll() {
   chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...spaces.value.map((space) => space.id))
+  chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
 
 function deselectAll() {
   chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length)
+  chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
 
@@ -89,6 +92,7 @@ function toggle(id: string) {
   } else {
     chatStore.freeChatMemorySpaceIds.push(id)
   }
+  chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
 
@@ -97,6 +101,7 @@ function toggleAutoMemory(enabled: boolean) {
   if (enabled && chatStore.freeChatMemorySpaceIds.length === 0 && spaces.value.length > 0) {
     chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...spaces.value.map((space) => space.id))
   }
+  chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
 </script>
@@ -158,7 +163,7 @@ function toggleAutoMemory(enabled: boolean) {
     </div>
 
     <!-- Folder list -->
-    <div class="overflow-y-auto space-y-1 max-h-80">
+    <div class="overflow-y-auto space-y-1">
       <div
         v-if="loading"
         class="text-sm text-theme-500 text-center py-6"
