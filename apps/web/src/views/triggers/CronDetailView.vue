@@ -540,11 +540,9 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <span class="text-xs text-theme-300">{{ dlgHumanReadable }}</span>
               <code class="ml-auto text-[11px] text-theme-600 font-mono">{{ dlgGeneratedExpr }}</code>
             </div>
-          </div>
 
-          <!-- One-off -->
-          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
-            <div class="flex items-start justify-between gap-4">
+            <!-- One-off -->
+            <div class="mt-4 pt-4 border-t border-theme-700 flex items-start justify-between gap-4">
               <div class="flex-1">
                 <div class="flex items-center gap-2 mb-1">
                   <Icon
