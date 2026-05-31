@@ -387,7 +387,7 @@ const settingsItems: NavItem[] = [
             icon="lucide:brain"
             class="w-4.5 h-4.5"
           />
-          <span>Memory Folders</span>
+          <span>Memories</span>
         </RouterLink>
         <template #content>
           Memory Folders
