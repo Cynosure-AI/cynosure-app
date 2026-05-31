@@ -83,7 +83,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_list_documents",
         description:
-            "List memorised documents (source files) with their chunk counts. Paginated — max 100 per page. Searches assigned spaces, or the default space when no assignments exist.",
+            "List memorised documents (source files) with their chunk counts. Paginated — max 100 per page. Searches selected memory folders.",
         parameters: {
             type: "object",
             properties: {
@@ -91,10 +91,14 @@ const BUILTIN_TOOL_SPECS = [
                     type: "number",
                     description: "Zero-based page index (default: 0).",
                 },
-                space: {
+                folder: {
                     type: "string",
                     description:
-                        "Optional memory space name or ID to restrict the listing.",
+                        "Optional memory folder name, relative path, or ID to restrict the listing.",
+                },
+                space: {
+                    type: "string",
+                    description: "Deprecated alias for folder. Prefer folder.",
                 },
             },
         },
@@ -103,7 +107,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_retrieve_chunks",
         description:
-            "Retrieve additional chunks from a stored document by source file and chunk index range. Searches assigned spaces, or the default space when no assignments exist; use space to disambiguate duplicate source files.",
+            "Retrieve additional chunks from a stored document by source file and chunk index range. Searches selected memory folders; use folder to disambiguate duplicate source files.",
         parameters: {
             type: "object",
             properties: {
@@ -116,10 +120,14 @@ const BUILTIN_TOOL_SPECS = [
                     type: "number",
                     description: "Maximum chunk index (0-based, inclusive).",
                 },
-                space: {
+                folder: {
                     type: "string",
                     description:
-                        "Optional memory space name or ID. Use when the same source file exists in more than one space.",
+                        "Optional memory folder name, relative path, or ID. Use when the same source file exists in more than one folder.",
+                },
+                space: {
+                    type: "string",
+                    description: "Deprecated alias for folder. Prefer folder.",
                 },
             },
             required: ["sourceFile", "minIndex", "maxIndex"],
@@ -129,7 +137,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_semantic_search",
         description:
-            "Search through stored memories using a semantic query. Returns the most relevant memory chunks with their memory space, source, and chunk index. Searches assigned spaces, or the default space when no assignments exist.",
+            "Search through stored memories using a semantic query. Returns the most relevant memory chunks with their memory folder, source, and chunk index. Searches selected memory folders.",
         parameters: {
             type: "object",
             properties: {
@@ -142,10 +150,14 @@ const BUILTIN_TOOL_SPECS = [
                     description:
                         "Maximum number of results to return (default: 5, max: 10).",
                 },
-                space: {
+                folder: {
                     type: "string",
                     description:
-                        "Optional memory space name or ID to restrict the search.",
+                        "Optional memory folder name, relative path, or ID to restrict the search.",
+                },
+                space: {
+                    type: "string",
+                    description: "Deprecated alias for folder. Prefer folder.",
                 },
             },
             required: ["query"],
@@ -167,10 +179,14 @@ const BUILTIN_TOOL_SPECS = [
                     type: "string",
                     description: "The text content to store in memory.",
                 },
-                space: {
+                folder: {
                     type: "string",
                     description:
-                        "Target memory space name or ID. Required when multiple memory spaces are assigned, or when none are assigned and you need to choose an existing space.",
+                        "Optional memory folder name, relative path, or ID. Omit to write to the default root folder.",
+                },
+                space: {
+                    type: "string",
+                    description: "Deprecated alias for folder. Prefer folder.",
                 },
             },
             required: ["title", "content"],
@@ -180,7 +196,7 @@ const BUILTIN_TOOL_SPECS = [
     {
         name: "memory_update",
         description:
-            "Update an existing memory entry. Auto-matches the title to find the entry; if multiple spaces contain the same title, space parameter is required. " +
+            "Update an existing memory entry. Auto-matches the title to find the entry; if multiple folders contain the same title, folder parameter is required. " +
             "By default, replaces all content. Use chunkStartIndex and chunkEndIndex to update only specific chunks.",
         parameters: {
             type: "object",
@@ -188,17 +204,21 @@ const BUILTIN_TOOL_SPECS = [
                 title: {
                     type: "string",
                     description:
-                        "The title (source file name) of the memory entry to update. Auto-matched across assigned spaces.",
+                        "The title (source file name) of the memory entry to update. Auto-matched across selected folders.",
                 },
                 content: {
                     type: "string",
                     description:
                         "The new text content. Replaces all content by default, or specific chunks if using chunkStartIndex/chunkEndIndex.",
                 },
-                space: {
+                folder: {
                     type: "string",
                     description:
-                        "Memory space name or ID. Required only when the title exists in multiple spaces; otherwise auto-selected.",
+                        "Memory folder name, relative path, or ID. Required only when the title exists in multiple folders; otherwise auto-selected.",
+                },
+                space: {
+                    type: "string",
+                    description: "Deprecated alias for folder. Prefer folder.",
                 },
                 chunkStartIndex: {
                     type: "number",
