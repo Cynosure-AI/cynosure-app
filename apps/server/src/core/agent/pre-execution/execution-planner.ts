@@ -63,10 +63,11 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
     const allRegisteredToolKeys = toolRegistry.listRegisteredTools()
         .map((tool) => tool.key)
         .filter((key) => !isBuiltInMemoryToolKey(key))
+    const effectiveAutoToolRouting = autoToolRouting ?? resolvedAgent?.autoToolRouting ?? false
     const configuredTools = hasExplicitToolAllowlist
         ? selectedToolKeys
         : resolvedAgent
-            ? (stripRuntimeMemoryToolKeys(resolvedAgent.tools).length ? stripRuntimeMemoryToolKeys(resolvedAgent.tools) : (autoToolRouting ? allRegisteredToolKeys : []))
+            ? (stripRuntimeMemoryToolKeys(resolvedAgent.tools).length ? stripRuntimeMemoryToolKeys(resolvedAgent.tools) : (effectiveAutoToolRouting ? allRegisteredToolKeys : []))
             : allRegisteredToolKeys
     const fixedToolKeys = hasRequestToolSelection
         ? selectedToolKeys

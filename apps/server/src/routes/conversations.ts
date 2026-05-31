@@ -11,6 +11,47 @@ function escapeSqlLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
 }
 
+function hydrateChatConfigFromAgent(
+    chatConfig: Record<string, unknown> | undefined,
+    agentId: string | null | undefined,
+): Record<string, unknown> | undefined {
+    if (!agentId) return chatConfig
+    const agent = getAgent(agentId)
+    if (!agent) return chatConfig
+
+    const hydrated: Record<string, unknown> = { ...(chatConfig ?? {}) }
+
+    if (!Object.prototype.hasOwnProperty.call(hydrated, 'allowedTools')) {
+        hydrated.allowedTools = agent.tools
+    }
+    if (!Object.prototype.hasOwnProperty.call(hydrated, 'subAgents')) {
+        hydrated.subAgents = agent.subAgents
+    }
+    if (!Object.prototype.hasOwnProperty.call(hydrated, 'systemPrompt')) {
+        hydrated.systemPrompt = agent.systemPrompt
+    }
+    if (!Object.prototype.hasOwnProperty.call(hydrated, 'model')) {
+        hydrated.model = agent.model
+    }
+    if (!Object.prototype.hasOwnProperty.call(hydrated, 'providerId')) {
+        hydrated.providerId = agent.providerId
+    }
+    if (!Object.prototype.hasOwnProperty.call(hydrated, 'overrideSubAgents')) {
+        hydrated.overrideSubAgents = agent.overrideSubAgents
+    }
+    if (!Object.prototype.hasOwnProperty.call(hydrated, 'thinkingEnabled')) {
+        hydrated.thinkingEnabled = agent.thinkingEnabled
+    }
+    if (!Object.prototype.hasOwnProperty.call(hydrated, 'autoToolRouting')) {
+        hydrated.autoToolRouting = agent.autoToolRouting
+    }
+    if (!Object.prototype.hasOwnProperty.call(hydrated, 'autoMemory')) {
+        hydrated.autoMemory = agent.autoMemory
+    }
+
+    return hydrated
+}
+
 /** Delete image files referenced by messages in the given conversation IDs. */
 function cleanupConversationImages(conversationIds: string[]): void {
     const db = getDb()
@@ -121,6 +162,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         let chatConfig: Record<string, unknown> | undefined
         try {
             chatConfig = convRow?.config_json ? JSON.parse(convRow.config_json) : undefined
+            chatConfig = hydrateChatConfigFromAgent(chatConfig, convRow?.agent_id)
             if (chatConfig && Array.isArray(chatConfig.allowedTools)) {
                 chatConfig.allowedTools = chatConfig.allowedTools.filter((toolKey) => (
                     typeof toolKey === 'string' && !isBuiltInMemoryToolKey(toolKey)
