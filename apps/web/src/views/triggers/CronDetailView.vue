@@ -11,6 +11,7 @@ import { useProviderStore } from "../../stores/provider.store";
 import { Icon } from "@iconify/vue";
 import AgentSelect from "../../components/shared/AgentSelect.vue";
 import ProviderModelSelect from "../../components/shared/ProviderModelSelect.vue";
+import BaseCard from "../../components/shared/BaseCard.vue";
 import {
   parseCronExpr,
   buildCronExpr,
@@ -283,7 +284,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
         <!-- Form -->
         <div class="space-y-4">
           <!-- Identity: Name + Agent -->
-          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5 space-y-4">
+          <BaseCard class="p-5 space-y-4">
             <div class="flex items-center gap-2">
               <Icon
                 icon="lucide:tag"
@@ -310,10 +311,10 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 placeholder="Select an agent…"
               />
             </div>
-          </div>
+          </BaseCard>
 
           <!-- Schedule -->
-          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+          <BaseCard class="p-5">
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:calendar-clock"
@@ -564,10 +565,10 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 class="mt-0.5"
               />
             </div>
-          </div>
+          </BaseCard>
 
           <!-- Provider / Model override -->
-          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+          <BaseCard class="p-5">
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:cpu"
@@ -589,10 +590,10 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               placeholder="Agent default"
               @change="onModelProviderChange"
             />
-          </div>
+          </BaseCard>
 
           <!-- Output Channel -->
-          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+          <BaseCard class="p-5">
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:send"
@@ -621,10 +622,10 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 {{ ch.name }} ({{ ch.type }})
               </option>
             </select>
-          </div>
+          </BaseCard>
 
           <!-- Cron Prompt -->
-          <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+          <BaseCard class="p-5">
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:file-clock"
@@ -646,7 +647,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               style="min-height: 5rem"
               @input="resizePrompt"
             />
-          </div>
+          </BaseCard>
         </div>
       </template>
     </div>
