@@ -75,6 +75,8 @@ export interface AgentExecutorConfig {
     usedToolNames?: Set<string>
     /** Durable orchestration run for the top-level chat executor. */
     orchestrationRunId?: string
+    /** True only for the top-level chat executor that owns conversation-level progress persistence. */
+    isPrimaryExecutor?: boolean
 }
 
 export interface AgentExecutorResult {
@@ -156,6 +158,7 @@ export class AgentExecutor {
             saveMessages: true,
             streamMode: 'single',
             emitEvents: true,
+            isPrimaryExecutor: false,
             ...config,
         }
         this._streamId = config.streamId ?? nanoid()
@@ -385,7 +388,7 @@ export class AgentExecutor {
      * but should not overwrite the main agent's context usage.
      */
     private maybeUpdateContextTokens(conversationId: string, tokens: number | undefined): void {
-        if (tokens == null || this._sp !== 'chat:stream') return
+        if (tokens == null || !this.config.isPrimaryExecutor) return
         try {
             getDb().prepare('UPDATE conversations SET last_context_tokens = ? WHERE id = ?').run(tokens, conversationId)
         } catch { /* best-effort — don't crash the execution loop */ }
@@ -719,7 +722,7 @@ export class AgentExecutor {
 
     private reconcileOrchestrationProgress(results: ToolCallResult[]): void {
         const runId = this.config.orchestrationRunId
-        if (!runId || this._sp !== 'chat:stream') return
+        if (!runId || !this.config.isPrimaryExecutor) return
         const success = results.every((result) => result.success)
         const failed = results.find((result) => !result.success)
         reconcileOrchestrationAfterToolBatch(runId, {
