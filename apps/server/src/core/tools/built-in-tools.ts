@@ -96,10 +96,6 @@ const BUILTIN_TOOL_SPECS = [
                     description:
                         "Optional memory folder name, relative path, or ID to restrict the listing.",
                 },
-                space: {
-                    type: "string",
-                    description: "Deprecated alias for folder. Prefer folder.",
-                },
             },
         },
         timeout: 15_000,
@@ -124,10 +120,6 @@ const BUILTIN_TOOL_SPECS = [
                     type: "string",
                     description:
                         "Optional memory folder name, relative path, or ID. Use when the same source file exists in more than one folder.",
-                },
-                space: {
-                    type: "string",
-                    description: "Deprecated alias for folder. Prefer folder.",
                 },
             },
             required: ["sourceFile", "minIndex", "maxIndex"],
@@ -155,10 +147,6 @@ const BUILTIN_TOOL_SPECS = [
                     description:
                         "Optional memory folder name, relative path, or ID to restrict the search.",
                 },
-                space: {
-                    type: "string",
-                    description: "Deprecated alias for folder. Prefer folder.",
-                },
             },
             required: ["query"],
         },
@@ -183,10 +171,6 @@ const BUILTIN_TOOL_SPECS = [
                     type: "string",
                     description:
                         "Optional memory folder name, relative path, or ID. Omit to write to the default root folder.",
-                },
-                space: {
-                    type: "string",
-                    description: "Deprecated alias for folder. Prefer folder.",
                 },
             },
             required: ["title", "content"],
@@ -215,10 +199,6 @@ const BUILTIN_TOOL_SPECS = [
                     type: "string",
                     description:
                         "Memory folder name, relative path, or ID. Required only when the title exists in multiple folders; otherwise auto-selected.",
-                },
-                space: {
-                    type: "string",
-                    description: "Deprecated alias for folder. Prefer folder.",
                 },
                 chunkStartIndex: {
                     type: "number",
