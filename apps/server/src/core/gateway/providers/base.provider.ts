@@ -42,18 +42,24 @@ export interface ToolDefinition {
   description: string
   parameters: Record<string, unknown> // JSON Schema
   timeout: number
-  /** Stable registry key, when this tool came from the global registry. */
-  registryKey?: string
-  /** Original bare tool name before any collision-safe execution alias was applied. */
-  originalName?: string
-  /** Namespace ID, when this tool came from the global registry. */
-  namespaceId?: string
-  /** Human-readable namespace label, when this tool came from the global registry. */
-  namespaceLabel?: string
-  /** Namespace-level description, when provided by the upstream tool source. */
-  namespaceDescription?: string
   execute: (params: unknown) => Promise<ToolResult>
 }
+
+export interface RegistryToolMetadata {
+  /** Stable registry key, when this tool came from the global registry. */
+  registryKey: string
+  /** Original bare tool name before any collision-safe execution alias was applied. */
+  originalName: string
+  /** Namespace ID, when this tool came from the global registry. */
+  namespaceId: string
+  /** Human-readable namespace label, when this tool came from the global registry. */
+  namespaceLabel: string
+  /** Namespace-level description, when provided by the upstream tool source. */
+  namespaceDescription?: string
+}
+
+export type RegistryAwareToolDefinition = ToolDefinition & Partial<RegistryToolMetadata>
+export type RegisteredToolDefinition = ToolDefinition & RegistryToolMetadata
 
 export interface ToolResult {
   success: boolean

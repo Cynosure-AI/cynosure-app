@@ -1,6 +1,7 @@
 import * as lancedb from '@lancedb/lancedb'
 import { join } from 'path'
 import { getAppDataDir } from '../data-dir.js'
+import { lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
 
 type RRFReranker = lancedb.rerankers.RRFReranker
 
@@ -374,8 +375,7 @@ export class RAGStore {
       const cols = ['id', 'text', 'chunkIndex', 'sourceFile']
       if (fieldNames.has('spaceId')) cols.push('spaceId')
 
-      const escapedSource = sourceFile.replace(/'/g, "''")
-      let whereClause = `sourceFile = '${escapedSource}' AND chunkIndex >= ${minIndex} AND chunkIndex <= ${maxIndex}`
+      let whereClause = `${lanceDbEqFilter('sourceFile', sourceFile)} AND chunkIndex >= ${minIndex} AND chunkIndex <= ${maxIndex}`
       if (filter) whereClause += ` AND ${filter}`
 
       const results = await table.query().select(cols).where(whereClause).toArray()
@@ -404,8 +404,7 @@ export class RAGStore {
       const table = await this.openExistingTable(tableName)
       if (!table) return 0
 
-      const escapedSource = sourceFile.replace(/'/g, "''")
-      let whereClause = `sourceFile = '${escapedSource}' AND id != '__seed__'`
+      let whereClause = `${lanceDbEqFilter('sourceFile', sourceFile)} AND id != '__seed__'`
       if (filter) whereClause += ` AND ${filter}`
 
       return await table.countRows(whereClause)
@@ -521,8 +520,8 @@ export class RAGStore {
     try {
       const table = await this.openExistingTable(tableName)
       if (!table) return 0
-      const escaped = sourceFiles.map(sf => `'${sf.replace(/'/g, "''")}'`).join(', ')
-      let whereClause = `sourceFile IN (${escaped})`
+      let whereClause = lanceDbInFilter('sourceFile', sourceFiles)
+      if (!whereClause) return 0
       if (filter) whereClause += ` AND ${filter}`
       const deletedCount = await table.countRows(whereClause)
       await table.delete(whereClause)
@@ -548,8 +547,9 @@ export class RAGStore {
     try {
       const table = await this.openExistingTable(tableName)
       if (!table) return
-      const quoted = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(', ')
-      await table.delete(`id IN (${quoted})`)
+      const filter = lanceDbInFilter('id', ids)
+      if (!filter) return
+      await table.delete(filter)
       this.ftsIndexCurrent.delete(tableName)
       await this.rebuildFtsIndex(tableName)
     } catch { /* best-effort */ }

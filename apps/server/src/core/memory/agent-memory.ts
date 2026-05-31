@@ -1,6 +1,7 @@
 import { getMemoryParser, type RetrievedChunk } from './parser.js'
 import { getRAGStore } from './rag.js'
 import { getDb } from '../../db/database.js'
+import { buildMemorySpaceFilter, getMemorySpaceFolderPath } from './memory-space-scope.js'
 import {
     ensureFolder,
     writeTextFile,
@@ -21,22 +22,6 @@ const TABLE_NAME = 'permanent_memory'
 export interface ReindexFileResult {
     fileName: string
     chunkCount: number
-}
-
-// ---------------------------------------------------------------------------
-// DB helpers
-// ---------------------------------------------------------------------------
-
-function getSpaceFolderPath(spaceId: string): string | undefined {
-    try {
-        const db = getDb()
-        const row = db
-            .prepare('SELECT folder_path FROM memory_spaces WHERE id = ?')
-            .get(spaceId) as { folder_path: string } | undefined
-        return row?.folder_path || undefined
-    } catch {
-        return undefined
-    }
 }
 
 function upsertFileIndex(
@@ -101,7 +86,7 @@ export class AgentMemory {
         fileName: string,
         spaceId: string,
     ): Promise<{ fileName: string; chunkCount: number }> {
-        const folderPath = getSpaceFolderPath(spaceId)
+        const folderPath = getMemorySpaceFolderPath(spaceId)
         if (!folderPath) {
             // Fallback: index without writing to disk
             const count = await this.ingestText(content, fileName, spaceId)
@@ -143,7 +128,7 @@ export class AgentMemory {
 
             moveToRevisions(folderPath, fileName)
 
-            await ragStore.deleteBySources(TABLE_NAME, [fileName, mdName], `spaceId = '${spaceId.replace(/'/g, "''")}'`)
+            await ragStore.deleteBySources(TABLE_NAME, [fileName, mdName], buildMemorySpaceFilter([{ id: spaceId }]))
             removeFileIndex(spaceId, fileName)
 
             const count = await this.ingestText(text, mdName, spaceId)
@@ -155,7 +140,7 @@ export class AgentMemory {
         }
 
         // Remove old vectors for this file in this space
-        await ragStore.deleteBySource(TABLE_NAME, fileName, `spaceId = '${spaceId.replace(/'/g, "''")}'`)
+        await ragStore.deleteBySource(TABLE_NAME, fileName, buildMemorySpaceFilter([{ id: spaceId }]))
 
         const count = await this.ingestText(text, fileName, spaceId)
         const hash = computeFileHash(filePath)
@@ -181,7 +166,7 @@ export class AgentMemory {
         const hash = computeFileHash(filePath)
 
         const ragStore = getRAGStore()
-        await ragStore.deleteBySource(TABLE_NAME, uniqueName, `spaceId = '${spaceId.replace(/'/g, "''")}'`)
+        await ragStore.deleteBySource(TABLE_NAME, uniqueName, buildMemorySpaceFilter([{ id: spaceId }]))
         const count = await this.ingestText(parsedContent, uniqueName, spaceId)
         upsertFileIndex(spaceId, uniqueName, hash, count)
         return { fileName: uniqueName, chunkCount: count }
@@ -239,10 +224,10 @@ export class AgentMemory {
      */
     async deleteSourceFile(sourceFile: string, spaceId: string): Promise<number> {
         const ragStore = getRAGStore()
-        const spaceFilter = `spaceId = '${spaceId.replace(/'/g, "''")}'`
+        const spaceFilter = buildMemorySpaceFilter([{ id: spaceId }])
         const deleted = await ragStore.deleteBySource(TABLE_NAME, sourceFile, spaceFilter)
 
-        const folderPath = getSpaceFolderPath(spaceId)
+        const folderPath = getMemorySpaceFolderPath(spaceId)
         if (folderPath) {
             deleteFile(folderPath, sourceFile)
         }
@@ -268,7 +253,7 @@ export class AgentMemory {
         if (overrideFilter) {
             filter = overrideFilter
         } else if (spaceId) {
-            filter = `spaceId = '${spaceId.replace(/'/g, "''")}'`
+            filter = buildMemorySpaceFilter([{ id: spaceId }])
         }
         const docs = await ragStore.listDocuments(TABLE_NAME, filter)
 
@@ -295,7 +280,7 @@ export class AgentMemory {
      */
     async resolveUniqueSourceFile(sourceFile: string, spaceId?: string): Promise<string> {
         if (spaceId) {
-            const folderPath = getSpaceFolderPath(spaceId)
+            const folderPath = getMemorySpaceFolderPath(spaceId)
             if (folderPath) {
                 return resolveUniqueFileName(folderPath, sourceFile)
             }

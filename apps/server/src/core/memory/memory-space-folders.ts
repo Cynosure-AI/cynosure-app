@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, type Dirent } f
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path'
 import { nanoid } from 'nanoid'
 import { getMemorySpacesRootDir } from '../data-dir.js'
+import { lanceDbEqFilter } from './lancedb-filter.js'
 import { getRAGStore } from './rag.js'
 import { stopWatchingMemorySpace, watchMemorySpace } from './memory-space-watcher.js'
 
@@ -27,10 +28,6 @@ export interface MemorySpaceFolderData {
     folderPath: string
     depth: number
     parentRelativePath: string | null
-}
-
-function sqlString(value: string): string {
-    return `'${value.replace(/'/g, "''")}'`
 }
 
 export function memoryRootDir(): string {
@@ -185,7 +182,7 @@ export async function runFolderModelCleanupOnce(db: Database.Database): Promise<
     const legacyRows = db.prepare('SELECT id FROM memory_spaces WHERE id != ?').all(DEFAULT_MEMORY_SPACE_ID) as { id: string }[]
     const rag = getRAGStore()
     for (const row of legacyRows) {
-        await rag.deleteByFilter('permanent_memory', `spaceId = ${sqlString(row.id)}`).catch(() => undefined)
+        await rag.deleteByFilter('permanent_memory', lanceDbEqFilter('spaceId', row.id)).catch(() => undefined)
         stopWatchingMemorySpace(row.id)
     }
 

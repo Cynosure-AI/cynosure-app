@@ -15,7 +15,7 @@ import { applyAutoMemoryRouting } from './pre-execution/auto-memory-routing.js'
 import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
-import type { ChatMessage, ToolDefinition } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -87,7 +87,7 @@ export interface PrepareExecutionInput {
 
 export interface PreparedExecution {
     /** Tool definitions ready for the executor */
-    tools: ToolDefinition[]
+    tools: RegistryAwareToolDefinition[]
     /** Resolved provider ID */
     providerId: string | undefined
     /** Resolved model name */
@@ -133,7 +133,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     const toolKeys = routingEnabled
         ? toolRegistry.listRegisteredTools().map((tool) => tool.key)
         : configuredToolKeys
-    let tools = toolRegistry.resolveForExecution(toolKeys)
+    let tools: RegistryAwareToolDefinition[] = toolRegistry.resolveForExecution(toolKeys)
     const preferredToolNames = routingEnabled
         ? toolRegistry
             .resolveForExecution(input.preferredToolKeys ?? [])
@@ -313,9 +313,9 @@ function isRuntimeMemoryEnabled(
     return Boolean(memorySpaceOverrides?.length) || isAutoMemoryEnabled(preset, sessionEnabled)
 }
 
-function dedupeToolsByName(tools: ToolDefinition[]): ToolDefinition[] {
+function dedupeToolsByName(tools: RegistryAwareToolDefinition[]): RegistryAwareToolDefinition[] {
     const seen = new Set<string>()
-    const result: ToolDefinition[] = []
+    const result: RegistryAwareToolDefinition[] = []
     for (const tool of tools) {
         if (seen.has(tool.name)) continue
         seen.add(tool.name)

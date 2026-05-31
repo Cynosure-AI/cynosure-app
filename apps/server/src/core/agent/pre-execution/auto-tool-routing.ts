@@ -3,7 +3,7 @@ import { getEventBus } from '../../telemetry/event-bus.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
 import { routeTools, shouldRouteTools } from './../tool-router.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
-import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
+import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../../tools/tool-registry.js'
 
 export interface ApplyAutoToolRoutingInput {
@@ -11,7 +11,7 @@ export interface ApplyAutoToolRoutingInput {
     conversationId: string
     userQuery?: string
     recentMessages?: ChatMessage[]
-    tools: ToolDefinition[]
+    tools: RegistryAwareToolDefinition[]
     gateway: LLMGateway
     providerId: string
     model: string
