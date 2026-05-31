@@ -80,12 +80,14 @@ function onOverrideSubAgentsToggle(value: boolean): void {
     </div>
     
     <!-- Search -->
-    <input
-      v-model="search"
-      type="text"
-      placeholder="Search agents…"
-      class="w-full px-3 py-1.5 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 outline-none focus:border-theme-500 transition-colors mb-3"
-    >
+    <div class="sticky top-0 z-10 bg-theme-900 pb-3">
+      <input
+        v-model="search"
+        type="text"
+        placeholder="Search agents…"
+        class="w-full px-3 py-1.5 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 outline-none focus:border-theme-500 transition-colors"
+      >
+    </div>
 
 
     <!-- Agent list -->
