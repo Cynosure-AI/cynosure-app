@@ -32,12 +32,12 @@ export function ensureDefaultMemorySpace(database: Database.Database = getDb()):
   if (!defaultSpaceExists) {
     const now = Date.now()
     database.prepare("INSERT INTO memory_spaces (id, name, description, folder_path, sort_order, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(defaultSpaceId, 'Default', 'Default memory space for general knowledge and notes', defaultFolderPath, 0, 1, now)
+      .run(defaultSpaceId, 'Default', 'Default memory folder for general knowledge and notes', defaultFolderPath, 0, 1, now)
     return
   }
 
-  database.prepare("UPDATE memory_spaces SET folder_path = ?, is_default = 1 WHERE id = ?")
-    .run(defaultFolderPath, defaultSpaceId)
+  database.prepare("UPDATE memory_spaces SET name = ?, description = ?, folder_path = ?, is_default = 1 WHERE id = ?")
+    .run('Default', 'Default memory folder for general knowledge and notes', defaultFolderPath, defaultSpaceId)
 }
 
 function createTables(db: Database.Database): void {

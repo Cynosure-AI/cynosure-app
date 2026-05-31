@@ -33,6 +33,7 @@ import { registerBackupRoutes } from './routes/backup.js'
 import { registerChannelRoutes } from './routes/channels.js'
 import { registerMemorySpacesRoutes } from './routes/memory-spaces.js'
 import { watchMemorySpace, stopAllMemorySpaceWatchers } from './core/memory/memory-space-watcher.js'
+import { runFolderModelCleanupOnce, syncMemorySpacesFromFolders } from './core/memory/memory-space-folders.js'
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { addClient, broadcast, startHeartbeat } from './ws.js'
@@ -274,6 +275,7 @@ async function registerWebUi(app: FastifyInstance, startedAt: string): Promise<v
 
 function startMemorySpaceWatchers(): void {
   const db = getDb()
+  syncMemorySpacesFromFolders(db)
   const rows = db
     .prepare("SELECT id, folder_path FROM memory_spaces WHERE folder_path IS NOT NULL AND folder_path != ''")
     .all() as { id: string; folder_path: string }[]
@@ -289,6 +291,9 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
   const startedAt = new Date().toISOString()
   const app = Fastify({ bodyLimit: 50 * 1024 * 1024 })
+
+  await runFolderModelCleanupOnce(getDb())
+  syncMemorySpacesFromFolders(getDb())
 
   await app.register(fastifyCors)
   await app.register(fastifyWebsocket)

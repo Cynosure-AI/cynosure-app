@@ -313,9 +313,9 @@ export const api = {
   memorySpaces: {
     list: () =>
       get<MemorySpace[]>('/api/memory-spaces'),
-    create: (name: string, description?: string, folderPath?: string) =>
-      post<MemorySpace>('/api/memory-spaces', { name, description, folderPath }),
-    update: (id: string, data: { name?: string; description?: string; folderPath?: string }) =>
+    create: (name: string, description?: string, parentRelativePath?: string) =>
+      post<MemorySpace>('/api/memory-spaces', { name, description, parentRelativePath }),
+    update: (id: string, data: { name?: string; description?: string; relativePath?: string }) =>
       put<MemorySpace>(`/api/memory-spaces/${encodeURIComponent(id)}`, data),
     remove: (id: string) =>
       del<{ success: boolean }>(`/api/memory-spaces/${encodeURIComponent(id)}`),

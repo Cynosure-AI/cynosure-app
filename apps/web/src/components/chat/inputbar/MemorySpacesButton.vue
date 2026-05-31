@@ -14,7 +14,12 @@ const showModal = ref(false)
 const cachedMemorySpaces = ref<MemorySpace[]>([])
 
 async function loadMemorySpaces() {
-  try { cachedMemorySpaces.value = await api.memorySpaces.list() } catch { /* ignore */ }
+  try {
+    cachedMemorySpaces.value = await api.memorySpaces.list()
+    if (chatStore.freeChatMemorySpaceIds.length === 0 && cachedMemorySpaces.value.length > 0) {
+      chatStore.freeChatMemorySpaceIds.splice(0, 0, ...cachedMemorySpaces.value.map((space) => space.id))
+    }
+  } catch { /* ignore */ }
 }
 
 onMounted(loadMemorySpaces)
@@ -37,7 +42,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
   <HoverTooltip :max-width="260">
     <button
       class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-accent-500 text-theme-500 hover:text-theme-300"
-      aria-label="Memory spaces"
+      aria-label="Memory folders"
       @click="showModal = true"
     >
       <Icon
@@ -61,7 +66,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
     </button>
     <template #content>
       <div class="font-medium text-theme-300 mb-1.5">
-        Memory Spaces ({{ memorySpaceCount }} selected)
+        Memory Folders ({{ memorySpaceCount }} selected)
       </div>
       <div
         v-if="autoMemoryEnabled"
@@ -86,7 +91,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
           class="flex items-start gap-1.5 mb-1 last:mb-0"
         >
           <Icon
-            icon="lucide:database"
+            icon="lucide:folder"
             class="w-3 h-3 text-purple-400 shrink-0 mt-0.5"
           />
           <div class="min-w-0">
@@ -109,7 +114,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
         v-else
         class="text-theme-500"
       >
-        No memory spaces selected
+        No memory folders selected
       </div>
       <div class="text-theme-600 text-[10px] mt-1.5 border-t border-theme-800 pt-1.5">
         Click to configure

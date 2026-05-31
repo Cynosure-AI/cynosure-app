@@ -1,6 +1,6 @@
 import { getAgentMemory } from './agent-memory.js'
 import { getDb } from '../../db/database.js'
-import { buildMemorySpaceFilter, getAssignedOrDefaultSpaces, getDefaultMemorySpace } from './memory-space-scope.js'
+import { buildMemorySpaceFilter, getAllMemorySpaces, getAssignedOrDefaultSpaces } from './memory-space-scope.js'
 import type { RetrievedChunk } from './parser.js'
 
 export interface AggregatedMemory {
@@ -14,7 +14,7 @@ export interface AggregatedMemory {
  * Fallback logic:
  * - If explicit space IDs are provided → query only those spaces
  * - If agent has explicit memory space assignments → query only those spaces
- * - If agent has NO assignments or no scope is provided → fallback to default space only
+ * - If agent has NO assignments or no scope is provided → query all memory folders
  */
 export class MemoryAggregator {
   /**
@@ -37,7 +37,7 @@ export class MemoryAggregator {
 
     let scopedSpaces: { id: string; name: string }[] = []
 
-    if (opts?.spaceIds?.length) {
+    if (Array.isArray(opts?.spaceIds)) {
       try {
         const db = getDb()
         const uniqueSpaceIds = [...new Set(opts.spaceIds.map((s) => s.trim()).filter(Boolean))]
@@ -49,13 +49,11 @@ export class MemoryAggregator {
     } else if (opts?.agentId) {
       scopedSpaces = getAssignedOrDefaultSpaces(opts.agentId)
     } else {
-      const defaultSpace = getDefaultMemorySpace()
-      if (defaultSpace) scopedSpaces = [defaultSpace]
+      scopedSpaces = getAllMemorySpaces()
     }
 
-    if (scopedSpaces.length === 0) {
-      const defaultSpace = getDefaultMemorySpace()
-      if (defaultSpace) scopedSpaces = [defaultSpace]
+    if (Array.isArray(opts?.spaceIds) && scopedSpaces.length === 0) {
+      return { permanent: [] }
     }
 
     if (scopedSpaces.length > 0) {

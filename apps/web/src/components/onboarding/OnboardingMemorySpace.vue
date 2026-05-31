@@ -2,22 +2,22 @@
   <div class="max-w-2xl mx-auto px-4 py-6 w-full space-y-4">
     <div class="mb-5">
       <h2 class="text-xl font-bold text-theme-100">
-        Memory Space Ready
+        Memory Folder Ready
       </h2>
       <p class="text-sm text-theme-500 mt-1">
-        Cynosure includes a default memory space automatically. You can upload documents now,
-        and create additional spaces later from the Memory section.
+        Cynosure includes a default memory folder automatically. You can upload documents now,
+        and create additional folders later from the Memory section.
       </p>
     </div>
 
-    <!-- Space creation -->
+    <!-- Folder selection -->
     <div class="bg-theme-800/50 border border-theme-700/60 rounded-xl p-5 space-y-4">
       <h3 class="text-sm font-semibold text-theme-200">
-        Active Space
+        Active Folder
       </h3>
 
       <div v-if="!createdSpace && !loadingSpace">
-        <label class="block text-xs font-medium text-theme-400 mb-1.5">Space Name</label>
+        <label class="block text-xs font-medium text-theme-400 mb-1.5">Folder Name</label>
         <div class="flex gap-2">
           <input
             v-model="spaceName"
@@ -55,10 +55,10 @@
           icon="lucide:loader-2"
           class="w-4 h-4 animate-spin"
         />
-        Loading default memory space…
+        Loading default memory folder...
       </div>
 
-      <!-- Space created confirmation -->
+      <!-- Folder ready confirmation -->
       <div
         v-else
         class="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-3"
@@ -72,7 +72,7 @@
             {{ createdSpace?.name }}
           </p>
           <p class="text-xs text-theme-500">
-            Memory space ready
+            Memory folder ready
           </p>
         </div>
         <Icon
@@ -201,7 +201,7 @@ async function createSpace() {
   try {
     createdSpace.value = await api.memorySpaces.create(spaceName.value.trim())
   } catch (e) {
-    spaceError.value = e instanceof Error ? e.message : 'Failed to create memory space'
+    spaceError.value = e instanceof Error ? e.message : 'Failed to create memory folder'
   } finally {
     creatingSpace.value = false
   }
@@ -215,7 +215,7 @@ async function loadInitialSpace() {
     const defaultSpace = spaces.find((s) => s.isDefault)
     createdSpace.value = defaultSpace || spaces[0] || null
   } catch (e) {
-    spaceError.value = e instanceof Error ? e.message : 'Failed to load memory spaces'
+    spaceError.value = e instanceof Error ? e.message : 'Failed to load memory folders'
   } finally {
     loadingSpace.value = false
   }

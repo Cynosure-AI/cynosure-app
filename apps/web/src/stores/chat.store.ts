@@ -230,6 +230,14 @@ export const useChatStore = defineStore('chat', () => {
           ? cfg.subAgents.map((s: { agentId: string }) => s.agentId)
           : []
         agentConfig.freeChatMemorySpaceIds.value = cfg.memorySpaceIds?.length ? [...cfg.memorySpaceIds] : []
+        if (!agentConfig.freeChatMemorySpaceIds.value.length && (cfg.autoMemory ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoMemory === true))) {
+          try {
+            const spaces = await api.memorySpaces.list()
+            agentConfig.freeChatMemorySpaceIds.value = spaces.map((space) => space.id)
+          } catch {
+            /* keep empty; server-side defaults still apply when no explicit scope is sent */
+          }
+        }
         agentConfig.sessionSystemPrompt.value = cfg.systemPrompt ?? ''
         agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled ?? true
         agentConfig.sessionModelOverride.value = cfg.model || null

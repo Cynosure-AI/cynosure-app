@@ -111,6 +111,14 @@ export function useChatMessages(
 
         const tools = agentStore.selectedToolNames
         const baseSystemPrompt = activeAgent?.systemPrompt || undefined
+        if (agentConfig.sessionAutoMemory.value && agentConfig.freeChatMemorySpaceIds.value.length === 0) {
+            try {
+                const spaces = await api.memorySpaces.list()
+                agentConfig.freeChatMemorySpaceIds.value = spaces.map((space) => space.id)
+            } catch {
+                /* server falls back to all folders when no explicit scope is sent */
+            }
+        }
         const executionRun = {
             model: agentConfig.sessionModelOverride.value || undefined,
             providerOverride: agentConfig.sessionProviderOverride.value || undefined,
@@ -138,7 +146,7 @@ export function useChatMessages(
             msgId,
             audioDataUrls,
             executionRun.subAgents,
-            executionRun.memorySpaceIds,
+            executionRun.memorySpaceIds.length ? executionRun.memorySpaceIds : undefined,
             executionRun.overrideSubAgents,
             executionRun.thinkingEnabled,
             prefs.contextStrategy,

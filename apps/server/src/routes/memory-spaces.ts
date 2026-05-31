@@ -10,10 +10,20 @@ import {
     copyFileToFolder,
     deleteFile as deletePhysicalFile,
 } from '../core/memory/memory-file-manager.js'
-import { getMemorySpacesRootDir } from '../core/data-dir.js'
-import { nanoid } from 'nanoid'
-import { join } from 'path'
+import { join, sep } from 'path'
 import { watchMemorySpace, stopWatchingMemorySpace } from '../core/memory/memory-space-watcher.js'
+import {
+    archiveMemorySpaceFolder,
+    folderPathForRelative,
+    makeSubfolderRelativePath,
+    memorySpaceFolderData,
+    newMemorySpaceId,
+    relativePathForFolder,
+    renameMemorySpaceFolder,
+    syncMemorySpacesFromFolders,
+    validateRelativePath,
+    type MemorySpaceFolderData,
+} from '../core/memory/memory-space-folders.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -34,6 +44,9 @@ interface MemorySpaceData {
     name: string
     description: string
     folderPath: string
+    relativePath: string
+    depth: number
+    parentRelativePath: string | null
     sortOrder: number
     isDefault: boolean
     createdAt: number
@@ -60,11 +73,15 @@ export interface MemoryFileStatus {
 // ---------------------------------------------------------------------------
 
 function rowToData(row: MemorySpaceRow, fileCount: number): MemorySpaceData {
+    const folderData: MemorySpaceFolderData = memorySpaceFolderData(row)
     return {
         id: row.id,
         name: row.name,
         description: row.description,
-        folderPath: row.folder_path,
+        folderPath: folderData.folderPath,
+        relativePath: folderData.relativePath,
+        depth: folderData.depth,
+        parentRelativePath: folderData.parentRelativePath,
         sortOrder: row.sort_order,
         isDefault: row.is_default === 1,
         createdAt: row.created_at,
@@ -72,8 +89,10 @@ function rowToData(row: MemorySpaceRow, fileCount: number): MemorySpaceData {
     }
 }
 
-function defaultFolderForNewSpace(id: string): string {
-    return join(getMemorySpacesRootDir(), id)
+function loadSpaceRow(id: string): MemorySpaceRow | undefined {
+    const db = getDb()
+    syncMemorySpacesFromFolders(db)
+    return db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(id) as MemorySpaceRow | undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -85,22 +104,33 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     // GET /api/memory-spaces — list all spaces with file counts
     app.get('/', async () => {
         const db = getDb()
-        const rows = db.prepare('SELECT * FROM memory_spaces ORDER BY sort_order ASC, created_at DESC').all() as MemorySpaceRow[]
+        syncMemorySpacesFromFolders(db)
+        const rows = db.prepare('SELECT * FROM memory_spaces ORDER BY is_default DESC, folder_path ASC').all() as MemorySpaceRow[]
         return rows.map(row => {
             const files = listFilesInFolder(row.folder_path).filter(f => f.supported)
             return rowToData(row, files.length)
         })
     })
 
-    // POST /api/memory-spaces — create a space
-    app.post<{ Body: { name: string; description?: string; folderPath?: string } }>('/', async (req, reply) => {
-        const { name, description, folderPath } = req.body
+    // POST /api/memory-spaces — create a subfolder-backed space
+    app.post<{ Body: { name: string; description?: string; parentRelativePath?: string } }>('/', async (req, reply) => {
+        const { name, description, parentRelativePath } = req.body
         if (!name?.trim()) return reply.status(400).send({ error: 'name is required' })
         const trimmedName = name.trim()
         const db = getDb()
-        const id = nanoid()
+        syncMemorySpacesFromFolders(db)
+        let relativePath: string
+        try {
+            relativePath = makeSubfolderRelativePath(trimmedName, parentRelativePath || '')
+        } catch (err) {
+            return reply.status(400).send({ error: (err as Error).message })
+        }
+        const resolvedFolder = folderPathForRelative(relativePath)
+        const existing = db.prepare('SELECT id FROM memory_spaces WHERE folder_path = ?').get(resolvedFolder) as { id: string } | undefined
+        if (existing) return reply.status(409).send({ error: 'A memory folder with that path already exists.' })
+
+        const id = newMemorySpaceId()
         const now = Date.now()
-        const resolvedFolder = (folderPath?.trim()) || defaultFolderForNewSpace(id)
         ensureFolder(resolvedFolder)
         db.prepare('INSERT INTO memory_spaces (id, name, description, folder_path, sort_order, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
             .run(id, trimmedName, description || '', resolvedFolder, 0, 0, now)
@@ -121,43 +151,87 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         return { success: true }
     })
 
-    // PUT /api/memory-spaces/:id — update name/description/folderPath
-    app.put<{ Params: { id: string }; Body: { name?: string; description?: string; folderPath?: string } }>('/:id', async (req, reply) => {
+    // PUT /api/memory-spaces/:id — update name/description/relativePath
+    app.put<{ Params: { id: string }; Body: { name?: string; description?: string; relativePath?: string } }>('/:id', async (req, reply) => {
         const db = getDb()
+        syncMemorySpacesFromFolders(db)
         const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
         if (!row) return reply.status(404).send({ error: 'Space not found' })
 
         const name = req.body.name?.trim() || row.name
         const description = req.body.description !== undefined ? req.body.description : row.description
         let folderPath = row.folder_path
+        let nextName = name
 
-        if (req.body.folderPath?.trim() && req.body.folderPath.trim() !== row.folder_path) {
-            if (row.is_default) return reply.status(400).send({ error: 'Cannot change the folder of the default memory space.' })
-            folderPath = req.body.folderPath.trim()
-            ensureFolder(folderPath)
+        if (row.is_default === 1 && req.body.relativePath !== undefined && validateRelativePath(req.body.relativePath) !== '') {
+            return reply.status(400).send({ error: 'Cannot move the default memory folder.' })
         }
 
-        db.prepare('UPDATE memory_spaces SET name = ?, description = ?, folder_path = ? WHERE id = ?').run(name, description, folderPath, row.id)
+        if (row.is_default === 0) {
+            const currentRelativePath = relativePathForFolder(row.folder_path)
+            const requestedRelativePath = req.body.relativePath !== undefined
+                ? req.body.relativePath
+                : (() => {
+                    const parent = currentRelativePath.includes('/') ? currentRelativePath.slice(0, currentRelativePath.lastIndexOf('/')) : ''
+                    return parent ? `${parent}/${name}` : name
+                })()
+            let nextRelativePath: string
+            try {
+                nextRelativePath = validateRelativePath(requestedRelativePath)
+            } catch (err) {
+                return reply.status(400).send({ error: (err as Error).message })
+            }
+            if (nextRelativePath !== currentRelativePath) {
+                try {
+                    const oldFolderPath = row.folder_path
+                    const descendants = db.prepare('SELECT * FROM memory_spaces WHERE id != ? AND folder_path LIKE ?').all(row.id, `${oldFolderPath}${oldFolderPath.endsWith(sep) ? '' : sep}%`) as MemorySpaceRow[]
+                    const renamed = renameMemorySpaceFolder(row, nextRelativePath)
+                    folderPath = renamed.folder_path
+                    nextName = renamed.name
+                    for (const child of descendants) {
+                        const childFolderPath = `${folderPath}${child.folder_path.slice(oldFolderPath.length)}`
+                        db.prepare('UPDATE memory_spaces SET folder_path = ? WHERE id = ?').run(childFolderPath, child.id)
+                        watchMemorySpace(child.id, childFolderPath)
+                    }
+                } catch (err) {
+                    return reply.status(409).send({ error: (err as Error).message })
+                }
+            }
+        }
+
+        db.prepare('UPDATE memory_spaces SET name = ?, description = ?, folder_path = ? WHERE id = ?').run(nextName, description, folderPath, row.id)
         watchMemorySpace(row.id, folderPath)
         const files = listFilesInFolder(folderPath).filter(f => f.supported)
-        return rowToData({ ...row, name, description, folder_path: folderPath }, files.length)
+        return rowToData({ ...row, name: nextName, description, folder_path: folderPath }, files.length)
     })
 
-    // DELETE /api/memory-spaces/:id — delete space + vectors (files kept on disk)
+    // DELETE /api/memory-spaces/:id — archive folder + delete vectors/index
     app.delete<{ Params: { id: string } }>('/:id', async (req, reply) => {
         const db = getDb()
-        const row = db.prepare('SELECT id, is_default FROM memory_spaces WHERE id = ?').get(req.params.id) as { id: string; is_default: number } | undefined
+        syncMemorySpacesFromFolders(db)
+        const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         if (row.is_default) {
-            return reply.status(400).send({ error: 'Cannot delete the default memory space. It is always available as a fallback for agents without explicit space assignments.' })
+            return reply.status(400).send({ error: 'Cannot delete the default memory folder.' })
         }
         const rag = getRAGStore()
-        await rag.deleteByFilter('permanent_memory', `spaceId = '${row.id.replace(/'/g, "''")}'`)
-        db.prepare('DELETE FROM memory_file_index WHERE space_id = ?').run(row.id)
-        db.prepare('DELETE FROM agent_memory_spaces WHERE space_id = ?').run(row.id)
-        db.prepare('DELETE FROM memory_spaces WHERE id = ?').run(row.id)
-        stopWatchingMemorySpace(row.id)
-        return { success: true }
+        const relativePath = relativePathForFolder(row.folder_path)
+        const descendants = db.prepare('SELECT * FROM memory_spaces WHERE id != ? AND folder_path LIKE ?').all(row.id, `${row.folder_path}${row.folder_path.endsWith(sep) ? '' : sep}%`) as MemorySpaceRow[]
+        const rowsToDelete = [row, ...descendants]
+        for (const target of rowsToDelete) {
+            await rag.deleteByFilter('permanent_memory', `spaceId = '${target.id.replace(/'/g, "''")}'`)
+            stopWatchingMemorySpace(target.id)
+        }
+        archiveMemorySpaceFolder(row)
+        const deleteRows = db.transaction(() => {
+            for (const target of rowsToDelete) {
+                db.prepare('DELETE FROM memory_file_index WHERE space_id = ?').run(target.id)
+                db.prepare('DELETE FROM agent_memory_spaces WHERE space_id = ?').run(target.id)
+                db.prepare('DELETE FROM memory_spaces WHERE id = ?').run(target.id)
+            }
+        })
+        deleteRows()
+        return { success: true, archived: relativePath }
     })
 
     // -----------------------------------------------------------------------
@@ -166,8 +240,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
     // GET /api/memory-spaces/:id/files — list files in folder with index status
     app.get<{ Params: { id: string } }>('/:id/files', async (req, reply) => {
-        const db = getDb()
-        const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
+        const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
 
@@ -219,8 +292,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
     // POST /api/memory-spaces/:id/files/:fileName/reindex — re-index a specific file
     app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/reindex', async (req, reply) => {
-        const db = getDb()
-        const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
+        const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
 
@@ -235,8 +307,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
     // DELETE /api/memory-spaces/:id/files/:fileName — delete a file from the space
     app.delete<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName', async (req, reply) => {
-        const db = getDb()
-        const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
+        const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
 
         const mem = getAgentMemory()
@@ -250,8 +321,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
     // POST /api/memory-spaces/:id/ingest-file — upload a document to a space
     app.post<{ Params: { id: string }; Body: { fileName: string; content: string } }>('/:id/ingest-file', async (req, reply) => {
-        const db = getDb()
-        const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
+        const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         const { fileName, content } = req.body
         if (!fileName || !content) return reply.status(400).send({ error: 'fileName and content are required' })
@@ -278,8 +348,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
     // POST /api/memory-spaces/:id/reingest-file — re-index an existing file in the space
     app.post<{ Params: { id: string }; Body: { fileName?: string; sourceFile?: string } }>('/:id/reingest-file', async (req, reply) => {
-        const db = getDb()
-        const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
+        const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
         const fileName = req.body.fileName || req.body.sourceFile
@@ -301,6 +370,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     // GET /api/memory-spaces/:id/groups — list documents in a space (from LanceDB index)
     app.get<{ Params: { id: string } }>('/:id/groups', async (req, reply) => {
         const db = getDb()
+        syncMemorySpacesFromFolders(db)
         const row = db.prepare('SELECT id FROM memory_spaces WHERE id = ?').get(req.params.id) as { id: string } | undefined
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         const mem = getAgentMemory()
@@ -310,6 +380,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     // GET /api/memory-spaces/:id/entries — list entries in a space (optionally by fileName)
     app.get<{ Params: { id: string }; Querystring: { sourceFile?: string } }>('/:id/entries', async (req, reply) => {
         const db = getDb()
+        syncMemorySpacesFromFolders(db)
         const row = db.prepare('SELECT id FROM memory_spaces WHERE id = ?').get(req.params.id) as { id: string } | undefined
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         const rag = getRAGStore()
@@ -330,8 +401,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
     // POST /api/memory-spaces/:id/delete-groups — delete files from a space
     app.post<{ Params: { id: string }; Body: { sourceFiles: string[] } }>('/:id/delete-groups', async (req, reply) => {
-        const db = getDb()
-        const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
+        const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         const { sourceFiles } = req.body
         if (!sourceFiles?.length) return reply.status(400).send({ error: 'No sourceFiles provided' })
@@ -345,6 +415,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     // POST /api/memory-spaces/:id/move-groups — move files to another space
     app.post<{ Params: { id: string }; Body: { sourceFiles: string[]; targetSpaceId: string } }>('/:id/move-groups', async (req, reply) => {
         const db = getDb()
+        syncMemorySpacesFromFolders(db)
         const source = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
         if (!source) return reply.status(404).send({ error: 'Source space not found' })
         const { sourceFiles, targetSpaceId } = req.body
