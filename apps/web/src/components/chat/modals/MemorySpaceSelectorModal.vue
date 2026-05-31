@@ -76,6 +76,11 @@ function selectAll() {
   chatStore.markOverridesModified()
 }
 
+function deselectAll() {
+  chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length)
+  chatStore.markOverridesModified()
+}
+
 function toggle(id: string) {
   const idx = chatStore.freeChatMemorySpaceIds.indexOf(id)
   if (idx >= 0) {
@@ -142,6 +147,13 @@ function toggleAutoMemory(enabled: boolean) {
         @click="selectAll"
       >
         Select all
+      </button>
+      <button
+        v-else
+        class="text-theme-400 hover:text-theme-200"
+        @click="deselectAll"
+      >
+        Deselect all
       </button>
     </div>
 
