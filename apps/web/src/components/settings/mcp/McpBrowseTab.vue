@@ -350,52 +350,6 @@ onMounted(() => {
           </div>
 
           <div
-            v-if="addingRegistryId === entryId(item.server) && getInstallInfo(item.server)?.envVars.length"
-            class="mt-3 p-3 border border-theme-700 rounded-lg bg-theme-900/60 space-y-2"
-          >
-            <p class="text-xs text-theme-400 mb-1">
-              Required configuration:
-            </p>
-            <div
-              v-for="ev in getInstallInfo(item.server)!.envVars"
-              :key="ev.name"
-            >
-              <label class="block text-xs text-theme-400 mb-1">
-                {{ ev.name }}
-                <span
-                  v-if="ev.required"
-                  class="text-red-400"
-                >*</span>
-                <span
-                  v-if="ev.description"
-                  class="text-theme-600 ml-1"
-                >- {{ ev.description }}</span>
-              </label>
-              <input
-                v-model="registryEnv[ev.name]"
-                type="text"
-                :placeholder="ev.name"
-                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-              >
-            </div>
-            <div class="flex gap-2 justify-end mt-2">
-              <button
-                class="px-3 py-1.5 text-xs bg-theme-700 hover:bg-theme-600 text-theme-300 rounded-md transition-colors"
-                @click="cancelRegistryAdd"
-              >
-                Cancel
-              </button>
-              <button
-                :disabled="isLoading(entryId(item.server)) || getInstallInfo(item.server)!.envVars.some(v => v.required && !registryEnv[v.name])"
-                class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
-                @click="addFromRegistry(item)"
-              >
-                {{ isLoading(entryId(item.server)) ? 'Adding...' : 'Confirm & Add' }}
-              </button>
-            </div>
-          </div>
-
-          <div
             v-if="actionError[entryId(item.server)]"
             class="mt-2 text-xs text-red-400"
           >
@@ -456,6 +410,56 @@ onMounted(() => {
         <template v-else>
           <span class="text-xs text-theme-600">Not installable</span>
         </template>
+      </div>
+    </template>
+
+    <template #row-expand="{ item }">
+      <div
+        v-if="addingRegistryId === item.id && getInstallInfo(item.server)?.envVars.length"
+        class="px-5 pb-4 border-t border-theme-700/50"
+      >
+        <div class="mt-3 p-3 border border-theme-700 rounded-lg bg-theme-900/60 space-y-2">
+          <p class="text-xs text-theme-400 mb-1">
+            Required configuration:
+          </p>
+          <div
+            v-for="ev in getInstallInfo(item.server)!.envVars"
+            :key="ev.name"
+          >
+            <label class="block text-xs text-theme-400 mb-1">
+              {{ ev.name }}
+              <span
+                v-if="ev.required"
+                class="text-red-400"
+              >*</span>
+              <span
+                v-if="ev.description"
+                class="text-theme-600 ml-1"
+              >- {{ ev.description }}</span>
+            </label>
+            <input
+              v-model="registryEnv[ev.name]"
+              type="text"
+              :placeholder="ev.name"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            >
+          </div>
+          <div class="flex gap-2 justify-end mt-2">
+            <button
+              class="px-3 py-1.5 text-xs bg-theme-700 hover:bg-theme-600 text-theme-300 rounded-md transition-colors"
+              @click="cancelRegistryAdd"
+            >
+              Cancel
+            </button>
+            <button
+              :disabled="isLoading(item.id) || getInstallInfo(item.server)!.envVars.some(v => v.required && !registryEnv[v.name])"
+              class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
+              @click="addFromRegistry(item)"
+            >
+              {{ isLoading(item.id) ? 'Adding...' : 'Confirm & Add' }}
+            </button>
+          </div>
+        </div>
       </div>
     </template>
   </DataTable>
