@@ -55,7 +55,6 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         autoMemory,
         memoryRouterProviderId,
         memoryRouterModel,
-        memoryCandidateCount,
         hasExplicitToolAllowlist = false,
     } = input
     const selectedToolKeys = stripRuntimeMemoryToolKeys(input.selectedToolKeys ?? [])
@@ -89,7 +88,6 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
             autoMemory,
             memoryRouterProviderId,
             memoryRouterModel,
-            memoryCandidateCount,
         })
 
     const prepared = await prepareAgentExecution({
@@ -110,7 +108,6 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         autoMemory,
         memoryRouterProviderId,
         memoryRouterModel,
-        memoryCandidateCount,
         preferredToolKeys: fixedToolKeys,
         recentMessages: messages,
         userQuery: userText,

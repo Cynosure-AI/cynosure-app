@@ -117,7 +117,6 @@ export const api = {
       autoMemory?: boolean,
       memoryRouterProviderId?: string,
       memoryRouterModel?: string,
-      memoryCandidateCount?: number,
       compactProviderId?: string,
       compactModel?: string
     ) =>
@@ -143,7 +142,6 @@ export const api = {
         autoMemory,
         memoryRouterProviderId: memoryRouterProviderId || undefined,
         memoryRouterModel: memoryRouterModel || undefined,
-        memoryCandidateCount,
         compactProviderId: compactProviderId || undefined,
         compactModel: compactModel || undefined,
         titleProviderId: titleProviderId || undefined,

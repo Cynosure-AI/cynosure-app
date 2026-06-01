@@ -3,7 +3,8 @@
  * from office documents (docx, pptx, xlsx, odt, odp, ods, pdf, rtf)
  * and converts the AST to Markdown for LLM consumption.
  */
-import { parseOffice, type OfficeContentNode, type OfficeAttachment } from 'officeparser'
+import { parseOffice, type OfficeContentNode, type OfficeAttachment, type SupportedFileType } from 'officeparser'
+import AdmZip from 'adm-zip'
 import { getDb } from '../../db/database.js'
 
 /** File extensions that officeparser can handle */
@@ -12,6 +13,8 @@ const PARSEABLE_EXTENSIONS = new Set([
     '.odt', '.odp', '.ods',
     '.pdf', '.rtf'
 ])
+
+const DOCX_HEADING_STYLE_RE = /(?:^|[\s_-])heading\D*([1-6])(?:\D|$)|^h([1-6])$/i
 
 /** Check if a filename has a parseable document extension */
 export function isParseableDocument(filename: string): boolean {
@@ -33,34 +36,24 @@ function getParserConfig(): { ocrEnabled: boolean; ocrLanguage: string } {
 }
 
 /** Parse a document buffer and return structured Markdown text */
-export async function parseDocument(buffer: Buffer, _filename: string): Promise<string> {
+export async function parseDocument(buffer: Buffer, filename: string): Promise<string> {
     const { ocrEnabled: ocr, ocrLanguage } = getParserConfig()
+    const fileType = getFileType(filename)
     const ast = await parseOffice(buffer, {
+        fileType,
         outputErrorToConsole: false,
         extractAttachments: ocr,
         ocr,
         ocrLanguage,
     })
 
+    if (fileType === 'docx') {
+        normalizeDocxHeadings(ast.content, extractDocxHeadingStyles(buffer))
+    }
+    clearDocumentMetadata(ast)
+
     const lines: string[] = []
-
-    // Add metadata header if available
-    const meta = ast.metadata
-    if (meta) {
-        const metaParts: string[] = []
-        if (meta.title) metaParts.push(`**Title:** ${meta.title}`)
-        if (meta.author) metaParts.push(`**Author:** ${meta.author}`)
-        if (metaParts.length) {
-            lines.push(metaParts.join(' | '))
-            lines.push('')
-        }
-    }
-
-    // Convert content nodes to markdown
-    for (const node of ast.content) {
-        const md = nodeToMarkdown(node)
-        if (md) lines.push(md)
-    }
+    lines.push(await astToMarkdown(ast))
 
     // Append OCR text from image attachments
     if (ocr && ast.attachments?.length) {
@@ -79,6 +72,196 @@ export async function parseDocument(buffer: Buffer, _filename: string): Promise<
 }
 
 // ─── AST → Markdown Conversion ──────────────────────────────────
+
+type ParsedOfficeAst = Awaited<ReturnType<typeof parseOffice>>
+
+function getFileType(filename: string): SupportedFileType | undefined {
+    const ext = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase()
+    return PARSEABLE_EXTENSIONS.has(`.${ext}`) ? ext as SupportedFileType : undefined
+}
+
+async function astToMarkdown(ast: ParsedOfficeAst): Promise<string> {
+    try {
+        const result = await ast.to('md', {
+            generateIds: false,
+            includeCharts: false,
+            includeFormatting: false,
+            includeImages: false,
+            mdConfig: {
+                fallbackToHtml: false,
+            },
+            renderMetadata: false,
+        })
+        if (typeof result.value === 'string') {
+            return normalizeMarkdown(result.value)
+        }
+    } catch (err) {
+        console.warn('[document-parser] Native Markdown conversion failed, using AST fallback:', err)
+    }
+
+    return normalizeMarkdown(ast.content
+        .map((node) => nodeToMarkdown(node))
+        .filter(Boolean)
+        .join('\n\n'))
+}
+
+function clearDocumentMetadata(ast: ParsedOfficeAst): void {
+    const metadata = ast.metadata as Record<string, unknown> | undefined
+    if (!metadata) return
+    for (const key of Object.keys(metadata)) delete metadata[key]
+}
+
+function normalizeMarkdown(markdown: string): string {
+    return markdown
+        .replace(/^---\n[\s\S]*?\n---\n{0,2}/, '')
+        .split('\n')
+        .map((line) => stripHtmlTags(decodeBasicHtmlEntities(line.replace(/\s+\{#[^{}\s]+(?:\s+[^{}]+)?\}\s*$/, ''))))
+        .filter((line) => {
+            const trimmed = line.trim()
+            if (!trimmed) return true
+            if (/^[-_*=\s]{3,}$/.test(trimmed)) return false
+            return /[\p{L}\p{N}]/u.test(trimmed)
+        })
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+}
+
+function stripHtmlTags(text: string): string {
+    return text
+        .replace(/<\/(?:div|p|br|h[1-6]|li|ul|ol|table|tr)>/gi, ' ')
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/<\/?[a-z][^>]*>/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+function decodeBasicHtmlEntities(text: string): string {
+    return text
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;|&apos;/gi, "'")
+}
+
+function extractDocxHeadingStyles(buffer: Buffer): Map<string, number> {
+    try {
+        const zip = new AdmZip(buffer)
+        const entry = zip.getEntry('word/styles.xml')
+        if (!entry) return new Map()
+
+        const xml = entry.getData().toString('utf8')
+        const styleBlocks = [...xml.matchAll(/<w:style\b[^>]*>[\s\S]*?<\/w:style>/g)]
+            .map((match) => match[0])
+        const candidates: Array<{ id: string; level: number | null; basedOn: string | null }> = []
+
+        for (const block of styleBlocks) {
+            const type = readXmlAttr(block, 'w:type')
+            if (type && type !== 'paragraph') continue
+
+            const id = readXmlAttr(block, 'w:styleId')
+            if (!id) continue
+
+            const outline = readXmlChildAttr(block, 'w:outlineLvl', 'w:val')
+            const outlineLevel = outline == null ? null : clampHeadingLevel(Number(outline) + 1)
+            const name = readXmlChildAttr(block, 'w:name', 'w:val') || ''
+            const level = outlineLevel
+                || headingLevelFromStyleId(id)
+                || headingLevelFromStyleId(name)
+
+            candidates.push({
+                id,
+                level,
+                basedOn: readXmlChildAttr(block, 'w:basedOn', 'w:val'),
+            })
+        }
+
+        const levels = new Map<string, number>()
+        for (const candidate of candidates) {
+            if (candidate.level) levels.set(candidate.id, candidate.level)
+        }
+
+        for (let pass = 0; pass < 3; pass++) {
+            let changed = false
+            for (const candidate of candidates) {
+                if (levels.has(candidate.id) || !candidate.basedOn) continue
+                const parentLevel = levels.get(candidate.basedOn)
+                if (!parentLevel) continue
+                levels.set(candidate.id, parentLevel)
+                changed = true
+            }
+            if (!changed) break
+        }
+
+        return levels
+    } catch (err) {
+        console.warn('[document-parser] Failed to read DOCX heading styles; using parser headings only:', err)
+        return new Map()
+    }
+}
+
+function normalizeDocxHeadings(nodes: OfficeContentNode[], headingStyles: Map<string, number>): void {
+    const hasStructuralStyles = headingStyles.size > 0
+
+    for (const node of nodes) {
+        if (node.children?.length) normalizeDocxHeadings(node.children, headingStyles)
+        if (node.type !== 'paragraph' && node.type !== 'heading') continue
+
+        const text = node.text?.trim()
+        if (!text) continue
+
+        const meta = node.metadata as Record<string, unknown> | undefined
+        const style = typeof meta?.style === 'string' ? meta.style : ''
+        const level = style
+            ? headingStyles.get(style) || headingLevelFromStyleId(style)
+            : null
+
+        if (level) {
+            node.type = 'heading'
+            node.metadata = { ...(meta || {}), level }
+            continue
+        }
+
+        if (node.type === 'heading' && hasStructuralStyles) {
+            node.type = 'paragraph'
+            if (meta) {
+                delete meta.level
+                if (!Object.keys(meta).length) node.metadata = undefined
+            }
+        }
+    }
+}
+
+function readXmlAttr(xml: string, attrName: string): string | null {
+    const unprefixed = attrName.replace(/^w:/, '')
+    const escaped = attrName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const escapedUnprefixed = unprefixed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return xml.match(new RegExp(`\\s(?:${escaped}|${escapedUnprefixed})="([^"]*)"`))?.[1] || null
+}
+
+function readXmlChildAttr(xml: string, tagName: string, attrName: string): string | null {
+    const unprefixedTag = tagName.replace(/^w:/, '')
+    const escapedTag = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const escapedUnprefixedTag = unprefixedTag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const child = xml.match(new RegExp(`<(?:${escapedTag}|${escapedUnprefixedTag})\\b[^>]*/?>`))?.[0]
+    return child ? readXmlAttr(child, attrName) : null
+}
+
+function headingLevelFromStyleId(style: string): number | null {
+    const normalized = style.trim()
+    const match = normalized.match(DOCX_HEADING_STYLE_RE)
+    if (match) return clampHeadingLevel(Number(match[1] || match[2]))
+    if (/^(?:title|titel)$/i.test(normalized)) return 1
+    if (/^(?:subtitle|untertitel)$/i.test(normalized)) return 2
+    return null
+}
+
+function clampHeadingLevel(level: number): number | null {
+    if (!Number.isFinite(level)) return null
+    return Math.max(1, Math.min(6, Math.floor(level)))
+}
 
 function nodeToMarkdown(node: OfficeContentNode, depth = 0): string {
     // Use 'any' for metadata access since the union type doesn't allow direct property access

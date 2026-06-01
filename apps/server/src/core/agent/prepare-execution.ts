@@ -63,8 +63,6 @@ export interface PrepareExecutionInput {
     memoryRouterProviderId?: string
     /** Optional model override for the memory router confirmation pass */
     memoryRouterModel?: string
-    /** Number of memory chunks to retrieve before router confirmation */
-    memoryCandidateCount?: number
 
     // ── Sub-agents ──
 
@@ -226,7 +224,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             toolRouterModel: input.toolRouterModel,
             memoryRouterProviderId: input.memoryRouterProviderId,
             memoryRouterModel: input.memoryRouterModel,
-            memoryCandidateCount: input.memoryCandidateCount,
         })
         tools = [...tools, ...subAgentTools]
     }
@@ -284,7 +281,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             providerId: router.providerId,
             model: providerModel.model,
             routerModel: router.model,
-            memoryCandidateCount: input.memoryCandidateCount ?? preset.memoryCandidateCount,
             agentId: preset.id === '__agentless__' ? undefined : preset.id,
             memorySpaceIds: memorySpaceOverrides?.map((space) => space.id),
         })

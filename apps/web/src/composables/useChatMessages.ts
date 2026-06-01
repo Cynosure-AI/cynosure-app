@@ -160,7 +160,6 @@ export function useChatMessages(
             executionRun.autoMemory,
             activeAgent?.memoryRouterProviderId || prefs.memoryRouterProviderId || undefined,
             activeAgent?.memoryRouterModel || prefs.memoryRouterModel || undefined,
-            prefs.memoryCandidateCount,
             prefs.compactProviderId || undefined,
             prefs.compactModel || undefined
         )
