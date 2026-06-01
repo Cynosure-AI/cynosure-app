@@ -106,10 +106,21 @@ class ChannelManager {
      */
     queueNotification(channelId: string, target: string, text: string): void {
         const provider = this.providers.get(channelId)
-        if (!provider?.sendNotification) return
+        if (!provider) {
+            console.warn(`[ChannelManager] Cannot send notification for channel ${channelId}: channel is not running`)
+            return
+        }
+        if (!provider.sendNotification) {
+            console.warn(`[ChannelManager] Cannot send notification for channel ${channelId}: provider does not support notifications`)
+            return
+        }
 
         const prev = this.notificationQueues.get(channelId) ?? Promise.resolve()
-        const next = prev.then(() => provider.sendNotification!(target, text)).catch(() => { })
+        const next = prev
+            .then(() => provider.sendNotification!(target, text))
+            .catch((err) => {
+                console.error(`[ChannelManager] Notification failed for channel ${channelId}: ${(err as Error).message}`)
+            })
         this.notificationQueues.set(channelId, next)
         // Clean up the queue entry once the chain settles
         next.finally(() => {

@@ -118,8 +118,13 @@ export class TelegramChannel implements ChannelProvider {
     }
 
     async sendNotification(target: string, text: string): Promise<void> {
+        if (!this.connected) {
+            throw new Error('Telegram channel is not connected')
+        }
         const chatId = parseInt(target, 10)
-        if (isNaN(chatId)) return
+        if (isNaN(chatId)) {
+            throw new Error(`Invalid Telegram chat target: ${target}`)
+        }
         await sendLongMessage(this, chatId, text)
     }
 

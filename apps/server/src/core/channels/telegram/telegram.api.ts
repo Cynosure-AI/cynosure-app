@@ -2,11 +2,15 @@ import { TELEGRAM_API, type TelegramCtx } from './telegram.types.js'
 import { formatTelegramMessage } from './telegram.format.js'
 
 export async function sendMessage(ctx: TelegramCtx, chatId: number, text: string): Promise<void> {
-    await fetch(`${TELEGRAM_API}/bot${ctx.botToken}/sendMessage`, {
+    const res = await fetch(`${TELEGRAM_API}/bot${ctx.botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: chatId, text: formatTelegramMessage(text), parse_mode: 'MarkdownV2' })
     })
+    const data = await res.json().catch(() => null) as { ok?: boolean; description?: string } | null
+    if (!res.ok || data?.ok === false) {
+        throw new Error(data?.description || `Telegram API error: ${res.status} ${res.statusText}`)
+    }
 }
 
 export async function sendLongMessage(ctx: TelegramCtx, chatId: number, text: string): Promise<void> {

@@ -206,11 +206,17 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
         })
 
         // Send result to configured output channel if set
-        if (job.outputChannelId && result.content) {
-            const target = resolveChannelTarget(job.outputChannelId)
-            if (target) {
-                const label = job.name?.trim() || 'Cron job'
-                getChannelManager().queueNotification(job.outputChannelId, target, `**${label}:**\n${result.content}`)
+        if (job.outputChannelId) {
+            if (!result.content) {
+                console.warn(`[cron] Job "${job.name || job.id}" (${job.id}) did not send output notification because the agent returned empty content`)
+            } else {
+                const target = resolveChannelTarget(job.outputChannelId)
+                if (target) {
+                    const label = job.name?.trim() || 'Cron job'
+                    getChannelManager().queueNotification(job.outputChannelId, target, `**${label}:**\n${result.content}`)
+                } else {
+                    console.warn(`[cron] Job "${job.name || job.id}" (${job.id}) did not send output notification because channel "${job.outputChannelId}" has no known target`)
+                }
             }
         }
 

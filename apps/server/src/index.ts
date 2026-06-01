@@ -453,12 +453,14 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   // Set the server base URL so MCP HTTP transport can construct OAuth callback URLs
   getMcpManager().setServerBaseUrl(`http://127.0.0.1:${options.port}`)
   await loadSavedMcpServers()
-  startCronScheduler(broadcast)
 
-  // Start messaging channels (Telegram, etc.)
+  // Start messaging channels (Telegram, etc.) before cron catch-up runs so
+  // startup-triggered jobs can deliver configured output notifications.
   const channelManager = getChannelManager()
   channelManager.setBroadcast(broadcast)
   await channelManager.loadAll()
+
+  startCronScheduler(broadcast)
 
   await app.listen({ port: options.port, host: options.host || '0.0.0.0' })
 
