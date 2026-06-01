@@ -93,7 +93,7 @@ onMounted(() => loadSpaces())
 
 <template>
   <div class="space-y-4">
-    <!-- Auto-memory -->
+    <!-- Auto Memories -->
     <BaseCard class="p-5">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
@@ -103,7 +103,7 @@ onMounted(() => loadSpaces())
               class="w-4 h-4 text-accent-400"
             />
             <h3 class="text-sm font-medium text-theme-200">
-              Auto-memory
+              Auto Memories
             </h3>
           </div>
           <p class="text-xs text-theme-500 leading-relaxed">
