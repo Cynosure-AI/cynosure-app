@@ -122,7 +122,7 @@ export class AgentMemory {
             text = readTextFile(folderPath, fileName)
         } else if (isParseableDocument(fileName)) {
             const buf = readFileSync(filePath)
-            text = this.withImportMetadata(await parseDocument(buf, fileName), fileName)
+            text = await parseDocument(buf, fileName)
             const mdName = resolveUniqueFileName(folderPath, toMarkdownFileName(fileName))
             const mdPath = writeTextFile(folderPath, mdName, text)
 
@@ -170,18 +170,6 @@ export class AgentMemory {
         const count = await this.ingestText(parsedContent, uniqueName, spaceId)
         upsertFileIndex(spaceId, uniqueName, hash, count)
         return { fileName: uniqueName, chunkCount: count }
-    }
-
-    private withImportMetadata(content: string, originalFileName: string): string {
-        return [
-            '---',
-            `importedFrom: ${JSON.stringify(originalFileName)}`,
-            `importedAt: ${JSON.stringify(new Date().toISOString())}`,
-            '---',
-            '',
-            content.trim(),
-            '',
-        ].join('\n')
     }
 
     // -----------------------------------------------------------------------

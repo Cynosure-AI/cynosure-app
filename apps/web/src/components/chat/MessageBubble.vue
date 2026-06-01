@@ -414,7 +414,7 @@ const imageGridClass = computed(() => {
   font-weight: 700;
   margin-top: 1.5rem;
   margin-bottom: 0.75rem;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
 }
 .msg-markdown h2 {
   font-size: 1.25rem;
@@ -422,7 +422,7 @@ const imageGridClass = computed(() => {
   font-weight: 700;
   margin-top: 1.25rem;
   margin-bottom: 0.5rem;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
 }
 .msg-markdown h3 {
   font-size: 1.125rem;
@@ -499,8 +499,19 @@ const imageGridClass = computed(() => {
 
 /* ── Spacing ── */
 .msg-markdown p { margin: 0.5rem 0; }
-.msg-markdown ul, .msg-markdown ol { margin: 0.5rem 0; }
-.msg-markdown li { margin: 0.125rem 0; }
+.msg-markdown ul, .msg-markdown ol {
+  margin: 0.5rem 0 0.5rem 1.25rem;
+  padding-left: 1rem;
+}
+.msg-markdown ul { list-style-type: disc; }
+.msg-markdown ol { list-style-type: decimal; }
+.msg-markdown ul ul, .msg-markdown ol ul { list-style-type: circle; }
+.msg-markdown ul ul ul, .msg-markdown ol ul ul { list-style-type: square; }
+.msg-markdown li {
+  margin: 0.125rem 0;
+  padding-left: 0.125rem;
+}
+.msg-markdown li > p { margin: 0.125rem 0; }
 .msg-markdown strong { color: rgba(244, 244, 245, 1); }
 
 /* ── Tables ── */
