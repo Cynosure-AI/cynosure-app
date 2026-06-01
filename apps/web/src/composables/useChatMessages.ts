@@ -112,21 +112,12 @@ export function useChatMessages(
 
         const tools = agentStore.selectedToolNames
         const baseSystemPrompt = activeAgent?.systemPrompt || undefined
-        if (!agentConfig.freeChatMemorySelectionInitialized.value && agentConfig.freeChatMemorySpaceIds.value.length === 0) {
-            try {
-                const spaces = await api.memorySpaces.list()
-                agentConfig.freeChatMemorySpaceIds.value = spaces.map((space) => space.id)
-                agentConfig.freeChatMemorySelectionInitialized.value = true
-            } catch {
-                /* keep empty for this turn; a later successful load can initialize the default scope */
-            }
-        }
         const executionRun = {
             model: agentConfig.sessionModelOverride.value || undefined,
             providerOverride: agentConfig.sessionProviderOverride.value || undefined,
             systemPrompt: agentConfig.sessionSystemPrompt.value || baseSystemPrompt,
             subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.freeChatSubAgentIds.value]),
-            memorySpaceIds: [...agentConfig.freeChatMemorySpaceIds.value],
+            memorySpaceIds: agentConfig.freeChatMemorySelectionInitialized.value ? [...agentConfig.freeChatMemorySpaceIds.value] : undefined,
             overrideSubAgents: agentConfig.sessionOverrideSubAgents.value,
             thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
             autoToolRouting: agentConfig.sessionAutoToolRouting.value,

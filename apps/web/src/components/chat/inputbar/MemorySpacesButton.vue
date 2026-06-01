@@ -16,10 +16,15 @@ const cachedMemorySpaces = ref<MemorySpace[]>([])
 async function loadMemorySpaces() {
   try {
     cachedMemorySpaces.value = await api.memorySpaces.list()
-    if (!chatStore.freeChatMemorySelectionInitialized && chatStore.freeChatMemorySpaceIds.length === 0 && cachedMemorySpaces.value.length > 0) {
-      chatStore.freeChatMemorySpaceIds.splice(0, 0, ...cachedMemorySpaces.value.map((space) => space.id))
+    // On first load for a new free-chat session, pre-select only the default space.
+    // This gives a sensible default while allowing the user to deselect all to disable memory.
+    if (!chatStore.freeChatMemorySelectionInitialized && chatStore.freeChatMemorySpaceIds.length === 0) {
+      const defaultSpaces = cachedMemorySpaces.value.filter(s => s.isDefault)
+      if (defaultSpaces.length > 0) {
+        chatStore.freeChatMemorySpaceIds.splice(0, 0, ...defaultSpaces.map(s => s.id))
+      }
+      chatStore.freeChatMemorySelectionInitialized = true
     }
-    chatStore.freeChatMemorySelectionInitialized = true
   } catch { /* ignore */ }
 }
 

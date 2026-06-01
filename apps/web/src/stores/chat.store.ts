@@ -232,15 +232,6 @@ export const useChatStore = defineStore('chat', () => {
         const hasMemorySpaceSnapshot = Object.prototype.hasOwnProperty.call(cfg, 'memorySpaceIds')
         agentConfig.freeChatMemorySpaceIds.value = Array.isArray(cfg.memorySpaceIds) ? [...cfg.memorySpaceIds] : []
         agentConfig.freeChatMemorySelectionInitialized.value = hasMemorySpaceSnapshot
-        if (!hasMemorySpaceSnapshot && !agentConfig.freeChatMemorySpaceIds.value.length && (cfg.autoMemory ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoMemory === true))) {
-          try {
-            const spaces = await api.memorySpaces.list()
-            agentConfig.freeChatMemorySpaceIds.value = spaces.map((space) => space.id)
-            agentConfig.freeChatMemorySelectionInitialized.value = true
-          } catch {
-            /* keep empty; the next successful memory-space load can initialize the default scope */
-          }
-        }
         agentConfig.sessionSystemPrompt.value = cfg.systemPrompt ?? ''
         agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled ?? true
         agentConfig.sessionModelOverride.value = cfg.model || null
