@@ -27,12 +27,9 @@ watch(visible, async (val) => {
       return (a.relativePath || '').localeCompare(b.relativePath || '')
     })
 
+    // Prune any stale IDs that no longer exist
     const validIds = new Set(spaces.value.map((space) => space.id))
-    let nextSelected = chatStore.freeChatMemorySpaceIds.filter((id) => validIds.has(id))
-    if (!chatStore.freeChatMemorySelectionInitialized && nextSelected.length === 0) {
-      nextSelected = spaces.value.map((space) => space.id)
-      chatStore.freeChatMemorySelectionInitialized = true
-    }
+    const nextSelected = chatStore.freeChatMemorySpaceIds.filter((id) => validIds.has(id))
     if (nextSelected.length !== chatStore.freeChatMemorySpaceIds.length) {
       chatStore.freeChatMemorySpaceIds.splice(
         0,
