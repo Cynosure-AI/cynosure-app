@@ -50,7 +50,7 @@ const categories: SettingsCategory[] = [
   {
     id: 'chat',
     label: 'Chat',
-    description: 'Control router models, generated titles, and context handling for conversations.',
+    description: 'Control automatic tool and memory modes, generated titles, and context handling for conversations.',
     icon: 'lucide:message-square',
     component: ChatSettings
   },
@@ -130,16 +130,16 @@ const sections: SettingsSection[] = [
   {
     id: 'tool-router',
     categoryId: 'chat',
-    label: 'Tool Router',
-    description: 'Provider and model used to detect which tools a request needs.',
-    terms: ['tool router', 'tools', 'router', 'provider model', 'auto selected tools', 'tool namespaces']
+    label: 'Auto Tool Mode',
+    description: 'Provider and model used by the chat input automatic tool mode.',
+    terms: ['auto tool mode', 'tool router', 'tools', 'router', 'provider model', 'auto selected tools', 'tool namespaces', 'automatic tools']
   },
   {
     id: 'memory-router',
     categoryId: 'chat',
-    label: 'Memory Router',
-    description: 'Provider and model used to detect which memories a request needs.',
-    terms: ['memory router', 'auto memory', 'router', 'memories', 'provider model', 'candidate chunks']
+    label: 'Auto Memories',
+    description: 'Provider, model, and candidate pool used by the chat input automatic memories mode.',
+    terms: ['auto memories', 'auto memory', 'memory router', 'router', 'memories', 'provider model', 'candidate chunks', 'memory search candidates', 'candidate pool', 'rerank pool']
   },
   {
     id: 'generated-titles',

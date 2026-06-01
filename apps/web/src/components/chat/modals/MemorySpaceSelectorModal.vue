@@ -125,7 +125,7 @@ function toggleAutoMemory(enabled: boolean) {
         </div>
         <div class="min-w-0">
           <div class="text-sm text-theme-200">
-            Auto-memory
+            Auto Memories
           </div>
           <div class="text-[11px] text-theme-500 leading-relaxed">
             Retrieve relevant snippets from selected folders before sending.

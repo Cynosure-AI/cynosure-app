@@ -18,7 +18,7 @@ const toolRouterLeadingSelections = [
   {
     providerId: "",
     model: "",
-    label: "Use global router model",
+    label: "Use global Auto Tool Mode",
     iconName: "lucide:settings",
   },
   {
@@ -33,7 +33,7 @@ const memoryRouterLeadingSelections = [
   {
     providerId: "",
     model: "",
-    label: "Use global router model",
+    label: "Use global Auto Memories",
     iconName: "lucide:settings",
   },
   {
@@ -134,7 +134,7 @@ function onMaxCtxBlur() {
       </div>
     </div>
 
-    <!-- Tool Router Model -->
+    <!-- Auto Tool Mode Model -->
     <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
       <div class="flex items-start gap-4">
         <div class="flex-1">
@@ -144,12 +144,12 @@ function onMaxCtxBlur() {
               class="w-4 h-4 text-emerald-400"
             />
             <h3 class="text-sm font-medium text-theme-200">
-              Tool Router Model
+              Auto Tool Mode Model
             </h3>
           </div>
           <p class="text-xs text-theme-500 leading-relaxed">
-            Override the provider and model this agent uses when auto tool
-            routing is enabled. Leave blank to use the global router settings
+            Override the provider and model this agent uses when automatic
+            tool mode is enabled. Leave blank to use the global Auto Tool Mode settings
             from Preferences.
           </p>
 
@@ -160,7 +160,7 @@ function onMaxCtxBlur() {
               :model-value="agent.toolRouterModel || ''"
               :providers="providerStore.providers"
               :leading-selections="toolRouterLeadingSelections"
-              placeholder="Use global router model"
+              placeholder="Use global Auto Tool Mode"
               @change="onToolRouterSelection"
             />
           </div>
@@ -168,7 +168,7 @@ function onMaxCtxBlur() {
       </div>
     </div>
 
-    <!-- Memory Router Model -->
+    <!-- Auto Memories Model -->
     <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
       <div class="flex items-start gap-4">
         <div class="flex-1">
@@ -178,12 +178,12 @@ function onMaxCtxBlur() {
               class="w-4 h-4 text-accent-400"
             />
             <h3 class="text-sm font-medium text-theme-200">
-              Memory Router Model
+              Auto Memories Model
             </h3>
           </div>
           <p class="text-xs text-theme-500 leading-relaxed">
-            Override the provider and model this agent uses when auto-memory is enabled.
-            Leave blank to use the global memory router settings from Preferences.
+            Override the provider and model this agent uses when automatic memories are enabled.
+            Leave blank to use the global Auto Memories settings from Preferences.
           </p>
 
           <div class="mt-4 pt-4 border-t border-theme-700">
@@ -193,7 +193,7 @@ function onMaxCtxBlur() {
               :model-value="agent.memoryRouterModel || ''"
               :providers="providerStore.providers"
               :leading-selections="memoryRouterLeadingSelections"
-              placeholder="Use global router model"
+              placeholder="Use global Auto Memories"
               @change="onMemoryRouterSelection"
             />
           </div>
