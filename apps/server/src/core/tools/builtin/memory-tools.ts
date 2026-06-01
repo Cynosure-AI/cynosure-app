@@ -390,7 +390,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             type: 'object',
             properties: {
                 query: { type: 'string', description: 'A descriptive search query to find relevant memories.' },
-                topK: { type: 'number', description: 'Maximum number of results to return (default: 5, max: 30).' },
+                topK: { type: 'number', description: 'Maximum number of results to return (default: 5, max: 20).' },
                 folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the search. Without this, searches all selected folders.' }
             },
             required: ['query']
@@ -402,7 +402,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
 
-            const k = Math.min(topK ?? 5, 30)
+            const k = Math.min(topK ?? 5, 20)
             const results = await mem.recall(query, k, resolvedScope.filter)
 
             if (results.length === 0) {
