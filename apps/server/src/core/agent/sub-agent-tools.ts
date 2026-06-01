@@ -34,6 +34,8 @@ interface SubAgentToolOptions {
     memoryRouterProviderId?: string
     /** Request/global model fallback for sub-agent memory routing */
     memoryRouterModel?: string
+    /** Request/global memory search candidate count for sub-agent auto-memory */
+    memoryCandidateCount?: number
 }
 
 /**
@@ -44,7 +46,7 @@ interface SubAgentToolOptions {
  * sub-agent's own tools, provider, and model.
  */
 export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition[] {
-    const { subAgents, conversationId, broadcast, signal, modelOverride, providerOverride, toolRouterProviderId, toolRouterModel, memoryRouterProviderId, memoryRouterModel } = options
+    const { subAgents, conversationId, broadcast, signal, modelOverride, providerOverride, toolRouterProviderId, toolRouterModel, memoryRouterProviderId, memoryRouterModel, memoryCandidateCount } = options
     const tools: ToolDefinition[] = []
 
     for (const assignment of subAgents) {
@@ -92,6 +94,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     toolRouterModel,
                     memoryRouterProviderId,
                     memoryRouterModel,
+                    memoryCandidateCount,
                     userQuery: userMessage,
                 })
 

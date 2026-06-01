@@ -79,11 +79,18 @@ function onCompactSelection(selection: {
   prefs.compactProviderId = selection.providerId;
   prefs.compactModel = selection.model;
 }
+
+function normalizeMemoryCandidateCount(): void {
+  const value = Number(prefs.memoryCandidateCount);
+  prefs.memoryCandidateCount = Number.isFinite(value)
+    ? Math.max(1, Math.min(100, Math.floor(value)))
+    : 12;
+}
 </script>
 
 <template>
   <div class="space-y-4">
-    <!-- Tool Router -->
+    <!-- Auto Tool Mode -->
     <BaseCard
       v-if="showSection('tool-router')"
       class="p-5 space-y-4"
@@ -99,10 +106,10 @@ function onCompactSelection(selection: {
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
-            Tool Router
+            Auto Tool Mode
           </h3>
           <p class="text-xs text-theme-500 mt-0.5">
-            Provider and model used to detect which tools a request needs
+            Provider and model used by the chat input's automatic tool mode
           </p>
         </div>
       </div>
@@ -119,13 +126,13 @@ function onCompactSelection(selection: {
           @change="onToolRouterSelection"
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          Tool namespaces are prefiltered with your Memory embedding provider, then confirmed by this router model.
+          Tool namespaces are prefiltered with your Memory embedding provider, then confirmed by this model.
           If the embedding model changes, router vectors are rebuilt lazily the next time tools are auto-selected.
         </p>
       </div>
     </BaseCard>
 
-    <!-- Memory Router -->
+    <!-- Auto Memories -->
     <BaseCard
       v-if="showSection('memory-router')"
       class="p-5 space-y-4"
@@ -141,10 +148,10 @@ function onCompactSelection(selection: {
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
-            Memory Router
+            Auto Memories
           </h3>
           <p class="text-xs text-theme-500 mt-0.5">
-            Provider and model used to detect which memories a request needs
+            Provider, model, and candidate pool used by the chat input's automatic memories mode
           </p>
         </div>
       </div>
@@ -161,7 +168,26 @@ function onCompactSelection(selection: {
           @change="onMemoryRouterSelection"
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          Auto-memory retrieves candidate chunks with Memory search, then confirms useful snippets with this router model.
+          Auto Memories retrieves candidate chunks with Memory search, then confirms useful snippets with this model.
+        </p>
+      </div>
+
+      <div class="pt-1 border-t border-theme-700">
+        <label class="block text-xs text-theme-400 mb-1.5">Memory Search Candidates</label>
+        <div class="flex items-center gap-2">
+          <input
+            v-model.number="prefs.memoryCandidateCount"
+            type="number"
+            min="1"
+            max="100"
+            step="1"
+            class="w-28 bg-theme-900 border border-theme-600 rounded-lg px-3 py-2 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+            @blur="normalizeMemoryCandidateCount"
+          >
+          <span class="text-xs text-theme-500">chunks</span>
+        </div>
+        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
+          Larger pools improve recall and give the reranker more material, with extra retrieval and rerank latency.
         </p>
       </div>
     </BaseCard>
