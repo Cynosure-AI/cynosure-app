@@ -80,12 +80,6 @@ function onCompactSelection(selection: {
   prefs.compactModel = selection.model;
 }
 
-function normalizeMemoryCandidateCount(): void {
-  const value = Number(prefs.memoryCandidateCount);
-  prefs.memoryCandidateCount = Number.isFinite(value)
-    ? Math.max(1, Math.min(100, Math.floor(value)))
-    : 12;
-}
 </script>
 
 <template>
@@ -169,25 +163,6 @@ function normalizeMemoryCandidateCount(): void {
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
           Auto Memories retrieves candidate chunks with Memory search, then confirms useful snippets with this model.
-        </p>
-      </div>
-
-      <div class="pt-1 border-t border-theme-700">
-        <label class="block text-xs text-theme-400 mb-1.5">Memory Search Candidates</label>
-        <div class="flex items-center gap-2">
-          <input
-            v-model.number="prefs.memoryCandidateCount"
-            type="number"
-            min="1"
-            max="100"
-            step="1"
-            class="w-28 bg-theme-900 border border-theme-600 rounded-lg px-3 py-2 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-            @blur="normalizeMemoryCandidateCount"
-          >
-          <span class="text-xs text-theme-500">chunks</span>
-        </div>
-        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          Larger pools improve recall and give the reranker more material, with extra retrieval and rerank latency.
         </p>
       </div>
     </BaseCard>

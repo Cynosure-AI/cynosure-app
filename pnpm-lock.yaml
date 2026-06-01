@@ -117,8 +117,8 @@ importers:
         specifier: ^4.2.1
         version: 4.2.1
       officeparser:
-        specifier: ^6.0.7
-        version: 6.1.0
+        specifier: ^7.1.0
+        version: 7.1.0
       openai:
         specifier: ^6.27.0
         version: 6.34.0(ws@8.20.0)(zod@4.3.6)
@@ -3622,10 +3622,15 @@ packages:
     resolution: {integrity: sha512-NuAESUOUMrlIXOfHKzD6bpPu3tYt3xvjNdRIQ+FeT0lNb4K8WR70CaDxhuNguS2XG+GjkyMwOzsN5ZktImfhLA==}
     engines: {node: '>= 0.4'}
 
-  officeparser@6.1.0:
-    resolution: {integrity: sha512-S/dMjUyhbeyDNUjnuGKsmuDx3IoOTcyy6uFzZ6321paaF5NVQVS+Ht8SkQEzEQ85DJ256LnTroMTP2PVKebX1Q==}
+  officeparser@7.1.0:
+    resolution: {integrity: sha512-BkN+nQeOWNiwo8ZNesikbtvIKV/ZhB7RlcLmZNdfYrrlaJsceB9zS+YOK+ElaZVKj9vOLQfUvlyByRmoJm6KBg==}
     engines: {node: '>=18.0.0'}
     hasBin: true
+    peerDependencies:
+      puppeteer: '*'
+    peerDependenciesMeta:
+      puppeteer:
+        optional: true
 
   on-exit-leak-free@2.1.2:
     resolution: {integrity: sha512-0eJJY6hXLGf1udHwfNftBqH+g73EU4B504nZeKpz1sYRKafAghwxEJunB2O7rDZkL4PGfsMVnTXZ2EjibbqcsA==}
@@ -8157,7 +8162,7 @@ snapshots:
 
   object-keys@1.1.1: {}
 
-  officeparser@6.1.0:
+  officeparser@7.1.0:
     dependencies:
       '@xmldom/xmldom': 0.9.10
       fflate: 0.8.2

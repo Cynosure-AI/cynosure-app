@@ -138,8 +138,8 @@ const sections: SettingsSection[] = [
     id: 'memory-router',
     categoryId: 'chat',
     label: 'Auto Memories',
-    description: 'Provider, model, and candidate pool used by the chat input automatic memories mode.',
-    terms: ['auto memories', 'auto memory', 'memory router', 'router', 'memories', 'provider model', 'candidate chunks', 'memory search candidates', 'candidate pool', 'rerank pool']
+    description: 'Provider and model used by the chat input automatic memories mode.',
+    terms: ['auto memories', 'auto memory', 'memory router', 'router', 'memories', 'provider model', 'candidate chunks']
   },
   {
     id: 'generated-titles',

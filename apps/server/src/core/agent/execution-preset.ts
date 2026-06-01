@@ -13,7 +13,6 @@ export interface ExecutionPreset {
     autoMemory?: boolean
     memoryRouterProviderId?: string
     memoryRouterModel?: string
-    memoryCandidateCount?: number
     toolRoutingEnabled?: boolean
     disableToolRouting?: boolean
 }
@@ -50,7 +49,6 @@ export function presetFromAgentless(options: {
     autoMemory?: boolean
     memoryRouterProviderId?: string
     memoryRouterModel?: string
-    memoryCandidateCount?: number
 }): ExecutionPreset {
     return {
         id: '__agentless__',
@@ -62,6 +60,5 @@ export function presetFromAgentless(options: {
         autoMemory: options.autoMemory,
         memoryRouterProviderId: options.memoryRouterProviderId,
         memoryRouterModel: options.memoryRouterModel,
-        memoryCandidateCount: options.memoryCandidateCount,
     }
 }

@@ -5,9 +5,7 @@ import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { RetrievedChunk } from '../../memory/parser.js'
 
-export const DEFAULT_MEMORY_CANDIDATE_COUNT = 12
-const MIN_MEMORY_CANDIDATE_COUNT = 1
-const MAX_MEMORY_CANDIDATE_COUNT = 100
+const AUTO_MEMORY_RETRIEVAL_COUNT = 12
 const MAX_SELECTED_MEMORIES = 5
 const TURN_CHAR_LIMIT = 200
 const MEMORY_TEXT_LIMIT = 900
@@ -22,7 +20,6 @@ export interface ApplyAutoMemoryRoutingInput {
     providerId?: string
     model?: string
     routerModel?: string
-    memoryCandidateCount?: number
     agentId?: string
     memorySpaceIds?: string[]
 }
@@ -37,7 +34,6 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         providerId,
         model,
         routerModel,
-        memoryCandidateCount,
         agentId,
         memorySpaceIds,
     } = input
@@ -53,7 +49,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         const candidates = await aggregator.aggregate(query, {
             agentId,
             spaceIds: memorySpaceIds,
-            permanentTopK: normalizeMemoryCandidateCount(memoryCandidateCount),
+            permanentTopK: AUTO_MEMORY_RETRIEVAL_COUNT,
         })
 
         if (!candidates.permanent.length) {
@@ -87,11 +83,6 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         emitMemoryRoutingSelection(conversationId, taskId, [])
         return null
     }
-}
-
-export function normalizeMemoryCandidateCount(value: unknown): number {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_MEMORY_CANDIDATE_COUNT
-    return Math.max(MIN_MEMORY_CANDIDATE_COUNT, Math.min(MAX_MEMORY_CANDIDATE_COUNT, Math.floor(value)))
 }
 
 function shouldRouteMemory(userQuery?: string, opts: { enabled?: boolean } = {}): boolean {
