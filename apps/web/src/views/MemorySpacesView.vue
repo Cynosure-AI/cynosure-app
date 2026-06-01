@@ -292,7 +292,7 @@ onMounted(() => loadSpaces());
       </div>
 
       <template v-else>
-        <div class="grid gap-5 lg:grid-cols-[minmax(260px,340px)_1fr]">
+        <div class="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
           <div class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45">
             <div class="flex items-center justify-between px-4 py-3 border-b border-theme-800 bg-theme-900/50">
               <div class="text-xs font-medium uppercase tracking-wide text-theme-400">
