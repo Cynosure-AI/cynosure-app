@@ -328,13 +328,14 @@ onMounted(() => loadSpaces());
                   selectedSpaceId === space.id ? 'bg-accent-500/12 text-theme-100' : 'hover:bg-theme-800/35 text-theme-300',
                   dropTargetSpaceId === space.id ? 'ring-1 ring-accent-500/70 ring-inset bg-accent-500/10' : '',
                 ]"
-                :style="{ paddingLeft: `${12 + (space.depth || 0) * 18}px` }"
+                :style="{ paddingLeft: `${12 + (space.depth || 0) * 12}px` }"
                 @dragenter.stop="onDragEnter($event, space.id)"
                 @dragleave.stop="onDragLeave($event, space.id)"
                 @dragover.stop="onDragOver($event)"
                 @drop.stop="onFolderDrop($event, space.id)"
               >
                 <button
+                  v-if="!space.isDefault"
                   class="p-0.5 text-theme-500 hover:text-theme-200 transition-colors"
                   :class="{ 'invisible': !hasChildren(space) }"
                   @click.stop="toggleFolder(space)"

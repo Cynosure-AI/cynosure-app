@@ -180,9 +180,10 @@ function toggleAutoMemory(enabled: boolean) {
         :class="selected.includes(space.id)
           ? 'bg-accent-600/15 border border-accent-500/30'
           : 'hover:bg-theme-800 border border-transparent'"
-        :style="{ paddingLeft: `${12 + (space.depth || 0) * 16}px` }"
+        :style="{ paddingLeft: `${12 + (space.depth || 0) * 12}px` }"
       >
         <button
+          v-if="!space.isDefault"
           class="p-0.5 text-theme-500 hover:text-theme-200"
           :class="{ 'invisible': !hasChildren(space) }"
           @click.stop="toggleCollapsed(space)"
