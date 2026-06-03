@@ -4,6 +4,7 @@ import type { LLMProviderConfig } from "../../api/types";
 import CustomSelect, {
   type SelectOption,
   type SelectOptionGroup,
+  type SelectSize,
 } from "./CustomSelect.vue";
 import { useProviderStore } from "../../stores/provider.store";
 import { useProviderLogos } from "../../composables/useProviderLogos";
@@ -40,7 +41,7 @@ const props = withDefaults(
     dropUp?: boolean;
     align?: "left" | "center" | "right";
     dropdownWidth?: string;
-    size?: "sm" | "md";
+    size?: SelectSize;
   }>(),
   {
     modelType: "llm",

@@ -30,6 +30,8 @@ export interface SelectOptionGroup {
   options: SelectOption[];
 }
 
+export type SelectSize = "xs" | "sm" | "md" | "lg";
+
 const props = withDefaults(
   defineProps<{
     modelValue: string;
@@ -50,10 +52,12 @@ const props = withDefaults(
     align?: "left" | "center" | "right";
     /**
      * Trigger button size:
-     * - 'sm' — compact (text-xs, py-1.5, px-2.5) for toolbars/headers
-     * - 'md' — standard form size (text-sm, py-2, px-3)
+     * - 'xs' — extra compact (text-xs, py-1, px-2)
+     * - 'sm' — compact (text-sm, py-1.5, px-2.5)
+     * - 'md' — standard form size (text-base, py-2, px-3)
+     * - 'lg' — large form size (text-lg, py-2.5, px-3.5)
      */
-    size?: "sm" | "md";
+    size?: SelectSize;
   }>(),
   {
     placeholder: "Select...",
@@ -118,6 +122,43 @@ const filteredAllOptions = computed(() =>
 const hasOptionIcons = computed(() =>
   filteredAllOptions.value.some((o) => o.imgSrc || o.iconName),
 );
+
+const sizeClasses: Record<
+  SelectSize,
+  {
+    trigger: string;
+    filterInput: string;
+    empty: string;
+    option: string;
+  }
+> = {
+  xs: {
+    trigger: "text-xs px-2 py-1",
+    filterInput: "text-xs px-2 py-1",
+    empty: "text-xs",
+    option: "text-xs px-2 py-1",
+  },
+  sm: {
+    trigger: "text-sm px-2.5 py-1.5",
+    filterInput: "text-sm px-2.5 py-1",
+    empty: "text-sm",
+    option: "text-sm px-2.5 py-1.5",
+  },
+  md: {
+    trigger: "text-base px-3 py-2",
+    filterInput: "text-base px-3 py-1.5",
+    empty: "text-base",
+    option: "text-base px-3 py-2",
+  },
+  lg: {
+    trigger: "text-lg px-3.5 py-2.5",
+    filterInput: "text-lg px-3.5 py-2",
+    empty: "text-lg",
+    option: "text-lg px-3.5 py-2.5",
+  },
+};
+
+const currentSizeClasses = computed(() => sizeClasses[props.size]);
 
 function open(): void {
   filterQuery.value = "";
@@ -239,7 +280,7 @@ onBeforeUnmount(() =>
       :aria-expanded="isOpen"
       tabindex="0"
       class="w-full flex items-center gap-2 bg-theme-900 border border-theme-600 text-theme-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-accent-500 cursor-pointer select-none"
-      :class="size === 'md' ? 'text-sm px-3 py-2' : 'text-xs px-2.5 py-1.5'"
+      :class="currentSizeClasses.trigger"
       @click="toggle"
       @keydown="handleKeydown"
     >
@@ -303,7 +344,8 @@ onBeforeUnmount(() =>
           type="text"
           placeholder="Search…"
           autocomplete="off"
-          class="w-full bg-theme-700/60 border border-theme-600 rounded-md px-2.5 py-1 text-xs text-theme-200 placeholder:text-theme-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          class="w-full bg-theme-700/60 border border-theme-600 rounded-md text-theme-200 placeholder:text-theme-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          :class="currentSizeClasses.filterInput"
           @keydown.esc.prevent="isOpen = false"
           @keydown.arrow-down.prevent="handleKeydown"
           @keydown.arrow-up.prevent="handleKeydown"
@@ -317,7 +359,8 @@ onBeforeUnmount(() =>
       >
         <div
           v-if="filterable && filterQuery && !filteredAllOptions.length"
-          class="px-3 py-2 text-xs text-theme-500 italic"
+          class="px-3 py-2 text-theme-500 italic"
+          :class="currentSizeClasses.empty"
         >
           No results
         </div>
@@ -348,8 +391,9 @@ onBeforeUnmount(() =>
             :disabled="opt.disabled"
             :title="opt.tooltip"
             :data-value="opt.value"
-            class="group/select-option w-full flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer transition-colors"
+            class="group/select-option w-full flex items-center gap-2 cursor-pointer transition-colors"
             :class="[
+              currentSizeClasses.option,
               opt.disabled
                 ? 'text-theme-600 cursor-not-allowed'
                 : opt.value === modelValue
