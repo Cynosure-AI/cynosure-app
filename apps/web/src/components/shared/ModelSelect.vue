@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import CustomSelect, { type SelectOption, type SelectOptionGroup } from './CustomSelect.vue'
+import CustomSelect, { type SelectOption, type SelectOptionGroup, type SelectSize } from './CustomSelect.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -20,7 +20,7 @@ const props = withDefaults(
     dropUp?: boolean
     align?: 'left' | 'center' | 'right'
     dropdownWidth?: string
-    size?: 'sm' | 'md'
+    size?: SelectSize
   }>(),
   {
     includeDefault: false,
