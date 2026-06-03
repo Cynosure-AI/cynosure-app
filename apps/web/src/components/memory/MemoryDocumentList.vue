@@ -332,7 +332,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
 </script>
 
 <template>
-  <div>
+  <div class="min-w-0 overflow-hidden">
     <!-- Folder header -->
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
@@ -391,14 +391,13 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
     <!-- Folder path hint -->
     <div
       v-if="currentSpace?.folderPath"
-      class="mb-3 flex items-center gap-1.5 text-xs text-theme-600"
+      class="mb-3 flex items-center gap-1.5 text-xs text-theme-600 min-w-0 overflow-hidden"
     >
       <Icon
         icon="lucide:folder"
         class="w-3.5 h-3.5 shrink-0"
       />
-      <span class="truncate font-mono">{{ currentSpace.relativePath || "Default" }}</span>
-      <span class="text-theme-700">|</span>
+
       <span class="truncate font-mono">{{ currentSpace.folderPath }}</span>
     </div>
 
