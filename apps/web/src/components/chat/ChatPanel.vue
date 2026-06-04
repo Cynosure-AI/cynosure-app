@@ -79,6 +79,18 @@ function postActionLabel(action: string): string {
   return postActionLabels[action] || `${action}…`
 }
 
+const POST_ACTION_ORDER = ['generating-title', 'updating-entity-graph']
+const activePostActionItems = computed(() =>
+  Array.from(chatStore.activePostActions).sort((a, b) => {
+    const ai = POST_ACTION_ORDER.indexOf(a)
+    const bi = POST_ACTION_ORDER.indexOf(b)
+    if (ai === -1 && bi === -1) return a.localeCompare(b)
+    if (ai === -1) return 1
+    if (bi === -1) return -1
+    return ai - bi
+  }),
+)
+
 // ─── Unified timeline ───────────────────────────────────────
 
 interface ToolGroup {
@@ -641,31 +653,44 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Post-action indicators (title generation, report creation) -->
+      <!-- Post-action indicators -->
       <div
-        v-if="chatStore.activePostActions.size > 0"
+        v-if="activePostActionItems.length > 0"
         class="px-4 py-1.5"
       >
-        <div
-          v-for="action in chatStore.activePostActions"
-          :key="action"
-          class="max-w-[80%] ml-10 flex items-center gap-2 text-xs text-theme-500 py-0.5"
-        >
-          <Icon
-            icon="svg-spinners:ring-resize"
-            class="w-3 h-3 text-theme-500"
-          />
-          <span>{{ postActionLabel(action) }}</span>
-          <button
-            class="ml-1 text-theme-600 hover:text-red-400 transition-colors"
-            title="Cancel"
-            @click="chatStore.cancelPostActions()"
-          >
+        <div class="max-w-[80%] ml-10 rounded-lg border border-theme-800/70 bg-theme-950/70 px-3 py-2">
+          <div class="flex items-center gap-2 text-xs text-theme-500">
             <Icon
-              icon="mdi:close-circle-outline"
-              class="w-3.5 h-3.5"
+              icon="svg-spinners:ring-resize"
+              class="w-3.5 h-3.5 text-accent-400"
             />
-          </button>
+            <span class="font-medium text-theme-400">Post-turn actions</span>
+            <span class="text-theme-700">·</span>
+            <span>{{ activePostActionItems.length }} running</span>
+            <button
+              class="ml-auto text-theme-600 hover:text-red-400 transition-colors"
+              title="Cancel post-turn actions"
+              @click="chatStore.cancelPostActions()"
+            >
+              <Icon
+                icon="mdi:close-circle-outline"
+                class="w-3.5 h-3.5"
+              />
+            </button>
+          </div>
+          <div class="mt-1.5 flex flex-wrap gap-1.5">
+            <span
+              v-for="action in activePostActionItems"
+              :key="action"
+              class="inline-flex items-center gap-1.5 rounded-md border border-theme-800 bg-theme-900/70 px-2 py-1 text-xs text-theme-400"
+            >
+              <Icon
+                icon="lucide:loader-2"
+                class="w-3 h-3 animate-spin text-theme-500"
+              />
+              {{ postActionLabel(action) }}
+            </span>
+          </div>
         </div>
       </div>
 
