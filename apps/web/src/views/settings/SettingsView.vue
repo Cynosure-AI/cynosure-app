@@ -8,8 +8,9 @@ import ChatSettings from '../../components/settings/ChatSettings.vue'
 import SpeechToTextSettings from '../../components/settings/SpeechToTextSettings.vue'
 import AppearanceSettings from '../../components/settings/AppearanceSettings.vue'
 import BackupSettings from '../../components/settings/BackupSettings.vue'
+import ChannelsView from '../triggers/ChannelsView.vue'
 
-type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'appearance' | 'backup'
+type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'appearance' | 'backup'
 
 interface SettingsCategory {
   id: SettingsCategoryId
@@ -17,6 +18,7 @@ interface SettingsCategory {
   description: string
   icon: string
   component: unknown
+  componentProps?: Record<string, unknown>
 }
 
 interface SettingsSection {
@@ -60,6 +62,14 @@ const categories: SettingsCategory[] = [
     description: 'Manage voice input, Whisper model downloads, language, quantization, and microphone selection.',
     icon: 'lucide:mic',
     component: SpeechToTextSettings
+  },
+  {
+    id: 'channels',
+    label: 'Channels',
+    description: 'Connect Telegram, Discord, and Slack so agents can respond from messaging platforms.',
+    icon: 'lucide:radio',
+    component: ChannelsView,
+    componentProps: { embedded: true }
   },
   {
     id: 'appearance',
@@ -196,6 +206,13 @@ const sections: SettingsSection[] = [
     label: 'How it works',
     description: 'Learn how local Whisper transcription works.',
     terms: ['how it works', 'local', 'browser', 'web worker', 'webassembly', 'privacy', 'audio data']
+  },
+  {
+    id: 'channel-management',
+    categoryId: 'channels',
+    label: 'Channel Management',
+    description: 'Add, edit, test, enable, disable, and remove messaging channels.',
+    terms: ['channels', 'channel', 'messaging', 'telegram', 'discord', 'slack', 'bot token', 'app token', 'socket mode', 'message content intent', 'allowed agents', 'remote agents']
   },
   {
     id: 'theme',
@@ -578,6 +595,7 @@ function scoreSection(section: SettingsSection, query: string): number {
               <component
                 :is="category.component"
                 :visible-sections="visibleSectionIds"
+                v-bind="category.componentProps || {}"
               />
             </section>
           </div>

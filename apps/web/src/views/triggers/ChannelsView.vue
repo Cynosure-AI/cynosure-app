@@ -12,6 +12,13 @@ import MultiSelect from '../../components/shared/MultiSelect.vue'
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 
 const router = useRouter()
+const props = withDefaults(defineProps<{
+  embedded?: boolean
+  visibleSections?: string[]
+}>(), {
+  embedded: false,
+  visibleSections: () => []
+})
 const channels = ref<ChannelDefinition[]>([])
 const allAgents = ref<AgentDefinition[]>([])
 const loading = ref(true)
@@ -170,9 +177,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto">
-    <div class="max-w-3xl mx-auto py-8 px-6">
-      <div class="flex items-center justify-between mb-6">
+  <div :class="props.embedded ? '' : 'h-full overflow-y-auto'">
+    <div :class="props.embedded ? 'max-w-none' : 'max-w-3xl mx-auto py-8 px-6'">
+      <div
+        v-if="!props.embedded"
+        class="flex items-center justify-between mb-6"
+      >
         <div>
           <h1 class="text-2xl font-bold text-theme-100">
             Channels
@@ -181,6 +191,21 @@ onUnmounted(() => {
             Connect messaging platforms to interact with agents
           </p>
         </div>
+        <button
+          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-white transition-colors"
+          @click="openAddDialog"
+        >
+          <Icon
+            icon="lucide:plus"
+            class="w-4 h-4"
+          />
+          Add Channel
+        </button>
+      </div>
+      <div
+        v-else
+        class="flex justify-end mb-4"
+      >
         <button
           class="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-white transition-colors"
           @click="openAddDialog"
@@ -246,7 +271,7 @@ onUnmounted(() => {
           :key="ch.id"
           class="flex items-center gap-4 px-5 py-4 rounded-xl border bg-theme-800/60 group cursor-pointer hover:border-theme-600 transition-colors"
           :class="ch.enabled ? 'border-theme-700' : 'border-theme-700/50 opacity-60'"
-          @click="router.push(`/triggers/channels/${ch.id}`)"
+          @click="router.push(`/settings/channels/${ch.id}`)"
         >
           <!-- Channel type icon -->
           <div class="shrink-0">
@@ -307,7 +332,7 @@ onUnmounted(() => {
               <button
                 class="p-1.5 rounded-lg hover:bg-theme-800 text-theme-500 hover:text-theme-200 transition-colors"
                 title="Edit"
-                @click.stop="router.push(`/triggers/channels/${ch.id}`)"
+                @click.stop="router.push(`/settings/channels/${ch.id}`)"
               >
                 <Icon
                   icon="lucide:pencil"

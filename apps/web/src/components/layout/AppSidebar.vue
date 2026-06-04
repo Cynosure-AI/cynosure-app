@@ -125,7 +125,6 @@ interface NavItem {
 
 const triggerItems: NavItem[] = [
   { to: "/triggers/cron", icon: "lucide:clock", label: "Cron" },
-  { to: "/triggers/channels", icon: "lucide:radio", label: "Channels" },
 ];
 
 const settingsItems: NavItem[] = [
