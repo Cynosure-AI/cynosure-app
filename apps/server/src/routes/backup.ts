@@ -3,7 +3,7 @@ import multipart from '@fastify/multipart'
 import archiver from 'archiver'
 import AdmZip from 'adm-zip'
 import { ensureDefaultMemorySpace, getDb } from '../db/database.js'
-import { getAppDataDir, getDefaultMemorySpaceDir, getMemorySpacesRootDir } from '../core/data-dir.js'
+import { getAppDataDir, getDefaultMemorySpaceDir, getMemorySpacesRootDir, getSkillsDir } from '../core/data-dir.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import { loadSavedProviders } from './providers.js'
 import { loadSavedMcpServers } from './mcp/index.js'
@@ -24,6 +24,7 @@ import type { LLMProviderConfig } from '../core/gateway/providers/base.provider.
 import { ensureFolder, listFilesInFolder } from '../core/memory/memory-file-manager.js'
 import { stopAllMemorySpaceWatchers, watchMemorySpace } from '../core/memory/memory-space-watcher.js'
 import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
+import { listSkillMarkdownFiles, restoreSkillMarkdownFile } from '../core/skills/skill-store.js'
 
 interface ManifestModule {
     count: number
@@ -161,10 +162,11 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
 
             // --- Skills ---
             if (requested.includes('skills')) {
-                const db = getDb()
-                const skills = db.prepare('SELECT * FROM skills ORDER BY category, name').all()
-                archive.append(JSON.stringify(skills, null, 2), { name: 'skills/skills.json' })
-                manifest.modules.skills = { count: (skills as unknown[]).length }
+                const skills = listSkillMarkdownFiles()
+                for (const skill of skills) {
+                    archive.append(skill.content, { name: `skills/${skill.name}` })
+                }
+                manifest.modules.skills = { count: skills.length }
             }
 
             // --- Providers ---
@@ -417,28 +419,15 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         if (requestedModules.includes('skills') && manifest.modules.skills) {
             const res = { restored: 0, errors: [] as string[] }
             try {
-                const entry = zip.getEntry('skills/skills.json')
-                if (entry) {
-                    const skills = JSON.parse(entry.getData().toString('utf-8')) as Record<string, unknown>[]
-                    for (const skill of skills) {
-                        try {
-                            db.prepare(
-                                `INSERT OR REPLACE INTO skills (id, name, description, category, content, enabled, created_at, updated_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                skill.id,
-                                skill.name || '',
-                                skill.description || '',
-                                skill.category || '',
-                                skill.content || '',
-                                skill.enabled ?? 1,
-                                skill.created_at || Date.now(),
-                                skill.updated_at || Date.now()
-                            )
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`Skill ${skill.name || skill.id}: ${(e as Error).message}`)
-                        }
+                const skillEntries = zip.getEntries()
+                    .filter((entry) => entry.entryName.startsWith('skills/') && entry.entryName.toLowerCase().endsWith('.md'))
+
+                for (const entry of skillEntries) {
+                    try {
+                        restoreSkillMarkdownFile(basename(entry.entryName), entry.getData().toString('utf-8'))
+                        res.restored++
+                    } catch (e) {
+                        res.errors.push(`Skill ${entry.entryName}: ${(e as Error).message}`)
                     }
                 }
             } catch (e) {
@@ -1015,6 +1004,11 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         }
         ensureDefaultMemorySpace(db)
         watchMemorySpace('default', getDefaultMemorySpaceDir())
+
+        const skillsDir = getSkillsDir()
+        if (existsSync(skillsDir)) {
+            rmSync(skillsDir, { recursive: true, force: true })
+        }
 
         // Reload in-memory state
         try {

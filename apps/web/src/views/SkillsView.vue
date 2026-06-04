@@ -223,14 +223,6 @@ async function setEnabled(skill: SkillDefinition, enabled: boolean): Promise<voi
               placeholder="Skill instructions"
               class="w-full rounded border border-theme-700 bg-theme-950 px-3 py-2 font-mono text-sm focus:border-accent-500 focus:outline-none"
             />
-            <label class="flex items-center gap-2 text-sm text-theme-300">
-              <input
-                v-model="form.enabled"
-                type="checkbox"
-                class="accent-accent-500"
-              >
-              Enabled
-            </label>
           </div>
           <div class="mt-4 flex gap-2">
             <button
