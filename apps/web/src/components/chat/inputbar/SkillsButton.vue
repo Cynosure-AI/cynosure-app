@@ -5,6 +5,7 @@ import { useChatStore } from '../../../stores/chat.store'
 import { useSkillDefinitionsStore } from '../../../stores/skill-definitions.store'
 import ModalDialog from '../../shared/ModalDialog.vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
+import ToggleSwitch from '../../shared/ToggleSwitch.vue'
 
 const chatStore = useChatStore()
 const skillsStore = useSkillDefinitionsStore()
@@ -27,8 +28,8 @@ function toggleSkill(id: string): void {
   chatStore.markOverridesModified()
 }
 
-function toggleAuto(): void {
-  chatStore.sessionAutoSkillRouting = !chatStore.sessionAutoSkillRouting
+function toggleAuto(value: boolean): void {
+  chatStore.sessionAutoSkillRouting = value
   chatStore.markOverridesModified()
 }
 </script>
@@ -95,6 +96,8 @@ function toggleAuto(): void {
   <ModalDialog
     :show="showModal"
     title="Skills"
+    icon="lucide:book-open-check"
+    icon-color="accent"
     max-width="max-w-2xl"
     @close="showModal = false"
   >
@@ -104,12 +107,12 @@ function toggleAuto(): void {
           <span class="block text-sm font-medium text-theme-200">Auto-select relevant skills</span>
           <span class="block text-xs text-theme-500">Uses the current request to pull in matching skill instructions.</span>
         </span>
-        <input
-          type="checkbox"
-          :checked="chatStore.sessionAutoSkillRouting"
-          class="accent-accent-500"
-          @change="toggleAuto"
-        >
+        <ToggleSwitch
+          :model-value="chatStore.sessionAutoSkillRouting"
+          size="md"
+          color="accent"
+          @update:model-value="toggleAuto"
+        />
       </label>
 
       <div class="max-h-96 overflow-y-auto rounded border border-theme-700 bg-theme-900">

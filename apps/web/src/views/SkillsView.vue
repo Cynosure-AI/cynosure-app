@@ -3,6 +3,9 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useSkillDefinitionsStore } from '../stores/skill-definitions.store'
 import type { SkillDefinition } from '../api/types'
+import DataTable from '../components/shared/DataTable.vue'
+import type { Column } from '../components/shared/DataTable.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 
 const skillStore = useSkillDefinitionsStore()
 const editingId = ref<string | null>(null)
@@ -17,6 +20,34 @@ const form = reactive({
 const sortedSkills = computed(() =>
   [...skillStore.skills].sort((a, b) => `${a.category}/${a.name}`.localeCompare(`${b.category}/${b.name}`))
 )
+
+const columns: Column<SkillDefinition>[] = [
+  {
+    key: 'name',
+    label: 'Name',
+    width: 'minmax(180px,1.1fr)',
+    sortable: true,
+    sortValue: (skill) => skill.name,
+  },
+  {
+    key: 'description',
+    label: 'Description',
+    width: 'minmax(220px,1.6fr)',
+    hideOnMobile: true,
+  },
+  {
+    key: 'enabled',
+    label: 'Enabled',
+    width: '90px',
+    sortable: true,
+    sortValue: (skill) => skill.enabled,
+  },
+  {
+    key: 'actions',
+    label: '',
+    width: '80px',
+  },
+]
 
 onMounted(() => {
   skillStore.load().catch(() => { })
@@ -60,6 +91,10 @@ async function removeSkill(id: string): Promise<void> {
   await skillStore.remove(id)
   if (editingId.value === id) resetForm()
 }
+
+async function setEnabled(skill: SkillDefinition, enabled: boolean): Promise<void> {
+  await skillStore.update(skill.id, { enabled })
+}
 </script>
 
 <template>
@@ -87,21 +122,19 @@ async function removeSkill(id: string): Promise<void> {
       </div>
 
       <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div class="rounded border border-theme-800 bg-theme-900">
-          <div
-            v-for="skill in sortedSkills"
-            :key="skill.id"
-            class="flex items-start justify-between gap-3 border-b border-theme-800 px-4 py-3 last:border-b-0"
-          >
-            <button
-              class="min-w-0 flex-1 text-left"
-              @click="editSkill(skill)"
-            >
-              <div class="flex items-center gap-2">
+        <DataTable
+          :items="sortedSkills"
+          :columns="columns"
+          empty-message="No skills yet."
+          @row-click="editSkill"
+        >
+          <template #col-name="{ item: skill }">
+            <div class="min-w-0">
+              <div class="flex min-w-0 items-center gap-2">
                 <span class="truncate text-sm font-medium text-theme-100">{{ skill.name }}</span>
                 <span
                   v-if="!skill.enabled"
-                  class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase text-theme-500"
+                  class="shrink-0 rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase text-theme-500"
                 >Disabled</span>
               </div>
               <div
@@ -110,28 +143,51 @@ async function removeSkill(id: string): Promise<void> {
               >
                 {{ skill.category }}
               </div>
-              <p class="mt-1 line-clamp-2 text-xs text-theme-400">
-                {{ skill.description || skill.content }}
-              </p>
-            </button>
-            <button
-              class="rounded p-1.5 text-theme-500 hover:bg-red-500/10 hover:text-red-400"
-              aria-label="Delete skill"
-              @click="removeSkill(skill.id)"
-            >
-              <Icon
-                icon="lucide:trash-2"
-                class="h-4 w-4"
+            </div>
+          </template>
+
+          <template #col-description="{ item: skill }">
+            <p class="line-clamp-2 text-xs text-theme-400">
+              {{ skill.description || skill.content }}
+            </p>
+          </template>
+
+          <template #col-enabled="{ item: skill }">
+            <div @click.stop>
+              <ToggleSwitch
+                :model-value="skill.enabled"
+                size="sm"
+                color="accent"
+                @update:model-value="setEnabled(skill, $event)"
               />
-            </button>
-          </div>
-          <div
-            v-if="!sortedSkills.length"
-            class="px-4 py-12 text-center text-sm text-theme-500"
-          >
-            No skills yet.
-          </div>
-        </div>
+            </div>
+          </template>
+
+          <template #col-actions="{ item: skill }">
+            <div class="flex items-center justify-end gap-1" @click.stop>
+              <button
+                class="rounded p-1.5 text-theme-500 hover:bg-theme-800 hover:text-theme-200"
+                aria-label="Edit skill"
+                @click="editSkill(skill)"
+              >
+                <Icon
+                  icon="lucide:pencil"
+                  class="h-4 w-4"
+                />
+              </button>
+              <button
+                class="rounded p-1.5 text-theme-500 hover:bg-red-500/10 hover:text-red-400"
+                aria-label="Delete skill"
+                @click="removeSkill(skill.id)"
+              >
+                <Icon
+                  icon="lucide:trash-2"
+                  class="h-4 w-4"
+                />
+              </button>
+            </div>
+          </template>
+        </DataTable>
 
         <form
           class="rounded border border-theme-800 bg-theme-900 p-4"
