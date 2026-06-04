@@ -313,6 +313,10 @@ export const api = {
       const qs = params.toString()
       return get<EntityGraphResponse>(`/api/memory/graph${qs ? `?${qs}` : ''}`)
     },
+    updateGraphNode: (id: string, data: { name?: string; type?: EntityGraphResponse['nodes'][number]['type']; aliases?: string[] }) =>
+      patch<EntityGraphResponse['nodes'][number]>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`, data),
+    deleteGraphNode: (id: string) =>
+      del<{ success: boolean }>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`),
     updateGraphEdge: (id: string, data: { relation?: string; evidence?: string; confidence?: number }) =>
       patch<EntityGraphResponse['edges'][number]>(`/api/memory/graph/edges/${encodeURIComponent(id)}`, data),
     deleteGraphEdge: (id: string) =>

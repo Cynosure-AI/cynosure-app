@@ -249,6 +249,41 @@ export class EntityGraphStore {
     return row ? rowToEdge(row) : null
   }
 
+  updateNode(
+    id: string,
+    patch: { name?: string; type?: EntityType; aliases?: string[] },
+  ): EntityNode | null {
+    const existing = this.getNode(id)
+    if (!existing) return null
+
+    const name = patch.name !== undefined ? cleanName(patch.name) : existing.name
+    const normalizedName = normalizeName(name)
+    if (!name || normalizedName.length < 2 || STOP_TERMS.has(normalizedName)) {
+      throw new Error('ENTITY_NODE_INVALID_NAME')
+    }
+
+    const type = patch.type !== undefined && ENTITY_TYPES.has(patch.type)
+      ? patch.type
+      : existing.type
+    const aliases = patch.aliases !== undefined
+      ? Array.from(new Set(patch.aliases.map(cleanName).filter(Boolean))).slice(0, 16)
+      : existing.aliases
+
+    const conflict = getDb().prepare(`
+      SELECT id FROM entity_graph_nodes
+      WHERE normalized_name = ? AND type = ? AND id != ?
+    `).get(normalizedName, type, id) as { id: string } | undefined
+    if (conflict) throw new Error('ENTITY_NODE_CONFLICT')
+
+    getDb().prepare(`
+      UPDATE entity_graph_nodes
+      SET name = ?, normalized_name = ?, type = ?, aliases_json = ?, last_seen_at = ?
+      WHERE id = ?
+    `).run(name, normalizedName, type, JSON.stringify(aliases), Date.now(), id)
+
+    return this.getNode(id)
+  }
+
   updateEdge(
     id: string,
     patch: { relation?: string; evidence?: string; confidence?: number },
@@ -277,6 +312,11 @@ export class EntityGraphStore {
 
   deleteEdge(id: string): boolean {
     const result = getDb().prepare('DELETE FROM entity_graph_edges WHERE id = ?').run(id)
+    return result.changes > 0
+  }
+
+  deleteNode(id: string): boolean {
+    const result = getDb().prepare('DELETE FROM entity_graph_nodes WHERE id = ?').run(id)
     return result.changes > 0
   }
 

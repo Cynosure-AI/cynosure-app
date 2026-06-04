@@ -198,6 +198,8 @@ export interface EntityGraphNode {
     lastSeenAt: number
 }
 
+export type EntityGraphNodeType = EntityGraphNode['type']
+
 export interface EntityGraphEdge {
     id: string
     fromNodeId: string

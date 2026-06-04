@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { MarkerType, VueFlow, useVueFlow, type Edge, type Node } from "@vue-flow/core";
+import { Handle, MarkerType, Position, VueFlow, useVueFlow, type Edge, type Node } from "@vue-flow/core";
+import { NodeToolbar } from "@vue-flow/node-toolbar";
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
 import { api } from "../api/client";
-import type { EntityGraphEdge, EntityGraphResponse, MemorySpace } from "../api/types";
+import type { EntityGraphEdge, EntityGraphNode, EntityGraphNodeType, EntityGraphResponse, MemorySpace } from "../api/types";
 import { Icon } from "@iconify/vue";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MemoryDocumentList from "../components/memory/MemoryDocumentList.vue";
@@ -28,8 +29,13 @@ const activePanel = ref<"documents" | "relationships" | "visual">("documents");
 const graph = ref<EntityGraphResponse | null>(null);
 const graphLoading = ref(false);
 const graphQuery = ref("");
+const editingNode = ref<EntityGraphNode | null>(null);
 const editingEdge = ref<EntityGraphEdge | null>(null);
+const pendingDeleteNode = ref<EntityGraphNode | null>(null);
 const pendingDeleteEdge = ref<EntityGraphEdge | null>(null);
+const nodeName = ref("");
+const nodeType = ref<EntityGraphNodeType>("other");
+const nodeAliases = ref("");
 const edgeRelation = ref("");
 const edgeEvidence = ref("");
 const edgeConfidence = ref(70);
@@ -39,6 +45,30 @@ const graphFlowEdges = ref<Edge[]>([]);
 const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null);
 const { fitView } = useVueFlow(ENTITY_FLOW_ID);
 let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk.bundled.js").default>> | null = null;
+
+const ENTITY_NODE_TYPES: EntityGraphNodeType[] = [
+  "person",
+  "place",
+  "organization",
+  "project",
+  "date",
+  "technology",
+  "concept",
+  "other",
+];
+
+type FlowNodeData = {
+  entity: EntityGraphNode;
+  label: string;
+  isSeed: boolean;
+};
+
+type FlowPoint = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 async function getElk() {
   if (!elkPromise) {
@@ -104,16 +134,19 @@ async function layoutGraph() {
     return;
   }
 
-  const nodeLabels = new Map<string, { label: string; type: string }>();
+  const nodeLabels = new Map<string, EntityGraphNode>();
   for (const node of graph.value.nodes) {
-    nodeLabels.set(node.id, { label: node.name, type: node.type });
+    nodeLabels.set(node.id, node);
   }
   for (const edge of graph.value.edges) {
-    if (!nodeLabels.has(edge.fromNodeId)) nodeLabels.set(edge.fromNodeId, { label: edge.fromName, type: "entity" });
-    if (!nodeLabels.has(edge.toNodeId)) nodeLabels.set(edge.toNodeId, { label: edge.toName, type: "entity" });
+    if (!nodeLabels.has(edge.fromNodeId)) nodeLabels.set(edge.fromNodeId, fallbackGraphNode(edge.fromNodeId, edge.fromName));
+    if (!nodeLabels.has(edge.toNodeId)) nodeLabels.set(edge.toNodeId, fallbackGraphNode(edge.toNodeId, edge.toName));
   }
 
   const seedIds = new Set(graph.value.seedNodes.map((node) => node.id));
+  const dimensions = new Map<string, { width: number; height: number }>(
+    [...nodeLabels.entries()].map(([id, node]) => [id, nodeDimensions(node.name)]),
+  );
 
   const elk = await getElk();
   const layout = await elk.layout({
@@ -126,10 +159,10 @@ async function layoutGraph() {
       "elk.disco.componentCompaction.strategy": "POLYOMINO",
       "elk.randomSeed": "7",
     },
-    children: [...nodeLabels.entries()].map(([id, value]) => ({
+    children: [...nodeLabels.entries()].map(([id]) => ({
       id,
-      width: Math.max(140, Math.min(240, value.label.length * 8 + 48)),
-      height: value.label.length > 18 ? 56 : 42,
+      width: dimensions.get(id)?.width || 150,
+      height: dimensions.get(id)?.height || 44,
     })),
     edges: graph.value.edges.map((edge) => ({
       id: edge.id,
@@ -142,26 +175,80 @@ async function layoutGraph() {
     child.id,
     { x: Math.round(child.x || 0), y: Math.round(child.y || 0) },
   ]));
+  const points = new Map<string, FlowPoint>();
+  for (const [id, position] of positions.entries()) {
+    const size = dimensions.get(id) || { width: 150, height: 44 };
+    points.set(id, { ...position, ...size });
+  }
 
-  const nodes: Node[] = [...nodeLabels.entries()].map(([id, value]) => ({
+  const nodes: Node<FlowNodeData>[] = [...nodeLabels.entries()].map(([id, entity]) => ({
     id,
-    label: value.label,
+    type: "entity",
     position: positions.get(id) || { x: 0, y: 0 },
     class: seedIds.has(id) ? "entity-flow-node entity-flow-node-seed" : "entity-flow-node",
-    data: { type: value.type },
+    data: { entity, label: entity.name, isSeed: seedIds.has(id) },
   }));
 
-  const edges: Edge[] = graph.value.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.fromNodeId,
-    target: edge.toNodeId,
-    markerEnd: MarkerType.ArrowClosed,
-    class: "entity-flow-edge",
-    style: { stroke: "#8b5cf6", strokeWidth: 1.8 },
-  }));
+  const edges: Edge[] = graph.value.edges.map((edge) => {
+    const handles = closestHandles(points.get(edge.fromNodeId), points.get(edge.toNodeId));
+    return {
+      id: edge.id,
+      source: edge.fromNodeId,
+      target: edge.toNodeId,
+      sourceHandle: handles.sourceHandle,
+      targetHandle: handles.targetHandle,
+      label: formatRelation(edge.relation),
+      markerEnd: MarkerType.ArrowClosed,
+      class: "entity-flow-edge",
+      style: { stroke: "#8b5cf6", strokeWidth: 1.8 },
+      labelStyle: { fill: "#f3f4f6", fontSize: 11, fontWeight: 700 },
+      labelBgStyle: { fill: "#111827", fillOpacity: 0.92 },
+      labelBgPadding: [6, 4],
+      labelBgBorderRadius: 4,
+    };
+  });
 
   graphFlowNodes.value = nodes;
   graphFlowEdges.value = edges;
+}
+
+function fallbackGraphNode(id: string, name: string): EntityGraphNode {
+  return {
+    id,
+    name,
+    normalizedName: name.toLowerCase(),
+    type: "other",
+    aliases: [],
+    mentionCount: 0,
+    sourceCount: 0,
+    firstSeenAt: 0,
+    lastSeenAt: 0,
+  };
+}
+
+function nodeDimensions(label: string): { width: number; height: number } {
+  return {
+    width: Math.max(150, Math.min(250, label.length * 8 + 54)),
+    height: label.length > 18 ? 56 : 44,
+  };
+}
+
+function closestHandles(source?: FlowPoint, target?: FlowPoint): { sourceHandle: string; targetHandle: string } {
+  if (!source || !target) return { sourceHandle: "source-bottom", targetHandle: "target-top" };
+  const sourceCenter = { x: source.x + source.width / 2, y: source.y + source.height / 2 };
+  const targetCenter = { x: target.x + target.width / 2, y: target.y + target.height / 2 };
+  const dx = targetCenter.x - sourceCenter.x;
+  const dy = targetCenter.y - sourceCenter.y;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0
+      ? { sourceHandle: "source-right", targetHandle: "target-left" }
+      : { sourceHandle: "source-left", targetHandle: "target-right" };
+  }
+
+  return dy >= 0
+    ? { sourceHandle: "source-bottom", targetHandle: "target-top" }
+    : { sourceHandle: "source-top", targetHandle: "target-bottom" };
 }
 
 watch([graph, () => activePanel.value], async () => {
@@ -396,6 +483,37 @@ async function clearGraphWalk() {
 async function selectPanel(panel: typeof activePanel.value) {
   activePanel.value = panel;
   if ((panel === "relationships" || panel === "visual") && !graph.value) await loadGraph();
+}
+
+function openEditNode(node: EntityGraphNode) {
+  editingNode.value = node;
+  nodeName.value = node.name;
+  nodeType.value = node.type;
+  nodeAliases.value = node.aliases.join(", ");
+}
+
+async function saveNode() {
+  if (!editingNode.value || !nodeName.value.trim()) return;
+  await api.memory.updateGraphNode(editingNode.value.id, {
+    name: nodeName.value.trim(),
+    type: nodeType.value,
+    aliases: nodeAliases.value
+      .split(",")
+      .map((alias) => alias.trim())
+      .filter(Boolean),
+  });
+  editingNode.value = null;
+  await loadGraph();
+}
+
+function confirmDeleteNode(node: EntityGraphNode) {
+  pendingDeleteNode.value = node;
+}
+
+async function deleteNode(node: EntityGraphNode) {
+  pendingDeleteNode.value = null;
+  await api.memory.deleteGraphNode(node.id);
+  await loadGraph();
 }
 
 function openEditEdge(edge: EntityGraphEdge) {
@@ -772,7 +890,94 @@ async function deleteEdge(edge: EntityGraphEdge) {
                 :min-zoom="0.2"
                 :max-zoom="1.8"
                 class="entity-flow"
-              />
+              >
+                <template #node-entity="{ data, selected }">
+                  <NodeToolbar
+                    :is-visible="selected"
+                    :position="Position.Top"
+                    class="entity-node-toolbar"
+                  >
+                    <button
+                      type="button"
+                      title="Edit entity"
+                      @click.stop="openEditNode(data.entity)"
+                    >
+                      <Icon
+                        icon="lucide:pencil"
+                        class="w-3.5 h-3.5"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      title="Delete entity"
+                      @click.stop="confirmDeleteNode(data.entity)"
+                    >
+                      <Icon
+                        icon="lucide:trash-2"
+                        class="w-3.5 h-3.5"
+                      />
+                    </button>
+                  </NodeToolbar>
+
+                  <div class="entity-node-body">
+                    <div class="entity-node-label">
+                      {{ data.label }}
+                    </div>
+                    <div class="entity-node-type">
+                      {{ data.entity.type }}
+                    </div>
+                  </div>
+
+                  <Handle
+                    id="target-top"
+                    type="target"
+                    :position="Position.Top"
+                    class="entity-handle entity-handle-target"
+                  />
+                  <Handle
+                    id="source-top"
+                    type="source"
+                    :position="Position.Top"
+                    class="entity-handle entity-handle-source"
+                  />
+                  <Handle
+                    id="target-right"
+                    type="target"
+                    :position="Position.Right"
+                    class="entity-handle entity-handle-target"
+                  />
+                  <Handle
+                    id="source-right"
+                    type="source"
+                    :position="Position.Right"
+                    class="entity-handle entity-handle-source"
+                  />
+                  <Handle
+                    id="target-bottom"
+                    type="target"
+                    :position="Position.Bottom"
+                    class="entity-handle entity-handle-target"
+                  />
+                  <Handle
+                    id="source-bottom"
+                    type="source"
+                    :position="Position.Bottom"
+                    class="entity-handle entity-handle-source"
+                  />
+                  <Handle
+                    id="target-left"
+                    type="target"
+                    :position="Position.Left"
+                    class="entity-handle entity-handle-target"
+                  />
+                  <Handle
+                    id="source-left"
+                    type="source"
+                    :position="Position.Left"
+                    class="entity-handle entity-handle-source"
+                  />
+                </template>
+              </VueFlow>
             </div>
 
             <div
@@ -913,6 +1118,72 @@ async function deleteEdge(edge: EntityGraphEdge) {
 
       <Teleport to="body">
         <div
+          v-if="editingNode"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          @click.self="editingNode = null"
+        >
+          <div class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-lg shadow-xl">
+            <h3 class="text-base font-medium text-theme-200 mb-4">
+              Edit Entity
+            </h3>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs text-theme-400 mb-1">Name</label>
+                <input
+                  v-model="nodeName"
+                  type="text"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500"
+                  placeholder="e.g. Acme"
+                  @keydown.enter="saveNode"
+                >
+              </div>
+              <div>
+                <label class="block text-xs text-theme-400 mb-1">Type</label>
+                <select
+                  v-model="nodeType"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 focus:outline-none focus:border-theme-500"
+                >
+                  <option
+                    v-for="type in ENTITY_NODE_TYPES"
+                    :key="type"
+                    :value="type"
+                  >
+                    {{ type }}
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-theme-400 mb-1">Aliases</label>
+                <input
+                  v-model="nodeAliases"
+                  type="text"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500"
+                  placeholder="Comma-separated aliases"
+                  @keydown.enter="saveNode"
+                >
+              </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-5">
+              <button
+                class="px-3 py-1.5 text-sm text-theme-400 hover:text-theme-200"
+                @click="editingNode = null"
+              >
+                Cancel
+              </button>
+              <button
+                :disabled="!nodeName.trim()"
+                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg disabled:opacity-50"
+                @click="saveNode"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
+
+      <Teleport to="body">
+        <div
           v-if="editingEdge"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
           @click.self="editingEdge = null"
@@ -980,6 +1251,32 @@ async function deleteEdge(edge: EntityGraphEdge) {
       </Teleport>
 
       <ModalDialog
+        :show="Boolean(pendingDeleteNode)"
+        title="Delete Entity"
+        icon="lucide:trash-2"
+        icon-color="red"
+        @close="pendingDeleteNode = null"
+      >
+        <p class="text-theme-400 leading-relaxed">
+          Delete <strong class="text-theme-200">{{ pendingDeleteNode?.name }}</strong> and all of its relationships?
+        </p>
+        <template #actions>
+          <button
+            class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
+            @click="pendingDeleteNode && deleteNode(pendingDeleteNode)"
+          >
+            Delete Entity
+          </button>
+          <button
+            class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
+            @click="pendingDeleteNode = null"
+          >
+            Cancel
+          </button>
+        </template>
+      </ModalDialog>
+
+      <ModalDialog
         :show="Boolean(pendingDeleteEdge)"
         title="Delete Relationship"
         icon="lucide:trash-2"
@@ -1021,7 +1318,6 @@ async function deleteEdge(edge: EntityGraphEdge) {
   background: rgba(17, 24, 39, 0.96);
   color: #f3f4f6;
   border-radius: 8px;
-  padding: 8px 10px;
   font-size: 12px;
   font-weight: 600;
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
@@ -1035,5 +1331,70 @@ async function deleteEdge(edge: EntityGraphEdge) {
 
 :deep(.entity-flow-edge path) {
   stroke: #8b5cf6;
+}
+
+:deep(.entity-node-body) {
+  display: grid;
+  min-width: 150px;
+  max-width: 250px;
+  min-height: 44px;
+  place-items: center;
+  gap: 2px;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+:deep(.entity-node-label) {
+  max-width: 220px;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+:deep(.entity-node-type) {
+  color: rgba(165, 180, 252, 0.72);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+:deep(.entity-handle) {
+  width: 6px;
+  height: 6px;
+  border: 1px solid rgba(243, 244, 246, 0.85);
+  background: #030712;
+}
+
+:deep(.entity-handle-source) {
+  background: rgba(139, 92, 246, 0.95);
+}
+
+:deep(.entity-node-toolbar) {
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  border-radius: 8px;
+  background: rgba(17, 24, 39, 0.96);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.32);
+}
+
+:deep(.entity-node-toolbar button) {
+  display: grid;
+  width: 28px;
+  height: 26px;
+  place-items: center;
+  border-radius: 6px;
+  color: #c4b5fd;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+:deep(.entity-node-toolbar button:hover) {
+  background: rgba(139, 92, 246, 0.18);
+  color: #f3f4f6;
+}
+
+:deep(.entity-flow-edge .vue-flow__edge-textbg) {
+  stroke: rgba(139, 92, 246, 0.35);
+  stroke-width: 1px;
 }
 </style>

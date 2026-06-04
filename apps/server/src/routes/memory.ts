@@ -7,7 +7,7 @@ import { getMemoryParser } from '../core/memory/parser.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
-import { getEntityGraphStore } from '../core/memory/entity-graph.js'
+import { getEntityGraphStore, type EntityType } from '../core/memory/entity-graph.js'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import OpenAI from 'openai'
@@ -105,6 +105,43 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       seedNodes: [],
       ...graph.list(limit)
     }
+  })
+
+  // PATCH /api/memory/graph/nodes/:id — manually correct an entity node
+  app.patch<{
+    Params: { id: string }
+    Body: { name?: string; type?: string; aliases?: string[] }
+  }>('/graph/nodes/:id', async (req, reply) => {
+    const name = req.body.name?.trim()
+    if (name !== undefined && name.length === 0) {
+      return reply.status(400).send({ error: 'Entity name cannot be empty' })
+    }
+
+    try {
+      const updated = getEntityGraphStore().updateNode(req.params.id, {
+        name,
+        type: req.body.type as EntityType | undefined,
+        aliases: Array.isArray(req.body.aliases) ? req.body.aliases : undefined
+      })
+      if (!updated) return reply.status(404).send({ error: 'Entity not found' })
+      return updated
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (message === 'ENTITY_NODE_CONFLICT') {
+        return reply.status(409).send({ error: 'An entity with that name and type already exists' })
+      }
+      if (message === 'ENTITY_NODE_INVALID_NAME') {
+        return reply.status(400).send({ error: 'Entity name is not valid' })
+      }
+      throw error
+    }
+  })
+
+  // DELETE /api/memory/graph/nodes/:id — manually remove an entity and its relationships
+  app.delete<{ Params: { id: string } }>('/graph/nodes/:id', async (req, reply) => {
+    const deleted = getEntityGraphStore().deleteNode(req.params.id)
+    if (!deleted) return reply.status(404).send({ error: 'Entity not found' })
+    return { success: true }
   })
 
   // PATCH /api/memory/graph/edges/:id — manually correct a relationship
