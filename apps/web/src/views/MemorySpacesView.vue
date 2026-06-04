@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { Handle, MarkerType, Position, VueFlow, useVueFlow, type Edge, type Node } from "@vue-flow/core";
+import { Controls } from "@vue-flow/controls";
+import { MiniMap } from "@vue-flow/minimap";
+import "@vue-flow/controls/dist/style.css";
+import "@vue-flow/minimap/dist/style.css";
 import { NodeToolbar } from "@vue-flow/node-toolbar";
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
@@ -41,6 +45,7 @@ const edgeEvidence = ref("");
 const edgeConfidence = ref(70);
 const graphFlowNodes = ref<Node[]>([]);
 const graphFlowEdges = ref<Edge[]>([]);
+const nodeSpacing = ref(1.0);
 
 const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null);
 const { fitView } = useVueFlow(ENTITY_FLOW_ID);
@@ -154,8 +159,8 @@ async function layoutGraph() {
     id: "entity-root",
     layoutOptions: {
       "elk.algorithm": "stress",
-      "elk.stress.desiredEdgeLength": "280",
-      "elk.spacing.nodeNode": "120",
+      "elk.stress.desiredEdgeLength": String(Math.round(280 * nodeSpacing.value)),
+      "elk.spacing.nodeNode": String(Math.round(120 * nodeSpacing.value)),
       "elk.separateConnectedComponents": "true",
       "elk.disco.componentCompaction.strategy": "POLYOMINO",
       "elk.randomSeed": "7",
@@ -266,6 +271,15 @@ watch([graph, () => activePanel.value], async () => {
     fitView({ padding: 0.18, duration: 320 }).catch(() => undefined);
   }, 40);
 });
+
+async function relayout() {
+  await layoutGraph();
+  if (graphFlowNodes.value.length === 0) return;
+  await nextTick();
+  window.setTimeout(() => {
+    fitView({ padding: 0.18, duration: 320 }).catch(() => undefined);
+  }, 40);
+}
 
 function hasChildren(space: MemorySpace): boolean {
   const prefix = space.relativePath ? `${space.relativePath}/` : "";
@@ -887,8 +901,26 @@ async function deleteEdge(edge: EntityGraphEdge) {
 
             <div
               v-else-if="activePanel === 'visual'"
-              class="h-[calc(100vh-255px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
+              class="relative h-[calc(100vh-255px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
             >
+              <div class="absolute top-2 right-2 z-10 flex items-center gap-2 bg-theme-900/80 backdrop-blur-sm border border-theme-700/60 rounded-lg px-3 py-1.5">
+                <Icon
+                  icon="lucide:move"
+                  class="w-3.5 h-3.5 text-theme-500 shrink-0"
+                />
+                <span class="text-xs text-theme-500 shrink-0">Spacing</span>
+                <input
+                  v-model.number="nodeSpacing"
+                  type="range"
+                  min="0.5"
+                  max="3"
+                  step="0.25"
+                  class="w-24 accent-accent-500 cursor-pointer"
+                  title="Node spacing"
+                  @change="relayout()"
+                >
+                <span class="text-xs text-theme-300 w-6 text-right">{{ nodeSpacing }}×</span>
+              </div>
               <VueFlow
                 :id="ENTITY_FLOW_ID"
                 :nodes="graphFlowNodes"
@@ -992,6 +1024,15 @@ async function deleteEdge(edge: EntityGraphEdge) {
                     class="entity-handle entity-handle-source"
                   />
                 </template>
+
+                <Controls />
+
+                <MiniMap
+                  :node-color="(n) => typeof n.class === 'string' && n.class.includes('entity-flow-node-seed') ? '#8b5cf6' : '#374151'"
+                  :node-stroke-color="() => '#6b7280'"
+                  :node-border-radius="4"
+                  mask-color="rgba(10,10,20,0.7)"
+                />
               </VueFlow>
             </div>
 
