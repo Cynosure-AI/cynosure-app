@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from "vue";
+import { MarkerType, VueFlow, type Edge, type Node } from "@vue-flow/core";
+import "@vue-flow/core/dist/style.css";
+import "@vue-flow/core/dist/theme-default.css";
 import { api } from "../api/client";
-import type { EntityGraphResponse, MemorySpace } from "../api/types";
+import type { EntityGraphEdge, EntityGraphResponse, MemorySpace } from "../api/types";
 import { Icon } from "@iconify/vue";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MemoryDocumentList from "../components/memory/MemoryDocumentList.vue";
@@ -24,6 +27,11 @@ const activePanel = ref<"documents" | "graph">("documents");
 const graph = ref<EntityGraphResponse | null>(null);
 const graphLoading = ref(false);
 const graphQuery = ref("");
+const editingEdge = ref<EntityGraphEdge | null>(null);
+const pendingDeleteEdge = ref<EntityGraphEdge | null>(null);
+const edgeRelation = ref("");
+const edgeEvidence = ref("");
+const edgeConfidence = ref(70);
 
 const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null);
 
@@ -51,6 +59,51 @@ const visibleSpaces = computed(() =>
     return true;
   }),
 );
+
+const graphFlowNodes = computed<Node[]>(() => {
+  if (!graph.value) return [];
+  const nodeLabels = new Map<string, { label: string; type: string }>();
+  for (const node of graph.value.nodes) {
+    nodeLabels.set(node.id, { label: node.name, type: node.type });
+  }
+  for (const edge of graph.value.edges) {
+    if (!nodeLabels.has(edge.fromNodeId)) nodeLabels.set(edge.fromNodeId, { label: edge.fromName, type: "entity" });
+    if (!nodeLabels.has(edge.toNodeId)) nodeLabels.set(edge.toNodeId, { label: edge.toName, type: "entity" });
+  }
+
+  const entries = [...nodeLabels.entries()];
+  const radius = Math.max(150, Math.min(280, entries.length * 34));
+  const centerX = 360;
+  const centerY = 210;
+  return entries.map(([id, value], index) => {
+    const angle = entries.length <= 1 ? 0 : (2 * Math.PI * index) / entries.length - Math.PI / 2;
+    return {
+      id,
+      label: value.label,
+      position: {
+        x: centerX + Math.cos(angle) * radius,
+        y: centerY + Math.sin(angle) * radius,
+      },
+      class: "entity-flow-node",
+      data: { type: value.type },
+    };
+  });
+});
+
+const graphFlowEdges = computed<Edge[]>(() => {
+  if (!graph.value) return [];
+  return graph.value.edges.map((edge) => ({
+    id: edge.id,
+    source: edge.fromNodeId,
+    target: edge.toNodeId,
+    label: formatRelation(edge.relation),
+    markerEnd: MarkerType.ArrowClosed,
+    class: "entity-flow-edge",
+    labelBgStyle: { fill: "#111827", fillOpacity: 0.92 },
+    labelStyle: { fill: "#d1d5db", fontSize: 11 },
+    style: { stroke: "#8b5cf6", strokeWidth: 1.8 },
+  }));
+});
 
 function hasChildren(space: MemorySpace): boolean {
   const prefix = space.relativePath ? `${space.relativePath}/` : "";
@@ -265,6 +318,34 @@ async function loadGraph(query = graphQuery.value) {
 async function showGraphPanel() {
   activePanel.value = "graph";
   if (!graph.value) await loadGraph();
+}
+
+function openEditEdge(edge: EntityGraphEdge) {
+  editingEdge.value = edge;
+  edgeRelation.value = edge.relation;
+  edgeEvidence.value = edge.evidence || "";
+  edgeConfidence.value = Math.round((edge.confidence || 0.7) * 100);
+}
+
+async function saveEdge() {
+  if (!editingEdge.value || !edgeRelation.value.trim()) return;
+  await api.memory.updateGraphEdge(editingEdge.value.id, {
+    relation: edgeRelation.value.trim(),
+    evidence: edgeEvidence.value,
+    confidence: edgeConfidence.value / 100,
+  });
+  editingEdge.value = null;
+  await loadGraph();
+}
+
+function confirmDeleteEdge(edge: EntityGraphEdge) {
+  pendingDeleteEdge.value = edge;
+}
+
+async function deleteEdge(edge: EntityGraphEdge) {
+  pendingDeleteEdge.value = null;
+  await api.memory.deleteGraphEdge(edge.id);
+  await loadGraph();
 }
 </script>
 
@@ -580,6 +661,20 @@ async function showGraphPanel() {
                 </div>
 
                 <div
+                  v-if="graph.edges.length > 0"
+                  class="h-[420px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
+                >
+                  <VueFlow
+                    :nodes="graphFlowNodes"
+                    :edges="graphFlowEdges"
+                    fit-view-on-init
+                    :min-zoom="0.35"
+                    :max-zoom="1.6"
+                    class="entity-flow"
+                  />
+                </div>
+
+                <div
                   v-if="graph.edges.length === 0"
                   class="py-12 text-center text-sm text-theme-500"
                 >
@@ -608,6 +703,26 @@ async function showGraphPanel() {
                       />
                       <span class="font-medium text-theme-100">{{ edge.toName }}</span>
                       <span class="ml-auto text-xs text-theme-600">{{ formatDate(edge.lastSeenAt) }}</span>
+                      <button
+                        class="p-1 text-theme-600 hover:text-theme-200 transition-colors"
+                        title="Edit relationship"
+                        @click="openEditEdge(edge)"
+                      >
+                        <Icon
+                          icon="lucide:pencil"
+                          class="w-3.5 h-3.5"
+                        />
+                      </button>
+                      <button
+                        class="p-1 text-theme-600 hover:text-red-400 transition-colors"
+                        title="Delete relationship"
+                        @click="confirmDeleteEdge(edge)"
+                      >
+                        <Icon
+                          icon="lucide:trash-2"
+                          class="w-3.5 h-3.5"
+                        />
+                      </button>
                     </div>
                     <div
                       v-if="edge.evidence"
@@ -703,6 +818,124 @@ async function showGraphPanel() {
           </button>
         </template>
       </ModalDialog>
+
+      <Teleport to="body">
+        <div
+          v-if="editingEdge"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          @click.self="editingEdge = null"
+        >
+          <div class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-lg shadow-xl">
+            <h3 class="text-base font-medium text-theme-200 mb-4">
+              Edit Relationship
+            </h3>
+            <div class="space-y-3">
+              <div class="text-sm text-theme-400">
+                <span class="text-theme-200">{{ editingEdge.fromName }}</span>
+                <Icon
+                  icon="lucide:arrow-right"
+                  class="inline w-3.5 h-3.5 mx-1 text-theme-500"
+                />
+                <span class="text-theme-200">{{ editingEdge.toName }}</span>
+              </div>
+              <div>
+                <label class="block text-xs text-theme-400 mb-1">Relation</label>
+                <input
+                  v-model="edgeRelation"
+                  type="text"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500"
+                  placeholder="e.g. works_at"
+                  @keydown.enter="saveEdge"
+                >
+              </div>
+              <div>
+                <label class="block text-xs text-theme-400 mb-1">Evidence</label>
+                <textarea
+                  v-model="edgeEvidence"
+                  rows="3"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500 resize-none"
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-theme-400 mb-1">Confidence: {{ edgeConfidence }}%</label>
+                <input
+                  v-model.number="edgeConfidence"
+                  type="range"
+                  min="10"
+                  max="100"
+                  step="5"
+                  class="w-full accent-accent-500"
+                >
+              </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-5">
+              <button
+                class="px-3 py-1.5 text-sm text-theme-400 hover:text-theme-200"
+                @click="editingEdge = null"
+              >
+                Cancel
+              </button>
+              <button
+                :disabled="!edgeRelation.trim()"
+                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg disabled:opacity-50"
+                @click="saveEdge"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
+
+      <ModalDialog
+        :show="Boolean(pendingDeleteEdge)"
+        title="Delete Relationship"
+        icon="lucide:trash-2"
+        icon-color="red"
+        @close="pendingDeleteEdge = null"
+      >
+        <p class="text-theme-400 leading-relaxed">
+          Delete
+          <strong class="text-theme-200">{{ pendingDeleteEdge?.fromName }}</strong>
+          -> {{ pendingDeleteEdge ? formatRelation(pendingDeleteEdge.relation) : "" }} ->
+          <strong class="text-theme-200">{{ pendingDeleteEdge?.toName }}</strong>?
+        </p>
+        <template #actions>
+          <button
+            class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
+            @click="pendingDeleteEdge && deleteEdge(pendingDeleteEdge)"
+          >
+            Delete Relationship
+          </button>
+          <button
+            class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
+            @click="pendingDeleteEdge = null"
+          >
+            Cancel
+          </button>
+        </template>
+      </ModalDialog>
     </div>
   </div>
 </template>
+
+<style scoped>
+:deep(.entity-flow) {
+  background: #030712;
+}
+
+:deep(.entity-flow-node) {
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  background: rgba(17, 24, 39, 0.96);
+  color: #f3f4f6;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
+}
+
+:deep(.entity-flow-edge path) {
+  stroke: #8b5cf6;
+}
+</style>

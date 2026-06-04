@@ -234,6 +234,37 @@ export class EntityGraphStore {
     return row ? rowToEdge(row) : null
   }
 
+  updateEdge(
+    id: string,
+    patch: { relation?: string; evidence?: string; confidence?: number },
+  ): EntityEdge | null {
+    const existing = this.getEdge(id)
+    if (!existing) return null
+
+    const relation = patch.relation !== undefined
+      ? normalizeRelation(patch.relation)
+      : existing.relation
+    const evidence = patch.evidence !== undefined
+      ? cleanEvidence(patch.evidence)
+      : existing.evidence
+    const confidence = patch.confidence !== undefined
+      ? clampConfidence(patch.confidence)
+      : existing.confidence
+
+    getDb().prepare(`
+      UPDATE entity_graph_edges
+      SET relation = ?, evidence = ?, confidence = ?, last_seen_at = ?
+      WHERE id = ?
+    `).run(relation, evidence, confidence, Date.now(), id)
+
+    return this.getEdge(id)
+  }
+
+  deleteEdge(id: string): boolean {
+    const result = getDb().prepare('DELETE FROM entity_graph_edges WHERE id = ?').run(id)
+    return result.changes > 0
+  }
+
   list(limit = 80): { nodes: EntityNode[]; edges: EntityEdge[] } {
     const db = getDb()
     const nodes = db.prepare(`

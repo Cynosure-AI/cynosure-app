@@ -313,6 +313,10 @@ export const api = {
       const qs = params.toString()
       return get<EntityGraphResponse>(`/api/memory/graph${qs ? `?${qs}` : ''}`)
     },
+    updateGraphEdge: (id: string, data: { relation?: string; evidence?: string; confidence?: number }) =>
+      patch<EntityGraphResponse['edges'][number]>(`/api/memory/graph/edges/${encodeURIComponent(id)}`, data),
+    deleteGraphEdge: (id: string) =>
+      del<{ success: boolean }>(`/api/memory/graph/edges/${encodeURIComponent(id)}`),
     onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>
       onWsEvent('memory:reembed-progress', cb as WsHandler)
   },

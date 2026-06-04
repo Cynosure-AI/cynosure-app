@@ -107,6 +107,31 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     }
   })
 
+  // PATCH /api/memory/graph/edges/:id — manually correct a relationship
+  app.patch<{
+    Params: { id: string }
+    Body: { relation?: string; evidence?: string; confidence?: number }
+  }>('/graph/edges/:id', async (req, reply) => {
+    const relation = req.body.relation?.trim()
+    if (relation !== undefined && relation.length === 0) {
+      return reply.status(400).send({ error: 'Relation cannot be empty' })
+    }
+    const updated = getEntityGraphStore().updateEdge(req.params.id, {
+      relation,
+      evidence: req.body.evidence,
+      confidence: req.body.confidence
+    })
+    if (!updated) return reply.status(404).send({ error: 'Relationship not found' })
+    return updated
+  })
+
+  // DELETE /api/memory/graph/edges/:id — manually remove a relationship
+  app.delete<{ Params: { id: string } }>('/graph/edges/:id', async (req, reply) => {
+    const deleted = getEntityGraphStore().deleteEdge(req.params.id)
+    if (!deleted) return reply.status(404).send({ error: 'Relationship not found' })
+    return { success: true }
+  })
+
   // GET /api/memory/history/:conversationId — get history
   app.get<{ Params: { conversationId: string } }>(
     '/history/:conversationId',

@@ -9,3 +9,4 @@ allowBuilds:
   protobufjs: true
   sharp: true
   tesseract.js: false
+  vue-demi: true
