@@ -56,7 +56,7 @@ const props = withDefaults(
     dropUp: false,
     align: "left",
     dropdownWidth: "w-full",
-    size: "md",
+    size: "sm",
   },
 );
 
