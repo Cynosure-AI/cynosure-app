@@ -66,6 +66,10 @@ export interface PrepareExecutionInput {
     memoryRouterProviderId?: string
     /** Optional model override for the memory router confirmation pass */
     memoryRouterModel?: string
+    /** Optional provider override for the skill router confirmation pass */
+    skillRouterProviderId?: string
+    /** Optional model override for the skill router confirmation pass */
+    skillRouterModel?: string
     /** Explicit/manual skill ids selected for this execution. */
     selectedSkillIds?: string[]
     /** Enable automatic skill selection for this execution. */
@@ -259,8 +263,9 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         recentMessages: input.recentMessages,
         manualSkills,
         availableSkills: listSkills({ enabledOnly: true }),
-        providerId: providerModel.providerId,
+        providerId: input.skillRouterProviderId || providerModel.providerId,
         model: providerModel.model,
+        routerModel: input.skillRouterModel || undefined,
     })
 
     const skillsPrompt = buildSkillsSystemPrompt(selectedSkills)

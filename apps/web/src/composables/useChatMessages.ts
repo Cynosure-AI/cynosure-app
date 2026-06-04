@@ -157,6 +157,8 @@ export function useChatMessages(
             executionRun.autoMemory,
             activeAgent?.memoryRouterProviderId || prefs.memoryRouterProviderId || undefined,
             activeAgent?.memoryRouterModel || prefs.memoryRouterModel || undefined,
+            prefs.skillRouterProviderId || undefined,
+            prefs.skillRouterModel || undefined,
             prefs.compactProviderId || undefined,
             prefs.compactModel || undefined
         )

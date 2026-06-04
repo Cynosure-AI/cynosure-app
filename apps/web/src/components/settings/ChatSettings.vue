@@ -64,6 +64,14 @@ function onMemoryRouterSelection(selection: {
   prefs.memoryRouterModel = selection.model;
 }
 
+function onSkillRouterSelection(selection: {
+  providerId: string;
+  model: string;
+}): void {
+  prefs.skillRouterProviderId = selection.providerId;
+  prefs.skillRouterModel = selection.model;
+}
+
 function onTitleSelection(selection: {
   providerId: string;
   model: string;
@@ -163,6 +171,48 @@ function onCompactSelection(selection: {
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
           Auto Memories retrieves candidate chunks with Memory search, then confirms useful snippets with this model.
+        </p>
+      </div>
+    </BaseCard>
+
+    <!-- Skill Router -->
+    <BaseCard
+      v-if="showSection('skill-router')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-center gap-3">
+        <div
+          class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center"
+        >
+          <Icon
+            icon="lucide:book-open-check"
+            class="w-5 h-5 text-theme-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Skill Router
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Provider and model used to detect which skills a request needs
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-1 border-t border-theme-700">
+        <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
+        <ProviderModelSelect
+          :provider-id="prefs.skillRouterProviderId"
+          :model-value="prefs.skillRouterModel"
+          :providers="providerStore.providers"
+          include-default
+          default-label="Use chat provider"
+          placeholder="Use chat provider"
+          @change="onSkillRouterSelection"
+        />
+        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
+          Skills are prefiltered by embedding similarity, then confirmed by this router model.
+          Defaults to the current chat model when not set.
         </p>
       </div>
     </BaseCard>

@@ -122,6 +122,8 @@ export const api = {
       autoMemory?: boolean,
       memoryRouterProviderId?: string,
       memoryRouterModel?: string,
+      skillRouterProviderId?: string,
+      skillRouterModel?: string,
       compactProviderId?: string,
       compactModel?: string
     ) =>
@@ -147,6 +149,8 @@ export const api = {
         autoMemory,
         memoryRouterProviderId: memoryRouterProviderId || undefined,
         memoryRouterModel: memoryRouterModel || undefined,
+        skillRouterProviderId: skillRouterProviderId || undefined,
+        skillRouterModel: skillRouterModel || undefined,
         compactProviderId: compactProviderId || undefined,
         compactModel: compactModel || undefined,
         titleProviderId: titleProviderId || undefined,
