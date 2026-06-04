@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { useSkillDefinitionsStore } from '../../../stores/skill-definitions.store'
@@ -15,9 +15,18 @@ const enabledSkills = computed(() => skillsStore.skills.filter((skill) => skill.
 const selectedSkills = computed(() =>
   enabledSkills.value.filter((skill) => chatStore.freeChatSkillIds.includes(skill.id))
 )
+const showSkillsButton = computed(() => skillsStore.loaded && enabledSkills.value.length > 0)
+
+function loadSkills(force = false): void {
+  skillsStore.load({ force }).catch(() => { })
+}
 
 onMounted(() => {
-  if (!skillsStore.loaded) skillsStore.load().catch(() => { })
+  loadSkills()
+})
+
+watch(showModal, (visible) => {
+  if (visible && (!skillsStore.loaded || skillsStore.loadError)) loadSkills(true)
 })
 
 function toggleSkill(id: string): void {
@@ -37,6 +46,7 @@ function toggleAuto(value: boolean): void {
 <template>
   <HoverTooltip :max-width="280">
     <button
+      v-if="showSkillsButton"
       class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-accent-500 text-theme-500 hover:text-theme-300"
       aria-label="Skills"
       @click="showModal = true"
@@ -116,7 +126,30 @@ function toggleAuto(value: boolean): void {
       </label>
 
       <div class="max-h-96 overflow-y-auto rounded border border-theme-700 bg-theme-900">
+        <div
+          v-if="skillsStore.loading"
+          class="flex items-center justify-center gap-2 px-3 py-8 text-sm text-theme-500"
+        >
+          <Icon
+            icon="lucide:loader-2"
+            class="h-4 w-4 animate-spin"
+          />
+          Loading skills...
+        </div>
+        <div
+          v-else-if="skillsStore.loadError"
+          class="px-3 py-8 text-center text-sm text-red-400"
+        >
+          <div>{{ skillsStore.loadError }}</div>
+          <button
+            class="mt-3 rounded border border-red-500/30 px-2.5 py-1 text-xs text-red-300 hover:bg-red-500/10"
+            @click="loadSkills(true)"
+          >
+            Retry
+          </button>
+        </div>
         <label
+          v-else
           v-for="skill in enabledSkills"
           :key="skill.id"
           class="flex items-start gap-3 px-3 py-2.5 border-b border-theme-800 last:border-b-0 hover:bg-theme-800/60 cursor-pointer"
@@ -137,7 +170,7 @@ function toggleAuto(value: boolean): void {
           </span>
         </label>
         <div
-          v-if="!enabledSkills.length"
+          v-if="!skillsStore.loading && !skillsStore.loadError && !enabledSkills.length"
           class="px-3 py-8 text-center text-sm text-theme-500"
         >
           No skills yet. Create skills from the Skills page.

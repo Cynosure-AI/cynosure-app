@@ -342,6 +342,14 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('agents', 'icon_mime', 'TEXT')
   addColumnIfMissing('agents', 'skills_json', "TEXT NOT NULL DEFAULT '[]'")
 
+  // Skills table: keep early development databases compatible as the feature evolves.
+  addColumnIfMissing('skills', 'description', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('skills', 'category', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('skills', 'content', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('skills', 'enabled', 'INTEGER NOT NULL DEFAULT 1')
+  addColumnIfMissing('skills', 'created_at', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('skills', 'updated_at', 'INTEGER NOT NULL DEFAULT 0')
+
   // Trigger output channel support
   addColumnIfMissing('cron_jobs', 'output_channel_id', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('cron_jobs', 'output_target', "TEXT NOT NULL DEFAULT ''")

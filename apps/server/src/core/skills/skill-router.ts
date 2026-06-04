@@ -27,6 +27,14 @@ export interface RouteSkillsInput {
     routerModel?: string
 }
 
+export function shouldRouteSkills(
+    skills: SkillData[],
+    userQuery?: string,
+    opts: { enabled?: boolean } = {},
+): boolean {
+    return opts.enabled === true && Boolean(userQuery?.trim()) && skills.some((skill) => skill.enabled)
+}
+
 export function buildSkillsSystemPrompt(skills: SkillData[]): string {
     if (!skills.length) return ''
 

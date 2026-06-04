@@ -12,11 +12,10 @@ import { getToolRegistry } from '../tools/tool-registry.js'
 import { getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../tools/built-in-tools.js'
 import { applyAutoToolRouting } from './pre-execution/auto-tool-routing.js'
 import { applyAutoMemoryRouting } from './pre-execution/auto-memory-routing.js'
+import { applyAutoSkillRouting } from './pre-execution/auto-skill-routing.js'
 import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
 import { getSkillsByIds, listSkills } from '../skills/skill-store.js'
-import { buildSkillsSystemPrompt, routeSkills } from '../skills/skill-router.js'
-import { getEventBus } from '../telemetry/event-bus.js'
-import { nanoid } from 'nanoid'
+import { buildSkillsSystemPrompt } from '../skills/skill-router.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
@@ -252,44 +251,17 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         ...(input.selectedSkillIds || []),
     ], { enabledOnly: true })
 
-    let selectedSkills = manualSkills
-    if (input.autoSkillRouting === true && input.userQuery?.trim()) {
-        const skillRoutingTaskId = `skill_router_${nanoid()}`
-        getEventBus().emit('step:status', {
-            conversationId,
-            taskId: skillRoutingTaskId,
-            iteration: 0,
-            status: 'routing-skills',
-            message: 'Selecting relevant skills...',
-        })
-
-        const routedSkills = await routeSkills({
-            userQuery: input.userQuery,
-            recentMessages: input.recentMessages,
-            skills: listSkills({ enabledOnly: true }),
-            gateway,
-            providerId: providerModel.providerId,
-            model: providerModel.model,
-        })
-
-        const byId = new Map(selectedSkills.map((skill) => [skill.id, skill]))
-        for (const skill of routedSkills) byId.set(skill.id, skill)
-        selectedSkills = [...byId.values()]
-
-        getEventBus().emit('step:tools-chosen', {
-            conversationId,
-            taskId: skillRoutingTaskId,
-            iteration: 0,
-            toolCalls: selectedSkills.map((skill) => ({
-                name: skill.name,
-                arguments: JSON.stringify({
-                    type: 'skill',
-                    category: skill.category || undefined,
-                    description: skill.description || undefined,
-                }),
-            })),
-        })
-    }
+    const selectedSkills = await applyAutoSkillRouting({
+        enabled: input.autoSkillRouting === true,
+        gateway,
+        conversationId,
+        userQuery: input.userQuery,
+        recentMessages: input.recentMessages,
+        manualSkills,
+        availableSkills: listSkills({ enabledOnly: true }),
+        providerId: providerModel.providerId,
+        model: providerModel.model,
+    })
 
     const skillsPrompt = buildSkillsSystemPrompt(selectedSkills)
 

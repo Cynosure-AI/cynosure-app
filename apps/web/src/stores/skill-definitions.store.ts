@@ -6,10 +6,32 @@ import type { SkillDefinition } from '../api/types'
 export const useSkillDefinitionsStore = defineStore('skill-definitions', () => {
   const skills = ref<SkillDefinition[]>([])
   const loaded = ref(false)
+  const loading = ref(false)
+  const loadError = ref('')
+  let pendingLoad: Promise<void> | null = null
 
-  async function load(): Promise<void> {
-    skills.value = await api.skills.list()
-    loaded.value = true
+  async function load(options: { force?: boolean } = {}): Promise<void> {
+    if (pendingLoad) return pendingLoad
+    if (loaded.value && !options.force) return
+
+    loading.value = true
+    loadError.value = ''
+    pendingLoad = api.skills.list()
+      .then((items) => {
+        skills.value = items
+        loaded.value = true
+      })
+      .catch((err) => {
+        loaded.value = false
+        loadError.value = (err as Error).message
+        throw err
+      })
+      .finally(() => {
+        loading.value = false
+        pendingLoad = null
+      })
+
+    return pendingLoad
   }
 
   function get(id: string): SkillDefinition | undefined {
@@ -35,7 +57,7 @@ export const useSkillDefinitionsStore = defineStore('skill-definitions', () => {
     skills.value = skills.value.filter((skill) => skill.id !== id)
   }
 
-  return { skills, loaded, load, get, create, update, remove }
+  return { skills, loaded, loading, loadError, load, get, create, update, remove }
 })
 
 if (import.meta.hot) {
