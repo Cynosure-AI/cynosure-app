@@ -186,6 +186,45 @@ export interface MemoryFileStatus {
     lastIndexedAt?: number
 }
 
+export interface EntityGraphNode {
+    id: string
+    name: string
+    normalizedName: string
+    type: 'person' | 'place' | 'organization' | 'project' | 'date' | 'technology' | 'concept' | 'other'
+    aliases: string[]
+    mentionCount: number
+    sourceCount: number
+    firstSeenAt: number
+    lastSeenAt: number
+}
+
+export interface EntityGraphEdge {
+    id: string
+    fromNodeId: string
+    toNodeId: string
+    fromName: string
+    toName: string
+    relation: string
+    confidence: number
+    evidence: string
+    sourceKind: string
+    sourceId: string
+    mentionCount: number
+    firstSeenAt: number
+    lastSeenAt: number
+}
+
+export interface EntityGraphResponse {
+    stats: {
+        nodeCount: number
+        edgeCount: number
+        recentEdgeCount: number
+    }
+    seedNodes: EntityGraphNode[]
+    nodes: EntityGraphNode[]
+    edges: EntityGraphEdge[]
+}
+
 // ── Instances / Cron / Channels ──────────────────────────────────────────────
 
 export interface AgentInstance {

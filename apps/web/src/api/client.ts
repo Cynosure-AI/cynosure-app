@@ -2,7 +2,7 @@ import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage } from '
 import type {
   LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryResponse,
   AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus,
-  AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType,
+  AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse,
   MetricsSummary, OrchestrationState,
 } from './types'
 import type { WsHandler } from './http'
@@ -306,6 +306,13 @@ export const api = {
       get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
     configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>
       post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/configure', opts),
+    getGraph: (query?: string, limit?: number) => {
+      const params = new URLSearchParams()
+      if (query) params.set('query', query)
+      if (limit) params.set('limit', String(limit))
+      const qs = params.toString()
+      return get<EntityGraphResponse>(`/api/memory/graph${qs ? `?${qs}` : ''}`)
+    },
     onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>
       onWsEvent('memory:reembed-progress', cb as WsHandler)
   },

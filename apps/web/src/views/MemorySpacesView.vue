@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from "vue";
 import { api } from "../api/client";
-import type { MemorySpace } from "../api/types";
+import type { EntityGraphResponse, MemorySpace } from "../api/types";
 import { Icon } from "@iconify/vue";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MemoryDocumentList from "../components/memory/MemoryDocumentList.vue";
@@ -20,6 +20,10 @@ const folderDescription = ref("");
 const showDeleteConfirm = ref(false);
 const pendingDeleteSpace = ref<MemorySpace | null>(null);
 const collapsedFolders = ref<Set<string>>(readCollapsedFolders());
+const activePanel = ref<"documents" | "graph">("documents");
+const graph = ref<EntityGraphResponse | null>(null);
+const graphLoading = ref(false);
+const graphQuery = ref("");
 
 const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null);
 
@@ -233,6 +237,35 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
 }
 
 onMounted(() => loadSpaces());
+
+function formatRelation(relation: string): string {
+  return relation.replace(/_/g, " ");
+}
+
+function formatDate(ts: number): string {
+  if (!ts) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(ts));
+}
+
+async function loadGraph(query = graphQuery.value) {
+  graphLoading.value = true;
+  try {
+    graph.value = await api.memory.getGraph(query.trim() || undefined, 100);
+  } catch {
+    graph.value = null;
+  }
+  graphLoading.value = false;
+}
+
+async function showGraphPanel() {
+  activePanel.value = "graph";
+  if (!graph.value) await loadGraph();
+}
 </script>
 
 <template>
@@ -393,15 +426,200 @@ onMounted(() => loadSpaces());
             </div>
           </div>
 
-          <MemoryDocumentList
-            v-if="selectedSpaceId"
-            ref="docList"
-            :space-id="selectedSpaceId"
-            :spaces="spaces"
-            @edit-space="selectedSpace && openEditDialog(selectedSpace)"
-            @delete-space="selectedSpace && confirmDeleteSpace(selectedSpace)"
-            @spaces-changed="loadSpaces"
-          />
+          <div class="min-w-0">
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <div class="inline-flex rounded-lg border border-theme-800 bg-theme-950/45 p-1">
+                <button
+                  class="px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-2"
+                  :class="activePanel === 'documents' ? 'bg-theme-800 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
+                  @click="activePanel = 'documents'"
+                >
+                  <Icon
+                    icon="lucide:file-text"
+                    class="w-4 h-4"
+                  />
+                  Documents
+                </button>
+                <button
+                  class="px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-2"
+                  :class="activePanel === 'graph' ? 'bg-theme-800 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
+                  @click="showGraphPanel"
+                >
+                  <Icon
+                    icon="lucide:network"
+                    class="w-4 h-4"
+                  />
+                  Entity Graph
+                </button>
+              </div>
+              <button
+                v-if="activePanel === 'graph'"
+                class="p-2 text-theme-500 hover:text-theme-200 transition-colors"
+                title="Refresh entity graph"
+                @click="loadGraph()"
+              >
+                <Icon
+                  icon="lucide:refresh-cw"
+                  class="w-4 h-4"
+                  :class="{ 'animate-spin': graphLoading }"
+                />
+              </button>
+            </div>
+
+            <MemoryDocumentList
+              v-if="selectedSpaceId && activePanel === 'documents'"
+              ref="docList"
+              :space-id="selectedSpaceId"
+              :spaces="spaces"
+              @edit-space="selectedSpace && openEditDialog(selectedSpace)"
+              @delete-space="selectedSpace && confirmDeleteSpace(selectedSpace)"
+              @spaces-changed="loadSpaces"
+            />
+
+            <div
+              v-else-if="activePanel === 'graph'"
+              class="rounded-xl border border-theme-800 bg-theme-950/45 overflow-hidden"
+            >
+              <div class="px-4 py-3 border-b border-theme-800 bg-theme-900/50">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 class="text-sm font-semibold text-theme-200">
+                      Entity Graph
+                    </h2>
+                    <p class="text-xs text-theme-500 mt-1">
+                      Conversations are distilled into entities and relationships after each turn.
+                    </p>
+                  </div>
+                  <form
+                    class="flex items-center gap-2"
+                    @submit.prevent="loadGraph(graphQuery)"
+                  >
+                    <div class="relative">
+                      <Icon
+                        icon="lucide:search"
+                        class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-600"
+                      />
+                      <input
+                        v-model="graphQuery"
+                        type="text"
+                        class="w-64 max-w-full pl-8 pr-3 py-2 text-sm bg-theme-950 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-600 focus:outline-none focus:border-theme-600"
+                        placeholder="Walk from Tom, Acme, Project X"
+                      >
+                    </div>
+                    <button
+                      class="p-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
+                      title="Walk graph"
+                    >
+                      <Icon
+                        icon="lucide:route"
+                        class="w-4 h-4"
+                      />
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              <div
+                v-if="graphLoading && !graph"
+                class="flex items-center justify-center gap-2 py-12 text-sm text-theme-500"
+              >
+                <Icon
+                  icon="lucide:loader-2"
+                  class="w-4 h-4 animate-spin"
+                />
+                Loading graph...
+              </div>
+
+              <div
+                v-else-if="graph"
+                class="p-4 space-y-4"
+              >
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
+                    <div class="text-xs text-theme-500">
+                      Entities
+                    </div>
+                    <div class="mt-1 text-xl font-semibold text-theme-100">
+                      {{ graph.stats.nodeCount }}
+                    </div>
+                  </div>
+                  <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
+                    <div class="text-xs text-theme-500">
+                      Relations
+                    </div>
+                    <div class="mt-1 text-xl font-semibold text-theme-100">
+                      {{ graph.stats.edgeCount }}
+                    </div>
+                  </div>
+                  <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
+                    <div class="text-xs text-theme-500">
+                      This Week
+                    </div>
+                    <div class="mt-1 text-xl font-semibold text-theme-100">
+                      {{ graph.stats.recentEdgeCount }}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="graph.seedNodes.length"
+                  class="flex flex-wrap gap-2"
+                >
+                  <span
+                    v-for="node in graph.seedNodes"
+                    :key="node.id"
+                    class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/30 bg-accent-500/10 px-2 py-1 text-xs text-accent-200"
+                  >
+                    <Icon
+                      icon="lucide:sparkles"
+                      class="w-3 h-3"
+                    />
+                    {{ node.name }}
+                    <span class="text-accent-300/70">{{ node.type }}</span>
+                  </span>
+                </div>
+
+                <div
+                  v-if="graph.edges.length === 0"
+                  class="py-12 text-center text-sm text-theme-500"
+                >
+                  No relationships have been extracted yet.
+                </div>
+
+                <div
+                  v-else
+                  class="divide-y divide-theme-900/80 rounded-lg border border-theme-800 overflow-hidden"
+                >
+                  <div
+                    v-for="edge in graph.edges"
+                    :key="edge.id"
+                    class="px-4 py-3 bg-theme-950/35"
+                  >
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                      <span class="font-medium text-theme-100">{{ edge.fromName }}</span>
+                      <Icon
+                        icon="lucide:arrow-right"
+                        class="w-3.5 h-3.5 text-theme-500"
+                      />
+                      <span class="rounded-md bg-theme-800 px-2 py-0.5 text-xs text-theme-300">{{ formatRelation(edge.relation) }}</span>
+                      <Icon
+                        icon="lucide:arrow-right"
+                        class="w-3.5 h-3.5 text-theme-500"
+                      />
+                      <span class="font-medium text-theme-100">{{ edge.toName }}</span>
+                      <span class="ml-auto text-xs text-theme-600">{{ formatDate(edge.lastSeenAt) }}</span>
+                    </div>
+                    <div
+                      v-if="edge.evidence"
+                      class="mt-2 text-xs text-theme-500 leading-relaxed"
+                    >
+                      {{ edge.evidence }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </template>
 

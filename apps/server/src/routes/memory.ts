@@ -7,6 +7,7 @@ import { getMemoryParser } from '../core/memory/parser.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
+import { getEntityGraphStore } from '../core/memory/entity-graph.js'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import OpenAI from 'openai'
@@ -79,7 +80,30 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const memory = await aggregator.aggregate(query, opts)
     return {
       permanent: memory.permanent,
+      graph: memory.graph,
       formatted: aggregator.format(memory)
+    }
+  })
+
+  // GET /api/memory/graph — inspect the lightweight entity graph
+  app.get<{ Querystring: { query?: string; limit?: string } }>('/graph', async (req) => {
+    const graph = getEntityGraphStore()
+    const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 200)
+    const query = req.query.query?.trim()
+    if (query) {
+      const seeds = graph.findSeedNodes(query, [], 12)
+      const walk = graph.walk(seeds.map((node) => node.id), 2, limit)
+      return {
+        stats: graph.stats(),
+        seedNodes: walk.seedNodes,
+        nodes: walk.nodes,
+        edges: walk.edges
+      }
+    }
+    return {
+      stats: graph.stats(),
+      seedNodes: [],
+      ...graph.list(limit)
     }
   })
 

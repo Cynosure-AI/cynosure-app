@@ -72,7 +72,8 @@ function scrollMainToBottomIfNear(): void {
 // ─── Post-action labels ─────────────────────────────────────
 
 const postActionLabels: Record<string, string> = {
-  'generating-title': 'Generating title…'
+  'generating-title': 'Generating title…',
+  'updating-entity-graph': 'Updating entity graph…'
 }
 function postActionLabel(action: string): string {
   return postActionLabels[action] || `${action}…`

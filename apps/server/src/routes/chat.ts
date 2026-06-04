@@ -10,7 +10,7 @@ import { closeOrchestrationRun } from '../core/agent/orchestration-state.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
-import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
+import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions, extractEntityGraph } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
 import type { ChatMessage, ContentPart, RegistryAwareToolDefinition } from '../core/gateway/providers/base.provider.js'
 import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
@@ -530,6 +530,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             }
           }
         }
+
+        extractEntityGraph({
+          conversationId,
+          userMessage: content,
+          assistantResponse: result.content,
+          broadcast,
+          providerId: responseProvider,
+          model: responseModel
+        }).catch(() => { })
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           if (orchestrationRunId) {
