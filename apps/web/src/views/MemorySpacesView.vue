@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { MarkerType, useVueFlow, type Edge, type Node } from "@vue-flow/core";
 import { Icon } from "@iconify/vue";
+import { useLocalStorage } from "@vueuse/core";
 import { api } from "../api/client";
 import type { EntityGraphEdge, EntityGraphNode, EntityGraphNodeType, EntityGraphResponse, MemorySpace } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
@@ -9,6 +10,8 @@ import MemoryDocumentsSection from "../components/memory/MemoryDocumentsSection.
 import MemoryRelationshipsSection from "../components/memory/MemoryRelationshipsSection.vue";
 import MemoryVisualGraphSection from "../components/memory/MemoryVisualGraphSection.vue";
 import type { FlowNodeData } from "../components/memory/memory-graph-types";
+import { syncPrefsToElectron } from "../utils/electron-prefs";
+import { SK_MEMORY_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
 const ENTITY_FLOW_ID = "memory-entity-graph";
 
@@ -25,8 +28,11 @@ const ENTITY_NODE_TYPES: EntityGraphNodeType[] = [
   "place",
   "organization",
   "project",
+  "event",
   "date",
   "technology",
+  "product",
+  "artifact",
   "concept",
   "other",
 ];
@@ -79,7 +85,7 @@ const edgeEvidence = ref("");
 const edgeConfidence = ref(70);
 const graphFlowNodes = ref<Node<FlowNodeData>[]>([]);
 const graphFlowEdges = ref<Edge[]>([]);
-const nodeSpacing = ref(1.0);
+const nodeSpacing = useLocalStorage(SK_MEMORY_GRAPH_NODE_SPACING, 1.0);
 
 const { fitView } = useVueFlow(ENTITY_FLOW_ID);
 let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk.bundled.js").default>> | null = null;
@@ -235,6 +241,10 @@ watch([graph, () => activePanel.value], async () => {
   window.setTimeout(() => {
     fitView({ padding: 0.18, duration: 320 }).catch(() => undefined);
   }, 40);
+});
+
+watch(nodeSpacing, () => {
+  syncPrefsToElectron();
 });
 
 async function relayout() {

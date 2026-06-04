@@ -190,7 +190,7 @@ export interface EntityGraphNode {
     id: string
     name: string
     normalizedName: string
-    type: 'person' | 'place' | 'organization' | 'project' | 'date' | 'technology' | 'concept' | 'other'
+    type: 'person' | 'place' | 'organization' | 'project' | 'event' | 'date' | 'technology' | 'product' | 'artifact' | 'concept' | 'other'
     aliases: string[]
     mentionCount: number
     sourceCount: number

@@ -23,6 +23,7 @@ export const SK_COMPACT_MODEL = 'cy-compact-model'
 export const SK_PROVIDER_MODEL_FAVORITES = 'cy-provider-model-favorites'
 export const SK_AGENT_CATEGORIES = 'cy-agent-categories'
 export const SK_MA_CATEGORIES = 'cy-ma-categories'
+export const SK_MEMORY_GRAPH_NODE_SPACING = 'cy-memory-graph-node-spacing'
 
 // ── Whisper / STT ──────────────────────────────────────────────────────────────
 export const SK_WHISPER_MODEL = 'cy-whisper-model'
@@ -64,6 +65,7 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_PROVIDER_MODEL_FAVORITES,
     SK_AGENT_CATEGORIES,
     SK_MA_CATEGORIES,
+    SK_MEMORY_GRAPH_NODE_SPACING,
     SK_WHISPER_MODEL,
     SK_WHISPER_ENABLED,
     SK_WHISPER_QUANTIZATION,

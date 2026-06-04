@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 
-export type EntityType = 'person' | 'place' | 'organization' | 'project' | 'date' | 'technology' | 'concept' | 'other'
+export type EntityType = 'person' | 'place' | 'organization' | 'project' | 'event' | 'date' | 'technology' | 'product' | 'artifact' | 'concept' | 'other'
 
 export interface EntityNode {
   id: string
@@ -53,7 +53,7 @@ interface ExtractedRelation {
   evidence?: string
 }
 
-const ENTITY_TYPES = new Set<EntityType>(['person', 'place', 'organization', 'project', 'date', 'technology', 'concept', 'other'])
+const ENTITY_TYPES = new Set<EntityType>(['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'])
 const STOP_TERMS = new Set(['user', 'assistant', 'you', 'me', 'i', 'we', 'they', 'today', 'tomorrow', 'yesterday', 'this', 'that'])
 const FUNCTIONAL_RELATIONS = new Set([
   'works_at',
@@ -477,7 +477,7 @@ export class EntityGraphStore {
             'Return strict JSON only: an array of objects with keys action, from, relation, to, confidence, evidence.',
             'action is "assert" for facts that are true now, or "delete" for facts explicitly corrected, negated, or no longer true.',
             'from and to are objects with name, type, and optional aliases.',
-            'Allowed types: person, place, organization, project, date, technology, concept, other.',
+            'Allowed types: person, place, organization, project, event, date, technology, product, artifact, concept, other.',
             'Only include facts that would remain useful later. Skip vague, temporary, or unsupported claims.',
             'Use concise snake_case relation names such as works_at, depends_on, located_in, owns, uses, met_on, discussed_with.',
             'When a fact changes, emit a delete for the old relationship if the turn names it, and an assert for the replacement.',
