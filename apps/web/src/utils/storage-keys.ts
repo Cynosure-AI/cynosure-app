@@ -10,6 +10,7 @@ export const SK_AUTO_EXPAND_TOOLS = 'cy-auto-expand-tools'
 export const SK_GENERATE_TITLE = 'cy-generate-title'
 export const SK_TITLE_PROVIDER = 'cy-title-provider'
 export const SK_TITLE_MODEL = 'cy-title-model'
+export const SK_ENABLE_ENTITY_GRAPH = 'cy-enable-entity-graph'
 export const SK_ENTITY_GRAPH_PROVIDER = 'cy-entity-graph-provider'
 export const SK_ENTITY_GRAPH_MODEL = 'cy-entity-graph-model'
 export const SK_TOOL_ROUTER_PROVIDER = 'cy-tool-router-provider'
@@ -51,6 +52,7 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_GENERATE_TITLE,
     SK_TITLE_PROVIDER,
     SK_TITLE_MODEL,
+    SK_ENABLE_ENTITY_GRAPH,
     SK_ENTITY_GRAPH_PROVIDER,
     SK_ENTITY_GRAPH_MODEL,
     SK_TOOL_ROUTER_PROVIDER,

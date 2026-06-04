@@ -119,6 +119,7 @@ export const api = {
       memoryRouterModel?: string,
       compactProviderId?: string,
       compactModel?: string,
+      enableEntityGraph?: boolean,
       entityGraphProviderId?: string,
       entityGraphModel?: string
     ) =>
@@ -148,6 +149,7 @@ export const api = {
         compactModel: compactModel || undefined,
         titleProviderId: titleProviderId || undefined,
         titleModel: titleModel || undefined,
+        enableEntityGraph,
         entityGraphProviderId: entityGraphProviderId || undefined,
         entityGraphModel: entityGraphModel || undefined
       }),
