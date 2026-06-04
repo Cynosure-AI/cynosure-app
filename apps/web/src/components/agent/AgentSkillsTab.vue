@@ -3,6 +3,7 @@ import { computed, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { AgentDefinition } from '../../api/types'
 import { useSkillDefinitionsStore } from '../../stores/skill-definitions.store'
+import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -24,6 +25,33 @@ function toggleSkill(id: string): void {
 
 <template>
   <div class="space-y-4">
+    <!-- Auto Skill Routing -->
+    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            <Icon
+              icon="lucide:book-open-check"
+              class="w-4 h-4 text-accent-400"
+            />
+            <h3 class="text-sm font-medium text-theme-200">
+              Auto Skill Routing
+            </h3>
+          </div>
+          <p class="text-xs text-theme-500 leading-relaxed">
+            When enabled, this agent automatically selects relevant skills for each request.
+            Manual skills from the Skills tab are always included.
+          </p>
+        </div>
+        <ToggleSwitch
+          :model-value="agent.autoSkillRouting !== false"
+          color="accent"
+          class="mt-0.5"
+          @update:model-value="emit('update', 'autoSkillRouting', $event)"
+        />
+      </div>
+    </div>
+
     <div class="rounded-lg border border-theme-700 bg-theme-900/70 px-4 py-3">
       <div class="flex items-center gap-2">
         <Icon

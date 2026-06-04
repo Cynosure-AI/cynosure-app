@@ -226,59 +226,31 @@ function onMaxCtxBlur() {
 
     <!-- Skill Routing -->
     <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
-      <div class="space-y-4">
-        <div class="flex items-start justify-between gap-4">
-          <div class="flex-1">
-            <div class="flex items-center gap-2 mb-1">
-              <Icon
-                icon="lucide:book-open-check"
-                class="w-4 h-4 text-accent-400"
-              />
-              <h3 class="text-sm font-medium text-theme-200">
-                Auto Skill Routing
-              </h3>
-            </div>
-            <p class="text-xs text-theme-500 leading-relaxed">
-              When enabled, this agent automatically selects relevant skills for each request.
-              Manual skills from the Skills tab are always included.
-            </p>
-          </div>
-          <ToggleSwitch
-            :model-value="agent.autoSkillRouting !== false"
-            color="accent"
-            class="mt-0.5"
-            @update:model-value="emit('update', 'autoSkillRouting', $event)"
-          />
-        </div>
+      <div class="flex items-center gap-2 mb-1">
+        <Icon
+          icon="lucide:sparkles"
+          class="w-4 h-4 text-accent-400"
+        />
+        <h3 class="text-sm font-medium text-theme-200">
+          Skill Router Model
+        </h3>
+      </div>
+      <p class="text-xs text-theme-500 leading-relaxed">
+        Override the provider and model this agent uses when auto skill
+        routing is enabled. Leave blank to use the global skill router settings
+        from Preferences.
+      </p>
 
-        <div class="pt-4 border-t border-theme-700">
-          <div class="flex items-center gap-2 mb-1">
-            <Icon
-              icon="lucide:sparkles"
-              class="w-4 h-4 text-accent-400"
-            />
-            <h3 class="text-sm font-medium text-theme-200">
-              Skill Router Model
-            </h3>
-          </div>
-          <p class="text-xs text-theme-500 leading-relaxed">
-            Override the provider and model this agent uses when auto skill
-            routing is enabled. Leave blank to use the global skill router settings
-            from Preferences.
-          </p>
-
-          <div class="mt-4">
-            <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
-            <ProviderModelSelect
-              :provider-id="agent.skillRouterProviderId || ''"
-              :model-value="agent.skillRouterModel || ''"
-              :providers="providerStore.providers"
-              :leading-selections="skillRouterLeadingSelections"
-              placeholder="Use global router model"
-              @change="onSkillRouterSelection"
-            />
-          </div>
-        </div>
+      <div class="mt-4">
+        <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
+        <ProviderModelSelect
+          :provider-id="agent.skillRouterProviderId || ''"
+          :model-value="agent.skillRouterModel || ''"
+          :providers="providerStore.providers"
+          :leading-selections="skillRouterLeadingSelections"
+          placeholder="Use global router model"
+          @change="onSkillRouterSelection"
+        />
       </div>
     </div>
 
