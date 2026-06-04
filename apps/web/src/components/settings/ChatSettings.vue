@@ -72,6 +72,14 @@ function onTitleSelection(selection: {
   prefs.titleModel = selection.model;
 }
 
+function onEntityGraphSelection(selection: {
+  providerId: string;
+  model: string;
+}): void {
+  prefs.entityGraphProviderId = selection.providerId;
+  prefs.entityGraphModel = selection.model;
+}
+
 function onCompactSelection(selection: {
   providerId: string;
   model: string;
@@ -208,6 +216,47 @@ function onCompactSelection(selection: {
           placeholder="Use chat provider"
           @change="onTitleSelection"
         />
+      </div>
+    </BaseCard>
+
+    <!-- Entity Graph Extraction -->
+    <BaseCard
+      v-if="showSection('entity-graph-extraction')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-center gap-3">
+        <div
+          class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center"
+        >
+          <Icon
+            icon="lucide:network"
+            class="w-5 h-5 text-theme-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Entity Graph Extraction
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Provider and model used to extract post-turn entities and relationships
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-1 border-t border-theme-700">
+        <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
+        <ProviderModelSelect
+          :provider-id="prefs.entityGraphProviderId"
+          :model-value="prefs.entityGraphModel"
+          :providers="providerStore.providers"
+          include-default
+          default-label="Use chat provider"
+          placeholder="Use chat provider"
+          @change="onEntityGraphSelection"
+        />
+        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
+          Entity extraction runs after each chat turn and stores durable relationships in the local entity graph.
+        </p>
       </div>
     </BaseCard>
 

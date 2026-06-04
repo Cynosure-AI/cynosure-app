@@ -159,6 +159,13 @@ const sections: SettingsSection[] = [
     terms: ['generate chat titles', 'titles', 'chat titles', 'conversation titles', 'title model']
   },
   {
+    id: 'entity-graph-extraction',
+    categoryId: 'chat',
+    label: 'Entity Graph Extraction',
+    description: 'Provider and model used to extract post-turn entities and relationships.',
+    terms: ['entity graph', 'entity extraction', 'relationships', 'relation extraction', 'post turn actions', 'memory graph']
+  },
+  {
     id: 'context-strategy',
     categoryId: 'chat',
     label: 'Context Strategy',

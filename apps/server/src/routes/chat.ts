@@ -182,11 +182,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       compactModel?: string
       titleProviderId?: string
       titleModel?: string
+      entityGraphProviderId?: string
+      entityGraphModel?: string
     }
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, entityGraphProviderId: entityGraphProviderIdPref, entityGraphModel: entityGraphModelPref } = req.body
       const db = getDb()
       const toolRegistry = getToolRegistry()
       const selectedToolKeys = Array.isArray(allowedTools)
@@ -536,8 +538,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           userMessage: content,
           assistantResponse: result.content,
           broadcast,
-          providerId: responseProvider,
-          model: responseModel
+          providerId: entityGraphProviderIdPref || responseProvider,
+          model: entityGraphModelPref || (entityGraphProviderIdPref ? undefined : responseModel)
         }).catch(() => { })
       } catch (err) {
         if ((err as Error).name === 'AbortError') {

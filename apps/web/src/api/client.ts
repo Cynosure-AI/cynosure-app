@@ -118,7 +118,9 @@ export const api = {
       memoryRouterProviderId?: string,
       memoryRouterModel?: string,
       compactProviderId?: string,
-      compactModel?: string
+      compactModel?: string,
+      entityGraphProviderId?: string,
+      entityGraphModel?: string
     ) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, {
         content,
@@ -145,7 +147,9 @@ export const api = {
         compactProviderId: compactProviderId || undefined,
         compactModel: compactModel || undefined,
         titleProviderId: titleProviderId || undefined,
-        titleModel: titleModel || undefined
+        titleModel: titleModel || undefined,
+        entityGraphProviderId: entityGraphProviderId || undefined,
+        entityGraphModel: entityGraphModel || undefined
       }),
     truncateFrom: (conversationId: string, messageId: string) =>
       post<{ success: boolean; deleted: number }>(
