@@ -34,13 +34,14 @@ const router = createRouter({
     },
     {
       path: '/triggers/channels',
-      name: 'triggers-channels',
-      component: () => import('@/views/triggers/ChannelsView.vue')
+      redirect: { name: 'settings-channels' }
     },
     {
       path: '/triggers/channels/:id',
-      name: 'channel-detail',
-      component: () => import('@/views/triggers/ChannelDetailView.vue')
+      redirect: (to) => ({
+        name: 'settings-channel-detail',
+        params: { id: to.params.id }
+      })
     },
     // Instances
     {
@@ -95,6 +96,16 @@ const router = createRouter({
       path: '/settings/mcp',
       name: 'settings-mcp',
       component: () => import('@/views/settings/McpSettingsView.vue')
+    },
+    {
+      path: '/settings/channels',
+      name: 'settings-channels',
+      redirect: { name: 'settings', query: { category: 'channels' } }
+    },
+    {
+      path: '/settings/channels/:id',
+      name: 'settings-channel-detail',
+      component: () => import('@/views/triggers/ChannelDetailView.vue')
     },
     {
       path: '/settings/memory',

@@ -94,7 +94,7 @@ async function loadChannel() {
     channel.value = found
     populateFields(found)
   } catch {
-    router.push('/triggers/channels')
+    router.push('/settings/channels')
   } finally {
     loading.value = false
   }
@@ -155,7 +155,7 @@ onMounted(loadChannel)
           <div class="flex items-center gap-3">
             <button
               class="p-1.5 text-theme-500 hover:text-theme-300 transition-colors"
-              @click="router.push('/triggers/channels')"
+              @click="router.push('/settings/channels')"
             >
               <Icon
                 icon="lucide:arrow-left"
