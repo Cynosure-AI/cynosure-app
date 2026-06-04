@@ -23,7 +23,7 @@ const folderDescription = ref("");
 const showDeleteConfirm = ref(false);
 const pendingDeleteSpace = ref<MemorySpace | null>(null);
 const collapsedFolders = ref<Set<string>>(readCollapsedFolders());
-const activePanel = ref<"documents" | "graph">("documents");
+const activePanel = ref<"documents" | "relationships" | "visual">("documents");
 const graph = ref<EntityGraphResponse | null>(null);
 const graphLoading = ref(false);
 const graphQuery = ref("");
@@ -34,6 +34,31 @@ const edgeEvidence = ref("");
 const edgeConfidence = ref(70);
 
 const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null);
+
+const memorySections = [
+  {
+    id: "documents",
+    label: "Documents",
+    description: "Browse folders, upload files, and manage indexed memory documents.",
+    icon: "lucide:file-text",
+  },
+  {
+    id: "relationships",
+    label: "Relationships",
+    description: "Inspect, correct, and delete extracted entity connections.",
+    icon: "lucide:git-branch",
+  },
+  {
+    id: "visual",
+    label: "Visual Graph",
+    description: "Explore entities as a spatial graph with more room to breathe.",
+    icon: "lucide:network",
+  },
+] as const;
+
+const activeSection = computed(() =>
+  memorySections.find((section) => section.id === activePanel.value) || memorySections[0],
+);
 
 const selectedSpace = computed(() =>
   spaces.value.find((s) => s.id === selectedSpaceId.value) || null,
@@ -72,9 +97,9 @@ const graphFlowNodes = computed<Node[]>(() => {
   }
 
   const entries = [...nodeLabels.entries()];
-  const radius = Math.max(150, Math.min(280, entries.length * 34));
-  const centerX = 360;
-  const centerY = 210;
+  const radius = Math.max(220, Math.min(460, entries.length * 48));
+  const centerX = 540;
+  const centerY = 360;
   return entries.map(([id, value], index) => {
     const angle = entries.length <= 1 ? 0 : (2 * Math.PI * index) / entries.length - Math.PI / 2;
     return {
@@ -96,11 +121,9 @@ const graphFlowEdges = computed<Edge[]>(() => {
     id: edge.id,
     source: edge.fromNodeId,
     target: edge.toNodeId,
-    label: formatRelation(edge.relation),
     markerEnd: MarkerType.ArrowClosed,
+    type: "smoothstep",
     class: "entity-flow-edge",
-    labelBgStyle: { fill: "#111827", fillOpacity: 0.92 },
-    labelStyle: { fill: "#d1d5db", fontSize: 11 },
     style: { stroke: "#8b5cf6", strokeWidth: 1.8 },
   }));
 });
@@ -236,12 +259,14 @@ const dragCounter = ref(0);
 const dropTargetSpaceId = ref<string | null>(null);
 
 function onDragEnter(e: DragEvent, spaceId?: string) {
+  if (activePanel.value !== "documents") return;
   e.preventDefault();
   if (spaceId) dropTargetSpaceId.value = spaceId;
   else dragCounter.value++;
 }
 
 function onDragLeave(e: DragEvent, spaceId?: string) {
+  if (activePanel.value !== "documents") return;
   e.preventDefault();
   if (spaceId) {
     if (dropTargetSpaceId.value === spaceId) dropTargetSpaceId.value = null;
@@ -251,6 +276,7 @@ function onDragLeave(e: DragEvent, spaceId?: string) {
 }
 
 function onDragOver(e: DragEvent) {
+  if (activePanel.value !== "documents") return;
   e.preventDefault();
   if (e.dataTransfer) {
     e.dataTransfer.dropEffect = e.dataTransfer.types.includes(DOCUMENT_DRAG_MIME) ? "move" : "copy";
@@ -258,6 +284,7 @@ function onDragOver(e: DragEvent) {
 }
 
 async function onFolderDrop(e: DragEvent, targetSpaceId: string) {
+  if (activePanel.value !== "documents") return;
   e.preventDefault();
   dropTargetSpaceId.value = null;
   const documentPayload = e.dataTransfer?.getData(DOCUMENT_DRAG_MIME);
@@ -277,6 +304,7 @@ async function onFolderDrop(e: DragEvent, targetSpaceId: string) {
 }
 
 async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
+  if (activePanel.value !== "documents") return;
   e.preventDefault();
   dragCounter.value = 0;
   dropTargetSpaceId.value = null;
@@ -315,9 +343,9 @@ async function loadGraph(query = graphQuery.value) {
   graphLoading.value = false;
 }
 
-async function showGraphPanel() {
-  activePanel.value = "graph";
-  if (!graph.value) await loadGraph();
+async function selectPanel(panel: typeof activePanel.value) {
+  activePanel.value = panel;
+  if ((panel === "relationships" || panel === "visual") && !graph.value) await loadGraph();
 }
 
 function openEditEdge(edge: EntityGraphEdge) {
@@ -358,7 +386,7 @@ async function deleteEdge(edge: EntityGraphEdge) {
     @drop="onFileDrop($event)"
   >
     <div
-      v-if="dragCounter > 0 && selectedSpaceId && !dropTargetSpaceId"
+      v-if="activePanel === 'documents' && dragCounter > 0 && selectedSpaceId && !dropTargetSpaceId"
       class="absolute inset-0 z-40 flex items-center justify-center bg-accent-500/10 border-2 border-dashed border-accent-500/40 rounded-xl pointer-events-none"
     >
       <div class="text-center">
@@ -372,169 +400,58 @@ async function deleteEdge(edge: EntityGraphEdge) {
       </div>
     </div>
 
-    <div class="max-w-6xl mx-auto px-6 py-6">
-      <div class="flex items-center justify-between mb-6">
-        <div>
+    <div class="flex min-h-full flex-col lg:flex-row">
+      <aside class="shrink-0 border-b border-theme-800 bg-theme-950/60 lg:w-72 lg:border-b-0 lg:border-r">
+        <header class="p-4">
           <h1 class="text-2xl font-bold text-theme-100">
-            Memory Folders
+            Memory
           </h1>
-          <p class="text-sm text-theme-500 mt-1">
-            Organize shared knowledge in one memory folder with searchable subfolders.
+          <p class="mt-1 text-sm leading-relaxed text-theme-500">
+            Manage documents, extracted relationships, and the entity graph.
           </p>
-        </div>
-        <button
-          class="px-3 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-          @click="openCreateDialog()"
-        >
-          <Icon
-            icon="lucide:folder-plus"
-            class="w-4 h-4"
-          />
-          New Folder
-        </button>
-      </div>
+        </header>
+        <nav class="flex gap-1 overflow-x-auto px-3 py-3 lg:block lg:space-y-1 lg:overflow-x-visible lg:p-4">
+          <button
+            v-for="section in memorySections"
+            :key="section.id"
+            class="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all lg:w-full"
+            :class="activePanel === section.id ? 'bg-theme-800 text-theme-100 shadow-[inset_3px_0_0_var(--color-accent-500,#3b82f6)]' : 'text-theme-400 hover:bg-theme-800/70 hover:text-theme-200'"
+            @click="selectPanel(section.id)"
+          >
+            <Icon
+              :icon="section.icon"
+              class="h-4.5 w-4.5 shrink-0"
+            />
+            <span class="whitespace-nowrap">{{ section.label }}</span>
+          </button>
+        </nav>
+      </aside>
 
-      <div
-        v-if="spacesLoading && spaces.length === 0"
-        class="flex items-center gap-2 py-8 justify-center text-theme-500"
-      >
-        <Icon
-          icon="lucide:loader-2"
-          class="w-5 h-5 animate-spin"
-        />
-        Loading folders...
-      </div>
-
-      <template v-else>
-        <div class="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
-          <div class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45">
-            <div class="flex items-center justify-between px-4 py-3 border-b border-theme-800 bg-theme-900/50">
-              <div class="text-xs font-medium uppercase tracking-wide text-theme-400">
-                Folders
-              </div>
+      <main class="min-w-0 flex-1 overflow-y-auto">
+        <div class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 backdrop-blur-sm px-4 py-3 sm:px-6 lg:px-8">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 class="text-xl font-semibold text-theme-100">
+                {{ activeSection.label }}
+              </h2>
+              <p class="text-sm text-theme-500 mt-1">
+                {{ activeSection.description }}
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
               <button
-                class="p-1.5 text-theme-500 hover:text-theme-200 transition-colors"
-                title="Refresh folders"
-                @click="loadSpaces"
+                v-if="activePanel === 'documents'"
+                class="px-3 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                @click="openCreateDialog()"
               >
                 <Icon
-                  icon="lucide:refresh-cw"
+                  icon="lucide:folder-plus"
                   class="w-4 h-4"
-                  :class="{ 'animate-spin': spacesLoading }"
                 />
+                New Folder
               </button>
-            </div>
-            <div
-              v-if="spaces.length === 0"
-              class="px-4 py-8 text-center text-sm text-theme-500"
-            >
-              No memory folder found.
-            </div>
-            <div
-              v-else
-              class="py-1"
-            >
-              <div
-                v-for="space in visibleSpaces"
-                :key="space.id"
-                class="group flex items-center gap-2 px-3 py-2.5 border-b border-theme-900/70 last:border-b-0 transition-colors"
-                :class="[
-                  selectedSpaceId === space.id ? 'bg-accent-500/12 text-theme-100' : 'hover:bg-theme-800/35 text-theme-300',
-                  dropTargetSpaceId === space.id ? 'ring-1 ring-accent-500/70 ring-inset bg-accent-500/10' : '',
-                ]"
-                :style="{ paddingLeft: `${12 + (space.depth || 0) * 12}px` }"
-                @dragenter.stop="onDragEnter($event, space.id)"
-                @dragleave.stop="onDragLeave($event, space.id)"
-                @dragover.stop="onDragOver($event)"
-                @drop.stop="onFolderDrop($event, space.id)"
-              >
-                <button
-                  v-if="!space.isDefault"
-                  class="p-0.5 text-theme-500 hover:text-theme-200 transition-colors"
-                  :class="{ 'invisible': !hasChildren(space) }"
-                  @click.stop="toggleFolder(space)"
-                >
-                  <Icon
-                    icon="lucide:chevron-down"
-                    class="w-4 h-4 transition-transform"
-                    :class="{ '-rotate-90': isCollapsed(space) }"
-                  />
-                </button>
-                <button
-                  class="min-w-0 flex flex-1 items-center gap-2 text-left"
-                  @click="selectedSpaceId = space.id"
-                >
-                  <Icon
-                    :icon="space.isDefault ? 'lucide:hard-drive' : isCollapsed(space) ? 'lucide:folder' : 'lucide:folder-open'"
-                    class="w-4 h-4 shrink-0"
-                    :class="space.isDefault ? 'text-accent-400' : 'text-amber-400'"
-                  />
-                  <span class="truncate text-sm font-medium">{{ space.name }}</span>
-                  <span class="text-xs text-theme-500">{{ space.fileCount }}</span>
-                </button>
-                <button
-                  class="p-1 text-theme-600 hover:text-accent-400 opacity-0 group-hover:opacity-100 transition-colors"
-                  title="New subfolder"
-                  @click.stop="openCreateDialog(space)"
-                >
-                  <Icon
-                    icon="lucide:plus"
-                    class="w-3.5 h-3.5"
-                  />
-                </button>
-                <button
-                  class="p-1 text-theme-600 hover:text-theme-200 opacity-0 group-hover:opacity-100 transition-colors"
-                  title="Rename folder"
-                  @click.stop="openEditDialog(space)"
-                >
-                  <Icon
-                    icon="lucide:pencil"
-                    class="w-3.5 h-3.5"
-                  />
-                </button>
-                <button
-                  :disabled="space.isDefault"
-                  class="p-1 text-theme-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-colors disabled:opacity-20 disabled:hover:text-theme-600"
-                  title="Archive folder"
-                  @click.stop="confirmDeleteSpace(space)"
-                >
-                  <Icon
-                    icon="lucide:archive"
-                    class="w-3.5 h-3.5"
-                  />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="min-w-0">
-            <div class="mb-3 flex items-center justify-between gap-3">
-              <div class="inline-flex rounded-lg border border-theme-800 bg-theme-950/45 p-1">
-                <button
-                  class="px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-2"
-                  :class="activePanel === 'documents' ? 'bg-theme-800 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
-                  @click="activePanel = 'documents'"
-                >
-                  <Icon
-                    icon="lucide:file-text"
-                    class="w-4 h-4"
-                  />
-                  Documents
-                </button>
-                <button
-                  class="px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-2"
-                  :class="activePanel === 'graph' ? 'bg-theme-800 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
-                  @click="showGraphPanel"
-                >
-                  <Icon
-                    icon="lucide:network"
-                    class="w-4 h-4"
-                  />
-                  Entity Graph
-                </button>
-              </div>
               <button
-                v-if="activePanel === 'graph'"
+                v-if="activePanel === 'relationships' || activePanel === 'visual'"
                 class="p-2 text-theme-500 hover:text-theme-200 transition-colors"
                 title="Refresh entity graph"
                 @click="loadGraph()"
@@ -546,9 +463,127 @@ async function deleteEdge(edge: EntityGraphEdge) {
                 />
               </button>
             </div>
+          </div>
+        </div>
+
+        <div
+          v-if="spacesLoading && spaces.length === 0"
+          class="flex items-center gap-2 py-8 justify-center text-theme-500"
+        >
+          <Icon
+            icon="lucide:loader-2"
+            class="w-5 h-5 animate-spin"
+          />
+          Loading folders...
+        </div>
+
+        <div
+          v-else-if="activePanel === 'documents'"
+          class="p-4 sm:p-6 lg:p-8"
+        >
+          <div class="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
+            <div class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45">
+              <div class="flex items-center justify-between px-4 py-3 border-b border-theme-800 bg-theme-900/50">
+                <div class="text-xs font-medium uppercase tracking-wide text-theme-400">
+                  Folders
+                </div>
+                <button
+                  class="p-1.5 text-theme-500 hover:text-theme-200 transition-colors"
+                  title="Refresh folders"
+                  @click="loadSpaces"
+                >
+                  <Icon
+                    icon="lucide:refresh-cw"
+                    class="w-4 h-4"
+                    :class="{ 'animate-spin': spacesLoading }"
+                  />
+                </button>
+              </div>
+              <div
+                v-if="spaces.length === 0"
+                class="px-4 py-8 text-center text-sm text-theme-500"
+              >
+                No memory folder found.
+              </div>
+              <div
+                v-else
+                class="py-1"
+              >
+                <div
+                  v-for="space in visibleSpaces"
+                  :key="space.id"
+                  class="group flex items-center gap-2 px-3 py-2.5 border-b border-theme-900/70 last:border-b-0 transition-colors"
+                  :class="[
+                    selectedSpaceId === space.id ? 'bg-accent-500/12 text-theme-100' : 'hover:bg-theme-800/35 text-theme-300',
+                    dropTargetSpaceId === space.id ? 'ring-1 ring-accent-500/70 ring-inset bg-accent-500/10' : '',
+                  ]"
+                  :style="{ paddingLeft: `${12 + (space.depth || 0) * 12}px` }"
+                  @dragenter.stop="onDragEnter($event, space.id)"
+                  @dragleave.stop="onDragLeave($event, space.id)"
+                  @dragover.stop="onDragOver($event)"
+                  @drop.stop="onFolderDrop($event, space.id)"
+                >
+                  <button
+                    v-if="!space.isDefault"
+                    class="p-0.5 text-theme-500 hover:text-theme-200 transition-colors"
+                    :class="{ 'invisible': !hasChildren(space) }"
+                    @click.stop="toggleFolder(space)"
+                  >
+                    <Icon
+                      icon="lucide:chevron-down"
+                      class="w-4 h-4 transition-transform"
+                      :class="{ '-rotate-90': isCollapsed(space) }"
+                    />
+                  </button>
+                  <button
+                    class="min-w-0 flex flex-1 items-center gap-2 text-left"
+                    @click="selectedSpaceId = space.id"
+                  >
+                    <Icon
+                      :icon="space.isDefault ? 'lucide:hard-drive' : isCollapsed(space) ? 'lucide:folder' : 'lucide:folder-open'"
+                      class="w-4 h-4 shrink-0"
+                      :class="space.isDefault ? 'text-accent-400' : 'text-amber-400'"
+                    />
+                    <span class="truncate text-sm font-medium">{{ space.name }}</span>
+                    <span class="text-xs text-theme-500">{{ space.fileCount }}</span>
+                  </button>
+                  <button
+                    class="p-1 text-theme-600 hover:text-accent-400 opacity-0 group-hover:opacity-100 transition-colors"
+                    title="New subfolder"
+                    @click.stop="openCreateDialog(space)"
+                  >
+                    <Icon
+                      icon="lucide:plus"
+                      class="w-3.5 h-3.5"
+                    />
+                  </button>
+                  <button
+                    class="p-1 text-theme-600 hover:text-theme-200 opacity-0 group-hover:opacity-100 transition-colors"
+                    title="Rename folder"
+                    @click.stop="openEditDialog(space)"
+                  >
+                    <Icon
+                      icon="lucide:pencil"
+                      class="w-3.5 h-3.5"
+                    />
+                  </button>
+                  <button
+                    :disabled="space.isDefault"
+                    class="p-1 text-theme-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-colors disabled:opacity-20 disabled:hover:text-theme-600"
+                    title="Archive folder"
+                    @click.stop="confirmDeleteSpace(space)"
+                  >
+                    <Icon
+                      icon="lucide:archive"
+                      class="w-3.5 h-3.5"
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
 
             <MemoryDocumentList
-              v-if="selectedSpaceId && activePanel === 'documents'"
+              v-if="selectedSpaceId"
               ref="docList"
               :space-id="selectedSpaceId"
               :spaces="spaces"
@@ -556,187 +591,174 @@ async function deleteEdge(edge: EntityGraphEdge) {
               @delete-space="selectedSpace && confirmDeleteSpace(selectedSpace)"
               @spaces-changed="loadSpaces"
             />
+          </div>
+        </div>
 
-            <div
-              v-else-if="activePanel === 'graph'"
-              class="rounded-xl border border-theme-800 bg-theme-950/45 overflow-hidden"
-            >
-              <div class="px-4 py-3 border-b border-theme-800 bg-theme-900/50">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 class="text-sm font-semibold text-theme-200">
-                      Entity Graph
-                    </h2>
-                    <p class="text-xs text-theme-500 mt-1">
-                      Conversations are distilled into entities and relationships after each turn.
-                    </p>
-                  </div>
-                  <form
-                    class="flex items-center gap-2"
-                    @submit.prevent="loadGraph(graphQuery)"
-                  >
-                    <div class="relative">
-                      <Icon
-                        icon="lucide:search"
-                        class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-600"
-                      />
-                      <input
-                        v-model="graphQuery"
-                        type="text"
-                        class="w-64 max-w-full pl-8 pr-3 py-2 text-sm bg-theme-950 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-600 focus:outline-none focus:border-theme-600"
-                        placeholder="Walk from Tom, Acme, Project X"
-                      >
-                    </div>
-                    <button
-                      class="p-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
-                      title="Walk graph"
-                    >
-                      <Icon
-                        icon="lucide:route"
-                        class="w-4 h-4"
-                      />
-                    </button>
-                  </form>
+        <div
+          v-else
+          class="p-4 sm:p-6 lg:p-8"
+        >
+          <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div class="grid gap-3 sm:grid-cols-3 lg:min-w-[520px]">
+              <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
+                <div class="text-xs text-theme-500">
+                  Entities
+                </div>
+                <div class="mt-1 text-xl font-semibold text-theme-100">
+                  {{ graph?.stats.nodeCount ?? 0 }}
                 </div>
               </div>
-
-              <div
-                v-if="graphLoading && !graph"
-                class="flex items-center justify-center gap-2 py-12 text-sm text-theme-500"
-              >
-                <Icon
-                  icon="lucide:loader-2"
-                  class="w-4 h-4 animate-spin"
-                />
-                Loading graph...
+              <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
+                <div class="text-xs text-theme-500">
+                  Relations
+                </div>
+                <div class="mt-1 text-xl font-semibold text-theme-100">
+                  {{ graph?.stats.edgeCount ?? 0 }}
+                </div>
               </div>
-
-              <div
-                v-else-if="graph"
-                class="p-4 space-y-4"
-              >
-                <div class="grid gap-3 sm:grid-cols-3">
-                  <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
-                    <div class="text-xs text-theme-500">
-                      Entities
-                    </div>
-                    <div class="mt-1 text-xl font-semibold text-theme-100">
-                      {{ graph.stats.nodeCount }}
-                    </div>
-                  </div>
-                  <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
-                    <div class="text-xs text-theme-500">
-                      Relations
-                    </div>
-                    <div class="mt-1 text-xl font-semibold text-theme-100">
-                      {{ graph.stats.edgeCount }}
-                    </div>
-                  </div>
-                  <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
-                    <div class="text-xs text-theme-500">
-                      This Week
-                    </div>
-                    <div class="mt-1 text-xl font-semibold text-theme-100">
-                      {{ graph.stats.recentEdgeCount }}
-                    </div>
-                  </div>
+              <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
+                <div class="text-xs text-theme-500">
+                  This Week
                 </div>
-
-                <div
-                  v-if="graph.seedNodes.length"
-                  class="flex flex-wrap gap-2"
-                >
-                  <span
-                    v-for="node in graph.seedNodes"
-                    :key="node.id"
-                    class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/30 bg-accent-500/10 px-2 py-1 text-xs text-accent-200"
-                  >
-                    <Icon
-                      icon="lucide:sparkles"
-                      class="w-3 h-3"
-                    />
-                    {{ node.name }}
-                    <span class="text-accent-300/70">{{ node.type }}</span>
-                  </span>
-                </div>
-
-                <div
-                  v-if="graph.edges.length > 0"
-                  class="h-[420px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
-                >
-                  <VueFlow
-                    :nodes="graphFlowNodes"
-                    :edges="graphFlowEdges"
-                    fit-view-on-init
-                    :min-zoom="0.35"
-                    :max-zoom="1.6"
-                    class="entity-flow"
-                  />
-                </div>
-
-                <div
-                  v-if="graph.edges.length === 0"
-                  class="py-12 text-center text-sm text-theme-500"
-                >
-                  No relationships have been extracted yet.
-                </div>
-
-                <div
-                  v-else
-                  class="divide-y divide-theme-900/80 rounded-lg border border-theme-800 overflow-hidden"
-                >
-                  <div
-                    v-for="edge in graph.edges"
-                    :key="edge.id"
-                    class="px-4 py-3 bg-theme-950/35"
-                  >
-                    <div class="flex flex-wrap items-center gap-2 text-sm">
-                      <span class="font-medium text-theme-100">{{ edge.fromName }}</span>
-                      <Icon
-                        icon="lucide:arrow-right"
-                        class="w-3.5 h-3.5 text-theme-500"
-                      />
-                      <span class="rounded-md bg-theme-800 px-2 py-0.5 text-xs text-theme-300">{{ formatRelation(edge.relation) }}</span>
-                      <Icon
-                        icon="lucide:arrow-right"
-                        class="w-3.5 h-3.5 text-theme-500"
-                      />
-                      <span class="font-medium text-theme-100">{{ edge.toName }}</span>
-                      <span class="ml-auto text-xs text-theme-600">{{ formatDate(edge.lastSeenAt) }}</span>
-                      <button
-                        class="p-1 text-theme-600 hover:text-theme-200 transition-colors"
-                        title="Edit relationship"
-                        @click="openEditEdge(edge)"
-                      >
-                        <Icon
-                          icon="lucide:pencil"
-                          class="w-3.5 h-3.5"
-                        />
-                      </button>
-                      <button
-                        class="p-1 text-theme-600 hover:text-red-400 transition-colors"
-                        title="Delete relationship"
-                        @click="confirmDeleteEdge(edge)"
-                      >
-                        <Icon
-                          icon="lucide:trash-2"
-                          class="w-3.5 h-3.5"
-                        />
-                      </button>
-                    </div>
-                    <div
-                      v-if="edge.evidence"
-                      class="mt-2 text-xs text-theme-500 leading-relaxed"
-                    >
-                      {{ edge.evidence }}
-                    </div>
-                  </div>
+                <div class="mt-1 text-xl font-semibold text-theme-100">
+                  {{ graph?.stats.recentEdgeCount ?? 0 }}
                 </div>
               </div>
             </div>
+
+            <form
+              class="flex items-center gap-2"
+              @submit.prevent="loadGraph(graphQuery)"
+            >
+              <div class="relative">
+                <Icon
+                  icon="lucide:search"
+                  class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-600"
+                />
+                <input
+                  v-model="graphQuery"
+                  type="text"
+                  class="w-72 max-w-full pl-8 pr-3 py-2 text-sm bg-theme-950 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-600 focus:outline-none focus:border-theme-600"
+                  placeholder="Walk from Tom, Acme, Project X"
+                >
+              </div>
+              <button
+                class="p-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
+                title="Walk graph"
+              >
+                <Icon
+                  icon="lucide:route"
+                  class="w-4 h-4"
+                />
+              </button>
+            </form>
           </div>
+
+          <div
+            v-if="graphLoading && !graph"
+            class="flex items-center justify-center gap-2 py-12 text-sm text-theme-500"
+          >
+            <Icon
+              icon="lucide:loader-2"
+              class="w-4 h-4 animate-spin"
+            />
+            Loading graph...
+          </div>
+
+          <template v-else-if="graph">
+            <div
+              v-if="graph.seedNodes.length"
+              class="mb-4 flex flex-wrap gap-2"
+            >
+              <span
+                v-for="node in graph.seedNodes"
+                :key="node.id"
+                class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/30 bg-accent-500/10 px-2 py-1 text-xs text-accent-200"
+              >
+                <Icon
+                  icon="lucide:sparkles"
+                  class="w-3 h-3"
+                />
+                {{ node.name }}
+                <span class="text-accent-300/70">{{ node.type }}</span>
+              </span>
+            </div>
+
+            <div
+              v-if="graph.edges.length === 0"
+              class="py-12 text-center text-sm text-theme-500"
+            >
+              No relationships have been extracted yet.
+            </div>
+
+            <div
+              v-else-if="activePanel === 'visual'"
+              class="h-[calc(100vh-255px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
+            >
+              <VueFlow
+                :nodes="graphFlowNodes"
+                :edges="graphFlowEdges"
+                fit-view-on-init
+                :min-zoom="0.2"
+                :max-zoom="1.8"
+                class="entity-flow"
+              />
+            </div>
+
+            <div
+              v-else
+              class="divide-y divide-theme-900/80 rounded-lg border border-theme-800 overflow-hidden"
+            >
+              <div
+                v-for="edge in graph.edges"
+                :key="edge.id"
+                class="px-4 py-3 bg-theme-950/35"
+              >
+                <div class="flex flex-wrap items-center gap-2 text-sm">
+                  <span class="font-medium text-theme-100">{{ edge.fromName }}</span>
+                  <Icon
+                    icon="lucide:arrow-right"
+                    class="w-3.5 h-3.5 text-theme-500"
+                  />
+                  <span class="rounded-md bg-theme-800 px-2 py-0.5 text-xs text-theme-300">{{ formatRelation(edge.relation) }}</span>
+                  <Icon
+                    icon="lucide:arrow-right"
+                    class="w-3.5 h-3.5 text-theme-500"
+                  />
+                  <span class="font-medium text-theme-100">{{ edge.toName }}</span>
+                  <span class="ml-auto text-xs text-theme-600">{{ formatDate(edge.lastSeenAt) }}</span>
+                  <button
+                    class="p-1 text-theme-600 hover:text-theme-200 transition-colors"
+                    title="Edit relationship"
+                    @click="openEditEdge(edge)"
+                  >
+                    <Icon
+                      icon="lucide:pencil"
+                      class="w-3.5 h-3.5"
+                    />
+                  </button>
+                  <button
+                    class="p-1 text-theme-600 hover:text-red-400 transition-colors"
+                    title="Delete relationship"
+                    @click="confirmDeleteEdge(edge)"
+                  >
+                    <Icon
+                      icon="lucide:trash-2"
+                      class="w-3.5 h-3.5"
+                    />
+                  </button>
+                </div>
+                <div
+                  v-if="edge.evidence"
+                  class="mt-2 text-xs text-theme-500 leading-relaxed"
+                >
+                  {{ edge.evidence }}
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
-      </template>
+      </main>
 
       <Teleport to="body">
         <div
