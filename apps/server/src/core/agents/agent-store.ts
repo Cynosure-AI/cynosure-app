@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
+import { normalizeSkillIds } from '../skills/skill-store.js'
 
 // ---- Types ----
 
@@ -170,7 +171,7 @@ function rowToAgentData(row: AgentRow): AgentData {
         systemPrompt: row.system_prompt || '',
         cronPrompt: row.cron_prompt || '',
         tools: JSON.parse(row.tools_json || '[]'),
-        skills: JSON.parse(row.skills_json || '[]'),
+        skills: normalizeSkillIds(JSON.parse(row.skills_json || '[]')),
         subAgents: JSON.parse(row.sub_agents_json || '[]'),
         autoApproveTools: row.auto_approve_tools === 1,
         overrideSubAgents: row.override_sub_agents === 1,
@@ -241,7 +242,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
         input.model || '',
         input.systemPrompt || '',
         JSON.stringify(normalizedTools),
-        JSON.stringify(input.skills || []),
+        JSON.stringify(normalizeSkillIds(input.skills)),
         null, // icon_url - not used for new agents; icon_data/icon_mime used instead
         codename,
         input.category || '',
@@ -283,7 +284,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     const updatedSystemPrompt = input.systemPrompt !== undefined ? input.systemPrompt : existing.system_prompt
     const updatedCronPrompt = input.cronPrompt !== undefined ? (input.cronPrompt || '') : existing.cron_prompt
     const updatedTools = input.tools !== undefined ? normalizeAgentTools(input.tools) : JSON.parse(existing.tools_json || '[]')
-    const updatedSkills = input.skills !== undefined ? input.skills : JSON.parse(existing.skills_json || '[]')
+    const updatedSkills = input.skills !== undefined ? normalizeSkillIds(input.skills) : normalizeSkillIds(JSON.parse(existing.skills_json || '[]'))
     const updatedSubAgents = input.subAgents !== undefined ? input.subAgents : JSON.parse(existing.sub_agents_json || '[]')
     const updatedAutoApprove = input.autoApproveTools !== undefined ? input.autoApproveTools : (existing.auto_approve_tools === 1)
     const updatedOverrideSubAgents = input.overrideSubAgents !== undefined ? input.overrideSubAgents : (existing.override_sub_agents === 1)

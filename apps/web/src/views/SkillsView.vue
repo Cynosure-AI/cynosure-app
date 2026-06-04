@@ -164,7 +164,10 @@ async function setEnabled(skill: SkillDefinition, enabled: boolean): Promise<voi
           </template>
 
           <template #col-actions="{ item: skill }">
-            <div class="flex items-center justify-end gap-1" @click.stop>
+            <div
+              class="flex items-center justify-end gap-1"
+              @click.stop
+            >
               <button
                 class="rounded p-1.5 text-theme-500 hover:bg-theme-800 hover:text-theme-200"
                 aria-label="Edit skill"

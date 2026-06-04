@@ -148,27 +148,28 @@ function toggleAuto(value: boolean): void {
             Retry
           </button>
         </div>
-        <label
-          v-else
-          v-for="skill in enabledSkills"
-          :key="skill.id"
-          class="flex items-start gap-3 px-3 py-2.5 border-b border-theme-800 last:border-b-0 hover:bg-theme-800/60 cursor-pointer"
-        >
-          <input
-            type="checkbox"
-            :checked="chatStore.freeChatSkillIds.includes(skill.id)"
-            class="mt-1 accent-accent-500"
-            @change="toggleSkill(skill.id)"
+        <template v-else>
+          <label
+            v-for="skill in enabledSkills"
+            :key="skill.id"
+            class="flex items-start gap-3 px-3 py-2.5 border-b border-theme-800 last:border-b-0 hover:bg-theme-800/60 cursor-pointer"
           >
-          <span class="min-w-0">
-            <span class="block text-sm text-theme-200 truncate">{{ skill.name }}</span>
-            <span
-              v-if="skill.category"
-              class="block text-[10px] uppercase tracking-wide text-theme-500"
-            >{{ skill.category }}</span>
-            <span class="block text-xs text-theme-500 line-clamp-2">{{ skill.description }}</span>
-          </span>
-        </label>
+            <input
+              type="checkbox"
+              :checked="chatStore.freeChatSkillIds.includes(skill.id)"
+              class="mt-1 accent-accent-500"
+              @change="toggleSkill(skill.id)"
+            >
+            <span class="min-w-0">
+              <span class="block text-sm text-theme-200 truncate">{{ skill.name }}</span>
+              <span
+                v-if="skill.category"
+                class="block text-[10px] uppercase tracking-wide text-theme-500"
+              >{{ skill.category }}</span>
+              <span class="block text-xs text-theme-500 line-clamp-2">{{ skill.description }}</span>
+            </span>
+          </label>
+        </template>
         <div
           v-if="!skillsStore.loading && !skillsStore.loadError && !enabledSkills.length"
           class="px-3 py-8 text-center text-sm text-theme-500"

@@ -9,6 +9,7 @@ const SKILL_CANDIDATE_COUNT = 8
 const MAX_SELECTED_SKILLS = 5
 const TURN_CHAR_LIMIT = 200
 const SKILL_TEXT_LIMIT = 500
+const SKILL_PROMPT_CONTENT_LIMIT = 20_000
 const ROUTER_SELECTION_TOOL_NAME = 'select_relevant_skills'
 
 interface SkillEmbeddingScope {
@@ -41,7 +42,7 @@ export function buildSkillsSystemPrompt(skills: SkillData[]): string {
     const blocks = skills.map((skill) => [
         `### ${skill.name}${skill.category ? ` (${skill.category})` : ''}`,
         skill.description ? `Use when: ${skill.description}` : '',
-        skill.content.trim(),
+        skill.content.trim().slice(0, SKILL_PROMPT_CONTENT_LIMIT),
     ].filter(Boolean).join('\n'))
 
     return [

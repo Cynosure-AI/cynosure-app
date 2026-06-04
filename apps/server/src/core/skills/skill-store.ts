@@ -50,6 +50,28 @@ function cleanString(value: unknown): string {
     return typeof value === 'string' ? value.trim() : ''
 }
 
+export function normalizeSkillIds(ids: unknown): string[] {
+    if (!Array.isArray(ids)) return []
+
+    const result: string[] = []
+    const seen = new Set<string>()
+    for (const raw of ids) {
+        const id = cleanString(raw)
+        if (!id || seen.has(id)) continue
+        seen.add(id)
+        result.push(id)
+    }
+    return result
+}
+
+function parseStoredSkillIds(raw: string): string[] {
+    try {
+        return normalizeSkillIds(JSON.parse(raw || '[]'))
+    } catch {
+        return []
+    }
+}
+
 export function listSkills(options: { enabledOnly?: boolean } = {}): SkillData[] {
     const db = getDb()
     const rows = options.enabledOnly
@@ -64,23 +86,27 @@ export function getSkill(id: string): SkillData | null {
 }
 
 export function getSkillsByIds(ids: string[], options: { enabledOnly?: boolean } = {}): SkillData[] {
-    if (!ids.length) return []
-    const seen = new Set<string>()
-    return ids
-        .map((id) => id.trim())
-        .filter(Boolean)
-        .filter((id) => {
-            if (seen.has(id)) return false
-            seen.add(id)
-            return true
-        })
-        .map(getSkill)
-        .filter((skill): skill is SkillData => Boolean(skill && (!options.enabledOnly || skill.enabled)))
+    const normalizedIds = normalizeSkillIds(ids)
+    if (!normalizedIds.length) return []
+
+    const placeholders = normalizedIds.map(() => '?').join(', ')
+    const rows = getDb()
+        .prepare(`SELECT * FROM skills WHERE id IN (${placeholders})`)
+        .all(...normalizedIds) as SkillRow[]
+
+    const byId = new Map(rows
+        .map(rowToSkill)
+        .filter((skill) => !options.enabledOnly || skill.enabled)
+        .map((skill) => [skill.id, skill]))
+
+    return normalizedIds
+        .map((id) => byId.get(id))
+        .filter((skill): skill is SkillData => Boolean(skill))
 }
 
 export function createSkill(input: CreateSkillInput): SkillData {
     const name = cleanString(input.name)
-    const content = typeof input.content === 'string' ? input.content.trim() : ''
+    const content = cleanString(input.content)
     if (!name) throw new Error('Skill name is required')
     if (!content) throw new Error('Skill content is required')
 
@@ -107,7 +133,7 @@ export function updateSkill(id: string, input: UpdateSkillInput): SkillData | nu
     if (!existing) return null
 
     const nextName = input.name !== undefined ? cleanString(input.name) : existing.name
-    const nextContent = input.content !== undefined ? input.content.trim() : existing.content
+    const nextContent = input.content !== undefined ? cleanString(input.content) : existing.content
     if (!nextName) throw new Error('Skill name is required')
     if (!nextContent) throw new Error('Skill content is required')
 
@@ -131,5 +157,15 @@ export function deleteSkill(id: string): boolean {
     const db = getDb()
     const result = db.prepare('DELETE FROM skills WHERE id = ?').run(id)
     db.prepare('DELETE FROM skill_embeddings WHERE skill_id = ?').run(id)
+    if (result.changes > 0) {
+        const rows = db.prepare('SELECT id, skills_json FROM agents').all() as { id: string; skills_json: string }[]
+        const update = db.prepare('UPDATE agents SET skills_json = ?, updated_at = ? WHERE id = ?')
+        const now = Date.now()
+        for (const row of rows) {
+            const skillIds = parseStoredSkillIds(row.skills_json)
+            if (!skillIds.includes(id)) continue
+            update.run(JSON.stringify(skillIds.filter((skillId) => skillId !== id)), now, row.id)
+        }
+    }
     return result.changes > 0
 }
