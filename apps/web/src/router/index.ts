@@ -66,6 +66,11 @@ const router = createRouter({
       name: 'memory-spaces',
       component: () => import('@/views/MemorySpacesView.vue')
     },
+    {
+      path: '/skills',
+      name: 'skills',
+      component: () => import('@/views/SkillsView.vue')
+    },
     // Usage
     {
       path: '/usage',

@@ -13,6 +13,8 @@ import { getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../tools/built-in
 import { applyAutoToolRouting } from './pre-execution/auto-tool-routing.js'
 import { applyAutoMemoryRouting } from './pre-execution/auto-memory-routing.js'
 import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
+import { getSkillsByIds, listSkills } from '../skills/skill-store.js'
+import { buildSkillsSystemPrompt, routeSkills } from '../skills/skill-router.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
@@ -63,6 +65,10 @@ export interface PrepareExecutionInput {
     memoryRouterProviderId?: string
     /** Optional model override for the memory router confirmation pass */
     memoryRouterModel?: string
+    /** Explicit/manual skill ids selected for this execution. */
+    selectedSkillIds?: string[]
+    /** Enable automatic skill selection for this execution. */
+    autoSkillRouting?: boolean
 
     // ── Sub-agents ──
 
@@ -237,7 +243,32 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         memorySpaceOverrides,
     })
 
-    // ── 5. System prompt ──
+    // ── 5. Skills ──
+
+    const manualSkills = getSkillsByIds([
+        ...(preset.skills || []),
+        ...(input.selectedSkillIds || []),
+    ], { enabledOnly: true })
+
+    let selectedSkills = manualSkills
+    if (input.autoSkillRouting === true && input.userQuery?.trim()) {
+        const routedSkills = await routeSkills({
+            userQuery: input.userQuery,
+            recentMessages: input.recentMessages,
+            skills: listSkills({ enabledOnly: true }),
+            gateway,
+            providerId: providerModel.providerId,
+            model: providerModel.model,
+        })
+
+        const byId = new Map(selectedSkills.map((skill) => [skill.id, skill]))
+        for (const skill of routedSkills) byId.set(skill.id, skill)
+        selectedSkills = [...byId.values()]
+    }
+
+    const skillsPrompt = buildSkillsSystemPrompt(selectedSkills)
+
+    // ── 6. System prompt ──
 
     const systemMessages: ChatMessage[] = []
 
@@ -250,6 +281,10 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     if (systemPromptSuffix) {
         effectiveSystemPrompt = (effectiveSystemPrompt ? effectiveSystemPrompt + '\n' : '') + systemPromptSuffix
+    }
+
+    if (skillsPrompt) {
+        effectiveSystemPrompt = (effectiveSystemPrompt ? effectiveSystemPrompt + '\n\n' : '') + skillsPrompt
     }
 
     if (effectiveSystemPrompt) {

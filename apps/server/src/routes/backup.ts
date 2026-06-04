@@ -111,7 +111,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
     app.get<{ Querystring: { modules?: string } }>(
         '/export',
         async (req, reply) => {
-            const requested = (req.query.modules || 'agents,providers,mcp,settings,channels,memory,conversations,usage')
+            const requested = (req.query.modules || 'agents,skills,providers,mcp,settings,channels,memory,conversations,usage')
                 .split(',')
                 .map((m) => m.trim())
 
@@ -135,7 +135,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 const db = getDb()
                 const agentRows = db.prepare(
                     `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
-                     category, sub_agents_json, auto_approve_tools, override_sub_agents, thinking_enabled,
+                     category, sub_agents_json, skills_json, auto_approve_tools, override_sub_agents, thinking_enabled,
                      max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                      auto_memory, memory_router_provider_id, memory_router_model,
                      sort_order, cron_prompt, icon_mime, created_at, updated_at
@@ -156,6 +156,14 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                     archive.append(JSON.stringify(agentIcons, null, 2), { name: 'agents/_db_agent_icons.json' })
                 }
                 manifest.modules.agents = { count: agentRows.length }
+            }
+
+            // --- Skills ---
+            if (requested.includes('skills')) {
+                const db = getDb()
+                const skills = db.prepare('SELECT * FROM skills ORDER BY category, name').all()
+                archive.append(JSON.stringify(skills, null, 2), { name: 'skills/skills.json' })
+                manifest.modules.skills = { count: (skills as unknown[]).length }
             }
 
             // --- Providers ---
@@ -352,7 +360,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
 
                             db.prepare(
                                 `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json,
-                                   icon_url, codename, category, sub_agents_json, auto_approve_tools, override_sub_agents,
+                                   skills_json, icon_url, codename, category, sub_agents_json, auto_approve_tools, override_sub_agents,
                                  thinking_enabled, max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                                  auto_memory, memory_router_provider_id, memory_router_model,
                                  sort_order, cron_prompt, icon_data, icon_mime,
@@ -366,6 +374,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 row.model || '',
                                 row.system_prompt || '',
                                 row.tools_json || '[]',
+                                row.skills_json || '[]',
                                 row.icon_url || null,
                                 row.codename || '',
                                 row.category || '',
@@ -397,6 +406,40 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 res.errors.push((e as Error).message)
             }
             results.agents = res
+        }
+
+        // --- Restore Skills ---
+        if (requestedModules.includes('skills') && manifest.modules.skills) {
+            const res = { restored: 0, errors: [] as string[] }
+            try {
+                const entry = zip.getEntry('skills/skills.json')
+                if (entry) {
+                    const skills = JSON.parse(entry.getData().toString('utf-8')) as Record<string, unknown>[]
+                    for (const skill of skills) {
+                        try {
+                            db.prepare(
+                                `INSERT OR REPLACE INTO skills (id, name, description, category, content, enabled, created_at, updated_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+                            ).run(
+                                skill.id,
+                                skill.name || '',
+                                skill.description || '',
+                                skill.category || '',
+                                skill.content || '',
+                                skill.enabled ?? 1,
+                                skill.created_at || Date.now(),
+                                skill.updated_at || Date.now()
+                            )
+                            res.restored++
+                        } catch (e) {
+                            res.errors.push(`Skill ${skill.name || skill.id}: ${(e as Error).message}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                res.errors.push((e as Error).message)
+            }
+            results.skills = res
         }
 
         // --- Restore Providers ---
@@ -933,7 +976,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             'tasks', 'pending_hitl', 'notifications', 'tool_approvals', 'session_tool_approvals',
             'cron_jobs', 'channels',
             'memory_file_index', 'memory_spaces', 'agent_memory_spaces',
-            'mcp_servers', 'providers', 'agents',
+            'mcp_servers', 'providers', 'agents', 'skills', 'skill_embeddings',
             'settings', 'tool_router_embeddings'
         ]
         for (const table of tables) {

@@ -4,6 +4,7 @@ import type {
   AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus,
   AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType,
   MetricsSummary, OrchestrationState,
+  SkillDefinition,
 } from './types'
 import type { WsHandler } from './http'
 
@@ -68,6 +69,8 @@ export const api = {
           thinkingEnabled?: boolean
           autoToolRouting?: boolean
           autoMemory?: boolean
+          selectedSkillIds?: string[]
+          autoSkillRouting?: boolean
         }
       }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
     getExecutionSteps: (conversationId: string) =>
@@ -112,6 +115,8 @@ export const api = {
       titleProviderId?: string,
       titleModel?: string,
       autoToolRouting?: boolean,
+      selectedSkillIds?: string[],
+      autoSkillRouting?: boolean,
       toolRouterProviderId?: string,
       toolRouterModel?: string,
       autoMemory?: boolean,
@@ -145,7 +150,9 @@ export const api = {
         compactProviderId: compactProviderId || undefined,
         compactModel: compactModel || undefined,
         titleProviderId: titleProviderId || undefined,
-        titleModel: titleModel || undefined
+        titleModel: titleModel || undefined,
+        selectedSkillIds,
+        autoSkillRouting
       }),
     truncateFrom: (conversationId: string, messageId: string) =>
       post<{ success: boolean; deleted: number }>(
@@ -263,6 +270,16 @@ export const api = {
       del<{ success: boolean }>(`/api/agents/${encodeURIComponent(id)}`),
     duplicate: (id: string) =>
       post<AgentDefinition>(`/api/agents/${encodeURIComponent(id)}/duplicate`)
+  },
+
+  skills: {
+    list: () => get<SkillDefinition[]>('/api/skills'),
+    get: (id: string) => get<SkillDefinition>(`/api/skills/${encodeURIComponent(id)}`),
+    create: (data: Partial<Omit<SkillDefinition, 'id' | 'createdAt' | 'updatedAt'>>) =>
+      post<SkillDefinition>('/api/skills', data),
+    update: (id: string, data: Partial<Omit<SkillDefinition, 'id' | 'createdAt' | 'updatedAt'>>) =>
+      put<SkillDefinition>(`/api/skills/${encodeURIComponent(id)}`, data),
+    remove: (id: string) => del<{ success: boolean }>(`/api/skills/${encodeURIComponent(id)}`)
   },
 
   memory: {

@@ -6,6 +6,7 @@ export interface ExecutionPreset {
     model?: string
     systemPrompt?: string
     tools: string[]
+    skills?: string[]
     subAgents: SubAgentAssignment[]
     autoToolRouting?: boolean
     toolRouterProviderId?: string
@@ -30,6 +31,7 @@ export function presetFromAgent(
         model: agent.model,
         systemPrompt: agent.systemPrompt,
         tools: overrides.tools ?? agent.tools,
+        skills: agent.skills,
         subAgents: overrides.subAgents ?? agent.subAgents,
         autoToolRouting: agent.autoToolRouting,
         toolRouterProviderId: agent.toolRouterProviderId,
@@ -42,6 +44,7 @@ export function presetFromAgent(
 
 export function presetFromAgentless(options: {
     tools: string[]
+    skills?: string[]
     subAgents?: SubAgentAssignment[]
     autoToolRouting: boolean
     toolRouterProviderId?: string
@@ -53,6 +56,7 @@ export function presetFromAgentless(options: {
     return {
         id: '__agentless__',
         tools: options.tools,
+        skills: options.skills ?? [],
         subAgents: options.subAgents ?? [],
         autoToolRouting: options.autoToolRouting,
         toolRouterProviderId: options.toolRouterProviderId,

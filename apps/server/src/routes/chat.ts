@@ -173,6 +173,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       thinkingEnabled?: boolean
       contextStrategy?: ContextStrategy
       autoToolRouting?: boolean
+      selectedSkillIds?: string[]
+      autoSkillRouting?: boolean
       toolRouterProviderId?: string
       toolRouterModel?: string
       autoMemory?: boolean
@@ -186,7 +188,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
       const db = getDb()
       const toolRegistry = getToolRegistry()
       const selectedToolKeys = Array.isArray(allowedTools)
@@ -351,6 +353,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           memoryRouterModel: reqMemoryRouterModel || undefined,
           selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
           hasExplicitToolAllowlist,
+          selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
+          autoSkillRouting: reqAutoSkillRouting === true,
         },
       })
 
@@ -401,6 +405,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         thinkingEnabled: reqThinkingEnabled ?? true,
         autoToolRouting: reqAutoToolRouting === true,
         autoMemory: effectiveAutoMemory,
+        selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
+        autoSkillRouting: reqAutoSkillRouting === true,
       }
       db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
         JSON.stringify(chatConfig),

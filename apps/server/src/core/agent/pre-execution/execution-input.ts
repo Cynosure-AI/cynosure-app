@@ -30,6 +30,8 @@ export interface ExecutionRequest {
         memoryRouterModel?: string
         selectedToolKeys?: string[]
         hasExplicitToolAllowlist?: boolean
+        selectedSkillIds?: string[]
+        autoSkillRouting?: boolean
     }
 }
 
@@ -57,6 +59,8 @@ export interface ExecutionPlanInput {
     memoryRouterModel?: string
     selectedToolKeys?: string[]
     hasExplicitToolAllowlist?: boolean
+    selectedSkillIds?: string[]
+    autoSkillRouting?: boolean
 }
 
 export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanInput {
@@ -85,5 +89,7 @@ export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanIn
         memoryRouterModel: run.memoryRouterModel,
         selectedToolKeys: run.selectedToolKeys,
         hasExplicitToolAllowlist: run.hasExplicitToolAllowlist,
+        selectedSkillIds: run.selectedSkillIds,
+        autoSkillRouting: run.autoSkillRouting,
     }
 }
