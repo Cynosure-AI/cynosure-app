@@ -61,6 +61,7 @@ type FlowNodeData = {
   entity: EntityGraphNode;
   label: string;
   isSeed: boolean;
+  connectedHandles: Set<string>;
 };
 
 type FlowPoint = {
@@ -181,16 +182,14 @@ async function layoutGraph() {
     points.set(id, { ...position, ...size });
   }
 
-  const nodes: Node<FlowNodeData>[] = [...nodeLabels.entries()].map(([id, entity]) => ({
-    id,
-    type: "entity",
-    position: positions.get(id) || { x: 0, y: 0 },
-    class: seedIds.has(id) ? "entity-flow-node entity-flow-node-seed" : "entity-flow-node",
-    data: { entity, label: entity.name, isSeed: seedIds.has(id) },
-  }));
+  const connectedHandles = new Map<string, Set<string>>();
 
   const edges: Edge[] = graph.value.edges.map((edge) => {
     const handles = closestHandles(points.get(edge.fromNodeId), points.get(edge.toNodeId));
+    if (!connectedHandles.has(edge.fromNodeId)) connectedHandles.set(edge.fromNodeId, new Set());
+    if (!connectedHandles.has(edge.toNodeId)) connectedHandles.set(edge.toNodeId, new Set());
+    connectedHandles.get(edge.fromNodeId)!.add(handles.sourceHandle);
+    connectedHandles.get(edge.toNodeId)!.add(handles.targetHandle);
     return {
       id: edge.id,
       source: edge.fromNodeId,
@@ -207,6 +206,14 @@ async function layoutGraph() {
       labelBgBorderRadius: 4,
     };
   });
+
+  const nodes: Node<FlowNodeData>[] = [...nodeLabels.entries()].map(([id, entity]) => ({
+    id,
+    type: "entity",
+    position: positions.get(id) || { x: 0, y: 0 },
+    class: seedIds.has(id) ? "entity-flow-node entity-flow-node-seed" : "entity-flow-node",
+    data: { entity, label: entity.name, isSeed: seedIds.has(id), connectedHandles: connectedHandles.get(id) ?? new Set() },
+  }));
 
   graphFlowNodes.value = nodes;
   graphFlowEdges.value = edges;
@@ -929,48 +936,56 @@ async function deleteEdge(edge: EntityGraphEdge) {
                   </div>
 
                   <Handle
+                    v-if="data.connectedHandles.has('target-top')"
                     id="target-top"
                     type="target"
                     :position="Position.Top"
                     class="entity-handle entity-handle-target"
                   />
                   <Handle
+                    v-if="data.connectedHandles.has('source-top')"
                     id="source-top"
                     type="source"
                     :position="Position.Top"
                     class="entity-handle entity-handle-source"
                   />
                   <Handle
+                    v-if="data.connectedHandles.has('target-right')"
                     id="target-right"
                     type="target"
                     :position="Position.Right"
                     class="entity-handle entity-handle-target"
                   />
                   <Handle
+                    v-if="data.connectedHandles.has('source-right')"
                     id="source-right"
                     type="source"
                     :position="Position.Right"
                     class="entity-handle entity-handle-source"
                   />
                   <Handle
+                    v-if="data.connectedHandles.has('target-bottom')"
                     id="target-bottom"
                     type="target"
                     :position="Position.Bottom"
                     class="entity-handle entity-handle-target"
                   />
                   <Handle
+                    v-if="data.connectedHandles.has('source-bottom')"
                     id="source-bottom"
                     type="source"
                     :position="Position.Bottom"
                     class="entity-handle entity-handle-source"
                   />
                   <Handle
+                    v-if="data.connectedHandles.has('target-left')"
                     id="target-left"
                     type="target"
                     :position="Position.Left"
                     class="entity-handle entity-handle-target"
                   />
                   <Handle
+                    v-if="data.connectedHandles.has('source-left')"
                     id="source-left"
                     type="source"
                     :position="Position.Left"
