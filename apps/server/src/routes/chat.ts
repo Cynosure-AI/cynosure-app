@@ -324,6 +324,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const effectiveAutoMemory = reqAutoMemory !== undefined
         ? reqAutoMemory === true
         : (resolvedAgent?.autoMemory === true)
+      const effectiveAutoSkillRouting = reqAutoSkillRouting !== undefined
+        ? reqAutoSkillRouting === true
+        : (resolvedAgent?.autoSkillRouting !== false)
 
       // Resolve memory space overrides (request body ids -> { id, name } objects)
       const memorySpaceOverrides = resolveMemorySpaceOverrides(db, reqMemorySpaceIds)
@@ -358,7 +361,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
           hasExplicitToolAllowlist,
           selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
-          autoSkillRouting: reqAutoSkillRouting === true,
+          autoSkillRouting: effectiveAutoSkillRouting,
         },
       })
 
@@ -410,7 +413,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         autoToolRouting: reqAutoToolRouting === true,
         autoMemory: effectiveAutoMemory,
         selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
-        autoSkillRouting: reqAutoSkillRouting === true,
+        autoSkillRouting: effectiveAutoSkillRouting,
       }
       db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
         JSON.stringify(chatConfig),

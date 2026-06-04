@@ -134,10 +134,11 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             if (requested.includes('agents')) {
                 const db = getDb()
                 const agentRows = db.prepare(
-                    `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
+                     `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
                      category, sub_agents_json, skills_json, auto_approve_tools, override_sub_agents, thinking_enabled,
                      max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                      auto_memory, memory_router_provider_id, memory_router_model,
+                     auto_skill_routing, skill_router_provider_id, skill_router_model,
                      sort_order, cron_prompt, icon_mime, created_at, updated_at
                      FROM agents ORDER BY created_at`
                 ).all() as Record<string, unknown>[]
@@ -359,13 +360,14 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                             }
 
                             db.prepare(
-                                `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json,
+                                 `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json,
                                    skills_json, icon_url, codename, category, sub_agents_json, auto_approve_tools, override_sub_agents,
                                  thinking_enabled, max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                                  auto_memory, memory_router_provider_id, memory_router_model,
+                                 auto_skill_routing, skill_router_provider_id, skill_router_model,
                                  sort_order, cron_prompt, icon_data, icon_mime,
                                  created_at, updated_at)
-                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 row.id,
                                 row.name || '',
@@ -389,6 +391,9 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 row.auto_memory ?? 0,
                                 row.memory_router_provider_id || '',
                                 row.memory_router_model || '',
+                                row.auto_skill_routing ?? 1,
+                                row.skill_router_provider_id || '',
+                                row.skill_router_model || '',
                                 row.sort_order ?? 0,
                                 row.cron_prompt || '',
                                 iconData,

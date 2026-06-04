@@ -162,6 +162,10 @@ export function useChatAgentConfig(
             updates.autoMemory = sessionAutoMemory.value
         }
 
+        if (sessionAutoSkillRouting.value !== agentOriginalAutoSkillRouting.value) {
+            updates.autoSkillRouting = sessionAutoSkillRouting.value
+        }
+
         if (sessionProviderOverride.value !== null) {
             // Provider changed: save new provider and resolve model
             // If no explicit model override, clear the model to avoid a mismatch
@@ -181,6 +185,7 @@ export function useChatAgentConfig(
         agentOriginalSkillIds.value = [...freeChatSkillIds.value]
         agentOriginalSystemPrompt.value = sessionSystemPrompt.value
         agentOriginalThinkingEnabled.value = sessionThinkingEnabled.value
+        agentOriginalOverrideSubAgents.value = sessionOverrideSubAgents.value
         agentOriginalAutoToolRouting.value = sessionAutoToolRouting.value
         agentOriginalAutoMemory.value = sessionAutoMemory.value
         agentOriginalAutoSkillRouting.value = sessionAutoSkillRouting.value
@@ -223,8 +228,8 @@ export function useChatAgentConfig(
             agentOriginalAutoToolRouting.value = sessionAutoToolRouting.value
             sessionAutoMemory.value = agent?.autoMemory === true
             agentOriginalAutoMemory.value = sessionAutoMemory.value
-            sessionAutoSkillRouting.value = true
-            agentOriginalAutoSkillRouting.value = true
+            sessionAutoSkillRouting.value = agent?.autoSkillRouting !== false
+            agentOriginalAutoSkillRouting.value = sessionAutoSkillRouting.value
         } else {
             localStorage.removeItem(SK_ACTIVE_AGENT)
             agentStore.clearSelectedTools()
@@ -304,8 +309,8 @@ export function useChatAgentConfig(
         agentOriginalAutoToolRouting.value = autoRouting
         sessionAutoMemory.value = agent.autoMemory === true
         agentOriginalAutoMemory.value = sessionAutoMemory.value
-        sessionAutoSkillRouting.value = true
-        agentOriginalAutoSkillRouting.value = true
+        sessionAutoSkillRouting.value = agent.autoSkillRouting !== false
+        agentOriginalAutoSkillRouting.value = sessionAutoSkillRouting.value
         sessionModelOverride.value = null
         sessionProviderOverride.value = null
         userModifiedOverrides.value = false

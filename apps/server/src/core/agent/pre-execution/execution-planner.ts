@@ -93,6 +93,9 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
             autoMemory,
             memoryRouterProviderId,
             memoryRouterModel,
+            autoSkillRouting,
+            skillRouterProviderId,
+            skillRouterModel,
         })
 
     const prepared = await prepareAgentExecution({

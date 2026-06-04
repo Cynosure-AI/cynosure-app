@@ -130,6 +130,9 @@ export interface AgentDefinition {
     autoMemory: boolean
     memoryRouterProviderId: string
     memoryRouterModel: string
+    autoSkillRouting: boolean
+    skillRouterProviderId: string
+    skillRouterModel: string
     generateTitle: boolean
     thinkingEnabled: boolean
     maxContextTokens: number | null

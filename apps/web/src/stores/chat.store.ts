@@ -240,7 +240,7 @@ export const useChatStore = defineStore('chat', () => {
         agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.overrideSubAgents === true)
         agentConfig.sessionAutoToolRouting.value = cfg.autoToolRouting ?? !agentConfig.activeAgentId.value
         agentConfig.sessionAutoMemory.value = cfg.autoMemory ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoMemory === true)
-        agentConfig.sessionAutoSkillRouting.value = cfg.autoSkillRouting ?? true
+        agentConfig.sessionAutoSkillRouting.value = cfg.autoSkillRouting ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoSkillRouting !== false)
       } else {
         agentConfig.syncAgentBaseline()
       }

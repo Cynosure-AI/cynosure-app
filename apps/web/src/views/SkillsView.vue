@@ -33,7 +33,6 @@ const columns: Column<SkillDefinition>[] = [
     key: 'description',
     label: 'Description',
     width: 'minmax(220px,1.6fr)',
-    hideOnMobile: true,
   },
   {
     key: 'enabled',

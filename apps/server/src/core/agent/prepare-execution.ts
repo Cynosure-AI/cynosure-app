@@ -254,18 +254,29 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         ...(preset.skills || []),
         ...(input.selectedSkillIds || []),
     ], { enabledOnly: true })
+    const useAgentSkillRouterProvider = preset.skillRouterProviderId === AGENT_ROUTER_PROVIDER
+    const useAgentSkillRouterModel = preset.skillRouterModel === AGENT_ROUTER_MODEL
+    const skillRouter = resolveRouterProviderModel({
+        gateway,
+        fallbackProviderId: providerModel.providerId,
+        fallbackModel: providerModel.model,
+        agentRouterProviderId: useAgentSkillRouterProvider ? preset.providerId : (preset.skillRouterProviderId || undefined),
+        agentRouterModel: useAgentSkillRouterModel ? (preset.model || undefined) : (preset.skillRouterModel || undefined),
+        requestRouterProviderId: input.skillRouterProviderId,
+        requestRouterModel: useAgentSkillRouterProvider ? undefined : input.skillRouterModel,
+    })
 
     const selectedSkills = await applyAutoSkillRouting({
-        enabled: input.autoSkillRouting === true,
+        enabled: isSkillRoutingEnabled(preset, input.autoSkillRouting),
         gateway,
         conversationId,
         userQuery: input.userQuery,
         recentMessages: input.recentMessages,
         manualSkills,
         availableSkills: listSkills({ enabledOnly: true }),
-        providerId: input.skillRouterProviderId || providerModel.providerId,
+        providerId: skillRouter.providerId,
         model: providerModel.model,
-        routerModel: input.skillRouterModel || undefined,
+        routerModel: skillRouter.model,
     })
 
     const skillsPrompt = buildSkillsSystemPrompt(selectedSkills)
@@ -374,4 +385,10 @@ function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean)
     if (sessionEnabled === true) return true
     if (sessionEnabled === false) return false
     return preset.autoToolRouting === true || preset.toolRoutingEnabled === true
+}
+
+function isSkillRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
+    if (sessionEnabled === true) return true
+    if (sessionEnabled === false) return false
+    return preset.autoSkillRouting === true
 }
