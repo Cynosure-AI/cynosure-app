@@ -45,6 +45,7 @@ interface ExtractedEntity {
 }
 
 interface ExtractedRelation {
+  action?: 'assert' | 'delete'
   from: ExtractedEntity
   relation: string
   to: ExtractedEntity
@@ -54,6 +55,19 @@ interface ExtractedRelation {
 
 const ENTITY_TYPES = new Set<EntityType>(['person', 'place', 'organization', 'project', 'date', 'technology', 'concept', 'other'])
 const STOP_TERMS = new Set(['user', 'assistant', 'you', 'me', 'i', 'we', 'they', 'today', 'tomorrow', 'yesterday', 'this', 'that'])
+const FUNCTIONAL_RELATIONS = new Set([
+  'works_at',
+  'employed_by',
+  'lives_in',
+  'located_in',
+  'based_in',
+  'studies_at',
+  'studied_at',
+  'has_role',
+  'reports_to',
+  'managed_by',
+  'owned_by',
+])
 
 function normalizeName(name: string): string {
   return name
@@ -195,6 +209,7 @@ export class EntityGraphStore {
     const db = getDb()
     const rel = normalizeRelation(relation.relation)
     const evidence = cleanEvidence(relation.evidence)
+    this.deleteConflictingFunctionalEdges(from.id, rel, to.id)
     const existing = db.prepare(`
       SELECT * FROM entity_graph_edges
       WHERE from_node_id = ? AND relation = ? AND to_node_id = ?
@@ -263,6 +278,44 @@ export class EntityGraphStore {
   deleteEdge(id: string): boolean {
     const result = getDb().prepare('DELETE FROM entity_graph_edges WHERE id = ?').run(id)
     return result.changes > 0
+  }
+
+  deleteMatchingEdge(relation: ExtractedRelation): number {
+    const from = this.findNodeByEntity(relation.from)
+    const to = this.findNodeByEntity(relation.to)
+    if (!from || !to) return 0
+    const result = getDb().prepare(`
+      DELETE FROM entity_graph_edges
+      WHERE from_node_id = ? AND relation = ? AND to_node_id = ?
+    `).run(from.id, normalizeRelation(relation.relation), to.id)
+    return result.changes
+  }
+
+  deleteAll(): { nodesDeleted: number; edgesDeleted: number } {
+    const db = getDb()
+    const edgesDeleted = db.prepare('DELETE FROM entity_graph_edges').run().changes
+    const nodesDeleted = db.prepare('DELETE FROM entity_graph_nodes').run().changes
+    return { nodesDeleted, edgesDeleted }
+  }
+
+  private findNodeByEntity(entity: ExtractedEntity): EntityNode | null {
+    const name = cleanName(entity.name)
+    const normalizedName = normalizeName(name)
+    const type = ENTITY_TYPES.has((entity.type || 'other') as EntityType) ? entity.type || 'other' : 'other'
+    const row = getDb().prepare(`
+      SELECT * FROM entity_graph_nodes
+      WHERE normalized_name = ? AND type = ?
+    `).get(normalizedName, type) as Record<string, unknown> | undefined
+    return row ? rowToNode(row) : null
+  }
+
+  private deleteConflictingFunctionalEdges(fromNodeId: string, relation: string, toNodeId: string): number {
+    if (!FUNCTIONAL_RELATIONS.has(relation)) return 0
+    const result = getDb().prepare(`
+      DELETE FROM entity_graph_edges
+      WHERE from_node_id = ? AND relation = ? AND to_node_id != ?
+    `).run(fromNodeId, relation, toNodeId)
+    return result.changes
   }
 
   list(limit = 80): { nodes: EntityNode[]; edges: EntityEdge[] } {
@@ -365,7 +418,7 @@ export class EntityGraphStore {
     providerId?: string
     model?: string
     signal?: AbortSignal
-  }): Promise<{ insertedOrUpdated: number }> {
+  }): Promise<{ insertedOrUpdated: number; deleted: number }> {
     const gateway = getGateway()
     const provider = opts.providerId
       ? gateway.getProvider(opts.providerId) || gateway.getLastUsedProvider()
@@ -381,11 +434,13 @@ export class EntityGraphStore {
           role: 'system',
           content: [
             'Extract durable named entities and explicit relationships from a chat turn.',
-            'Return strict JSON only: an array of objects with keys from, relation, to, confidence, evidence.',
+            'Return strict JSON only: an array of objects with keys action, from, relation, to, confidence, evidence.',
+            'action is "assert" for facts that are true now, or "delete" for facts explicitly corrected, negated, or no longer true.',
             'from and to are objects with name, type, and optional aliases.',
             'Allowed types: person, place, organization, project, date, technology, concept, other.',
             'Only include facts that would remain useful later. Skip vague, temporary, or unsupported claims.',
             'Use concise snake_case relation names such as works_at, depends_on, located_in, owns, uses, met_on, discussed_with.',
+            'When a fact changes, emit a delete for the old relationship if the turn names it, and an assert for the replacement.',
             'If there are no durable relationships, return [].'
           ].join('\n')
         },
@@ -406,23 +461,30 @@ export class EntityGraphStore {
 
     const rawRelations = parseJsonArray(result.content)
     let count = 0
+    let deleted = 0
     const now = Date.now()
     for (const item of rawRelations.slice(0, 24)) {
       if (!item || typeof item !== 'object') continue
-      const obj = item as { from?: unknown; relation?: unknown; to?: unknown; confidence?: unknown; evidence?: unknown }
+      const obj = item as { action?: unknown; from?: unknown; relation?: unknown; to?: unknown; confidence?: unknown; evidence?: unknown }
       const from = toEntity(obj.from)
       const to = toEntity(obj.to)
       if (!from || !to || typeof obj.relation !== 'string') continue
-      const edge = this.upsertEdge({
+      const extracted = {
+        action: obj.action === 'delete' ? 'delete' as const : 'assert' as const,
         from,
         relation: obj.relation,
         to,
         confidence: clampConfidence(obj.confidence),
         evidence: typeof obj.evidence === 'string' ? obj.evidence : ''
-      }, 'conversation', opts.conversationId, now)
+      }
+      if (extracted.action === 'delete') {
+        deleted += this.deleteMatchingEdge(extracted)
+        continue
+      }
+      const edge = this.upsertEdge(extracted, 'conversation', opts.conversationId, now)
       if (edge) count++
     }
-    return { insertedOrUpdated: count }
+    return { insertedOrUpdated: count, deleted }
   }
 
   formatWalk(walk: GraphWalkResult): string {

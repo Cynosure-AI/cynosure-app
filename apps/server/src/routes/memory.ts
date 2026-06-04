@@ -132,6 +132,12 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     return { success: true }
   })
 
+  // DELETE /api/memory/graph — clear all entity graph nodes and relationships
+  app.delete('/graph', async () => {
+    const deleted = getEntityGraphStore().deleteAll()
+    return { success: true, ...deleted }
+  })
+
   // GET /api/memory/history/:conversationId — get history
   app.get<{ Params: { conversationId: string } }>(
     '/history/:conversationId',

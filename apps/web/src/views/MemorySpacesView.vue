@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from "vue";
-import { MarkerType, VueFlow, type Edge, type Node } from "@vue-flow/core";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { MarkerType, VueFlow, useVueFlow, type Edge, type Node } from "@vue-flow/core";
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
 import { api } from "../api/client";
@@ -11,6 +11,7 @@ import MemoryDocumentList from "../components/memory/MemoryDocumentList.vue";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
 const COLLAPSED_KEY = "cy-memory-folder-collapsed";
+const ENTITY_FLOW_ID = "memory-entity-graph";
 
 const spaces = ref<MemorySpace[]>([]);
 const spacesLoading = ref(false);
@@ -32,8 +33,19 @@ const pendingDeleteEdge = ref<EntityGraphEdge | null>(null);
 const edgeRelation = ref("");
 const edgeEvidence = ref("");
 const edgeConfidence = ref(70);
+const graphFlowNodes = ref<Node[]>([]);
+const graphFlowEdges = ref<Edge[]>([]);
 
 const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null);
+const { fitView } = useVueFlow(ENTITY_FLOW_ID);
+let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk.bundled.js").default>> | null = null;
+
+async function getElk() {
+  if (!elkPromise) {
+    elkPromise = import("elkjs/lib/elk.bundled.js").then(({ default: ELK }) => new ELK());
+  }
+  return elkPromise;
+}
 
 const memorySections = [
   {
@@ -85,8 +97,13 @@ const visibleSpaces = computed(() =>
   }),
 );
 
-const graphFlowNodes = computed<Node[]>(() => {
-  if (!graph.value) return [];
+async function layoutGraph() {
+  if (!graph.value) {
+    graphFlowNodes.value = [];
+    graphFlowEdges.value = [];
+    return;
+  }
+
   const nodeLabels = new Map<string, { label: string; type: string }>();
   for (const node of graph.value.nodes) {
     nodeLabels.set(node.id, { label: node.name, type: node.type });
@@ -96,36 +113,64 @@ const graphFlowNodes = computed<Node[]>(() => {
     if (!nodeLabels.has(edge.toNodeId)) nodeLabels.set(edge.toNodeId, { label: edge.toName, type: "entity" });
   }
 
-  const entries = [...nodeLabels.entries()];
-  const radius = Math.max(220, Math.min(460, entries.length * 48));
-  const centerX = 540;
-  const centerY = 360;
-  return entries.map(([id, value], index) => {
-    const angle = entries.length <= 1 ? 0 : (2 * Math.PI * index) / entries.length - Math.PI / 2;
-    return {
-      id,
-      label: value.label,
-      position: {
-        x: centerX + Math.cos(angle) * radius,
-        y: centerY + Math.sin(angle) * radius,
-      },
-      class: "entity-flow-node",
-      data: { type: value.type },
-    };
-  });
-});
+  const seedIds = new Set(graph.value.seedNodes.map((node) => node.id));
 
-const graphFlowEdges = computed<Edge[]>(() => {
-  if (!graph.value) return [];
-  return graph.value.edges.map((edge) => ({
+  const elk = await getElk();
+  const layout = await elk.layout({
+    id: "entity-root",
+    layoutOptions: {
+      "elk.algorithm": "stress",
+      "elk.stress.desiredEdgeLength": "280",
+      "elk.spacing.nodeNode": "120",
+      "elk.separateConnectedComponents": "true",
+      "elk.disco.componentCompaction.strategy": "POLYOMINO",
+      "elk.randomSeed": "7",
+    },
+    children: [...nodeLabels.entries()].map(([id, value]) => ({
+      id,
+      width: Math.max(140, Math.min(240, value.label.length * 8 + 48)),
+      height: value.label.length > 18 ? 56 : 42,
+    })),
+    edges: graph.value.edges.map((edge) => ({
+      id: edge.id,
+      sources: [edge.fromNodeId],
+      targets: [edge.toNodeId],
+    })),
+  });
+
+  const positions = new Map<string, { x: number; y: number }>((layout.children || []).map((child) => [
+    child.id,
+    { x: Math.round(child.x || 0), y: Math.round(child.y || 0) },
+  ]));
+
+  const nodes: Node[] = [...nodeLabels.entries()].map(([id, value]) => ({
+    id,
+    label: value.label,
+    position: positions.get(id) || { x: 0, y: 0 },
+    class: seedIds.has(id) ? "entity-flow-node entity-flow-node-seed" : "entity-flow-node",
+    data: { type: value.type },
+  }));
+
+  const edges: Edge[] = graph.value.edges.map((edge) => ({
     id: edge.id,
     source: edge.fromNodeId,
     target: edge.toNodeId,
     markerEnd: MarkerType.ArrowClosed,
-    type: "smoothstep",
     class: "entity-flow-edge",
     style: { stroke: "#8b5cf6", strokeWidth: 1.8 },
   }));
+
+  graphFlowNodes.value = nodes;
+  graphFlowEdges.value = edges;
+}
+
+watch([graph, () => activePanel.value], async () => {
+  await layoutGraph();
+  if (activePanel.value !== "visual" || graphFlowNodes.value.length === 0) return;
+  await nextTick();
+  window.setTimeout(() => {
+    fitView({ padding: 0.18, duration: 320 }).catch(() => undefined);
+  }, 40);
 });
 
 function hasChildren(space: MemorySpace): boolean {
@@ -341,6 +386,11 @@ async function loadGraph(query = graphQuery.value) {
     graph.value = null;
   }
   graphLoading.value = false;
+}
+
+async function clearGraphWalk() {
+  graphQuery.value = "";
+  await loadGraph("");
 }
 
 async function selectPanel(panel: typeof activePanel.value) {
@@ -651,8 +701,27 @@ async function deleteEdge(edge: EntityGraphEdge) {
                   class="w-4 h-4"
                 />
               </button>
+              <button
+                v-if="graphQuery.trim() || graph?.seedNodes.length"
+                type="button"
+                class="p-2 text-theme-500 hover:text-theme-200 transition-colors"
+                title="Show full graph"
+                @click="clearGraphWalk"
+              >
+                <Icon
+                  icon="lucide:x"
+                  class="w-4 h-4"
+                />
+              </button>
             </form>
           </div>
+
+          <p
+            v-if="activePanel === 'visual'"
+            class="mb-4 text-xs text-theme-500"
+          >
+            Search walks outward from matching entities and refocuses the canvas on that neighborhood.
+          </p>
 
           <div
             v-if="graphLoading && !graph"
@@ -696,6 +765,7 @@ async function deleteEdge(edge: EntityGraphEdge) {
               class="h-[calc(100vh-255px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
             >
               <VueFlow
+                :id="ENTITY_FLOW_ID"
                 :nodes="graphFlowNodes"
                 :edges="graphFlowEdges"
                 fit-view-on-init
@@ -955,6 +1025,12 @@ async function deleteEdge(edge: EntityGraphEdge) {
   font-size: 12px;
   font-weight: 600;
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
+}
+
+:deep(.entity-flow-node-seed) {
+  border-color: rgba(34, 211, 238, 0.8);
+  background: rgba(8, 47, 73, 0.96);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.2), 0 14px 28px rgba(0, 0, 0, 0.28);
 }
 
 :deep(.entity-flow-edge path) {

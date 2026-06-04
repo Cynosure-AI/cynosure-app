@@ -133,9 +133,9 @@ const sections: SettingsSection[] = [
   {
     id: 'vector-database',
     categoryId: 'memory',
-    label: 'Vector Database',
-    description: 'Clear all stored vector embeddings.',
-    terms: ['danger zone', 'clear vector database', 'vectors', 'delete embeddings', 'reset memory', 'drop vectors']
+    label: 'Memory Data',
+    description: 'Clear the entity graph or all stored vector embeddings.',
+    terms: ['danger zone', 'entity graph', 'clear entity graph', 'relationships', 'entities', 'clear vector database', 'vectors', 'delete embeddings', 'reset memory', 'drop vectors']
   },
   {
     id: 'tool-router',

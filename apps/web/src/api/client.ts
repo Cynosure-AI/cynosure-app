@@ -317,6 +317,8 @@ export const api = {
       patch<EntityGraphResponse['edges'][number]>(`/api/memory/graph/edges/${encodeURIComponent(id)}`, data),
     deleteGraphEdge: (id: string) =>
       del<{ success: boolean }>(`/api/memory/graph/edges/${encodeURIComponent(id)}`),
+    clearGraph: () =>
+      del<{ success: boolean; nodesDeleted: number; edgesDeleted: number }>('/api/memory/graph'),
     onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>
       onWsEvent('memory:reembed-progress', cb as WsHandler)
   },
