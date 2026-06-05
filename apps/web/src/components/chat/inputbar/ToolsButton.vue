@@ -36,7 +36,7 @@ const missingTools = computed(() => {
       <Icon
         icon="mdi:tools"
         class="h-5 w-5"
-        :class="agentStore.selectedToolNames.length || chatStore.sessionAutoToolRouting ? 'text-emerald-600' : ''"
+        :class="{ 'text-emerald-600': chatStore.sessionAutoToolRouting }"
       />
       <span
         v-if="missingTools.length"
@@ -48,7 +48,7 @@ const missingTools = computed(() => {
         />
       </span>
       <span
-        v-else
+        v-else-if="chatStore.sessionAutoToolRouting || agentStore.selectedToolNames.length"
         class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none"
         :class="chatStore.sessionAutoToolRouting ? 'bg-emerald-600' : 'bg-accent-600'"
       >
