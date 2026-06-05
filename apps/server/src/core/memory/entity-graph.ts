@@ -360,12 +360,7 @@ export class EntityGraphStore {
 
   list(limit = 80): { nodes: EntityNode[]; edges: EntityEdge[] } {
     const db = getDb()
-    const nodes = db.prepare(`
-      SELECT * FROM entity_graph_nodes
-      ORDER BY last_seen_at DESC
-      LIMIT ?
-    `).all(limit) as Record<string, unknown>[]
-    const edges = db.prepare(`
+    const edgeRows = db.prepare(`
       SELECT e.*, fn.name AS from_name, tn.name AS to_name
       FROM entity_graph_edges e
       JOIN entity_graph_nodes fn ON fn.id = e.from_node_id
@@ -373,7 +368,34 @@ export class EntityGraphStore {
       ORDER BY e.last_seen_at DESC
       LIMIT ?
     `).all(limit) as Record<string, unknown>[]
-    return { nodes: nodes.map(rowToNode), edges: edges.map(rowToEdge) }
+    const edges = edgeRows.map(rowToEdge)
+    const nodeIds = Array.from(new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId])))
+
+    if (nodeIds.length === 0) {
+      const nodes = db.prepare(`
+        SELECT * FROM entity_graph_nodes
+        ORDER BY last_seen_at DESC
+        LIMIT ?
+      `).all(limit) as Record<string, unknown>[]
+      return { nodes: nodes.map(rowToNode), edges }
+    }
+
+    const placeholders = nodeIds.map(() => '?').join(', ')
+    const nodes = db.prepare(`
+      SELECT * FROM entity_graph_nodes
+      WHERE id IN (${placeholders})
+      ORDER BY last_seen_at DESC
+    `).all(...nodeIds) as Record<string, unknown>[]
+    const remaining = Math.max(limit - nodes.length, 0)
+    const standaloneNodes = remaining > 0
+      ? db.prepare(`
+        SELECT * FROM entity_graph_nodes
+        WHERE id NOT IN (${placeholders})
+        ORDER BY last_seen_at DESC
+        LIMIT ?
+      `).all(...nodeIds, remaining) as Record<string, unknown>[]
+      : []
+    return { nodes: [...nodes, ...standaloneNodes].map(rowToNode), edges }
   }
 
   stats(): { nodeCount: number; edgeCount: number; recentEdgeCount: number } {

@@ -348,7 +348,7 @@ function formatRelation(relation: string): string {
 async function loadGraph(query = graphQuery.value) {
   graphLoading.value = true;
   try {
-    graph.value = await api.memory.getGraph(query.trim() || undefined, 100);
+    graph.value = await api.memory.getGraph(query.trim() || undefined, 200);
   } catch {
     graph.value = null;
   }
