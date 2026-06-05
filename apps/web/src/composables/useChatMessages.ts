@@ -160,7 +160,10 @@ export function useChatMessages(
             activeAgent?.skillRouterProviderId || prefs.skillRouterProviderId || undefined,
             activeAgent?.skillRouterModel || prefs.skillRouterModel || undefined,
             prefs.compactProviderId || undefined,
-            prefs.compactModel || undefined
+            prefs.compactModel || undefined,
+            prefs.enableEntityGraph,
+            prefs.entityGraphProviderId || undefined,
+            prefs.entityGraphModel || undefined
         )
     }
 

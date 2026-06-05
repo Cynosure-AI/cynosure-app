@@ -10,6 +10,9 @@ export const SK_AUTO_EXPAND_TOOLS = 'cy-auto-expand-tools'
 export const SK_GENERATE_TITLE = 'cy-generate-title'
 export const SK_TITLE_PROVIDER = 'cy-title-provider'
 export const SK_TITLE_MODEL = 'cy-title-model'
+export const SK_ENABLE_ENTITY_GRAPH = 'cy-enable-entity-graph'
+export const SK_ENTITY_GRAPH_PROVIDER = 'cy-entity-graph-provider'
+export const SK_ENTITY_GRAPH_MODEL = 'cy-entity-graph-model'
 export const SK_TOOL_ROUTER_PROVIDER = 'cy-tool-router-provider'
 export const SK_TOOL_ROUTER_MODEL = 'cy-tool-router-model'
 export const SK_MEMORY_ROUTER_PROVIDER = 'cy-memory-router-provider'
@@ -22,6 +25,7 @@ export const SK_COMPACT_MODEL = 'cy-compact-model'
 export const SK_PROVIDER_MODEL_FAVORITES = 'cy-provider-model-favorites'
 export const SK_AGENT_CATEGORIES = 'cy-agent-categories'
 export const SK_MA_CATEGORIES = 'cy-ma-categories'
+export const SK_MEMORY_GRAPH_NODE_SPACING = 'cy-memory-graph-node-spacing'
 
 // ── Whisper / STT ──────────────────────────────────────────────────────────────
 export const SK_WHISPER_MODEL = 'cy-whisper-model'
@@ -51,6 +55,9 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_GENERATE_TITLE,
     SK_TITLE_PROVIDER,
     SK_TITLE_MODEL,
+    SK_ENABLE_ENTITY_GRAPH,
+    SK_ENTITY_GRAPH_PROVIDER,
+    SK_ENTITY_GRAPH_MODEL,
     SK_TOOL_ROUTER_PROVIDER,
     SK_TOOL_ROUTER_MODEL,
     SK_MEMORY_ROUTER_PROVIDER,
@@ -62,6 +69,7 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_PROVIDER_MODEL_FAVORITES,
     SK_AGENT_CATEGORIES,
     SK_MA_CATEGORIES,
+    SK_MEMORY_GRAPH_NODE_SPACING,
     SK_WHISPER_MODEL,
     SK_WHISPER_ENABLED,
     SK_WHISPER_QUANTIZATION,

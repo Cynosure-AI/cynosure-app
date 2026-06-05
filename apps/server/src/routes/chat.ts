@@ -10,7 +10,7 @@ import { closeOrchestrationRun } from '../core/agent/orchestration-state.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
-import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
+import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions, extractEntityGraph } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
 import type { ChatMessage, ContentPart, RegistryAwareToolDefinition } from '../core/gateway/providers/base.provider.js'
 import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
@@ -186,11 +186,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       compactModel?: string
       titleProviderId?: string
       titleModel?: string
+      enableEntityGraph?: boolean
+      entityGraphProviderId?: string
+      entityGraphModel?: string
     }
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, skillRouterProviderId: reqSkillRouterProviderId, skillRouterModel: reqSkillRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, skillRouterProviderId: reqSkillRouterProviderId, skillRouterModel: reqSkillRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, enableEntityGraph: enableEntityGraphPref, entityGraphProviderId: entityGraphProviderIdPref, entityGraphModel: entityGraphModelPref } = req.body
       const db = getDb()
       const toolRegistry = getToolRegistry()
       const selectedToolKeys = Array.isArray(allowedTools)
@@ -542,6 +545,17 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
               broadcast('chat:title-updated', { conversationId, title: fallback })
             }
           }
+        }
+
+        if (enableEntityGraphPref !== false) {
+          extractEntityGraph({
+            conversationId,
+            userMessage: content,
+            assistantResponse: result.content,
+            broadcast,
+            providerId: entityGraphProviderIdPref || responseProvider,
+            model: entityGraphModelPref || (entityGraphProviderIdPref ? undefined : responseModel)
+          }).catch(() => { })
         }
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
