@@ -13,10 +13,12 @@ import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
 import type { ChatMessage, ContentPart, RegistryAwareToolDefinition } from '../core/gateway/providers/base.provider.js'
-import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
+import { existsSync, readFileSync } from 'fs'
+import { extname } from 'path'
+import { materializeFileAttachments, readFileAttachmentText, type FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -39,6 +41,8 @@ interface ChatHistoryRow {
   tool_call_id: string | null
   agent_id: string | null
   image_urls_json: string | null
+  audio_urls_json: string | null
+  file_attachments_json: string | null
   created_at: number
 }
 
@@ -150,6 +154,75 @@ function appendHiddenSystemContext(messages: ChatMessage[], hint: string | null)
   })
 }
 
+function imageMimeFromPath(filePath: string): string {
+  switch (extname(filePath).toLowerCase()) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg'
+    case '.gif':
+      return 'image/gif'
+    case '.webp':
+      return 'image/webp'
+    case '.bmp':
+      return 'image/bmp'
+    case '.svg':
+      return 'image/svg+xml'
+    default:
+      return 'image/png'
+  }
+}
+
+function localFileUrlToDataUrl(url: string): string {
+  const filePath = extractFilePathFromFileUrl(url)
+  if (!filePath || !existsSync(filePath)) return url
+  try {
+    const data = readFileSync(filePath).toString('base64')
+    return `data:${imageMimeFromPath(filePath)};base64,${data}`
+  } catch {
+    return url
+  }
+}
+
+function parseJsonArray<T>(json: string | null): T[] {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function buildHistoryContent(row: ChatHistoryRow): string | ContentPart[] {
+  if (row.role !== 'user') return row.content
+
+  const fileAttachments = parseJsonArray<FileAttachmentArtifact & { content?: string }>(row.file_attachments_json)
+    .filter((file) => typeof file?.name === 'string')
+  const imageUrls = parseJsonArray<string>(row.image_urls_json).filter((url) => typeof url === 'string')
+  const audioUrls = parseJsonArray<string>(row.audio_urls_json).filter((url) => typeof url === 'string')
+
+  if (!fileAttachments.length && !imageUrls.length && !audioUrls.length) {
+    return row.content
+  }
+
+  const parts: ContentPart[] = [{ type: 'text', text: row.content }]
+  for (const file of fileAttachments) {
+    const fileText = readFileAttachmentText(file)
+    if (fileText === null) continue
+    parts.push({
+      type: 'text',
+      text: `[Attached file: ${file.name}]\n${fileText}`
+    })
+  }
+  for (const url of imageUrls) {
+    parts.push({ type: 'image_url', image_url: { url: localFileUrlToDataUrl(url) } })
+  }
+  for (const url of audioUrls) {
+    parts.push({ type: 'audio_url', audio_url: { url } })
+  }
+  return parts
+}
+
 export async function registerChatRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   const gateway = getGateway()
 
@@ -207,25 +280,18 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
       }
 
+      const storedFileAttachments = files?.length
+        ? await materializeFileAttachments(files, conversationId)
+        : []
+
       // Build content (text + optional images + optional audio + optional files)
       let userContent: string | ContentPart[]
       if (imageDataUrls?.length || audioDataUrls?.length || files?.length) {
         const parts: ContentPart[] = [{ type: 'text', text: content }]
-        if (files?.length) {
-          for (const file of files) {
-            let fileText = file.content
-            // Parse office documents (docx, pdf, xlsx, etc.) from base64 data URLs
-            if (isParseableDocument(file.name) && file.content.startsWith('data:')) {
-              try {
-                const base64 = file.content.split(',')[1]
-                if (base64) {
-                  const buf = Buffer.from(base64, 'base64')
-                  fileText = await parseDocument(buf, file.name)
-                }
-              } catch (err) {
-                fileText = `[Error parsing ${file.name}: ${err instanceof Error ? err.message : 'unknown error'}]`
-              }
-            }
+        if (storedFileAttachments.length) {
+          for (const file of storedFileAttachments) {
+            const fileText = readFileAttachmentText(file)
+            if (fileText === null) continue
             parts.push({
               type: 'text',
               text: `[Attached file: ${file.name}]\n${fileText}`
@@ -255,13 +321,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       db.prepare(
         `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, file_attachments_json, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(userMsgId, conversationId, 'user', content, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, files?.length ? JSON.stringify(files.map(f => ({ name: f.name }))) : null, now)
+      ).run(userMsgId, conversationId, 'user', content, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, storedFileAttachments.length ? JSON.stringify(storedFileAttachments) : null, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
       // Build message history
       const historyRows = db
         .prepare(
-          'SELECT role, content, tool_calls_json, tool_call_id, agent_id, image_urls_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
+          'SELECT role, content, tool_calls_json, tool_call_id, agent_id, image_urls_json, audio_urls_json, file_attachments_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
         )
         .all(conversationId) as ChatHistoryRow[]
 
@@ -297,7 +363,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       let messages: ChatMessage[] = filteredRows.map((row) => ({
         role: row.role as ChatMessage['role'],
-        content: row.content,
+        content: buildHistoryContent(row),
         toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
         toolCallId: row.tool_call_id || undefined
       }))

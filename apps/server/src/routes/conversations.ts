@@ -200,7 +200,12 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 } catch { /* malformed JSON — ignore */ }
                 let fileAttachments: { name: string }[] | undefined
                 try {
-                    fileAttachments = row.file_attachments_json ? JSON.parse(row.file_attachments_json) : undefined
+                    const parsed = row.file_attachments_json ? JSON.parse(row.file_attachments_json) : undefined
+                    fileAttachments = Array.isArray(parsed)
+                        ? parsed
+                            .filter((file) => typeof file?.name === 'string')
+                            .map((file) => ({ name: file.name }))
+                        : undefined
                 } catch { /* malformed JSON — ignore */ }
                 return {
                     id: row.id,
