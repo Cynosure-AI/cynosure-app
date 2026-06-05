@@ -7,6 +7,7 @@ import { getMemoryParser } from '../core/memory/parser.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
+import { getEntityGraphStore, type EntityType } from '../core/memory/entity-graph.js'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import OpenAI from 'openai'
@@ -79,8 +80,99 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const memory = await aggregator.aggregate(query, opts)
     return {
       permanent: memory.permanent,
+      graph: memory.graph,
       formatted: aggregator.format(memory)
     }
+  })
+
+  // GET /api/memory/graph — inspect the lightweight entity graph
+  app.get<{ Querystring: { query?: string; limit?: string } }>('/graph', async (req) => {
+    const graph = getEntityGraphStore()
+    const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 200)
+    const query = req.query.query?.trim()
+    if (query) {
+      const seeds = graph.findSeedNodes(query, [], 12)
+      const walk = graph.walk(seeds.map((node) => node.id), 2, limit)
+      return {
+        stats: graph.stats(),
+        seedNodes: walk.seedNodes,
+        nodes: walk.nodes,
+        edges: walk.edges
+      }
+    }
+    return {
+      stats: graph.stats(),
+      seedNodes: [],
+      ...graph.list(limit)
+    }
+  })
+
+  // PATCH /api/memory/graph/nodes/:id — manually correct an entity node
+  app.patch<{
+    Params: { id: string }
+    Body: { name?: string; type?: string; aliases?: string[] }
+  }>('/graph/nodes/:id', async (req, reply) => {
+    const name = req.body.name?.trim()
+    if (name !== undefined && name.length === 0) {
+      return reply.status(400).send({ error: 'Entity name cannot be empty' })
+    }
+
+    try {
+      const updated = getEntityGraphStore().updateNode(req.params.id, {
+        name,
+        type: req.body.type as EntityType | undefined,
+        aliases: Array.isArray(req.body.aliases) ? req.body.aliases : undefined
+      })
+      if (!updated) return reply.status(404).send({ error: 'Entity not found' })
+      return updated
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (message === 'ENTITY_NODE_CONFLICT') {
+        return reply.status(409).send({ error: 'An entity with that name and type already exists' })
+      }
+      if (message === 'ENTITY_NODE_INVALID_NAME') {
+        return reply.status(400).send({ error: 'Entity name is not valid' })
+      }
+      throw error
+    }
+  })
+
+  // DELETE /api/memory/graph/nodes/:id — manually remove an entity and its relationships
+  app.delete<{ Params: { id: string } }>('/graph/nodes/:id', async (req, reply) => {
+    const deleted = getEntityGraphStore().deleteNode(req.params.id)
+    if (!deleted) return reply.status(404).send({ error: 'Entity not found' })
+    return { success: true }
+  })
+
+  // PATCH /api/memory/graph/edges/:id — manually correct a relationship
+  app.patch<{
+    Params: { id: string }
+    Body: { relation?: string; evidence?: string; confidence?: number }
+  }>('/graph/edges/:id', async (req, reply) => {
+    const relation = req.body.relation?.trim()
+    if (relation !== undefined && relation.length === 0) {
+      return reply.status(400).send({ error: 'Relation cannot be empty' })
+    }
+    const updated = getEntityGraphStore().updateEdge(req.params.id, {
+      relation,
+      evidence: req.body.evidence,
+      confidence: req.body.confidence
+    })
+    if (!updated) return reply.status(404).send({ error: 'Relationship not found' })
+    return updated
+  })
+
+  // DELETE /api/memory/graph/edges/:id — manually remove a relationship
+  app.delete<{ Params: { id: string } }>('/graph/edges/:id', async (req, reply) => {
+    const deleted = getEntityGraphStore().deleteEdge(req.params.id)
+    if (!deleted) return reply.status(404).send({ error: 'Relationship not found' })
+    return { success: true }
+  })
+
+  // DELETE /api/memory/graph — clear all entity graph nodes and relationships
+  app.delete('/graph', async () => {
+    const deleted = getEntityGraphStore().deleteAll()
+    return { success: true, ...deleted }
   })
 
   // GET /api/memory/history/:conversationId — get history
