@@ -387,18 +387,32 @@ export class EntityGraphStore {
   }
 
   findSeedNodes(text: string, extraTexts: string[] = [], limit = 8): EntityNode[] {
+    const query = normalizeName(text)
     const haystack = normalizeName([text, ...extraTexts].join(' '))
-    if (!haystack) return []
-    const rows = getDb().prepare(`
+    if (!query && !haystack) return []
+    const db = getDb()
+    const directRows = query
+      ? db.prepare(`
+        SELECT * FROM entity_graph_nodes
+        WHERE normalized_name LIKE ? OR aliases_json LIKE ?
+        ORDER BY mention_count DESC, last_seen_at DESC
+        LIMIT 200
+      `).all(`%${query}%`, `%${query}%`) as Record<string, unknown>[]
+      : []
+    const rankedRows = db.prepare(`
       SELECT * FROM entity_graph_nodes
       ORDER BY mention_count DESC, last_seen_at DESC
       LIMIT 500
     `).all() as Record<string, unknown>[]
+    const rows = [...directRows, ...rankedRows]
+    const seen = new Set<string>()
     const seeds: EntityNode[] = []
     for (const row of rows) {
       const node = rowToNode(row)
+      if (seen.has(node.id)) continue
+      seen.add(node.id)
       const names = [node.normalizedName, ...node.aliases.map(normalizeName)].filter(Boolean)
-      if (names.some((name) => name.length >= 2 && haystack.includes(name))) {
+      if (names.some((name) => name.length >= 2 && (haystack.includes(name) || (query.length >= 2 && name.includes(query))))) {
         seeds.push(node)
         if (seeds.length >= limit) break
       }

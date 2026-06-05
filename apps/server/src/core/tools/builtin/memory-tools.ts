@@ -4,7 +4,7 @@ import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getMemorySpaceFolderPath, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import { relativePathForFolder } from '../../memory/memory-space-folders.js'
 import { readTextFile, writeTextFile, fileExists, backupToRevisions } from '../../memory/memory-file-manager.js'
-import { getEntityGraphStore } from '../../memory/entity-graph.js'
+import { getEntityGraphStore, type EntityEdge, type EntityNode, type EntityType } from '../../memory/entity-graph.js'
 
 export const MEMORY_READ_TOOL_NAMES = [
     'memory_list_documents',
@@ -22,9 +22,16 @@ export const MEMORY_TOOL_NAMES = [
     ...MEMORY_WRITE_TOOL_NAMES,
 ] as const
 
+export const ENTITY_GRAPH_TOOL_NAMES = [
+    'entity_graph_search',
+    'entity_graph_assert',
+    'entity_graph_delete',
+] as const
+
 export type MemoryReadToolName = (typeof MEMORY_READ_TOOL_NAMES)[number]
 export type MemoryWriteToolName = (typeof MEMORY_WRITE_TOOL_NAMES)[number]
 export type MemoryToolName = (typeof MEMORY_TOOL_NAMES)[number]
+export type EntityGraphToolName = (typeof ENTITY_GRAPH_TOOL_NAMES)[number]
 
 export function isMemoryToolName(toolName: string): toolName is MemoryToolName {
     return (MEMORY_TOOL_NAMES as readonly string[]).includes(toolName)
@@ -34,11 +41,68 @@ export function isMemoryReadToolName(toolName: string): toolName is MemoryReadTo
     return (MEMORY_READ_TOOL_NAMES as readonly string[]).includes(toolName)
 }
 
+export function isEntityGraphToolName(toolName: string): toolName is EntityGraphToolName {
+    return (ENTITY_GRAPH_TOOL_NAMES as readonly string[]).includes(toolName)
+}
+
 export interface MemoryToolOptions {
     /** SQL filter covering all selected memory folders, e.g. `spaceId IN ('...', '...')`. */
     spaceFilter?: string
     /** Selected memory folders for write tools and read disambiguation. */
     assignedSpaces?: MemorySpaceRef[]
+}
+
+const ENTITY_TYPES = ['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'] as const
+
+function formatEntityNode(node: EntityNode): string {
+    const aliases = node.aliases.length ? ` aliases=${node.aliases.join(', ')}` : ''
+    return `- ${node.name} (${node.type}, id=${node.id}, mentions=${node.mentionCount}${aliases})`
+}
+
+function formatEntityEdge(edge: EntityEdge): string {
+    const evidence = edge.evidence ? ` Evidence: ${edge.evidence}` : ''
+    return `- ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${edge.id}, confidence=${edge.confidence.toFixed(2)}, mentions=${edge.mentionCount}).${evidence}`
+}
+
+function normalizeEntityType(value: unknown): EntityType {
+    return typeof value === 'string' && (ENTITY_TYPES as readonly string[]).includes(value)
+        ? value as EntityType
+        : 'other'
+}
+
+function cleanAliases(value: unknown): string[] {
+    if (!Array.isArray(value)) return []
+    return value
+        .filter((alias): alias is string => typeof alias === 'string')
+        .map((alias) => alias.replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .slice(0, 8)
+}
+
+function cleanRelationName(value: unknown): string {
+    if (typeof value !== 'string') return ''
+    return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64)
+}
+
+function cleanEntityName(value: unknown): string {
+    return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, 120) : ''
+}
+
+function clampToolNumber(value: unknown, fallback: number, min: number, max: number): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+    return Math.max(min, Math.min(max, value))
+}
+
+function toEntityInput(value: unknown): { name: string; type: EntityType; aliases: string[] } | { error: string } {
+    if (!value || typeof value !== 'object') return { error: 'Expected entity objects with name, type, and optional aliases.' }
+    const obj = value as { name?: unknown; type?: unknown; aliases?: unknown }
+    const name = cleanEntityName(obj.name)
+    if (name.length < 2) return { error: 'Entity names must be at least 2 characters long.' }
+    return {
+        name,
+        type: normalizeEntityType(obj.type),
+        aliases: cleanAliases(obj.aliases),
+    }
 }
 
 function getKnownMemorySpaces(): MemorySpaceRef[] {
@@ -454,6 +518,205 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
 
             return { success: true, output: `Showing ${results.length} result${results.length !== 1 ? 's' : ''}${resolvedScope.space ? ` from "${resolvedScope.space.name}"` : ''}:\n\n${formatted}${graphSection}` }
         }
+    }
+}
+
+/**
+ * Create an `entity_graph_search` tool that lets the LLM inspect known entities
+ * and their nearby relationships.
+ */
+export function makeEntityGraphSearchTool(): ToolDefinition {
+    return {
+        name: 'entity_graph_search',
+        description:
+            'Search and inspect the durable entity graph extracted from conversations and memory use. ' +
+            'Use this to look up known people, organizations, projects, technologies, concepts, or relationships. ' +
+            'Provide a query to find matching entities and walk nearby relationships, or omit query to list recent graph entries.',
+        parameters: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: 'Entity name, alias, or natural-language phrase to search for.' },
+                depth: { type: 'number', description: 'Relationship walk depth from matched entities (default: 2, max: 3).' },
+                limit: { type: 'number', description: 'Maximum number of nodes/edges to return (default: 20, max: 80).' },
+            },
+        },
+        timeout: 15_000,
+        execute: async (params: unknown) => {
+            const { query, depth, limit } = (params || {}) as { query?: string; depth?: number; limit?: number }
+            const graph = getEntityGraphStore()
+            const cappedLimit = Math.floor(clampToolNumber(limit, 20, 1, 80))
+
+            if (query?.trim()) {
+                const seedNodes = graph.findSeedNodes(query, [], Math.min(cappedLimit, 12))
+                if (seedNodes.length === 0) {
+                    return { success: false, output: `No entity graph nodes matched "${query.trim()}".` }
+                }
+
+                const walkDepth = Math.floor(clampToolNumber(depth, 2, 1, 3))
+                const walk = graph.walk(seedNodes.map((node) => node.id), walkDepth, cappedLimit)
+                const nodeLines = walk.nodes.slice(0, cappedLimit).map(formatEntityNode)
+                const edgeLines = walk.edges.slice(0, cappedLimit).map(formatEntityEdge)
+                const sections = [
+                    `Matched ${seedNodes.length} seed node${seedNodes.length !== 1 ? 's' : ''}; walked ${walkDepth} hop${walkDepth !== 1 ? 's' : ''}.`,
+                    nodeLines.length ? `Nodes:\n${nodeLines.join('\n')}` : '',
+                    edgeLines.length ? `Relationships:\n${edgeLines.join('\n')}` : 'No relationships connected to the matched nodes.',
+                ].filter(Boolean)
+                return { success: true, output: sections.join('\n\n') }
+            }
+
+            const snapshot = graph.list(cappedLimit)
+            if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {
+                return { success: false, output: 'The entity graph is empty.' }
+            }
+
+            const nodeLines = snapshot.nodes.map(formatEntityNode)
+            const edgeLines = snapshot.edges.map(formatEntityEdge)
+            return {
+                success: true,
+                output: [
+                    `Recent entity graph entries (limit ${cappedLimit}):`,
+                    nodeLines.length ? `Nodes:\n${nodeLines.join('\n')}` : '',
+                    edgeLines.length ? `Relationships:\n${edgeLines.join('\n')}` : '',
+                ].filter(Boolean).join('\n\n'),
+            }
+        },
+    }
+}
+
+/**
+ * Create an `entity_graph_assert` tool that lets the LLM actively record or
+ * correct a relationship in the entity graph.
+ */
+export function makeEntityGraphAssertTool(): ToolDefinition {
+    return {
+        name: 'entity_graph_assert',
+        description:
+            'Assert or update a durable relationship in the entity graph. ' +
+            'Use this for stable facts the user explicitly wants remembered as connected entities. ' +
+            'This creates missing entities, merges repeated relationships, and may replace older functional relationships such as works_at or lives_in.',
+        parameters: {
+            type: 'object',
+            properties: {
+                from: {
+                    type: 'object',
+                    description: 'Source entity.',
+                    properties: {
+                        name: { type: 'string', description: 'Entity name.' },
+                        type: { type: 'string', enum: ENTITY_TYPES, description: 'Entity type.' },
+                        aliases: { type: 'array', items: { type: 'string' }, description: 'Optional aliases for the entity.' },
+                    },
+                    required: ['name'],
+                },
+                relation: { type: 'string', description: 'Concise snake_case relationship name, e.g. works_at, uses, owns, depends_on.' },
+                to: {
+                    type: 'object',
+                    description: 'Target entity.',
+                    properties: {
+                        name: { type: 'string', description: 'Entity name.' },
+                        type: { type: 'string', enum: ENTITY_TYPES, description: 'Entity type.' },
+                        aliases: { type: 'array', items: { type: 'string' }, description: 'Optional aliases for the entity.' },
+                    },
+                    required: ['name'],
+                },
+                confidence: { type: 'number', description: 'Confidence from 0.1 to 1.0 (default: 0.9 for explicit user-provided facts).' },
+                evidence: { type: 'string', description: 'Short evidence phrase explaining why this relationship is true.' },
+            },
+            required: ['from', 'relation', 'to'],
+        },
+        timeout: 15_000,
+        execute: async (params: unknown) => {
+            const { from, relation, to, confidence, evidence } = (params || {}) as {
+                from?: unknown; relation?: unknown; to?: unknown; confidence?: unknown; evidence?: unknown
+            }
+            const fromEntity = toEntityInput(from)
+            if ('error' in fromEntity) return { success: false, output: `Invalid from entity: ${fromEntity.error}` }
+            const toEntity = toEntityInput(to)
+            if ('error' in toEntity) return { success: false, output: `Invalid to entity: ${toEntity.error}` }
+            const rel = cleanRelationName(relation)
+            if (!rel) return { success: false, output: 'Relationship name is required.' }
+            if (fromEntity.name.toLowerCase() === toEntity.name.toLowerCase() && fromEntity.type === toEntity.type) {
+                return { success: false, output: 'Cannot create a relationship from an entity to itself.' }
+            }
+
+            const edge = getEntityGraphStore().upsertEdge({
+                action: 'assert',
+                from: fromEntity,
+                relation: rel,
+                to: toEntity,
+                confidence: clampToolNumber(confidence, 0.9, 0.1, 1),
+                evidence: typeof evidence === 'string' ? evidence.replace(/\s+/g, ' ').trim().slice(0, 280) : '',
+            }, 'tool', 'entity_graph_assert')
+
+            if (!edge) return { success: false, output: 'No relationship was created.' }
+            return { success: true, output: `Relationship asserted:\n${formatEntityEdge(edge)}` }
+        },
+    }
+}
+
+/**
+ * Create an `entity_graph_delete` tool that lets the LLM remove an incorrect
+ * relationship by ID or by exact relationship triple.
+ */
+export function makeEntityGraphDeleteTool(): ToolDefinition {
+    return {
+        name: 'entity_graph_delete',
+        description:
+            'Delete an incorrect relationship from the entity graph. ' +
+            'Prefer edgeId from entity_graph_search. If edgeId is unknown, provide from, relation, and to to delete an exact relationship triple.',
+        parameters: {
+            type: 'object',
+            properties: {
+                edgeId: { type: 'string', description: 'Relationship edge ID to delete.' },
+                from: {
+                    type: 'object',
+                    description: 'Source entity for exact triple deletion when edgeId is not available.',
+                    properties: {
+                        name: { type: 'string', description: 'Entity name.' },
+                        type: { type: 'string', enum: ENTITY_TYPES, description: 'Entity type.' },
+                    },
+                },
+                relation: { type: 'string', description: 'Relationship name for exact triple deletion.' },
+                to: {
+                    type: 'object',
+                    description: 'Target entity for exact triple deletion when edgeId is not available.',
+                    properties: {
+                        name: { type: 'string', description: 'Entity name.' },
+                        type: { type: 'string', enum: ENTITY_TYPES, description: 'Entity type.' },
+                    },
+                },
+            },
+        },
+        timeout: 15_000,
+        execute: async (params: unknown) => {
+            const { edgeId, from, relation, to } = (params || {}) as {
+                edgeId?: string; from?: unknown; relation?: unknown; to?: unknown
+            }
+            const graph = getEntityGraphStore()
+
+            if (edgeId?.trim()) {
+                const deleted = graph.deleteEdge(edgeId.trim())
+                return deleted
+                    ? { success: true, output: `Deleted entity graph relationship ${edgeId.trim()}.` }
+                    : { success: false, output: `No relationship found with id ${edgeId.trim()}.` }
+            }
+
+            const fromEntity = toEntityInput(from)
+            if ('error' in fromEntity) return { success: false, output: 'Provide edgeId, or a valid from/relation/to triple to delete.' }
+            const toEntity = toEntityInput(to)
+            if ('error' in toEntity) return { success: false, output: 'Provide edgeId, or a valid from/relation/to triple to delete.' }
+            const rel = cleanRelationName(relation)
+            if (!rel) return { success: false, output: 'Provide edgeId, or a valid from/relation/to triple to delete.' }
+
+            const deleted = graph.deleteMatchingEdge({
+                action: 'delete',
+                from: fromEntity,
+                relation: rel,
+                to: toEntity,
+            })
+            return deleted > 0
+                ? { success: true, output: `Deleted ${deleted} matching entity graph relationship${deleted !== 1 ? 's' : ''}.` }
+                : { success: false, output: 'No matching entity graph relationship was found.' }
+        },
     }
 }
 
