@@ -495,6 +495,7 @@ export class EntityGraphStore {
             'Only include facts that would remain useful later. Skip vague, temporary, or unsupported claims.',
             'Use concise snake_case relation names such as works_at, depends_on, located_in, owns, uses, met_on, discussed_with.',
             'When a fact changes, emit a delete for the old relationship if the turn names it, and an assert for the replacement.',
+            "Evidence should be one short sentence on why the fact is true.",
             'If there are no durable relationships, return [].'
           ].join('\n')
         },
