@@ -770,9 +770,9 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                     id, conversation_id, role, content, tool_calls_json, tool_call_id,
                                     provider, model, prompt_tokens, completion_tokens, context_tokens,
                                     latency_ms, image_urls_json, agent_id, memory_sources_json, thinking,
-                                    audio_urls_json, file_attachments_json, created_at
+                                    audio_urls_json, created_at
                                  )
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 m.id, m.conversation_id, m.role, m.content,
                                 m.tool_calls_json || null, m.tool_call_id || null,
@@ -781,7 +781,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 m.context_tokens ?? null,
                                 m.latency_ms ?? null, m.image_urls_json || null, m.agent_id || null,
                                 m.memory_sources_json || null, m.thinking || null,
-                                m.audio_urls_json || null, m.file_attachments_json || null,
+                                m.audio_urls_json || null,
                                 m.created_at || Date.now()
                             )
                             importedMessageIds.add(m.id as string)

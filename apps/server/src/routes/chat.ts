@@ -19,7 +19,7 @@ import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../core/a
 import { existsSync, readFileSync } from 'fs'
 import { extname } from 'path'
 import { materializeFileAttachments, readFileAttachmentText, type FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
-import { buildAttachmentContext, indexConversationAttachment, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
+import { buildAttachmentContext, indexConversationAttachment, listConversationFileAttachmentsByMessage, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 // Attachments larger than this are represented by retrieved excerpts plus
@@ -41,6 +41,7 @@ const activeChatExecutions = new Map<string, ActiveChatExecution>()
 const activeAbortControllers = new Map<string, AbortController>()
 
 interface ChatHistoryRow {
+  id: string
   role: string
   content: string
   tool_calls_json: string | null
@@ -48,7 +49,6 @@ interface ChatHistoryRow {
   agent_id: string | null
   image_urls_json: string | null
   audio_urls_json: string | null
-  file_attachments_json: string | null
   created_at: number
 }
 
@@ -216,11 +216,13 @@ function getChatAttachmentConfig(db = getDb()): { inlineAttachmentTextLimit: num
   }
 }
 
-function buildHistoryContent(row: ChatHistoryRow, inlineAttachmentTextLimit: number): string | ContentPart[] {
+function buildHistoryContent(
+  row: ChatHistoryRow,
+  inlineAttachmentTextLimit: number,
+  fileAttachments: FileAttachmentArtifact[],
+): string | ContentPart[] {
   if (row.role !== 'user') return row.content
 
-  const fileAttachments = parseJsonArray<FileAttachmentArtifact & { content?: string }>(row.file_attachments_json)
-    .filter((file) => typeof file?.name === 'string')
   const imageUrls = parseJsonArray<string>(row.image_urls_json).filter((url) => typeof url === 'string')
   const audioUrls = parseJsonArray<string>(row.audio_urls_json).filter((url) => typeof url === 'string')
 
@@ -382,18 +384,19 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const userMsgId = (providedMsgId && idPattern.test(providedMsgId)) ? providedMsgId : nanoid()
       const now = Date.now()
       db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, file_attachments_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(userMsgId, conversationId, 'user', content, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, storedFileAttachments.length ? JSON.stringify(storedFileAttachments) : null, now)
+        `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run(userMsgId, conversationId, 'user', content, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, now)
       persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
       // Build message history
       const historyRows = db
         .prepare(
-          'SELECT role, content, tool_calls_json, tool_call_id, agent_id, image_urls_json, audio_urls_json, file_attachments_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
+          'SELECT id, role, content, tool_calls_json, tool_call_id, agent_id, image_urls_json, audio_urls_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
         )
         .all(conversationId) as ChatHistoryRow[]
+      const attachmentsByMessage = listConversationFileAttachmentsByMessage(db, conversationId)
 
       // Filter out sub-agent intermediate messages.
       // Keep: user messages, main-agent assistant messages + their tool results.
@@ -427,7 +430,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       let messages: ChatMessage[] = filteredRows.map((row) => ({
         role: row.role as ChatMessage['role'],
-        content: buildHistoryContent(row, inlineAttachmentTextLimit),
+        content: buildHistoryContent(row, inlineAttachmentTextLimit, attachmentsByMessage.get(row.id) || []),
         toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
         toolCallId: row.tool_call_id || undefined
       }))

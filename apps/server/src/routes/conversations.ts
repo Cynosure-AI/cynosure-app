@@ -150,7 +150,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 tool_call_id: string | null
                 image_urls_json: string | null
                 audio_urls_json: string | null
-                file_attachments_json: string | null
                 agent_id: string | null
                 provider: string | null
                 model: string | null
@@ -210,16 +209,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 try {
                     audioDataUrls = row.audio_urls_json ? JSON.parse(row.audio_urls_json) : undefined
                 } catch { /* malformed JSON — ignore */ }
-                let fileAttachments: { name: string }[] | undefined
-                try {
-                    const parsed = row.file_attachments_json ? JSON.parse(row.file_attachments_json) : undefined
-                    fileAttachments = Array.isArray(parsed)
-                        ? parsed
-                            .filter((file) => typeof file?.name === 'string')
-                            .map((file) => ({ name: file.name }))
-                        : undefined
-                } catch { /* malformed JSON — ignore */ }
-                fileAttachments ||= attachmentsByMessage.get(row.id)
+                const fileAttachments = attachmentsByMessage.get(row.id)
                 return {
                     id: row.id,
                     conversationId: row.conversation_id,

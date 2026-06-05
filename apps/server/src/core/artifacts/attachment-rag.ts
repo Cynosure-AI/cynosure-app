@@ -105,7 +105,7 @@ export function persistMessageFileAttachments(
 }
 
 export function listConversationFileAttachments(db: Database, conversationId: string): FileAttachmentArtifact[] {
-    const records = db.prepare(`
+    const rows = db.prepare(`
         SELECT id, name, original_path, text_path, size_bytes, text_bytes, chunk_count
         FROM message_attachments
         WHERE conversation_id = ? AND kind = 'file'
@@ -120,45 +120,56 @@ export function listConversationFileAttachments(db: Database, conversationId: st
         chunk_count: number | null
     }[]
 
-    if (records.length) {
-        return records
-            .filter((row) => row.original_path && row.text_path)
-            .map((row) => ({
-                id: row.id,
-                name: row.name,
-                originalPath: row.original_path!,
-                textPath: row.text_path!,
-                sizeBytes: row.size_bytes ?? 0,
-                textBytes: row.text_bytes ?? 0,
-                chunkCount: row.chunk_count ?? undefined,
-            }))
-    }
+    return rows.map(rowToFileAttachment).filter((attachment): attachment is FileAttachmentArtifact => Boolean(attachment))
+}
 
-    const rows = db.prepare(
-        'SELECT file_attachments_json FROM messages WHERE conversation_id = ? AND file_attachments_json IS NOT NULL ORDER BY created_at ASC'
-    ).all(conversationId) as { file_attachments_json: string }[]
+export function listConversationFileAttachmentsByMessage(db: Database, conversationId: string): Map<string, FileAttachmentArtifact[]> {
+    const rows = db.prepare(`
+        SELECT message_id, id, name, original_path, text_path, size_bytes, text_bytes, chunk_count
+        FROM message_attachments
+        WHERE conversation_id = ? AND kind = 'file'
+        ORDER BY created_at ASC
+    `).all(conversationId) as {
+        message_id: string
+        id: string
+        name: string
+        original_path: string | null
+        text_path: string | null
+        size_bytes: number | null
+        text_bytes: number | null
+        chunk_count: number | null
+    }[]
 
-    const attachments: FileAttachmentArtifact[] = []
-    const seen = new Set<string>()
+    const byMessage = new Map<string, FileAttachmentArtifact[]>()
     for (const row of rows) {
-        try {
-            const parsed = JSON.parse(row.file_attachments_json)
-            if (!Array.isArray(parsed)) continue
-            for (const item of parsed) {
-                if (
-                    typeof item?.id !== 'string' ||
-                    typeof item.name !== 'string' ||
-                    typeof item.textPath !== 'string' ||
-                    seen.has(item.id)
-                ) continue
-                seen.add(item.id)
-                attachments.push(item as FileAttachmentArtifact)
-            }
-        } catch {
-            // Ignore malformed attachment metadata.
-        }
+        const attachment = rowToFileAttachment(row)
+        if (!attachment) continue
+        const existing = byMessage.get(row.message_id) || []
+        existing.push(attachment)
+        byMessage.set(row.message_id, existing)
     }
-    return attachments
+    return byMessage
+}
+
+function rowToFileAttachment(row: {
+    id: string
+    name: string
+    original_path: string | null
+    text_path: string | null
+    size_bytes: number | null
+    text_bytes: number | null
+    chunk_count: number | null
+}): FileAttachmentArtifact | null {
+    if (!row.original_path || !row.text_path) return null
+    return {
+        id: row.id,
+        name: row.name,
+        originalPath: row.original_path,
+        textPath: row.text_path,
+        sizeBytes: row.size_bytes ?? 0,
+        textBytes: row.text_bytes ?? 0,
+        chunkCount: row.chunk_count ?? undefined,
+    }
 }
 
 function formatAttachmentList(attachments: FileAttachmentArtifact[]): string {

@@ -89,7 +89,6 @@ function createTables(db: Database.Database): void {
       memory_sources_json TEXT,
       thinking TEXT,
       audio_urls_json TEXT,
-      file_attachments_json TEXT,
       context_tokens INTEGER,
       created_at INTEGER NOT NULL
     );
