@@ -26,6 +26,7 @@ export interface ChatAgentConfigApi {
     hasAgentOverrides: ComputedRef<boolean>
     markOverridesModified(): void
     resetAgentOverrides(): void
+    resetToDefaults(): void
     applyOverridesToAgent(): Promise<void>
     setActiveAgent(id: string | null): Promise<void>
     setConversationAgent(id: string | null): void
@@ -111,6 +112,24 @@ export function useChatAgentConfig(
         sessionAutoToolRouting.value = agentOriginalAutoToolRouting.value
         sessionAutoMemory.value = agentOriginalAutoMemory.value
         sessionAutoSkillRouting.value = agentOriginalAutoSkillRouting.value
+        sessionModelOverride.value = null
+        sessionProviderOverride.value = null
+        userModifiedOverrides.value = false
+    }
+
+    function resetToDefaults(): void {
+        agentStore.clearSelectedTools()
+        freeChatSubAgentIds.value = []
+        const defaultMemorySpaceIds = activeAgentId.value ? [] : [...agentOriginalMemorySpaceIds.value]
+        freeChatMemorySpaceIds.value = [...defaultMemorySpaceIds]
+        freeChatMemorySelectionInitialized.value = defaultMemorySpaceIds.length > 0
+        freeChatSkillIds.value = []
+        sessionSystemPrompt.value = ''
+        sessionThinkingEnabled.value = true
+        sessionOverrideSubAgents.value = false
+        sessionAutoToolRouting.value = true
+        sessionAutoMemory.value = true
+        sessionAutoSkillRouting.value = true
         sessionModelOverride.value = null
         sessionProviderOverride.value = null
         userModifiedOverrides.value = false
@@ -338,6 +357,7 @@ export function useChatAgentConfig(
         hasAgentOverrides,
         markOverridesModified,
         resetAgentOverrides,
+        resetToDefaults,
         applyOverridesToAgent,
         setActiveAgent,
         setConversationAgent,

@@ -21,11 +21,23 @@ const newAgentName = ref('')
 const newAgentDescription = ref('')
 const savingAgent = ref(false)
 
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const sortedA = [...a].sort()
+  const sortedB = [...b].sort()
+  return sortedA.every((value, index) => value === sortedB[index])
+}
+
+const hasMemoryConfigChange = computed(() => (
+  chatStore.freeChatMemorySelectionInitialized &&
+  !arraysEqual(chatStore.freeChatMemorySpaceIds, chatStore.agentOriginalMemorySpaceIds)
+))
+
 const canSaveAsAgent = computed(() => {
   return (
     agentStore.selectedToolNames.length > 0 ||
     chatStore.freeChatSubAgentIds.length > 0 ||
-    chatStore.freeChatMemorySpaceIds.length > 0 ||
+    hasMemoryConfigChange.value ||
     chatStore.sessionSystemPrompt.trim().length > 0
   )
 })
@@ -117,6 +129,13 @@ async function saveAsNewAgent() {
       class="w-3.5 h-3.5 text-theme-400 shrink-0"
     />
     <span class="text-[11px] text-theme-400 flex-1">Session has custom configuration</span>
+    <button
+      class="text-[11px] px-2 py-0.5 rounded bg-theme-700 text-theme-300 hover:bg-theme-600 transition-colors"
+      title="Reset to default chat configuration"
+      @click="chatStore.resetToDefaults()"
+    >
+      Reset
+    </button>
     <button
       class="text-[11px] px-2 py-0.5 rounded bg-accent-600 text-white hover:bg-accent-500 transition-colors flex items-center gap-1"
       title="Create a new agent from the current session configuration"

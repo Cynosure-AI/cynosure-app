@@ -522,6 +522,7 @@ export const useChatStore = defineStore('chat', () => {
     hasAgentOverrides: agentConfig.hasAgentOverrides,
     markOverridesModified: agentConfig.markOverridesModified,
     resetAgentOverrides: agentConfig.resetAgentOverrides,
+    resetToDefaults: agentConfig.resetToDefaults,
     applyOverridesToAgent: agentConfig.applyOverridesToAgent,
     setActiveAgent: agentConfig.setActiveAgent,
     setSessionModel: agentConfig.setSessionModel,
