@@ -22,7 +22,9 @@ import { materializeFileAttachments, readFileAttachmentText, type FileAttachment
 import { buildAttachmentContext, indexConversationAttachment, makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
-const INLINE_ATTACHMENT_TEXT_LIMIT = 24_000 // ~30-40 pages of text, chosen to allow reasonably large files to be inlined while still fitting within typical model context windows when combined with user messages and assistant responses. Attachments larger than this will be indexed for retrieval instead of inlined, and the system prompt will include instructions on how to reference them.
+// Attachments larger than this are represented by retrieved excerpts plus
+// attachment_search/attachment_retrieve_chunks instead of full inline text.
+const INLINE_ATTACHMENT_TEXT_LIMIT = 24_000
 
 export interface ActiveChatExecution {
   id: string
@@ -209,8 +211,6 @@ function buildHistoryContent(row: ChatHistoryRow): string | ContentPart[] {
 
   const parts: ContentPart[] = [{ type: 'text', text: row.content }]
   for (const file of fileAttachments) {
-    const fileText = readFileAttachmentText(file)
-    if (fileText === null) continue
     if (file.textBytes > INLINE_ATTACHMENT_TEXT_LIMIT && file.chunkCount && file.chunkCount > 0) {
       parts.push({
         type: 'text',
@@ -218,6 +218,8 @@ function buildHistoryContent(row: ChatHistoryRow): string | ContentPart[] {
       })
       continue
     }
+    const fileText = readFileAttachmentText(file)
+    if (fileText === null) continue
     parts.push({
       type: 'text',
       text: `[Attached file: ${file.name}]\n${fileText}`
@@ -302,8 +304,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const parts: ContentPart[] = [{ type: 'text', text: content }]
         if (storedFileAttachments.length) {
           for (const file of storedFileAttachments) {
-            const fileText = readFileAttachmentText(file)
-            if (fileText === null) continue
             if (file.textBytes > INLINE_ATTACHMENT_TEXT_LIMIT && file.chunkCount && file.chunkCount > 0) {
               parts.push({
                 type: 'text',
@@ -311,6 +311,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
               })
               continue
             }
+            const fileText = readFileAttachmentText(file)
+            if (fileText === null) continue
             parts.push({
               type: 'text',
               text: `[Attached file: ${file.name}]\n${fileText}`

@@ -8,16 +8,6 @@ import { getDb } from '../../db/database.js'
 
 const TABLE_NAME = 'conversation_attachments'
 
-export const ATTACHMENT_TOOL_NAMES = [
-    'attachment_list_documents',
-    'attachment_search',
-    'attachment_retrieve_chunks',
-] as const
-
-export function isAttachmentToolName(toolName: string): boolean {
-    return (ATTACHMENT_TOOL_NAMES as readonly string[]).includes(toolName)
-}
-
 export function conversationAttachmentSpaceId(conversationId: string): string {
     return `conversation:${conversationId}`
 }
