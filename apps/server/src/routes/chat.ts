@@ -10,7 +10,7 @@ import { closeOrchestrationRun } from '../core/agent/orchestration-state.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
-import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
+import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions, extractEntityGraph } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
 import type { ChatMessage, ContentPart, RegistryAwareToolDefinition } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
@@ -297,21 +297,28 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       thinkingEnabled?: boolean
       contextStrategy?: ContextStrategy
       autoToolRouting?: boolean
+      selectedSkillIds?: string[]
+      autoSkillRouting?: boolean
       toolRouterProviderId?: string
       toolRouterModel?: string
       autoMemory?: boolean
       memoryRouterProviderId?: string
       memoryRouterModel?: string
+      skillRouterProviderId?: string
+      skillRouterModel?: string
       compactProviderId?: string
       compactModel?: string
       titleProviderId?: string
       titleModel?: string
       inlineAttachmentTextLimit?: number
+      enableEntityGraph?: boolean
+      entityGraphProviderId?: string
+      entityGraphModel?: string
     }
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, inlineAttachmentTextLimit: reqInlineAttachmentTextLimit } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, skillRouterProviderId: reqSkillRouterProviderId, skillRouterModel: reqSkillRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, inlineAttachmentTextLimit: reqInlineAttachmentTextLimit, enableEntityGraph: enableEntityGraphPref, entityGraphProviderId: entityGraphProviderIdPref, entityGraphModel: entityGraphModelPref } = req.body
       const db = getDb()
       const inlineAttachmentTextLimit = reqInlineAttachmentTextLimit !== undefined
         ? normalizeInlineAttachmentTextLimit(reqInlineAttachmentTextLimit)
@@ -453,6 +460,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const effectiveAutoMemory = reqAutoMemory !== undefined
         ? reqAutoMemory === true
         : (resolvedAgent?.autoMemory === true)
+      const effectiveAutoSkillRouting = reqAutoSkillRouting !== undefined
+        ? reqAutoSkillRouting === true
+        : (resolvedAgent?.autoSkillRouting !== false)
 
       // Resolve memory space overrides (request body ids -> { id, name } objects)
       const memorySpaceOverrides = resolveMemorySpaceOverrides(db, reqMemorySpaceIds)
@@ -482,8 +492,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           autoMemory: effectiveAutoMemory,
           memoryRouterProviderId: reqMemoryRouterProviderId || undefined,
           memoryRouterModel: reqMemoryRouterModel || undefined,
+          skillRouterProviderId: reqSkillRouterProviderId || undefined,
+          skillRouterModel: reqSkillRouterModel || undefined,
           selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
           hasExplicitToolAllowlist,
+          selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
+          autoSkillRouting: effectiveAutoSkillRouting,
         },
       })
 
@@ -536,6 +550,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         thinkingEnabled: reqThinkingEnabled ?? true,
         autoToolRouting: reqAutoToolRouting === true,
         autoMemory: effectiveAutoMemory,
+        selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
+        autoSkillRouting: effectiveAutoSkillRouting,
       }
       db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
         JSON.stringify(chatConfig),
@@ -664,6 +680,17 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
               broadcast('chat:title-updated', { conversationId, title: fallback })
             }
           }
+        }
+
+        if (enableEntityGraphPref !== false) {
+          extractEntityGraph({
+            conversationId,
+            userMessage: content,
+            assistantResponse: result.content,
+            broadcast,
+            providerId: entityGraphProviderIdPref || responseProvider,
+            model: entityGraphModelPref || (entityGraphProviderIdPref ? undefined : responseModel)
+          }).catch(() => { })
         }
       } catch (err) {
         if ((err as Error).name === 'AbortError') {

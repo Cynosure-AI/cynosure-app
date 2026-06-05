@@ -13,6 +13,7 @@
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import type { LLMGateway } from '../gateway/gateway.js'
+import { getEntityGraphStore } from '../memory/entity-graph.js'
 
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -128,6 +129,39 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
         applyFallbackTitle(db, conversationId, userMessage, broadcast)
     } finally {
         completeAction(conversationId, 'generating-title', broadcast)
+    }
+}
+
+// ─── Entity graph extraction ───────────────────────────────
+
+export interface ExtractEntityGraphOpts {
+    conversationId: string
+    userMessage: string
+    assistantResponse: string
+    broadcast: BroadcastFn
+    providerId?: string
+    model?: string
+}
+
+export async function extractEntityGraph(opts: ExtractEntityGraphOpts): Promise<void> {
+    const { conversationId, userMessage, assistantResponse, broadcast, providerId, model } = opts
+    const signal = startAction(conversationId, 'updating-entity-graph', broadcast)
+
+    try {
+        await getEntityGraphStore().extractFromTurn({
+            conversationId,
+            userMessage,
+            assistantResponse,
+            providerId,
+            model,
+            signal
+        })
+    } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+            console.warn('[entity-graph] Extraction failed:', err)
+        }
+    } finally {
+        completeAction(conversationId, 'updating-entity-graph', broadcast)
     }
 }
 

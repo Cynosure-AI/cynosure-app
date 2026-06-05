@@ -53,3 +53,10 @@ export function getMemorySpacesRootDir(): string {
 export function getDefaultMemorySpaceDir(): string {
     return getMemorySpacesRootDir()
 }
+
+/**
+ * Returns the folder that contains user-editable skill definition files.
+ */
+export function getSkillsDir(): string {
+    return join(getAppDataDir(), 'skills')
+}

@@ -2,8 +2,9 @@ import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage } from '
 import type {
   LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryResponse,
   AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus,
-  AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType,
+  AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse,
   MetricsSummary, OrchestrationState,
+  SkillDefinition,
 } from './types'
 import type { WsHandler } from './http'
 
@@ -68,6 +69,8 @@ export const api = {
           thinkingEnabled?: boolean
           autoToolRouting?: boolean
           autoMemory?: boolean
+          selectedSkillIds?: string[]
+          autoSkillRouting?: boolean
         }
       }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
     getExecutionSteps: (conversationId: string) =>
@@ -112,14 +115,21 @@ export const api = {
       titleProviderId?: string,
       titleModel?: string,
       autoToolRouting?: boolean,
+      selectedSkillIds?: string[],
+      autoSkillRouting?: boolean,
       toolRouterProviderId?: string,
       toolRouterModel?: string,
       autoMemory?: boolean,
       memoryRouterProviderId?: string,
       memoryRouterModel?: string,
+      skillRouterProviderId?: string,
+      skillRouterModel?: string,
       compactProviderId?: string,
       compactModel?: string,
-      inlineAttachmentTextLimit?: number
+      inlineAttachmentTextLimit?: number,
+      enableEntityGraph?: boolean,
+      entityGraphProviderId?: string,
+      entityGraphModel?: string
     ) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, {
         content,
@@ -143,11 +153,18 @@ export const api = {
         autoMemory,
         memoryRouterProviderId: memoryRouterProviderId || undefined,
         memoryRouterModel: memoryRouterModel || undefined,
+        skillRouterProviderId: skillRouterProviderId || undefined,
+        skillRouterModel: skillRouterModel || undefined,
         compactProviderId: compactProviderId || undefined,
         compactModel: compactModel || undefined,
         titleProviderId: titleProviderId || undefined,
         titleModel: titleModel || undefined,
-        inlineAttachmentTextLimit
+        selectedSkillIds,
+        autoSkillRouting,
+        inlineAttachmentTextLimit,
+        enableEntityGraph,
+        entityGraphProviderId: entityGraphProviderId || undefined,
+        entityGraphModel: entityGraphModel || undefined
       }),
     getAttachmentConfig: () =>
       get<{ inlineAttachmentTextLimit: number }>('/api/chat/attachment-config'),
@@ -271,6 +288,16 @@ export const api = {
       post<AgentDefinition>(`/api/agents/${encodeURIComponent(id)}/duplicate`)
   },
 
+  skills: {
+    list: () => get<SkillDefinition[]>('/api/skills'),
+    get: (id: string) => get<SkillDefinition>(`/api/skills/${encodeURIComponent(id)}`),
+    create: (data: Partial<Omit<SkillDefinition, 'id' | 'createdAt' | 'updatedAt'>>) =>
+      post<SkillDefinition>('/api/skills', data),
+    update: (id: string, data: Partial<Omit<SkillDefinition, 'id' | 'createdAt' | 'updatedAt'>>) =>
+      put<SkillDefinition>(`/api/skills/${encodeURIComponent(id)}`, data),
+    remove: (id: string) => del<{ success: boolean }>(`/api/skills/${encodeURIComponent(id)}`)
+  },
+
   memory: {
     search: (query: string, topK?: number, spaceId?: string) =>
       post<unknown[]>('/api/memory/search', { query, topK, spaceId }),
@@ -312,6 +339,23 @@ export const api = {
       get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
     configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>
       post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/configure', opts),
+    getGraph: (query?: string, limit?: number) => {
+      const params = new URLSearchParams()
+      if (query) params.set('query', query)
+      if (limit) params.set('limit', String(limit))
+      const qs = params.toString()
+      return get<EntityGraphResponse>(`/api/memory/graph${qs ? `?${qs}` : ''}`)
+    },
+    updateGraphNode: (id: string, data: { name?: string; type?: EntityGraphResponse['nodes'][number]['type']; aliases?: string[] }) =>
+      patch<EntityGraphResponse['nodes'][number]>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`, data),
+    deleteGraphNode: (id: string) =>
+      del<{ success: boolean }>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`),
+    updateGraphEdge: (id: string, data: { relation?: string; evidence?: string; confidence?: number }) =>
+      patch<EntityGraphResponse['edges'][number]>(`/api/memory/graph/edges/${encodeURIComponent(id)}`, data),
+    deleteGraphEdge: (id: string) =>
+      del<{ success: boolean }>(`/api/memory/graph/edges/${encodeURIComponent(id)}`),
+    clearGraph: () =>
+      del<{ success: boolean; nodesDeleted: number; edgesDeleted: number }>('/api/memory/graph'),
     onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>
       onWsEvent('memory:reembed-progress', cb as WsHandler)
   },

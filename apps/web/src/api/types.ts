@@ -120,6 +120,7 @@ export interface AgentDefinition {
     systemPrompt: string
     cronPrompt: string
     tools: string[]
+    skills: string[]
     subAgents?: SubAgentAssignment[]
     autoApproveTools: boolean
     overrideSubAgents: boolean
@@ -129,11 +130,25 @@ export interface AgentDefinition {
     autoMemory: boolean
     memoryRouterProviderId: string
     memoryRouterModel: string
+    autoSkillRouting: boolean
+    skillRouterProviderId: string
+    skillRouterModel: string
     generateTitle: boolean
     thinkingEnabled: boolean
     maxContextTokens: number | null
     sortOrder: number
     memorySpaces: string[]
+    createdAt: number
+    updatedAt: number
+}
+
+export interface SkillDefinition {
+    id: string
+    name: string
+    description: string
+    category: string
+    content: string
+    enabled: boolean
     createdAt: number
     updatedAt: number
 }
@@ -184,6 +199,47 @@ export interface MemoryFileStatus {
     status: 'indexed' | 'needs_reindex' | 'not_indexed' | 'unsupported'
     chunkCount?: number
     lastIndexedAt?: number
+}
+
+export interface EntityGraphNode {
+    id: string
+    name: string
+    normalizedName: string
+    type: 'person' | 'place' | 'organization' | 'project' | 'event' | 'date' | 'technology' | 'product' | 'artifact' | 'concept' | 'other'
+    aliases: string[]
+    mentionCount: number
+    sourceCount: number
+    firstSeenAt: number
+    lastSeenAt: number
+}
+
+export type EntityGraphNodeType = EntityGraphNode['type']
+
+export interface EntityGraphEdge {
+    id: string
+    fromNodeId: string
+    toNodeId: string
+    fromName: string
+    toName: string
+    relation: string
+    confidence: number
+    evidence: string
+    sourceKind: string
+    sourceId: string
+    mentionCount: number
+    firstSeenAt: number
+    lastSeenAt: number
+}
+
+export interface EntityGraphResponse {
+    stats: {
+        nodeCount: number
+        edgeCount: number
+        recentEdgeCount: number
+    }
+    seedNodes: EntityGraphNode[]
+    nodes: EntityGraphNode[]
+    edges: EntityGraphEdge[]
 }
 
 // ── Instances / Cron / Channels ──────────────────────────────────────────────

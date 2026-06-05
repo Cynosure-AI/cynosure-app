@@ -54,6 +54,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
       <Icon
         icon="lucide:brain"
         class="h-5 w-5"
+        :class="memorySpaceCount > 0 || autoMemoryEnabled ? 'text-emerald-600' : ''"
       />
       <span
         v-if="autoMemoryEnabled || memorySpaceCount > 0"

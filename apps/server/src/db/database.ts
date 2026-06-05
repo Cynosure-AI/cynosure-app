@@ -194,6 +194,18 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_tool_router_embeddings_updated ON tool_router_embeddings(updated_at);
 
+    CREATE TABLE IF NOT EXISTS skill_embeddings (
+      skill_id TEXT NOT NULL,
+      embedding_provider_id TEXT NOT NULL DEFAULT '',
+      embedding_model TEXT NOT NULL,
+      embedding_dimensions INTEGER NOT NULL,
+      content_hash TEXT NOT NULL,
+      vector_json TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (skill_id, embedding_provider_id, embedding_model, embedding_dimensions)
+    );
+    CREATE INDEX IF NOT EXISTS idx_skill_embeddings_updated ON skill_embeddings(updated_at);
+
     CREATE TABLE IF NOT EXISTS pending_hitl (
       task_id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL,
@@ -293,6 +305,41 @@ function createTables(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_ams_agent ON agent_memory_spaces(agent_id);
     CREATE INDEX IF NOT EXISTS idx_ams_space ON agent_memory_spaces(space_id);
 
+    CREATE TABLE IF NOT EXISTS entity_graph_nodes (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      normalized_name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      aliases_json TEXT NOT NULL DEFAULT '[]',
+      mention_count INTEGER NOT NULL DEFAULT 1,
+      source_count INTEGER NOT NULL DEFAULT 1,
+      first_seen_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      UNIQUE(normalized_name, type)
+    );
+    CREATE INDEX IF NOT EXISTS idx_egn_name ON entity_graph_nodes(normalized_name);
+    CREATE INDEX IF NOT EXISTS idx_egn_type ON entity_graph_nodes(type);
+    CREATE INDEX IF NOT EXISTS idx_egn_seen ON entity_graph_nodes(last_seen_at);
+
+    CREATE TABLE IF NOT EXISTS entity_graph_edges (
+      id TEXT PRIMARY KEY,
+      from_node_id TEXT NOT NULL REFERENCES entity_graph_nodes(id) ON DELETE CASCADE,
+      to_node_id TEXT NOT NULL REFERENCES entity_graph_nodes(id) ON DELETE CASCADE,
+      relation TEXT NOT NULL,
+      confidence REAL NOT NULL DEFAULT 0.7,
+      evidence TEXT NOT NULL DEFAULT '',
+      source_kind TEXT NOT NULL DEFAULT 'conversation',
+      source_id TEXT NOT NULL DEFAULT '',
+      mention_count INTEGER NOT NULL DEFAULT 1,
+      first_seen_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      UNIQUE(from_node_id, relation, to_node_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ege_from ON entity_graph_edges(from_node_id);
+    CREATE INDEX IF NOT EXISTS idx_ege_to ON entity_graph_edges(to_node_id);
+    CREATE INDEX IF NOT EXISTS idx_ege_relation ON entity_graph_edges(relation);
+    CREATE INDEX IF NOT EXISTS idx_ege_seen ON entity_graph_edges(last_seen_at);
+
   `)
 
   // Migrations for existing databases
@@ -325,12 +372,16 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('agents', 'auto_memory', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('agents', 'memory_router_provider_id', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'memory_router_model', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('agents', 'auto_skill_routing', 'INTEGER NOT NULL DEFAULT 1')
+  addColumnIfMissing('agents', 'skill_router_provider_id', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('agents', 'skill_router_model', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'thinking_enabled', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('agents', 'max_context_tokens', 'INTEGER')
   addColumnIfMissing('agents', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('agents', 'cron_prompt', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'icon_data', 'BLOB')
   addColumnIfMissing('agents', 'icon_mime', 'TEXT')
+  addColumnIfMissing('agents', 'skills_json', "TEXT NOT NULL DEFAULT '[]'")
 
   // Trigger output channel support
   addColumnIfMissing('cron_jobs', 'output_channel_id', "TEXT NOT NULL DEFAULT ''")

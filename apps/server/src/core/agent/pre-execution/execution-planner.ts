@@ -55,7 +55,11 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         autoMemory,
         memoryRouterProviderId,
         memoryRouterModel,
+        skillRouterProviderId,
+        skillRouterModel,
         hasExplicitToolAllowlist = false,
+        selectedSkillIds = [],
+        autoSkillRouting = false,
     } = input
     const selectedToolKeys = stripRuntimeMemoryToolKeys(input.selectedToolKeys ?? [])
     const hasRequestToolSelection = input.selectedToolKeys !== undefined
@@ -81,6 +85,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         })
         : presetFromAgentless({
             tools: configuredTools,
+            skills: selectedSkillIds,
             subAgents: effectiveSubAgents,
             autoToolRouting: autoToolRouting === true,
             toolRouterProviderId,
@@ -88,6 +93,9 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
             autoMemory,
             memoryRouterProviderId,
             memoryRouterModel,
+            autoSkillRouting,
+            skillRouterProviderId,
+            skillRouterModel,
         })
 
     const prepared = await prepareAgentExecution({
@@ -108,7 +116,11 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         autoMemory,
         memoryRouterProviderId,
         memoryRouterModel,
+        skillRouterProviderId,
+        skillRouterModel,
         preferredToolKeys: fixedToolKeys,
+        selectedSkillIds,
+        autoSkillRouting,
         recentMessages: messages,
         userQuery: userText,
         memorySpaceOverrides,
