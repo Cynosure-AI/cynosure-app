@@ -1,0 +1,240 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Matrix Theme — Green-on-black terminal aesthetic
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Variable overrides ── */
+[data-theme="matrix"] {
+  /* Base: near-black with faint green undertone */
+  --color-zinc-950: #030705;
+  --color-zinc-900: #0a120e;
+  --color-zinc-800: #111f18;
+  --color-zinc-700: #1a2e23;
+  --color-zinc-600: #24402f;
+  --color-zinc-500: #3a5c48;
+  --color-zinc-400: #5a8068;
+  --color-zinc-300: #84a890;
+  --color-zinc-200: #b0ccb8;
+  --color-zinc-100: #d8eed8;
+
+  /* Accent: phosphor green for buttons, links, active states */
+  --color-blue-50: #ecfdf5;
+  --color-blue-100: #d1fae5;
+  --color-blue-200: #a7f3d0;
+  --color-blue-300: #6ee7b7;
+  --color-blue-400: #34d399;
+  --color-blue-500: #00ff41;
+  --color-blue-600: #00cc33;
+  --color-blue-700: #00a82a;
+  --color-blue-800: #008522;
+  --color-blue-900: #00661a;
+  --color-blue-950: #003d10;
+
+  /* Custom matrix accent vars */
+  --mx-green: #00ff41;
+  --mx-green-dim: rgba(0, 255, 65, 0.2);
+  --mx-green-glow: rgba(0, 255, 65, 0.1);
+  --mx-green-dark: #00cc33;
+  --mx-green-subtle: rgba(0, 255, 65, 0.06);
+
+  /* Sharp edges — no rounding (terminal style) */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 1px;
+  --radius-lg: 1px;
+  --radius-xl: 2px;
+  --radius-2xl: 2px;
+  --radius-3xl: 3px;
+  --radius-4xl: 3px;
+
+  /* Theme effects */
+  --theme-glow: 0 0 8px var(--mx-green-glow), 0 0 24px rgba(0, 255, 65, 0.04);
+  --theme-glow-strong:
+    0 0 12px rgba(0, 255, 65, 0.25), 0 0 36px rgba(0, 255, 65, 0.08);
+  --theme-accent-rgb: 0, 255, 65;
+
+  /* Monospace terminal font */
+  font-family:
+    "JetBrains Mono", "Fira Code", "Cascadia Code", "SF Mono", "Consolas",
+    monospace;
+  letter-spacing: 0.02em;
+
+  color-scheme: dark;
+}
+
+/* ── Focus glow ── */
+[data-theme="matrix"] :is(button, a):focus-visible {
+  box-shadow: var(--theme-glow-strong);
+  outline: 1px solid var(--mx-green-dim);
+}
+
+/* ── Green border accent on structural panels ── */
+[data-theme="matrix"] .rounded-xl,
+[data-theme="matrix"] .rounded-lg {
+  border-style: solid;
+  border-color: var(--mx-green-dim);
+}
+
+/* ── Corner bracket decorations (terminal-window style) ── */
+[data-theme="matrix"] main,
+[data-theme="matrix"] dialog,
+[data-theme="matrix"] [role="dialog"] {
+  position: relative;
+}
+[data-theme="matrix"] main::before,
+[data-theme="matrix"] main::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--mx-green);
+  border-style: solid;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.35;
+}
+
+/* ── Green text glow on headings ── */
+[data-theme="matrix"] h1,
+[data-theme="matrix"] h2 {
+  text-shadow: 0 0 8px var(--mx-green-glow);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Muted green-tinted secondary text ── */
+[data-theme="matrix"] label,
+[data-theme="matrix"] .text-zinc-400 {
+  color: #5a8068;
+}
+
+/* ── Section dividers: green accent lines ── */
+[data-theme="matrix"] hr,
+[data-theme="matrix"] .border-b {
+  border-color: var(--mx-green-dim);
+}
+
+/* ── Toggle switches: green accent when active ── */
+[data-theme="matrix"] input[type="checkbox"]:checked {
+  accent-color: var(--mx-green);
+}
+
+/* ── Cards & panels: subtle green border ── */
+[data-theme="matrix"] .bg-zinc-800,
+[data-theme="matrix"] .bg-zinc-900\/50 {
+  border: 1px solid var(--mx-green-dim);
+}
+
+/* ── Input focus: neon border + inner glow ── */
+[data-theme="matrix"] input:focus,
+[data-theme="matrix"] textarea:focus,
+[data-theme="matrix"] select:focus {
+  box-shadow:
+    0 0 8px var(--mx-green-glow),
+    inset 0 0 4px rgba(0, 255, 65, 0.03);
+  border-color: rgba(0, 255, 65, 0.4) !important;
+  outline: none;
+}
+
+/* ── Button hover glow ── */
+[data-theme="matrix"] button:hover {
+  text-shadow: 0 0 6px var(--mx-green-glow);
+}
+
+/* ── Primary buttons: stronger green glow border ── */
+[data-theme="matrix"] button.bg-blue-600,
+[data-theme="matrix"] button.bg-blue-500 {
+  box-shadow:
+    0 0 8px var(--mx-green-glow),
+    inset 0 0 6px rgba(0, 255, 65, 0.08);
+  border: 1px solid rgba(0, 255, 65, 0.35);
+}
+
+/* ── Dark text on green accent backgrounds ── */
+[data-theme="matrix"] .bg-blue-600,
+[data-theme="matrix"] .bg-blue-500,
+[data-theme="matrix"] .bg-blue-400 {
+  color: #030705;
+}
+[data-theme="matrix"] .bg-blue-600 .text-white,
+[data-theme="matrix"] .bg-blue-500 .text-white,
+[data-theme="matrix"] .bg-blue-400 .text-white,
+[data-theme="matrix"] .text-white.bg-blue-600,
+[data-theme="matrix"] .text-white.bg-blue-500,
+[data-theme="matrix"] .text-white.bg-blue-400 {
+  color: #030705;
+}
+[data-theme="matrix"] .from-blue-500 .text-white,
+[data-theme="matrix"] .from-blue-400 .text-white {
+  color: #030705;
+}
+
+/* ── Scan-line overlay (CRT terminal feel) ── */
+[data-theme="matrix"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 65, 0.015) 2px,
+    rgba(0, 255, 65, 0.015) 3px
+  );
+  pointer-events: none;
+  z-index: 10000;
+}
+
+/* ── Scrollbar styling ── */
+[data-theme="matrix"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+[data-theme="matrix"] ::-webkit-scrollbar-track {
+  background: #030705;
+}
+[data-theme="matrix"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 65, 0.2);
+  border: 1px solid rgba(0, 255, 65, 0.1);
+}
+
+/* ── Text selection ── */
+[data-theme="matrix"] ::selection {
+  background: rgba(0, 255, 65, 0.25);
+  color: #d8eed8;
+}
+
+/* ── Subtle CRT vignette effect ── */
+[data-theme="matrix"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 60%,
+    rgba(0, 0, 0, 0.35) 100%
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Cursor blink on focused inputs ── */
+[data-theme="matrix"] textarea,
+[data-theme="matrix"] input[type="text"] {
+  caret-color: var(--mx-green);
+}
+
+/* ── Code blocks: phosphor green on deep black ── */
+[data-theme="matrix"] pre,
+[data-theme="matrix"] code {
+  background: #050a07 !important;
+  border: 1px solid var(--mx-green-dim);
+  color: #84a890;
+}
+
+/* ── Active sidebar nav item: terminal-style highlight ── */
+[data-theme="matrix"] nav a.router-link-active,
+[data-theme="matrix"] nav [data-active="true"] {
+  background: var(--mx-green-subtle);
+  border-left: 2px solid var(--mx-green);
+  box-shadow: inset 4px 0 12px rgba(0, 255, 65, 0.06);
+}
