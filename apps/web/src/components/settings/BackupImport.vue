@@ -23,6 +23,7 @@ const moduleLabels: Record<string, { label: string; icon: string; description: s
   settings: { label: 'Settings', icon: 'lucide:sliders-horizontal', description: 'Tool approvals, cron jobs, and app settings' },
   channels: { label: 'Channels', icon: 'lucide:radio', description: 'Channel configurations (Telegram, etc.)' },
   memory: { label: 'Memory Spaces', icon: 'lucide:book-open', description: 'Memory space definitions, agent assignments, and document content (re-embedded on import)' },
+  entityGraph: { label: 'Entity Graph', icon: 'lucide:network', description: 'Extracted entities and relationships, restored separately from memory spaces' },
   conversations: { label: 'Conversations', icon: 'lucide:message-square', description: 'Chat history and messages linked to agents (only restores for agents present in the DB)' },
   usage: { label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs and step traces used for usage metrics' }
 }
