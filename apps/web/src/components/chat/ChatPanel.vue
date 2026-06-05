@@ -341,6 +341,28 @@ watch(() => chatStore.loadingMessages, (isLoading) => {
   collapseVisibleSubAgentGroups()
 })
 
+// ─── Time-based greeting ────────────────────────────────────
+
+const GREETINGS: Record<string, string[]> = {
+  night:     ['Still up?', 'Burning the midnight oil?', 'Working late?'],
+  morning:   ['Good morning.', 'Morning!', 'What are we building today?'],
+  lunch:     ['Lunchtime.', 'Taking a lunch break?', 'Midday check-in.'],
+  afternoon: ['Good afternoon.', 'Afternoon!', 'What\'s on your mind?'],
+  evening:   ['Good evening.', 'Evening!', 'How can I help?'],
+}
+
+const greeting = computed(() => {
+  const hour = new Date().getHours()
+  const slot =
+    hour < 5  ? 'night'     :
+    hour < 12 ? 'morning'   :
+    hour < 14 ? 'lunch'     :
+    hour < 18 ? 'afternoon' : 'evening'
+  const options = GREETINGS[slot]
+  // Stable within the hour — rotates each new hour
+  return options[hour % options.length]
+})
+
 // Scroll to bottom when mounting into an already-loaded conversation
 // (e.g. navigating here from InstancesView after selectConversation was called)
 onMounted(() => {
@@ -391,7 +413,7 @@ onMounted(() => {
       </template>
       <template v-else>
         <h2 class="text-xl font-semibold text-theme-200 tracking-tight">
-          How can I help you today?
+          {{ greeting }}
         </h2>
         <p class="text-sm mt-2 text-theme-500 max-w-sm text-center">
           Type a message below to begin a new conversation, or choose an agent to assist you.
