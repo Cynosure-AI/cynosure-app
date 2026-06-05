@@ -19,8 +19,10 @@ import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../core/a
 import { existsSync, readFileSync } from 'fs'
 import { extname } from 'path'
 import { materializeFileAttachments, readFileAttachmentText, type FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
+import { buildAttachmentContext, indexConversationAttachment, makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
+const INLINE_ATTACHMENT_TEXT_LIMIT = 24_000 // ~30-40 pages of text, chosen to allow reasonably large files to be inlined while still fitting within typical model context windows when combined with user messages and assistant responses. Attachments larger than this will be indexed for retrieval instead of inlined, and the system prompt will include instructions on how to reference them.
 
 export interface ActiveChatExecution {
   id: string
@@ -209,6 +211,13 @@ function buildHistoryContent(row: ChatHistoryRow): string | ContentPart[] {
   for (const file of fileAttachments) {
     const fileText = readFileAttachmentText(file)
     if (fileText === null) continue
+    if (file.textBytes > INLINE_ATTACHMENT_TEXT_LIMIT && file.chunkCount && file.chunkCount > 0) {
+      parts.push({
+        type: 'text',
+        text: `[Attached file: ${file.name}]\nThis attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}). Use the current attachment context or attachment_search/attachment_retrieve_chunks when details are needed.`
+      })
+      continue
+    }
     parts.push({
       type: 'text',
       text: `[Attached file: ${file.name}]\n${fileText}`
@@ -283,6 +292,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const storedFileAttachments = files?.length
         ? await materializeFileAttachments(files, conversationId)
         : []
+      for (const attachment of storedFileAttachments) {
+        attachment.chunkCount = await indexConversationAttachment(conversationId, attachment)
+      }
 
       // Build content (text + optional images + optional audio + optional files)
       let userContent: string | ContentPart[]
@@ -292,6 +304,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           for (const file of storedFileAttachments) {
             const fileText = readFileAttachmentText(file)
             if (fileText === null) continue
+            if (file.textBytes > INLINE_ATTACHMENT_TEXT_LIMIT && file.chunkCount && file.chunkCount > 0) {
+              parts.push({
+                type: 'text',
+                text: `[Attached file: ${file.name}]\nThis attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}). Relevant excerpts will be provided as context; use attachment_search/attachment_retrieve_chunks for more detail.`
+              })
+              continue
+            }
             parts.push({
               type: 'text',
               text: `[Attached file: ${file.name}]\n${fileText}`
@@ -432,6 +451,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const tools: RegistryAwareToolDefinition[] = plannedTools
       messages = planned.messages
 
+      tools.push(...makeAttachmentTools(conversationId))
+      messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, content, db))
       messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
       const streamId = nanoid()

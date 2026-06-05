@@ -1,6 +1,7 @@
 import { isOrchestrationToolName } from './builtin/orchestration-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from './builtin/expand-available-toolset.js'
 import { isMemoryReadToolName } from './builtin/memory-tools.js'
+import { isAttachmentToolName } from '../artifacts/attachment-rag.js'
 
 /**
  * Tool policy lives here so approval and UI visibility decisions use the same
@@ -17,10 +18,11 @@ export function isSystemAutoApprovedTool(toolName: string): boolean {
     toolName === TOOL_SEARCH_TOOL_NAME ||
     isSubAgentDelegationTool(toolName) ||
     isOrchestrationToolName(toolName) ||
-    isMemoryReadToolName(toolName)
+    isMemoryReadToolName(toolName) ||
+    isAttachmentToolName(toolName)
   )
 }
 
 export function isVisibleExecutionTool(toolName: string): boolean {
-  return !isOrchestrationToolName(toolName)
+  return !isOrchestrationToolName(toolName) && !isAttachmentToolName(toolName)
 }

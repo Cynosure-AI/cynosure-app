@@ -10,11 +10,13 @@ export interface FileAttachmentInput {
 }
 
 export interface FileAttachmentArtifact {
+    id: string
     name: string
     originalPath: string
     textPath: string
     sizeBytes: number
     textBytes: number
+    chunkCount?: number
 }
 
 function getConversationFilesDir(conversationId: string): string {
@@ -45,6 +47,7 @@ export async function materializeFileAttachment(
     conversationId: string,
 ): Promise<FileAttachmentArtifact> {
     const dir = getConversationFilesDir(conversationId)
+    const id = nanoid()
     const filename = safeFilename(file.name)
     const originalPath = join(dir, filename)
     const textPath = join(dir, `${filename}.parsed.md`)
@@ -65,6 +68,7 @@ export async function materializeFileAttachment(
 
     return {
         name: file.name,
+        id,
         originalPath,
         textPath,
         sizeBytes: buffer.byteLength,
