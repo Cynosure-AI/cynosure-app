@@ -2,7 +2,7 @@ import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage } from '
 import type {
   LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryResponse,
   AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus,
-  AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType,
+  AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse,
   MetricsSummary, OrchestrationState,
 } from './types'
 import type { WsHandler } from './http'
@@ -118,7 +118,10 @@ export const api = {
       memoryRouterProviderId?: string,
       memoryRouterModel?: string,
       compactProviderId?: string,
-      compactModel?: string
+      compactModel?: string,
+      enableEntityGraph?: boolean,
+      entityGraphProviderId?: string,
+      entityGraphModel?: string
     ) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, {
         content,
@@ -145,7 +148,10 @@ export const api = {
         compactProviderId: compactProviderId || undefined,
         compactModel: compactModel || undefined,
         titleProviderId: titleProviderId || undefined,
-        titleModel: titleModel || undefined
+        titleModel: titleModel || undefined,
+        enableEntityGraph,
+        entityGraphProviderId: entityGraphProviderId || undefined,
+        entityGraphModel: entityGraphModel || undefined
       }),
     truncateFrom: (conversationId: string, messageId: string) =>
       post<{ success: boolean; deleted: number }>(
@@ -306,6 +312,23 @@ export const api = {
       get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
     configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>
       post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/configure', opts),
+    getGraph: (query?: string, limit?: number) => {
+      const params = new URLSearchParams()
+      if (query) params.set('query', query)
+      if (limit) params.set('limit', String(limit))
+      const qs = params.toString()
+      return get<EntityGraphResponse>(`/api/memory/graph${qs ? `?${qs}` : ''}`)
+    },
+    updateGraphNode: (id: string, data: { name?: string; type?: EntityGraphResponse['nodes'][number]['type']; aliases?: string[] }) =>
+      patch<EntityGraphResponse['nodes'][number]>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`, data),
+    deleteGraphNode: (id: string) =>
+      del<{ success: boolean }>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`),
+    updateGraphEdge: (id: string, data: { relation?: string; evidence?: string; confidence?: number }) =>
+      patch<EntityGraphResponse['edges'][number]>(`/api/memory/graph/edges/${encodeURIComponent(id)}`, data),
+    deleteGraphEdge: (id: string) =>
+      del<{ success: boolean }>(`/api/memory/graph/edges/${encodeURIComponent(id)}`),
+    clearGraph: () =>
+      del<{ success: boolean; nodesDeleted: number; edgesDeleted: number }>('/api/memory/graph'),
     onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>
       onWsEvent('memory:reembed-progress', cb as WsHandler)
   },

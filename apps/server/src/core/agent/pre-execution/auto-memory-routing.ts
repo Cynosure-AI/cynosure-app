@@ -52,9 +52,14 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             permanentTopK: AUTO_MEMORY_RETRIEVAL_COUNT,
         })
 
-        if (!candidates.permanent.length) {
+        if (!candidates.permanent.length && !candidates.graph?.edges.length) {
             emitMemoryRoutingSelection(conversationId, taskId, [])
             return null
+        }
+
+        if (!candidates.permanent.length && candidates.graph?.edges.length) {
+            emitMemoryRoutingSelection(conversationId, taskId, [])
+            return aggregator.format({ permanent: [], graph: candidates.graph }) || null
         }
 
         let selectedIds: Set<string>
@@ -73,6 +78,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             permanent: candidates.permanent
                 .filter((chunk) => selectedIds.has(chunk.id))
                 .slice(0, MAX_SELECTED_MEMORIES),
+            graph: candidates.graph,
         }
 
         emitMemoryRoutingSelection(conversationId, taskId, selectedMemory.permanent)

@@ -2,9 +2,11 @@ import { getAgentMemory } from './agent-memory.js'
 import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces, getAssignedOrDefaultSpaces } from './memory-space-scope.js'
 import type { RetrievedChunk } from './parser.js'
+import { getEntityGraphStore, type GraphWalkResult } from './entity-graph.js'
 
 export interface AggregatedMemory {
   permanent: RetrievedChunk[]
+  graph?: GraphWalkResult
 }
 
 /**
@@ -53,7 +55,7 @@ export class MemoryAggregator {
     }
 
     if (Array.isArray(opts?.spaceIds) && scopedSpaces.length === 0) {
-      return { permanent: [] }
+      return { permanent: [], graph: undefined }
     }
 
     if (scopedSpaces.length > 0) {
@@ -112,7 +114,11 @@ export class MemoryAggregator {
       }
     }
 
-    return { permanent: dedupedPermanent }
+    const graph = getEntityGraphStore()
+    const seedNodes = graph.findSeedNodes(query, dedupedPermanent.map((chunk) => chunk.text), 8)
+    const graphWalk = seedNodes.length > 0 ? graph.walk(seedNodes.map((node) => node.id), 2, 32) : undefined
+
+    return { permanent: dedupedPermanent, graph: graphWalk }
   }
 
   /**
@@ -145,6 +151,10 @@ export class MemoryAggregator {
           return `- ${parts.join(' ')}`
         }).join('\n')
       )
+    }
+
+    if (memory.graph && memory.graph.edges.length > 0) {
+      sections.push(getEntityGraphStore().formatWalk(memory.graph))
     }
 
     return sections.join('\n\n')
