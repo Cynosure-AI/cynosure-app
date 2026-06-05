@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { Icon } from "@iconify/vue";
 import type { EntityGraphEdge, EntityGraphResponse } from "../../api/types";
+import DataTable, { type Column } from "../shared/DataTable.vue";
 
 defineProps<{
   graph: EntityGraphResponse | null;
@@ -14,7 +16,18 @@ const emit = defineEmits<{
   "clear-walk": [];
   "edit-edge": [edge: EntityGraphEdge];
   "delete-edge": [edge: EntityGraphEdge];
+  "delete-edges": [ids: string[]];
 }>();
+
+const selectedIds = ref<string[]>([]);
+
+const columns: Column<EntityGraphEdge>[] = [
+  { key: "fromName", label: "From", width: "minmax(0, 1.5fr)", sortable: true },
+  { key: "relation", label: "Relation", width: "minmax(0, 1.5fr)", sortable: true, sortValue: (e) => e.relation },
+  { key: "toName", label: "To", width: "minmax(0, 1.5fr)", sortable: true },
+  { key: "lastSeenAt", label: "Last Seen", width: "140px", sortable: true },
+  { key: "actions", label: "", width: "80px" },
+];
 
 function formatRelation(relation: string): string {
   return relation.replace(/_/g, " ");
@@ -28,6 +41,11 @@ function formatDate(ts: number): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(ts));
+}
+
+function handleBulkDelete() {
+  emit("delete-edges", [...selectedIds.value]);
+  selectedIds.value = [];
 }
 </script>
 
@@ -132,39 +150,65 @@ function formatDate(ts: number): string {
         </span>
       </div>
 
+      <!-- Bulk action bar -->
       <div
-        v-if="graph.edges.length === 0"
-        class="py-12 text-center text-sm text-theme-500"
+        v-if="selectedIds.length"
+        class="mb-3 flex items-center gap-3 rounded-lg border border-theme-700 bg-theme-900 px-4 py-2.5"
       >
-        No relationships have been extracted yet.
+        <span class="text-sm text-theme-300">{{ selectedIds.length }} selected</span>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-md bg-red-600/20 px-3 py-1 text-xs text-red-400 hover:bg-red-600/30 transition-colors"
+          @click="handleBulkDelete"
+        >
+          <Icon
+            icon="lucide:trash-2"
+            class="w-3.5 h-3.5"
+          />
+          Delete selected
+        </button>
+        <button
+          type="button"
+          class="text-xs text-theme-500 hover:text-theme-300 transition-colors"
+          @click="selectedIds = []"
+        >
+          Clear selection
+        </button>
       </div>
 
-      <div
-        v-else
-        class="divide-y divide-theme-900/80 rounded-lg border border-theme-800 overflow-hidden"
+      <DataTable
+        v-model:selected-ids="selectedIds"
+        :items="graph.edges"
+        :columns="columns"
+        :selectable="true"
+        empty-message="No relationships have been extracted yet."
       >
-        <div
-          v-for="edge in graph.edges"
-          :key="edge.id"
-          class="px-4 py-3 bg-theme-950/35"
-        >
-          <div class="flex flex-wrap items-center gap-2 text-sm">
-            <span class="font-medium text-theme-100">{{ edge.fromName }}</span>
-            <Icon
-              icon="lucide:arrow-right"
-              class="w-3.5 h-3.5 text-theme-500"
-            />
-            <span class="rounded-md bg-theme-800 px-2 py-0.5 text-xs text-theme-300">{{ formatRelation(edge.relation) }}</span>
-            <Icon
-              icon="lucide:arrow-right"
-              class="w-3.5 h-3.5 text-theme-500"
-            />
-            <span class="font-medium text-theme-100">{{ edge.toName }}</span>
-            <span class="ml-auto text-xs text-theme-600">{{ formatDate(edge.lastSeenAt) }}</span>
+        <template #col-fromName="{ item }">
+          <span class="font-medium text-theme-100">{{ item.fromName }}</span>
+        </template>
+
+        <template #col-relation="{ item }">
+          <span class="rounded-md bg-theme-800 px-2 py-0.5 text-xs text-theme-300">{{ formatRelation(item.relation) }}</span>
+        </template>
+
+        <template #col-toName="{ item }">
+          <span class="font-medium text-theme-100">{{ item.toName }}</span>
+        </template>
+
+        <template #col-lastSeenAt="{ item }">
+          <span class="text-xs text-theme-500">{{ formatDate(item.lastSeenAt) }}</span>
+        </template>
+
+        <template #col-actions="{ item }">
+          <div
+            class="flex items-center gap-1"
+            @click.stop
+          >
             <button
+              type="button"
               class="p-1 text-theme-600 hover:text-theme-200 transition-colors"
               title="Edit relationship"
-              @click="emit('edit-edge', edge)"
+              @click="emit('edit-edge', item)"
             >
               <Icon
                 icon="lucide:pencil"
@@ -172,9 +216,10 @@ function formatDate(ts: number): string {
               />
             </button>
             <button
+              type="button"
               class="p-1 text-theme-600 hover:text-red-400 transition-colors"
               title="Delete relationship"
-              @click="emit('delete-edge', edge)"
+              @click="emit('delete-edge', item)"
             >
               <Icon
                 icon="lucide:trash-2"
@@ -182,14 +227,17 @@ function formatDate(ts: number): string {
               />
             </button>
           </div>
+        </template>
+
+        <template #row-expand="{ item }">
           <div
-            v-if="edge.evidence"
-            class="mt-2 text-xs text-theme-500 leading-relaxed"
+            v-if="item.evidence"
+            class="pl-19 pr-5 pb-3 text-xs text-theme-500 leading-relaxed"
           >
-            {{ edge.evidence }}
+            {{ item.evidence }}
           </div>
-        </div>
-      </div>
+        </template>
+      </DataTable>
     </template>
   </div>
 </template>

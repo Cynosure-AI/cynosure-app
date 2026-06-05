@@ -424,6 +424,11 @@ async function deleteEdge(edge: EntityGraphEdge) {
   await loadGraph();
 }
 
+async function deleteEdges(ids: string[]) {
+  await Promise.all(ids.map(id => api.memory.deleteGraphEdge(id)));
+  await loadGraph();
+}
+
 onMounted(() => loadSpaces());
 </script>
 
@@ -527,6 +532,7 @@ onMounted(() => loadSpaces());
           @clear-walk="clearGraphWalk"
           @edit-edge="openEditEdge"
           @delete-edge="confirmDeleteEdge"
+          @delete-edges="deleteEdges"
         />
 
         <MemoryVisualGraphSection
