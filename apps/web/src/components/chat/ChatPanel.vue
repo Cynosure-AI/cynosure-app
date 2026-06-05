@@ -393,10 +393,10 @@ onMounted(() => {
       v-else-if="chatStore.messages.length === 0"
       class="flex flex-col items-center justify-center h-full text-theme-400"
     >
-      <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-indigo-500/10 to-purple-500/10 rounded-3xl border border-white/5 shadow-xl">
+      <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl">
         <Icon
           icon="lucide:bot-message-square"
-          class="w-10 h-10 text-indigo-400"
+          class="w-10 h-10 text-accent-400"
         />
       </div>
       <template v-if="!wsConnected">
@@ -404,7 +404,7 @@ onMounted(() => {
           icon="lucide:loader-2"
           class="w-8 h-8 text-theme-500 animate-spin mb-4"
         />
-        <h2 class="text-xl font-semibold text-theme-200 tracking-tight">
+        <h2 class="text-3xl font-semibold text-theme-200 tracking-tight">
           Initializing…
         </h2>
         <p class="text-sm mt-2 text-theme-500 max-w-sm text-center">
@@ -412,7 +412,7 @@ onMounted(() => {
         </p>
       </template>
       <template v-else>
-        <h2 class="text-xl font-semibold text-theme-200 tracking-tight">
+        <h2 class="text-3xl font-semibold text-theme-200 tracking-tight">
           {{ greeting }}
         </h2>
         <p class="text-sm mt-2 text-theme-500 max-w-sm text-center">
