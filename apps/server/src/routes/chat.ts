@@ -13,12 +13,20 @@ import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions, extractEntityGraph } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
 import type { ChatMessage, ContentPart, RegistryAwareToolDefinition } from '../core/gateway/providers/base.provider.js'
-import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
+import { existsSync, readFileSync } from 'fs'
+import { extname } from 'path'
+import { materializeFileAttachments, readFileAttachmentText, type FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
+import { buildAttachmentContext, indexConversationAttachment, listConversationFileAttachmentsByMessage, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
+// Attachments larger than this are represented by retrieved excerpts plus
+// attachment_search/attachment_retrieve_chunks instead of full inline text.
+const DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT = 24_000
+const MIN_INLINE_ATTACHMENT_TEXT_LIMIT = 2_000
+const MAX_INLINE_ATTACHMENT_TEXT_LIMIT = 500_000
 
 export interface ActiveChatExecution {
   id: string
@@ -33,12 +41,14 @@ const activeChatExecutions = new Map<string, ActiveChatExecution>()
 const activeAbortControllers = new Map<string, AbortController>()
 
 interface ChatHistoryRow {
+  id: string
   role: string
   content: string
   tool_calls_json: string | null
   tool_call_id: string | null
   agent_id: string | null
   image_urls_json: string | null
+  audio_urls_json: string | null
   created_at: number
 }
 
@@ -150,8 +160,122 @@ function appendHiddenSystemContext(messages: ChatMessage[], hint: string | null)
   })
 }
 
+function imageMimeFromPath(filePath: string): string {
+  switch (extname(filePath).toLowerCase()) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg'
+    case '.gif':
+      return 'image/gif'
+    case '.webp':
+      return 'image/webp'
+    case '.bmp':
+      return 'image/bmp'
+    case '.svg':
+      return 'image/svg+xml'
+    default:
+      return 'image/png'
+  }
+}
+
+function localFileUrlToDataUrl(url: string): string {
+  const filePath = extractFilePathFromFileUrl(url)
+  if (!filePath || !existsSync(filePath)) return url
+  try {
+    const data = readFileSync(filePath).toString('base64')
+    return `data:${imageMimeFromPath(filePath)};base64,${data}`
+  } catch {
+    return url
+  }
+}
+
+function parseJsonArray<T>(json: string | null): T[] {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function normalizeInlineAttachmentTextLimit(value: unknown): number {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numeric)) return DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT
+  return Math.max(MIN_INLINE_ATTACHMENT_TEXT_LIMIT, Math.min(MAX_INLINE_ATTACHMENT_TEXT_LIMIT, Math.floor(numeric)))
+}
+
+function getChatAttachmentConfig(db = getDb()): { inlineAttachmentTextLimit: number } {
+  const row = db.prepare("SELECT value_json FROM settings WHERE key = 'chatAttachments'").get() as { value_json: string } | undefined
+  if (!row) return { inlineAttachmentTextLimit: DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT }
+  try {
+    const parsed = JSON.parse(row.value_json) as { inlineAttachmentTextLimit?: unknown }
+    return { inlineAttachmentTextLimit: normalizeInlineAttachmentTextLimit(parsed.inlineAttachmentTextLimit) }
+  } catch {
+    return { inlineAttachmentTextLimit: DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT }
+  }
+}
+
+function buildHistoryContent(
+  row: ChatHistoryRow,
+  inlineAttachmentTextLimit: number,
+  fileAttachments: FileAttachmentArtifact[],
+): string | ContentPart[] {
+  if (row.role !== 'user') return row.content
+
+  const imageUrls = parseJsonArray<string>(row.image_urls_json).filter((url) => typeof url === 'string')
+  const audioUrls = parseJsonArray<string>(row.audio_urls_json).filter((url) => typeof url === 'string')
+
+  if (!fileAttachments.length && !imageUrls.length && !audioUrls.length) {
+    return row.content
+  }
+
+  const parts: ContentPart[] = [{ type: 'text', text: row.content }]
+  for (const file of fileAttachments) {
+    if (file.textBytes > inlineAttachmentTextLimit && file.chunkCount && file.chunkCount > 0) {
+      parts.push({
+        type: 'text',
+        text: `[Attached file: ${file.name}]\nThis attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}). Use the current attachment context or attachment_search/attachment_retrieve_chunks when details are needed.`
+      })
+      continue
+    }
+    const fileText = readFileAttachmentText(file)
+    if (fileText === null) continue
+    parts.push({
+      type: 'text',
+      text: `[Attached file: ${file.name}]\n${fileText}`
+    })
+  }
+  for (const url of imageUrls) {
+    parts.push({ type: 'image_url', image_url: { url: localFileUrlToDataUrl(url) } })
+  }
+  for (const url of audioUrls) {
+    parts.push({ type: 'audio_url', audio_url: { url } })
+  }
+  return parts
+}
+
 export async function registerChatRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   const gateway = getGateway()
+
+  // GET /api/chat/attachment-config — get attachment context settings
+  app.get('/attachment-config', async () => {
+    return getChatAttachmentConfig()
+  })
+
+  // POST /api/chat/attachment-config — update attachment context settings
+  app.post<{ Body: { inlineAttachmentTextLimit: number } }>('/attachment-config', async (req, reply) => {
+    const rawLimit = req.body.inlineAttachmentTextLimit
+    if (!Number.isFinite(Number(rawLimit))) {
+      return reply.status(400).send({ error: 'inlineAttachmentTextLimit must be a number' })
+    }
+    const inlineAttachmentTextLimit = normalizeInlineAttachmentTextLimit(rawLimit)
+    const db = getDb()
+    db.prepare(
+      "INSERT OR REPLACE INTO settings (key, value_json) VALUES ('chatAttachments', ?)"
+    ).run(JSON.stringify({ inlineAttachmentTextLimit }))
+    return { success: true, inlineAttachmentTextLimit }
+  })
 
   // POST /api/chat/conversations/:id/send — send message + stream response
   app.post<{
@@ -186,6 +310,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       compactModel?: string
       titleProviderId?: string
       titleModel?: string
+      inlineAttachmentTextLimit?: number
       enableEntityGraph?: boolean
       entityGraphProviderId?: string
       entityGraphModel?: string
@@ -193,8 +318,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, skillRouterProviderId: reqSkillRouterProviderId, skillRouterModel: reqSkillRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, enableEntityGraph: enableEntityGraphPref, entityGraphProviderId: entityGraphProviderIdPref, entityGraphModel: entityGraphModelPref } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, skillRouterProviderId: reqSkillRouterProviderId, skillRouterModel: reqSkillRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, inlineAttachmentTextLimit: reqInlineAttachmentTextLimit, enableEntityGraph: enableEntityGraphPref, entityGraphProviderId: entityGraphProviderIdPref, entityGraphModel: entityGraphModelPref } = req.body
       const db = getDb()
+      const inlineAttachmentTextLimit = reqInlineAttachmentTextLimit !== undefined
+        ? normalizeInlineAttachmentTextLimit(reqInlineAttachmentTextLimit)
+        : getChatAttachmentConfig(db).inlineAttachmentTextLimit
       const toolRegistry = getToolRegistry()
       const selectedToolKeys = Array.isArray(allowedTools)
         ? Array.from(new Set(allowedTools)).filter((name) => toolRegistry.hasKey(name))
@@ -214,25 +342,28 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
       }
 
+      const storedFileAttachments = files?.length
+        ? await materializeFileAttachments(files, conversationId)
+        : []
+      for (const attachment of storedFileAttachments) {
+        attachment.chunkCount = await indexConversationAttachment(conversationId, attachment)
+      }
+
       // Build content (text + optional images + optional audio + optional files)
       let userContent: string | ContentPart[]
       if (imageDataUrls?.length || audioDataUrls?.length || files?.length) {
         const parts: ContentPart[] = [{ type: 'text', text: content }]
-        if (files?.length) {
-          for (const file of files) {
-            let fileText = file.content
-            // Parse office documents (docx, pdf, xlsx, etc.) from base64 data URLs
-            if (isParseableDocument(file.name) && file.content.startsWith('data:')) {
-              try {
-                const base64 = file.content.split(',')[1]
-                if (base64) {
-                  const buf = Buffer.from(base64, 'base64')
-                  fileText = await parseDocument(buf, file.name)
-                }
-              } catch (err) {
-                fileText = `[Error parsing ${file.name}: ${err instanceof Error ? err.message : 'unknown error'}]`
-              }
+        if (storedFileAttachments.length) {
+          for (const file of storedFileAttachments) {
+            if (file.textBytes > inlineAttachmentTextLimit && file.chunkCount && file.chunkCount > 0) {
+              parts.push({
+                type: 'text',
+                text: `[Attached file: ${file.name}]\nThis attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}). Relevant excerpts will be provided as context; use attachment_search/attachment_retrieve_chunks for more detail.`
+              })
+              continue
             }
+            const fileText = readFileAttachmentText(file)
+            if (fileText === null) continue
             parts.push({
               type: 'text',
               text: `[Attached file: ${file.name}]\n${fileText}`
@@ -260,17 +391,19 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const userMsgId = (providedMsgId && idPattern.test(providedMsgId)) ? providedMsgId : nanoid()
       const now = Date.now()
       db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, file_attachments_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(userMsgId, conversationId, 'user', content, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, files?.length ? JSON.stringify(files.map(f => ({ name: f.name }))) : null, now)
+        `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run(userMsgId, conversationId, 'user', content, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, now)
+      persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
       // Build message history
       const historyRows = db
         .prepare(
-          'SELECT role, content, tool_calls_json, tool_call_id, agent_id, image_urls_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
+          'SELECT id, role, content, tool_calls_json, tool_call_id, agent_id, image_urls_json, audio_urls_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
         )
         .all(conversationId) as ChatHistoryRow[]
+      const attachmentsByMessage = listConversationFileAttachmentsByMessage(db, conversationId)
 
       // Filter out sub-agent intermediate messages.
       // Keep: user messages, main-agent assistant messages + their tool results.
@@ -304,7 +437,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       let messages: ChatMessage[] = filteredRows.map((row) => ({
         role: row.role as ChatMessage['role'],
-        content: row.content,
+        content: buildHistoryContent(row, inlineAttachmentTextLimit, attachmentsByMessage.get(row.id) || []),
         toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
         toolCallId: row.tool_call_id || undefined
       }))
@@ -380,6 +513,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const tools: RegistryAwareToolDefinition[] = plannedTools
       messages = planned.messages
 
+      tools.push(...makeAttachmentTools(conversationId))
+      messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, content, db))
       messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
       const streamId = nanoid()

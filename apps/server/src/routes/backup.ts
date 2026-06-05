@@ -25,6 +25,8 @@ import { ensureFolder, listFilesInFolder } from '../core/memory/memory-file-mana
 import { stopAllMemorySpaceWatchers, watchMemorySpace } from '../core/memory/memory-space-watcher.js'
 import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { listSkillMarkdownFiles, restoreSkillMarkdownFile } from '../core/skills/skill-store.js'
+import { indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
+import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
 
 interface ManifestModule {
     count: number
@@ -135,7 +137,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             if (requested.includes('agents')) {
                 const db = getDb()
                 const agentRows = db.prepare(
-                     `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
+                    `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
                      category, sub_agents_json, skills_json, auto_approve_tools, override_sub_agents, thinking_enabled,
                      max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                      auto_memory, memory_router_provider_id, memory_router_model,
@@ -245,10 +247,12 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 const db = getDb()
                 const conversations = db.prepare('SELECT * FROM conversations ORDER BY created_at').all()
                 const messages = db.prepare('SELECT * FROM messages ORDER BY created_at').all()
+                const messageAttachments = db.prepare('SELECT * FROM message_attachments ORDER BY created_at').all()
                 const tasks = db.prepare('SELECT * FROM tasks ORDER BY created_at').all()
 
                 archive.append(JSON.stringify(conversations, null, 2), { name: 'conversations/conversations.json' })
                 archive.append(JSON.stringify(messages, null, 2), { name: 'conversations/messages.json' })
+                archive.append(JSON.stringify(messageAttachments, null, 2), { name: 'conversations/message_attachments.json' })
                 archive.append(JSON.stringify(tasks, null, 2), { name: 'conversations/tasks.json' })
 
                 // Export artifact files for each conversation
@@ -362,7 +366,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                             }
 
                             db.prepare(
-                                 `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json,
+                                `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json,
                                    skills_json, icon_url, codename, category, sub_agents_json, auto_approve_tools, override_sub_agents,
                                  thinking_enabled, max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                                  auto_memory, memory_router_provider_id, memory_router_model,
@@ -791,6 +795,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 }
 
                 // Messages (only for imported conversations)
+                const importedMessageIds = new Set<string>()
                 const msgEntry = zip.getEntry('conversations/messages.json')
                 if (msgEntry) {
                     const messages = JSON.parse(msgEntry.getData().toString('utf-8')) as Record<string, unknown>[]
@@ -798,19 +803,52 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                         if (!importedConversationIds.has(m.conversation_id as string)) continue
                         try {
                             db.prepare(
-                                `INSERT OR REPLACE INTO messages (id, conversation_id, role, content, tool_calls_json, tool_call_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, agent_id, created_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                `INSERT OR REPLACE INTO messages (
+                                    id, conversation_id, role, content, tool_calls_json, tool_call_id,
+                                    provider, model, prompt_tokens, completion_tokens, context_tokens,
+                                    latency_ms, image_urls_json, agent_id, memory_sources_json, thinking,
+                                    audio_urls_json, created_at
+                                 )
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 m.id, m.conversation_id, m.role, m.content,
                                 m.tool_calls_json || null, m.tool_call_id || null,
                                 m.provider || null, m.model || null,
                                 m.prompt_tokens ?? null, m.completion_tokens ?? null,
                                 m.context_tokens ?? null,
-                                m.latency_ms ?? null, m.agent_id || null,
+                                m.latency_ms ?? null, m.image_urls_json || null, m.agent_id || null,
+                                m.memory_sources_json || null, m.thinking || null,
+                                m.audio_urls_json || null,
                                 m.created_at || Date.now()
                             )
+                            importedMessageIds.add(m.id as string)
                         } catch (e) {
                             res.errors.push(`Message: ${(e as Error).message}`)
+                        }
+                    }
+                }
+
+                // Message attachments (only for imported messages)
+                const attachmentsEntry = zip.getEntry('conversations/message_attachments.json')
+                if (attachmentsEntry) {
+                    const attachments = JSON.parse(attachmentsEntry.getData().toString('utf-8')) as Record<string, unknown>[]
+                    for (const a of attachments) {
+                        if (!importedMessageIds.has(a.message_id as string)) continue
+                        try {
+                            db.prepare(
+                                `INSERT OR REPLACE INTO message_attachments (
+                                    id, message_id, conversation_id, kind, name, original_path, text_path,
+                                    size_bytes, text_bytes, chunk_count, metadata_json, created_at
+                                 )
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                            ).run(
+                                a.id, a.message_id, a.conversation_id, a.kind || 'file', a.name || '',
+                                a.original_path || null, a.text_path || null,
+                                a.size_bytes ?? null, a.text_bytes ?? null, a.chunk_count ?? null,
+                                a.metadata_json || null, a.created_at || Date.now()
+                            )
+                        } catch (e) {
+                            res.errors.push(`Message attachment: ${(e as Error).message}`)
                         }
                     }
                 }
@@ -870,6 +908,50 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                     }
                 } catch (e) {
                     res.errors.push(`Artifact restoration: ${(e as Error).message}`)
+                }
+
+                // Re-home restored attachment artifact paths and rebuild conversation-scoped vectors.
+                try {
+                    const appDataDir = getAppDataDir()
+                    const artifactsBaseDir = join(appDataDir, 'artifacts', 'conversations')
+                    const rows = db.prepare(`
+                        SELECT id, conversation_id, name, original_path, text_path, size_bytes, text_bytes, chunk_count
+                        FROM message_attachments
+                        WHERE conversation_id IN (${Array.from(importedConversationIds).map(() => '?').join(',') || "''"})
+                          AND kind = 'file'
+                    `).all(...Array.from(importedConversationIds)) as {
+                        id: string
+                        conversation_id: string
+                        name: string
+                        original_path: string | null
+                        text_path: string | null
+                        size_bytes: number | null
+                        text_bytes: number | null
+                        chunk_count: number | null
+                    }[]
+
+                    for (const row of rows) {
+                        if (!row.original_path || !row.text_path) continue
+                        const originalPath = join(artifactsBaseDir, row.conversation_id, 'files', basename(row.original_path))
+                        const textPath = join(artifactsBaseDir, row.conversation_id, 'files', basename(row.text_path))
+                        const attachment: FileAttachmentArtifact = {
+                            id: row.id,
+                            name: row.name,
+                            originalPath,
+                            textPath,
+                            sizeBytes: row.size_bytes ?? 0,
+                            textBytes: row.text_bytes ?? 0,
+                            chunkCount: row.chunk_count ?? undefined,
+                        }
+                        const chunkCount = await indexConversationAttachment(row.conversation_id, attachment)
+                        db.prepare(`
+                            UPDATE message_attachments
+                            SET original_path = ?, text_path = ?, chunk_count = ?, metadata_json = ?
+                            WHERE id = ?
+                        `).run(originalPath, textPath, chunkCount, JSON.stringify({ ...attachment, chunkCount }), row.id)
+                    }
+                } catch (e) {
+                    res.errors.push(`Attachment reindex: ${(e as Error).message}`)
                 }
             } catch (e) {
                 res.errors.push((e as Error).message)

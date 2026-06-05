@@ -89,12 +89,28 @@ function createTables(db: Database.Database): void {
       memory_sources_json TEXT,
       thinking TEXT,
       audio_urls_json TEXT,
-      file_attachments_json TEXT,
       context_tokens INTEGER,
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
+
+    CREATE TABLE IF NOT EXISTS message_attachments (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      original_path TEXT,
+      text_path TEXT,
+      size_bytes INTEGER,
+      text_bytes INTEGER,
+      chunk_count INTEGER,
+      metadata_json TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_message_attachments_message ON message_attachments(message_id);
+    CREATE INDEX IF NOT EXISTS idx_message_attachments_conversation ON message_attachments(conversation_id);
 
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
