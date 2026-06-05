@@ -54,6 +54,7 @@ function toggleAuto(value: boolean): void {
       <Icon
         icon="lucide:book-open-check"
         class="h-5 w-5"
+        :class="selectedSkills.length > 0 || chatStore.sessionAutoSkillRouting ? 'text-emerald-600' : ''"
       />
       <span
         class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none"
