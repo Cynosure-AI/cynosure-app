@@ -378,6 +378,26 @@ const settingsItems: NavItem[] = [
         :disabled="!sidebarCollapsed"
       >
         <RouterLink
+          to="/skills"
+          class="nav-item"
+          :class="{ active: isActive('/skills') }"
+        >
+          <Icon
+            icon="lucide:book-open-check"
+            class="w-4.5 h-4.5"
+          />
+          <span>Skills</span>
+        </RouterLink>
+        <template #content>
+          Skills
+        </template>
+      </HoverTooltip>
+      <HoverTooltip
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
+      >
+        <RouterLink
           to="/memory-spaces"
           class="nav-item"
           :class="{ active: isActive('/memory-spaces') }"

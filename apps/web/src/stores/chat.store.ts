@@ -232,6 +232,7 @@ export const useChatStore = defineStore('chat', () => {
         const hasMemorySpaceSnapshot = Object.prototype.hasOwnProperty.call(cfg, 'memorySpaceIds')
         agentConfig.freeChatMemorySpaceIds.value = Array.isArray(cfg.memorySpaceIds) ? [...cfg.memorySpaceIds] : []
         agentConfig.freeChatMemorySelectionInitialized.value = hasMemorySpaceSnapshot
+        agentConfig.freeChatSkillIds.value = cfg.selectedSkillIds?.length ? [...cfg.selectedSkillIds] : []
         agentConfig.sessionSystemPrompt.value = cfg.systemPrompt ?? ''
         agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled ?? true
         agentConfig.sessionModelOverride.value = cfg.model || null
@@ -239,6 +240,7 @@ export const useChatStore = defineStore('chat', () => {
         agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.overrideSubAgents === true)
         agentConfig.sessionAutoToolRouting.value = cfg.autoToolRouting ?? !agentConfig.activeAgentId.value
         agentConfig.sessionAutoMemory.value = cfg.autoMemory ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoMemory === true)
+        agentConfig.sessionAutoSkillRouting.value = cfg.autoSkillRouting ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoSkillRouting !== false)
       } else {
         agentConfig.syncAgentBaseline()
       }
@@ -507,13 +509,16 @@ export const useChatStore = defineStore('chat', () => {
     sessionThinkingEnabled: agentConfig.sessionThinkingEnabled,
     sessionAutoToolRouting: agentConfig.sessionAutoToolRouting,
     sessionAutoMemory: agentConfig.sessionAutoMemory,
+    sessionAutoSkillRouting: agentConfig.sessionAutoSkillRouting,
     agentOriginalSystemPrompt: agentConfig.agentOriginalSystemPrompt,
     freeChatSubAgentIds: agentConfig.freeChatSubAgentIds,
     freeChatMemorySpaceIds: agentConfig.freeChatMemorySpaceIds,
     freeChatMemorySelectionInitialized: agentConfig.freeChatMemorySelectionInitialized,
+    freeChatSkillIds: agentConfig.freeChatSkillIds,
     agentOriginalTools: agentConfig.agentOriginalTools,
     agentOriginalSubAgentIds: agentConfig.agentOriginalSubAgentIds,
     agentOriginalMemorySpaceIds: agentConfig.agentOriginalMemorySpaceIds,
+    agentOriginalSkillIds: agentConfig.agentOriginalSkillIds,
     hasAgentOverrides: agentConfig.hasAgentOverrides,
     markOverridesModified: agentConfig.markOverridesModified,
     resetAgentOverrides: agentConfig.resetAgentOverrides,

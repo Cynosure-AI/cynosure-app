@@ -44,6 +44,21 @@ const memoryRouterLeadingSelections = [
   },
 ];
 
+const skillRouterLeadingSelections = [
+  {
+    providerId: "",
+    model: "",
+    label: "Use global router model",
+    iconName: "lucide:settings",
+  },
+  {
+    providerId: AGENT_ROUTER_PROVIDER,
+    model: AGENT_ROUTER_MODEL,
+    label: "Use agent model",
+    iconName: "lucide:bot",
+  },
+];
+
 onMounted(() => {
   if (providerStore.providers.length === 0) {
     providerStore.loadProviders();
@@ -64,6 +79,14 @@ function onMemoryRouterSelection(selection: {
 }): void {
   emit("update", "memoryRouterProviderId", selection.providerId);
   emit("update", "memoryRouterModel", selection.model);
+}
+
+function onSkillRouterSelection(selection: {
+  providerId: string;
+  model: string;
+}): void {
+  emit("update", "skillRouterProviderId", selection.providerId);
+  emit("update", "skillRouterModel", selection.model);
 }
 
 // ── Max Context Tokens local state ──
@@ -198,6 +221,36 @@ function onMaxCtxBlur() {
             />
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Skill Routing -->
+    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+      <div class="flex items-center gap-2 mb-1">
+        <Icon
+          icon="lucide:sparkles"
+          class="w-4 h-4 text-accent-400"
+        />
+        <h3 class="text-sm font-medium text-theme-200">
+          Skill Router Model
+        </h3>
+      </div>
+      <p class="text-xs text-theme-500 leading-relaxed">
+        Override the provider and model this agent uses when auto skill
+        routing is enabled. Leave blank to use the global skill router settings
+        from Preferences.
+      </p>
+
+      <div class="mt-4">
+        <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
+        <ProviderModelSelect
+          :provider-id="agent.skillRouterProviderId || ''"
+          :model-value="agent.skillRouterModel || ''"
+          :providers="providerStore.providers"
+          :leading-selections="skillRouterLeadingSelections"
+          placeholder="Use global router model"
+          @change="onSkillRouterSelection"
+        />
       </div>
     </div>
 

@@ -28,8 +28,12 @@ export interface ExecutionRequest {
         autoMemory?: boolean
         memoryRouterProviderId?: string
         memoryRouterModel?: string
+        skillRouterProviderId?: string
+        skillRouterModel?: string
         selectedToolKeys?: string[]
         hasExplicitToolAllowlist?: boolean
+        selectedSkillIds?: string[]
+        autoSkillRouting?: boolean
     }
 }
 
@@ -55,8 +59,12 @@ export interface ExecutionPlanInput {
     autoMemory?: boolean
     memoryRouterProviderId?: string
     memoryRouterModel?: string
+    skillRouterProviderId?: string
+    skillRouterModel?: string
     selectedToolKeys?: string[]
     hasExplicitToolAllowlist?: boolean
+    selectedSkillIds?: string[]
+    autoSkillRouting?: boolean
 }
 
 export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanInput {
@@ -83,7 +91,11 @@ export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanIn
         autoMemory: run.autoMemory,
         memoryRouterProviderId: run.memoryRouterProviderId,
         memoryRouterModel: run.memoryRouterModel,
+        skillRouterProviderId: run.skillRouterProviderId,
+        skillRouterModel: run.skillRouterModel,
         selectedToolKeys: run.selectedToolKeys,
         hasExplicitToolAllowlist: run.hasExplicitToolAllowlist,
+        selectedSkillIds: run.selectedSkillIds,
+        autoSkillRouting: run.autoSkillRouting,
     }
 }
