@@ -19,12 +19,14 @@ import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../core/a
 import { existsSync, readFileSync } from 'fs'
 import { extname } from 'path'
 import { materializeFileAttachments, readFileAttachmentText, type FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
-import { buildAttachmentContext, indexConversationAttachment, makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
+import { buildAttachmentContext, indexConversationAttachment, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 // Attachments larger than this are represented by retrieved excerpts plus
 // attachment_search/attachment_retrieve_chunks instead of full inline text.
-const INLINE_ATTACHMENT_TEXT_LIMIT = 24_000
+const DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT = 24_000
+const MIN_INLINE_ATTACHMENT_TEXT_LIMIT = 2_000
+const MAX_INLINE_ATTACHMENT_TEXT_LIMIT = 500_000
 
 export interface ActiveChatExecution {
   id: string
@@ -197,7 +199,24 @@ function parseJsonArray<T>(json: string | null): T[] {
   }
 }
 
-function buildHistoryContent(row: ChatHistoryRow): string | ContentPart[] {
+function normalizeInlineAttachmentTextLimit(value: unknown): number {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numeric)) return DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT
+  return Math.max(MIN_INLINE_ATTACHMENT_TEXT_LIMIT, Math.min(MAX_INLINE_ATTACHMENT_TEXT_LIMIT, Math.floor(numeric)))
+}
+
+function getChatAttachmentConfig(db = getDb()): { inlineAttachmentTextLimit: number } {
+  const row = db.prepare("SELECT value_json FROM settings WHERE key = 'chatAttachments'").get() as { value_json: string } | undefined
+  if (!row) return { inlineAttachmentTextLimit: DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT }
+  try {
+    const parsed = JSON.parse(row.value_json) as { inlineAttachmentTextLimit?: unknown }
+    return { inlineAttachmentTextLimit: normalizeInlineAttachmentTextLimit(parsed.inlineAttachmentTextLimit) }
+  } catch {
+    return { inlineAttachmentTextLimit: DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT }
+  }
+}
+
+function buildHistoryContent(row: ChatHistoryRow, inlineAttachmentTextLimit: number): string | ContentPart[] {
   if (row.role !== 'user') return row.content
 
   const fileAttachments = parseJsonArray<FileAttachmentArtifact & { content?: string }>(row.file_attachments_json)
@@ -211,7 +230,7 @@ function buildHistoryContent(row: ChatHistoryRow): string | ContentPart[] {
 
   const parts: ContentPart[] = [{ type: 'text', text: row.content }]
   for (const file of fileAttachments) {
-    if (file.textBytes > INLINE_ATTACHMENT_TEXT_LIMIT && file.chunkCount && file.chunkCount > 0) {
+    if (file.textBytes > inlineAttachmentTextLimit && file.chunkCount && file.chunkCount > 0) {
       parts.push({
         type: 'text',
         text: `[Attached file: ${file.name}]\nThis attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}). Use the current attachment context or attachment_search/attachment_retrieve_chunks when details are needed.`
@@ -236,6 +255,25 @@ function buildHistoryContent(row: ChatHistoryRow): string | ContentPart[] {
 
 export async function registerChatRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   const gateway = getGateway()
+
+  // GET /api/chat/attachment-config — get attachment context settings
+  app.get('/attachment-config', async () => {
+    return getChatAttachmentConfig()
+  })
+
+  // POST /api/chat/attachment-config — update attachment context settings
+  app.post<{ Body: { inlineAttachmentTextLimit: number } }>('/attachment-config', async (req, reply) => {
+    const rawLimit = req.body.inlineAttachmentTextLimit
+    if (!Number.isFinite(Number(rawLimit))) {
+      return reply.status(400).send({ error: 'inlineAttachmentTextLimit must be a number' })
+    }
+    const inlineAttachmentTextLimit = normalizeInlineAttachmentTextLimit(rawLimit)
+    const db = getDb()
+    db.prepare(
+      "INSERT OR REPLACE INTO settings (key, value_json) VALUES ('chatAttachments', ?)"
+    ).run(JSON.stringify({ inlineAttachmentTextLimit }))
+    return { success: true, inlineAttachmentTextLimit }
+  })
 
   // POST /api/chat/conversations/:id/send — send message + stream response
   app.post<{
@@ -266,12 +304,16 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       compactModel?: string
       titleProviderId?: string
       titleModel?: string
+      inlineAttachmentTextLimit?: number
     }
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, inlineAttachmentTextLimit: reqInlineAttachmentTextLimit } = req.body
       const db = getDb()
+      const inlineAttachmentTextLimit = reqInlineAttachmentTextLimit !== undefined
+        ? normalizeInlineAttachmentTextLimit(reqInlineAttachmentTextLimit)
+        : getChatAttachmentConfig(db).inlineAttachmentTextLimit
       const toolRegistry = getToolRegistry()
       const selectedToolKeys = Array.isArray(allowedTools)
         ? Array.from(new Set(allowedTools)).filter((name) => toolRegistry.hasKey(name))
@@ -304,7 +346,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const parts: ContentPart[] = [{ type: 'text', text: content }]
         if (storedFileAttachments.length) {
           for (const file of storedFileAttachments) {
-            if (file.textBytes > INLINE_ATTACHMENT_TEXT_LIMIT && file.chunkCount && file.chunkCount > 0) {
+            if (file.textBytes > inlineAttachmentTextLimit && file.chunkCount && file.chunkCount > 0) {
               parts.push({
                 type: 'text',
                 text: `[Attached file: ${file.name}]\nThis attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}). Relevant excerpts will be provided as context; use attachment_search/attachment_retrieve_chunks for more detail.`
@@ -343,6 +385,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, file_attachments_json, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(userMsgId, conversationId, 'user', content, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, storedFileAttachments.length ? JSON.stringify(storedFileAttachments) : null, now)
+      persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
       // Build message history
@@ -384,7 +427,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       let messages: ChatMessage[] = filteredRows.map((row) => ({
         role: row.role as ChatMessage['role'],
-        content: buildHistoryContent(row),
+        content: buildHistoryContent(row, inlineAttachmentTextLimit),
         toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
         toolCallId: row.tool_call_id || undefined
       }))

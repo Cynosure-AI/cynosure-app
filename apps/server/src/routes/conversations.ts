@@ -161,6 +161,16 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 created_at: number
             }[]
 
+        const attachmentRows = db.prepare(
+            'SELECT message_id, name FROM message_attachments WHERE conversation_id = ? ORDER BY created_at ASC'
+        ).all(req.params.id) as { message_id: string; name: string }[]
+        const attachmentsByMessage = new Map<string, { name: string }[]>()
+        for (const row of attachmentRows) {
+            const existing = attachmentsByMessage.get(row.message_id) || []
+            existing.push({ name: row.name })
+            attachmentsByMessage.set(row.message_id, existing)
+        }
+
         let chatConfig: Record<string, unknown> | undefined
         try {
             chatConfig = convRow?.config_json ? JSON.parse(convRow.config_json) : undefined
@@ -209,6 +219,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                             .map((file) => ({ name: file.name }))
                         : undefined
                 } catch { /* malformed JSON — ignore */ }
+                fileAttachments ||= attachmentsByMessage.get(row.id)
                 return {
                     id: row.id,
                     conversationId: row.conversation_id,

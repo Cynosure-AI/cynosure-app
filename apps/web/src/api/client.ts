@@ -118,7 +118,8 @@ export const api = {
       memoryRouterProviderId?: string,
       memoryRouterModel?: string,
       compactProviderId?: string,
-      compactModel?: string
+      compactModel?: string,
+      inlineAttachmentTextLimit?: number
     ) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, {
         content,
@@ -145,8 +146,13 @@ export const api = {
         compactProviderId: compactProviderId || undefined,
         compactModel: compactModel || undefined,
         titleProviderId: titleProviderId || undefined,
-        titleModel: titleModel || undefined
+        titleModel: titleModel || undefined,
+        inlineAttachmentTextLimit
       }),
+    getAttachmentConfig: () =>
+      get<{ inlineAttachmentTextLimit: number }>('/api/chat/attachment-config'),
+    updateAttachmentConfig: (inlineAttachmentTextLimit: number) =>
+      post<{ success: boolean; inlineAttachmentTextLimit: number }>('/api/chat/attachment-config', { inlineAttachmentTextLimit }),
     truncateFrom: (conversationId: string, messageId: string) =>
       post<{ success: boolean; deleted: number }>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/truncate`,

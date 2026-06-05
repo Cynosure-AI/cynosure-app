@@ -166,6 +166,13 @@ const sections: SettingsSection[] = [
     terms: ['context strategy', 'context window', 'sliding window', 'truncate middle', 'compact', 'summarize', 'summarization', 'no trimming', 'conversation history']
   },
   {
+    id: 'attachment-context',
+    categoryId: 'chat',
+    label: 'Attachment Context',
+    description: 'Choose when document attachments switch from inline context to retrieval.',
+    terms: ['attachment context', 'attachments', 'attached files', 'documents', 'inline attachment', 'rag', 'retrieval', 'file context', 'screenshots']
+  },
+  {
     id: 'enable-voice',
     categoryId: 'speech-to-text',
     label: 'Enable Voice Input',

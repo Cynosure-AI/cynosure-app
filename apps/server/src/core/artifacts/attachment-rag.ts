@@ -72,7 +72,68 @@ export async function deleteConversationAttachmentIndex(conversationId: string):
     await getRAGStore().deleteByFilter(TABLE_NAME, filter)
 }
 
+export function persistMessageFileAttachments(
+    db: Database,
+    messageId: string,
+    conversationId: string,
+    attachments: FileAttachmentArtifact[],
+    createdAt: number,
+): void {
+    if (!attachments.length) return
+    const stmt = db.prepare(`
+        INSERT OR REPLACE INTO message_attachments (
+            id, message_id, conversation_id, kind, name, original_path, text_path,
+            size_bytes, text_bytes, chunk_count, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    for (const attachment of attachments) {
+        stmt.run(
+            attachment.id,
+            messageId,
+            conversationId,
+            'file',
+            attachment.name,
+            attachment.originalPath,
+            attachment.textPath,
+            attachment.sizeBytes,
+            attachment.textBytes,
+            attachment.chunkCount ?? null,
+            JSON.stringify(attachment),
+            createdAt,
+        )
+    }
+}
+
 export function listConversationFileAttachments(db: Database, conversationId: string): FileAttachmentArtifact[] {
+    const records = db.prepare(`
+        SELECT id, name, original_path, text_path, size_bytes, text_bytes, chunk_count
+        FROM message_attachments
+        WHERE conversation_id = ? AND kind = 'file'
+        ORDER BY created_at ASC
+    `).all(conversationId) as {
+        id: string
+        name: string
+        original_path: string | null
+        text_path: string | null
+        size_bytes: number | null
+        text_bytes: number | null
+        chunk_count: number | null
+    }[]
+
+    if (records.length) {
+        return records
+            .filter((row) => row.original_path && row.text_path)
+            .map((row) => ({
+                id: row.id,
+                name: row.name,
+                originalPath: row.original_path!,
+                textPath: row.text_path!,
+                sizeBytes: row.size_bytes ?? 0,
+                textBytes: row.text_bytes ?? 0,
+                chunkCount: row.chunk_count ?? undefined,
+            }))
+    }
+
     const rows = db.prepare(
         'SELECT file_attachments_json FROM messages WHERE conversation_id = ? AND file_attachments_json IS NOT NULL ORDER BY created_at ASC'
     ).all(conversationId) as { file_attachments_json: string }[]
