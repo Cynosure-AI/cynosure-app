@@ -5,29 +5,29 @@
 /* ── Variable overrides ── */
 [data-theme="matrix"] {
   /* Base: near-black with faint green undertone */
-  --color-zinc-950: #030705;
-  --color-zinc-900: #0a120e;
-  --color-zinc-800: #111f18;
-  --color-zinc-700: #1a2e23;
-  --color-zinc-600: #24402f;
-  --color-zinc-500: #3a5c48;
-  --color-zinc-400: #5a8068;
-  --color-zinc-300: #84a890;
-  --color-zinc-200: #b0ccb8;
-  --color-zinc-100: #d8eed8;
+  --color-theme-950: #030705;
+  --color-theme-900: #0a120e;
+  --color-theme-800: #111f18;
+  --color-theme-700: #1a2e23;
+  --color-theme-600: #24402f;
+  --color-theme-500: #3a5c48;
+  --color-theme-400: #5a8068;
+  --color-theme-300: #84a890;
+  --color-theme-200: #b0ccb8;
+  --color-theme-100: #d8eed8;
 
   /* Accent: phosphor green for buttons, links, active states */
-  --color-blue-50: #ecfdf5;
-  --color-blue-100: #d1fae5;
-  --color-blue-200: #a7f3d0;
-  --color-blue-300: #6ee7b7;
-  --color-blue-400: #34d399;
-  --color-blue-500: #00ff41;
-  --color-blue-600: #00cc33;
-  --color-blue-700: #00a82a;
-  --color-blue-800: #008522;
-  --color-blue-900: #00661a;
-  --color-blue-950: #003d10;
+  --color-accent-50: #ecfdf5;
+  --color-accent-100: #d1fae5;
+  --color-accent-200: #a7f3d0;
+  --color-accent-300: #6ee7b7;
+  --color-accent-400: #34d399;
+  --color-accent-500: #00ff41;
+  --color-accent-600: #00cc33;
+  --color-accent-700: #00a82a;
+  --color-accent-800: #008522;
+  --color-accent-900: #00661a;
+  --color-accent-950: #003d10;
 
   /* Custom matrix accent vars */
   --mx-green: #00ff41;
@@ -103,7 +103,7 @@
 
 /* ── Muted green-tinted secondary text ── */
 [data-theme="matrix"] label,
-[data-theme="matrix"] .text-zinc-400 {
+[data-theme="matrix"] .text-theme-400 {
   color: #5a8068;
 }
 
@@ -119,8 +119,8 @@
 }
 
 /* ── Cards & panels: subtle green border ── */
-[data-theme="matrix"] .bg-zinc-800,
-[data-theme="matrix"] .bg-zinc-900\/50 {
+[data-theme="matrix"] .bg-theme-800,
+[data-theme="matrix"] .bg-theme-900\/50 {
   border: 1px solid var(--mx-green-dim);
 }
 
@@ -141,8 +141,8 @@
 }
 
 /* ── Primary buttons: stronger green glow border ── */
-[data-theme="matrix"] button.bg-blue-600,
-[data-theme="matrix"] button.bg-blue-500 {
+[data-theme="matrix"] button.bg-accent-600,
+[data-theme="matrix"] button.bg-accent-500 {
   box-shadow:
     0 0 8px var(--mx-green-glow),
     inset 0 0 6px rgba(0, 255, 65, 0.08);
@@ -150,21 +150,21 @@
 }
 
 /* ── Dark text on green accent backgrounds ── */
-[data-theme="matrix"] .bg-blue-600,
-[data-theme="matrix"] .bg-blue-500,
-[data-theme="matrix"] .bg-blue-400 {
+[data-theme="matrix"] .bg-accent-600,
+[data-theme="matrix"] .bg-accent-500,
+[data-theme="matrix"] .bg-accent-400 {
   color: #030705;
 }
-[data-theme="matrix"] .bg-blue-600 .text-white,
-[data-theme="matrix"] .bg-blue-500 .text-white,
-[data-theme="matrix"] .bg-blue-400 .text-white,
-[data-theme="matrix"] .text-white.bg-blue-600,
-[data-theme="matrix"] .text-white.bg-blue-500,
-[data-theme="matrix"] .text-white.bg-blue-400 {
+[data-theme="matrix"] .bg-accent-600 .text-white,
+[data-theme="matrix"] .bg-accent-500 .text-white,
+[data-theme="matrix"] .bg-accent-400 .text-white,
+[data-theme="matrix"] .text-white.bg-accent-600,
+[data-theme="matrix"] .text-white.bg-accent-500,
+[data-theme="matrix"] .text-white.bg-accent-400 {
   color: #030705;
 }
-[data-theme="matrix"] .from-blue-500 .text-white,
-[data-theme="matrix"] .from-blue-400 .text-white {
+[data-theme="matrix"] .from-accent-500 .text-white,
+[data-theme="matrix"] .from-accent-400 .text-white {
   color: #030705;
 }
 
