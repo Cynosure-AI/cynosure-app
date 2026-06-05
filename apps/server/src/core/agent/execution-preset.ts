@@ -6,6 +6,7 @@ export interface ExecutionPreset {
     model?: string
     systemPrompt?: string
     tools: string[]
+    skills?: string[]
     subAgents: SubAgentAssignment[]
     autoToolRouting?: boolean
     toolRouterProviderId?: string
@@ -13,6 +14,9 @@ export interface ExecutionPreset {
     autoMemory?: boolean
     memoryRouterProviderId?: string
     memoryRouterModel?: string
+    autoSkillRouting?: boolean
+    skillRouterProviderId?: string
+    skillRouterModel?: string
     toolRoutingEnabled?: boolean
     disableToolRouting?: boolean
 }
@@ -30,6 +34,7 @@ export function presetFromAgent(
         model: agent.model,
         systemPrompt: agent.systemPrompt,
         tools: overrides.tools ?? agent.tools,
+        skills: agent.skills,
         subAgents: overrides.subAgents ?? agent.subAgents,
         autoToolRouting: agent.autoToolRouting,
         toolRouterProviderId: agent.toolRouterProviderId,
@@ -37,11 +42,15 @@ export function presetFromAgent(
         autoMemory: agent.autoMemory,
         memoryRouterProviderId: agent.memoryRouterProviderId,
         memoryRouterModel: agent.memoryRouterModel,
+        autoSkillRouting: agent.autoSkillRouting,
+        skillRouterProviderId: agent.skillRouterProviderId,
+        skillRouterModel: agent.skillRouterModel,
     }
 }
 
 export function presetFromAgentless(options: {
     tools: string[]
+    skills?: string[]
     subAgents?: SubAgentAssignment[]
     autoToolRouting: boolean
     toolRouterProviderId?: string
@@ -49,10 +58,14 @@ export function presetFromAgentless(options: {
     autoMemory?: boolean
     memoryRouterProviderId?: string
     memoryRouterModel?: string
+    autoSkillRouting?: boolean
+    skillRouterProviderId?: string
+    skillRouterModel?: string
 }): ExecutionPreset {
     return {
         id: '__agentless__',
         tools: options.tools,
+        skills: options.skills ?? [],
         subAgents: options.subAgents ?? [],
         autoToolRouting: options.autoToolRouting,
         toolRouterProviderId: options.toolRouterProviderId,
@@ -60,5 +73,8 @@ export function presetFromAgentless(options: {
         autoMemory: options.autoMemory,
         memoryRouterProviderId: options.memoryRouterProviderId,
         memoryRouterModel: options.memoryRouterModel,
+        autoSkillRouting: options.autoSkillRouting,
+        skillRouterProviderId: options.skillRouterProviderId,
+        skillRouterModel: options.skillRouterModel,
     }
 }

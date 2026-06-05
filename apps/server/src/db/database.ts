@@ -178,6 +178,18 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_tool_router_embeddings_updated ON tool_router_embeddings(updated_at);
 
+    CREATE TABLE IF NOT EXISTS skill_embeddings (
+      skill_id TEXT NOT NULL,
+      embedding_provider_id TEXT NOT NULL DEFAULT '',
+      embedding_model TEXT NOT NULL,
+      embedding_dimensions INTEGER NOT NULL,
+      content_hash TEXT NOT NULL,
+      vector_json TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (skill_id, embedding_provider_id, embedding_model, embedding_dimensions)
+    );
+    CREATE INDEX IF NOT EXISTS idx_skill_embeddings_updated ON skill_embeddings(updated_at);
+
     CREATE TABLE IF NOT EXISTS pending_hitl (
       task_id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL,
@@ -344,12 +356,16 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('agents', 'auto_memory', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('agents', 'memory_router_provider_id', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'memory_router_model', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('agents', 'auto_skill_routing', 'INTEGER NOT NULL DEFAULT 1')
+  addColumnIfMissing('agents', 'skill_router_provider_id', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('agents', 'skill_router_model', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'thinking_enabled', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('agents', 'max_context_tokens', 'INTEGER')
   addColumnIfMissing('agents', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('agents', 'cron_prompt', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'icon_data', 'BLOB')
   addColumnIfMissing('agents', 'icon_mime', 'TEXT')
+  addColumnIfMissing('agents', 'skills_json', "TEXT NOT NULL DEFAULT '[]'")
 
   // Trigger output channel support
   addColumnIfMissing('cron_jobs', 'output_channel_id', "TEXT NOT NULL DEFAULT ''")

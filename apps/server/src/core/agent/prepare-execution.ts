@@ -12,7 +12,10 @@ import { getToolRegistry } from '../tools/tool-registry.js'
 import { getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../tools/built-in-tools.js'
 import { applyAutoToolRouting } from './pre-execution/auto-tool-routing.js'
 import { applyAutoMemoryRouting } from './pre-execution/auto-memory-routing.js'
+import { applyAutoSkillRouting } from './pre-execution/auto-skill-routing.js'
 import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
+import { getSkillsByIds, listSkills } from '../skills/skill-store.js'
+import { buildSkillsSystemPrompt } from '../skills/skill-router.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
@@ -63,6 +66,14 @@ export interface PrepareExecutionInput {
     memoryRouterProviderId?: string
     /** Optional model override for the memory router confirmation pass */
     memoryRouterModel?: string
+    /** Optional provider override for the skill router confirmation pass */
+    skillRouterProviderId?: string
+    /** Optional model override for the skill router confirmation pass */
+    skillRouterModel?: string
+    /** Explicit/manual skill ids selected for this execution. */
+    selectedSkillIds?: string[]
+    /** Enable automatic skill selection for this execution. */
+    autoSkillRouting?: boolean
 
     // ── Sub-agents ──
 
@@ -237,7 +248,40 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         memorySpaceOverrides,
     })
 
-    // ── 5. System prompt ──
+    // ── 5. Skills ──
+
+    const manualSkills = getSkillsByIds([
+        ...(preset.skills || []),
+        ...(input.selectedSkillIds || []),
+    ], { enabledOnly: true })
+    const useAgentSkillRouterProvider = preset.skillRouterProviderId === AGENT_ROUTER_PROVIDER
+    const useAgentSkillRouterModel = preset.skillRouterModel === AGENT_ROUTER_MODEL
+    const skillRouter = resolveRouterProviderModel({
+        gateway,
+        fallbackProviderId: providerModel.providerId,
+        fallbackModel: providerModel.model,
+        agentRouterProviderId: useAgentSkillRouterProvider ? preset.providerId : (preset.skillRouterProviderId || undefined),
+        agentRouterModel: useAgentSkillRouterModel ? (preset.model || undefined) : (preset.skillRouterModel || undefined),
+        requestRouterProviderId: input.skillRouterProviderId,
+        requestRouterModel: useAgentSkillRouterProvider ? undefined : input.skillRouterModel,
+    })
+
+    const selectedSkills = await applyAutoSkillRouting({
+        enabled: isSkillRoutingEnabled(preset, input.autoSkillRouting),
+        gateway,
+        conversationId,
+        userQuery: input.userQuery,
+        recentMessages: input.recentMessages,
+        manualSkills,
+        availableSkills: listSkills({ enabledOnly: true }),
+        providerId: skillRouter.providerId,
+        model: providerModel.model,
+        routerModel: skillRouter.model,
+    })
+
+    const skillsPrompt = buildSkillsSystemPrompt(selectedSkills)
+
+    // ── 6. System prompt ──
 
     const systemMessages: ChatMessage[] = []
 
@@ -250,6 +294,10 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     if (systemPromptSuffix) {
         effectiveSystemPrompt = (effectiveSystemPrompt ? effectiveSystemPrompt + '\n' : '') + systemPromptSuffix
+    }
+
+    if (skillsPrompt) {
+        effectiveSystemPrompt = (effectiveSystemPrompt ? effectiveSystemPrompt + '\n\n' : '') + skillsPrompt
     }
 
     if (effectiveSystemPrompt) {
@@ -337,4 +385,10 @@ function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean)
     if (sessionEnabled === true) return true
     if (sessionEnabled === false) return false
     return preset.autoToolRouting === true || preset.toolRoutingEnabled === true
+}
+
+function isSkillRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
+    if (sessionEnabled === true) return true
+    if (sessionEnabled === false) return false
+    return preset.autoSkillRouting === true
 }

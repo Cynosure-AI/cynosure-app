@@ -33,6 +33,7 @@ const lightboxSrc = ref<string | null>(null)
 const statusMeta: Record<string, { label: string; icon: string; color: string }> = {
   'routing-tools': { label: 'Auto tool routing', icon: 'lucide:route', color: 'text-accent-300' },
   'routing-memory': { label: 'Auto Memories', icon: 'lucide:brain-circuit', color: 'text-accent-300' },
+  'routing-skills': { label: 'Skill routing', icon: 'lucide:book-open-check', color: 'text-accent-300' },
   'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-amber-400' },
   denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-red-400' },
   executing: { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-400' },
@@ -68,6 +69,8 @@ const currentPhase = computed(() => {
 const currentStatus = computed(() => props.steps[props.steps.length - 1]?.status ?? 'executing')
 const isToolRouting = computed(() => currentStatus.value === 'routing-tools')
 const isMemoryRouting = computed(() => currentStatus.value === 'routing-memory')
+const isSkillRoutingCurrent = computed(() => currentStatus.value === 'routing-skills')
+const isRoutingStatus = computed(() => isToolRouting.value || isMemoryRouting.value || isSkillRoutingCurrent.value)
 
 /** All tool names from this iteration */
 const toolNames = computed(() => {
@@ -76,6 +79,8 @@ const toolNames = computed(() => {
   }
   return []
 })
+
+const isSkillRouting = computed(() => props.steps.some(step => step.status === 'routing-skills'))
 
 /** Latest results from this iteration */
 const results = computed(() => {
@@ -121,7 +126,9 @@ function prettifyJson(text: string): string {
 /** Streaming content from this iteration */
 const streamingText = computed(() => {
   for (const step of [...props.steps].reverse()) {
-    if (step.streamingChoosing && !step.toolCalls?.length) return { label: 'Choosing tools…', text: step.streamingChoosing }
+    if (step.streamingChoosing && !step.toolCalls?.length) {
+      return { label: isSkillRouting.value ? 'Choosing skills…' : 'Choosing tools…', text: step.streamingChoosing }
+    }
   }
   return null
 })
@@ -154,11 +161,11 @@ const maContext = computed(() => {
           >
             <!-- Status icon -->
             <Icon
-              :icon="currentPhase.label === 'Denied' ? 'lucide:shield-x' : isToolRouting || isMemoryRouting ? currentPhase.icon : toolNames.length && !results.length ? (isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash') : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
+              :icon="currentPhase.label === 'Denied' ? 'lucide:shield-x' : isRoutingStatus ? currentPhase.icon : toolNames.length && !results.length ? (isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash') : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
               class="w-3.5 h-3.5 shrink-0"
               :class="[
                 currentPhase.label === 'Denied' ? 'text-red-400' :
-                isToolRouting || isMemoryRouting ? 'text-accent-300' :
+                isRoutingStatus ? 'text-accent-300' :
                 toolNames.length && !results.length ? (isActive ? 'text-accent-400' : 'text-theme-500') :
                 allSuccess ? 'text-emerald-400' :
                 anyFailed ? 'text-red-400' :
@@ -177,10 +184,10 @@ const maContext = computed(() => {
               class="text-[10px] text-violet-400/80"
             >{{ maContext.phase }}</span>
 
-            <!-- Tool names -->
+            <!-- Tool / skill names -->
             <div class="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
               <span
-                v-if="(isToolRouting || isMemoryRouting) && toolNames.length"
+                v-if="isRoutingStatus && toolNames.length"
                 class="text-theme-400 shrink-0"
                 :class="currentPhase.color"
               >{{ currentPhase.label }}</span>
@@ -246,12 +253,12 @@ const maContext = computed(() => {
               v-for="(tc, i) in toolCallArgs"
               :key="i"
               class="rounded-lg bg-theme-900/60 border border-theme-700/30 px-3 py-2"
-            >
-              <div class="flex items-center gap-1.5 mb-1">
-                <Icon
-                  :icon="isMemoryCall(tc) ? 'lucide:brain' : 'lucide:terminal'"
-                  class="w-3 h-3 text-accent-400"
-                />
+              >
+                <div class="flex items-center gap-1.5 mb-1">
+                  <Icon
+                  :icon="isSkillRouting ? 'lucide:book-open-check' : isMemoryCall(tc) ? 'lucide:brain' : 'lucide:terminal'"
+                    class="w-3 h-3 text-accent-400"
+                  />
                 <span class="text-[11px] text-accent-300 font-medium">{{ tc.name }}</span>
               </div>
               <pre

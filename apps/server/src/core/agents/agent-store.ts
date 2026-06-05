@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
+import { normalizeSkillIds } from '../skills/skill-store.js'
 
 // ---- Types ----
 
@@ -18,6 +19,7 @@ export interface AgentConfig {
     providerId: string
     model: string
     tools: string[]
+    skills: string[]
     subAgents: SubAgentAssignment[]
     autoApproveTools: boolean
     overrideSubAgents: boolean
@@ -27,6 +29,9 @@ export interface AgentConfig {
     autoMemory: boolean
     memoryRouterProviderId: string
     memoryRouterModel: string
+    autoSkillRouting: boolean
+    skillRouterProviderId: string
+    skillRouterModel: string
     thinkingEnabled: boolean
     maxContextTokens: number | null
     sortOrder: number
@@ -52,6 +57,7 @@ export type CreateAgentInput = {
     systemPrompt?: string
     cronPrompt?: string
     tools?: string[]
+    skills?: string[]
     subAgents?: SubAgentAssignment[]
     autoApproveTools?: boolean
     overrideSubAgents?: boolean
@@ -61,12 +67,15 @@ export type CreateAgentInput = {
     autoMemory?: boolean
     memoryRouterProviderId?: string
     memoryRouterModel?: string
+    autoSkillRouting?: boolean
+    skillRouterProviderId?: string
+    skillRouterModel?: string
     thinkingEnabled?: boolean
     maxContextTokens?: number | null
     sortOrder?: number
 }
 
-export type UpdateAgentInput = Partial<Omit<CreateAgentInput, 'codename'> & { codename?: string; subAgents?: SubAgentAssignment[]; autoApproveTools?: boolean; autoToolRouting?: boolean; autoMemory?: boolean }>
+export type UpdateAgentInput = Partial<Omit<CreateAgentInput, 'codename'> & { codename?: string; subAgents?: SubAgentAssignment[]; autoApproveTools?: boolean; autoToolRouting?: boolean; autoMemory?: boolean; autoSkillRouting?: boolean }>
 
 // ---- Helpers ----
 
@@ -131,6 +140,7 @@ interface AgentRow {
     model: string
     system_prompt: string
     tools_json: string
+    skills_json: string
     icon_url: string | null
     codename: string
     category: string
@@ -143,6 +153,9 @@ interface AgentRow {
     auto_memory: number
     memory_router_provider_id: string
     memory_router_model: string
+    auto_skill_routing: number
+    skill_router_provider_id: string
+    skill_router_model: string
     thinking_enabled: number
     max_context_tokens: number | null
     sort_order: number
@@ -167,6 +180,7 @@ function rowToAgentData(row: AgentRow): AgentData {
         systemPrompt: row.system_prompt || '',
         cronPrompt: row.cron_prompt || '',
         tools: JSON.parse(row.tools_json || '[]'),
+        skills: normalizeSkillIds(JSON.parse(row.skills_json || '[]')),
         subAgents: JSON.parse(row.sub_agents_json || '[]'),
         autoApproveTools: row.auto_approve_tools === 1,
         overrideSubAgents: row.override_sub_agents === 1,
@@ -176,6 +190,9 @@ function rowToAgentData(row: AgentRow): AgentData {
         autoMemory: row.auto_memory === 1,
         memoryRouterProviderId: row.memory_router_provider_id || '',
         memoryRouterModel: row.memory_router_model || '',
+        autoSkillRouting: row.auto_skill_routing !== 0,
+        skillRouterProviderId: row.skill_router_provider_id || '',
+        skillRouterModel: row.skill_router_model || '',
         thinkingEnabled: row.thinking_enabled !== 0,
         maxContextTokens: typeof row.max_context_tokens === 'number' ? row.max_context_tokens : null,
         sortOrder: typeof row.sort_order === 'number' ? row.sort_order : 0,
@@ -224,11 +241,13 @@ export function createAgent(input: CreateAgentInput): AgentData {
     const normalizedTools = normalizeAgentTools(input.tools || [])
 
     db.prepare(
-        `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
+        `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, skills_json, icon_url, codename,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, max_context_tokens,
             override_sub_agents, auto_tool_routing, tool_router_provider_id, tool_router_model,
-            auto_memory, memory_router_provider_id, memory_router_model, sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            auto_memory, memory_router_provider_id, memory_router_model,
+            auto_skill_routing, skill_router_provider_id, skill_router_model,
+            sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.name,
@@ -237,6 +256,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
         input.model || '',
         input.systemPrompt || '',
         JSON.stringify(normalizedTools),
+        JSON.stringify(normalizeSkillIds(input.skills)),
         null, // icon_url - not used for new agents; icon_data/icon_mime used instead
         codename,
         input.category || '',
@@ -251,6 +271,9 @@ export function createAgent(input: CreateAgentInput): AgentData {
         input.autoMemory === true ? 1 : 0,
         input.memoryRouterProviderId || '',
         input.memoryRouterModel || '',
+        input.autoSkillRouting !== false ? 1 : 0,
+        input.skillRouterProviderId || '',
+        input.skillRouterModel || '',
         typeof input.sortOrder === 'number' ? input.sortOrder : 0,
         input.cronPrompt || '',
         iconData,
@@ -278,6 +301,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     const updatedSystemPrompt = input.systemPrompt !== undefined ? input.systemPrompt : existing.system_prompt
     const updatedCronPrompt = input.cronPrompt !== undefined ? (input.cronPrompt || '') : existing.cron_prompt
     const updatedTools = input.tools !== undefined ? normalizeAgentTools(input.tools) : JSON.parse(existing.tools_json || '[]')
+    const updatedSkills = input.skills !== undefined ? normalizeSkillIds(input.skills) : normalizeSkillIds(JSON.parse(existing.skills_json || '[]'))
     const updatedSubAgents = input.subAgents !== undefined ? input.subAgents : JSON.parse(existing.sub_agents_json || '[]')
     const updatedAutoApprove = input.autoApproveTools !== undefined ? input.autoApproveTools : (existing.auto_approve_tools === 1)
     const updatedOverrideSubAgents = input.overrideSubAgents !== undefined ? input.overrideSubAgents : (existing.override_sub_agents === 1)
@@ -287,6 +311,9 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     const updatedAutoMemory = input.autoMemory !== undefined ? input.autoMemory : (existing.auto_memory === 1)
     const updatedMemoryRouterProviderId = input.memoryRouterProviderId !== undefined ? (input.memoryRouterProviderId || '') : (existing.memory_router_provider_id || '')
     const updatedMemoryRouterModel = input.memoryRouterModel !== undefined ? (input.memoryRouterModel || '') : (existing.memory_router_model || '')
+    const updatedAutoSkillRouting = input.autoSkillRouting !== undefined ? input.autoSkillRouting : (existing.auto_skill_routing !== 0)
+    const updatedSkillRouterProviderId = input.skillRouterProviderId !== undefined ? (input.skillRouterProviderId || '') : (existing.skill_router_provider_id || '')
+    const updatedSkillRouterModel = input.skillRouterModel !== undefined ? (input.skillRouterModel || '') : (existing.skill_router_model || '')
     const updatedThinkingEnabled = input.thinkingEnabled !== undefined ? input.thinkingEnabled : (existing.thinking_enabled !== 0)
     const updatedMaxContextTokens = input.maxContextTokens !== undefined
         ? (typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null)
@@ -310,10 +337,11 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     }
 
     db.prepare(
-        `UPDATE agents SET name = ?, description = ?, provider_id = ?, model = ?, system_prompt = ?, tools_json = ?,
+        `UPDATE agents SET name = ?, description = ?, provider_id = ?, model = ?, system_prompt = ?, tools_json = ?, skills_json = ?,
          codename = ?, category = ?, sub_agents_json = ?, auto_approve_tools = ?,
             thinking_enabled = ?, max_context_tokens = ?, override_sub_agents = ?, auto_tool_routing = ?, tool_router_provider_id = ?, tool_router_model = ?,
-            auto_memory = ?, memory_router_provider_id = ?, memory_router_model = ?, sort_order = ?, cron_prompt = ?,
+            auto_memory = ?, memory_router_provider_id = ?, memory_router_model = ?,
+            auto_skill_routing = ?, skill_router_provider_id = ?, skill_router_model = ?, sort_order = ?, cron_prompt = ?,
          icon_data = ?, icon_mime = ?, updated_at = ?
          WHERE id = ?`
     ).run(
@@ -323,6 +351,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         updatedModel,
         updatedSystemPrompt,
         JSON.stringify(updatedTools),
+        JSON.stringify(updatedSkills),
         resolvedCodename,
         updatedCategory,
         JSON.stringify(updatedSubAgents),
@@ -336,6 +365,9 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         updatedAutoMemory ? 1 : 0,
         updatedMemoryRouterProviderId,
         updatedMemoryRouterModel,
+        updatedAutoSkillRouting ? 1 : 0,
+        updatedSkillRouterProviderId,
+        updatedSkillRouterModel,
         updatedSortOrder,
         updatedCronPrompt,
         iconData,
@@ -364,11 +396,13 @@ export function duplicateAgent(id: string): AgentData | null {
     const newCodename = toCodename(newName)
 
     db.prepare(
-        `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
+        `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, skills_json, icon_url, codename,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, max_context_tokens,
             override_sub_agents, auto_tool_routing, tool_router_provider_id, tool_router_model,
-            auto_memory, memory_router_provider_id, memory_router_model, sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            auto_memory, memory_router_provider_id, memory_router_model,
+            auto_skill_routing, skill_router_provider_id, skill_router_model,
+            sort_order, cron_prompt, icon_data, icon_mime, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         newId,
         newName,
@@ -377,6 +411,7 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.model,
         existing.system_prompt,
         existing.tools_json,
+        existing.skills_json || '[]',
         existing.icon_url,
         newCodename,
         existing.category,
@@ -391,6 +426,9 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.auto_memory,
         existing.memory_router_provider_id,
         existing.memory_router_model,
+        existing.auto_skill_routing,
+        existing.skill_router_provider_id,
+        existing.skill_router_model,
         existing.sort_order,
         existing.cron_prompt,
         existing.icon_data,

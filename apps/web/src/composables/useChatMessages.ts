@@ -29,9 +29,11 @@ export function useChatMessages(
         sessionThinkingEnabled: Ref<boolean>
         sessionAutoToolRouting: Ref<boolean>
         sessionAutoMemory: Ref<boolean>
+        sessionAutoSkillRouting: Ref<boolean>
         freeChatSubAgentIds: Ref<string[]>
         freeChatMemorySpaceIds: Ref<string[]>
         freeChatMemorySelectionInitialized: Ref<boolean>
+        freeChatSkillIds: Ref<string[]>
     },
 ): ChatMessagesApi {
     const agentStore = useAgentStore()
@@ -118,10 +120,12 @@ export function useChatMessages(
             systemPrompt: agentConfig.sessionSystemPrompt.value || baseSystemPrompt,
             subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.freeChatSubAgentIds.value]),
             memorySpaceIds: agentConfig.freeChatMemorySelectionInitialized.value ? [...agentConfig.freeChatMemorySpaceIds.value] : undefined,
+            selectedSkillIds: [...agentConfig.freeChatSkillIds.value],
             overrideSubAgents: agentConfig.sessionOverrideSubAgents.value,
             thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
             autoToolRouting: agentConfig.sessionAutoToolRouting.value,
             autoMemory: agentConfig.sessionAutoMemory.value,
+            autoSkillRouting: agentConfig.sessionAutoSkillRouting.value,
         }
 
         const prefs = usePreferencesStore()
@@ -146,11 +150,15 @@ export function useChatMessages(
             prefs.titleProviderId || undefined,
             prefs.titleModel || undefined,
             executionRun.autoToolRouting,
+            executionRun.selectedSkillIds,
+            executionRun.autoSkillRouting,
             prefs.toolRouterProviderId || undefined,
             prefs.toolRouterModel || undefined,
             executionRun.autoMemory,
             activeAgent?.memoryRouterProviderId || prefs.memoryRouterProviderId || undefined,
             activeAgent?.memoryRouterModel || prefs.memoryRouterModel || undefined,
+            activeAgent?.skillRouterProviderId || prefs.skillRouterProviderId || undefined,
+            activeAgent?.skillRouterModel || prefs.skillRouterModel || undefined,
             prefs.compactProviderId || undefined,
             prefs.compactModel || undefined,
             prefs.enableEntityGraph,
