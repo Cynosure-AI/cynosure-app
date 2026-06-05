@@ -14,7 +14,11 @@ import {
     makeMemorySearchTool,
     makeMemoryCreateTool,
     makeMemoryUpdateTool,
+    makeEntityGraphSearchTool,
+    makeEntityGraphAssertTool,
+    makeEntityGraphDeleteTool,
     MEMORY_TOOL_NAMES,
+    ENTITY_GRAPH_TOOL_NAMES,
 } from "./builtin/memory-tools.js";
 export {
     makeNotificationTool,
@@ -23,12 +27,17 @@ export {
     makeMemorySearchTool,
     makeMemoryCreateTool,
     makeMemoryUpdateTool,
+    makeEntityGraphSearchTool,
+    makeEntityGraphAssertTool,
+    makeEntityGraphDeleteTool,
     MEMORY_TOOL_NAMES,
+    ENTITY_GRAPH_TOOL_NAMES,
 };
 export type { NotificationToolOptions } from "./builtin/notification.js";
 export {
     MEMORY_READ_TOOL_NAMES,
     MEMORY_WRITE_TOOL_NAMES,
+    isEntityGraphToolName,
     isMemoryToolName,
     isMemoryReadToolName,
     type MemoryToolOptions,
@@ -83,6 +92,9 @@ const BUILTIN_TOOL_HYDRATORS = {
     memory_update: (ctx: BuiltInHydrationContext) => makeMemoryUpdateTool({
         assignedSpaces: ctx.assignedSpaces,
     }),
+    entity_graph_search: () => makeEntityGraphSearchTool(),
+    entity_graph_assert: () => makeEntityGraphAssertTool(),
+    entity_graph_delete: () => makeEntityGraphDeleteTool(),
 } as const satisfies Record<string, (ctx: BuiltInHydrationContext) => ToolDefinition>;
 
 export const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_HYDRATORS);
@@ -113,6 +125,10 @@ export function isBuiltInMemoryToolKey(toolKey: string): boolean {
 
 export function getBuiltInMemoryToolKeys(): string[] {
     return MEMORY_TOOL_NAMES.map((toolName) => `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+}
+
+export function isBuiltInEntityGraphToolKey(toolKey: string): boolean {
+    return ENTITY_GRAPH_TOOL_NAMES.some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
 }
 
 /**
