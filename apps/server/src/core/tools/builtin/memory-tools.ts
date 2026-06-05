@@ -15,6 +15,7 @@ export const MEMORY_READ_TOOL_NAMES = [
 export const MEMORY_WRITE_TOOL_NAMES = [
     'memory_create',
     'memory_update',
+    'forget_memory',
 ] as const
 
 export const MEMORY_TOOL_NAMES = [
@@ -209,6 +210,40 @@ function replaceChunkRangeInText(
     }
 }
 
+function removeChunkRangeFromText(
+    content: string,
+    chunks: { text: string; chunkIndex: number }[],
+): { content: string; startIndex: number; endIndex: number } | { error: string } {
+    const normalizedContent = content.replace(/\r\n/g, '\n')
+    const sorted = [...chunks].sort((a, b) => a.chunkIndex - b.chunkIndex)
+    const first = sorted[0]
+    const last = sorted[sorted.length - 1]
+    if (!first || !last) return { error: 'No indexed chunks were found for the requested range.' }
+
+    const firstMatch = findChunkText(normalizedContent, first.text)
+    if (!firstMatch) {
+        return { error: `Could not locate chunk ${first.chunkIndex} in the source file. The file may have changed since indexing; re-index it before retrying.` }
+    }
+
+    const lastMatch = first.chunkIndex === last.chunkIndex
+        ? firstMatch
+        : findChunkText(normalizedContent, last.text, firstMatch.start)
+
+    if (!lastMatch) {
+        return { error: `Could not locate chunk ${last.chunkIndex} in the source file. The file may have changed since indexing; re-index it before retrying.` }
+    }
+
+    const before = normalizedContent.slice(0, firstMatch.start).replace(/\s*$/, '\n\n')
+    const after = normalizedContent.slice(lastMatch.end).replace(/^\s*/, '\n\n')
+    const nextContent = `${before}${after}`.trim()
+
+    return {
+        content: nextContent ? `${nextContent}\n` : '',
+        startIndex: first.chunkIndex,
+        endIndex: last.chunkIndex,
+    }
+}
+
 function resolveReadableSpaceFilter(
     assignedSpaces: MemorySpaceRef[],
     baseFilter?: string,
@@ -311,6 +346,70 @@ async function resolveTargetSpace(
             'No memory folder is selected for writes. Provide the target memory folder using the "folder" parameter, select one in the conversation, or assign one to the agent.\n' +
             `Existing memory folders:\n${formatSpaces(existing)}`
     }
+}
+
+async function resolveExistingMemorySpace(
+    assignedSpaces: MemorySpaceRef[],
+    title: string,
+    folderParam?: string,
+    getKnownSpaces: () => MemorySpaceRef[] = getKnownMemorySpaces,
+): Promise<{ spaceId: string; spaceName: string; fileName: string; indexedCount: number; existsOnDisk: boolean; folderPath?: string } | { error: string }> {
+    const fileName = title.endsWith('.md') ? title : `${title}.md`
+    const mem = getAgentMemory()
+
+    const inspectSpace = async (space: MemorySpaceRef) => {
+        const folderPath = getMemorySpaceFolderPath(space.id)
+        const existsOnDisk = Boolean(folderPath && fileExists(folderPath, fileName))
+        const indexedCount = await mem.countChunks(fileName, buildScopeFilter([{ id: space.id }]))
+        return { space, folderPath, existsOnDisk, indexedCount }
+    }
+
+    if (folderParam?.trim()) {
+        const wanted = folderParam.trim()
+        const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownSpaces()
+        const match = findSpaceByIdOrName(candidates, wanted)
+        if (!match) {
+            const scopeLabel = assignedSpaces.length > 0 ? 'selected memory folders' : 'existing memory folders'
+            return { error: `Memory folder "${wanted}" not found in ${scopeLabel}.\n${formatSpaces(candidates.length > 0 ? candidates : getKnownSpaces())}` }
+        }
+
+        const inspected = await inspectSpace(match)
+        if (inspected.indexedCount === 0 && !inspected.existsOnDisk) {
+            return { error: `No memory entry found with title "${title}" in "${match.name}".` }
+        }
+
+        return {
+            spaceId: match.id,
+            spaceName: match.name,
+            fileName,
+            indexedCount: inspected.indexedCount,
+            existsOnDisk: inspected.existsOnDisk,
+            folderPath: inspected.folderPath,
+        }
+    }
+
+    const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownSpaces()
+    const inspected = await Promise.all(candidates.map(inspectSpace))
+    const matches = inspected.filter((item) => item.indexedCount > 0 || item.existsOnDisk)
+
+    if (matches.length === 1) {
+        const match = matches[0]
+        return {
+            spaceId: match.space.id,
+            spaceName: match.space.name,
+            fileName,
+            indexedCount: match.indexedCount,
+            existsOnDisk: match.existsOnDisk,
+            folderPath: match.folderPath,
+        }
+    }
+
+    if (matches.length > 1) {
+        const listing = matches.map(({ space }) => `  - "${space.name}" (id: ${space.id})`).join('\n')
+        return { error: `Memory entry "${title}" exists in multiple folders. Please specify which to forget using the 'folder' parameter:\n${listing}` }
+    }
+
+    return { error: `No memory entry found with title "${title}". Use memory_list_documents or memory_semantic_search to find the exact memory first.` }
 }
 
 /**
@@ -872,6 +971,105 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                     success: true,
                     output: `Memory "${fileName}" fully updated in "${resolved.spaceName}" (${chunks} chunk${chunks !== 1 ? 's' : ''} re-indexed).`
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Create a `forget_memory` tool that lets the LLM remove obsolete memory.
+ * Supports full source-file removal or targeted removal by indexed chunk range.
+ */
+export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedSpaces = [] } = opts
+    const getKnownSpaces = createKnownMemorySpacesLoader()
+    return {
+        name: 'forget_memory',
+        description:
+            'Remove an obsolete or incorrect memory entry. Auto-matches the title to find the file; if multiple folders contain the same title, folder parameter is required. ' +
+            'By default, forgets the whole memory by moving the source file to revisions and deleting its indexed chunks. ' +
+            'To forget only part of a memory, first inspect the relevant chunks with memory_retrieve_chunks, then provide chunkStartIndex and chunkEndIndex. ' +
+            'Use this only when information is no longer relevant, should no longer be remembered, or conflicts with newer information.',
+        parameters: {
+            type: 'object',
+            properties: {
+                title: { type: 'string', description: 'The title (file name without .md) of the memory entry to remove.' },
+                folder: { type: 'string', description: 'Memory folder name, relative path (e.g. "projects/acme"), or ID. Required only when the title exists in multiple folders.' },
+                chunkStartIndex: { type: 'number', description: 'Optional zero-based first chunk index to forget. Use the chunk index shown by memory_retrieve_chunks or semantic search.' },
+                chunkEndIndex: { type: 'number', description: 'Optional zero-based last chunk index to forget, inclusive. Required when chunkStartIndex is provided.' },
+            },
+            required: ['title']
+        },
+        timeout: 30_000,
+        execute: async (params: unknown) => {
+            const { title, folder, chunkStartIndex, chunkEndIndex } = params as {
+                title: string; folder?: string; chunkStartIndex?: number; chunkEndIndex?: number
+            }
+            if (!title?.trim()) return { success: false, output: 'Title is required.' }
+
+            const resolved = await resolveExistingMemorySpace(assignedSpaces, title.trim(), folder, getKnownSpaces)
+            if ('error' in resolved) return { success: false, output: resolved.error }
+
+            const mem = getAgentMemory()
+            const hasChunkRange = chunkStartIndex !== undefined || chunkEndIndex !== undefined
+
+            if (hasChunkRange) {
+                if (!Number.isInteger(chunkStartIndex) || !Number.isInteger(chunkEndIndex)) {
+                    return { success: false, output: 'Partial memory removal requires integer chunkStartIndex and chunkEndIndex values.' }
+                }
+                if (chunkStartIndex! < 0 || chunkEndIndex! < chunkStartIndex!) {
+                    return { success: false, output: 'Invalid chunk range. chunkEndIndex must be greater than or equal to chunkStartIndex.' }
+                }
+                if (!resolved.folderPath || !resolved.existsOnDisk) {
+                    return { success: false, output: `Chunk removal requires the file "${resolved.fileName}" to exist on disk.` }
+                }
+
+                let fileContent: string
+                try {
+                    fileContent = readTextFile(resolved.folderPath, resolved.fileName)
+                } catch {
+                    return { success: false, output: `Could not read file "${resolved.fileName}" from memory folder.` }
+                }
+
+                const targetFilter = buildScopeFilter([{ id: resolved.spaceId }])
+                const chunks = await mem.getChunksByRange(resolved.fileName, chunkStartIndex!, chunkEndIndex!, targetFilter)
+                const expectedCount = chunkEndIndex! - chunkStartIndex! + 1
+                if (chunks.length !== expectedCount) {
+                    return {
+                        success: false,
+                        output: `Found ${chunks.length}/${expectedCount} chunks for "${resolved.fileName}" in range ${chunkStartIndex}-${chunkEndIndex}. Retrieve the current chunks and retry with a valid range.`,
+                    }
+                }
+
+                const removed = removeChunkRangeFromText(fileContent, chunks)
+                if ('error' in removed) return { success: false, output: removed.error }
+
+                backupToRevisions(resolved.folderPath, resolved.fileName)
+
+                if (!removed.content.trim()) {
+                    const deleted = await mem.deleteSourceFile(resolved.fileName, resolved.spaceId)
+                    return {
+                        success: true,
+                        output: `Chunks ${removed.startIndex}-${removed.endIndex} removed; "${resolved.fileName}" is now empty and was forgotten from "${resolved.spaceName}" (${deleted} indexed chunk${deleted !== 1 ? 's' : ''} deleted).`
+                    }
+                }
+
+                writeTextFile(resolved.folderPath, resolved.fileName, removed.content)
+                const { chunkCount } = await mem.reindexFile(resolved.folderPath, resolved.fileName, resolved.spaceId)
+                return {
+                    success: true,
+                    output: `Chunks ${removed.startIndex}-${removed.endIndex} removed from "${resolved.fileName}" in "${resolved.spaceName}" (${chunkCount} remaining chunk${chunkCount !== 1 ? 's' : ''} re-indexed).`
+                }
+            }
+
+            if (resolved.folderPath && resolved.existsOnDisk) {
+                backupToRevisions(resolved.folderPath, resolved.fileName)
+            }
+
+            const deleted = await mem.deleteSourceFile(resolved.fileName, resolved.spaceId)
+            return {
+                success: true,
+                output: `Memory "${resolved.fileName}" forgotten from "${resolved.spaceName}" (${deleted} indexed chunk${deleted !== 1 ? 's' : ''} deleted).`
             }
         }
     }

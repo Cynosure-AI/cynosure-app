@@ -62,9 +62,11 @@ const RERANK_MODEL_OPTIONS = [
 
 const MEMORY_CREATE_TOOL = 'memory_create'
 const MEMORY_UPDATE_TOOL = 'memory_update'
+const FORGET_MEMORY_TOOL = 'forget_memory'
 
 const memoryCreateAutoApprove = ref(false)
 const memoryUpdateAutoApprove = ref(false)
+const forgetMemoryAutoApprove = ref(false)
 const memoryPermissionSaving = ref<string | null>(null)
 
 const OCR_LANGUAGE_OPTIONS = [
@@ -172,6 +174,7 @@ async function loadMemoryToolApprovals() {
     const approvals = await api.agent.getToolApprovals()
     memoryCreateAutoApprove.value = approvals[MEMORY_CREATE_TOOL] === true
     memoryUpdateAutoApprove.value = approvals[MEMORY_UPDATE_TOOL] === true
+    forgetMemoryAutoApprove.value = approvals[FORGET_MEMORY_TOOL] === true
   } catch { /* defaults */ }
 }
 
@@ -181,6 +184,7 @@ async function setMemoryToolApproval(toolName: string, autoApprove: boolean) {
     await api.agent.setToolApproval(toolName, autoApprove)
     if (toolName === MEMORY_CREATE_TOOL) memoryCreateAutoApprove.value = autoApprove
     if (toolName === MEMORY_UPDATE_TOOL) memoryUpdateAutoApprove.value = autoApprove
+    if (toolName === FORGET_MEMORY_TOOL) forgetMemoryAutoApprove.value = autoApprove
   } catch { /* keep previous value */ }
   memoryPermissionSaving.value = null
 }
@@ -404,7 +408,7 @@ async function manualClearGraph() {
             Memory Write Permissions
           </h3>
           <p class="text-xs text-theme-500 mt-0.5">
-            Read-only memory tools are always allowed. Creating or updating memories asks for approval unless enabled here, approved for the session, or allowed by the active agent.
+            Read-only memory tools are always allowed. Creating, updating, or removing memories asks for approval unless enabled here, approved for the session, or allowed by the active agent.
           </p>
         </div>
       </div>
@@ -457,6 +461,31 @@ async function manualClearGraph() {
             :disabled="memoryPermissionSaving === MEMORY_UPDATE_TOOL"
             class="mt-0.5 shrink-0"
             @update:model-value="setMemoryToolApproval(MEMORY_UPDATE_TOOL, $event)"
+          />
+        </div>
+
+        <div class="flex items-start justify-between gap-4 rounded-lg border border-theme-700 bg-theme-900/40 p-3">
+          <div class="flex items-start gap-3 min-w-0">
+            <div class="w-7 h-7 rounded-lg bg-theme-800 flex items-center justify-center shrink-0">
+              <Icon
+                icon="lucide:file-x-2"
+                class="w-3.5 h-3.5 text-accent-400"
+              />
+            </div>
+            <div class="min-w-0">
+              <div class="text-sm text-theme-200">
+                Allow memory removal
+              </div>
+              <div class="text-[11px] text-theme-500 leading-relaxed">
+                Auto-approve persistent removals from the forget_memory tool.
+              </div>
+            </div>
+          </div>
+          <ToggleSwitch
+            :model-value="forgetMemoryAutoApprove"
+            :disabled="memoryPermissionSaving === FORGET_MEMORY_TOOL"
+            class="mt-0.5 shrink-0"
+            @update:model-value="setMemoryToolApproval(FORGET_MEMORY_TOOL, $event)"
           />
         </div>
       </div>

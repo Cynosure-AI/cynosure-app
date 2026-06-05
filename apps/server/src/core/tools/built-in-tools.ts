@@ -14,6 +14,7 @@ import {
     makeMemorySearchTool,
     makeMemoryCreateTool,
     makeMemoryUpdateTool,
+    makeForgetMemoryTool,
     makeEntityGraphSearchTool,
     makeEntityGraphAssertTool,
     makeEntityGraphDeleteTool,
@@ -27,6 +28,7 @@ export {
     makeMemorySearchTool,
     makeMemoryCreateTool,
     makeMemoryUpdateTool,
+    makeForgetMemoryTool,
     makeEntityGraphSearchTool,
     makeEntityGraphAssertTool,
     makeEntityGraphDeleteTool,
@@ -90,6 +92,9 @@ const BUILTIN_TOOL_HYDRATORS = {
         assignedSpaces: ctx.assignedSpaces,
     }),
     memory_update: (ctx: BuiltInHydrationContext) => makeMemoryUpdateTool({
+        assignedSpaces: ctx.assignedSpaces,
+    }),
+    forget_memory: (ctx: BuiltInHydrationContext) => makeForgetMemoryTool({
         assignedSpaces: ctx.assignedSpaces,
     }),
     entity_graph_search: () => makeEntityGraphSearchTool(),
