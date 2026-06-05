@@ -44,6 +44,11 @@ interface MemoryFileBackup {
     archiveName: string
 }
 
+interface EntityGraphBackup {
+    nodes: Record<string, unknown>[]
+    edges: Record<string, unknown>[]
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 //  Export helpers
 // ────────────────────────────────────────────────────────────────────────────
@@ -103,6 +108,34 @@ function getChannelRows(): unknown[] {
     return db.prepare('SELECT * FROM channels ORDER BY created_at').all()
 }
 
+function getEntityGraphRows(): EntityGraphBackup {
+    const db = getDb()
+    return {
+        nodes: db.prepare('SELECT * FROM entity_graph_nodes ORDER BY last_seen_at DESC').all() as Record<string, unknown>[],
+        edges: db.prepare('SELECT * FROM entity_graph_edges ORDER BY last_seen_at DESC').all() as Record<string, unknown>[]
+    }
+}
+
+function getEntityGraphBackup(zip: AdmZip): EntityGraphBackup | null {
+    const combinedEntry = zip.getEntry('entity-graph/graph.json') || zip.getEntry('memory/entity_graph.json')
+    if (combinedEntry) {
+        const graph = JSON.parse(combinedEntry.getData().toString('utf-8')) as Partial<EntityGraphBackup>
+        return {
+            nodes: Array.isArray(graph.nodes) ? graph.nodes : [],
+            edges: Array.isArray(graph.edges) ? graph.edges : []
+        }
+    }
+
+    const nodesEntry = zip.getEntry('entity-graph/nodes.json') || zip.getEntry('memory/entity_graph_nodes.json')
+    const edgesEntry = zip.getEntry('entity-graph/edges.json') || zip.getEntry('memory/entity_graph_edges.json')
+    if (!nodesEntry && !edgesEntry) return null
+
+    return {
+        nodes: nodesEntry ? JSON.parse(nodesEntry.getData().toString('utf-8')) as Record<string, unknown>[] : [],
+        edges: edgesEntry ? JSON.parse(edgesEntry.getData().toString('utf-8')) as Record<string, unknown>[] : []
+    }
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 //  Route registration
 // ────────────────────────────────────────────────────────────────────────────
@@ -114,7 +147,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
     app.get<{ Querystring: { modules?: string } }>(
         '/export',
         async (req, reply) => {
-            const requested = (req.query.modules || 'agents,skills,providers,mcp,settings,channels,memory,conversations,usage')
+            const requested = (req.query.modules || 'agents,skills,providers,mcp,settings,channels,memory,entityGraph,conversations,usage')
                 .split(',')
                 .map((m) => m.trim())
 
@@ -240,6 +273,14 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 archive.append(JSON.stringify({ spaces, assignments }, null, 2), { name: 'memory/spaces.json' })
                 archive.append(JSON.stringify({ files }, null, 2), { name: 'memory/files.json' })
                 manifest.modules.memory = { count: files.length }
+            }
+
+            // --- Entity graph ---
+            if (requested.includes('entityGraph')) {
+                const graph = getEntityGraphRows()
+                archive.append(JSON.stringify(graph.nodes, null, 2), { name: 'entity-graph/nodes.json' })
+                archive.append(JSON.stringify(graph.edges, null, 2), { name: 'entity-graph/edges.json' })
+                manifest.modules.entityGraph = { count: graph.nodes.length + graph.edges.length }
             }
 
             // --- Conversations (agent-linked chat history) ---
@@ -765,6 +806,69 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             results.memory = res
         }
 
+        // --- Restore Entity graph ---
+        if (requestedModules.includes('entityGraph') && (manifest.modules.entityGraph || getEntityGraphBackup(zip))) {
+            const res = { restored: 0, errors: [] as string[] }
+            try {
+                const graph = getEntityGraphBackup(zip)
+                if (graph) {
+                    db.prepare('DELETE FROM entity_graph_edges').run()
+                    db.prepare('DELETE FROM entity_graph_nodes').run()
+
+                    for (const node of graph.nodes) {
+                        try {
+                            db.prepare(`
+                                INSERT OR REPLACE INTO entity_graph_nodes
+                                    (id, name, normalized_name, type, aliases_json, mention_count, source_count, first_seen_at, last_seen_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            `).run(
+                                node.id,
+                                node.name || '',
+                                node.normalized_name || '',
+                                node.type || 'other',
+                                node.aliases_json || '[]',
+                                node.mention_count ?? 1,
+                                node.source_count ?? 1,
+                                node.first_seen_at || Date.now(),
+                                node.last_seen_at || Date.now()
+                            )
+                            res.restored++
+                        } catch (e) {
+                            res.errors.push(`Entity graph node ${node.id}: ${(e as Error).message}`)
+                        }
+                    }
+
+                    for (const edge of graph.edges) {
+                        try {
+                            db.prepare(`
+                                INSERT OR REPLACE INTO entity_graph_edges
+                                    (id, from_node_id, to_node_id, relation, confidence, evidence, source_kind, source_id, mention_count, first_seen_at, last_seen_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            `).run(
+                                edge.id,
+                                edge.from_node_id,
+                                edge.to_node_id,
+                                edge.relation || '',
+                                edge.confidence ?? 0.7,
+                                edge.evidence || '',
+                                edge.source_kind || 'conversation',
+                                edge.source_id || '',
+                                edge.mention_count ?? 1,
+                                edge.first_seen_at || Date.now(),
+                                edge.last_seen_at || Date.now()
+                            )
+                            res.restored++
+                        } catch (e) {
+                            res.errors.push(`Entity graph edge ${edge.id}: ${(e as Error).message}`)
+                        }
+                    }
+                }
+            } catch (e) {
+                res.errors.push((e as Error).message)
+            }
+            results.entityGraph = res
+        }
+
         // --- Restore Conversations (only for agents present in DB) ---
         if (requestedModules.includes('conversations') && manifest.modules.conversations) {
             const res = { restored: 0, errors: [] as string[] }
@@ -1034,6 +1138,13 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             manifestEntry.getData().toString('utf-8')
         ) as BackupManifest
 
+        if (!manifest.modules.entityGraph) {
+            const graph = getEntityGraphBackup(zip)
+            if (graph && (graph.nodes.length > 0 || graph.edges.length > 0)) {
+                manifest.modules.entityGraph = { count: graph.nodes.length + graph.edges.length }
+            }
+        }
+
         return manifest
     })
 
@@ -1051,6 +1162,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             'messages', 'conversations', 'execution_steps', 'execution_logs',
             'tasks', 'pending_hitl', 'notifications', 'tool_approvals', 'session_tool_approvals',
             'cron_jobs', 'channels',
+            'entity_graph_edges', 'entity_graph_nodes',
             'memory_file_index', 'memory_spaces', 'agent_memory_spaces',
             'mcp_servers', 'providers', 'agents', 'skills', 'skill_embeddings',
             'settings', 'tool_router_embeddings'
