@@ -1,16 +1,19 @@
 <script setup lang="ts">
+import { onMounted, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import {
   usePreferencesStore,
   type ContextStrategy,
 } from "../../stores/preferences.store";
 import { useProviderStore } from "../../stores/provider.store";
+import { api } from "../../api/client";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import BaseCard from "../shared/BaseCard.vue";
 
 const prefs = usePreferencesStore();
 const providerStore = useProviderStore();
+const attachmentConfigStatus = ref<"idle" | "saving" | "saved" | "error">("idle");
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
 }>(), {
@@ -95,6 +98,33 @@ function onCompactSelection(selection: {
   prefs.compactProviderId = selection.providerId;
   prefs.compactModel = selection.model;
 }
+
+function clampInlineAttachmentTextLimit(value: number): number {
+  return Math.max(2_000, Math.min(500_000, Math.floor(value || 24_000)));
+}
+
+async function updateInlineAttachmentTextLimit(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const limit = clampInlineAttachmentTextLimit(Number(input.value));
+  prefs.inlineAttachmentTextLimit = limit;
+  attachmentConfigStatus.value = "saving";
+  try {
+    const result = await api.chat.updateAttachmentConfig(limit);
+    prefs.inlineAttachmentTextLimit = result.inlineAttachmentTextLimit;
+    attachmentConfigStatus.value = "saved";
+  } catch {
+    attachmentConfigStatus.value = "error";
+  }
+}
+
+onMounted(async () => {
+  try {
+    const config = await api.chat.getAttachmentConfig();
+    prefs.inlineAttachmentTextLimit = config.inlineAttachmentTextLimit;
+  } catch {
+    attachmentConfigStatus.value = "error";
+  }
+});
 
 </script>
 
@@ -312,6 +342,64 @@ function onCompactSelection(selection: {
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
           Entity extraction runs after each chat turn and stores durable relationships in the local entity graph.
+        </p>
+      </div>
+    </BaseCard>
+
+    <!-- Attachment Context -->
+    <BaseCard
+      v-if="showSection('attachment-context')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-center gap-3">
+        <div
+          class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center"
+        >
+          <Icon
+            icon="lucide:paperclip"
+            class="w-5 h-5 text-theme-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Attachment Context
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Switch large document attachments from inline context to retrieval
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-1 border-t border-theme-700">
+        <div class="flex items-end gap-3">
+          <label class="flex-1">
+            <span class="block text-xs text-theme-400 mb-1.5">Inline text limit</span>
+            <input
+              :value="prefs.inlineAttachmentTextLimit"
+              type="number"
+              min="2000"
+              max="500000"
+              step="1000"
+              class="w-full bg-theme-900 border border-theme-600 rounded-lg px-3 py-2 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              @change="updateInlineAttachmentTextLimit"
+            >
+          </label>
+          <span class="pb-2 text-xs text-theme-500">bytes</span>
+        </div>
+        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
+          Larger extracted document text is indexed and retrieved as relevant excerpts instead of being fully resent each turn.
+          <span
+            v-if="attachmentConfigStatus === 'saving'"
+            class="text-theme-400"
+          > Saving...</span>
+          <span
+            v-else-if="attachmentConfigStatus === 'saved'"
+            class="text-green-400"
+          > Saved.</span>
+          <span
+            v-else-if="attachmentConfigStatus === 'error'"
+            class="text-red-400"
+          > Could not save.</span>
         </p>
       </div>
     </BaseCard>

@@ -20,6 +20,7 @@ export const SK_MEMORY_ROUTER_MODEL = 'cy-memory-router-model'
 export const SK_SKILL_ROUTER_PROVIDER = 'cy-skill-router-provider'
 export const SK_SKILL_ROUTER_MODEL = 'cy-skill-router-model'
 export const SK_CONTEXT_STRATEGY = 'cy-context-strategy'
+export const SK_INLINE_ATTACHMENT_TEXT_LIMIT = 'cy-inline-attachment-text-limit'
 export const SK_COMPACT_PROVIDER = 'cy-compact-provider'
 export const SK_COMPACT_MODEL = 'cy-compact-model'
 export const SK_PROVIDER_MODEL_FAVORITES = 'cy-provider-model-favorites'
@@ -64,6 +65,8 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_MEMORY_ROUTER_MODEL,
     SK_SKILL_ROUTER_PROVIDER,
     SK_SKILL_ROUTER_MODEL,
+    SK_CONTEXT_STRATEGY,
+    SK_INLINE_ATTACHMENT_TEXT_LIMIT,
     SK_COMPACT_PROVIDER,
     SK_COMPACT_MODEL,
     SK_PROVIDER_MODEL_FAVORITES,

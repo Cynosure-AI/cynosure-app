@@ -126,6 +126,7 @@ export const api = {
       skillRouterModel?: string,
       compactProviderId?: string,
       compactModel?: string,
+      inlineAttachmentTextLimit?: number,
       enableEntityGraph?: boolean,
       entityGraphProviderId?: string,
       entityGraphModel?: string
@@ -160,10 +161,15 @@ export const api = {
         titleModel: titleModel || undefined,
         selectedSkillIds,
         autoSkillRouting,
+        inlineAttachmentTextLimit,
         enableEntityGraph,
         entityGraphProviderId: entityGraphProviderId || undefined,
         entityGraphModel: entityGraphModel || undefined
       }),
+    getAttachmentConfig: () =>
+      get<{ inlineAttachmentTextLimit: number }>('/api/chat/attachment-config'),
+    updateAttachmentConfig: (inlineAttachmentTextLimit: number) =>
+      post<{ success: boolean; inlineAttachmentTextLimit: number }>('/api/chat/attachment-config', { inlineAttachmentTextLimit }),
     truncateFrom: (conversationId: string, messageId: string) =>
       post<{ success: boolean; deleted: number }>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/truncate`,

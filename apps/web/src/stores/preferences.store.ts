@@ -8,7 +8,7 @@ import {
     SK_TOOL_ROUTER_PROVIDER, SK_TOOL_ROUTER_MODEL,
     SK_MEMORY_ROUTER_PROVIDER, SK_MEMORY_ROUTER_MODEL,
     SK_SKILL_ROUTER_PROVIDER, SK_SKILL_ROUTER_MODEL,
-    SK_CONTEXT_STRATEGY, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL,
+    SK_CONTEXT_STRATEGY, SK_INLINE_ATTACHMENT_TEXT_LIMIT, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL,
     SK_AGENT_CATEGORIES, SK_MA_CATEGORIES,
     SK_WHISPER_MODEL, SK_WHISPER_ENABLED, SK_WHISPER_QUANTIZATION, SK_WHISPER_LANGUAGE, SK_WHISPER_MIC_DEVICE,
 } from '@/utils/storage-keys'
@@ -37,6 +37,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const compactModel = useLocalStorage(SK_COMPACT_MODEL, '')
     const sidebarCollapsed = ref(false)
     const contextStrategy = useLocalStorage<ContextStrategy>(SK_CONTEXT_STRATEGY, 'sliding-window')
+    const inlineAttachmentTextLimit = useLocalStorage(SK_INLINE_ATTACHMENT_TEXT_LIMIT, 24_000)
 
     const agentCategories = useLocalStorage<string[]>(SK_AGENT_CATEGORIES, [])
     const maCategories = useLocalStorage<string[]>(SK_MA_CATEGORIES, [])
@@ -54,7 +55,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     // Sync all pref changes to Electron's JSON file (single watcher)
     watch(
-        [theme, autoExpandSteps, autoExpandToolCalls, generateTitle, titleProviderId, titleModel, enableEntityGraph, entityGraphProviderId, entityGraphModel, toolRouterProviderId, toolRouterModel, memoryRouterProviderId, memoryRouterModel, skillRouterProviderId, skillRouterModel, compactProviderId, compactModel, contextStrategy,
+        [theme, autoExpandSteps, autoExpandToolCalls, generateTitle, titleProviderId, titleModel, enableEntityGraph, entityGraphProviderId, entityGraphModel, toolRouterProviderId, toolRouterModel, memoryRouterProviderId, memoryRouterModel, skillRouterProviderId, skillRouterModel, compactProviderId, compactModel, contextStrategy, inlineAttachmentTextLimit,
             agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId],
         () => { syncPrefsToElectron() },
         { deep: true },
@@ -113,7 +114,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     return {
         theme, autoExpandSteps, autoExpandToolCalls, generateTitle, titleProviderId, titleModel, enableEntityGraph, entityGraphProviderId, entityGraphModel, toolRouterProviderId, toolRouterModel, memoryRouterProviderId, memoryRouterModel, skillRouterProviderId, skillRouterModel, compactProviderId, compactModel, sidebarCollapsed,
-        contextStrategy,
+        contextStrategy, inlineAttachmentTextLimit,
         agentCategories, maCategories,
         whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
         toggleTheme, setTheme, toggleAutoExpand,

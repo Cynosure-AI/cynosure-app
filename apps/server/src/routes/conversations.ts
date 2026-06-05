@@ -6,6 +6,7 @@ import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { nanoid } from 'nanoid'
 import { unlinkSync } from 'fs'
 import { cleanupConversationArtifacts, extractFilePathFromFileUrl } from '../core/artifacts/image-artifacts.js'
+import { deleteConversationAttachmentIndex } from '../core/artifacts/attachment-rag.js'
 
 function escapeSqlLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
@@ -52,8 +53,8 @@ function hydrateChatConfigFromAgent(
     return hydrated
 }
 
-/** Delete image files referenced by messages in the given conversation IDs. */
-function cleanupConversationImages(conversationIds: string[]): void {
+/** Delete artifact files and attachment vectors referenced by conversations. */
+async function cleanupConversationArtifactsAndIndexes(conversationIds: string[]): Promise<void> {
     const db = getDb()
     for (const convId of conversationIds) {
         const rows = db.prepare(
@@ -74,6 +75,7 @@ function cleanupConversationImages(conversationIds: string[]): void {
         }
 
         cleanupConversationArtifacts(convId)
+        await deleteConversationAttachmentIndex(convId)
     }
 }
 
@@ -148,7 +150,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 tool_call_id: string | null
                 image_urls_json: string | null
                 audio_urls_json: string | null
-                file_attachments_json: string | null
                 agent_id: string | null
                 provider: string | null
                 model: string | null
@@ -158,6 +159,16 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 latency_ms: number | null
                 created_at: number
             }[]
+
+        const attachmentRows = db.prepare(
+            'SELECT message_id, name FROM message_attachments WHERE conversation_id = ? ORDER BY created_at ASC'
+        ).all(req.params.id) as { message_id: string; name: string }[]
+        const attachmentsByMessage = new Map<string, { name: string }[]>()
+        for (const row of attachmentRows) {
+            const existing = attachmentsByMessage.get(row.message_id) || []
+            existing.push({ name: row.name })
+            attachmentsByMessage.set(row.message_id, existing)
+        }
 
         let chatConfig: Record<string, unknown> | undefined
         try {
@@ -198,10 +209,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 try {
                     audioDataUrls = row.audio_urls_json ? JSON.parse(row.audio_urls_json) : undefined
                 } catch { /* malformed JSON — ignore */ }
-                let fileAttachments: { name: string }[] | undefined
-                try {
-                    fileAttachments = row.file_attachments_json ? JSON.parse(row.file_attachments_json) : undefined
-                } catch { /* malformed JSON — ignore */ }
+                const fileAttachments = attachmentsByMessage.get(row.id)
                 return {
                     id: row.id,
                     conversationId: row.conversation_id,
@@ -308,7 +316,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         if (row?.pinned) {
             return reply.status(400).send({ error: 'Cannot delete a pinned conversation. Unpin it first.' })
         }
-        cleanupConversationImages([req.params.id])
+        await cleanupConversationArtifactsAndIndexes([req.params.id])
         db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(req.params.id)
@@ -324,7 +332,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         if (agentId !== undefined) {
             const filter = agentId === '' ? 'agent_id IS NULL AND ma_workspace_id IS NULL' : 'agent_id = ?'
             const ids = db.prepare(`SELECT id FROM conversations WHERE ${filter} AND pinned = 0`).all(...(agentId === '' ? [] : [agentId])) as { id: string }[]
-            cleanupConversationImages(ids.map(r => r.id))
+            await cleanupConversationArtifactsAndIndexes(ids.map(r => r.id))
             for (const { id } of ids) {
                 db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
@@ -334,7 +342,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             db.prepare(`DELETE FROM conversations WHERE ${filter} AND pinned = 0`).run(...(agentId === '' ? [] : [agentId]))
         } else {
             const allIds = db.prepare('SELECT id FROM conversations WHERE pinned = 0').all() as { id: string }[]
-            cleanupConversationImages(allIds.map(r => r.id))
+            await cleanupConversationArtifactsAndIndexes(allIds.map(r => r.id))
             for (const { id } of allIds) {
                 db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
