@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import { api } from '../../../api/client'
@@ -13,27 +13,26 @@ const showModal = ref(false)
 
 const cachedMemorySpaces = ref<MemorySpace[]>([])
 
-async function loadMemorySpaces() {
+async function loadMemorySpaces(initializeDefaultSelection = false) {
   try {
     cachedMemorySpaces.value = await api.memorySpaces.list()
     // On first load for a new free-chat session, pre-select only the default space.
     // This gives a sensible default while allowing the user to deselect all to disable memory.
-    if (!chatStore.freeChatMemorySelectionInitialized && chatStore.freeChatMemorySpaceIds.length === 0) {
+    if (initializeDefaultSelection && !chatStore.freeChatMemorySelectionInitialized && chatStore.freeChatMemorySpaceIds.length === 0) {
       const defaultSpaces = cachedMemorySpaces.value.filter(s => s.isDefault)
       if (defaultSpaces.length > 0) {
-        chatStore.freeChatMemorySpaceIds.splice(0, 0, ...defaultSpaces.map(s => s.id))
+        const defaultSpaceIds = defaultSpaces.map(s => s.id)
+        chatStore.freeChatMemorySpaceIds.splice(0, 0, ...defaultSpaceIds)
+        if (!chatStore.activeAgentId) {
+          chatStore.agentOriginalMemorySpaceIds.splice(0, chatStore.agentOriginalMemorySpaceIds.length, ...defaultSpaceIds)
+        }
       }
       chatStore.freeChatMemorySelectionInitialized = true
     }
   } catch { /* ignore */ }
 }
 
-onMounted(loadMemorySpaces)
-
-// Reload memory spaces when modal visibility changes
-watch(showModal, () => {
-  loadMemorySpaces()
-})
+onMounted(() => loadMemorySpaces(true))
 
 const selectedMemorySpaces = computed(() => {
   const ids = chatStore.freeChatMemorySpaceIds

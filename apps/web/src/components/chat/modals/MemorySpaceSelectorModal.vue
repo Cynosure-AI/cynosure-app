@@ -84,7 +84,6 @@ function deselectAll() {
 function toggle(id: string) {
   const idx = chatStore.freeChatMemorySpaceIds.indexOf(id)
   if (idx >= 0) {
-    if (chatStore.sessionAutoMemory && chatStore.freeChatMemorySpaceIds.length <= 1) return
     chatStore.freeChatMemorySpaceIds.splice(idx, 1)
   } else {
     chatStore.freeChatMemorySpaceIds.push(id)
@@ -143,20 +142,22 @@ function toggleAutoMemory(enabled: boolean) {
       <span class="text-theme-500">
         {{ allSelected ? 'All folders selected' : `${selected.length}/${spaces.length} folders selected` }}
       </span>
-      <button
-        v-if="!allSelected"
-        class="text-accent-400 hover:text-accent-300"
-        @click="selectAll"
-      >
-        Select all
-      </button>
-      <button
-        v-else
-        class="text-theme-400 hover:text-theme-200"
-        @click="deselectAll"
-      >
-        Deselect all
-      </button>
+      <div class="flex items-center gap-4">
+        <button
+          v-if="!allSelected"
+          class="text-accent-400 hover:text-accent-300"
+          @click="selectAll"
+        >
+          Select all
+        </button>
+        <button
+          v-if="selected.length > 0"
+          class="text-theme-400 hover:text-theme-200"
+          @click="deselectAll"
+        >
+          Deselect all
+        </button>
+      </div>
     </div>
 
     <!-- Folder list -->
