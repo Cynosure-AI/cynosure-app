@@ -6,3 +6,7 @@ export type FlowNodeData = {
   isSeed: boolean;
   connectedHandles: Set<string>;
 };
+
+export type FlowEdgeData = {
+  labels: string[];
+};
