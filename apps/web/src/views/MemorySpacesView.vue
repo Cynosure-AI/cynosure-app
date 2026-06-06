@@ -73,6 +73,7 @@ const activePanel = ref<MemoryPanel>("documents");
 const graph = ref<EntityGraphResponse | null>(null);
 const graphLoading = ref(false);
 const graphQuery = ref("");
+const graphSuggestions = ref<EntityGraphNode[]>([]);
 const editingNode = ref<EntityGraphNode | null>(null);
 const editingEdge = ref<EntityGraphEdge | null>(null);
 const pendingDeleteNode = ref<EntityGraphNode | null>(null);
@@ -89,6 +90,8 @@ const nodeSpacing = useLocalStorage(SK_MEMORY_GRAPH_NODE_SPACING, 1.0);
 
 const { fitView } = useVueFlow(ENTITY_FLOW_ID);
 let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk.bundled.js").default>> | null = null;
+let graphSuggestionTimer: number | null = null;
+let graphSuggestionRequest = 0;
 
 const activeSection = computed(() =>
   memorySections.find((section) => section.id === activePanel.value) || memorySections[0],
@@ -187,7 +190,11 @@ async function layoutGraph() {
       id,
       type: "entity",
       position: positions.get(id) || { x: 0, y: 0 },
-      class: seedIds.has(id) ? "entity-flow-node entity-flow-node-seed" : "entity-flow-node",
+      class: [
+        "entity-flow-node",
+        entityTypeClass(entity.type),
+        seedIds.has(id) ? "entity-flow-node-seed" : "",
+      ].filter(Boolean).join(" "),
       data: { entity, label: entity.name, isSeed: seedIds.has(id), connectedHandles: connectedHandles.get(id) ?? new Set() },
     });
   }
@@ -345,8 +352,13 @@ function formatRelation(relation: string): string {
   return relation.replace(/_/g, " ");
 }
 
+function entityTypeClass(type: EntityGraphNodeType): string {
+  return `entity-flow-node-type-${type}`;
+}
+
 async function loadGraph(query = graphQuery.value) {
   graphLoading.value = true;
+  graphSuggestions.value = [];
   try {
     graph.value = await api.memory.getGraph(query.trim() || undefined, 200);
   } catch {
@@ -357,8 +369,39 @@ async function loadGraph(query = graphQuery.value) {
 
 async function clearGraphWalk() {
   graphQuery.value = "";
+  graphSuggestions.value = [];
   await loadGraph("");
 }
+
+async function loadGraphSuggestions(query = graphQuery.value) {
+  const trimmed = query.trim();
+  if (trimmed.length === 0) {
+    graphSuggestions.value = [];
+    return;
+  }
+
+  const requestId = ++graphSuggestionRequest;
+  try {
+    const result = await api.memory.getGraphSuggestions(trimmed, 8);
+    if (requestId !== graphSuggestionRequest) return;
+    graphSuggestions.value = result.suggestions.filter((node) => node.name.toLowerCase() !== trimmed.toLowerCase());
+  } catch {
+    if (requestId === graphSuggestionRequest) graphSuggestions.value = [];
+  }
+}
+
+async function selectGraphSuggestion(node: EntityGraphNode) {
+  graphQuery.value = node.name;
+  graphSuggestions.value = [];
+  await loadGraph(node.name);
+}
+
+watch(graphQuery, (query) => {
+  if (graphSuggestionTimer) window.clearTimeout(graphSuggestionTimer);
+  graphSuggestionTimer = window.setTimeout(() => {
+    loadGraphSuggestions(query);
+  }, 140);
+});
 
 async function selectPanel(panel: MemoryPanel) {
   activePanel.value = panel;
@@ -544,8 +587,10 @@ onMounted(() => loadSpaces());
           :graph-loading="graphLoading"
           :graph-flow-nodes="graphFlowNodes"
           :graph-flow-edges="graphFlowEdges"
+          :graph-suggestions="graphSuggestions"
           @load-graph="loadGraph"
           @clear-walk="clearGraphWalk"
+          @select-suggestion="selectGraphSuggestion"
           @relayout="relayout"
           @edit-node="openEditNode"
           @delete-node="confirmDeleteNode"

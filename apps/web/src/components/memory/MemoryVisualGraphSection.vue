@@ -8,7 +8,7 @@ import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
 import "@vue-flow/controls/dist/style.css";
 import "@vue-flow/minimap/dist/style.css";
-import type { EntityGraphNode, EntityGraphResponse } from "../../api/types";
+import type { EntityGraphNode, EntityGraphNodeType, EntityGraphResponse } from "../../api/types";
 import type { FlowNodeData } from "./memory-graph-types";
 
 defineProps<{
@@ -16,6 +16,7 @@ defineProps<{
   graph: EntityGraphResponse | null;
   graphLoading: boolean;
   graphQuery: string;
+  graphSuggestions: EntityGraphNode[];
   graphFlowNodes: Node<FlowNodeData>[];
   graphFlowEdges: Edge[];
   nodeSpacing: number;
@@ -26,10 +27,36 @@ const emit = defineEmits<{
   "update:nodeSpacing": [value: number];
   "load-graph": [query?: string];
   "clear-walk": [];
+  "select-suggestion": [node: EntityGraphNode];
   "relayout": [];
   "edit-node": [node: EntityGraphNode];
   "delete-node": [node: EntityGraphNode];
 }>();
+
+const ENTITY_TYPE_COLORS: Record<EntityGraphNodeType, string> = {
+  person: "var(--memory-flow-person-fill)",
+  place: "var(--memory-flow-place-fill)",
+  organization: "var(--memory-flow-organization-fill)",
+  project: "var(--memory-flow-project-fill)",
+  event: "var(--memory-flow-event-fill)",
+  date: "var(--memory-flow-date-fill)",
+  technology: "var(--memory-flow-technology-fill)",
+  product: "var(--memory-flow-product-fill)",
+  artifact: "var(--memory-flow-artifact-fill)",
+  concept: "var(--memory-flow-concept-fill)",
+  other: "var(--memory-flow-node-fill)",
+};
+
+function minimapNodeColor(node: Node<FlowNodeData>): string {
+  if (typeof node.class === "string" && node.class.includes("entity-flow-node-seed")) {
+    return "var(--memory-flow-seed-fill)";
+  }
+  return ENTITY_TYPE_COLORS[node.data?.entity.type || "other"];
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat().format(value);
+}
 </script>
 
 <template>
@@ -63,7 +90,7 @@ const emit = defineEmits<{
       </div>
 
       <form
-        class="flex items-center gap-2"
+        class="flex items-start gap-2"
         @submit.prevent="emit('load-graph', graphQuery)"
       >
         <div class="relative">
@@ -75,9 +102,26 @@ const emit = defineEmits<{
             :value="graphQuery"
             type="text"
             class="w-72 max-w-full pl-8 pr-3 py-2 text-sm bg-theme-950 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-600 focus:outline-none focus:border-theme-600"
-            placeholder="Walk from Tom, Acme, Project X"
+            placeholder="Search entities"
             @input="emit('update:graphQuery', ($event.target as HTMLInputElement).value)"
           >
+          <div
+            v-if="graphSuggestions.length > 0 && graphQuery.trim()"
+            class="absolute left-0 top-full z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-theme-700 bg-theme-950 shadow-2xl"
+          >
+            <button
+              v-for="node in graphSuggestions"
+              :key="node.id"
+              type="button"
+              class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100"
+              @mousedown.prevent="emit('select-suggestion', node)"
+            >
+              <span class="truncate">{{ node.name }}</span>
+              <span class="shrink-0 rounded-md border border-theme-700 bg-theme-900 px-1.5 py-0.5 text-[10px] text-theme-500">
+                {{ node.type }}
+              </span>
+            </button>
+          </div>
         </div>
         <button
           class="p-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
@@ -104,7 +148,13 @@ const emit = defineEmits<{
     </div>
 
     <p class="mb-4 text-xs text-theme-500">
-      Search walks outward from matching entities and refocuses the canvas on that neighborhood.
+      <span v-if="graph">
+        Showing {{ formatCount(graph.nodes.length) }} of {{ formatCount(graph.stats.nodeCount) }} entities,
+        {{ formatCount(graph.edges.length) }} of {{ formatCount(graph.stats.edgeCount) }} relations.
+      </span>
+      <span v-else>
+        Search walks outward from matching entities and refocuses the canvas on that neighborhood.
+      </span>
     </p>
 
     <div
@@ -274,7 +324,7 @@ const emit = defineEmits<{
           <Controls />
 
           <MiniMap
-            :node-color="(n) => typeof n.class === 'string' && n.class.includes('entity-flow-node-seed') ? 'var(--memory-flow-seed-fill)' : 'var(--memory-flow-node-fill)'"
+            :node-color="minimapNodeColor"
             :node-stroke-color="() => 'var(--memory-flow-node-border)'"
             :node-border-radius="4"
             mask-color="var(--memory-flow-minimap-mask)"
@@ -293,6 +343,26 @@ const emit = defineEmits<{
   --memory-flow-node-border: color-mix(in srgb, var(--color-accent-500) 52%, var(--color-theme-700));
   --memory-flow-node-text: var(--color-theme-100);
   --memory-flow-node-muted: color-mix(in srgb, var(--color-accent-300) 68%, var(--color-theme-400));
+  --memory-flow-person-fill: color-mix(in srgb, #0f766e 52%, var(--color-theme-950));
+  --memory-flow-person-border: color-mix(in srgb, #2dd4bf 70%, var(--color-theme-700));
+  --memory-flow-place-fill: color-mix(in srgb, #166534 52%, var(--color-theme-950));
+  --memory-flow-place-border: color-mix(in srgb, #4ade80 70%, var(--color-theme-700));
+  --memory-flow-organization-fill: color-mix(in srgb, #1d4ed8 54%, var(--color-theme-950));
+  --memory-flow-organization-border: color-mix(in srgb, #60a5fa 72%, var(--color-theme-700));
+  --memory-flow-project-fill: color-mix(in srgb, #7c3aed 50%, var(--color-theme-950));
+  --memory-flow-project-border: color-mix(in srgb, #a78bfa 72%, var(--color-theme-700));
+  --memory-flow-event-fill: color-mix(in srgb, #be123c 48%, var(--color-theme-950));
+  --memory-flow-event-border: color-mix(in srgb, #fb7185 72%, var(--color-theme-700));
+  --memory-flow-date-fill: color-mix(in srgb, #854d0e 48%, var(--color-theme-950));
+  --memory-flow-date-border: color-mix(in srgb, #facc15 68%, var(--color-theme-700));
+  --memory-flow-technology-fill: color-mix(in srgb, #0891b2 52%, var(--color-theme-950));
+  --memory-flow-technology-border: color-mix(in srgb, #22d3ee 72%, var(--color-theme-700));
+  --memory-flow-product-fill: color-mix(in srgb, #c2410c 48%, var(--color-theme-950));
+  --memory-flow-product-border: color-mix(in srgb, #fb923c 72%, var(--color-theme-700));
+  --memory-flow-artifact-fill: color-mix(in srgb, #b45309 48%, var(--color-theme-950));
+  --memory-flow-artifact-border: color-mix(in srgb, #fbbf24 70%, var(--color-theme-700));
+  --memory-flow-concept-fill: color-mix(in srgb, #4338ca 50%, var(--color-theme-950));
+  --memory-flow-concept-border: color-mix(in srgb, #818cf8 72%, var(--color-theme-700));
   --memory-flow-seed-fill: color-mix(in srgb, var(--color-accent-900) 42%, var(--color-theme-900));
   --memory-flow-seed-border: color-mix(in srgb, var(--color-accent-400) 78%, var(--color-theme-100));
   --memory-flow-edge: color-mix(in srgb, var(--color-accent-500) 82%, var(--color-theme-300));
@@ -324,6 +394,66 @@ const emit = defineEmits<{
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--color-accent-400) 24%, transparent),
     0 14px 28px var(--memory-flow-shadow);
+}
+
+:deep(.entity-flow-node-type-person) {
+  --memory-flow-node-fill: var(--memory-flow-person-fill);
+  --memory-flow-node-border: var(--memory-flow-person-border);
+  --memory-flow-node-muted: color-mix(in srgb, #99f6e4 78%, var(--color-theme-300));
+}
+
+:deep(.entity-flow-node-type-place) {
+  --memory-flow-node-fill: var(--memory-flow-place-fill);
+  --memory-flow-node-border: var(--memory-flow-place-border);
+  --memory-flow-node-muted: color-mix(in srgb, #bbf7d0 78%, var(--color-theme-300));
+}
+
+:deep(.entity-flow-node-type-organization) {
+  --memory-flow-node-fill: var(--memory-flow-organization-fill);
+  --memory-flow-node-border: var(--memory-flow-organization-border);
+  --memory-flow-node-muted: color-mix(in srgb, #bfdbfe 80%, var(--color-theme-300));
+}
+
+:deep(.entity-flow-node-type-project) {
+  --memory-flow-node-fill: var(--memory-flow-project-fill);
+  --memory-flow-node-border: var(--memory-flow-project-border);
+  --memory-flow-node-muted: color-mix(in srgb, #ddd6fe 80%, var(--color-theme-300));
+}
+
+:deep(.entity-flow-node-type-event) {
+  --memory-flow-node-fill: var(--memory-flow-event-fill);
+  --memory-flow-node-border: var(--memory-flow-event-border);
+  --memory-flow-node-muted: color-mix(in srgb, #fecdd3 78%, var(--color-theme-300));
+}
+
+:deep(.entity-flow-node-type-date) {
+  --memory-flow-node-fill: var(--memory-flow-date-fill);
+  --memory-flow-node-border: var(--memory-flow-date-border);
+  --memory-flow-node-muted: color-mix(in srgb, #fef08a 76%, var(--color-theme-300));
+}
+
+:deep(.entity-flow-node-type-technology) {
+  --memory-flow-node-fill: var(--memory-flow-technology-fill);
+  --memory-flow-node-border: var(--memory-flow-technology-border);
+  --memory-flow-node-muted: color-mix(in srgb, #a5f3fc 78%, var(--color-theme-300));
+}
+
+:deep(.entity-flow-node-type-product) {
+  --memory-flow-node-fill: var(--memory-flow-product-fill);
+  --memory-flow-node-border: var(--memory-flow-product-border);
+  --memory-flow-node-muted: color-mix(in srgb, #fed7aa 78%, var(--color-theme-300));
+}
+
+:deep(.entity-flow-node-type-artifact) {
+  --memory-flow-node-fill: var(--memory-flow-artifact-fill);
+  --memory-flow-node-border: var(--memory-flow-artifact-border);
+  --memory-flow-node-muted: color-mix(in srgb, #fde68a 78%, var(--color-theme-300));
+}
+
+:deep(.entity-flow-node-type-concept) {
+  --memory-flow-node-fill: var(--memory-flow-concept-fill);
+  --memory-flow-node-border: var(--memory-flow-concept-border);
+  --memory-flow-node-muted: color-mix(in srgb, #c7d2fe 80%, var(--color-theme-300));
 }
 
 :deep(.entity-flow-edge path) {

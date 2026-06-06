@@ -242,6 +242,10 @@ export interface EntityGraphResponse {
     edges: EntityGraphEdge[]
 }
 
+export interface EntityGraphSuggestionsResponse {
+    suggestions: EntityGraphNode[]
+}
+
 // ── Instances / Cron / Channels ──────────────────────────────────────────────
 
 export interface AgentInstance {

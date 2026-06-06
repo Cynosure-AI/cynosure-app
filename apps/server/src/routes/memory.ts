@@ -107,6 +107,15 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     }
   })
 
+  // GET /api/memory/graph/suggestions — autocomplete entity names
+  app.get<{ Querystring: { query?: string; limit?: string } }>('/graph/suggestions', async (req) => {
+    const graph = getEntityGraphStore()
+    const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20)
+    return {
+      suggestions: graph.suggestNodes(req.query.query?.trim() || '', limit)
+    }
+  })
+
   // PATCH /api/memory/graph/nodes/:id — manually correct an entity node
   app.patch<{
     Params: { id: string }
@@ -128,7 +137,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
       if (message === 'ENTITY_NODE_CONFLICT') {
-        return reply.status(409).send({ error: 'An entity with that name and type already exists' })
+        return reply.status(409).send({ error: 'An entity with that name already exists' })
       }
       if (message === 'ENTITY_NODE_INVALID_NAME') {
         return reply.status(400).send({ error: 'Entity name is not valid' })

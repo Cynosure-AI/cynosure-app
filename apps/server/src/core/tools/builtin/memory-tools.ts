@@ -733,7 +733,7 @@ export function makeEntityGraphAssertTool(): ToolDefinition {
             if ('error' in toEntity) return { success: false, output: `Invalid to entity: ${toEntity.error}` }
             const rel = cleanRelationName(relation)
             if (!rel) return { success: false, output: 'Relationship name is required.' }
-            if (fromEntity.name.toLowerCase() === toEntity.name.toLowerCase() && fromEntity.type === toEntity.type) {
+            if (fromEntity.name.toLowerCase() === toEntity.name.toLowerCase()) {
                 return { success: false, output: 'Cannot create a relationship from an entity to itself.' }
             }
 

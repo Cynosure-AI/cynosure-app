@@ -2,7 +2,7 @@ import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage } from '
 import type {
   LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryResponse,
   AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus,
-  AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse,
+  AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
   MetricsSummary, OrchestrationState,
   SkillDefinition,
 } from './types'
@@ -345,6 +345,12 @@ export const api = {
       if (limit) params.set('limit', String(limit))
       const qs = params.toString()
       return get<EntityGraphResponse>(`/api/memory/graph${qs ? `?${qs}` : ''}`)
+    },
+    getGraphSuggestions: (query: string, limit?: number) => {
+      const params = new URLSearchParams()
+      params.set('query', query)
+      if (limit) params.set('limit', String(limit))
+      return get<EntityGraphSuggestionsResponse>(`/api/memory/graph/suggestions?${params.toString()}`)
     },
     updateGraphNode: (id: string, data: { name?: string; type?: EntityGraphResponse['nodes'][number]['type']; aliases?: string[] }) =>
       patch<EntityGraphResponse['nodes'][number]>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`, data),

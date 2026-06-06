@@ -38,6 +38,11 @@ export interface GraphWalkResult {
   edges: EntityEdge[]
 }
 
+interface GraphSnapshot {
+  nodes: EntityNode[]
+  edges: EntityEdge[]
+}
+
 interface ExtractedEntity {
   name: string
   type?: EntityType
@@ -133,6 +138,10 @@ function toEntity(value: unknown): ExtractedEntity | null {
   return { name, type, aliases }
 }
 
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`)
+}
+
 function clampConfidence(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0.7
   return Math.max(0.1, Math.min(1, value))
@@ -177,9 +186,19 @@ export class EntityGraphStore {
     const normalizedName = normalizeName(name)
     const type = ENTITY_TYPES.has((entity.type || 'other') as EntityType) ? entity.type || 'other' : 'other'
     const aliases = Array.from(new Set((entity.aliases || []).map(cleanName).filter(Boolean)))
-    const existing = db.prepare(
-      'SELECT * FROM entity_graph_nodes WHERE normalized_name = ? AND type = ?'
-    ).get(normalizedName, type) as Record<string, unknown> | undefined
+    const matchingRows = db.prepare(`
+      SELECT * FROM entity_graph_nodes
+      WHERE normalized_name = ?
+      ORDER BY mention_count DESC, last_seen_at DESC
+    `).all(normalizedName) as Record<string, unknown>[]
+    if (matchingRows.length > 1) this.mergeDuplicateNameNodes(matchingRows, now)
+
+    const existing = db.prepare(`
+      SELECT * FROM entity_graph_nodes
+      WHERE normalized_name = ?
+      ORDER BY mention_count DESC, last_seen_at DESC
+      LIMIT 1
+    `).get(normalizedName) as Record<string, unknown> | undefined
 
     if (!existing) {
       const id = nanoid()
@@ -195,9 +214,14 @@ export class EntityGraphStore {
     const sourceIncrement = sourceId ? 1 : 0
     db.prepare(`
       UPDATE entity_graph_nodes
-      SET name = ?, aliases_json = ?, mention_count = mention_count + 1, source_count = source_count + ?, last_seen_at = ?
+      SET name = ?,
+          type = CASE WHEN type = 'other' AND ? != 'other' THEN ? ELSE type END,
+          aliases_json = ?,
+          mention_count = mention_count + 1,
+          source_count = source_count + ?,
+          last_seen_at = ?
       WHERE id = ?
-    `).run(name, JSON.stringify(mergedAliases), sourceIncrement, now, existing.id)
+    `).run(name, type, type, JSON.stringify(mergedAliases), sourceIncrement, now, existing.id)
     return this.getNode(existing.id as string)!
   }
 
@@ -271,8 +295,8 @@ export class EntityGraphStore {
 
     const conflict = getDb().prepare(`
       SELECT id FROM entity_graph_nodes
-      WHERE normalized_name = ? AND type = ? AND id != ?
-    `).get(normalizedName, type, id) as { id: string } | undefined
+      WHERE normalized_name = ? AND id != ?
+    `).get(normalizedName, id) as { id: string } | undefined
     if (conflict) throw new Error('ENTITY_NODE_CONFLICT')
 
     getDb().prepare(`
@@ -341,11 +365,12 @@ export class EntityGraphStore {
   private findNodeByEntity(entity: ExtractedEntity): EntityNode | null {
     const name = cleanName(entity.name)
     const normalizedName = normalizeName(name)
-    const type = ENTITY_TYPES.has((entity.type || 'other') as EntityType) ? entity.type || 'other' : 'other'
     const row = getDb().prepare(`
       SELECT * FROM entity_graph_nodes
-      WHERE normalized_name = ? AND type = ?
-    `).get(normalizedName, type) as Record<string, unknown> | undefined
+      WHERE normalized_name = ?
+      ORDER BY mention_count DESC, last_seen_at DESC
+      LIMIT 1
+    `).get(normalizedName) as Record<string, unknown> | undefined
     return row ? rowToNode(row) : null
   }
 
@@ -358,25 +383,134 @@ export class EntityGraphStore {
     return result.changes
   }
 
-  list(limit = 80): { nodes: EntityNode[]; edges: EntityEdge[] } {
+  private mergeDuplicateNameNodes(rows: Record<string, unknown>[], now = Date.now()): void {
+    if (rows.length < 2) return
     const db = getDb()
+    const target = rows[0]
+    const sources = rows.slice(1)
+
+    const merge = db.transaction(() => {
+      let aliases = JSON.parse((target.aliases_json as string) || '[]') as string[]
+      let mentionCount = Number(target.mention_count || 0)
+      let sourceCount = Number(target.source_count || 0)
+      let firstSeenAt = Number(target.first_seen_at || now)
+      let lastSeenAt = Number(target.last_seen_at || now)
+      let type = target.type as EntityType
+
+      for (const source of sources) {
+        aliases = aliases.concat(JSON.parse((source.aliases_json as string) || '[]') as string[])
+        mentionCount += Number(source.mention_count || 0)
+        sourceCount += Number(source.source_count || 0)
+        firstSeenAt = Math.min(firstSeenAt, Number(source.first_seen_at || firstSeenAt))
+        lastSeenAt = Math.max(lastSeenAt, Number(source.last_seen_at || lastSeenAt))
+        if (type === 'other' && source.type !== 'other') type = source.type as EntityType
+
+        const edgeRows = db.prepare(`
+          SELECT *
+          FROM entity_graph_edges
+          WHERE from_node_id = ? OR to_node_id = ?
+        `).all(source.id, source.id) as Record<string, unknown>[]
+
+        for (const edge of edgeRows) {
+          const fromNodeId = edge.from_node_id === source.id ? target.id as string : edge.from_node_id as string
+          const toNodeId = edge.to_node_id === source.id ? target.id as string : edge.to_node_id as string
+          if (fromNodeId === toNodeId) {
+            db.prepare('DELETE FROM entity_graph_edges WHERE id = ?').run(edge.id)
+            continue
+          }
+
+          const conflict = db.prepare(`
+            SELECT *
+            FROM entity_graph_edges
+            WHERE from_node_id = ? AND relation = ? AND to_node_id = ? AND id != ?
+          `).get(fromNodeId, edge.relation, toNodeId, edge.id) as Record<string, unknown> | undefined
+
+          if (conflict) {
+            db.prepare(`
+              UPDATE entity_graph_edges
+              SET confidence = MAX(confidence, ?),
+                  evidence = ?,
+                  mention_count = mention_count + ?,
+                  first_seen_at = MIN(first_seen_at, ?),
+                  last_seen_at = MAX(last_seen_at, ?)
+              WHERE id = ?
+            `).run(
+              edge.confidence,
+              edge.evidence || conflict.evidence || '',
+              Number(edge.mention_count || 0),
+              Number(edge.first_seen_at || now),
+              Number(edge.last_seen_at || now),
+              conflict.id,
+            )
+            db.prepare('DELETE FROM entity_graph_edges WHERE id = ?').run(edge.id)
+            continue
+          }
+
+          db.prepare(`
+            UPDATE entity_graph_edges
+            SET from_node_id = ?, to_node_id = ?
+            WHERE id = ?
+          `).run(fromNodeId, toNodeId, edge.id)
+        }
+
+        db.prepare('DELETE FROM entity_graph_nodes WHERE id = ?').run(source.id)
+      }
+
+      db.prepare(`
+        UPDATE entity_graph_nodes
+        SET type = ?,
+            aliases_json = ?,
+            mention_count = ?,
+            source_count = ?,
+            first_seen_at = ?,
+            last_seen_at = ?
+        WHERE id = ?
+      `).run(
+        type,
+        JSON.stringify(Array.from(new Set(aliases.map(cleanName).filter(Boolean))).slice(0, 16)),
+        mentionCount,
+        sourceCount,
+        firstSeenAt,
+        lastSeenAt,
+        target.id,
+      )
+    })
+
+    merge()
+  }
+
+  list(limit = 80): GraphSnapshot {
+    const db = getDb()
+    const edgeLimit = limit
+    const nodeLimit = limit
     const edgeRows = db.prepare(`
-      SELECT e.*, fn.name AS from_name, tn.name AS to_name
+      WITH node_degrees AS (
+        SELECT n.id AS id, COUNT(e.id) AS degree
+        FROM entity_graph_nodes n
+        LEFT JOIN entity_graph_edges e ON e.from_node_id = n.id OR e.to_node_id = n.id
+        GROUP BY n.id
+      )
+      SELECT e.*, fn.name AS from_name, tn.name AS to_name,
+        (e.mention_count * 4)
+        + (MAX(fd.degree, td.degree) * 1.5)
+        + CASE WHEN e.last_seen_at >= ? THEN 12 ELSE 0 END AS overview_score
       FROM entity_graph_edges e
       JOIN entity_graph_nodes fn ON fn.id = e.from_node_id
       JOIN entity_graph_nodes tn ON tn.id = e.to_node_id
-      ORDER BY e.last_seen_at DESC
+      JOIN node_degrees fd ON fd.id = e.from_node_id
+      JOIN node_degrees td ON td.id = e.to_node_id
+      ORDER BY overview_score DESC, e.last_seen_at DESC
       LIMIT ?
-    `).all(limit) as Record<string, unknown>[]
+    `).all(Date.now() - 7 * 24 * 60 * 60 * 1000, edgeLimit) as Record<string, unknown>[]
     const edges = edgeRows.map(rowToEdge)
     const nodeIds = Array.from(new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId])))
 
     if (nodeIds.length === 0) {
       const nodes = db.prepare(`
         SELECT * FROM entity_graph_nodes
-        ORDER BY last_seen_at DESC
+        ORDER BY mention_count DESC, last_seen_at DESC
         LIMIT ?
-      `).all(limit) as Record<string, unknown>[]
+      `).all(nodeLimit) as Record<string, unknown>[]
       return { nodes: nodes.map(rowToNode), edges }
     }
 
@@ -384,14 +518,20 @@ export class EntityGraphStore {
     const nodes = db.prepare(`
       SELECT * FROM entity_graph_nodes
       WHERE id IN (${placeholders})
-      ORDER BY last_seen_at DESC
     `).all(...nodeIds) as Record<string, unknown>[]
-    const remaining = Math.max(limit - nodes.length, 0)
+    const remaining = Math.max(nodeLimit - nodes.length, 0)
     const standaloneNodes = remaining > 0
       ? db.prepare(`
+        WITH node_degrees AS (
+          SELECT n.id AS id, COUNT(e.id) AS degree
+          FROM entity_graph_nodes n
+          LEFT JOIN entity_graph_edges e ON e.from_node_id = n.id OR e.to_node_id = n.id
+          GROUP BY n.id
+        )
         SELECT * FROM entity_graph_nodes
+        JOIN node_degrees USING (id)
         WHERE id NOT IN (${placeholders})
-        ORDER BY last_seen_at DESC
+        ORDER BY degree DESC, mention_count DESC, last_seen_at DESC
         LIMIT ?
       `).all(...nodeIds, remaining) as Record<string, unknown>[]
       : []
@@ -416,30 +556,43 @@ export class EntityGraphStore {
     const directRows = query
       ? db.prepare(`
         SELECT * FROM entity_graph_nodes
-        WHERE normalized_name LIKE ? OR aliases_json LIKE ?
+        WHERE normalized_name LIKE ? ESCAPE '\\' OR aliases_json LIKE ?
         ORDER BY mention_count DESC, last_seen_at DESC
         LIMIT 200
-      `).all(`%${query}%`, `%${query}%`) as Record<string, unknown>[]
+      `).all(`%${escapeLike(query)}%`, `%${query}%`) as Record<string, unknown>[]
       : []
-    const rankedRows = db.prepare(`
-      SELECT * FROM entity_graph_nodes
-      ORDER BY mention_count DESC, last_seen_at DESC
-      LIMIT 500
-    `).all() as Record<string, unknown>[]
-    const rows = [...directRows, ...rankedRows]
     const seen = new Set<string>()
     const seeds: EntityNode[] = []
-    for (const row of rows) {
+    for (const row of directRows) {
       const node = rowToNode(row)
       if (seen.has(node.id)) continue
       seen.add(node.id)
       const names = [node.normalizedName, ...node.aliases.map(normalizeName)].filter(Boolean)
-      if (names.some((name) => name.length >= 2 && (haystack.includes(name) || (query.length >= 2 && name.includes(query))))) {
+      if (names.some((name) => name.length >= 2 && (haystack.includes(name) || name.includes(query)))) {
         seeds.push(node)
         if (seeds.length >= limit) break
       }
     }
     return seeds
+  }
+
+  suggestNodes(text: string, limit = 8): EntityNode[] {
+    const query = normalizeName(text)
+    if (query.length < 1) return []
+    const pattern = `%${escapeLike(query)}%`
+    const startsWith = `${escapeLike(query)}%`
+    const rows = getDb().prepare(`
+      SELECT *
+      FROM entity_graph_nodes
+      WHERE normalized_name LIKE ? ESCAPE '\\'
+         OR aliases_json LIKE ?
+      ORDER BY
+        CASE WHEN normalized_name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,
+        mention_count DESC,
+        last_seen_at DESC
+      LIMIT ?
+    `).all(pattern, `%${query}%`, startsWith, limit) as Record<string, unknown>[]
+    return rows.map(rowToNode)
   }
 
   walk(seedNodeIds: string[], depth = 2, edgeLimit = 40): GraphWalkResult {
