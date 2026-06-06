@@ -63,6 +63,10 @@ const router = createRouter({
     // Memory Spaces
     {
       path: '/memory-spaces',
+      redirect: '/memory-spaces/documents'
+    },
+    {
+      path: '/memory-spaces/:section(documents|relationships|visual-graph)',
       name: 'memory-spaces',
       component: () => import('@/views/MemorySpacesView.vue')
     },
