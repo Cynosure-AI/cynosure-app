@@ -1,41 +1,156 @@
 .memory-graph-panel {
   --memory-flow-bg: color-mix(in srgb, var(--color-theme-950) 92%, black);
-  --memory-flow-grid: color-mix(in srgb, var(--color-theme-700) 28%, transparent);
-  --memory-flow-node-fill: color-mix(in srgb, var(--color-theme-900) 88%, var(--color-accent-500) 12%);
-  --memory-flow-node-border: color-mix(in srgb, var(--color-accent-500) 52%, var(--color-theme-700));
+  --memory-flow-grid: color-mix(
+    in srgb,
+    var(--color-theme-700) 28%,
+    transparent
+  );
+  --memory-flow-node-fill: color-mix(
+    in srgb,
+    var(--color-theme-900) 88%,
+    var(--color-accent-500) 12%
+  );
+  --memory-flow-node-border: color-mix(
+    in srgb,
+    var(--color-accent-500) 52%,
+    var(--color-theme-700)
+  );
   --memory-flow-node-text: var(--color-theme-100);
-  --memory-flow-node-muted: color-mix(in srgb, var(--color-accent-300) 68%, var(--color-theme-400));
-  --memory-flow-person-fill: color-mix(in srgb, #0f766e 52%, var(--color-theme-950));
-  --memory-flow-person-border: color-mix(in srgb, #2dd4bf 70%, var(--color-theme-700));
-  --memory-flow-place-fill: color-mix(in srgb, #166534 52%, var(--color-theme-950));
-  --memory-flow-place-border: color-mix(in srgb, #4ade80 70%, var(--color-theme-700));
-  --memory-flow-organization-fill: color-mix(in srgb, #1d4ed8 54%, var(--color-theme-950));
-  --memory-flow-organization-border: color-mix(in srgb, #60a5fa 72%, var(--color-theme-700));
-  --memory-flow-project-fill: color-mix(in srgb, #7c3aed 50%, var(--color-theme-950));
-  --memory-flow-project-border: color-mix(in srgb, #a78bfa 72%, var(--color-theme-700));
-  --memory-flow-event-fill: color-mix(in srgb, #be123c 48%, var(--color-theme-950));
-  --memory-flow-event-border: color-mix(in srgb, #fb7185 72%, var(--color-theme-700));
-  --memory-flow-date-fill: color-mix(in srgb, #854d0e 48%, var(--color-theme-950));
-  --memory-flow-date-border: color-mix(in srgb, #facc15 68%, var(--color-theme-700));
-  --memory-flow-technology-fill: color-mix(in srgb, #0891b2 52%, var(--color-theme-950));
-  --memory-flow-technology-border: color-mix(in srgb, #22d3ee 72%, var(--color-theme-700));
-  --memory-flow-product-fill: color-mix(in srgb, #c2410c 48%, var(--color-theme-950));
-  --memory-flow-product-border: color-mix(in srgb, #fb923c 72%, var(--color-theme-700));
-  --memory-flow-artifact-fill: color-mix(in srgb, #b45309 48%, var(--color-theme-950));
-  --memory-flow-artifact-border: color-mix(in srgb, #fbbf24 70%, var(--color-theme-700));
-  --memory-flow-concept-fill: color-mix(in srgb, #4338ca 50%, var(--color-theme-950));
-  --memory-flow-concept-border: color-mix(in srgb, #818cf8 72%, var(--color-theme-700));
-  --memory-flow-seed-fill: color-mix(in srgb, var(--color-accent-900) 42%, var(--color-theme-900));
-  --memory-flow-seed-border: color-mix(in srgb, var(--color-accent-400) 78%, var(--color-theme-100));
-  --memory-flow-edge: color-mix(in srgb, var(--color-accent-500) 82%, var(--color-theme-300));
-  --memory-flow-edge-label-bg: color-mix(in srgb, var(--color-theme-950) 90%, var(--color-accent-900));
+  --memory-flow-node-muted: color-mix(
+    in srgb,
+    var(--color-accent-300) 68%,
+    var(--color-theme-400)
+  );
+  --memory-flow-person-fill: color-mix(
+    in srgb,
+    #0f766e 52%,
+    var(--color-theme-950)
+  );
+  --memory-flow-person-border: color-mix(
+    in srgb,
+    #2dd4bf 70%,
+    var(--color-theme-700)
+  );
+  --memory-flow-place-fill: color-mix(
+    in srgb,
+    #166534 52%,
+    var(--color-theme-950)
+  );
+  --memory-flow-place-border: color-mix(
+    in srgb,
+    #4ade80 70%,
+    var(--color-theme-700)
+  );
+  --memory-flow-organization-fill: color-mix(
+    in srgb,
+    #1d4ed8 54%,
+    var(--color-theme-950)
+  );
+  --memory-flow-organization-border: color-mix(
+    in srgb,
+    #60a5fa 72%,
+    var(--color-theme-700)
+  );
+  --memory-flow-project-fill: color-mix(
+    in srgb,
+    #7c3aed 50%,
+    var(--color-theme-950)
+  );
+  --memory-flow-project-border: color-mix(
+    in srgb,
+    #a78bfa 72%,
+    var(--color-theme-700)
+  );
+  --memory-flow-event-fill: color-mix(
+    in srgb,
+    #be123c 48%,
+    var(--color-theme-950)
+  );
+  --memory-flow-event-border: color-mix(
+    in srgb,
+    #fb7185 72%,
+    var(--color-theme-700)
+  );
+  --memory-flow-date-fill: color-mix(
+    in srgb,
+    #854d0e 48%,
+    var(--color-theme-950)
+  );
+  --memory-flow-date-border: color-mix(
+    in srgb,
+    #facc15 68%,
+    var(--color-theme-700)
+  );
+  --memory-flow-technology-fill: color-mix(
+    in srgb,
+    #0891b2 52%,
+    var(--color-theme-950)
+  );
+  --memory-flow-technology-border: color-mix(
+    in srgb,
+    #22d3ee 72%,
+    var(--color-theme-700)
+  );
+  --memory-flow-product-fill: color-mix(
+    in srgb,
+    #c2410c 48%,
+    var(--color-theme-950)
+  );
+  --memory-flow-product-border: color-mix(
+    in srgb,
+    #fb923c 72%,
+    var(--color-theme-700)
+  );
+  --memory-flow-artifact-fill: color-mix(
+    in srgb,
+    #b45309 48%,
+    var(--color-theme-950)
+  );
+  --memory-flow-artifact-border: color-mix(
+    in srgb,
+    #fbbf24 70%,
+    var(--color-theme-700)
+  );
+  --memory-flow-concept-fill: color-mix(
+    in srgb,
+    #4338ca 50%,
+    var(--color-theme-950)
+  );
+  --memory-flow-concept-border: color-mix(
+    in srgb,
+    #818cf8 72%,
+    var(--color-theme-700)
+  );
+  --memory-flow-seed-fill: color-mix(
+    in srgb,
+    var(--color-accent-900) 42%,
+    var(--color-theme-900)
+  );
+  --memory-flow-seed-border: color-mix(
+    in srgb,
+    var(--color-accent-400) 78%,
+    var(--color-theme-100)
+  );
+  --memory-flow-edge: color-mix(
+    in srgb,
+    var(--color-accent-500) 82%,
+    var(--color-theme-300)
+  );
+  --memory-flow-edge-label-bg: color-mix(
+    in srgb,
+    var(--color-theme-950) 90%,
+    var(--color-accent-900)
+  );
   --memory-flow-shadow: color-mix(in srgb, black 28%, transparent);
-  --memory-flow-minimap-mask: color-mix(in srgb, var(--color-theme-950) 72%, transparent);
 }
 
 .memory-graph-panel .entity-flow {
   background:
-    radial-gradient(circle at 20px 20px, var(--memory-flow-grid) 1px, transparent 1px),
+    radial-gradient(
+      circle at 20px 20px,
+      var(--memory-flow-grid) 1px,
+      transparent 1px
+    ),
     var(--memory-flow-bg);
   background-size: 28px 28px;
 }
@@ -70,61 +185,101 @@
 .memory-graph-panel .entity-flow-node-type-person {
   --memory-flow-node-fill: var(--memory-flow-person-fill);
   --memory-flow-node-border: var(--memory-flow-person-border);
-  --memory-flow-node-muted: color-mix(in srgb, #99f6e4 78%, var(--color-theme-300));
+  --memory-flow-node-muted: color-mix(
+    in srgb,
+    #99f6e4 78%,
+    var(--color-theme-300)
+  );
 }
 
 .memory-graph-panel .entity-flow-node-type-place {
   --memory-flow-node-fill: var(--memory-flow-place-fill);
   --memory-flow-node-border: var(--memory-flow-place-border);
-  --memory-flow-node-muted: color-mix(in srgb, #bbf7d0 78%, var(--color-theme-300));
+  --memory-flow-node-muted: color-mix(
+    in srgb,
+    #bbf7d0 78%,
+    var(--color-theme-300)
+  );
 }
 
 .memory-graph-panel .entity-flow-node-type-organization {
   --memory-flow-node-fill: var(--memory-flow-organization-fill);
   --memory-flow-node-border: var(--memory-flow-organization-border);
-  --memory-flow-node-muted: color-mix(in srgb, #bfdbfe 80%, var(--color-theme-300));
+  --memory-flow-node-muted: color-mix(
+    in srgb,
+    #bfdbfe 80%,
+    var(--color-theme-300)
+  );
 }
 
 .memory-graph-panel .entity-flow-node-type-project {
   --memory-flow-node-fill: var(--memory-flow-project-fill);
   --memory-flow-node-border: var(--memory-flow-project-border);
-  --memory-flow-node-muted: color-mix(in srgb, #ddd6fe 80%, var(--color-theme-300));
+  --memory-flow-node-muted: color-mix(
+    in srgb,
+    #ddd6fe 80%,
+    var(--color-theme-300)
+  );
 }
 
 .memory-graph-panel .entity-flow-node-type-event {
   --memory-flow-node-fill: var(--memory-flow-event-fill);
   --memory-flow-node-border: var(--memory-flow-event-border);
-  --memory-flow-node-muted: color-mix(in srgb, #fecdd3 78%, var(--color-theme-300));
+  --memory-flow-node-muted: color-mix(
+    in srgb,
+    #fecdd3 78%,
+    var(--color-theme-300)
+  );
 }
 
 .memory-graph-panel .entity-flow-node-type-date {
   --memory-flow-node-fill: var(--memory-flow-date-fill);
   --memory-flow-node-border: var(--memory-flow-date-border);
-  --memory-flow-node-muted: color-mix(in srgb, #fef08a 76%, var(--color-theme-300));
+  --memory-flow-node-muted: color-mix(
+    in srgb,
+    #fef08a 76%,
+    var(--color-theme-300)
+  );
 }
 
 .memory-graph-panel .entity-flow-node-type-technology {
   --memory-flow-node-fill: var(--memory-flow-technology-fill);
   --memory-flow-node-border: var(--memory-flow-technology-border);
-  --memory-flow-node-muted: color-mix(in srgb, #a5f3fc 78%, var(--color-theme-300));
+  --memory-flow-node-muted: color-mix(
+    in srgb,
+    #a5f3fc 78%,
+    var(--color-theme-300)
+  );
 }
 
 .memory-graph-panel .entity-flow-node-type-product {
   --memory-flow-node-fill: var(--memory-flow-product-fill);
   --memory-flow-node-border: var(--memory-flow-product-border);
-  --memory-flow-node-muted: color-mix(in srgb, #fed7aa 78%, var(--color-theme-300));
+  --memory-flow-node-muted: color-mix(
+    in srgb,
+    #fed7aa 78%,
+    var(--color-theme-300)
+  );
 }
 
 .memory-graph-panel .entity-flow-node-type-artifact {
   --memory-flow-node-fill: var(--memory-flow-artifact-fill);
   --memory-flow-node-border: var(--memory-flow-artifact-border);
-  --memory-flow-node-muted: color-mix(in srgb, #fde68a 78%, var(--color-theme-300));
+  --memory-flow-node-muted: color-mix(
+    in srgb,
+    #fde68a 78%,
+    var(--color-theme-300)
+  );
 }
 
 .memory-graph-panel .entity-flow-node-type-concept {
   --memory-flow-node-fill: var(--memory-flow-concept-fill);
   --memory-flow-node-border: var(--memory-flow-concept-border);
-  --memory-flow-node-muted: color-mix(in srgb, #c7d2fe 80%, var(--color-theme-300));
+  --memory-flow-node-muted: color-mix(
+    in srgb,
+    #c7d2fe 80%,
+    var(--color-theme-300)
+  );
 }
 
 .memory-graph-panel .entity-flow-edge path {
@@ -151,8 +306,11 @@
   padding: 2px 0;
 }
 
-.memory-graph-panel .entity-edge-label-direction + .entity-edge-label-direction {
-  border-top: 1px solid color-mix(in srgb, var(--color-theme-700) 62%, transparent);
+.memory-graph-panel
+  .entity-edge-label-direction
+  + .entity-edge-label-direction {
+  border-top: 1px solid
+    color-mix(in srgb, var(--color-theme-700) 62%, transparent);
 }
 
 .memory-graph-panel .entity-edge-label-direction-title {
@@ -237,7 +395,8 @@
   width: min(320px, calc(100% - 16px));
   height: 100%;
   flex-direction: column;
-  border-left: 1px solid color-mix(in srgb, var(--color-accent-500) 36%, var(--color-theme-800));
+  border-left: 1px solid
+    color-mix(in srgb, var(--color-accent-500) 36%, var(--color-theme-800));
   background: color-mix(in srgb, var(--color-theme-950) 94%, black);
   box-shadow:
     -1px 0 0 color-mix(in srgb, var(--color-accent-500) 20%, transparent),
@@ -251,7 +410,11 @@
   bottom: 7px;
   width: 3px;
   border-radius: 99px;
-  background: color-mix(in srgb, var(--color-accent-500) 58%, var(--color-theme-600));
+  background: color-mix(
+    in srgb,
+    var(--color-accent-500) 58%,
+    var(--color-theme-600)
+  );
   content: "";
   pointer-events: none;
 }
@@ -304,7 +467,9 @@
   place-items: center;
   border-radius: 6px;
   color: var(--color-theme-500);
-  transition: background-color 120ms ease, color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .memory-graph-panel .entity-node-sidebar-close:hover {
@@ -363,11 +528,17 @@
   color: var(--color-theme-200);
   font-size: 13px;
   line-height: 1;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .memory-graph-panel .entity-node-sidebar-action:hover {
-  background: color-mix(in srgb, var(--color-accent-500) 18%, var(--color-theme-800));
+  background: color-mix(
+    in srgb,
+    var(--color-accent-500) 18%,
+    var(--color-theme-800)
+  );
   color: var(--color-theme-50);
 }
 
@@ -471,9 +642,4 @@
 .memory-graph-panel .vue-flow__controls-button:hover {
   background: var(--color-theme-800);
   color: var(--color-theme-100);
-}
-
-.memory-graph-panel .vue-flow__minimap {
-  background: color-mix(in srgb, var(--color-theme-900) 86%, transparent);
-  border: 1px solid var(--color-theme-800);
 }

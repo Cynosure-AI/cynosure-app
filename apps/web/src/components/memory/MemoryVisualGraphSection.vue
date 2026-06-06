@@ -13,14 +13,12 @@ import {
   type Node,
 } from "@vue-flow/core";
 import { Controls } from "@vue-flow/controls";
-import { MiniMap } from "@vue-flow/minimap";
 import { Icon } from "@iconify/vue";
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
 import "@vue-flow/controls/dist/style.css";
-import "@vue-flow/minimap/dist/style.css";
 import "./memory-visual-graph.css";
-import type { EntityGraphEdge, EntityGraphNode, EntityGraphNodeType, EntityGraphResponse } from "../../api/types";
+import type { EntityGraphEdge, EntityGraphNode, EntityGraphResponse } from "../../api/types";
 import type { FlowEdgeData, FlowNodeData } from "./memory-graph-types";
 
 const props = defineProps<{
@@ -47,20 +45,6 @@ const emit = defineEmits<{
   "delete-node": [node: EntityGraphNode];
   "delete-nodes": [nodes: EntityGraphNode[]];
 }>();
-
-const ENTITY_TYPE_COLORS: Record<EntityGraphNodeType, string> = {
-  person: "var(--memory-flow-person-fill)",
-  place: "var(--memory-flow-place-fill)",
-  organization: "var(--memory-flow-organization-fill)",
-  project: "var(--memory-flow-project-fill)",
-  event: "var(--memory-flow-event-fill)",
-  date: "var(--memory-flow-date-fill)",
-  technology: "var(--memory-flow-technology-fill)",
-  product: "var(--memory-flow-product-fill)",
-  artifact: "var(--memory-flow-artifact-fill)",
-  concept: "var(--memory-flow-concept-fill)",
-  other: "var(--memory-flow-node-fill)",
-};
 
 const selectedNodeId = ref<string | null>(null);
 const { getSelectedNodes, removeSelectedElements } = useVueFlow(props.flowId);
@@ -129,13 +113,6 @@ watch(() => props.graphFlowNodes, (nodes) => {
     removeSelectedElements();
   }
 });
-
-function minimapNodeColor(node: Node<FlowNodeData>): string {
-  if (typeof node.class === "string" && node.class.includes("entity-flow-node-seed")) {
-    return "var(--memory-flow-seed-fill)";
-  }
-  return ENTITY_TYPE_COLORS[node.data?.entity.type || "other"];
-}
 
 function formatCount(value: number): string {
   return new Intl.NumberFormat().format(value);
@@ -495,13 +472,6 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           </template>
 
           <Controls />
-
-          <MiniMap
-            :node-color="minimapNodeColor"
-            :node-stroke-color="() => 'var(--memory-flow-node-border)'"
-            :node-border-radius="4"
-            mask-color="var(--memory-flow-minimap-mask)"
-          />
         </VueFlow>
 
         <aside
