@@ -793,9 +793,9 @@ export function makeEntityGraphDeleteTool(): ToolDefinition {
             const graph = getEntityGraphStore()
 
             if (edgeId?.trim()) {
-                const deleted = graph.deleteEdge(edgeId.trim())
-                return deleted
-                    ? { success: true, output: `Deleted entity graph relationship ${edgeId.trim()}.` }
+                const result = graph.deleteEdge(edgeId.trim())
+                return result.edgeDeleted
+                    ? { success: true, output: formatEntityGraphDeleteOutput(`Deleted entity graph relationship ${edgeId.trim()}.`, result.orphanedNodeIds.length) }
                     : { success: false, output: `No relationship found with id ${edgeId.trim()}.` }
             }
 
@@ -806,17 +806,22 @@ export function makeEntityGraphDeleteTool(): ToolDefinition {
             const rel = cleanRelationName(relation)
             if (!rel) return { success: false, output: 'Provide edgeId, or a valid from/relation/to triple to delete.' }
 
-            const deleted = graph.deleteMatchingEdge({
+            const result = graph.deleteMatchingEdge({
                 action: 'delete',
                 from: fromEntity,
                 relation: rel,
                 to: toEntity,
             })
-            return deleted > 0
-                ? { success: true, output: `Deleted ${deleted} matching entity graph relationship${deleted !== 1 ? 's' : ''}.` }
+            return result.edgeDeleted
+                ? { success: true, output: formatEntityGraphDeleteOutput('Deleted 1 matching entity graph relationship.', result.orphanedNodeIds.length) }
                 : { success: false, output: 'No matching entity graph relationship was found.' }
         },
     }
+}
+
+function formatEntityGraphDeleteOutput(message: string, orphanedNodeCount: number): string {
+    if (orphanedNodeCount === 0) return message
+    return `${message} Removed ${orphanedNodeCount} orphaned entit${orphanedNodeCount === 1 ? 'y' : 'ies'}.`
 }
 
 /**

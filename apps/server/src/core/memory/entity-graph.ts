@@ -38,6 +38,11 @@ export interface GraphWalkResult {
   edges: EntityEdge[]
 }
 
+export interface DeleteEdgeResult {
+  edgeDeleted: boolean
+  orphanedNodeIds: string[]
+}
+
 interface GraphSnapshot {
   nodes: EntityNode[]
   edges: EntityEdge[]
@@ -332,9 +337,35 @@ export class EntityGraphStore {
     return this.getEdge(id)
   }
 
-  deleteEdge(id: string): boolean {
-    const result = getDb().prepare('DELETE FROM entity_graph_edges WHERE id = ?').run(id)
-    return result.changes > 0
+  deleteEdge(id: string, opts: { deleteOrphanedNodes?: boolean } = {}): DeleteEdgeResult {
+    const db = getDb()
+    const edge = this.getEdge(id)
+    if (!edge) return { edgeDeleted: false, orphanedNodeIds: [] }
+
+    const deleted = db.transaction(() => {
+      const result = db.prepare('DELETE FROM entity_graph_edges WHERE id = ?').run(id)
+      if (result.changes === 0) return { edgeDeleted: false, orphanedNodeIds: [] }
+      if (opts.deleteOrphanedNodes === false) return { edgeDeleted: true, orphanedNodeIds: [] }
+
+      const orphanedNodeIds = [edge.fromNodeId, edge.toNodeId].filter((nodeId, idx, ids) => {
+        if (ids.indexOf(nodeId) !== idx) return false
+        const linked = db.prepare(`
+          SELECT 1
+          FROM entity_graph_edges
+          WHERE from_node_id = ? OR to_node_id = ?
+          LIMIT 1
+        `).get(nodeId, nodeId)
+        return !linked
+      })
+
+      for (const nodeId of orphanedNodeIds) {
+        db.prepare('DELETE FROM entity_graph_nodes WHERE id = ?').run(nodeId)
+      }
+
+      return { edgeDeleted: true, orphanedNodeIds }
+    })()
+
+    return deleted
   }
 
   deleteNode(id: string): boolean {
@@ -342,15 +373,16 @@ export class EntityGraphStore {
     return result.changes > 0
   }
 
-  deleteMatchingEdge(relation: ExtractedRelation): number {
+  deleteMatchingEdge(relation: ExtractedRelation): DeleteEdgeResult {
     const from = this.findNodeByEntity(relation.from)
     const to = this.findNodeByEntity(relation.to)
-    if (!from || !to) return 0
-    const result = getDb().prepare(`
-      DELETE FROM entity_graph_edges
+    if (!from || !to) return { edgeDeleted: false, orphanedNodeIds: [] }
+    const row = getDb().prepare(`
+      SELECT id FROM entity_graph_edges
       WHERE from_node_id = ? AND relation = ? AND to_node_id = ?
-    `).run(from.id, normalizeRelation(relation.relation), to.id)
-    return result.changes
+    `).get(from.id, normalizeRelation(relation.relation), to.id) as { id: string } | undefined
+    if (!row) return { edgeDeleted: false, orphanedNodeIds: [] }
+    return this.deleteEdge(row.id)
   }
 
   deleteAll(): { nodesDeleted: number; edgesDeleted: number } {
@@ -795,7 +827,7 @@ export class EntityGraphStore {
         evidence: typeof obj.evidence === 'string' ? obj.evidence : ''
       }
       if (extracted.action === 'delete') {
-        deleted += this.deleteMatchingEdge(extracted)
+        if (this.deleteMatchingEdge(extracted).edgeDeleted) deleted++
         continue
       }
       const edge = this.upsertEdge(extracted, 'conversation', opts.conversationId, now)
