@@ -54,6 +54,8 @@ const cronOneOff = ref(false);
 const cronModelOverride = ref("");
 const cronProviderOverride = ref("");
 const cronOutputChannelId = ref("");
+const cronNotificationMode = ref<"always" | "conditional">("always");
+const cronNotificationCondition = ref("");
 
 // Schedule builder refs
 const dlgFrequency = ref<CronFrequency>("daily");
@@ -86,6 +88,8 @@ function populateFields(j: CronJob) {
   cronModelOverride.value = j.modelOverride || "";
   cronProviderOverride.value = j.providerOverride || "";
   cronOutputChannelId.value = j.outputChannelId || "";
+  cronNotificationMode.value = j.notificationMode === "conditional" ? "conditional" : "always";
+  cronNotificationCondition.value = j.notificationCondition || "";
 
   const p = parseCronExpr(j.schedule);
   dlgFrequency.value = p.frequency;
@@ -135,6 +139,8 @@ async function save() {
       modelOverride: cronModelOverride.value,
       providerOverride: cronProviderOverride.value,
       outputChannelId: cronOutputChannelId.value,
+      notificationMode: cronNotificationMode.value,
+      notificationCondition: cronNotificationCondition.value,
     });
     saveMessage.value = "Saved";
     setTimeout(() => (saveMessage.value = ""), 2000);
@@ -622,6 +628,34 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 {{ ch.name }} ({{ ch.type }})
               </option>
             </select>
+            <div
+              v-if="cronOutputChannelId"
+              class="mt-4 space-y-3"
+            >
+              <div>
+                <label class="block text-xs text-theme-400 mb-1.5">Notify</label>
+                <select
+                  v-model="cronNotificationMode"
+                  class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+                >
+                  <option value="always">
+                    Always
+                  </option>
+                  <option value="conditional">
+                    Conditional
+                  </option>
+                </select>
+              </div>
+              <div v-if="cronNotificationMode === 'conditional'">
+                <label class="block text-xs text-theme-400 mb-1.5">Condition</label>
+                <textarea
+                  v-model="cronNotificationCondition"
+                  placeholder="If the webpage mentions topic XY, which I'm interested in"
+                  class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 resize-vertical"
+                  rows="3"
+                />
+              </div>
+            </div>
           </BaseCard>
 
           <!-- Cron Prompt -->

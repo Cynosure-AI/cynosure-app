@@ -272,6 +272,8 @@ export interface CronJob {
     modelOverride: string
     providerOverride: string
     outputChannelId: string
+    notificationMode: 'always' | 'conditional'
+    notificationCondition: string
     createdAt: number
     updatedAt: number
     agentName: string
