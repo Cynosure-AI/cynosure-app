@@ -7,6 +7,7 @@ import { nanoid } from 'nanoid'
 import { unlinkSync } from 'fs'
 import { cleanupConversationArtifacts, extractFilePathFromFileUrl } from '../core/artifacts/image-artifacts.js'
 import { deleteConversationAttachmentIndex } from '../core/artifacts/attachment-rag.js'
+import { getAssignedOrDefaultSpaces } from '../core/memory/memory-space-scope.js'
 
 function escapeSqlLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
@@ -27,6 +28,9 @@ function hydrateChatConfigFromAgent(
     }
     if (!Object.prototype.hasOwnProperty.call(hydrated, 'subAgents')) {
         hydrated.subAgents = agent.subAgents
+    }
+    if (!Object.prototype.hasOwnProperty.call(hydrated, 'memorySpaceIds')) {
+        hydrated.memorySpaceIds = getAssignedOrDefaultSpaces(agentId).map((space) => space.id)
     }
     if (!Object.prototype.hasOwnProperty.call(hydrated, 'systemPrompt')) {
         hydrated.systemPrompt = agent.systemPrompt

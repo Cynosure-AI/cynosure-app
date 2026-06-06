@@ -244,9 +244,11 @@ export class AgentMemory {
             filter = buildMemorySpaceFilter([{ id: spaceId }])
         }
         const docs = await ragStore.listDocuments(TABLE_NAME, filter)
+        const indexedFiles = this.getIndexedFilePairs()
 
         const map = new Map<string, { count: number; earliest: number }>()
         for (const doc of docs) {
+            if (doc.spaceId && !indexedFiles.has(`${doc.spaceId}\0${doc.sourceFile || ''}`)) continue
             const sf = doc.sourceFile || '(untitled)'
             const existing = map.get(sf)
             if (existing) {
@@ -260,6 +262,18 @@ export class AgentMemory {
         return Array.from(map.entries())
             .map(([sourceFile, { count, earliest }]) => ({ sourceFile, chunkCount: count, createdAt: earliest }))
             .sort((a, b) => a.sourceFile.localeCompare(b.sourceFile))
+    }
+
+    private getIndexedFilePairs(): Set<string> {
+        try {
+            const db = getDb()
+            const rows = db
+                .prepare('SELECT space_id, file_name FROM memory_file_index')
+                .all() as { space_id: string; file_name: string }[]
+            return new Set(rows.map((row) => `${row.space_id}\0${row.file_name}`))
+        } catch {
+            return new Set()
+        }
     }
 
     /**
