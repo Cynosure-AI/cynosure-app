@@ -8,6 +8,7 @@ import { closeOrchestrationRun } from '../agent/orchestration-state.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import type { AgentData } from '../agents/agent-store.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
+import { getAssignedOrDefaultSpaces } from '../memory/memory-space-scope.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -82,6 +83,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     const chatConfig = JSON.stringify({
         model: planned.responseModel,
         providerId: planned.providerId,
+        memorySpaceIds: getAssignedOrDefaultSpaces(agent.id).map((space) => space.id),
         thinkingEnabled: agent.thinkingEnabled !== false,
         autoMemory: agent.autoMemory === true,
     })
