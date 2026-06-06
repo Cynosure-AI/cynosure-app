@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref, watch } from "vue";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -6,22 +7,23 @@ import {
   Position,
   VueFlow,
   getBezierPath,
+  useVueFlow,
   type Edge,
   type EdgeProps,
   type Node,
 } from "@vue-flow/core";
 import { Controls } from "@vue-flow/controls";
 import { MiniMap } from "@vue-flow/minimap";
-import { NodeToolbar } from "@vue-flow/node-toolbar";
 import { Icon } from "@iconify/vue";
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
 import "@vue-flow/controls/dist/style.css";
 import "@vue-flow/minimap/dist/style.css";
-import type { EntityGraphNode, EntityGraphNodeType, EntityGraphResponse } from "../../api/types";
+import "./memory-visual-graph.css";
+import type { EntityGraphEdge, EntityGraphNode, EntityGraphNodeType, EntityGraphResponse } from "../../api/types";
 import type { FlowEdgeData, FlowNodeData } from "./memory-graph-types";
 
-defineProps<{
+const props = defineProps<{
   flowId: string;
   graph: EntityGraphResponse | null;
   graphLoading: boolean;
@@ -43,6 +45,7 @@ const emit = defineEmits<{
   "relayout": [];
   "edit-node": [node: EntityGraphNode];
   "delete-node": [node: EntityGraphNode];
+  "delete-nodes": [nodes: EntityGraphNode[]];
 }>();
 
 const ENTITY_TYPE_COLORS: Record<EntityGraphNodeType, string> = {
@@ -59,6 +62,74 @@ const ENTITY_TYPE_COLORS: Record<EntityGraphNodeType, string> = {
   other: "var(--memory-flow-node-fill)",
 };
 
+const selectedNodeId = ref<string | null>(null);
+const { getSelectedNodes, removeSelectedElements } = useVueFlow(props.flowId);
+
+const selectedFlowNode = computed(() =>
+  props.graphFlowNodes.find((node) => node.id === selectedNodeId.value) || null,
+);
+
+const selectedFlowNodes = computed(() => {
+  const selectedIds = new Set(getSelectedNodes.value.map((node) => node.id));
+  if (selectedIds.size > 0) {
+    return props.graphFlowNodes.filter((node) => selectedIds.has(node.id));
+  }
+  return selectedFlowNode.value ? [selectedFlowNode.value] : [];
+});
+
+const selectedGraphNodes = computed(() =>
+  selectedFlowNodes.value
+    .map((node) => node.data?.entity)
+    .filter((node): node is EntityGraphNode => Boolean(node)),
+);
+
+const selectedGraphNode = computed(() =>
+  selectedGraphNodes.value.length === 1 ? selectedGraphNodes.value[0] : null,
+);
+
+const selectedNodeIds = computed(() => new Set(selectedGraphNodes.value.map((node) => node.id)));
+
+const sidebarVisible = computed(() => selectedGraphNodes.value.length > 0);
+
+const sidebarTitle = computed(() => {
+  if (selectedGraphNode.value) return selectedGraphNode.value.name;
+  return `${formatCount(selectedGraphNodes.value.length)} entities selected`;
+});
+
+const selectedMentionCount = computed(() =>
+  selectedGraphNodes.value.reduce((total, node) => total + node.mentionCount, 0),
+);
+
+const selectedSourceCount = computed(() =>
+  selectedGraphNodes.value.reduce((total, node) => total + node.sourceCount, 0),
+);
+
+const selectedNodeAliases = computed(() => selectedGraphNode.value?.aliases || []);
+
+const selectedNodeRelationships = computed(() => {
+  if (selectedNodeIds.value.size === 0 || !props.graph) return [];
+  return props.graph.edges
+    .filter((edge) => selectedNodeIds.value.has(edge.fromNodeId) || selectedNodeIds.value.has(edge.toNodeId))
+    .sort((a, b) => {
+      const confidenceDelta = (b.confidence || 0) - (a.confidence || 0);
+      if (confidenceDelta !== 0) return confidenceDelta;
+      return relationSortName(a).localeCompare(relationSortName(b));
+    });
+});
+
+watch(() => props.graph, () => {
+  clearSelection();
+});
+
+watch(() => props.graphFlowNodes, (nodes) => {
+  if (selectedNodeId.value && !nodes.some((node) => node.id === selectedNodeId.value)) {
+    selectedNodeId.value = null;
+  }
+  if (getSelectedNodes.value.some((selectedNode) => !nodes.some((node) => node.id === selectedNode.id))) {
+    removeSelectedElements();
+  }
+});
+
 function minimapNodeColor(node: Node<FlowNodeData>): string {
   if (typeof node.class === "string" && node.class.includes("entity-flow-node-seed")) {
     return "var(--memory-flow-seed-fill)";
@@ -68,6 +139,35 @@ function minimapNodeColor(node: Node<FlowNodeData>): string {
 
 function formatCount(value: number): string {
   return new Intl.NumberFormat().format(value);
+}
+
+function formatRelation(relation: string): string {
+  return relation.replace(/_/g, " ");
+}
+
+function formatConfidence(value: number): string {
+  return `${Math.round((value || 0) * 100)}%`;
+}
+
+function relationSortName(edge: EntityGraphEdge): string {
+  return `${edge.fromName} ${edge.toName}`;
+}
+
+function selectGraphNode(event: { node: Node<FlowNodeData> }): void {
+  selectedNodeId.value = event.node.id;
+}
+
+function clearSelection(): void {
+  selectedNodeId.value = null;
+  removeSelectedElements();
+}
+
+function deleteSelectedNodes(): void {
+  if (selectedGraphNodes.value.length === 1) {
+    emit("delete-node", selectedGraphNodes.value[0]);
+    return;
+  }
+  emit("delete-nodes", selectedGraphNodes.value);
 }
 
 function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBezierPath> {
@@ -265,6 +365,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           :min-zoom="0.2"
           :max-zoom="1.8"
           class="entity-flow"
+          @node-click="selectGraphNode"
         >
           <template #edge-stacked="edgeProps">
             <BaseEdge
@@ -323,34 +424,10 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           </template>
 
           <template #node-entity="{ data, selected }">
-            <NodeToolbar
-              :is-visible="selected"
-              :position="Position.Top"
-              class="entity-node-toolbar"
+            <div
+              class="entity-node-body"
+              :class="{ 'entity-node-body-selected': selected || selectedNodeId === data.entity.id }"
             >
-              <button
-                type="button"
-                title="Edit entity"
-                @click.stop="emit('edit-node', data.entity)"
-              >
-                <Icon
-                  icon="lucide:pencil"
-                  class="w-3.5 h-3.5"
-                />
-              </button>
-              <button
-                type="button"
-                title="Delete entity"
-                @click.stop="emit('delete-node', data.entity)"
-              >
-                <Icon
-                  icon="lucide:trash-2"
-                  class="w-3.5 h-3.5"
-                />
-              </button>
-            </NodeToolbar>
-
-            <div class="entity-node-body">
               <div class="entity-node-label">
                 {{ data.label }}
               </div>
@@ -426,277 +503,126 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
             mask-color="var(--memory-flow-minimap-mask)"
           />
         </VueFlow>
+
+        <aside
+          v-if="sidebarVisible"
+          class="entity-node-sidebar"
+        >
+          <header class="entity-node-sidebar-header">
+            <div class="min-w-0">
+              <h3 class="entity-node-sidebar-title">
+                {{ sidebarTitle }}
+              </h3>
+              <div class="entity-node-sidebar-meta">
+                <span>{{ selectedGraphNode?.type || "selection" }}</span>
+                <span>{{ formatCount(selectedMentionCount) }} mentions</span>
+                <span>{{ formatCount(selectedSourceCount) }} sources</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="entity-node-sidebar-close"
+              title="Close"
+              @click="clearSelection"
+            >
+              <Icon
+                icon="lucide:x"
+                class="h-4 w-4"
+              />
+            </button>
+          </header>
+
+          <div
+            v-if="selectedNodeAliases.length"
+            class="entity-node-sidebar-aliases"
+          >
+            <span
+              v-for="alias in selectedNodeAliases"
+              :key="alias"
+              class="entity-node-sidebar-alias"
+            >
+              {{ alias }}
+            </span>
+          </div>
+
+          <div
+            v-if="selectedGraphNodes.length > 1"
+            class="entity-node-sidebar-selection-list"
+          >
+            <span
+              v-for="node in selectedGraphNodes"
+              :key="node.id"
+              class="entity-node-sidebar-selection-item"
+            >
+              {{ node.name }}
+            </span>
+          </div>
+
+          <div class="entity-node-sidebar-actions">
+            <button
+              v-if="selectedGraphNode"
+              type="button"
+              class="entity-node-sidebar-action"
+              @click="emit('edit-node', selectedGraphNode)"
+            >
+              <Icon
+                icon="lucide:pencil"
+                class="h-4 w-4"
+              />
+              Edit
+            </button>
+            <button
+              type="button"
+              class="entity-node-sidebar-action entity-node-sidebar-action-danger"
+              @click="deleteSelectedNodes"
+            >
+              <Icon
+                icon="lucide:trash-2"
+                class="h-4 w-4"
+              />
+              {{ selectedGraphNodes.length > 1 ? `Delete ${selectedGraphNodes.length}` : "Delete" }}
+            </button>
+          </div>
+
+          <div class="entity-node-sidebar-divider" />
+
+          <div class="entity-node-sidebar-section-header">
+            <span>Relationships</span>
+            <span>{{ formatCount(selectedNodeRelationships.length) }}</span>
+          </div>
+
+          <div
+            v-if="selectedNodeRelationships.length"
+            class="entity-node-sidebar-list"
+          >
+            <div
+              v-for="edge in selectedNodeRelationships"
+              :key="edge.id"
+              class="entity-node-sidebar-relation"
+            >
+              <div class="entity-node-sidebar-relation-path">
+                <span>{{ edge.fromName }}</span>
+                <Icon
+                  icon="lucide:arrow-right"
+                  class="h-3 w-3 shrink-0 text-theme-600"
+                />
+                <span>{{ edge.toName }}</span>
+              </div>
+              <div class="entity-node-sidebar-relation-detail">
+                <span>{{ formatRelation(edge.relation) }}</span>
+                <span>{{ formatConfidence(edge.confidence) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else
+            class="entity-node-sidebar-empty"
+          >
+            No relationships for this entity.
+          </div>
+        </aside>
       </div>
     </template>
   </div>
 </template>
-
-<style scoped>
-.memory-graph-panel {
-  --memory-flow-bg: color-mix(in srgb, var(--color-theme-950) 92%, black);
-  --memory-flow-grid: color-mix(in srgb, var(--color-theme-700) 28%, transparent);
-  --memory-flow-node-fill: color-mix(in srgb, var(--color-theme-900) 88%, var(--color-accent-500) 12%);
-  --memory-flow-node-border: color-mix(in srgb, var(--color-accent-500) 52%, var(--color-theme-700));
-  --memory-flow-node-text: var(--color-theme-100);
-  --memory-flow-node-muted: color-mix(in srgb, var(--color-accent-300) 68%, var(--color-theme-400));
-  --memory-flow-person-fill: color-mix(in srgb, #0f766e 52%, var(--color-theme-950));
-  --memory-flow-person-border: color-mix(in srgb, #2dd4bf 70%, var(--color-theme-700));
-  --memory-flow-place-fill: color-mix(in srgb, #166534 52%, var(--color-theme-950));
-  --memory-flow-place-border: color-mix(in srgb, #4ade80 70%, var(--color-theme-700));
-  --memory-flow-organization-fill: color-mix(in srgb, #1d4ed8 54%, var(--color-theme-950));
-  --memory-flow-organization-border: color-mix(in srgb, #60a5fa 72%, var(--color-theme-700));
-  --memory-flow-project-fill: color-mix(in srgb, #7c3aed 50%, var(--color-theme-950));
-  --memory-flow-project-border: color-mix(in srgb, #a78bfa 72%, var(--color-theme-700));
-  --memory-flow-event-fill: color-mix(in srgb, #be123c 48%, var(--color-theme-950));
-  --memory-flow-event-border: color-mix(in srgb, #fb7185 72%, var(--color-theme-700));
-  --memory-flow-date-fill: color-mix(in srgb, #854d0e 48%, var(--color-theme-950));
-  --memory-flow-date-border: color-mix(in srgb, #facc15 68%, var(--color-theme-700));
-  --memory-flow-technology-fill: color-mix(in srgb, #0891b2 52%, var(--color-theme-950));
-  --memory-flow-technology-border: color-mix(in srgb, #22d3ee 72%, var(--color-theme-700));
-  --memory-flow-product-fill: color-mix(in srgb, #c2410c 48%, var(--color-theme-950));
-  --memory-flow-product-border: color-mix(in srgb, #fb923c 72%, var(--color-theme-700));
-  --memory-flow-artifact-fill: color-mix(in srgb, #b45309 48%, var(--color-theme-950));
-  --memory-flow-artifact-border: color-mix(in srgb, #fbbf24 70%, var(--color-theme-700));
-  --memory-flow-concept-fill: color-mix(in srgb, #4338ca 50%, var(--color-theme-950));
-  --memory-flow-concept-border: color-mix(in srgb, #818cf8 72%, var(--color-theme-700));
-  --memory-flow-seed-fill: color-mix(in srgb, var(--color-accent-900) 42%, var(--color-theme-900));
-  --memory-flow-seed-border: color-mix(in srgb, var(--color-accent-400) 78%, var(--color-theme-100));
-  --memory-flow-edge: color-mix(in srgb, var(--color-accent-500) 82%, var(--color-theme-300));
-  --memory-flow-edge-label-bg: color-mix(in srgb, var(--color-theme-950) 90%, var(--color-accent-900));
-  --memory-flow-shadow: color-mix(in srgb, black 28%, transparent);
-  --memory-flow-minimap-mask: color-mix(in srgb, var(--color-theme-950) 72%, transparent);
-}
-
-:deep(.entity-flow) {
-  background:
-    radial-gradient(circle at 20px 20px, var(--memory-flow-grid) 1px, transparent 1px),
-    var(--memory-flow-bg);
-  background-size: 28px 28px;
-}
-
-:deep(.entity-flow-node) {
-  border: 1px solid var(--memory-flow-node-border);
-  background: var(--memory-flow-node-fill);
-  color: var(--memory-flow-node-text);
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  box-shadow: 0 10px 22px var(--memory-flow-shadow);
-}
-
-:deep(.entity-flow-node-seed) {
-  border-color: var(--memory-flow-seed-border);
-  background: var(--memory-flow-seed-fill);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--color-accent-400) 24%, transparent),
-    0 14px 28px var(--memory-flow-shadow);
-}
-
-:deep(.entity-flow-node-type-person) {
-  --memory-flow-node-fill: var(--memory-flow-person-fill);
-  --memory-flow-node-border: var(--memory-flow-person-border);
-  --memory-flow-node-muted: color-mix(in srgb, #99f6e4 78%, var(--color-theme-300));
-}
-
-:deep(.entity-flow-node-type-place) {
-  --memory-flow-node-fill: var(--memory-flow-place-fill);
-  --memory-flow-node-border: var(--memory-flow-place-border);
-  --memory-flow-node-muted: color-mix(in srgb, #bbf7d0 78%, var(--color-theme-300));
-}
-
-:deep(.entity-flow-node-type-organization) {
-  --memory-flow-node-fill: var(--memory-flow-organization-fill);
-  --memory-flow-node-border: var(--memory-flow-organization-border);
-  --memory-flow-node-muted: color-mix(in srgb, #bfdbfe 80%, var(--color-theme-300));
-}
-
-:deep(.entity-flow-node-type-project) {
-  --memory-flow-node-fill: var(--memory-flow-project-fill);
-  --memory-flow-node-border: var(--memory-flow-project-border);
-  --memory-flow-node-muted: color-mix(in srgb, #ddd6fe 80%, var(--color-theme-300));
-}
-
-:deep(.entity-flow-node-type-event) {
-  --memory-flow-node-fill: var(--memory-flow-event-fill);
-  --memory-flow-node-border: var(--memory-flow-event-border);
-  --memory-flow-node-muted: color-mix(in srgb, #fecdd3 78%, var(--color-theme-300));
-}
-
-:deep(.entity-flow-node-type-date) {
-  --memory-flow-node-fill: var(--memory-flow-date-fill);
-  --memory-flow-node-border: var(--memory-flow-date-border);
-  --memory-flow-node-muted: color-mix(in srgb, #fef08a 76%, var(--color-theme-300));
-}
-
-:deep(.entity-flow-node-type-technology) {
-  --memory-flow-node-fill: var(--memory-flow-technology-fill);
-  --memory-flow-node-border: var(--memory-flow-technology-border);
-  --memory-flow-node-muted: color-mix(in srgb, #a5f3fc 78%, var(--color-theme-300));
-}
-
-:deep(.entity-flow-node-type-product) {
-  --memory-flow-node-fill: var(--memory-flow-product-fill);
-  --memory-flow-node-border: var(--memory-flow-product-border);
-  --memory-flow-node-muted: color-mix(in srgb, #fed7aa 78%, var(--color-theme-300));
-}
-
-:deep(.entity-flow-node-type-artifact) {
-  --memory-flow-node-fill: var(--memory-flow-artifact-fill);
-  --memory-flow-node-border: var(--memory-flow-artifact-border);
-  --memory-flow-node-muted: color-mix(in srgb, #fde68a 78%, var(--color-theme-300));
-}
-
-:deep(.entity-flow-node-type-concept) {
-  --memory-flow-node-fill: var(--memory-flow-concept-fill);
-  --memory-flow-node-border: var(--memory-flow-concept-border);
-  --memory-flow-node-muted: color-mix(in srgb, #c7d2fe 80%, var(--color-theme-300));
-}
-
-:deep(.entity-flow-edge path) {
-  stroke: var(--memory-flow-edge);
-}
-
-:deep(.entity-edge-label-stack) {
-  position: absolute;
-  display: grid;
-  gap: 2px;
-  max-width: 260px;
-  padding: 4px;
-  border: 1px solid color-mix(in srgb, var(--color-accent-500) 35%, transparent);
-  border-radius: 7px;
-  background: var(--memory-flow-edge-label-bg);
-  box-shadow: 0 8px 18px var(--memory-flow-shadow);
-  pointer-events: none;
-}
-
-:deep(.entity-edge-label-direction) {
-  display: grid;
-  gap: 2px;
-  min-width: 130px;
-  padding: 2px 0;
-}
-
-:deep(.entity-edge-label-direction + .entity-edge-label-direction) {
-  border-top: 1px solid color-mix(in srgb, var(--color-theme-700) 62%, transparent);
-}
-
-:deep(.entity-edge-label-direction-title) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-width: 0;
-  padding: 0 5px 1px;
-  color: var(--color-theme-400);
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1.15;
-}
-
-:deep(.entity-edge-label-direction-title span) {
-  min-width: 0;
-  max-width: 86px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-:deep(.entity-edge-label-row) {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  border-radius: 4px;
-  padding: 2px 6px;
-  color: var(--color-theme-100);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.2;
-  text-align: center;
-  white-space: normal;
-}
-
-:deep(.entity-node-body) {
-  display: grid;
-  min-width: 150px;
-  max-width: 250px;
-  min-height: 44px;
-  place-items: center;
-  gap: 2px;
-  padding: 8px 12px;
-  text-align: center;
-}
-
-:deep(.entity-node-label) {
-  max-width: 220px;
-  overflow-wrap: anywhere;
-  line-height: 1.2;
-}
-
-:deep(.entity-node-type) {
-  color: var(--memory-flow-node-muted);
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1;
-}
-
-:deep(.entity-handle) {
-  width: 6px;
-  height: 6px;
-  border: 1px solid var(--color-theme-100);
-  background: var(--memory-flow-bg);
-}
-
-:deep(.entity-handle-source) {
-  background: var(--memory-flow-edge);
-}
-
-:deep(.entity-node-toolbar) {
-  display: flex;
-  gap: 4px;
-  padding: 5px;
-  border: 1px solid var(--memory-flow-node-border);
-  border-radius: 8px;
-  background: var(--memory-flow-node-fill);
-  box-shadow: 0 12px 24px var(--memory-flow-shadow);
-}
-
-:deep(.entity-node-toolbar button) {
-  display: grid;
-  width: 28px;
-  height: 26px;
-  place-items: center;
-  border-radius: 6px;
-  color: var(--memory-flow-node-muted);
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-:deep(.entity-node-toolbar button:hover) {
-  background: color-mix(in srgb, var(--color-accent-500) 18%, transparent);
-  color: var(--color-theme-100);
-}
-
-:deep(.entity-flow-edge .vue-flow__edge-textbg) {
-  stroke: color-mix(in srgb, var(--color-accent-500) 35%, transparent);
-  stroke-width: 1px;
-}
-
-:deep(.vue-flow__controls) {
-  border-color: var(--color-theme-800);
-  box-shadow: 0 10px 22px var(--memory-flow-shadow);
-}
-
-:deep(.vue-flow__controls-button) {
-  background: color-mix(in srgb, var(--color-theme-900) 90%, transparent);
-  border-color: var(--color-theme-800);
-  color: var(--color-theme-300);
-}
-
-:deep(.vue-flow__controls-button:hover) {
-  background: var(--color-theme-800);
-  color: var(--color-theme-100);
-}
-
-:deep(.vue-flow__minimap) {
-  background: color-mix(in srgb, var(--color-theme-900) 86%, transparent);
-  border: 1px solid var(--color-theme-800);
-}
-</style>
