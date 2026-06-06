@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { Handle, Position, VueFlow, type Edge, type Node } from "@vue-flow/core";
+import {
+  BaseEdge,
+  EdgeLabelRenderer,
+  Handle,
+  Position,
+  VueFlow,
+  getBezierPath,
+  type Edge,
+  type EdgeProps,
+  type Node,
+} from "@vue-flow/core";
 import { Controls } from "@vue-flow/controls";
 import { MiniMap } from "@vue-flow/minimap";
 import { NodeToolbar } from "@vue-flow/node-toolbar";
@@ -9,7 +19,7 @@ import "@vue-flow/core/dist/theme-default.css";
 import "@vue-flow/controls/dist/style.css";
 import "@vue-flow/minimap/dist/style.css";
 import type { EntityGraphNode, EntityGraphNodeType, EntityGraphResponse } from "../../api/types";
-import type { FlowNodeData } from "./memory-graph-types";
+import type { FlowEdgeData, FlowNodeData } from "./memory-graph-types";
 
 defineProps<{
   flowId: string;
@@ -18,7 +28,7 @@ defineProps<{
   graphQuery: string;
   graphSuggestions: EntityGraphNode[];
   graphFlowNodes: Node<FlowNodeData>[];
-  graphFlowEdges: Edge[];
+  graphFlowEdges: Edge<FlowEdgeData>[];
   nodeSpacing: number;
 }>();
 
@@ -56,6 +66,17 @@ function minimapNodeColor(node: Node<FlowNodeData>): string {
 
 function formatCount(value: number): string {
   return new Intl.NumberFormat().format(value);
+}
+
+function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBezierPath> {
+  return getBezierPath({
+    sourceX: edge.sourceX,
+    sourceY: edge.sourceY,
+    sourcePosition: edge.sourcePosition,
+    targetX: edge.targetX,
+    targetY: edge.targetY,
+    targetPosition: edge.targetPosition,
+  });
 }
 </script>
 
@@ -226,6 +247,36 @@ function formatCount(value: number): string {
           :max-zoom="1.8"
           class="entity-flow"
         >
+          <template #edge-stacked="edgeProps">
+            <BaseEdge
+              :id="edgeProps.id"
+              :path="stackedEdgePath(edgeProps)[0]"
+              :marker-end="edgeProps.markerEnd"
+              :style="edgeProps.style"
+              :interaction-width="edgeProps.interactionWidth"
+            />
+            <EdgeLabelRenderer>
+              <div
+                class="entity-edge-label-stack nodrag nopan"
+                :style="{
+                  transform: `translate(-50%, -50%) translate(${stackedEdgePath(edgeProps)[1]}px, ${stackedEdgePath(edgeProps)[2]}px)`,
+                }"
+              >
+                <div
+                  v-for="(label, index) in edgeProps.data.labels"
+                  :key="label"
+                  class="entity-edge-label-row"
+                >
+                  {{ label }}
+                  <hr
+                    v-if="+index < edgeProps.data.labels.length - 1"
+                    class="entity-edge-label-separator mt-1 mb-0 border-theme-700/50"
+                  >
+                </div>
+              </div>
+            </EdgeLabelRenderer>
+          </template>
+
           <template #node-entity="{ data, selected }">
             <NodeToolbar
               :is-visible="selected"
@@ -458,6 +509,32 @@ function formatCount(value: number): string {
 
 :deep(.entity-flow-edge path) {
   stroke: var(--memory-flow-edge);
+}
+
+:deep(.entity-edge-label-stack) {
+  position: absolute;
+  display: grid;
+  gap: 2px;
+  max-width: 240px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--color-accent-500) 35%, transparent);
+  border-radius: 7px;
+  background: var(--memory-flow-edge-label-bg);
+  box-shadow: 0 8px 18px var(--memory-flow-shadow);
+  pointer-events: none;
+}
+
+:deep(.entity-edge-label-row) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--color-theme-100);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
 }
 
 :deep(.entity-node-body) {

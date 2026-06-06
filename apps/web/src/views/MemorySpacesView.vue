@@ -9,7 +9,7 @@ import ModalDialog from "../components/shared/ModalDialog.vue";
 import MemoryDocumentsSection from "../components/memory/MemoryDocumentsSection.vue";
 import MemoryRelationshipsSection from "../components/memory/MemoryRelationshipsSection.vue";
 import MemoryVisualGraphSection from "../components/memory/MemoryVisualGraphSection.vue";
-import type { FlowNodeData } from "../components/memory/memory-graph-types";
+import type { FlowEdgeData, FlowNodeData } from "../components/memory/memory-graph-types";
 import { syncPrefsToElectron } from "../utils/electron-prefs";
 import { SK_MEMORY_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
@@ -85,7 +85,7 @@ const edgeRelation = ref("");
 const edgeEvidence = ref("");
 const edgeConfidence = ref(70);
 const graphFlowNodes = ref<Node<FlowNodeData>[]>([]);
-const graphFlowEdges = ref<Edge[]>([]);
+const graphFlowEdges = ref<Edge<FlowEdgeData>[]>([]);
 const nodeSpacing = useLocalStorage(SK_MEMORY_GRAPH_NODE_SPACING, 1.0);
 
 const { fitView } = useVueFlow(ENTITY_FLOW_ID);
@@ -160,27 +160,32 @@ async function layoutGraph() {
     points.set(id, { ...position, ...size });
   }
 
+  const edgeGroups = new Map<string, EntityGraphEdge[]>();
+  for (const edge of graph.value.edges) {
+    const key = `${edge.fromNodeId}->${edge.toNodeId}`;
+    if (!edgeGroups.has(key)) edgeGroups.set(key, []);
+    edgeGroups.get(key)!.push(edge);
+  }
+
   const connectedHandles = new Map<string, Set<string>>();
-  const edges: Edge[] = graph.value.edges.map((edge) => {
+  const edges: Edge<FlowEdgeData>[] = Array.from(edgeGroups.values()).map((group) => {
+    const edge = group[0];
     const handles = closestHandles(points.get(edge.fromNodeId), points.get(edge.toNodeId));
     if (!connectedHandles.has(edge.fromNodeId)) connectedHandles.set(edge.fromNodeId, new Set());
     if (!connectedHandles.has(edge.toNodeId)) connectedHandles.set(edge.toNodeId, new Set());
     connectedHandles.get(edge.fromNodeId)!.add(handles.sourceHandle);
     connectedHandles.get(edge.toNodeId)!.add(handles.targetHandle);
     return {
-      id: edge.id,
+      id: group.map((item) => item.id).join("__"),
+      type: "stacked",
       source: edge.fromNodeId,
       target: edge.toNodeId,
       sourceHandle: handles.sourceHandle,
       targetHandle: handles.targetHandle,
-      label: formatRelation(edge.relation),
       markerEnd: MarkerType.ArrowClosed,
       class: "entity-flow-edge",
+      data: { labels: group.map((item) => formatRelation(item.relation)) },
       style: { stroke: "var(--memory-flow-edge)", strokeWidth: 1.8 },
-      labelStyle: { fill: "var(--color-theme-100)", fontSize: 11, fontWeight: 700 },
-      labelBgStyle: { fill: "var(--memory-flow-edge-label-bg)", fillOpacity: 0.92 },
-      labelBgPadding: [6, 4],
-      labelBgBorderRadius: 4,
     };
   });
 
