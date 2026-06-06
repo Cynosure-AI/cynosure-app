@@ -11,7 +11,7 @@ import MemoryRelationshipsSection from "../components/memory/MemoryRelationships
 import MemoryVisualGraphSection from "../components/memory/MemoryVisualGraphSection.vue";
 import type { FlowEdgeData, FlowNodeData } from "../components/memory/memory-graph-types";
 import { syncPrefsToElectron } from "../utils/electron-prefs";
-import { SK_MEMORY_GRAPH_NODE_SPACING } from "../utils/storage-keys";
+import { SK_MEMORY_GRAPH_EDGE_LABELS, SK_MEMORY_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
 const ENTITY_FLOW_ID = "memory-entity-graph";
 
@@ -87,6 +87,7 @@ const edgeConfidence = ref(70);
 const graphFlowNodes = ref<Node<FlowNodeData>[]>([]);
 const graphFlowEdges = ref<Edge<FlowEdgeData>[]>([]);
 const nodeSpacing = useLocalStorage(SK_MEMORY_GRAPH_NODE_SPACING, 1.0);
+const showGraphEdgeLabels = useLocalStorage(SK_MEMORY_GRAPH_EDGE_LABELS, true);
 
 const { fitView } = useVueFlow(ENTITY_FLOW_ID);
 let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk.bundled.js").default>> | null = null;
@@ -284,7 +285,7 @@ watch([graph, () => activePanel.value], async () => {
   }, 40);
 });
 
-watch(nodeSpacing, () => {
+watch([nodeSpacing, showGraphEdgeLabels], () => {
   syncPrefsToElectron();
 });
 
@@ -616,6 +617,7 @@ onMounted(() => loadSpaces());
           v-else
           v-model:graph-query="graphQuery"
           v-model:node-spacing="nodeSpacing"
+          v-model:edge-labels-visible="showGraphEdgeLabels"
           :flow-id="ENTITY_FLOW_ID"
           :graph="graph"
           :graph-loading="graphLoading"

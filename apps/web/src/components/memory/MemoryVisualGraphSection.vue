@@ -30,11 +30,13 @@ defineProps<{
   graphFlowNodes: Node<FlowNodeData>[];
   graphFlowEdges: Edge<FlowEdgeData>[];
   nodeSpacing: number;
+  edgeLabelsVisible: boolean;
 }>();
 
 const emit = defineEmits<{
   "update:graphQuery": [value: string];
   "update:nodeSpacing": [value: number];
+  "update:edgeLabelsVisible": [value: boolean];
   "load-graph": [query?: string];
   "clear-walk": [];
   "select-suggestion": [node: EntityGraphNode];
@@ -219,24 +221,41 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
         v-else
         class="memory-graph-panel relative h-[calc(100vh-255px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
       >
-        <div class="absolute top-2 right-2 z-10 flex items-center gap-2 bg-theme-900/80 backdrop-blur-sm border border-theme-700/60 rounded-lg px-3 py-1.5">
-          <Icon
-            icon="lucide:move"
-            class="w-3.5 h-3.5 text-theme-500 shrink-0"
-          />
-          <span class="text-xs text-theme-500 shrink-0">Spacing</span>
-          <input
-            :value="nodeSpacing"
-            type="range"
-            min="0.5"
-            max="3"
-            step="0.25"
-            class="w-24 accent-accent-500 cursor-pointer"
-            title="Node spacing"
-            @input="emit('update:nodeSpacing', Number(($event.target as HTMLInputElement).value))"
-            @change="emit('relayout')"
+        <div class="absolute top-2 right-2 z-10 flex flex-wrap items-center justify-end gap-2 bg-theme-900/80 backdrop-blur-sm border border-theme-700/60 rounded-lg px-3 py-1.5">
+          <label class="flex items-center gap-2">
+            <Icon
+              icon="lucide:move"
+              class="w-3.5 h-3.5 text-theme-500 shrink-0"
+            />
+            <span class="text-xs text-theme-500 shrink-0">Spacing</span>
+            <input
+              :value="nodeSpacing"
+              type="range"
+              min="0.5"
+              max="3"
+              step="0.25"
+              class="w-24 accent-accent-500 cursor-pointer"
+              title="Node spacing"
+              @input="emit('update:nodeSpacing', Number(($event.target as HTMLInputElement).value))"
+              @change="emit('relayout')"
+            >
+            <span class="text-xs text-theme-300 w-6 text-right">{{ nodeSpacing }}x</span>
+          </label>
+          <div class="h-5 w-px bg-theme-700/70" />
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors"
+            :class="edgeLabelsVisible ? 'bg-accent-500/15 text-accent-200' : 'text-theme-500 hover:bg-theme-800 hover:text-theme-200'"
+            :title="edgeLabelsVisible ? 'Hide edge labels' : 'Show edge labels'"
+            :aria-pressed="edgeLabelsVisible"
+            @click="emit('update:edgeLabelsVisible', !edgeLabelsVisible)"
           >
-          <span class="text-xs text-theme-300 w-6 text-right">{{ nodeSpacing }}x</span>
+            <Icon
+              icon="lucide:tag"
+              class="w-3.5 h-3.5"
+            />
+            Labels
+          </button>
         </div>
         <VueFlow
           :id="flowId"
@@ -256,7 +275,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               :style="edgeProps.style"
               :interaction-width="edgeProps.interactionWidth"
             />
-            <EdgeLabelRenderer>
+            <EdgeLabelRenderer v-if="edgeLabelsVisible">
               <div
                 class="entity-edge-label-stack nodrag nopan"
                 :style="{
