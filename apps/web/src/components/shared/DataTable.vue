@@ -21,6 +21,8 @@ interface Props<TItem> {
   selectable?: boolean
   selectionColumn?: SelectionColumn
   selectedIds?: string[]
+  initialSortKey?: string | null
+  initialSortDirection?: 'asc' | 'desc'
   showHeader?: boolean
   emptyMessage?: string
   loading?: boolean
@@ -31,6 +33,8 @@ const props = withDefaults(defineProps<Props<T>>(), {
   showHeader: true,
   emptyMessage: 'No items found',
   selectedIds: () => [],
+  initialSortKey: null,
+  initialSortDirection: 'asc',
   selectionColumn: () => ({
     width: '40px',
   }),
@@ -44,8 +48,8 @@ const emit = defineEmits<{
 }>()
 
 const showSelectableColumn = computed(() => Boolean(props.selectable))
-const sortColumnKey = ref<string | null>(null)
-const sortDirection = ref<'asc' | 'desc'>('asc')
+const sortColumnKey = ref<string | null>(props.initialSortKey)
+const sortDirection = ref<'asc' | 'desc'>(props.initialSortDirection)
 
 // Ensure fr-based column widths have a minimum so they don't collapse to 0
 // when the grid overflows its container (min-width: max-content doesn't expand fr units).

@@ -161,6 +161,10 @@ function rowToNode(row: Record<string, unknown>): EntityNode {
   }
 }
 
+function rowAliases(row: Record<string, unknown>): string[] {
+  return JSON.parse((row.aliases_json as string) || '[]') as string[]
+}
+
 function rowToEdge(row: Record<string, unknown>): EntityEdge {
   return {
     id: row.id as string,
@@ -186,19 +190,11 @@ export class EntityGraphStore {
     const normalizedName = normalizeName(name)
     const type = ENTITY_TYPES.has((entity.type || 'other') as EntityType) ? entity.type || 'other' : 'other'
     const aliases = Array.from(new Set((entity.aliases || []).map(cleanName).filter(Boolean)))
-    const matchingRows = db.prepare(`
-      SELECT * FROM entity_graph_nodes
-      WHERE normalized_name = ?
-      ORDER BY mention_count DESC, last_seen_at DESC
-    `).all(normalizedName) as Record<string, unknown>[]
+    const lookupNames = Array.from(new Set([name, ...aliases].map(normalizeName).filter(Boolean)))
+    const matchingRows = this.findNodeRowsByNames(lookupNames)
     if (matchingRows.length > 1) this.mergeDuplicateNameNodes(matchingRows, now)
 
-    const existing = db.prepare(`
-      SELECT * FROM entity_graph_nodes
-      WHERE normalized_name = ?
-      ORDER BY mention_count DESC, last_seen_at DESC
-      LIMIT 1
-    `).get(normalizedName) as Record<string, unknown> | undefined
+    const existing = this.findNodeRowsByNames(lookupNames)[0]
 
     if (!existing) {
       const id = nanoid()
@@ -209,8 +205,10 @@ export class EntityGraphStore {
       return this.getNode(id)!
     }
 
-    const existingAliases = JSON.parse((existing.aliases_json as string) || '[]') as string[]
-    const mergedAliases = Array.from(new Set([...existingAliases, ...aliases])).slice(0, 16)
+    const existingAliases = rowAliases(existing)
+    const incomingAliases = existing.normalized_name === normalizedName ? aliases : [name, ...aliases]
+    const mergedAliases = Array.from(new Set([...existingAliases, ...incomingAliases].map(cleanName).filter(Boolean))).slice(0, 16)
+    const displayName = existing.normalized_name === normalizedName ? name : existing.name as string
     const sourceIncrement = sourceId ? 1 : 0
     db.prepare(`
       UPDATE entity_graph_nodes
@@ -221,7 +219,7 @@ export class EntityGraphStore {
           source_count = source_count + ?,
           last_seen_at = ?
       WHERE id = ?
-    `).run(name, type, type, JSON.stringify(mergedAliases), sourceIncrement, now, existing.id)
+    `).run(displayName, type, type, JSON.stringify(mergedAliases), sourceIncrement, now, existing.id)
     return this.getNode(existing.id as string)!
   }
 
@@ -364,14 +362,42 @@ export class EntityGraphStore {
 
   private findNodeByEntity(entity: ExtractedEntity): EntityNode | null {
     const name = cleanName(entity.name)
-    const normalizedName = normalizeName(name)
-    const row = getDb().prepare(`
-      SELECT * FROM entity_graph_nodes
-      WHERE normalized_name = ?
-      ORDER BY mention_count DESC, last_seen_at DESC
-      LIMIT 1
-    `).get(normalizedName) as Record<string, unknown> | undefined
+    const aliases = (entity.aliases || []).map(cleanName).filter(Boolean)
+    const row = this.findNodeRowsByNames([name, ...aliases].map(normalizeName).filter(Boolean))[0]
     return row ? rowToNode(row) : null
+  }
+
+  private findNodeRowsByNames(names: string[]): Record<string, unknown>[] {
+    const normalizedNames = Array.from(new Set(names.filter(Boolean)))
+    if (normalizedNames.length === 0) return []
+
+    const db = getDb()
+    const byId = new Map<string, Record<string, unknown>>()
+    const placeholders = normalizedNames.map(() => '?').join(', ')
+    const exactRows = db.prepare(`
+      SELECT * FROM entity_graph_nodes
+      WHERE normalized_name IN (${placeholders})
+    `).all(...normalizedNames) as Record<string, unknown>[]
+    for (const row of exactRows) byId.set(row.id as string, row)
+
+    const aliasClauses = normalizedNames.map(() => `aliases_json LIKE ? ESCAPE '\\'`).join(' OR ')
+    const aliasRows = db.prepare(`
+      SELECT * FROM entity_graph_nodes
+      WHERE ${aliasClauses}
+    `).all(...normalizedNames.map((name) => `%${escapeLike(name)}%`)) as Record<string, unknown>[]
+    const nameSet = new Set(normalizedNames)
+    for (const row of aliasRows) {
+      const normalizedAliases = rowAliases(row).map(normalizeName).filter(Boolean)
+      if (normalizedAliases.some((alias) => nameSet.has(alias))) byId.set(row.id as string, row)
+    }
+
+    return [...byId.values()].sort((a, b) => {
+      const exactA = nameSet.has(a.normalized_name as string) ? 1 : 0
+      const exactB = nameSet.has(b.normalized_name as string) ? 1 : 0
+      return exactB - exactA
+        || Number(b.mention_count || 0) - Number(a.mention_count || 0)
+        || Number(b.last_seen_at || 0) - Number(a.last_seen_at || 0)
+    })
   }
 
   private deleteConflictingFunctionalEdges(fromNodeId: string, relation: string, toNodeId: string): number {
@@ -398,7 +424,7 @@ export class EntityGraphStore {
       let type = target.type as EntityType
 
       for (const source of sources) {
-        aliases = aliases.concat(JSON.parse((source.aliases_json as string) || '[]') as string[])
+        aliases = aliases.concat([source.name as string, ...rowAliases(source)])
         mentionCount += Number(source.mention_count || 0)
         sourceCount += Number(source.source_count || 0)
         firstSeenAt = Math.min(firstSeenAt, Number(source.first_seen_at || firstSeenAt))
@@ -479,7 +505,67 @@ export class EntityGraphStore {
     merge()
   }
 
+  private mergeAliasDuplicateNodes(now = Date.now()): void {
+    const rows = getDb().prepare(`
+      SELECT *
+      FROM entity_graph_nodes
+      ORDER BY mention_count DESC, last_seen_at DESC
+    `).all() as Record<string, unknown>[]
+    if (rows.length < 2) return
+
+    const parent = new Map<string, string>()
+    const identityOwner = new Map<string, string>()
+    for (const row of rows) {
+      const id = row.id as string
+      parent.set(id, id)
+    }
+
+    const find = (id: string): string => {
+      const current = parent.get(id) || id
+      if (current === id) return id
+      const root = find(current)
+      parent.set(id, root)
+      return root
+    }
+    const union = (a: string, b: string) => {
+      const rootA = find(a)
+      const rootB = find(b)
+      if (rootA !== rootB) parent.set(rootB, rootA)
+    }
+
+    for (const row of rows) {
+      const id = row.id as string
+      const identities = [
+        row.normalized_name as string,
+        ...rowAliases(row).map(normalizeName),
+      ].filter(Boolean)
+      for (const identity of identities) {
+        const owner = identityOwner.get(identity)
+        if (owner) union(owner, id)
+        else identityOwner.set(identity, id)
+      }
+    }
+
+    const groups = new Map<string, Record<string, unknown>[]>()
+    for (const row of rows) {
+      const root = find(row.id as string)
+      if (!groups.has(root)) groups.set(root, [])
+      groups.get(root)!.push(row)
+    }
+
+    for (const group of groups.values()) {
+      if (group.length < 2) continue
+      const freshRows = group
+        .map((row) => getDb().prepare('SELECT * FROM entity_graph_nodes WHERE id = ?').get(row.id) as Record<string, unknown> | undefined)
+        .filter((row): row is Record<string, unknown> => Boolean(row))
+        .sort((a, b) => Number(b.mention_count || 0) - Number(a.mention_count || 0)
+          || Number(b.last_seen_at || 0) - Number(a.last_seen_at || 0))
+      this.mergeDuplicateNameNodes(freshRows, now)
+    }
+  }
+
   list(limit = 80): GraphSnapshot {
+    this.mergeAliasDuplicateNodes()
     const db = getDb()
     const edgeLimit = limit
     const nodeLimit = limit
@@ -596,6 +682,7 @@ export class EntityGraphStore {
   }
 
   walk(seedNodeIds: string[], depth = 2, edgeLimit = 40): GraphWalkResult {
+    this.mergeAliasDuplicateNodes()
     const seedIds = Array.from(new Set(seedNodeIds.filter(Boolean)))
     if (seedIds.length === 0) return { seedNodes: [], nodes: [], edges: [] }
 

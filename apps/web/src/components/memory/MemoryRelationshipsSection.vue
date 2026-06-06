@@ -181,6 +181,8 @@ function handleBulkDelete() {
         :items="graph.edges"
         :columns="columns"
         :selectable="true"
+        initial-sort-key="lastSeenAt"
+        initial-sort-direction="desc"
         empty-message="No relationships have been extracted yet."
       >
         <template #col-fromName="{ item }">
