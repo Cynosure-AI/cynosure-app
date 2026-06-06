@@ -251,6 +251,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
             <BaseEdge
               :id="edgeProps.id"
               :path="stackedEdgePath(edgeProps)[0]"
+              :marker-start="edgeProps.markerStart"
               :marker-end="edgeProps.markerEnd"
               :style="edgeProps.style"
               :interaction-width="edgeProps.interactionWidth"
@@ -262,17 +263,42 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
                   transform: `translate(-50%, -50%) translate(${stackedEdgePath(edgeProps)[1]}px, ${stackedEdgePath(edgeProps)[2]}px)`,
                 }"
               >
-                <div
-                  v-for="(label, index) in edgeProps.data.labels"
-                  :key="label"
-                  class="entity-edge-label-row"
-                >
-                  {{ label }}
-                  <hr
-                    v-if="+index < edgeProps.data.labels.length - 1"
-                    class="entity-edge-label-separator mt-1 mb-0 border-theme-700/50"
+                <template v-if="edgeProps.data.isBidirectional">
+                  <div
+                    v-for="group in edgeProps.data.labelGroups"
+                    :key="`${group.fromNodeId}->${group.toNodeId}`"
+                    class="entity-edge-label-direction"
                   >
-                </div>
+                    <div class="entity-edge-label-direction-title">
+                      <span>{{ group.fromName }}</span>
+                      <Icon
+                        icon="lucide:arrow-right"
+                        class="w-3 h-3 shrink-0"
+                      />
+                      <span>{{ group.toName }}</span>
+                    </div>
+                    <div
+                      v-for="(label, index) in group.labels"
+                      :key="`${label}-${index}`"
+                      class="entity-edge-label-row"
+                    >
+                      {{ label }}
+                    </div>
+                  </div>
+                </template>
+                <template v-else>
+                  <div
+                    v-for="(label, index) in edgeProps.data.labels"
+                    :key="`${label}-${index}`"
+                    class="entity-edge-label-row"
+                  >
+                    {{ label }}
+                    <hr
+                      v-if="+index < edgeProps.data.labels.length - 1"
+                      class="entity-edge-label-separator mt-1 mb-0 border-theme-700/50"
+                    >
+                  </div>
+                </template>
               </div>
             </EdgeLabelRenderer>
           </template>
@@ -515,13 +541,45 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
   position: absolute;
   display: grid;
   gap: 2px;
-  max-width: 240px;
+  max-width: 260px;
   padding: 4px;
   border: 1px solid color-mix(in srgb, var(--color-accent-500) 35%, transparent);
   border-radius: 7px;
   background: var(--memory-flow-edge-label-bg);
   box-shadow: 0 8px 18px var(--memory-flow-shadow);
   pointer-events: none;
+}
+
+:deep(.entity-edge-label-direction) {
+  display: grid;
+  gap: 2px;
+  min-width: 130px;
+  padding: 2px 0;
+}
+
+:deep(.entity-edge-label-direction + .entity-edge-label-direction) {
+  border-top: 1px solid color-mix(in srgb, var(--color-theme-700) 62%, transparent);
+}
+
+:deep(.entity-edge-label-direction-title) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 5px 1px;
+  color: var(--color-theme-400);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+:deep(.entity-edge-label-direction-title span) {
+  min-width: 0;
+  max-width: 86px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 :deep(.entity-edge-label-row) {

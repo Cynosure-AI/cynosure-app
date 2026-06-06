@@ -162,7 +162,7 @@ async function layoutGraph() {
 
   const edgeGroups = new Map<string, EntityGraphEdge[]>();
   for (const edge of graph.value.edges) {
-    const key = `${edge.fromNodeId}->${edge.toNodeId}`;
+    const key = edgePairKey(edge.fromNodeId, edge.toNodeId);
     if (!edgeGroups.has(key)) edgeGroups.set(key, []);
     edgeGroups.get(key)!.push(edge);
   }
@@ -170,6 +170,8 @@ async function layoutGraph() {
   const connectedHandles = new Map<string, Set<string>>();
   const edges: Edge<FlowEdgeData>[] = Array.from(edgeGroups.values()).map((group) => {
     const edge = group[0];
+    const labelGroups = groupedEdgeLabels(group);
+    const isBidirectional = labelGroups.length > 1;
     const handles = closestHandles(points.get(edge.fromNodeId), points.get(edge.toNodeId));
     if (!connectedHandles.has(edge.fromNodeId)) connectedHandles.set(edge.fromNodeId, new Set());
     if (!connectedHandles.has(edge.toNodeId)) connectedHandles.set(edge.toNodeId, new Set());
@@ -183,8 +185,13 @@ async function layoutGraph() {
       sourceHandle: handles.sourceHandle,
       targetHandle: handles.targetHandle,
       markerEnd: MarkerType.ArrowClosed,
+      markerStart: isBidirectional ? MarkerType.ArrowClosed : undefined,
       class: "entity-flow-edge",
-      data: { labels: group.map((item) => formatRelation(item.relation)) },
+      data: {
+        labels: labelGroups.flatMap((item) => item.labels),
+        labelGroups,
+        isBidirectional,
+      },
       style: { stroke: "var(--memory-flow-edge)", strokeWidth: 1.8 },
     };
   });
@@ -226,6 +233,28 @@ function nodeDimensions(label: string): { width: number; height: number } {
     width: Math.max(150, Math.min(250, label.length * 8 + 54)),
     height: label.length > 18 ? 56 : 44,
   };
+}
+
+function edgePairKey(fromNodeId: string, toNodeId: string): string {
+  return [fromNodeId, toNodeId].sort().join("<->");
+}
+
+function groupedEdgeLabels(edges: EntityGraphEdge[]): FlowEdgeData["labelGroups"] {
+  const groups = new Map<string, FlowEdgeData["labelGroups"][number]>();
+  for (const edge of edges) {
+    const key = `${edge.fromNodeId}->${edge.toNodeId}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        fromNodeId: edge.fromNodeId,
+        toNodeId: edge.toNodeId,
+        fromName: edge.fromName,
+        toName: edge.toName,
+        labels: [],
+      });
+    }
+    groups.get(key)!.labels.push(formatRelation(edge.relation));
+  }
+  return [...groups.values()];
 }
 
 function closestHandles(source?: FlowPoint, target?: FlowPoint): { sourceHandle: string; targetHandle: string } {
