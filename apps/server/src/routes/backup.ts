@@ -620,8 +620,9 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                             db.prepare(
                                 `INSERT OR REPLACE INTO cron_jobs
                                     (id, name, agent_id, schedule, prompt, enabled, one_off, model_override,
-                                     provider_override, output_channel_id, output_target, created_at, updated_at, last_run_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                     provider_override, output_channel_id, output_target, notification_mode,
+                                     notification_condition, created_at, updated_at, last_run_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 job.id,
                                 job.name || '',
@@ -634,6 +635,8 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 job.provider_override || '',
                                 job.output_channel_id || '',
                                 job.output_target || '',
+                                job.notification_mode === 'conditional' ? 'conditional' : 'always',
+                                job.notification_condition || '',
                                 job.created_at || now,
                                 job.updated_at || now,
                                 typeof job.last_run_at === 'number' ? job.last_run_at : now

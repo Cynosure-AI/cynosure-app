@@ -479,9 +479,9 @@ export const api = {
   cronJobs: {
     list: () =>
       get<CronJob[]>('/api/cron-jobs'),
-    create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }) =>
+    create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string }) =>
       post<CronJob>('/api/cron-jobs', input),
-    update: (id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }) =>
+    update: (id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string }) =>
       put<CronJob>(`/api/cron-jobs/${encodeURIComponent(id)}`, input),
     delete: (id: string) =>
       del<{ success: boolean }>(`/api/cron-jobs/${encodeURIComponent(id)}`),

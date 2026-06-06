@@ -7,6 +7,10 @@ import { runTriggerExecution } from './trigger-runner.js'
 import { getChannelManager } from '../channels/channel-manager.js'
 import { enqueueCoalescedTrigger } from './trigger-queue.js'
 import { resolveChannelTarget } from './channel-target-resolver.js'
+import { getGateway } from '../gateway/gateway.js'
+import type { AgentExecutorResult } from '../agent/agent-executor.js'
+
+type CronNotificationMode = 'always' | 'conditional'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -36,6 +40,8 @@ export interface CronJobRow {
     model_override: string
     provider_override: string
     output_channel_id: string
+    notification_mode: string
+    notification_condition: string
     created_at: number
     updated_at: number
     last_run_at: number | null
@@ -52,6 +58,8 @@ export interface CronJobData {
     modelOverride: string
     providerOverride: string
     outputChannelId: string
+    notificationMode: CronNotificationMode
+    notificationCondition: string
     createdAt: number
     updatedAt: number
     lastRunAt: number | null
@@ -69,6 +77,8 @@ function rowToData(row: CronJobRow): CronJobData {
         modelOverride: row.model_override || '',
         providerOverride: row.provider_override || '',
         outputChannelId: row.output_channel_id || '',
+        notificationMode: row.notification_mode === 'conditional' ? 'conditional' : 'always',
+        notificationCondition: row.notification_condition || '',
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         lastRunAt: row.last_run_at ?? null,
@@ -89,27 +99,31 @@ export function getCronJob(id: string): CronJobData | undefined {
     return row ? rowToData(row) : undefined
 }
 
-export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }): CronJobData {
+export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string; notificationMode?: string; notificationCondition?: string }): CronJobData {
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
+    const notificationMode = input.notificationMode === 'conditional' ? 'conditional' : 'always'
     // Set lastRunAt to now so missed first runs are caught up after downtime
     db.prepare(
-        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, model_override, provider_override, output_channel_id, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.modelOverride || '', input.providerOverride || '', input.outputChannelId || '', now, now, now)
+        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, model_override, provider_override, output_channel_id, notification_mode, notification_condition, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.modelOverride || '', input.providerOverride || '', input.outputChannelId || '', notificationMode, input.notificationCondition || '', now, now, now)
     return getCronJob(id)!
 }
 
-export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string }): CronJobData | undefined {
+export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string; notificationMode?: string; notificationCondition?: string }): CronJobData | undefined {
     const db = getDb()
     const existing = db.prepare('SELECT * FROM cron_jobs WHERE id = ?').get(id) as CronJobRow | undefined
     if (!existing) return undefined
     const now = Date.now()
     const enabled = input.enabled !== undefined ? (input.enabled ? 1 : 0) : existing.enabled
     const schedule = input.schedule !== undefined ? input.schedule : existing.schedule
+    const notificationMode = input.notificationMode !== undefined
+        ? (input.notificationMode === 'conditional' ? 'conditional' : 'always')
+        : (existing.notification_mode === 'conditional' ? 'conditional' : 'always')
     const shouldResetLastRun = (existing.enabled !== 1 && enabled === 1) || schedule !== existing.schedule
     db.prepare(
-        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, model_override = ?, provider_override = ?, output_channel_id = ?, updated_at = ?, last_run_at = ? WHERE id = ?'
+        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, model_override = ?, provider_override = ?, output_channel_id = ?, notification_mode = ?, notification_condition = ?, updated_at = ?, last_run_at = ? WHERE id = ?'
     ).run(
         input.name !== undefined ? input.name : existing.name,
         input.agentId !== undefined ? input.agentId : existing.agent_id,
@@ -120,6 +134,8 @@ export function updateCronJob(id: string, input: { name?: string; agentId?: stri
         input.modelOverride !== undefined ? input.modelOverride : existing.model_override,
         input.providerOverride !== undefined ? input.providerOverride : existing.provider_override,
         input.outputChannelId !== undefined ? input.outputChannelId : (existing.output_channel_id || ''),
+        notificationMode,
+        input.notificationCondition !== undefined ? input.notificationCondition : (existing.notification_condition || ''),
         now,
         shouldResetLastRun ? now : existing.last_run_at,
         id
@@ -137,6 +153,67 @@ export function getCronJobsForAgent(agentId: string): CronJobData[] {
     const db = getDb()
     const rows = db.prepare('SELECT * FROM cron_jobs WHERE agent_id = ? ORDER BY created_at DESC').all(agentId) as CronJobRow[]
     return rows.map(rowToData)
+}
+
+function getCronEvaluationContext(conversationId: string, result: AgentExecutorResult): string {
+    const rows = getDb().prepare(
+        'SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 40'
+    ).all(conversationId) as { role: string; content: string }[]
+
+    const transcript = rows
+        .map((row) => `${row.role}: ${row.content}`)
+        .join('\n\n')
+        .trim()
+    const context = transcript || result.content.trim()
+
+    return context.length > 24000
+        ? `${context.slice(0, 12000)}\n\n[...middle omitted...]\n\n${context.slice(-12000)}`
+        : context
+}
+
+async function shouldNotifyForCronJob(job: CronJobData, result: AgentExecutorResult, conversationId: string): Promise<boolean> {
+    if (job.notificationMode !== 'conditional') return true
+
+    const condition = job.notificationCondition.trim()
+    if (!condition) return true
+
+    const gateway = getGateway()
+    const context = getCronEvaluationContext(conversationId, result)
+
+    try {
+        const evaluation = await gateway.complete({
+            model: result.model || job.modelOverride || undefined,
+            temperature: 0,
+            maxTokens: 80,
+            thinkingEnabled: false,
+            messages: [
+                {
+                    role: 'system',
+                    content: [
+                        'You decide whether a cron job result should notify the user.',
+                        'Return only JSON shaped exactly like {"notify":true} or {"notify":false}.',
+                        'Base the decision only on the provided result and condition.',
+                    ].join('\n'),
+                },
+                {
+                    role: 'user',
+                    content: [
+                        `Condition: ${condition}`,
+                        '',
+                        'Cron job run context:',
+                        context,
+                    ].join('\n'),
+                },
+            ],
+        }, result.provider || job.providerOverride || undefined)
+
+        const jsonText = evaluation.content.match(/\{[\s\S]*\}/)?.[0] || evaluation.content
+        const parsed = JSON.parse(jsonText) as { notify?: unknown }
+        return parsed.notify === true
+    } catch (err) {
+        console.warn(`[cron] Job "${job.name || job.id}" (${job.id}) could not evaluate notification condition:`, (err as Error).message)
+        return false
+    }
 }
 
 // ─── Runtime info ──────────────────────────────────────────
@@ -188,7 +265,7 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
         : `Scheduled cron job due at ${scheduledDate.toISOString()} and started at ${now.toISOString()}. Execute your scheduled task as described in your instructions.`
 
     try {
-        const { result } = await runTriggerExecution({
+        const { conversationId, result } = await runTriggerExecution({
             agent,
             userContent,
             origin: 'cron',
@@ -210,12 +287,15 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
             if (!result.content) {
                 console.warn(`[cron] Job "${job.name || job.id}" (${job.id}) did not send output notification because the agent returned empty content`)
             } else {
-                const target = resolveChannelTarget(job.outputChannelId)
-                if (target) {
-                    const label = job.name?.trim() || 'Cron job'
-                    getChannelManager().queueNotification(job.outputChannelId, target, `**${label}:**\n${result.content}`)
-                } else {
-                    console.warn(`[cron] Job "${job.name || job.id}" (${job.id}) did not send output notification because channel "${job.outputChannelId}" has no known target`)
+                const shouldNotify = await shouldNotifyForCronJob(job, result, conversationId)
+                if (shouldNotify) {
+                    const target = resolveChannelTarget(job.outputChannelId)
+                    if (target) {
+                        const label = job.name?.trim() || 'Cron job'
+                        getChannelManager().queueNotification(job.outputChannelId, target, `**${label}:**\n${result.content}`)
+                    } else {
+                        console.warn(`[cron] Job "${job.name || job.id}" (${job.id}) did not send output notification because channel "${job.outputChannelId}" has no known target`)
+                    }
                 }
             }
         }
