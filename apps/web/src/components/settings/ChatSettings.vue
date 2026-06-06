@@ -272,7 +272,7 @@ onMounted(async () => {
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
-              Generate Chat Titles
+              Generate Chat Titles <span class="ml-1 text-xs text-theme-500">• Post-turn action</span>
             </h3>
             <p class="text-xs text-theme-500 mt-0.5">
               Use AI to generate descriptive titles for chat conversations
@@ -316,7 +316,7 @@ onMounted(async () => {
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
-              Entity Graph Extraction
+              Entity Graph Extraction <span class="ml-1 text-xs text-theme-500">• Post-turn action</span>
             </h3>
             <p class="text-xs text-theme-500 mt-0.5">
               Extract post-turn entities and relationships
