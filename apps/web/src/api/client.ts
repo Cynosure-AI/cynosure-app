@@ -359,7 +359,7 @@ export const api = {
     updateGraphEdge: (id: string, data: { relation?: string; evidence?: string; confidence?: number }) =>
       patch<EntityGraphResponse['edges'][number]>(`/api/memory/graph/edges/${encodeURIComponent(id)}`, data),
     deleteGraphEdge: (id: string) =>
-      del<{ success: boolean }>(`/api/memory/graph/edges/${encodeURIComponent(id)}`),
+      del<{ success: boolean; orphanedNodeIds: string[] }>(`/api/memory/graph/edges/${encodeURIComponent(id)}`),
     clearGraph: () =>
       del<{ success: boolean; nodesDeleted: number; edgesDeleted: number }>('/api/memory/graph'),
     onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>

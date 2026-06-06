@@ -885,7 +885,7 @@ onMounted(() => loadSpaces());
           Delete
           <strong class="text-theme-200">{{ pendingDeleteEdge?.fromName }}</strong>
           -&gt; {{ pendingDeleteEdge ? formatRelation(pendingDeleteEdge.relation) : "" }} -&gt;
-          <strong class="text-theme-200">{{ pendingDeleteEdge?.toName }}</strong>?
+          <strong class="text-theme-200">{{ pendingDeleteEdge?.toName }}</strong>? Any entities left without relationships will also be deleted.
         </p>
         <template #actions>
           <button

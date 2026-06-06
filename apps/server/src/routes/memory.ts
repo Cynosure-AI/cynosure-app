@@ -173,9 +173,9 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
 
   // DELETE /api/memory/graph/edges/:id — manually remove a relationship
   app.delete<{ Params: { id: string } }>('/graph/edges/:id', async (req, reply) => {
-    const deleted = getEntityGraphStore().deleteEdge(req.params.id)
-    if (!deleted) return reply.status(404).send({ error: 'Relationship not found' })
-    return { success: true }
+    const result = getEntityGraphStore().deleteEdge(req.params.id)
+    if (!result.edgeDeleted) return reply.status(404).send({ error: 'Relationship not found' })
+    return { success: true, orphanedNodeIds: result.orphanedNodeIds }
   })
 
   // DELETE /api/memory/graph — clear all entity graph nodes and relationships
