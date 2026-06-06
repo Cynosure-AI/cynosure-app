@@ -77,6 +77,7 @@ const graphSuggestions = ref<EntityGraphNode[]>([]);
 const editingNode = ref<EntityGraphNode | null>(null);
 const editingEdge = ref<EntityGraphEdge | null>(null);
 const pendingDeleteNode = ref<EntityGraphNode | null>(null);
+const pendingDeleteNodes = ref<EntityGraphNode[]>([]);
 const pendingDeleteEdge = ref<EntityGraphEdge | null>(null);
 const nodeName = ref("");
 const nodeType = ref<EntityGraphNodeType>("other");
@@ -468,9 +469,19 @@ function confirmDeleteNode(node: EntityGraphNode) {
   pendingDeleteNode.value = node;
 }
 
+function confirmDeleteNodes(nodes: EntityGraphNode[]) {
+  pendingDeleteNodes.value = nodes;
+}
+
 async function deleteNode(node: EntityGraphNode) {
   pendingDeleteNode.value = null;
   await api.memory.deleteGraphNode(node.id);
+  await loadGraph();
+}
+
+async function deleteNodes(nodes: EntityGraphNode[]) {
+  pendingDeleteNodes.value = [];
+  await Promise.all(nodes.map(node => api.memory.deleteGraphNode(node.id)));
   await loadGraph();
 }
 
@@ -630,6 +641,7 @@ onMounted(() => loadSpaces());
           @relayout="relayout"
           @edit-node="openEditNode"
           @delete-node="confirmDeleteNode"
+          @delete-nodes="confirmDeleteNodes"
         />
       </main>
 
@@ -868,6 +880,32 @@ onMounted(() => loadSpaces());
           <button
             class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
             @click="pendingDeleteNode = null"
+          >
+            Cancel
+          </button>
+        </template>
+      </ModalDialog>
+
+      <ModalDialog
+        :show="pendingDeleteNodes.length > 0"
+        title="Delete Entities"
+        icon="lucide:trash-2"
+        icon-color="red"
+        @close="pendingDeleteNodes = []"
+      >
+        <p class="text-theme-400 leading-relaxed">
+          Delete <strong class="text-theme-200">{{ pendingDeleteNodes.length }}</strong> selected entities and all of their relationships?
+        </p>
+        <template #actions>
+          <button
+            class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
+            @click="pendingDeleteNodes.length && deleteNodes(pendingDeleteNodes)"
+          >
+            Delete Entities
+          </button>
+          <button
+            class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
+            @click="pendingDeleteNodes = []"
           >
             Cancel
           </button>

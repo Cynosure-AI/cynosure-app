@@ -1,0 +1,479 @@
+.memory-graph-panel {
+  --memory-flow-bg: color-mix(in srgb, var(--color-theme-950) 92%, black);
+  --memory-flow-grid: color-mix(in srgb, var(--color-theme-700) 28%, transparent);
+  --memory-flow-node-fill: color-mix(in srgb, var(--color-theme-900) 88%, var(--color-accent-500) 12%);
+  --memory-flow-node-border: color-mix(in srgb, var(--color-accent-500) 52%, var(--color-theme-700));
+  --memory-flow-node-text: var(--color-theme-100);
+  --memory-flow-node-muted: color-mix(in srgb, var(--color-accent-300) 68%, var(--color-theme-400));
+  --memory-flow-person-fill: color-mix(in srgb, #0f766e 52%, var(--color-theme-950));
+  --memory-flow-person-border: color-mix(in srgb, #2dd4bf 70%, var(--color-theme-700));
+  --memory-flow-place-fill: color-mix(in srgb, #166534 52%, var(--color-theme-950));
+  --memory-flow-place-border: color-mix(in srgb, #4ade80 70%, var(--color-theme-700));
+  --memory-flow-organization-fill: color-mix(in srgb, #1d4ed8 54%, var(--color-theme-950));
+  --memory-flow-organization-border: color-mix(in srgb, #60a5fa 72%, var(--color-theme-700));
+  --memory-flow-project-fill: color-mix(in srgb, #7c3aed 50%, var(--color-theme-950));
+  --memory-flow-project-border: color-mix(in srgb, #a78bfa 72%, var(--color-theme-700));
+  --memory-flow-event-fill: color-mix(in srgb, #be123c 48%, var(--color-theme-950));
+  --memory-flow-event-border: color-mix(in srgb, #fb7185 72%, var(--color-theme-700));
+  --memory-flow-date-fill: color-mix(in srgb, #854d0e 48%, var(--color-theme-950));
+  --memory-flow-date-border: color-mix(in srgb, #facc15 68%, var(--color-theme-700));
+  --memory-flow-technology-fill: color-mix(in srgb, #0891b2 52%, var(--color-theme-950));
+  --memory-flow-technology-border: color-mix(in srgb, #22d3ee 72%, var(--color-theme-700));
+  --memory-flow-product-fill: color-mix(in srgb, #c2410c 48%, var(--color-theme-950));
+  --memory-flow-product-border: color-mix(in srgb, #fb923c 72%, var(--color-theme-700));
+  --memory-flow-artifact-fill: color-mix(in srgb, #b45309 48%, var(--color-theme-950));
+  --memory-flow-artifact-border: color-mix(in srgb, #fbbf24 70%, var(--color-theme-700));
+  --memory-flow-concept-fill: color-mix(in srgb, #4338ca 50%, var(--color-theme-950));
+  --memory-flow-concept-border: color-mix(in srgb, #818cf8 72%, var(--color-theme-700));
+  --memory-flow-seed-fill: color-mix(in srgb, var(--color-accent-900) 42%, var(--color-theme-900));
+  --memory-flow-seed-border: color-mix(in srgb, var(--color-accent-400) 78%, var(--color-theme-100));
+  --memory-flow-edge: color-mix(in srgb, var(--color-accent-500) 82%, var(--color-theme-300));
+  --memory-flow-edge-label-bg: color-mix(in srgb, var(--color-theme-950) 90%, var(--color-accent-900));
+  --memory-flow-shadow: color-mix(in srgb, black 28%, transparent);
+  --memory-flow-minimap-mask: color-mix(in srgb, var(--color-theme-950) 72%, transparent);
+}
+
+.memory-graph-panel .entity-flow {
+  background:
+    radial-gradient(circle at 20px 20px, var(--memory-flow-grid) 1px, transparent 1px),
+    var(--memory-flow-bg);
+  background-size: 28px 28px;
+}
+
+.memory-graph-panel .entity-flow-node {
+  border: 1px solid var(--memory-flow-node-border);
+  background: var(--memory-flow-node-fill);
+  color: var(--memory-flow-node-text);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 10px 22px var(--memory-flow-shadow);
+}
+
+.memory-graph-panel .entity-flow-node-seed {
+  border-color: var(--memory-flow-seed-border);
+  background: var(--memory-flow-seed-fill);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-accent-400) 24%, transparent),
+    0 14px 28px var(--memory-flow-shadow);
+}
+
+.memory-graph-panel .entity-flow-node.selected,
+.memory-graph-panel .entity-flow-node:has(.entity-node-body-selected) {
+  border-color: color-mix(in srgb, var(--color-accent-300) 88%, white);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-accent-400) 42%, transparent),
+    0 0 28px color-mix(in srgb, var(--color-accent-500) 30%, transparent),
+    0 14px 28px var(--memory-flow-shadow);
+}
+
+.memory-graph-panel .entity-flow-node-type-person {
+  --memory-flow-node-fill: var(--memory-flow-person-fill);
+  --memory-flow-node-border: var(--memory-flow-person-border);
+  --memory-flow-node-muted: color-mix(in srgb, #99f6e4 78%, var(--color-theme-300));
+}
+
+.memory-graph-panel .entity-flow-node-type-place {
+  --memory-flow-node-fill: var(--memory-flow-place-fill);
+  --memory-flow-node-border: var(--memory-flow-place-border);
+  --memory-flow-node-muted: color-mix(in srgb, #bbf7d0 78%, var(--color-theme-300));
+}
+
+.memory-graph-panel .entity-flow-node-type-organization {
+  --memory-flow-node-fill: var(--memory-flow-organization-fill);
+  --memory-flow-node-border: var(--memory-flow-organization-border);
+  --memory-flow-node-muted: color-mix(in srgb, #bfdbfe 80%, var(--color-theme-300));
+}
+
+.memory-graph-panel .entity-flow-node-type-project {
+  --memory-flow-node-fill: var(--memory-flow-project-fill);
+  --memory-flow-node-border: var(--memory-flow-project-border);
+  --memory-flow-node-muted: color-mix(in srgb, #ddd6fe 80%, var(--color-theme-300));
+}
+
+.memory-graph-panel .entity-flow-node-type-event {
+  --memory-flow-node-fill: var(--memory-flow-event-fill);
+  --memory-flow-node-border: var(--memory-flow-event-border);
+  --memory-flow-node-muted: color-mix(in srgb, #fecdd3 78%, var(--color-theme-300));
+}
+
+.memory-graph-panel .entity-flow-node-type-date {
+  --memory-flow-node-fill: var(--memory-flow-date-fill);
+  --memory-flow-node-border: var(--memory-flow-date-border);
+  --memory-flow-node-muted: color-mix(in srgb, #fef08a 76%, var(--color-theme-300));
+}
+
+.memory-graph-panel .entity-flow-node-type-technology {
+  --memory-flow-node-fill: var(--memory-flow-technology-fill);
+  --memory-flow-node-border: var(--memory-flow-technology-border);
+  --memory-flow-node-muted: color-mix(in srgb, #a5f3fc 78%, var(--color-theme-300));
+}
+
+.memory-graph-panel .entity-flow-node-type-product {
+  --memory-flow-node-fill: var(--memory-flow-product-fill);
+  --memory-flow-node-border: var(--memory-flow-product-border);
+  --memory-flow-node-muted: color-mix(in srgb, #fed7aa 78%, var(--color-theme-300));
+}
+
+.memory-graph-panel .entity-flow-node-type-artifact {
+  --memory-flow-node-fill: var(--memory-flow-artifact-fill);
+  --memory-flow-node-border: var(--memory-flow-artifact-border);
+  --memory-flow-node-muted: color-mix(in srgb, #fde68a 78%, var(--color-theme-300));
+}
+
+.memory-graph-panel .entity-flow-node-type-concept {
+  --memory-flow-node-fill: var(--memory-flow-concept-fill);
+  --memory-flow-node-border: var(--memory-flow-concept-border);
+  --memory-flow-node-muted: color-mix(in srgb, #c7d2fe 80%, var(--color-theme-300));
+}
+
+.memory-graph-panel .entity-flow-edge path {
+  stroke: var(--memory-flow-edge);
+}
+
+.memory-graph-panel .entity-edge-label-stack {
+  position: absolute;
+  display: grid;
+  gap: 2px;
+  max-width: 260px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--color-accent-500) 35%, transparent);
+  border-radius: 7px;
+  background: var(--memory-flow-edge-label-bg);
+  box-shadow: 0 8px 18px var(--memory-flow-shadow);
+  pointer-events: none;
+}
+
+.memory-graph-panel .entity-edge-label-direction {
+  display: grid;
+  gap: 2px;
+  min-width: 130px;
+  padding: 2px 0;
+}
+
+.memory-graph-panel .entity-edge-label-direction + .entity-edge-label-direction {
+  border-top: 1px solid color-mix(in srgb, var(--color-theme-700) 62%, transparent);
+}
+
+.memory-graph-panel .entity-edge-label-direction-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 5px 1px;
+  color: var(--color-theme-400);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.memory-graph-panel .entity-edge-label-direction-title span {
+  min-width: 0;
+  max-width: 86px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-graph-panel .entity-edge-label-row {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--color-theme-100);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
+}
+
+.memory-graph-panel .entity-node-body {
+  display: grid;
+  min-width: 150px;
+  max-width: 250px;
+  min-height: 44px;
+  place-items: center;
+  gap: 2px;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.memory-graph-panel .entity-node-label {
+  max-width: 220px;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+.memory-graph-panel .entity-node-type {
+  color: var(--memory-flow-node-muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.memory-graph-panel .entity-node-body-selected .entity-node-label {
+  color: var(--color-theme-50);
+}
+
+.memory-graph-panel .entity-handle {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--color-theme-100);
+  background: var(--memory-flow-bg);
+}
+
+.memory-graph-panel .entity-handle-source {
+  background: var(--memory-flow-edge);
+}
+
+.memory-graph-panel .entity-node-sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  width: min(320px, calc(100% - 16px));
+  height: 100%;
+  flex-direction: column;
+  border-left: 1px solid color-mix(in srgb, var(--color-accent-500) 36%, var(--color-theme-800));
+  background: color-mix(in srgb, var(--color-theme-950) 94%, black);
+  box-shadow:
+    -1px 0 0 color-mix(in srgb, var(--color-accent-500) 20%, transparent),
+    -18px 0 36px color-mix(in srgb, black 26%, transparent);
+}
+
+.memory-graph-panel .entity-node-sidebar::after {
+  position: absolute;
+  top: 0;
+  right: 3px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--color-accent-500) 58%, var(--color-theme-600));
+  content: "";
+  pointer-events: none;
+}
+
+.memory-graph-panel .entity-node-sidebar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px 10px 16px;
+}
+
+.memory-graph-panel .entity-node-sidebar-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-theme-100);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.memory-graph-panel .entity-node-sidebar-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+  color: var(--color-theme-500);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.memory-graph-panel .entity-node-sidebar-meta span:first-child,
+.memory-graph-panel .entity-node-sidebar-alias,
+.memory-graph-panel .entity-node-sidebar-selection-item,
+.memory-graph-panel .entity-node-sidebar-relation-detail span:first-child {
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-theme-800) 62%, transparent);
+  color: var(--color-theme-300);
+}
+
+.memory-graph-panel .entity-node-sidebar-meta span:first-child {
+  padding: 2px 6px;
+}
+
+.memory-graph-panel .entity-node-sidebar-close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--color-theme-500);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.memory-graph-panel .entity-node-sidebar-close:hover {
+  background: color-mix(in srgb, var(--color-theme-800) 82%, transparent);
+  color: var(--color-theme-100);
+}
+
+.memory-graph-panel .entity-node-sidebar-aliases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 16px 16px;
+}
+
+.memory-graph-panel .entity-node-sidebar-alias {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--color-theme-800);
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.memory-graph-panel .entity-node-sidebar-selection-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 96px;
+  overflow-y: auto;
+  padding: 0 22px 16px 16px;
+}
+
+.memory-graph-panel .entity-node-sidebar-selection-item {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 4px 7px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.memory-graph-panel .entity-node-sidebar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 18px;
+}
+
+.memory-graph-panel .entity-node-sidebar-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-theme-800) 55%, transparent);
+  padding: 7px 11px;
+  color: var(--color-theme-200);
+  font-size: 13px;
+  line-height: 1;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.memory-graph-panel .entity-node-sidebar-action:hover {
+  background: color-mix(in srgb, var(--color-accent-500) 18%, var(--color-theme-800));
+  color: var(--color-theme-50);
+}
+
+.memory-graph-panel .entity-node-sidebar-action-danger {
+  background: color-mix(in srgb, #7f1d1d 46%, transparent);
+  color: #fecaca;
+}
+
+.memory-graph-panel .entity-node-sidebar-action-danger:hover {
+  background: color-mix(in srgb, #991b1b 70%, black);
+  color: white;
+}
+
+.memory-graph-panel .entity-node-sidebar-divider {
+  height: 1px;
+  margin: 0 16px;
+  background: color-mix(in srgb, var(--color-theme-800) 78%, transparent);
+}
+
+.memory-graph-panel .entity-node-sidebar-section-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 22px 10px 16px;
+  color: var(--color-theme-500);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.memory-graph-panel .entity-node-sidebar-list {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 22px 16px 16px;
+}
+
+.memory-graph-panel .entity-node-sidebar-relation {
+  display: grid;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--color-theme-800) 78%, transparent);
+  background: color-mix(in srgb, var(--color-theme-900) 38%, black);
+  padding: 10px 8px 9px;
+}
+
+.memory-graph-panel .entity-node-sidebar-relation-path {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-theme-300);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.memory-graph-panel .entity-node-sidebar-relation-path span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-graph-panel .entity-node-sidebar-relation-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--color-theme-500);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.memory-graph-panel .entity-node-sidebar-relation-detail span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 4px 6px;
+}
+
+.memory-graph-panel .entity-node-sidebar-empty {
+  padding: 0 16px;
+  color: var(--color-theme-500);
+  font-size: 13px;
+}
+
+.memory-graph-panel .entity-flow-edge .vue-flow__edge-textbg {
+  stroke: color-mix(in srgb, var(--color-accent-500) 35%, transparent);
+  stroke-width: 1px;
+}
+
+.memory-graph-panel .vue-flow__controls {
+  border-color: var(--color-theme-800);
+  box-shadow: 0 10px 22px var(--memory-flow-shadow);
+}
+
+.memory-graph-panel .vue-flow__controls-button {
+  background: color-mix(in srgb, var(--color-theme-900) 90%, transparent);
+  border-color: var(--color-theme-800);
+  color: var(--color-theme-300);
+}
+
+.memory-graph-panel .vue-flow__controls-button:hover {
+  background: var(--color-theme-800);
+  color: var(--color-theme-100);
+}
+
+.memory-graph-panel .vue-flow__minimap {
+  background: color-mix(in srgb, var(--color-theme-900) 86%, transparent);
+  border: 1px solid var(--color-theme-800);
+}
