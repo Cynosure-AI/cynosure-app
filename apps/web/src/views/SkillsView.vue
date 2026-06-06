@@ -86,7 +86,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="h-full overflow-auto bg-theme-950 text-theme-100">
+  <div class="h-full overflow-auto">
     <div class="mx-auto max-w-6xl p-6">
       <div class="mb-6 flex items-center justify-between gap-4">
         <div>
