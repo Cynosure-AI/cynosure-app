@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { MarkerType, useVueFlow, type Edge, type Node } from "@vue-flow/core";
 import { Icon } from "@iconify/vue";
 import { useLocalStorage } from "@vueuse/core";
@@ -40,18 +41,21 @@ const ENTITY_NODE_TYPES: EntityGraphNodeType[] = [
 const memorySections = [
   {
     id: "documents",
+    path: "/memory-spaces/documents",
     label: "Documents",
     description: "Browse folders, upload files, and manage indexed memory documents.",
     icon: "lucide:file-text",
   },
   {
     id: "relationships",
+    path: "/memory-spaces/relationships",
     label: "Relationships",
     description: "Inspect, correct, and delete extracted entity connections.",
     icon: "lucide:git-branch",
   },
   {
     id: "visual",
+    path: "/memory-spaces/visual-graph",
     label: "Visual Graph",
     description: "Explore entities as a spatial graph with more room to breathe.",
     icon: "lucide:network",
@@ -90,10 +94,17 @@ const graphFlowEdges = ref<Edge<FlowEdgeData>[]>([]);
 const nodeSpacing = useLocalStorage(SK_MEMORY_GRAPH_NODE_SPACING, 1.0);
 const showGraphEdgeLabels = useLocalStorage(SK_MEMORY_GRAPH_EDGE_LABELS, true);
 
+const route = useRoute();
 const { fitView } = useVueFlow(ENTITY_FLOW_ID);
 let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk.bundled.js").default>> | null = null;
 let graphSuggestionTimer: number | null = null;
 let graphSuggestionRequest = 0;
+
+const panelByRouteSegment: Record<string, MemoryPanel> = {
+  documents: "documents",
+  relationships: "relationships",
+  "visual-graph": "visual",
+};
 
 const activeSection = computed(() =>
   memorySections.find((section) => section.id === activePanel.value) || memorySections[0],
@@ -439,11 +450,6 @@ watch(graphQuery, (query) => {
   }, 140);
 });
 
-async function selectPanel(panel: MemoryPanel) {
-  activePanel.value = panel;
-  if ((panel === "relationships" || panel === "visual") && !graph.value) await loadGraph();
-}
-
 function openEditNode(node: EntityGraphNode) {
   editingNode.value = node;
   nodeName.value = node.name;
@@ -518,6 +524,17 @@ async function deleteEdges(ids: string[]) {
   await loadGraph();
 }
 
+watch(
+  () => route.params.section,
+  async (sectionParam) => {
+    const section = Array.isArray(sectionParam) ? sectionParam[0] : sectionParam;
+    const panel = panelByRouteSegment[section || "documents"] || "documents";
+    activePanel.value = panel;
+    if ((panel === "relationships" || panel === "visual") && !graph.value) await loadGraph();
+  },
+  { immediate: true },
+);
+
 onMounted(() => loadSpaces());
 </script>
 
@@ -534,19 +551,19 @@ onMounted(() => loadSpaces());
           </p>
         </header>
         <nav class="flex gap-1 overflow-x-auto px-3 py-3 lg:block lg:space-y-1 lg:overflow-x-visible lg:p-4">
-          <button
+          <RouterLink
             v-for="section in memorySections"
             :key="section.id"
+            :to="section.path"
             class="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all lg:w-full"
             :class="activePanel === section.id ? 'bg-theme-800 text-theme-100 shadow-[inset_3px_0_0_var(--color-accent-500,#3b82f6)]' : 'text-theme-400 hover:bg-theme-800/70 hover:text-theme-200'"
-            @click="selectPanel(section.id)"
           >
             <Icon
               :icon="section.icon"
               class="h-4.5 w-4.5 shrink-0"
             />
             <span class="whitespace-nowrap">{{ section.label }}</span>
-          </button>
+          </RouterLink>
         </nav>
       </aside>
 
