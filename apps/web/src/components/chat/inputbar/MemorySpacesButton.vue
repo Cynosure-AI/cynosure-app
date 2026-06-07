@@ -23,9 +23,6 @@ async function loadMemorySpaces(initializeDefaultSelection = false) {
       if (defaultSpaces.length > 0) {
         const defaultSpaceIds = defaultSpaces.map(s => s.id)
         chatStore.freeChatMemorySpaceIds.splice(0, 0, ...defaultSpaceIds)
-        if (!chatStore.activeAgentId) {
-          chatStore.agentOriginalMemorySpaceIds.splice(0, chatStore.agentOriginalMemorySpaceIds.length, ...defaultSpaceIds)
-        }
       }
       chatStore.freeChatMemorySelectionInitialized = true
     }
