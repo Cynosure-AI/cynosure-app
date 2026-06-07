@@ -2,8 +2,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
-import { api } from '../../../api/client'
-import type { MemorySpace } from '../../../api/types'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
 import MemorySpaceSelectorModal from '../modals/MemorySpaceSelectorModal.vue'
 
@@ -11,29 +9,11 @@ const chatStore = useChatStore()
 
 const showModal = ref(false)
 
-const cachedMemorySpaces = ref<MemorySpace[]>([])
-
-async function loadMemorySpaces(initializeDefaultSelection = false) {
-  try {
-    cachedMemorySpaces.value = await api.memorySpaces.list()
-    // On first load for a new free-chat session, pre-select only the default space.
-    // This gives a sensible default while allowing the user to deselect all to disable memory.
-    if (initializeDefaultSelection && !chatStore.freeChatMemorySelectionInitialized && chatStore.freeChatMemorySpaceIds.length === 0) {
-      const defaultSpaces = cachedMemorySpaces.value.filter(s => s.isDefault)
-      if (defaultSpaces.length > 0) {
-        const defaultSpaceIds = defaultSpaces.map(s => s.id)
-        chatStore.freeChatMemorySpaceIds.splice(0, 0, ...defaultSpaceIds)
-      }
-      chatStore.freeChatMemorySelectionInitialized = true
-    }
-  } catch { /* ignore */ }
-}
-
-onMounted(() => loadMemorySpaces(true))
+onMounted(() => chatStore.loadMemorySpaces())
 
 const selectedMemorySpaces = computed(() => {
   const ids = chatStore.freeChatMemorySpaceIds
-  return cachedMemorySpaces.value.filter(s => ids.includes(s.id))
+  return chatStore.memorySpaces.filter(s => ids.includes(s.id))
 })
 
 const memorySpaceCount = computed(() => selectedMemorySpaces.value.length)
