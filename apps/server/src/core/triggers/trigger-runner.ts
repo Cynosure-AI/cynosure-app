@@ -23,10 +23,6 @@ export interface TriggerRunConfig {
     title: string
     /** Suffix appended to the agent's system prompt */
     systemPromptSuffix: string
-    /** Provider override (optional) */
-    providerOverride?: string
-    /** Model override (optional) */
-    modelOverride?: string
     /** WebSocket broadcast function */
     broadcast: BroadcastFn
     /** Abort signal for cancellation */
@@ -50,7 +46,7 @@ export interface TriggerRunResult {
  * for managing abort controllers and active-run tracking.
  */
 export async function runTriggerExecution(config: TriggerRunConfig): Promise<TriggerRunResult> {
-    const { agent, userContent, origin, title, systemPromptSuffix, providerOverride, modelOverride, broadcast, signal, logPrefix, onConversationCreated } = config
+    const { agent, userContent, origin, title, systemPromptSuffix, broadcast, signal, logPrefix, onConversationCreated } = config
     const gateway = getGateway()
     const db = getDb()
 
@@ -73,8 +69,6 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         messages: [{ role: 'user', content: userContent }],
         userText: userContent,
         run: {
-            providerOverride,
-            modelOverride,
             systemPromptSuffix,
         },
     })

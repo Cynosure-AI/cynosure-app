@@ -6,7 +6,6 @@ import { Icon } from '@iconify/vue'
 import { useProviderStore } from '../../../stores/provider.store'
 import { useProviderLogos } from '../../../composables/useProviderLogos'
 import ModalDialog from '../../shared/ModalDialog.vue'
-import ToggleSwitch from '../../shared/ToggleSwitch.vue'
 
 const agentDefs = useAgentDefinitionsStore()
 const chatStore = useChatStore()
@@ -46,11 +45,6 @@ function agentIcon(agent: { iconUrl: string | null; providerId: string }): strin
 function toSubAgentCodename(name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent'
 }
-
-function onOverrideSubAgentsToggle(value: boolean): void {
-  chatStore.sessionOverrideSubAgents = value
-  chatStore.markOverridesModified()
-}
 </script>
 
 <template>
@@ -65,18 +59,12 @@ function onOverrideSubAgentsToggle(value: boolean): void {
     <div class="mb-3 flex items-center justify-between gap-4 rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2.5">
       <div class="min-w-0">
         <div class="text-sm text-theme-200">
-          Enforce model
+          Select sub-agents
         </div>
         <div class="text-[11px] text-theme-500">
-          Keep the main agent's provider and model across the selected sub-agents.
+          Selected sub-agents will be available for the main agent to delegate tasks to during this conversation.
         </div>
       </div>
-      <ToggleSwitch
-        :model-value="chatStore.sessionOverrideSubAgents"
-        size="sm"
-        color="amber"
-        @update:model-value="onOverrideSubAgentsToggle"
-      />
     </div>
     
     <!-- Search -->
@@ -121,7 +109,7 @@ function onOverrideSubAgentsToggle(value: boolean): void {
         </div>
         <div
           class="flex-1 min-w-0"
-          :title="toSubAgentCodename(agent.name) ? `Tool name: delegate_to_${toSubAgentCodename(agent.name)}` : undefined"
+          :title="toSubAgentCodename(agent.name) ? `Codename: ${toSubAgentCodename(agent.name)}` : undefined"
         >
           <div
             class="text-sm text-theme-200 truncate"

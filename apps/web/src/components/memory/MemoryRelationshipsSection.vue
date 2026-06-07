@@ -1,25 +1,30 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
-import type { EntityGraphEdge, EntityGraphResponse } from "../../api/types";
+import type { EntityGraphEdge, EntityGraphNode, EntityGraphResponse } from "../../api/types";
 import DataTable, { type Column } from "../shared/DataTable.vue";
+import EntityGraphSearchBox from "./EntityGraphSearchBox.vue";
 
-defineProps<{
+const props = defineProps<{
   graph: EntityGraphResponse | null;
   graphLoading: boolean;
   graphQuery: string;
+  graphSuggestions: EntityGraphNode[];
 }>();
 
 const emit = defineEmits<{
   "update:graphQuery": [value: string];
   "load-graph": [query?: string];
   "clear-walk": [];
+  "select-suggestion": [node: EntityGraphNode];
   "edit-edge": [edge: EntityGraphEdge];
   "delete-edge": [edge: EntityGraphEdge];
   "delete-edges": [ids: string[]];
 }>();
 
+const PAGE_SIZE = 30;
 const selectedIds = ref<string[]>([]);
+const currentPage = ref(1);
 
 const columns: Column<EntityGraphEdge>[] = [
   { key: "fromName", label: "From", width: "minmax(0, 1.5fr)", sortable: true },
@@ -41,6 +46,59 @@ function formatDate(ts: number): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(ts));
+}
+
+function edgeMatchesQuery(edge: EntityGraphEdge, query: string): boolean {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) return true;
+  return [
+    edge.fromName,
+    edge.relation,
+    edge.toName,
+    edge.evidence || "",
+  ].some((value) => value.toLowerCase().includes(trimmed));
+}
+
+const filteredEdges = computed(() =>
+  (props.graph?.edges || []).filter((edge) => edgeMatchesQuery(edge, props.graphQuery)),
+);
+
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredEdges.value.length / PAGE_SIZE)));
+
+const pagedEdges = computed(() => {
+  const start = (currentPage.value - 1) * PAGE_SIZE;
+  return filteredEdges.value.slice(start, start + PAGE_SIZE);
+});
+
+const pageStart = computed(() => filteredEdges.value.length ? (currentPage.value - 1) * PAGE_SIZE + 1 : 0);
+const pageEnd = computed(() => Math.min(currentPage.value * PAGE_SIZE, filteredEdges.value.length));
+
+const selectedPageCount = computed(() =>
+  pagedEdges.value.filter((edge) => selectedIds.value.includes(edge.id)).length,
+);
+
+const selectedFilteredCount = computed(() =>
+  filteredEdges.value.filter((edge) => selectedIds.value.includes(edge.id)).length,
+);
+
+watch(() => props.graphQuery, () => {
+  currentPage.value = 1;
+});
+
+watch(filteredEdges, () => {
+  if (currentPage.value > pageCount.value) currentPage.value = pageCount.value;
+});
+
+function mergeSelection(ids: string[]) {
+  selectedIds.value = Array.from(new Set([...selectedIds.value, ...ids]));
+}
+
+function selectPage() {
+  mergeSelection(pagedEdges.value.map((edge) => edge.id));
+}
+
+function selectAllFiltered() {
+  mergeSelection(filteredEdges.value.map((edge) => edge.id));
 }
 
 function handleBulkDelete() {
@@ -80,22 +138,16 @@ function handleBulkDelete() {
       </div>
 
       <form
-        class="flex items-center gap-2"
+        class="flex items-start gap-2"
         @submit.prevent="emit('load-graph', graphQuery)"
       >
-        <div class="relative">
-          <Icon
-            icon="lucide:search"
-            class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-600"
-          />
-          <input
-            :value="graphQuery"
-            type="text"
-            class="w-72 max-w-full pl-8 pr-3 py-2 text-sm bg-theme-950 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-600 focus:outline-none focus:border-theme-600"
-            placeholder="Walk from Tom, Acme, Project X"
-            @input="emit('update:graphQuery', ($event.target as HTMLInputElement).value)"
-          >
-        </div>
+        <EntityGraphSearchBox
+          :model-value="graphQuery"
+          :suggestions="graphSuggestions"
+          placeholder="Search relationships"
+          @update:model-value="emit('update:graphQuery', $event)"
+          @select-suggestion="emit('select-suggestion', $event)"
+        />
         <button
           class="p-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
           title="Walk graph"
@@ -152,38 +204,70 @@ function handleBulkDelete() {
 
       <!-- Bulk action bar -->
       <div
-        v-if="selectedIds.length"
-        class="mb-3 flex items-center gap-3 rounded-lg border border-theme-700 bg-theme-900 px-4 py-2.5"
+        class="mb-3 flex flex-col gap-2 rounded-lg border border-theme-700 bg-theme-900 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between"
       >
-        <span class="text-sm text-theme-300">{{ selectedIds.length }} selected</span>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-md bg-red-600/20 px-3 py-1 text-xs text-red-400 hover:bg-red-600/30 transition-colors"
-          @click="handleBulkDelete"
-        >
-          <Icon
-            icon="lucide:trash-2"
-            class="w-3.5 h-3.5"
-          />
-          Delete selected
-        </button>
-        <button
-          type="button"
-          class="text-xs text-theme-500 hover:text-theme-300 transition-colors"
-          @click="selectedIds = []"
-        >
-          Clear selection
-        </button>
+        <div class="flex flex-wrap items-center gap-2 text-sm text-theme-300">
+          <span>{{ selectedIds.length }} selected</span>
+          <span class="text-xs text-theme-600">
+            Showing {{ pageStart }}-{{ pageEnd }} of {{ filteredEdges.length }}
+          </span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700 px-3 py-1 text-xs text-theme-300 hover:bg-theme-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="pagedEdges.length === 0 || selectedPageCount === pagedEdges.length"
+            @click="selectPage"
+          >
+            <Icon
+              icon="lucide:file-text"
+              class="w-3.5 h-3.5"
+            />
+            Select Page
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700 px-3 py-1 text-xs text-theme-300 hover:bg-theme-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="filteredEdges.length === 0 || selectedFilteredCount === filteredEdges.length"
+            @click="selectAllFiltered"
+          >
+            <Icon
+              icon="lucide:list-checks"
+              class="w-3.5 h-3.5"
+            />
+            Select All
+          </button>
+          <button
+            v-if="selectedIds.length"
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md bg-red-600/20 px-3 py-1 text-xs text-red-400 hover:bg-red-600/30 transition-colors"
+            @click="handleBulkDelete"
+          >
+            <Icon
+              icon="lucide:trash-2"
+              class="w-3.5 h-3.5"
+            />
+            Delete selected
+          </button>
+          <button
+            v-if="selectedIds.length"
+            type="button"
+            class="text-xs text-theme-500 hover:text-theme-300 transition-colors"
+            @click="selectedIds = []"
+          >
+            Clear selection
+          </button>
+        </div>
       </div>
 
       <DataTable
         v-model:selected-ids="selectedIds"
-        :items="graph.edges"
+        :items="pagedEdges"
         :columns="columns"
         :selectable="true"
         initial-sort-key="lastSeenAt"
         initial-sort-direction="desc"
-        empty-message="No relationships have been extracted yet."
+        :empty-message="graphQuery.trim() ? 'No relationships match this search.' : 'No relationships have been extracted yet.'"
       >
         <template #col-fromName="{ item }">
           <span class="font-medium text-theme-100">{{ item.fromName }}</span>
@@ -240,6 +324,39 @@ function handleBulkDelete() {
           </div>
         </template>
       </DataTable>
+
+      <div
+        v-if="filteredEdges.length > PAGE_SIZE"
+        class="mt-4 flex flex-col gap-2 text-sm text-theme-400 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <span>Page {{ currentPage }} of {{ pageCount }}</span>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700 px-3 py-1.5 text-xs text-theme-300 hover:bg-theme-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="currentPage <= 1"
+            @click="currentPage--"
+          >
+            <Icon
+              icon="lucide:chevron-left"
+              class="w-3.5 h-3.5"
+            />
+            Previous
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700 px-3 py-1.5 text-xs text-theme-300 hover:bg-theme-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="currentPage >= pageCount"
+            @click="currentPage++"
+          >
+            Next
+            <Icon
+              icon="lucide:chevron-right"
+              class="w-3.5 h-3.5"
+            />
+          </button>
+        </div>
+      </div>
     </template>
   </div>
 </template>

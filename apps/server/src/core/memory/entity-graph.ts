@@ -65,6 +65,7 @@ interface ExtractedRelation {
 
 const ENTITY_TYPES = new Set<EntityType>(['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'])
 const RESERVED_ENTITY_NAMES = new Set(['user', 'assistant', 'system', 'tool'])
+const MAX_SEED_SEARCH_TERMS = 32
 
 function normalizeName(name: string): string {
   return name
@@ -606,7 +607,11 @@ export class EntityGraphStore {
     const query = normalizeName(text)
     const haystack = normalizeName([text, ...extraTexts].join(' '))
     if (!query && !haystack) return []
-    const tokens = tokenizeEntityQuery([text, ...extraTexts].join(' '))
+    const queryTokens = tokenizeEntityQuery(text)
+    const fallbackTokens = queryTokens.length
+      ? []
+      : tokenizeEntityQuery(extraTexts.join(' ')).slice(0, MAX_SEED_SEARCH_TERMS)
+    const tokens = [...queryTokens, ...fallbackTokens].slice(0, MAX_SEED_SEARCH_TERMS)
     const db = getDb()
     const scoreRows = (rows: Record<string, unknown>[], allowPrefix: boolean): EntityNode[] => {
       const scored = new Map<string, { node: EntityNode; score: number }>()

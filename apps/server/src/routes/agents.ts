@@ -16,6 +16,7 @@ import { getChannelManager } from '../core/channels/channel-manager.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
+import { makeOrchestrationTools } from '../core/tools/builtin/orchestration-tools.js'
 import { listAllMemorySpaceRefs } from '../core/memory/memory-space-folders.js'
 
 function defaultMemorySpaceIds(db = getDb()): string[] {
@@ -166,13 +167,27 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     )
 
     // GET /api/agents/tools — list registered tools
-    app.get('/tools', async () => {
+    app.get<{ Querystring: { includePolicyBuiltIns?: string } }>('/tools', async (req) => {
         const registry = getToolRegistry()
         const gate = getHITLGate()
         const approvals = gate.getAllApprovals()
+        const includePolicyBuiltIns = req.query.includePolicyBuiltIns === 'true'
         const items = registry.listRegisteredTools()
-            .filter((tool) => !isBuiltInMemoryToolKey(tool.key))
-        return items.map((tool) => ({
+            .filter((tool) => includePolicyBuiltIns || !isBuiltInMemoryToolKey(tool.key))
+
+        const policyBuiltIns = includePolicyBuiltIns
+            ? makeOrchestrationTools('').map((tool) => ({
+                key: `builtin::${tool.name}`,
+                name: tool.name,
+                executionName: tool.name,
+                description: tool.description,
+                parameters: tool.parameters,
+                namespace: { id: 'builtin', label: 'Built-In' },
+                ambiguous: false,
+            }))
+            : []
+
+        return [...items, ...policyBuiltIns].map((tool) => ({
             key: tool.key,
             name: tool.name,
             executionName: tool.executionName,

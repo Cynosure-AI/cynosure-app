@@ -75,6 +75,11 @@ const router = createRouter({
       name: 'skills',
       component: () => import('@/views/SkillsView.vue')
     },
+    {
+      path: '/tools-policy',
+      name: 'tools-policy',
+      component: () => import('@/views/ToolsPolicyView.vue')
+    },
     // Usage
     {
       path: '/usage',

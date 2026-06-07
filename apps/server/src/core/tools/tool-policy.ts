@@ -10,7 +10,7 @@ import { isAttachmentToolName } from '../artifacts/attachment-tools.js'
  */
 
 export function isSubAgentDelegationTool(toolName: string): boolean {
-  return toolName.startsWith('delegate_to_')
+  return toolName === 'spawn_subagent'
 }
 
 export function isSystemAutoApprovedTool(toolName: string): boolean {

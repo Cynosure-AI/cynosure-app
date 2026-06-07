@@ -14,36 +14,6 @@ const AGENT_ROUTER_MODEL = "__agent_model__";
 
 const providerStore = useProviderStore();
 
-const toolRouterLeadingSelections = [
-  {
-    providerId: "",
-    model: "",
-    label: "Use global Auto Tool Mode",
-    iconName: "lucide:settings",
-  },
-  {
-    providerId: AGENT_ROUTER_PROVIDER,
-    model: AGENT_ROUTER_MODEL,
-    label: "Use agent model",
-    iconName: "lucide:bot",
-  },
-];
-
-const memoryRouterLeadingSelections = [
-  {
-    providerId: "",
-    model: "",
-    label: "Use global Auto Memories",
-    iconName: "lucide:settings",
-  },
-  {
-    providerId: AGENT_ROUTER_PROVIDER,
-    model: AGENT_ROUTER_MODEL,
-    label: "Use agent model",
-    iconName: "lucide:bot",
-  },
-];
-
 const skillRouterLeadingSelections = [
   {
     providerId: "",
@@ -64,22 +34,6 @@ onMounted(() => {
     providerStore.loadProviders();
   }
 });
-
-function onToolRouterSelection(selection: {
-  providerId: string;
-  model: string;
-}): void {
-  emit("update", "toolRouterProviderId", selection.providerId);
-  emit("update", "toolRouterModel", selection.model);
-}
-
-function onMemoryRouterSelection(selection: {
-  providerId: string;
-  model: string;
-}): void {
-  emit("update", "memoryRouterProviderId", selection.providerId);
-  emit("update", "memoryRouterModel", selection.model);
-}
 
 function onSkillRouterSelection(selection: {
   providerId: string;
@@ -154,73 +108,6 @@ function onMaxCtxBlur() {
           class="mt-0.5"
           @update:model-value="emit('update', 'autoApproveTools', $event)"
         />
-      </div>
-    </div>
-
-    <!-- Auto Tool Mode Model -->
-    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
-      <div class="flex items-start gap-4">
-        <div class="flex-1">
-          <div class="flex items-center gap-2 mb-1">
-            <Icon
-              icon="lucide:route"
-              class="w-4 h-4 text-emerald-400"
-            />
-            <h3 class="text-sm font-medium text-theme-200">
-              Auto Tool Mode Model
-            </h3>
-          </div>
-          <p class="text-xs text-theme-500 leading-relaxed">
-            Override the provider and model this agent uses when automatic
-            tool mode is enabled. Leave blank to use the global Auto Tool Mode settings
-            from Preferences.
-          </p>
-
-          <div class="mt-4 pt-4 border-t border-theme-700">
-            <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
-            <ProviderModelSelect
-              :provider-id="agent.toolRouterProviderId || ''"
-              :model-value="agent.toolRouterModel || ''"
-              :providers="providerStore.providers"
-              :leading-selections="toolRouterLeadingSelections"
-              placeholder="Use global Auto Tool Mode"
-              @change="onToolRouterSelection"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Auto Memories Model -->
-    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
-      <div class="flex items-start gap-4">
-        <div class="flex-1">
-          <div class="flex items-center gap-2 mb-1">
-            <Icon
-              icon="lucide:brain-circuit"
-              class="w-4 h-4 text-accent-400"
-            />
-            <h3 class="text-sm font-medium text-theme-200">
-              Auto Memories Model
-            </h3>
-          </div>
-          <p class="text-xs text-theme-500 leading-relaxed">
-            Override the provider and model this agent uses when automatic memories are enabled.
-            Leave blank to use the global Auto Memories settings from Preferences.
-          </p>
-
-          <div class="mt-4 pt-4 border-t border-theme-700">
-            <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
-            <ProviderModelSelect
-              :provider-id="agent.memoryRouterProviderId || ''"
-              :model-value="agent.memoryRouterModel || ''"
-              :providers="providerStore.providers"
-              :leading-selections="memoryRouterLeadingSelections"
-              placeholder="Use global Auto Memories"
-              @change="onMemoryRouterSelection"
-            />
-          </div>
-        </div>
       </div>
     </div>
 

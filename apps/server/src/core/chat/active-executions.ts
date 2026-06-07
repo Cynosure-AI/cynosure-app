@@ -1,0 +1,49 @@
+import { closeOrchestrationRun } from '../agent/orchestration-state.js'
+
+export interface ActiveChatExecution {
+    id: string
+    conversationId: string
+    agentId: string | null
+    model: string | null
+    orchestrationRunId?: string
+    startedAt: number
+}
+
+const activeChatExecutions = new Map<string, ActiveChatExecution>()
+const activeAbortControllers = new Map<string, AbortController>()
+
+export function listActiveChatExecutions(): ActiveChatExecution[] {
+    return Array.from(activeChatExecutions.values())
+}
+
+export function registerActiveChatExecution(execution: ActiveChatExecution, controller: AbortController): void {
+    activeChatExecutions.set(execution.id, execution)
+    activeAbortControllers.set(execution.id, controller)
+}
+
+export function unregisterActiveChatExecution(executionId: string): void {
+    activeAbortControllers.delete(executionId)
+    activeChatExecutions.delete(executionId)
+}
+
+export function cancelChatExecution(executionId: string): boolean {
+    const controller = activeAbortControllers.get(executionId)
+    if (!controller) return false
+
+    const execution = activeChatExecutions.get(executionId)
+    if (execution?.orchestrationRunId) {
+        closeOrchestrationRun(execution.orchestrationRunId, 'cancelled', { error: 'Cancelled' })
+    }
+    controller.abort()
+    activeAbortControllers.delete(executionId)
+    return true
+}
+
+export function cancelChatExecutionByConversation(conversationId: string): boolean {
+    for (const [executionId, execution] of activeChatExecutions) {
+        if (execution.conversationId === conversationId) {
+            return cancelChatExecution(executionId)
+        }
+    }
+    return false
+}

@@ -11,7 +11,6 @@ interface ChatPreset {
     skillIds: string[]
     systemPrompt: string
     thinkingEnabled: boolean
-    overrideSubAgents: boolean
     autoToolRouting: boolean
     autoMemory: boolean
     autoSkillRouting: boolean
@@ -23,7 +22,6 @@ export interface ChatAgentConfigApi {
     activeAgentId: Ref<string | null>
     sessionModelOverride: Ref<string | null>
     sessionProviderOverride: Ref<string | null>
-    sessionOverrideSubAgents: Ref<boolean>
     sessionSystemPrompt: Ref<string>
     sessionThinkingEnabled: Ref<boolean>
     sessionAutoToolRouting: Ref<boolean>
@@ -77,7 +75,6 @@ function presetsEqual(a: ChatPreset, b: ChatPreset): boolean {
         arraysEqual(a.skillIds, b.skillIds) &&
         a.systemPrompt === b.systemPrompt &&
         a.thinkingEnabled === b.thinkingEnabled &&
-        a.overrideSubAgents === b.overrideSubAgents &&
         a.autoToolRouting === b.autoToolRouting &&
         a.autoMemory === b.autoMemory &&
         a.autoSkillRouting === b.autoSkillRouting &&
@@ -98,13 +95,11 @@ export function useChatAgentConfig(
     )
     const sessionModelOverride = ref<string | null>(null)
     const sessionProviderOverride = ref<string | null>(null)
-    const sessionOverrideSubAgents = ref<boolean>(false)
     const sessionSystemPrompt = ref<string>('')
     const sessionThinkingEnabled = ref<boolean>(true)
     const sessionAutoToolRouting = ref<boolean>(!activeAgentId.value)
     const sessionAutoMemory = ref<boolean>(true)
     const sessionAutoSkillRouting = ref<boolean>(true)
-    const agentOriginalOverrideSubAgents = ref<boolean>(false)
     const agentOriginalAutoToolRouting = ref<boolean>(false)
     const agentOriginalAutoMemory = ref<boolean>(true)
     const agentOriginalAutoSkillRouting = ref<boolean>(true)
@@ -131,7 +126,6 @@ export function useChatAgentConfig(
             skillIds: [],
             systemPrompt: '',
             thinkingEnabled: true,
-            overrideSubAgents: false,
             autoToolRouting: true,
             autoMemory: true,
             autoSkillRouting: true,
@@ -148,7 +142,6 @@ export function useChatAgentConfig(
             skillIds: [...freeChatSkillIds.value],
             systemPrompt: sessionSystemPrompt.value,
             thinkingEnabled: sessionThinkingEnabled.value,
-            overrideSubAgents: sessionOverrideSubAgents.value,
             autoToolRouting: sessionAutoToolRouting.value,
             autoMemory: sessionAutoMemory.value,
             autoSkillRouting: sessionAutoSkillRouting.value,
@@ -165,7 +158,6 @@ export function useChatAgentConfig(
         freeChatSkillIds.value = [...preset.skillIds]
         sessionSystemPrompt.value = preset.systemPrompt
         sessionThinkingEnabled.value = preset.thinkingEnabled
-        sessionOverrideSubAgents.value = preset.overrideSubAgents
         sessionAutoToolRouting.value = preset.autoToolRouting
         sessionAutoMemory.value = preset.autoMemory
         sessionAutoSkillRouting.value = preset.autoSkillRouting
@@ -180,7 +172,6 @@ export function useChatAgentConfig(
         agentOriginalSkillIds.value = [...preset.skillIds]
         agentOriginalSystemPrompt.value = preset.systemPrompt
         agentOriginalThinkingEnabled.value = preset.thinkingEnabled
-        agentOriginalOverrideSubAgents.value = preset.overrideSubAgents
         agentOriginalAutoToolRouting.value = preset.autoToolRouting
         agentOriginalAutoMemory.value = preset.autoMemory
         agentOriginalAutoSkillRouting.value = preset.autoSkillRouting
@@ -199,7 +190,6 @@ export function useChatAgentConfig(
                 skillIds: agent?.skills?.length ? [...agent.skills] : [],
                 systemPrompt: agent?.systemPrompt || '',
                 thinkingEnabled: agent?.thinkingEnabled !== false,
-                overrideSubAgents: agent?.overrideSubAgents === true,
                 autoToolRouting: agent?.autoToolRouting === true,
                 autoMemory: agent?.autoMemory === true,
                 autoSkillRouting: agent?.autoSkillRouting !== false,
@@ -247,7 +237,6 @@ export function useChatAgentConfig(
             !arraysEqual(freeChatSkillIds.value, agentOriginalSkillIds.value) ||
             sessionSystemPrompt.value !== agentOriginalSystemPrompt.value ||
             sessionThinkingEnabled.value !== agentOriginalThinkingEnabled.value ||
-            sessionOverrideSubAgents.value !== agentOriginalOverrideSubAgents.value ||
             sessionAutoToolRouting.value !== agentOriginalAutoToolRouting.value ||
             sessionAutoMemory.value !== agentOriginalAutoMemory.value ||
             sessionAutoSkillRouting.value !== agentOriginalAutoSkillRouting.value ||
@@ -273,7 +262,6 @@ export function useChatAgentConfig(
             skillIds: [...agentOriginalSkillIds.value],
             systemPrompt: agentOriginalSystemPrompt.value,
             thinkingEnabled: agentOriginalThinkingEnabled.value,
-            overrideSubAgents: agentOriginalOverrideSubAgents.value,
             autoToolRouting: agentOriginalAutoToolRouting.value,
             autoMemory: agentOriginalAutoMemory.value,
             autoSkillRouting: agentOriginalAutoSkillRouting.value,
@@ -318,7 +306,6 @@ export function useChatAgentConfig(
         }
         if (sessionSystemPrompt.value !== agentOriginalSystemPrompt.value) updates.systemPrompt = sessionSystemPrompt.value
         if (sessionThinkingEnabled.value !== agentOriginalThinkingEnabled.value) updates.thinkingEnabled = sessionThinkingEnabled.value
-        if (sessionOverrideSubAgents.value !== agentOriginalOverrideSubAgents.value) updates.overrideSubAgents = sessionOverrideSubAgents.value
         if (sessionAutoToolRouting.value !== agentOriginalAutoToolRouting.value) updates.autoToolRouting = sessionAutoToolRouting.value
         if (sessionAutoMemory.value !== agentOriginalAutoMemory.value) updates.autoMemory = sessionAutoMemory.value
         if (sessionAutoSkillRouting.value !== agentOriginalAutoSkillRouting.value) updates.autoSkillRouting = sessionAutoSkillRouting.value
@@ -385,7 +372,6 @@ export function useChatAgentConfig(
         activeAgentId,
         sessionModelOverride,
         sessionProviderOverride,
-        sessionOverrideSubAgents,
         sessionSystemPrompt,
         sessionThinkingEnabled,
         sessionAutoToolRouting,

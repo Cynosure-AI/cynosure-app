@@ -15,6 +15,8 @@ import { syncPrefsToElectron } from "../utils/electron-prefs";
 import { SK_MEMORY_GRAPH_EDGE_LABELS, SK_MEMORY_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
 const ENTITY_FLOW_ID = "memory-entity-graph";
+const VISUAL_GRAPH_LIMIT = 200;
+const RELATIONSHIPS_GRAPH_LIMIT = 5000;
 
 type MemoryPanel = "documents" | "relationships" | "visual";
 type FlowPoint = {
@@ -78,6 +80,7 @@ const graph = ref<EntityGraphResponse | null>(null);
 const graphLoading = ref(false);
 const graphQuery = ref("");
 const graphSuggestions = ref<EntityGraphNode[]>([]);
+const graphLimit = ref<number | null>(null);
 const editingNode = ref<EntityGraphNode | null>(null);
 const editingEdge = ref<EntityGraphEdge | null>(null);
 const pendingDeleteNode = ref<EntityGraphNode | null>(null);
@@ -96,7 +99,7 @@ const showGraphEdgeLabels = useLocalStorage(SK_MEMORY_GRAPH_EDGE_LABELS, true);
 
 const route = useRoute();
 const { fitView } = useVueFlow(ENTITY_FLOW_ID);
-let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk.bundled.js").default>> | null = null;
+let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk-api").default>> | null = null;
 let graphSuggestionTimer: number | null = null;
 let graphSuggestionRequest = 0;
 
@@ -116,7 +119,9 @@ const selectedSpace = computed(() =>
 
 async function getElk() {
   if (!elkPromise) {
-    elkPromise = import("elkjs/lib/elk.bundled.js").then(({ default: ELK }) => new ELK());
+    elkPromise = import("elkjs/lib/elk-api").then(({ default: ELK }) => new ELK({
+      workerUrl: "/elk-worker.min.js",
+    }));
   }
   return elkPromise;
 }
@@ -407,9 +412,12 @@ async function loadGraph(query = graphQuery.value) {
   graphLoading.value = true;
   graphSuggestions.value = [];
   try {
-    graph.value = await api.memory.getGraph(query.trim() || undefined, 200);
+    const limit = activePanel.value === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_LIMIT;
+    graph.value = await api.memory.getGraph(query.trim() || undefined, limit);
+    graphLimit.value = limit;
   } catch {
     graph.value = null;
+    graphLimit.value = null;
   }
   graphLoading.value = false;
 }
@@ -530,7 +538,8 @@ watch(
     const section = Array.isArray(sectionParam) ? sectionParam[0] : sectionParam;
     const panel = panelByRouteSegment[section || "documents"] || "documents";
     activePanel.value = panel;
-    if ((panel === "relationships" || panel === "visual") && !graph.value) await loadGraph();
+    const expectedGraphLimit = panel === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_LIMIT;
+    if ((panel === "relationships" || panel === "visual") && (!graph.value || graphLimit.value !== expectedGraphLimit)) await loadGraph();
   },
   { immediate: true },
 );
@@ -567,7 +576,7 @@ onMounted(() => loadSpaces());
         </nav>
       </aside>
 
-      <main class="min-w-0 flex-1 overflow-y-auto">
+      <main class="min-w-0 flex-1 overflow-y-auto flex-col flex h-full">
         <div class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 backdrop-blur-sm px-4 py-3 sm:px-6 lg:px-8">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -634,8 +643,10 @@ onMounted(() => loadSpaces());
           v-model:graph-query="graphQuery"
           :graph="graph"
           :graph-loading="graphLoading"
+          :graph-suggestions="graphSuggestions"
           @load-graph="loadGraph"
           @clear-walk="clearGraphWalk"
+          @select-suggestion="selectGraphSuggestion"
           @edit-edge="openEditEdge"
           @delete-edge="confirmDeleteEdge"
           @delete-edges="deleteEdges"

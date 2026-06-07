@@ -82,8 +82,13 @@ function toggleSelection(id: string) {
 }
 
 function toggleSelectAll() {
-  const allSelected = props.selectedIds.length === props.items.length
-  const updated = allSelected ? [] : props.items.map(i => i.id)
+  const current = new Set(props.selectedIds)
+  if (allSelected.value) {
+    for (const item of props.items) current.delete(item.id)
+  } else {
+    for (const item of props.items) current.add(item.id)
+  }
+  const updated = [...current]
   emit('update:selectedIds', updated)
   emit('selection-change', updated)
 }
@@ -147,8 +152,9 @@ const sortedItems = computed(() => {
   return [...props.items].sort((a, b) => compareValues(valueForSort(a, column), valueForSort(b, column)) * direction)
 })
 
-const allSelected = computed(() => props.selectedIds.length === props.items.length && props.items.length > 0)
-const someSelected = computed(() => props.selectedIds.length > 0 && props.selectedIds.length < props.items.length)
+const pageSelectedCount = computed(() => props.items.filter((item) => props.selectedIds.includes(item.id)).length)
+const allSelected = computed(() => pageSelectedCount.value === props.items.length && props.items.length > 0)
+const someSelected = computed(() => pageSelectedCount.value > 0 && pageSelectedCount.value < props.items.length)
 const anySelected = computed(() => props.selectedIds.length > 0)
 </script>
 

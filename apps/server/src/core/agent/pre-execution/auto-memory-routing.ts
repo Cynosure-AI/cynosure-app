@@ -1,25 +1,18 @@
 import { nanoid } from 'nanoid'
 import { getEventBus } from '../../telemetry/event-bus.js'
 import { getMemoryAggregator, type AggregatedMemory } from '../../memory/memory-aggregator.js'
-import type { LLMGateway } from '../../gateway/gateway.js'
-import type { ChatMessage, ContentPart, ToolDefinition } from '../../gateway/providers/base.provider.js'
+import type { ChatMessage, ContentPart } from '../../gateway/providers/base.provider.js'
 import type { RetrievedChunk } from '../../memory/parser.js'
 
 const AUTO_MEMORY_RETRIEVAL_COUNT = 12
 const MAX_SELECTED_MEMORIES = 5
 const TURN_CHAR_LIMIT = 200
-const MEMORY_TEXT_LIMIT = 900
-const ROUTER_SELECTION_TOOL_NAME = 'select_relevant_memories'
 
 export interface ApplyAutoMemoryRoutingInput {
     enabled: boolean
     conversationId: string
     userQuery?: string
     recentMessages?: ChatMessage[]
-    gateway: LLMGateway
-    providerId?: string
-    model?: string
-    routerModel?: string
     agentId?: string
     memorySpaceIds?: string[]
 }
@@ -30,10 +23,6 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         conversationId,
         userQuery,
         recentMessages = [],
-        gateway,
-        providerId,
-        model,
-        routerModel,
         agentId,
         memorySpaceIds,
     } = input
@@ -45,12 +34,20 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
 
     try {
         emitMemoryRoutingStatus(conversationId, taskId)
-        const query = buildRouterQuery(userQuery || '', recentMessages)
-        const candidates = await aggregator.aggregate(query, {
+        const primaryQuery = userQuery?.trim() || ''
+        const contextualQuery = buildRouterQuery(primaryQuery, recentMessages)
+        let candidates = await aggregator.aggregate(primaryQuery, {
             agentId,
             spaceIds: memorySpaceIds,
             permanentTopK: AUTO_MEMORY_RETRIEVAL_COUNT,
         })
+        if (!candidates.permanent.length && !candidates.graph?.edges.length && contextualQuery !== primaryQuery) {
+            candidates = await aggregator.aggregate(contextualQuery, {
+                agentId,
+                spaceIds: memorySpaceIds,
+                permanentTopK: AUTO_MEMORY_RETRIEVAL_COUNT,
+            })
+        }
 
         if (!candidates.permanent.length && !candidates.graph?.edges.length) {
             emitMemoryRoutingSelection(conversationId, taskId, [])
@@ -62,22 +59,8 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             return aggregator.format({ permanent: [], graph: candidates.graph }) || null
         }
 
-        let selectedIds: Set<string>
-        try {
-            selectedIds = new Set(await llmConfirmMemories(query, candidates.permanent, {
-                gateway,
-                providerId,
-                model: routerModel || model,
-            }))
-        } catch (err) {
-            console.warn('[memory-router] LLM confirmation failed, using top retrieved memories:', err)
-            selectedIds = new Set(candidates.permanent.slice(0, MAX_SELECTED_MEMORIES).map((chunk) => chunk.id))
-        }
-
         const selectedMemory: AggregatedMemory = {
-            permanent: candidates.permanent
-                .filter((chunk) => selectedIds.has(chunk.id))
-                .slice(0, MAX_SELECTED_MEMORIES),
+            permanent: candidates.permanent.slice(0, MAX_SELECTED_MEMORIES),
             graph: candidates.graph,
         }
 
@@ -109,81 +92,6 @@ function buildRouterQuery(currentMessage: string, messages: ChatMessage[] = []):
     return `Recent conversation:\n${context}\n\nCurrent request: ${currentMessage}`
 }
 
-async function llmConfirmMemories(
-    query: string,
-    candidates: RetrievedChunk[],
-    config: { gateway: LLMGateway; providerId?: string; model?: string },
-): Promise<string[]> {
-    if (!candidates.length) return []
-
-    const availableMemories = candidates
-        .map((chunk) => `${chunk.id}: ${memoryLabel(chunk)}\n${compactMemoryText(chunk.text)}`)
-        .join('\n\n')
-
-    const result = await config.gateway.complete({
-        messages: [
-            {
-                role: 'system',
-                content: `You select memory snippets for an assistant. Given a user request and candidate memories, call ${ROUTER_SELECTION_TOOL_NAME} with only memory IDs that materially help answer the request. If none apply, call it with an empty array. /no_think`,
-            },
-            {
-                role: 'user',
-                content: `Request: ${query}\n\nCandidate memories:\n${availableMemories}`,
-            },
-        ],
-        model: config.model,
-        maxTokens: 300,
-        tools: [buildRouterSelectionTool(candidates)],
-        toolChoice: { type: 'function', name: ROUTER_SELECTION_TOOL_NAME },
-        thinkingEnabled: false,
-    }, config.providerId)
-
-    const allowedIds = new Set(candidates.map(({ id }) => id))
-    const selectionCall = result.toolCalls?.find((call) => call.function.name === ROUTER_SELECTION_TOOL_NAME)
-    const parsedIds = selectionCall ? parseMemorySelectionArguments(selectionCall.function.arguments) : null
-
-    if (!parsedIds) return candidates.slice(0, MAX_SELECTED_MEMORIES).map(({ id }) => id)
-
-    return parsedIds
-        .filter((id) => allowedIds.has(id))
-        .slice(0, MAX_SELECTED_MEMORIES)
-}
-
-function buildRouterSelectionTool(candidates: RetrievedChunk[]): ToolDefinition {
-    return {
-        name: ROUTER_SELECTION_TOOL_NAME,
-        description: 'Select the memory IDs that are relevant to the current request.',
-        timeout: 1_000,
-        parameters: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-                memoryIds: {
-                    type: 'array',
-                    description: 'Relevant memory IDs.',
-                    items: {
-                        type: 'string',
-                        enum: candidates.map(({ id }) => id),
-                    },
-                },
-            },
-            required: ['memoryIds'],
-        },
-        execute: async () => ({ success: true, output: 'ok' }),
-    }
-}
-
-function parseMemorySelectionArguments(raw: string): string[] | null {
-    try {
-        const parsed = JSON.parse(raw) as { memoryIds?: unknown }
-        return Array.isArray(parsed.memoryIds)
-            ? parsed.memoryIds.filter((item): item is string => typeof item === 'string')
-            : null
-    } catch {
-        return null
-    }
-}
-
 function messageContentForRouter(content: string | ContentPart[]): string {
     if (typeof content === 'string') return content
     const text = content
@@ -192,10 +100,6 @@ function messageContentForRouter(content: string | ContentPart[]): string {
         .join('\n')
         .trim()
     return text || '[multipart content]'
-}
-
-function compactMemoryText(text: string): string {
-    return text.replace(/\s+/g, ' ').trim().slice(0, MEMORY_TEXT_LIMIT)
 }
 
 function memoryLabel(chunk: RetrievedChunk): string {

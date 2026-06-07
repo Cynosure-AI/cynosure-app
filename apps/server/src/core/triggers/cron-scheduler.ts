@@ -37,8 +37,6 @@ export interface CronJobRow {
     prompt: string
     enabled: number
     one_off: number
-    model_override: string
-    provider_override: string
     output_channel_id: string
     notification_mode: string
     notification_condition: string
@@ -55,8 +53,6 @@ export interface CronJobData {
     prompt: string
     enabled: boolean
     oneOff: boolean
-    modelOverride: string
-    providerOverride: string
     outputChannelId: string
     notificationMode: CronNotificationMode
     notificationCondition: string
@@ -74,8 +70,6 @@ function rowToData(row: CronJobRow): CronJobData {
         prompt: row.prompt,
         enabled: row.enabled === 1,
         oneOff: row.one_off === 1,
-        modelOverride: row.model_override || '',
-        providerOverride: row.provider_override || '',
         outputChannelId: row.output_channel_id || '',
         notificationMode: row.notification_mode === 'conditional' ? 'conditional' : 'always',
         notificationCondition: row.notification_condition || '',
@@ -99,19 +93,19 @@ export function getCronJob(id: string): CronJobData | undefined {
     return row ? rowToData(row) : undefined
 }
 
-export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string; notificationMode?: string; notificationCondition?: string }): CronJobData {
+export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string }): CronJobData {
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
     const notificationMode = input.notificationMode === 'conditional' ? 'conditional' : 'always'
     // Set lastRunAt to now so missed first runs are caught up after downtime
     db.prepare(
-        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, model_override, provider_override, output_channel_id, notification_mode, notification_condition, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.modelOverride || '', input.providerOverride || '', input.outputChannelId || '', notificationMode, input.notificationCondition || '', now, now, now)
+        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, output_channel_id, notification_mode, notification_condition, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.outputChannelId || '', notificationMode, input.notificationCondition || '', now, now, now)
     return getCronJob(id)!
 }
 
-export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string; notificationMode?: string; notificationCondition?: string }): CronJobData | undefined {
+export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string }): CronJobData | undefined {
     const db = getDb()
     const existing = db.prepare('SELECT * FROM cron_jobs WHERE id = ?').get(id) as CronJobRow | undefined
     if (!existing) return undefined
@@ -123,7 +117,7 @@ export function updateCronJob(id: string, input: { name?: string; agentId?: stri
         : (existing.notification_mode === 'conditional' ? 'conditional' : 'always')
     const shouldResetLastRun = (existing.enabled !== 1 && enabled === 1) || schedule !== existing.schedule
     db.prepare(
-        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, model_override = ?, provider_override = ?, output_channel_id = ?, notification_mode = ?, notification_condition = ?, updated_at = ?, last_run_at = ? WHERE id = ?'
+        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, output_channel_id = ?, notification_mode = ?, notification_condition = ?, updated_at = ?, last_run_at = ? WHERE id = ?'
     ).run(
         input.name !== undefined ? input.name : existing.name,
         input.agentId !== undefined ? input.agentId : existing.agent_id,
@@ -131,8 +125,6 @@ export function updateCronJob(id: string, input: { name?: string; agentId?: stri
         input.prompt !== undefined ? input.prompt : existing.prompt,
         enabled,
         input.oneOff !== undefined ? (input.oneOff ? 1 : 0) : existing.one_off,
-        input.modelOverride !== undefined ? input.modelOverride : existing.model_override,
-        input.providerOverride !== undefined ? input.providerOverride : existing.provider_override,
         input.outputChannelId !== undefined ? input.outputChannelId : (existing.output_channel_id || ''),
         notificationMode,
         input.notificationCondition !== undefined ? input.notificationCondition : (existing.notification_condition || ''),
@@ -182,7 +174,7 @@ async function shouldNotifyForCronJob(job: CronJobData, result: AgentExecutorRes
 
     try {
         const evaluation = await gateway.complete({
-            model: result.model || job.modelOverride || undefined,
+            model: result.model || undefined,
             temperature: 0,
             maxTokens: 80,
             thinkingEnabled: false,
@@ -205,7 +197,7 @@ async function shouldNotifyForCronJob(job: CronJobData, result: AgentExecutorRes
                     ].join('\n'),
                 },
             ],
-        }, result.provider || job.providerOverride || undefined)
+        }, result.provider || undefined)
 
         const jsonText = evaluation.content.match(/\{[\s\S]*\}/)?.[0] || evaluation.content
         const parsed = JSON.parse(jsonText) as { notify?: unknown }
@@ -271,8 +263,6 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
             origin: 'cron',
             title: `Cron Job ${now.toLocaleString()}`,
             systemPromptSuffix: '\nUse your tools to perform the scheduled task.',
-            providerOverride: job.providerOverride || undefined,
-            modelOverride: job.modelOverride || undefined,
             broadcast,
             signal: abortController.signal,
             logPrefix: '[cron]',

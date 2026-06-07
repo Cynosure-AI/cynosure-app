@@ -51,22 +51,6 @@ const contextStrategyOptions: {
   },
 ];
 
-function onToolRouterSelection(selection: {
-  providerId: string;
-  model: string;
-}): void {
-  prefs.toolRouterProviderId = selection.providerId;
-  prefs.toolRouterModel = selection.model;
-}
-
-function onMemoryRouterSelection(selection: {
-  providerId: string;
-  model: string;
-}): void {
-  prefs.memoryRouterProviderId = selection.providerId;
-  prefs.memoryRouterModel = selection.model;
-}
-
 function onSkillRouterSelection(selection: {
   providerId: string;
   model: string;
@@ -130,89 +114,6 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-4">
-    <!-- Auto Tool Mode -->
-    <BaseCard
-      v-if="showSection('tool-router')"
-      class="p-5 space-y-4"
-    >
-      <div class="flex items-center gap-3">
-        <div
-          class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center"
-        >
-          <Icon
-            icon="lucide:route"
-            class="w-5 h-5 text-theme-400"
-          />
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-theme-200">
-            Auto Tool Mode
-          </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
-            Provider and model used by the chat input's automatic tool mode
-          </p>
-        </div>
-      </div>
-
-      <div class="pt-1 border-t border-theme-700">
-        <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
-        <ProviderModelSelect
-          :provider-id="prefs.toolRouterProviderId"
-          :model-value="prefs.toolRouterModel"
-          :providers="providerStore.providers"
-          include-default
-          default-label="Use chat provider"
-          placeholder="Use chat provider"
-          @change="onToolRouterSelection"
-        />
-        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          Tool namespaces are prefiltered with your Memory embedding provider, then confirmed by this model.
-          If the embedding model changes, router vectors are rebuilt lazily the next time tools are auto-selected.
-        </p>
-      </div>
-    </BaseCard>
-
-    <!-- Auto Memories -->
-    <BaseCard
-      v-if="showSection('memory-router')"
-      class="p-5 space-y-4"
-    >
-      <div class="flex items-center gap-3">
-        <div
-          class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center"
-        >
-          <Icon
-            icon="lucide:brain-circuit"
-            class="w-5 h-5 text-theme-400"
-          />
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-theme-200">
-            Auto Memories
-          </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
-            Provider, model, and candidate pool used by the chat input's automatic memories mode
-          </p>
-        </div>
-      </div>
-
-      <div class="pt-1 border-t border-theme-700">
-        <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
-        <ProviderModelSelect
-          :provider-id="prefs.memoryRouterProviderId"
-          :model-value="prefs.memoryRouterModel"
-          :providers="providerStore.providers"
-          include-default
-          default-label="Use chat provider"
-          placeholder="Use chat provider"
-          @change="onMemoryRouterSelection"
-        />
-        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          Auto Memories retrieves candidate chunks with Memory search, then confirms useful snippets with this model.
-        </p>
-      </div>
-    </BaseCard>
-
     <!-- Skill Router -->
     <BaseCard
       v-if="showSection('skill-router')"

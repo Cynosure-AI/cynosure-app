@@ -53,7 +53,7 @@ const missingTools = computed(() => {
         :class="chatStore.sessionAutoToolRouting ? 'bg-emerald-600' : 'bg-accent-600'"
       >
         <Icon
-          v-if="chatStore.sessionAutoToolRouting"
+          v-if="chatStore.sessionAutoToolRouting && !agentStore.selectedToolNames.length"
           icon="lucide:sparkles"
           class="w-2.5 h-2.5"
         />

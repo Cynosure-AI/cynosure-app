@@ -44,7 +44,6 @@ const clearLabel = computed(() => {
 })
 async function selectChat(conv: Conversation): Promise<void> {
   await chatStore.selectConversation(conv.id, conv.agentId ?? null)
-  await agentStore.restoreForConversation(conv.id)
 }
 
 async function deleteChat(id: string, event: Event): Promise<void> {

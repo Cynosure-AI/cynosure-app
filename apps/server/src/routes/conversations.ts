@@ -41,9 +41,6 @@ function hydrateChatConfigFromAgent(
     if (!Object.prototype.hasOwnProperty.call(hydrated, 'providerId')) {
         hydrated.providerId = agent.providerId
     }
-    if (!Object.prototype.hasOwnProperty.call(hydrated, 'overrideSubAgents')) {
-        hydrated.overrideSubAgents = agent.overrideSubAgents
-    }
     if (!Object.prototype.hasOwnProperty.call(hydrated, 'thinkingEnabled')) {
         hydrated.thinkingEnabled = agent.thinkingEnabled
     }

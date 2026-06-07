@@ -53,8 +53,13 @@ export const useAgentStore = defineStore('agent', () => {
   const activeTaskId = ref<string | null>(null)
   /** Queue of pending HITL requests. Multiple subagents can each enqueue one simultaneously. */
   const hitlQueue = ref<HITLRequest[]>([])
-  /** The first (oldest) pending HITL request — drives the approval dialog. */
-  const pendingHITL = computed<HITLRequest | null>(() => hitlQueue.value[0] ?? null)
+  const activeHITLQueue = computed<HITLRequest[]>(() => {
+    const convId = activeViewConversationId.value
+    if (!convId) return hitlQueue.value.filter((request) => !request.conversationId)
+    return hitlQueue.value.filter((request) => !request.conversationId || request.conversationId === convId)
+  })
+  /** The first pending HITL request for the currently viewed conversation. */
+  const pendingHITL = computed<HITLRequest | null>(() => activeHITLQueue.value[0] ?? null)
   const executionSteps = ref<ExecutionStep[]>([])
   const orchestrationState = ref<OrchestrationState | null>(null)
   const toolApprovals = ref<Record<string, boolean>>({})
@@ -64,6 +69,7 @@ export const useAgentStore = defineStore('agent', () => {
 
   // Per-conversation execution state for background support
   const executionConversationId = ref<string | null>(null)
+  const executingConversationIds = ref<Set<string>>(new Set())
   /** The conversation the user is currently viewing — used to filter live events. */
   const activeViewConversationId = ref<string | null>(null)
   const stepsPerConversation = new Map<string, ExecutionStep[]>()
@@ -237,6 +243,10 @@ export const useAgentStore = defineStore('agent', () => {
   /** Shared logic for task completion / error events. */
   function onTaskEnd(isForActiveView: boolean, convId: string | undefined, maCodename: string | undefined): void {
     if (maCodename) return // Sub-agent completion doesn't stop overall execution
+    if (convId) {
+      executingConversationIds.value.delete(convId)
+      executingConversationIds.value = new Set(executingConversationIds.value)
+    }
     if (isForActiveView) {
       isExecuting.value = false
       activeTaskId.value = null
@@ -279,6 +289,9 @@ export const useAgentStore = defineStore('agent', () => {
     switch (data.event) {
       case 'task:started':
         if (eventData.maCodename) break
+        if (convId) {
+          executingConversationIds.value = new Set([...executingConversationIds.value, convId])
+        }
         if (isForActiveView) {
           isExecuting.value = true
           activeTaskId.value = taskId || null
@@ -364,7 +377,6 @@ export const useAgentStore = defineStore('agent', () => {
     orchestrationState.value = null
     isExecuting.value = false
     activeTaskId.value = null
-    hitlQueue.value = []
     executionConversationId.value = null
   }
 
@@ -372,6 +384,16 @@ export const useAgentStore = defineStore('agent', () => {
    * Execution events for other conversations will be cached but not shown. */
   function setActiveViewConversation(conversationId: string | null): void {
     activeViewConversationId.value = conversationId
+    if (!conversationId) {
+      executionSteps.value = []
+      orchestrationState.value = null
+      isExecuting.value = false
+      activeTaskId.value = null
+      return
+    }
+    executionSteps.value = [...(stepsPerConversation.get(conversationId) || [])]
+    orchestrationState.value = orchestrationPerConversation.get(conversationId) ?? null
+    isExecuting.value = executingConversationIds.value.has(conversationId)
   }
 
   /** Reset execution control state without wiping accumulated step history.
@@ -380,7 +402,6 @@ export const useAgentStore = defineStore('agent', () => {
   function clearExecutionState(): void {
     isExecuting.value = false
     activeTaskId.value = null
-    hitlQueue.value = []
     executionConversationId.value = null
   }
 
@@ -391,6 +412,7 @@ export const useAgentStore = defineStore('agent', () => {
   function setConversationExecutionState(conversationId: string, executing: boolean, taskId?: string | null): void {
     if (executing) {
       executionConversationId.value = conversationId
+      executingConversationIds.value = new Set([...executingConversationIds.value, conversationId])
       if (activeViewConversationId.value === conversationId) {
         isExecuting.value = true
         activeTaskId.value = taskId || activeTaskId.value
@@ -400,10 +422,12 @@ export const useAgentStore = defineStore('agent', () => {
 
     if (executionConversationId.value === conversationId) {
       executionConversationId.value = null
-      if (activeViewConversationId.value === conversationId) {
-        isExecuting.value = false
-        activeTaskId.value = null
-      }
+    }
+    executingConversationIds.value.delete(conversationId)
+    executingConversationIds.value = new Set(executingConversationIds.value)
+    if (activeViewConversationId.value === conversationId) {
+      isExecuting.value = false
+      activeTaskId.value = null
     }
   }
 
@@ -417,8 +441,7 @@ export const useAgentStore = defineStore('agent', () => {
 
     if (savedSteps?.length) {
       executionSteps.value = [...savedSteps]
-      isExecuting.value =
-        executionConversationId.value === conversationId && isExecuting.value
+      isExecuting.value = executingConversationIds.value.has(conversationId)
     } else {
       // Try loading from DB (survives page reload)
       executionSteps.value = []
@@ -497,6 +520,7 @@ export const useAgentStore = defineStore('agent', () => {
     isExecuting,
     activeTaskId,
     hitlQueue,
+    activeHITLQueue,
     pendingHITL,
     executionSteps,
     orchestrationState,

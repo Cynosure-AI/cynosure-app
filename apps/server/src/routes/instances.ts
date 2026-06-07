@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { getActiveCronRuns, cancelCronRun } from '../core/triggers/cron-scheduler.js'
 import { getAgent } from '../core/agents/agent-store.js'
-import { getActiveChatExecutions, cancelChatExecution } from './chat.js'
+import { cancelChatExecution, listActiveChatExecutions } from '../core/chat/active-executions.js'
 import { cancelPostActions } from '../core/agent/post-execution.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
@@ -48,7 +48,7 @@ export async function registerInstanceRoutes(app: FastifyInstance): Promise<void
         const instances: ActiveInstance[] = []
 
         // Active chat executions (user-initiated agent conversations)
-        for (const exec of getActiveChatExecutions()) {
+        for (const exec of listActiveChatExecutions()) {
             const agent = exec.agentId ? getAgent(exec.agentId) : null
             instances.push({
                 id: instanceId('chat', exec.id),
@@ -110,7 +110,7 @@ export async function registerInstanceRoutes(app: FastifyInstance): Promise<void
         if (parsed?.type === 'chat') {
             const executionId = parsed.id
             // Find the conversationId before cancelling (needed for post-actions)
-            const execution = getActiveChatExecutions().find(e => e.id === executionId)
+            const execution = listActiveChatExecutions().find(e => e.id === executionId)
             cancelled = cancelChatExecution(executionId)
             if (execution) cancelPostActions(execution.conversationId)
         } else if (parsed?.type === 'cron') {

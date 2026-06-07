@@ -88,7 +88,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   // GET /api/memory/graph — inspect the lightweight entity graph
   app.get<{ Querystring: { query?: string; limit?: string } }>('/graph', async (req) => {
     const graph = getEntityGraphStore()
-    const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 200)
+    const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 5000)
     const query = req.query.query?.trim()
     if (query) {
       const seeds = graph.findSeedNodes(query, [], 12)

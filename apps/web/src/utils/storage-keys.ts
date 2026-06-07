@@ -13,10 +13,6 @@ export const SK_TITLE_MODEL = 'cy-title-model'
 export const SK_ENABLE_ENTITY_GRAPH = 'cy-enable-entity-graph'
 export const SK_ENTITY_GRAPH_PROVIDER = 'cy-entity-graph-provider'
 export const SK_ENTITY_GRAPH_MODEL = 'cy-entity-graph-model'
-export const SK_TOOL_ROUTER_PROVIDER = 'cy-tool-router-provider'
-export const SK_TOOL_ROUTER_MODEL = 'cy-tool-router-model'
-export const SK_MEMORY_ROUTER_PROVIDER = 'cy-memory-router-provider'
-export const SK_MEMORY_ROUTER_MODEL = 'cy-memory-router-model'
 export const SK_SKILL_ROUTER_PROVIDER = 'cy-skill-router-provider'
 export const SK_SKILL_ROUTER_MODEL = 'cy-skill-router-model'
 export const SK_CONTEXT_STRATEGY = 'cy-context-strategy'
@@ -60,10 +56,6 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_ENABLE_ENTITY_GRAPH,
     SK_ENTITY_GRAPH_PROVIDER,
     SK_ENTITY_GRAPH_MODEL,
-    SK_TOOL_ROUTER_PROVIDER,
-    SK_TOOL_ROUTER_MODEL,
-    SK_MEMORY_ROUTER_PROVIDER,
-    SK_MEMORY_ROUTER_MODEL,
     SK_SKILL_ROUTER_PROVIDER,
     SK_SKILL_ROUTER_MODEL,
     SK_CONTEXT_STRATEGY,

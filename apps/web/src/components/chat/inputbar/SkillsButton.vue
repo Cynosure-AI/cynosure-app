@@ -62,7 +62,7 @@ function toggleAuto(value: boolean): void {
         :class="chatStore.sessionAutoSkillRouting ? 'bg-emerald-600' : 'bg-accent-600'"
       >
         <Icon
-          v-if="chatStore.sessionAutoSkillRouting"
+          v-if="chatStore.sessionAutoSkillRouting && !selectedSkills.length"
           icon="lucide:sparkles"
           class="w-2.5 h-2.5"
         />
