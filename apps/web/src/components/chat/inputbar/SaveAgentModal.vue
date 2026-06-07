@@ -21,24 +21,15 @@ const newAgentName = ref('')
 const newAgentDescription = ref('')
 const savingAgent = ref(false)
 
-function arraysEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false
-  const sortedA = [...a].sort()
-  const sortedB = [...b].sort()
-  return sortedA.every((value, index) => value === sortedB[index])
-}
-
-const hasMemoryConfigChange = computed(() => (
-  chatStore.freeChatMemorySelectionInitialized &&
-  !arraysEqual(chatStore.freeChatMemorySpaceIds, chatStore.agentOriginalMemorySpaceIds)
-))
-
 const canSaveAsAgent = computed(() => {
   return (
     agentStore.selectedToolNames.length > 0 ||
     chatStore.freeChatSubAgentIds.length > 0 ||
-    hasMemoryConfigChange.value ||
-    chatStore.sessionSystemPrompt.trim().length > 0
+    chatStore.hasFreeChatOverrides ||
+    chatStore.freeChatSkillIds.length > 0 ||
+    chatStore.sessionSystemPrompt.trim().length > 0 ||
+    chatStore.sessionModelOverride !== null ||
+    chatStore.sessionProviderOverride !== null
   )
 })
 
@@ -121,7 +112,7 @@ async function saveAsNewAgent() {
 
   <!-- Free chat: save as agent hint -->
   <div
-    v-else-if="!chatStore.activeAgentId && canSaveAsAgent"
+    v-else-if="!chatStore.activeAgentId && (chatStore.hasFreeChatOverrides || canSaveAsAgent)"
     class="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg border border-theme-700/50 bg-theme-800/40"
   >
     <Icon

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
-import { api } from '../../../api/client'
 import type { MemorySpace } from '../../../api/types'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../../shared/ModalDialog.vue'
@@ -11,21 +10,15 @@ const chatStore = useChatStore()
 
 const visible = defineModel<boolean>({ required: true })
 
-const spaces = ref<MemorySpace[]>([])
 const loading = ref(false)
 const collapsedFolders = ref<Set<string>>(new Set())
+const spaces = computed(() => chatStore.memorySpaces)
 
 watch(visible, async (val) => {
   if (!val) return
   loading.value = true
   try {
-    spaces.value = await api.memorySpaces.list()
-
-    spaces.value = [...spaces.value].sort((a, b) => {
-      if (a.isDefault) return -1
-      if (b.isDefault) return 1
-      return (a.relativePath || '').localeCompare(b.relativePath || '')
-    })
+    await chatStore.loadMemorySpaces()
 
     // Prune any stale IDs that no longer exist
     const validIds = new Set(spaces.value.map((space) => space.id))
@@ -95,7 +88,8 @@ function toggle(id: string) {
 function toggleAutoMemory(enabled: boolean) {
   chatStore.sessionAutoMemory = enabled
   if (enabled && chatStore.freeChatMemorySpaceIds.length === 0 && spaces.value.length > 0) {
-    chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...spaces.value.map((space) => space.id))
+    const defaultIds = spaces.value.filter((space) => space.isDefault).map((space) => space.id)
+    chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...(defaultIds.length ? defaultIds : spaces.value.map((space) => space.id)))
   }
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()

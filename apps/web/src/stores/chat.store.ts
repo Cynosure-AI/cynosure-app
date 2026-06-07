@@ -1,7 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
-import type { StoredMessage } from '../api/types'
+import type { MemorySpace, StoredMessage } from '../api/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -55,6 +55,7 @@ export const useChatStore = defineStore('chat', () => {
   const messages = ref<DisplayMessage[]>([])
   const loadingMessages = ref(false)
   const contextWindow = ref<number | null>(null)
+  const memorySpaces = ref<MemorySpace[]>([])
   const postActionsMap = new Map<string, Set<string>>()
   const postActionsTrigger = ref(0)
   const activePostActions = computed(() => {
@@ -89,26 +90,26 @@ export const useChatStore = defineStore('chat', () => {
     )
   }
 
-  async function ensureFreeChatDefaultMemorySelection(): Promise<void> {
-    if (agentConfig.activeAgentId.value || agentConfig.freeChatMemorySelectionInitialized.value) return
-    try {
-      const spaces = await api.memorySpaces.list()
-      const defaultSpaceIds = spaces.filter((space) => space.isDefault).map((space) => space.id)
-      if (defaultSpaceIds.length > 0) {
-        agentConfig.freeChatMemorySpaceIds.value = defaultSpaceIds
-      }
-      agentConfig.freeChatMemorySelectionInitialized.value = true
-    } catch {
-      // Non-critical; the memory selector can retry when opened.
-    }
-  }
-
   async function setActiveAgent(id: string | null): Promise<void> {
+    if (!memorySpaces.value.length) await loadMemorySpaces()
     await agentConfig.setActiveAgent(id)
-    if (!id) await ensureFreeChatDefaultMemorySelection()
   }
 
   const agentConfig = useChatAgentConfig(activeConversationId, messages, conversations, loadConversations)
+
+  async function loadMemorySpaces(): Promise<void> {
+    try {
+      const spaces = await api.memorySpaces.list()
+      memorySpaces.value = [...spaces].sort((a, b) => {
+        if (a.isDefault) return -1
+        if (b.isDefault) return 1
+        return (a.relativePath || '').localeCompare(b.relativePath || '')
+      })
+      agentConfig.setFreeChatDefaultMemorySpaceIds(memorySpaces.value.filter((space) => space.isDefault).map((space) => space.id))
+    } catch {
+      // Non-critical; memory selectors can retry later.
+    }
+  }
 
   async function createConversation(title?: string): Promise<string> {
     const conv = await api.chat.createConversation(
@@ -139,6 +140,12 @@ export const useChatStore = defineStore('chat', () => {
     createConversation,
     agentConfig,
   )
+
+  async function sendMessage(...args: Parameters<typeof chatMessages.sendMessage>): Promise<void> {
+    if (!memorySpaces.value.length) await loadMemorySpaces()
+    agentConfig.ensureFreeChatPreset()
+    return chatMessages.sendMessage(...args)
+  }
 
   // ── Conversation CRUD ──
 
@@ -260,6 +267,7 @@ export const useChatStore = defineStore('chat', () => {
         agentConfig.sessionAutoToolRouting.value = cfg.autoToolRouting ?? !agentConfig.activeAgentId.value
         agentConfig.sessionAutoMemory.value = cfg.autoMemory ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoMemory === true)
         agentConfig.sessionAutoSkillRouting.value = cfg.autoSkillRouting ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoSkillRouting !== false)
+        if (!agentConfig.activeAgentId.value) agentConfig.captureFreeChatPreset()
       } else {
         agentConfig.syncAgentBaseline()
       }
@@ -390,12 +398,11 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function startNewChat(): Promise<void> {
-    // Always re-sync agent config when pressing "New Chat" so edited settings (sub-agents, tools, etc.)
-    // take effect even when we're already on a blank chat and we reset it to it's original state.
+    if (!memorySpaces.value.length) await loadMemorySpaces()
+    // New chat starts from the selected agent defaults, while free chat keeps its current preset.
     agentConfig.syncAgentBaseline()
 
     if (!activeConversationId.value && messages.value.length === 0) {
-      await ensureFreeChatDefaultMemorySelection()
       return
     }
 
@@ -405,7 +412,6 @@ export const useChatStore = defineStore('chat', () => {
     agentStore.clearExecutionState()
     agentStore.clearOrchestrationState()
     resetStreaming()
-    await ensureFreeChatDefaultMemorySelection()
   }
 
   async function deleteAllConversations(allConversations = false): Promise<void> {
@@ -478,6 +484,8 @@ export const useChatStore = defineStore('chat', () => {
     conversations.value.find((c) => c.id === activeConversationId.value)
   )
 
+  void loadMemorySpaces()
+
   return {
     // Core state
     conversations,
@@ -485,6 +493,7 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId,
     messages,
     loadingMessages,
+    memorySpaces,
     activeConversation,
     activePostActions,
     isConversationLocked,
@@ -517,7 +526,7 @@ export const useChatStore = defineStore('chat', () => {
     handleCompactError: streaming.handleCompactError,
 
     // Messages (delegated)
-    sendMessage: chatMessages.sendMessage,
+    sendMessage,
     retryFromMessage: chatMessages.retryFromMessage,
     editMessage: chatMessages.editMessage,
     cancelStream: chatMessages.cancelStream,
@@ -543,6 +552,7 @@ export const useChatStore = defineStore('chat', () => {
     agentOriginalMemorySpaceIds: agentConfig.agentOriginalMemorySpaceIds,
     agentOriginalSkillIds: agentConfig.agentOriginalSkillIds,
     hasAgentOverrides: agentConfig.hasAgentOverrides,
+    hasFreeChatOverrides: agentConfig.hasFreeChatOverrides,
     markOverridesModified: agentConfig.markOverridesModified,
     resetAgentOverrides: agentConfig.resetAgentOverrides,
     resetToDefaults: agentConfig.resetToDefaults,
@@ -550,6 +560,7 @@ export const useChatStore = defineStore('chat', () => {
     setActiveAgent,
     setSessionModel: agentConfig.setSessionModel,
     syncAgentBaseline: agentConfig.syncAgentBaseline,
+    loadMemorySpaces,
     fetchContextWindow,
 
     // Conversation CRUD
