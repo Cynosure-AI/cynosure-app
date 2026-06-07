@@ -50,7 +50,7 @@ const activeOrigin = computed(() => {
 });
 
 async function newChat(): Promise<void> {
-  chatStore.startNewChat();
+  await chatStore.startNewChat();
   agentStore.clearExecution();
 }
 

@@ -89,6 +89,25 @@ export const useChatStore = defineStore('chat', () => {
     )
   }
 
+  async function ensureFreeChatDefaultMemorySelection(): Promise<void> {
+    if (agentConfig.activeAgentId.value || agentConfig.freeChatMemorySelectionInitialized.value) return
+    try {
+      const spaces = await api.memorySpaces.list()
+      const defaultSpaceIds = spaces.filter((space) => space.isDefault).map((space) => space.id)
+      if (defaultSpaceIds.length > 0) {
+        agentConfig.freeChatMemorySpaceIds.value = defaultSpaceIds
+      }
+      agentConfig.freeChatMemorySelectionInitialized.value = true
+    } catch {
+      // Non-critical; the memory selector can retry when opened.
+    }
+  }
+
+  async function setActiveAgent(id: string | null): Promise<void> {
+    await agentConfig.setActiveAgent(id)
+    if (!id) await ensureFreeChatDefaultMemorySelection()
+  }
+
   const agentConfig = useChatAgentConfig(activeConversationId, messages, conversations, loadConversations)
 
   async function createConversation(title?: string): Promise<string> {
@@ -370,12 +389,15 @@ export const useChatStore = defineStore('chat', () => {
     streaming.lastUsage.value = null
   }
 
-  function startNewChat(): void {
+  async function startNewChat(): Promise<void> {
     // Always re-sync agent config when pressing "New Chat" so edited settings (sub-agents, tools, etc.)
     // take effect even when we're already on a blank chat and we reset it to it's original state.
     agentConfig.syncAgentBaseline()
 
-    if (!activeConversationId.value && messages.value.length === 0) return
+    if (!activeConversationId.value && messages.value.length === 0) {
+      await ensureFreeChatDefaultMemorySelection()
+      return
+    }
 
     activeConversationId.value = null
     messages.value = []
@@ -383,6 +405,7 @@ export const useChatStore = defineStore('chat', () => {
     agentStore.clearExecutionState()
     agentStore.clearOrchestrationState()
     resetStreaming()
+    await ensureFreeChatDefaultMemorySelection()
   }
 
   async function deleteAllConversations(allConversations = false): Promise<void> {
@@ -524,7 +547,7 @@ export const useChatStore = defineStore('chat', () => {
     resetAgentOverrides: agentConfig.resetAgentOverrides,
     resetToDefaults: agentConfig.resetToDefaults,
     applyOverridesToAgent: agentConfig.applyOverridesToAgent,
-    setActiveAgent: agentConfig.setActiveAgent,
+    setActiveAgent,
     setSessionModel: agentConfig.setSessionModel,
     syncAgentBaseline: agentConfig.syncAgentBaseline,
     fetchContextWindow,
