@@ -64,20 +64,7 @@ interface ExtractedRelation {
 }
 
 const ENTITY_TYPES = new Set<EntityType>(['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'])
-const STOP_TERMS = new Set(['user', 'assistant', 'you', 'me', 'i', 'we', 'they', 'today', 'tomorrow', 'yesterday', 'this', 'that'])
-const FUNCTIONAL_RELATIONS = new Set([
-  'works_at',
-  'employed_by',
-  'lives_in',
-  'located_in',
-  'based_in',
-  'studies_at',
-  'studied_at',
-  'has_role',
-  'reports_to',
-  'managed_by',
-  'owned_by',
-])
+const RESERVED_ENTITY_NAMES = new Set(['user', 'assistant', 'system', 'tool'])
 
 function normalizeName(name: string): string {
   return name
@@ -133,7 +120,7 @@ function toEntity(value: unknown): ExtractedEntity | null {
   if (typeof obj.name !== 'string') return null
   const name = cleanName(obj.name)
   const normalizedName = normalizeName(name)
-  if (!name || normalizedName.length < 2 || STOP_TERMS.has(normalizedName)) return null
+  if (!name || normalizedName.length < 2 || RESERVED_ENTITY_NAMES.has(normalizedName)) return null
   const type = typeof obj.type === 'string' && ENTITY_TYPES.has(obj.type as EntityType)
     ? obj.type as EntityType
     : 'other'
@@ -150,6 +137,15 @@ function escapeLike(value: string): string {
 function clampConfidence(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0.7
   return Math.max(0.1, Math.min(1, value))
+}
+
+function tokenizeEntityQuery(value: string): string[] {
+  return Array.from(new Set(
+    normalizeName(value)
+      .split(' ')
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3)
+  ))
 }
 
 function rowToNode(row: Record<string, unknown>): EntityNode {
@@ -207,7 +203,7 @@ export class EntityGraphStore {
         INSERT INTO entity_graph_nodes (id, name, normalized_name, type, aliases_json, mention_count, source_count, first_seen_at, last_seen_at)
         VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)
       `).run(id, name, normalizedName, type, JSON.stringify(aliases), now, now)
-      return this.getNode(id)!
+      return this.mergeNodeIdentityCollisions([name, ...aliases], now) || this.getNode(id)!
     }
 
     const existingAliases = rowAliases(existing)
@@ -225,7 +221,7 @@ export class EntityGraphStore {
           last_seen_at = ?
       WHERE id = ?
     `).run(displayName, type, type, JSON.stringify(mergedAliases), sourceIncrement, now, existing.id)
-    return this.getNode(existing.id as string)!
+    return this.mergeNodeIdentityCollisions([displayName, ...mergedAliases], now) || this.getNode(existing.id as string)!
   }
 
   upsertEdge(relation: ExtractedRelation, sourceKind: string, sourceId: string, now = Date.now()): EntityEdge | null {
@@ -236,7 +232,6 @@ export class EntityGraphStore {
     const db = getDb()
     const rel = normalizeRelation(relation.relation)
     const evidence = cleanEvidence(relation.evidence)
-    this.deleteConflictingFunctionalEdges(from.id, rel, to.id)
     const existing = db.prepare(`
       SELECT * FROM entity_graph_edges
       WHERE from_node_id = ? AND relation = ? AND to_node_id = ?
@@ -285,7 +280,7 @@ export class EntityGraphStore {
 
     const name = patch.name !== undefined ? cleanName(patch.name) : existing.name
     const normalizedName = normalizeName(name)
-    if (!name || normalizedName.length < 2 || STOP_TERMS.has(normalizedName)) {
+    if (!name || normalizedName.length < 2 || RESERVED_ENTITY_NAMES.has(normalizedName)) {
       throw new Error('ENTITY_NODE_INVALID_NAME')
     }
 
@@ -302,13 +297,14 @@ export class EntityGraphStore {
     `).get(normalizedName, id) as { id: string } | undefined
     if (conflict) throw new Error('ENTITY_NODE_CONFLICT')
 
+    const now = Date.now()
     getDb().prepare(`
       UPDATE entity_graph_nodes
       SET name = ?, normalized_name = ?, type = ?, aliases_json = ?, last_seen_at = ?
       WHERE id = ?
-    `).run(name, normalizedName, type, JSON.stringify(aliases), Date.now(), id)
+    `).run(name, normalizedName, type, JSON.stringify(aliases), now, id)
 
-    return this.getNode(id)
+    return this.mergeNodeIdentityCollisions([name, ...aliases], now) || this.getNode(id)
   }
 
   updateEdge(
@@ -432,13 +428,13 @@ export class EntityGraphStore {
     })
   }
 
-  private deleteConflictingFunctionalEdges(fromNodeId: string, relation: string, toNodeId: string): number {
-    if (!FUNCTIONAL_RELATIONS.has(relation)) return 0
-    const result = getDb().prepare(`
-      DELETE FROM entity_graph_edges
-      WHERE from_node_id = ? AND relation = ? AND to_node_id != ?
-    `).run(fromNodeId, relation, toNodeId)
-    return result.changes
+  private mergeNodeIdentityCollisions(names: string[], now = Date.now()): EntityNode | null {
+    const normalizedNames = Array.from(new Set(names.map(normalizeName).filter(Boolean)))
+    if (normalizedNames.length === 0) return null
+    const rows = this.findNodeRowsByNames(normalizedNames)
+    if (rows.length > 1) this.mergeDuplicateNameNodes(rows, now)
+    const row = this.findNodeRowsByNames(normalizedNames)[0]
+    return row ? rowToNode(row) : null
   }
 
   private mergeDuplicateNameNodes(rows: Record<string, unknown>[], now = Date.now()): void {
@@ -537,67 +533,7 @@ export class EntityGraphStore {
     merge()
   }
 
-  private mergeAliasDuplicateNodes(now = Date.now()): void {
-    const rows = getDb().prepare(`
-      SELECT *
-      FROM entity_graph_nodes
-      ORDER BY mention_count DESC, last_seen_at DESC
-    `).all() as Record<string, unknown>[]
-    if (rows.length < 2) return
-
-    const parent = new Map<string, string>()
-    const identityOwner = new Map<string, string>()
-    for (const row of rows) {
-      const id = row.id as string
-      parent.set(id, id)
-    }
-
-    const find = (id: string): string => {
-      const current = parent.get(id) || id
-      if (current === id) return id
-      const root = find(current)
-      parent.set(id, root)
-      return root
-    }
-    const union = (a: string, b: string) => {
-      const rootA = find(a)
-      const rootB = find(b)
-      if (rootA !== rootB) parent.set(rootB, rootA)
-    }
-
-    for (const row of rows) {
-      const id = row.id as string
-      const identities = [
-        row.normalized_name as string,
-        ...rowAliases(row).map(normalizeName),
-      ].filter(Boolean)
-      for (const identity of identities) {
-        const owner = identityOwner.get(identity)
-        if (owner) union(owner, id)
-        else identityOwner.set(identity, id)
-      }
-    }
-
-    const groups = new Map<string, Record<string, unknown>[]>()
-    for (const row of rows) {
-      const root = find(row.id as string)
-      if (!groups.has(root)) groups.set(root, [])
-      groups.get(root)!.push(row)
-    }
-
-    for (const group of groups.values()) {
-      if (group.length < 2) continue
-      const freshRows = group
-        .map((row) => getDb().prepare('SELECT * FROM entity_graph_nodes WHERE id = ?').get(row.id) as Record<string, unknown> | undefined)
-        .filter((row): row is Record<string, unknown> => Boolean(row))
-        .sort((a, b) => Number(b.mention_count || 0) - Number(a.mention_count || 0)
-          || Number(b.last_seen_at || 0) - Number(a.last_seen_at || 0))
-      this.mergeDuplicateNameNodes(freshRows, now)
-    }
-  }
-
   list(limit = 80): GraphSnapshot {
-    this.mergeAliasDuplicateNodes()
     const db = getDb()
     const edgeLimit = limit
     const nodeLimit = limit
@@ -670,28 +606,75 @@ export class EntityGraphStore {
     const query = normalizeName(text)
     const haystack = normalizeName([text, ...extraTexts].join(' '))
     if (!query && !haystack) return []
+    const tokens = tokenizeEntityQuery([text, ...extraTexts].join(' '))
     const db = getDb()
-    const directRows = query
+    const scoreRows = (rows: Record<string, unknown>[], allowPrefix: boolean): EntityNode[] => {
+      const scored = new Map<string, { node: EntityNode; score: number }>()
+      for (const row of rows) {
+        const node = rowToNode(row)
+        const names = [node.normalizedName, ...node.aliases.map(normalizeName)].filter(Boolean)
+        let score = 0
+        for (const name of names) {
+          if (query && name === query) score += 100
+          else if (query && name.includes(query)) score += 80
+          else if (query && query.includes(name) && name.length >= 3) score += 70
+          if (haystack.includes(name) && name.length >= 3) score += 45
+          for (const token of tokens) {
+            if (name === token) score += 40
+            else if (name.includes(token)) score += 24
+            else if (token.includes(name) && name.length >= 3) score += 18
+            else if (allowPrefix && token.length >= 4 && name.startsWith(token.slice(0, 3))) score += 8
+          }
+        }
+        if (score > 0) {
+          const existing = scored.get(node.id)
+          if (!existing || score > existing.score) scored.set(node.id, { node, score })
+        }
+      }
+      return [...scored.values()]
+        .sort((a, b) => b.score - a.score || b.node.mentionCount - a.node.mentionCount || b.node.lastSeenAt - a.node.lastSeenAt)
+        .slice(0, limit)
+        .map((entry) => entry.node)
+    }
+
+    const exactNames = Array.from(new Set([query, ...tokens].filter(Boolean)))
+    const exactRows = exactNames.length
+      ? db.prepare(`
+        SELECT *
+        FROM entity_graph_nodes
+        WHERE normalized_name IN (${exactNames.map(() => '?').join(', ')})
+           OR ${exactNames.map(() => `aliases_json LIKE ? ESCAPE '\\'`).join(' OR ')}
+        ORDER BY mention_count DESC, last_seen_at DESC
+        LIMIT 120
+      `).all(...exactNames, ...exactNames.map((name) => `%${escapeLike(name)}%`)) as Record<string, unknown>[]
+      : []
+    const exactSeeds = scoreRows(exactRows, false)
+    if (exactSeeds.length > 0) return exactSeeds
+
+    const prefixes = tokens
+      .filter((token) => token.length >= 4)
+      .map((token) => token.slice(0, 3))
+      .filter((prefix, index, arr) => arr.indexOf(prefix) === index)
+    const clauses: string[] = []
+    const args: string[] = []
+    if (query) {
+      clauses.push(`normalized_name LIKE ? ESCAPE '\\'`, `aliases_json LIKE ? ESCAPE '\\'`)
+      args.push(`%${escapeLike(query)}%`, `%${escapeLike(query)}%`)
+    }
+    for (const prefix of prefixes) {
+      clauses.push(`normalized_name LIKE ? ESCAPE '\\'`, `aliases_json LIKE ? ESCAPE '\\'`)
+      args.push(`${escapeLike(prefix)}%`, `%"${escapeLike(prefix)}%`)
+    }
+
+    const rows = clauses.length
       ? db.prepare(`
         SELECT * FROM entity_graph_nodes
-        WHERE normalized_name LIKE ? ESCAPE '\\' OR aliases_json LIKE ?
+        WHERE ${clauses.join(' OR ')}
         ORDER BY mention_count DESC, last_seen_at DESC
-        LIMIT 200
-      `).all(`%${escapeLike(query)}%`, `%${query}%`) as Record<string, unknown>[]
+        LIMIT 120
+      `).all(...args) as Record<string, unknown>[]
       : []
-    const seen = new Set<string>()
-    const seeds: EntityNode[] = []
-    for (const row of directRows) {
-      const node = rowToNode(row)
-      if (seen.has(node.id)) continue
-      seen.add(node.id)
-      const names = [node.normalizedName, ...node.aliases.map(normalizeName)].filter(Boolean)
-      if (names.some((name) => name.length >= 2 && (haystack.includes(name) || name.includes(query)))) {
-        seeds.push(node)
-        if (seeds.length >= limit) break
-      }
-    }
-    return seeds
+    return scoreRows(rows, true)
   }
 
   suggestNodes(text: string, limit = 8): EntityNode[] {
@@ -714,7 +697,6 @@ export class EntityGraphStore {
   }
 
   walk(seedNodeIds: string[], depth = 2, edgeLimit = 40): GraphWalkResult {
-    this.mergeAliasDuplicateNodes()
     const seedIds = Array.from(new Set(seedNodeIds.filter(Boolean)))
     if (seedIds.length === 0) return { seedNodes: [], nodes: [], edges: [] }
 
@@ -722,9 +704,15 @@ export class EntityGraphStore {
     const nodeIds = new Set(seedIds)
     const edgeMap = new Map<string, EntityEdge>()
     let frontier = seedIds
+    const maxDepth = Math.max(Math.floor(depth), 1)
+    const perDepthLimit = Math.max(Math.ceil(edgeLimit / maxDepth), 1)
 
-    for (let d = 0; d < depth && frontier.length > 0 && edgeMap.size < edgeLimit; d++) {
+    for (let d = 0; d < maxDepth && frontier.length > 0 && edgeMap.size < edgeLimit; d++) {
       const placeholders = frontier.map(() => '?').join(', ')
+      const remainingLimit = Math.max(edgeLimit - edgeMap.size, 1)
+      const layerLimit = d === maxDepth - 1
+        ? remainingLimit
+        : Math.min(perDepthLimit, remainingLimit)
       const rows = db.prepare(`
         SELECT e.*, fn.name AS from_name, tn.name AS to_name
         FROM entity_graph_edges e
@@ -733,20 +721,20 @@ export class EntityGraphStore {
         WHERE e.from_node_id IN (${placeholders}) OR e.to_node_id IN (${placeholders})
         ORDER BY e.confidence DESC, e.mention_count DESC, e.last_seen_at DESC
         LIMIT ?
-      `).all(...frontier, ...frontier, Math.max(edgeLimit - edgeMap.size, 1)) as Record<string, unknown>[]
+      `).all(...frontier, ...frontier, layerLimit) as Record<string, unknown>[]
 
-      const next: string[] = []
+      const next = new Set<string>()
       for (const row of rows) {
         const edge = rowToEdge(row)
         if (!edgeMap.has(edge.id)) edgeMap.set(edge.id, edge)
         for (const id of [edge.fromNodeId, edge.toNodeId]) {
           if (!nodeIds.has(id)) {
             nodeIds.add(id)
-            next.push(id)
+            next.add(id)
           }
         }
       }
-      frontier = next
+      frontier = Array.from(next)
     }
 
     const allIds = Array.from(nodeIds)
