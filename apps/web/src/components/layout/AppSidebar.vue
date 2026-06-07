@@ -129,7 +129,8 @@ const triggerItems: NavItem[] = [
 
 const settingsItems: NavItem[] = [
   { to: "/settings", icon: "lucide:settings", label: "Settings", exact: true },
-  { to: "/settings/mcp", icon: "lucide:plug", label: "MCPs / Tools" },
+  { to: "/settings/mcp", icon: "lucide:plug", label: "MCP Servers" },
+  { to: "/usage", icon: "lucide:bar-chart-3", label: "Usage" },
 ];
 </script>
 
@@ -347,10 +348,10 @@ const settingsItems: NavItem[] = [
         </template>
       </HoverTooltip>
 
-      <!-- Agents -->
+      <!-- Configuration -->
       <div class="section-separator" />
       <div class="section-label">
-        Agents
+        Configuration
       </div>
       <HoverTooltip
         placement="right"
@@ -366,10 +367,10 @@ const settingsItems: NavItem[] = [
             icon="lucide:bot"
             class="w-4.5 h-4.5"
           />
-          <span>My Agents</span>
+          <span>Agents</span>
         </RouterLink>
         <template #content>
-          My Agents
+          Agents
         </template>
       </HoverTooltip>
       <HoverTooltip
@@ -418,18 +419,18 @@ const settingsItems: NavItem[] = [
         :disabled="!sidebarCollapsed"
       >
         <RouterLink
-          to="/usage"
+          to="/tools-policy"
           class="nav-item"
-          :class="{ active: isActive('/usage') }"
+          :class="{ active: isActive('/tools-policy') }"
         >
           <Icon
-            icon="lucide:bar-chart-3"
+            icon="lucide:wrench"
             class="w-4.5 h-4.5"
           />
-          <span>Usage</span>
+          <span>Tools</span>
         </RouterLink>
         <template #content>
-          Usage
+          Tools
         </template>
       </HoverTooltip>
 

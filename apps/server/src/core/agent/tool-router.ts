@@ -7,18 +7,16 @@ import {
     saveCachedRouterEmbedding,
     type RouterEmbeddingScope,
 } from './router-embedding-cache.js'
-import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ContentPart, RegistryAwareToolDefinition, ToolDefinition } from '../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../tools/tool-registry.js'
 import { compactToolDescription } from '../tools/tool-description.js'
 
-export const MCP_CANDIDATE_COUNT = 8 // Top-K MCP tool groups selected by embedding similarity and passed to the LLM for final confirmation
+export const MCP_CANDIDATE_COUNT = 8 // Top-K MCP tool groups selected by embedding similarity
 export const CONTEXT_WINDOW_TURNS = 5 // Recent turns included in routing query context
-export const ROUTER_SELECTION_TOOL_NAME = 'select_relevant_tools' // Name of the tool the router LLM calls to confirm its tool selection
 
 const TURN_CHAR_LIMIT = 200 // Max characters taken from each conversation turn when building the router query
-const MAX_CONFIRMED_TOOLS = 40 // Upper bound on how many tools the LLM confirmation step may select
-const FALLBACK_TOOL_COUNT = 12 // How many tools to fall back to via lexical scoring if LLM confirmation fails
+const MAX_ROUTED_TOOLS = 16 // Upper bound for automatically selected tools after individual ranking
+const MIN_RELATIVE_TOOL_SCORE = 0.72 // Keep near-matches when their embedding score is close to the best hit
 
 interface McpToolGroup {
     id: string
@@ -31,15 +29,12 @@ export interface RouteToolsInput {
     userQuery: string
     recentMessages?: ChatMessage[]
     allTools: RegistryAwareToolDefinition[]
-    gateway: LLMGateway
-    providerId?: string
-    model?: string
-    routerModel?: string
     mcpMetadata?: ToolNamespaceMetadata[]
     /** Explicitly selected tool names that must survive routing. */
     preferredToolNames?: Set<string>
     usedToolNames?: Set<string>
     topK?: number
+    maxTools?: number
     contextWindowTurns?: number
 }
 
@@ -120,68 +115,16 @@ export async function embeddingPreFilter(
     }
 }
 
-export async function llmConfirmTools(
-    query: string,
-    candidateTools: ToolDefinition[],
-    config: { gateway: LLMGateway; providerId?: string; model?: string; signal?: AbortSignal },
-): Promise<string[]> {
-    if (!candidateTools.length) return []
-
-    const availableTools = candidateTools
-        .map((tool) => `${tool.name}: ${compactToolDescription(tool.description)}`)
-        .join('\n')
-
-    const result = await config.gateway.complete({
-        messages: [
-            {
-                role: 'system',
-                content:
-                    `You are a tool selection assistant. Given a user request and a list of available tools, call ${ROUTER_SELECTION_TOOL_NAME} with every tool name needed to fulfill the request. Include prerequisite/helper tools when a selected tool description says another tool is required. If no tools are needed, call it with an empty array. /no_think`,
-            },
-            {
-                role: 'user',
-                content: `Request: ${query}\n\nAvailable tools:\n${availableTools}`,
-            },
-        ],
-        model: config.model,
-        maxTokens: 500,
-        tools: [buildRouterSelectionTool(candidateTools)],
-        toolChoice: { type: 'function', name: ROUTER_SELECTION_TOOL_NAME },
-        thinkingEnabled: false,
-        signal: config.signal,
-    }, config.providerId)
-
-    const allowedNames = new Set(candidateTools.map(({ name }) => name))
-    const selectionCall = result.toolCalls?.find(
-        (call) => call.function.name === ROUTER_SELECTION_TOOL_NAME,
-    )
-
-    const parsedNames = selectionCall
-        ? parseToolSelectionArguments(selectionCall.function.arguments)
-        : null
-
-    if (!parsedNames) {
-        return lexicalToolFallback(query, candidateTools, FALLBACK_TOOL_COUNT)
-    }
-
-    return parsedNames
-        .filter((name) => allowedNames.has(name))
-        .slice(0, MAX_CONFIRMED_TOOLS)
-}
-
 export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition[]> {
     const {
         userQuery,
         recentMessages = [],
         allTools,
-        gateway,
-        providerId,
-        model,
-        routerModel,
         mcpMetadata = [],
         preferredToolNames,
         usedToolNames,
         topK = MCP_CANDIDATE_COUNT,
+        maxTools = MAX_ROUTED_TOOLS,
         contextWindowTurns = CONTEXT_WINDOW_TURNS,
     } = input
 
@@ -209,21 +152,12 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
         .flatMap(({ tools }) => tools)
 
     const candidateTools = dedupeTools([...localTools, ...candidateMcpTools])
-
-    let confirmedNames: Set<string>
-    try {
-        confirmedNames = new Set(await llmConfirmTools(query, candidateTools, {
-            gateway,
-            providerId,
-            model: routerModel || model,
-        }))
-    } catch (err) {
-        console.warn('[tool-router] LLM confirmation failed, using lexical tool fallback:', err)
-        confirmedNames = new Set(lexicalToolFallback(query, candidateTools, FALLBACK_TOOL_COUNT))
-    }
-
-    const selectedTools = candidateTools.filter(({ name }) => confirmedNames.has(name))
     const stickyNames = collectStickyToolNames(recentMessages, usedToolNames)
+    const protectedNames = new Set([
+        ...fixedTools.map(({ name }) => name),
+        ...stickyNames,
+    ])
+    const selectedTools = await rankCandidateTools(query, candidateTools, maxTools, protectedNames)
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
     let routedTools: ToolDefinition[] = []
@@ -236,27 +170,39 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
     return routedTools
 }
 
-function buildRouterSelectionTool(candidateTools: ToolDefinition[]): ToolDefinition {
-    return {
-        name: ROUTER_SELECTION_TOOL_NAME,
-        description: 'Select the tool names required to answer the current user request.',
-        timeout: 1_000,
-        parameters: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-                toolNames: {
-                    type: 'array',
-                    description: 'Names of tools required for the request, including prerequisite helper tools.',
-                    items: {
-                        type: 'string',
-                        enum: candidateTools.map(({ name }) => name),
-                    },
-                },
-            },
-            required: ['toolNames'],
-        },
-        execute: async () => ({ success: true, output: 'ok' }),
+async function rankCandidateTools(
+    query: string,
+    tools: ToolDefinition[],
+    limit: number,
+    protectedNames: Set<string>,
+): Promise<ToolDefinition[]> {
+    const rankable = tools.filter(({ name }) => !protectedNames.has(name))
+    if (rankable.length <= limit) return rankable
+
+    try {
+        const embedder = getEmbeddingProvider()
+        const embeddings = await embedder.embedBatch([
+            query,
+            ...rankable.map(toolEmbeddingText),
+        ])
+        const queryVector = embeddings[0].vector
+        const scored = rankable
+            .map((tool, index) => ({
+                tool,
+                score: cosineSimilarity(queryVector, embeddings[index + 1]?.vector || []),
+                index,
+            }))
+            .sort((a, b) => b.score - a.score || a.index - b.index)
+
+        const bestScore = scored[0]?.score ?? 0
+        const minScore = bestScore > 0 ? bestScore * MIN_RELATIVE_TOOL_SCORE : Number.POSITIVE_INFINITY
+        const nearMatches = scored.filter(({ score }) => score >= minScore)
+        const selected = nearMatches.length ? nearMatches : scored
+
+        return selected.slice(0, limit).map(({ tool }) => tool)
+    } catch (err) {
+        console.warn('[tool-router] Tool ranking failed, using lexical fallback:', err)
+        return lexicalToolRank(query, rankable, limit)
     }
 }
 
@@ -384,22 +330,24 @@ function lexicalPreFilter(
         .map(({ value }) => value)
 }
 
-function lexicalToolFallback(
+function lexicalToolRank(
     query: string,
     tools: ToolDefinition[],
     limit: number,
-): string[] {
+): ToolDefinition[] {
+    const byName = new Map(tools.map((tool) => [tool.name, tool]))
     const scored = scoreItems(
         query,
         tools,
         toolText,
         ({ name }) => name,
     )
-
     const matching = scored.filter(({ score }) => score > 0)
+
     return (matching.length ? matching : scored)
         .slice(0, limit)
-        .map(({ value }) => value)
+        .map(({ value }) => byName.get(value))
+        .filter((tool): tool is ToolDefinition => Boolean(tool))
 }
 
 function scoreItems<T>(
@@ -436,23 +384,12 @@ function toolText(tool: ToolDefinition): string {
     return `${tool.name} ${tool.description}`
 }
 
-function parseToolSelectionArguments(argumentsJson: string): string[] | null {
-    try {
-        const parsed = JSON.parse(argumentsJson) as unknown
-
-        if (!parsed || typeof parsed !== 'object') return null
-
-        const args = parsed as Record<string, unknown>
-        const toolNames = args.toolNames
-
-        return Array.isArray(toolNames) ? extractStringArray(toolNames) : null
-    } catch {
-        return null
-    }
-}
-
-function extractStringArray(items: unknown[]): string[] {
-    return items.filter((item): item is string => typeof item === 'string')
+function toolEmbeddingText(tool: ToolDefinition): string {
+    return [
+        `Tool: ${tool.name}`,
+        compactToolDescription(tool.description),
+        JSON.stringify(tool.parameters || {}),
+    ].filter(Boolean).join('\n')
 }
 
 function collectStickyToolNames(

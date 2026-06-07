@@ -114,9 +114,14 @@ export class MemoryAggregator {
       }
     }
 
-    const graph = getEntityGraphStore()
-    const seedNodes = graph.findSeedNodes(query, dedupedPermanent.map((chunk) => chunk.text), 8)
-    const graphWalk = seedNodes.length > 0 ? graph.walk(seedNodes.map((node) => node.id), 2, 32) : undefined
+    let graphWalk: GraphWalkResult | undefined
+    try {
+      const graph = getEntityGraphStore()
+      const seedNodes = graph.findSeedNodes(query, dedupedPermanent.map((chunk) => chunk.text), 8)
+      graphWalk = seedNodes.length > 0 ? graph.walk(seedNodes.map((node) => node.id), 2, 32) : undefined
+    } catch (err) {
+      console.warn('[memory-aggregator] Entity graph enrichment failed; returning semantic memory only:', err)
+    }
 
     return { permanent: dedupedPermanent, graph: graphWalk }
   }

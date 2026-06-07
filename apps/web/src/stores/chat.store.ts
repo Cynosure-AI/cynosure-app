@@ -251,6 +251,7 @@ export const useChatStore = defineStore('chat', () => {
       // Legacy conversations without config_json fall back to agent defaults.
       const cfg = response.chatConfig
       if (cfg) {
+        const activeAgent = agentDefs.get(agentConfig.activeAgentId.value || '')
         agentStore.selectedToolNames = cfg.allowedTools?.length ? [...cfg.allowedTools] : []
         agentConfig.freeChatSubAgentIds.value = cfg.subAgents?.length
           ? cfg.subAgents.map((s: { agentId: string }) => s.agentId)
@@ -261,12 +262,16 @@ export const useChatStore = defineStore('chat', () => {
         agentConfig.freeChatSkillIds.value = cfg.selectedSkillIds?.length ? [...cfg.selectedSkillIds] : []
         agentConfig.sessionSystemPrompt.value = cfg.systemPrompt ?? ''
         agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled ?? true
-        agentConfig.sessionModelOverride.value = cfg.model || null
-        agentConfig.sessionProviderOverride.value = cfg.providerId || null
-        agentConfig.sessionOverrideSubAgents.value = cfg.overrideSubAgents ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.overrideSubAgents === true)
+        const restoredModel = cfg.model || null
+        const restoredProviderId = cfg.providerId || null
+        const matchesAgentModel = Boolean(activeAgent) &&
+          (restoredModel === (activeAgent?.model || null)) &&
+          (restoredProviderId === (activeAgent?.providerId || null))
+        agentConfig.sessionModelOverride.value = matchesAgentModel ? null : restoredModel
+        agentConfig.sessionProviderOverride.value = matchesAgentModel ? null : restoredProviderId
         agentConfig.sessionAutoToolRouting.value = cfg.autoToolRouting ?? !agentConfig.activeAgentId.value
-        agentConfig.sessionAutoMemory.value = cfg.autoMemory ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoMemory === true)
-        agentConfig.sessionAutoSkillRouting.value = cfg.autoSkillRouting ?? (agentDefs.get(agentConfig.activeAgentId.value || '')?.autoSkillRouting !== false)
+        agentConfig.sessionAutoMemory.value = cfg.autoMemory ?? (activeAgent?.autoMemory === true)
+        agentConfig.sessionAutoSkillRouting.value = cfg.autoSkillRouting ?? (activeAgent?.autoSkillRouting !== false)
         if (!agentConfig.activeAgentId.value) agentConfig.captureFreeChatPreset()
       } else {
         agentConfig.syncAgentBaseline()
@@ -536,7 +541,6 @@ export const useChatStore = defineStore('chat', () => {
     activeAgentId: agentConfig.activeAgentId,
     sessionModelOverride: agentConfig.sessionModelOverride,
     sessionProviderOverride: agentConfig.sessionProviderOverride,
-    sessionOverrideSubAgents: agentConfig.sessionOverrideSubAgents,
     sessionSystemPrompt: agentConfig.sessionSystemPrompt,
     sessionThinkingEnabled: agentConfig.sessionThinkingEnabled,
     sessionAutoToolRouting: agentConfig.sessionAutoToolRouting,

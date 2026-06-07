@@ -261,7 +261,6 @@ async function createAgent() {
     cronPrompt: '',
     tools: [],
     autoApproveTools: false,
-    overrideSubAgents: false,
     autoToolRouting: false,
     generateTitle: true
   })
@@ -525,7 +524,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
       <div class="flex items-center justify-between mb-6">
         <div>
           <h1 class="text-2xl font-bold text-theme-100">
-            My Agents
+            Agents
           </h1>
           <p class="text-sm text-theme-500 mt-1">
             Create and manage AI agents with custom configurations. Drag and drop the name column to reorder or organize into categories.

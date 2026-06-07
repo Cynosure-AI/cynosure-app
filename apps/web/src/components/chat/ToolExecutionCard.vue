@@ -59,6 +59,42 @@ function isMemoryCall(call: { arguments: string }): boolean {
   }
 }
 
+function isSubAgentSpawnCall(name: string): boolean {
+  return name === 'spawn_subagent'
+}
+
+function toolDisplayName(name: string): string {
+  return isSubAgentSpawnCall(name) ? 'Spawn sub-agent' : name
+}
+
+function subAgentCodenameFromArgs(args: string): string | null {
+  try {
+    const parsed = JSON.parse(args || '{}')
+    return typeof parsed?.codename === 'string' && parsed.codename.trim()
+      ? parsed.codename.trim()
+      : null
+  } catch {
+    return null
+  }
+}
+
+function toolChipClass(name: string): string {
+  return isSubAgentSpawnCall(name)
+    ? 'bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/20'
+    : 'bg-accent-500/10 text-accent-300'
+}
+
+function toolCallIcon(call: { name: string; arguments: string }): string {
+  if (isSubAgentSpawnCall(call.name)) return 'lucide:bot'
+  if (isSkillRouting.value) return 'lucide:book-open-check'
+  if (isMemoryCall(call)) return 'lucide:brain'
+  return 'lucide:terminal'
+}
+
+function toolCallIconClass(name: string): string {
+  return isSubAgentSpawnCall(name) ? 'text-indigo-400' : 'text-accent-400'
+}
+
 /** Current phase — the last meaningful status in this iteration */
 const currentPhase = computed(() => {
   if (!props.steps.length) return meta('executing')
@@ -81,6 +117,7 @@ const toolNames = computed(() => {
 })
 
 const isSkillRouting = computed(() => props.steps.some(step => step.status === 'routing-skills'))
+const isSubAgentSpawnIteration = computed(() => toolNames.value.some(isSubAgentSpawnCall))
 
 /** Latest results from this iteration */
 const results = computed(() => {
@@ -153,9 +190,13 @@ const maContext = computed(() => {
             v-bind="triggerAttrs"
             class="w-full flex items-center gap-2 px-3 py-2 rounded-2xl text-[13px] font-medium transition-all group shadow-sm"
             :class="[
-              isExpanded
-                ? 'bg-theme-800 border border-theme-700/60 shadow-md'
-                : 'bg-theme-800/60 hover:bg-theme-800 hover:border-theme-700/50 border border-transparent',
+              isSubAgentSpawnIteration
+                ? isExpanded
+                  ? 'bg-indigo-950/20 border border-indigo-500/35 shadow-md shadow-indigo-950/20'
+                  : 'bg-indigo-950/10 hover:bg-indigo-950/20 hover:border-indigo-500/35 border border-indigo-500/20'
+                : isExpanded
+                  ? 'bg-theme-800 border border-theme-700/60 shadow-md'
+                  : 'bg-theme-800/60 hover:bg-theme-800 hover:border-theme-700/50 border border-transparent',
             ]"
             @click="toggle"
           >
@@ -195,8 +236,16 @@ const maContext = computed(() => {
                 <span
                   v-for="name in toolNames.slice(0, 3)"
                   :key="name"
-                  class="inline-flex items-center rounded-md bg-accent-500/10 px-1.5 py-0.5 text-[10px] text-accent-300 font-medium truncate max-w-35"
-                >{{ name }}</span>
+                  class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium truncate max-w-35"
+                  :class="toolChipClass(name)"
+                >
+                  <Icon
+                    v-if="isSubAgentSpawnCall(name)"
+                    icon="lucide:bot"
+                    class="w-3 h-3 shrink-0"
+                  />
+                  {{ toolDisplayName(name) }}
+                </span>
                 <span
                   v-if="toolNames.length > 3"
                   class="text-[10px] text-theme-500"
@@ -252,14 +301,25 @@ const maContext = computed(() => {
             <div
               v-for="(tc, i) in toolCallArgs"
               :key="i"
-              class="rounded-lg bg-theme-900/60 border border-theme-700/30 px-3 py-2"
+              class="rounded-lg border px-3 py-2"
+              :class="isSubAgentSpawnCall(tc.name)
+                ? 'bg-indigo-950/15 border-indigo-500/25'
+                : 'bg-theme-900/60 border-theme-700/30'"
               >
                 <div class="flex items-center gap-1.5 mb-1">
                   <Icon
-                  :icon="isSkillRouting ? 'lucide:book-open-check' : isMemoryCall(tc) ? 'lucide:brain' : 'lucide:terminal'"
-                    class="w-3 h-3 text-accent-400"
+                    :icon="toolCallIcon(tc)"
+                    class="w-3 h-3"
+                    :class="toolCallIconClass(tc.name)"
                   />
-                <span class="text-[11px] text-accent-300 font-medium">{{ tc.name }}</span>
+                <span
+                  class="text-[11px] font-medium"
+                  :class="isSubAgentSpawnCall(tc.name) ? 'text-indigo-300' : 'text-accent-300'"
+                >{{ toolDisplayName(tc.name) }}</span>
+                <span
+                  v-if="subAgentCodenameFromArgs(tc.arguments)"
+                  class="ml-1 inline-flex rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] text-indigo-300"
+                >{{ subAgentCodenameFromArgs(tc.arguments) }}</span>
               </div>
               <pre
                 v-if="tc.arguments && tc.arguments !== '{}'"

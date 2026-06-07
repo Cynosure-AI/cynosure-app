@@ -101,11 +101,11 @@ function toggleExpand(index: number): void {
         <span class="text-sm font-semibold text-amber-500 tracking-wide uppercase text-[11px]">Action Required</span>
         <div class="flex items-center gap-2">
           <span
-            v-if="agentStore.hitlQueue.length > 1"
+            v-if="agentStore.activeHITLQueue.length > 1"
             class="text-[10px] font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20"
-            :title="`${agentStore.hitlQueue.length} approval requests queued`"
+            :title="`${agentStore.activeHITLQueue.length} approval requests queued for this chat`"
           >
-            1 of {{ agentStore.hitlQueue.length }}
+            1 of {{ agentStore.activeHITLQueue.length }}
           </span>
           <span class="text-xs font-medium text-theme-400 bg-theme-900/50 px-2 py-0.5 rounded-full border border-theme-700/50">
             {{ agentStore.pendingHITL.toolCalls.length }} tool{{ agentStore.pendingHITL.toolCalls.length > 1 ? 's' : '' }} requested

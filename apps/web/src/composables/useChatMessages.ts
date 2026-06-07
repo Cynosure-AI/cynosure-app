@@ -24,7 +24,6 @@ export function useChatMessages(
     agentConfig: {
         sessionModelOverride: Ref<string | null>
         sessionProviderOverride: Ref<string | null>
-        sessionOverrideSubAgents: Ref<boolean>
         sessionSystemPrompt: Ref<string>
         sessionThinkingEnabled: Ref<boolean>
         sessionAutoToolRouting: Ref<boolean>
@@ -121,7 +120,6 @@ export function useChatMessages(
             subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.freeChatSubAgentIds.value]),
             memorySpaceIds: agentConfig.freeChatMemorySelectionInitialized.value ? [...agentConfig.freeChatMemorySpaceIds.value] : undefined,
             selectedSkillIds: [...agentConfig.freeChatSkillIds.value],
-            overrideSubAgents: agentConfig.sessionOverrideSubAgents.value,
             thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
             autoToolRouting: agentConfig.sessionAutoToolRouting.value,
             autoMemory: agentConfig.sessionAutoMemory.value,
@@ -144,7 +142,6 @@ export function useChatMessages(
             audioDataUrls,
             executionRun.subAgents,
             executionRun.memorySpaceIds,
-            executionRun.overrideSubAgents,
             executionRun.thinkingEnabled,
             prefs.contextStrategy,
             prefs.titleProviderId || undefined,
@@ -152,11 +149,7 @@ export function useChatMessages(
             executionRun.autoToolRouting,
             executionRun.selectedSkillIds,
             executionRun.autoSkillRouting,
-            prefs.toolRouterProviderId || undefined,
-            prefs.toolRouterModel || undefined,
             executionRun.autoMemory,
-            activeAgent?.memoryRouterProviderId || prefs.memoryRouterProviderId || undefined,
-            activeAgent?.memoryRouterModel || prefs.memoryRouterModel || undefined,
             activeAgent?.skillRouterProviderId || prefs.skillRouterProviderId || undefined,
             activeAgent?.skillRouterModel || prefs.skillRouterModel || undefined,
             prefs.compactProviderId || undefined,

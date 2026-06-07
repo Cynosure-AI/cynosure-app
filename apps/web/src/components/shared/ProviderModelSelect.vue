@@ -263,7 +263,7 @@ const groups = computed((): SelectOptionGroup[] => {
       const options: SelectOption[] = [
         {
           value: encode(provider.id, ""),
-          label: `${props.providerDefaultLabel}${provider.defaultModel ? ` (${provider.defaultModel})` : ""}`,
+          label: `${provider.name}${provider.defaultModel ? ` (${provider.defaultModel})` : ""}`,
           iconName: "lucide:settings",
           imgSrc: logoUrl(provider.type),
         },

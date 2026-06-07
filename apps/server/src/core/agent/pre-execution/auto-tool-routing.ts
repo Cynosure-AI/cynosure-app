@@ -2,7 +2,6 @@ import { nanoid } from 'nanoid'
 import { getEventBus } from '../../telemetry/event-bus.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
 import { routeTools, shouldRouteTools } from './../tool-router.js'
-import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../../tools/tool-registry.js'
 
@@ -12,10 +11,6 @@ export interface ApplyAutoToolRoutingInput {
     userQuery?: string
     recentMessages?: ChatMessage[]
     tools: RegistryAwareToolDefinition[]
-    gateway: LLMGateway
-    providerId: string
-    model: string
-    routerModel?: string
     mcpMetadata?: ToolNamespaceMetadata[]
     /** Explicitly selected tool names that must be included after routing. */
     preferredToolNames?: Set<string>
@@ -29,10 +24,6 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         userQuery,
         recentMessages,
         tools,
-        gateway,
-        providerId,
-        model,
-        routerModel,
         mcpMetadata,
         preferredToolNames,
         usedToolNames,
@@ -49,10 +40,6 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             userQuery: userQuery || '',
             recentMessages: recentMessages || [],
             allTools: tools,
-            gateway,
-            providerId,
-            model,
-            routerModel,
             mcpMetadata,
             preferredToolNames,
             usedToolNames,

@@ -38,7 +38,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
         :class="autoMemoryEnabled ? 'bg-emerald-600' : 'bg-accent-600'"
       >
         <Icon
-          v-if="autoMemoryEnabled"
+          v-if="autoMemoryEnabled && memorySpaceCount === 1 && selectedMemorySpaces[0].isDefault"
           icon="lucide:sparkles"
           class="w-2.5 h-2.5"
         />

@@ -45,7 +45,7 @@ const categories: SettingsCategory[] = [
   {
     id: 'memory',
     label: 'Memory',
-    description: 'Tune memory permissions, embeddings, reranking, chunking, OCR, and vector storage.',
+    description: 'Tune embeddings, reranking, chunking, OCR, and vector storage.',
     icon: 'lucide:brain',
     component: MemorySettings
   },
@@ -96,13 +96,6 @@ const sections: SettingsSection[] = [
     terms: ['ai', 'llm', 'provider', 'providers', 'add provider', 'edit provider', 'remove provider', 'test connection', 'api key', 'base url', 'default model', 'models', 'openai', 'anthropic', 'google', 'gemini', 'grok', 'lm studio', 'ollama', 'openrouter', 'groq', 'mistral']
   },
   {
-    id: 'write-permissions',
-    categoryId: 'memory',
-    label: 'Memory Write Permissions',
-    description: 'Allow memory creation and updates from memory tools.',
-    terms: ['write permissions', 'memory write permissions', 'allow memory creation', 'allow memory updates', 'auto approve', 'persistent writes', 'memory create', 'memory update', 'approval', 'permissions']
-  },
-  {
     id: 'embedding-model',
     categoryId: 'memory',
     label: 'Embedding Model',
@@ -136,20 +129,6 @@ const sections: SettingsSection[] = [
     label: 'Memory Data',
     description: 'Clear the entity graph or all stored vector embeddings.',
     terms: ['danger zone', 'entity graph', 'clear entity graph', 'relationships', 'entities', 'clear vector database', 'vectors', 'delete embeddings', 'reset memory', 'drop vectors']
-  },
-  {
-    id: 'tool-router',
-    categoryId: 'chat',
-    label: 'Auto Tool Mode',
-    description: 'Provider and model used by the chat input automatic tool mode.',
-    terms: ['auto tool mode', 'tool router', 'tools', 'router', 'provider model', 'auto selected tools', 'tool namespaces', 'automatic tools']
-  },
-  {
-    id: 'memory-router',
-    categoryId: 'chat',
-    label: 'Auto Memories',
-    description: 'Provider and model used by the chat input automatic memories mode.',
-    terms: ['auto memories', 'auto memory', 'memory router', 'router', 'memories', 'provider model', 'candidate chunks']
   },
   {
     id: 'generated-titles',

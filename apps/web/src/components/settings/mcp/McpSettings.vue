@@ -1,24 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { api } from '../../../api/client'
-import { useAgentStore } from '../../../stores/agent-runtime.store'
 import TabBar, { type TabDef } from '../../shared/TabBar.vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
 import McpBrowseTab from './McpBrowseTab.vue'
 import McpInstalledTab from './McpInstalledTab.vue'
-import McpToolsTab from './McpToolsTab.vue'
 
-const agentStore = useAgentStore()
 const { servers, actionError, authInProgress, loadServers, refreshAll } = useMcpServers()
 
-type McpTab = 'browse' | 'installed' | 'tools'
+type McpTab = 'browse' | 'installed'
 const activeTab = ref<McpTab>('installed')
 
 const cleanups: (() => void)[] = []
 
 onMounted(() => {
   loadServers()
-  agentStore.loadTools()
 
   // Auto-refresh when background OAuth completes
   cleanups.push(
@@ -45,7 +41,6 @@ onUnmounted(() => {
       :tabs="[
         { value: 'installed', label: 'Installed', icon: 'lucide:plug', badge: servers.length || undefined } as TabDef<McpTab>,
         { value: 'browse', label: 'Browse Registry', icon: 'lucide:search' } as TabDef<McpTab>,
-        { value: 'tools', label: 'Registered Tools', icon: 'lucide:wrench' } as TabDef<McpTab>,
       ]"
       class="mb-5"
     />
@@ -58,6 +53,5 @@ onUnmounted(() => {
       v-else-if="activeTab === 'installed'"
       @go-to-browse="activeTab = 'browse'"
     />
-    <McpToolsTab v-else-if="activeTab === 'tools'" />
   </div>
 </template>

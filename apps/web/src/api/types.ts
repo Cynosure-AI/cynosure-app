@@ -123,13 +123,8 @@ export interface AgentDefinition {
     skills: string[]
     subAgents?: SubAgentAssignment[]
     autoApproveTools: boolean
-    overrideSubAgents: boolean
     autoToolRouting: boolean
-    toolRouterProviderId: string
-    toolRouterModel: string
     autoMemory: boolean
-    memoryRouterProviderId: string
-    memoryRouterModel: string
     autoSkillRouting: boolean
     skillRouterProviderId: string
     skillRouterModel: string
@@ -269,8 +264,6 @@ export interface CronJob {
     prompt: string
     enabled: boolean
     oneOff: boolean
-    modelOverride: string
-    providerOverride: string
     outputChannelId: string
     notificationMode: 'always' | 'conditional'
     notificationCondition: string

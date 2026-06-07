@@ -9,11 +9,7 @@ export interface ExecutionPreset {
     skills?: string[]
     subAgents: SubAgentAssignment[]
     autoToolRouting?: boolean
-    toolRouterProviderId?: string
-    toolRouterModel?: string
     autoMemory?: boolean
-    memoryRouterProviderId?: string
-    memoryRouterModel?: string
     autoSkillRouting?: boolean
     skillRouterProviderId?: string
     skillRouterModel?: string
@@ -37,11 +33,7 @@ export function presetFromAgent(
         skills: agent.skills,
         subAgents: overrides.subAgents ?? agent.subAgents,
         autoToolRouting: agent.autoToolRouting,
-        toolRouterProviderId: agent.toolRouterProviderId,
-        toolRouterModel: agent.toolRouterModel,
         autoMemory: agent.autoMemory,
-        memoryRouterProviderId: agent.memoryRouterProviderId,
-        memoryRouterModel: agent.memoryRouterModel,
         autoSkillRouting: agent.autoSkillRouting,
         skillRouterProviderId: agent.skillRouterProviderId,
         skillRouterModel: agent.skillRouterModel,
@@ -53,11 +45,7 @@ export function presetFromAgentless(options: {
     skills?: string[]
     subAgents?: SubAgentAssignment[]
     autoToolRouting: boolean
-    toolRouterProviderId?: string
-    toolRouterModel?: string
     autoMemory?: boolean
-    memoryRouterProviderId?: string
-    memoryRouterModel?: string
     autoSkillRouting?: boolean
     skillRouterProviderId?: string
     skillRouterModel?: string
@@ -68,11 +56,7 @@ export function presetFromAgentless(options: {
         skills: options.skills ?? [],
         subAgents: options.subAgents ?? [],
         autoToolRouting: options.autoToolRouting,
-        toolRouterProviderId: options.toolRouterProviderId,
-        toolRouterModel: options.toolRouterModel,
         autoMemory: options.autoMemory,
-        memoryRouterProviderId: options.memoryRouterProviderId,
-        memoryRouterModel: options.memoryRouterModel,
         autoSkillRouting: options.autoSkillRouting,
         skillRouterProviderId: options.skillRouterProviderId,
         skillRouterModel: options.skillRouterModel,

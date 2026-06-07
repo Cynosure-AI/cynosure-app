@@ -110,31 +110,6 @@ const subAgentColumns: Column<SubAgentItem>[] = [
 
 <template>
   <div class="space-y-4">
-    <div class="rounded-lg border border-theme-700 bg-theme-900/70 px-4 py-3">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2">
-            <Icon
-              icon="lucide:git-branch-plus"
-              class="h-4 w-4 text-accent-400"
-            />
-            <p class="text-sm font-medium text-theme-200">
-              Enforce Model
-            </p>
-          </div>
-          <p class="mt-1 text-xs text-theme-500">
-            Use this agent's resolved provider and model for delegated sub-agent calls by default.
-          </p>
-        </div>
-        <ToggleSwitch
-          :model-value="agent.overrideSubAgents === true"
-          size="md"
-          color="accent"
-          @update:model-value="emit('update', 'overrideSubAgents', $event)"
-        />
-      </div>
-    </div>
-
     <div class="flex items-center justify-between mb-2">
       <div>
         <p class="text-sm text-theme-400">

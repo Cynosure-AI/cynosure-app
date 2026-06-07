@@ -21,17 +21,13 @@ export interface ExecutionRequest {
         systemPromptSuffix?: string
         requestedSubAgents?: SubAgentAssignment[]
         memorySpaceOverrides?: { id: string; name: string }[]
-        overrideSubAgents?: boolean
         autoToolRouting?: boolean
-        toolRouterProviderId?: string
-        toolRouterModel?: string
         autoMemory?: boolean
-        memoryRouterProviderId?: string
-        memoryRouterModel?: string
         skillRouterProviderId?: string
         skillRouterModel?: string
         selectedToolKeys?: string[]
         hasExplicitToolAllowlist?: boolean
+        usedToolNames?: Set<string>
         selectedSkillIds?: string[]
         autoSkillRouting?: boolean
     }
@@ -52,17 +48,13 @@ export interface ExecutionPlanInput {
     systemPromptSuffix?: string
     requestedSubAgents?: SubAgentAssignment[]
     memorySpaceOverrides?: { id: string; name: string }[]
-    overrideSubAgents?: boolean
     autoToolRouting?: boolean
-    toolRouterProviderId?: string
-    toolRouterModel?: string
     autoMemory?: boolean
-    memoryRouterProviderId?: string
-    memoryRouterModel?: string
     skillRouterProviderId?: string
     skillRouterModel?: string
     selectedToolKeys?: string[]
     hasExplicitToolAllowlist?: boolean
+    usedToolNames?: Set<string>
     selectedSkillIds?: string[]
     autoSkillRouting?: boolean
 }
@@ -84,17 +76,13 @@ export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanIn
         systemPromptSuffix: run.systemPromptSuffix,
         requestedSubAgents: run.requestedSubAgents,
         memorySpaceOverrides: run.memorySpaceOverrides,
-        overrideSubAgents: run.overrideSubAgents,
         autoToolRouting: run.autoToolRouting,
-        toolRouterProviderId: run.toolRouterProviderId,
-        toolRouterModel: run.toolRouterModel,
         autoMemory: run.autoMemory,
-        memoryRouterProviderId: run.memoryRouterProviderId,
-        memoryRouterModel: run.memoryRouterModel,
         skillRouterProviderId: run.skillRouterProviderId,
         skillRouterModel: run.skillRouterModel,
         selectedToolKeys: run.selectedToolKeys,
         hasExplicitToolAllowlist: run.hasExplicitToolAllowlist,
+        usedToolNames: run.usedToolNames,
         selectedSkillIds: run.selectedSkillIds,
         autoSkillRouting: run.autoSkillRouting,
     }

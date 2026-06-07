@@ -65,7 +65,6 @@ export const api = {
           systemPrompt?: string
           model?: string
           providerId?: string
-          overrideSubAgents?: boolean
           thinkingEnabled?: boolean
           autoToolRouting?: boolean
           autoMemory?: boolean
@@ -109,7 +108,6 @@ export const api = {
       audioDataUrls?: string[],
       subAgents?: SubAgentAssignment[],
       memorySpaceIds?: string[],
-      overrideSubAgents?: boolean,
       thinkingEnabled?: boolean,
       contextStrategy?: string,
       titleProviderId?: string,
@@ -117,11 +115,7 @@ export const api = {
       autoToolRouting?: boolean,
       selectedSkillIds?: string[],
       autoSkillRouting?: boolean,
-      toolRouterProviderId?: string,
-      toolRouterModel?: string,
       autoMemory?: boolean,
-      memoryRouterProviderId?: string,
-      memoryRouterModel?: string,
       skillRouterProviderId?: string,
       skillRouterModel?: string,
       compactProviderId?: string,
@@ -144,15 +138,10 @@ export const api = {
         generateTitle,
         subAgents,
         memorySpaceIds,
-        overrideSubAgents,
         thinkingEnabled,
         contextStrategy,
         autoToolRouting,
-        toolRouterProviderId: toolRouterProviderId || undefined,
-        toolRouterModel: toolRouterModel || undefined,
         autoMemory,
-        memoryRouterProviderId: memoryRouterProviderId || undefined,
-        memoryRouterModel: memoryRouterModel || undefined,
         skillRouterProviderId: skillRouterProviderId || undefined,
         skillRouterModel: skillRouterModel || undefined,
         compactProviderId: compactProviderId || undefined,
@@ -267,6 +256,8 @@ export const api = {
       put<{ success: boolean }>('/api/agents/tool-approvals', approvals),
     listTools: () =>
       get<{ key: string; name: string; executionName: string; description: string; parameters: Record<string, unknown>; autoApprove: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools'),
+    listPolicyTools: () =>
+      get<{ key: string; name: string; executionName: string; description: string; parameters: Record<string, unknown>; autoApprove: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools?includePolicyBuiltIns=true'),
     onExecutionUpdate: (cb: (data: unknown) => void) =>
       onWsEvent('agent:execution-update', cb),
     onOrchestrationStateUpdated: (cb: (data: unknown) => void) =>
@@ -479,9 +470,9 @@ export const api = {
   cronJobs: {
     list: () =>
       get<CronJob[]>('/api/cron-jobs'),
-    create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string }) =>
+    create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string }) =>
       post<CronJob>('/api/cron-jobs', input),
-    update: (id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; modelOverride?: string; providerOverride?: string; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string }) =>
+    update: (id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string }) =>
       put<CronJob>(`/api/cron-jobs/${encodeURIComponent(id)}`, input),
     delete: (id: string) =>
       del<{ success: boolean }>(`/api/cron-jobs/${encodeURIComponent(id)}`),

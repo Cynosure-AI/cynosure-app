@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from "vue";
 import { useChatStore } from "../../stores/chat.store";
-import { useAgentStore } from "../../stores/agent-runtime.store";
 import { useProviderStore } from "../../stores/provider.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { Icon } from "@iconify/vue";
@@ -9,7 +8,6 @@ import AgentSelect from "../shared/AgentSelect.vue";
 import { useChatSidebar } from "../../composables/useSidebar";
 
 const chatStore = useChatStore();
-const agentStore = useAgentStore();
 const providerStore = useProviderStore();
 const agentDefs = useAgentDefinitionsStore();
 const { chatSidebarOpen, toggle: toggleSidebar } = useChatSidebar();
@@ -51,7 +49,6 @@ const activeOrigin = computed(() => {
 
 async function newChat(): Promise<void> {
   await chatStore.startNewChat();
-  agentStore.clearExecution();
 }
 
 // ── Inline title editing ──
@@ -111,10 +108,10 @@ function onTitleKeydown(e: KeyboardEvent): void {
         :model-value="agentDropdownValue"
         :agents="agentDefs.agents"
         include-default
-        default-label="Default"
+        default-label="Free Chat"
         default-icon="lucide:message-square"
         agents-group-label="Agents"
-        placeholder="Default"
+        placeholder="Free Chat"
         max-height="max-h-96"
         size="sm"
         @change="onAgentChange"

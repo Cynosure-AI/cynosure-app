@@ -10,7 +10,6 @@ import type {
 import { useProviderStore } from "../../stores/provider.store";
 import { Icon } from "@iconify/vue";
 import AgentSelect from "../../components/shared/AgentSelect.vue";
-import ProviderModelSelect from "../../components/shared/ProviderModelSelect.vue";
 import BaseCard from "../../components/shared/BaseCard.vue";
 import {
   parseCronExpr,
@@ -51,8 +50,6 @@ const cronName = ref("");
 const cronAgentId = ref("");
 const cronPrompt = ref("");
 const cronOneOff = ref(false);
-const cronModelOverride = ref("");
-const cronProviderOverride = ref("");
 const cronOutputChannelId = ref("");
 const cronNotificationMode = ref<"always" | "conditional">("always");
 const cronNotificationCondition = ref("");
@@ -85,8 +82,6 @@ function populateFields(j: CronJob) {
   cronAgentId.value = j.agentId;
   cronPrompt.value = j.prompt || "";
   cronOneOff.value = j.oneOff;
-  cronModelOverride.value = j.modelOverride || "";
-  cronProviderOverride.value = j.providerOverride || "";
   cronOutputChannelId.value = j.outputChannelId || "";
   cronNotificationMode.value = j.notificationMode === "conditional" ? "conditional" : "always";
   cronNotificationCondition.value = j.notificationCondition || "";
@@ -136,8 +131,6 @@ async function save() {
       schedule: expr.trim(),
       prompt: cronPrompt.value,
       oneOff: cronOneOff.value,
-      modelOverride: cronModelOverride.value,
-      providerOverride: cronProviderOverride.value,
       outputChannelId: cronOutputChannelId.value,
       notificationMode: cronNotificationMode.value,
       notificationCondition: cronNotificationCondition.value,
@@ -151,55 +144,6 @@ async function save() {
   } finally {
     saving.value = false;
   }
-}
-
-// ─── Model override helpers ──────────────────────────────
-
-const effectiveProviderId = computed(() => {
-  if (cronProviderOverride.value) return cronProviderOverride.value;
-  if (!job.value) return providerStore.lastUsedProviderId;
-  const agent = allAgents.value.find((a) => a.id === cronAgentId.value);
-  return agent?.providerId || providerStore.lastUsedProviderId;
-});
-
-const selectedAgent = computed(() =>
-  allAgents.value.find((a) => a.id === cronAgentId.value) || null,
-);
-
-const agentDefaultLabel = computed(() => {
-  const model = selectedAgent.value?.model;
-  return model ? `Agent default (${model})` : "Agent default";
-});
-
-const selectedProviderIdForSelector = computed(() =>
-  cronProviderOverride.value || cronModelOverride.value ? effectiveProviderId.value : "",
-);
-
-const selectedModelForSelector = computed(() =>
-  cronProviderOverride.value || cronModelOverride.value ? cronModelOverride.value : "",
-);
-
-function onModelProviderChange(selection: {
-  providerId: string;
-  model: string;
-}): void {
-  const agentProviderId =
-    allAgents.value.find((a) => a.id === cronAgentId.value)?.providerId || "";
-
-  if (!selection.providerId) {
-    cronProviderOverride.value = "";
-    cronModelOverride.value = "";
-    return;
-  }
-
-  if (selection.providerId === agentProviderId) {
-    // Keep provider override empty when selecting a model on the agent's provider.
-    cronProviderOverride.value = "";
-  } else {
-    cronProviderOverride.value = selection.providerId;
-  }
-
-  cronModelOverride.value = selection.model;
 }
 
 onMounted(loadJob);
@@ -571,31 +515,6 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 class="mt-0.5"
               />
             </div>
-          </BaseCard>
-
-          <!-- Provider / Model override -->
-          <BaseCard class="p-5">
-            <div class="flex items-center gap-2 mb-1">
-              <Icon
-                icon="lucide:cpu"
-                class="w-4 h-4 text-emerald-400"
-              />
-              <h3 class="text-sm font-medium text-theme-200">
-                Provider / Model override
-              </h3>
-            </div>
-            <p class="text-xs text-theme-500 leading-relaxed mb-4">
-              Override the model used for this cron job. Leave as agent default to use the agent's configured model.
-            </p>
-            <ProviderModelSelect
-              :provider-id="selectedProviderIdForSelector"
-              :model-value="selectedModelForSelector"
-              :providers="providerStore.providers"
-              include-default
-              :default-label="agentDefaultLabel"
-              placeholder="Agent default"
-              @change="onModelProviderChange"
-            />
           </BaseCard>
 
           <!-- Output Channel -->

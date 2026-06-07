@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
-import { COMPACT_EVENT_PREFIX, applyCompactStrategy } from '../core/agent/context-compactor.js'
+import { applyCompactStrategy } from '../core/agent/context-compactor.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../core/agent/agent-executor.js'
@@ -15,245 +15,55 @@ import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy }
 import type { ChatMessage, ContentPart, RegistryAwareToolDefinition } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
-import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
-import { existsSync, readFileSync } from 'fs'
-import { extname } from 'path'
-import { materializeFileAttachments, readFileAttachmentText, type FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
-import { buildAttachmentContext, indexConversationAttachment, listConversationFileAttachmentsByMessage, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
+import { materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
+import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
+import { buildAttachmentContext, indexConversationAttachment, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
+import {
+  cancelChatExecution,
+  cancelChatExecutionByConversation,
+  registerActiveChatExecution,
+  unregisterActiveChatExecution,
+} from '../core/chat/active-executions.js'
+import { withConversationLock } from '../core/chat/conversation-locks.js'
+import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
+import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageArtifactsSystemHint } from '../core/chat/message-history.js'
+import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemorySpaceOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
-// Attachments larger than this are represented by retrieved excerpts plus
-// attachment_search/attachment_retrieve_chunks instead of full inline text.
-const DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT = 24_000
-const MIN_INLINE_ATTACHMENT_TEXT_LIMIT = 2_000
-const MAX_INLINE_ATTACHMENT_TEXT_LIMIT = 500_000
 
-export interface ActiveChatExecution {
-  id: string
-  conversationId: string
-  agentId: string | null
-  model: string | null
-  orchestrationRunId?: string
-  startedAt: number
+function usedToolKeysFromNames(
+  tools: RegistryAwareToolDefinition[],
+  usedToolNames: Set<string>,
+  toolRegistry: ReturnType<typeof getToolRegistry>,
+): string[] {
+  return Array.from(
+    new Set(
+      tools
+        .filter((tool) => usedToolNames.has(tool.name))
+        .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
+        .map((tool) => tool.registryKey)
+        .filter((key): key is string => typeof key === 'string' && key.length > 0)
+        .filter((key) => toolRegistry.hasKey(key))
+        .filter((key) => !isBuiltInMemoryToolKey(key))
+    )
+  )
 }
 
-const activeChatExecutions = new Map<string, ActiveChatExecution>()
-const activeAbortControllers = new Map<string, AbortController>()
-
-interface ChatHistoryRow {
-  id: string
-  role: string
-  content: string
-  tool_calls_json: string | null
-  tool_call_id: string | null
-  agent_id: string | null
-  image_urls_json: string | null
-  audio_urls_json: string | null
-  created_at: number
+function persistAutoRoutedUsedTools(
+  db: ReturnType<typeof getDb>,
+  conversationId: string,
+  chatConfig: Record<string, unknown>,
+  tools: RegistryAwareToolDefinition[],
+  usedToolNames: Set<string>,
+  toolRegistry: ReturnType<typeof getToolRegistry>,
+): void {
+  const allowedTools = usedToolKeysFromNames(tools, usedToolNames, toolRegistry)
+  db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
+    JSON.stringify({ ...chatConfig, allowedTools }),
+    conversationId
+  )
 }
 
-/** Return all currently running chat executions. */
-export function getActiveChatExecutions(): ActiveChatExecution[] {
-  return Array.from(activeChatExecutions.values())
-}
-
-/** Cancel a chat execution by its streamId/executionId. */
-export function cancelChatExecution(executionId: string): boolean {
-  const controller = activeAbortControllers.get(executionId)
-  if (controller) {
-    const execution = activeChatExecutions.get(executionId)
-    if (execution?.orchestrationRunId) {
-      closeOrchestrationRun(execution.orchestrationRunId, 'cancelled', { error: 'Cancelled' })
-    }
-    controller.abort()
-    activeAbortControllers.delete(executionId)
-    return true
-  }
-  return false
-}
-
-/** Cancel the active chat execution for a given conversationId (fallback when streamId is unknown). */
-export function cancelChatExecutionByConversation(conversationId: string): boolean {
-  for (const [execId, exec] of activeChatExecutions) {
-    if (exec.conversationId === conversationId) {
-      return cancelChatExecution(execId)
-    }
-  }
-  return false
-}
-
-/**
- * Per-conversation mutex: serializes /send requests so two concurrent sends
- * to the same conversationId don't read stale history and produce conflicts.
- */
-const conversationLocks = new Map<string, Promise<unknown>>()
-
-function withConversationLock<T>(conversationId: string, fn: () => Promise<T>): Promise<T> {
-  const prev = conversationLocks.get(conversationId) ?? Promise.resolve()
-  const next = prev.then(fn, fn) // run fn even if previous rejected
-  conversationLocks.set(conversationId, next)
-  // Clean up the entry once both prev and our fn are done to avoid unbounded growth
-  next.finally(() => {
-    if (conversationLocks.get(conversationId) === next) {
-      conversationLocks.delete(conversationId)
-    }
-  })
-  return next
-}
-
-function buildRecentImageArtifactsSystemHint(rows: ChatHistoryRow[], limit = 5): string | null {
-  const artifacts: { path: string; url: string }[] = []
-  const seen = new Set<string>()
-
-  for (let i = rows.length - 1; i >= 0 && artifacts.length < limit; i--) {
-    const row = rows[i]
-    if (row.role !== 'assistant' || !row.image_urls_json) continue
-    try {
-      const urls = JSON.parse(row.image_urls_json) as string[]
-      for (let j = urls.length - 1; j >= 0 && artifacts.length < limit; j--) {
-        const url = urls[j]
-        const path = extractFilePathFromFileUrl(url)
-        if (!path || seen.has(path)) continue
-        seen.add(path)
-        artifacts.push({ path, url })
-      }
-    } catch {
-      // Ignore malformed image metadata.
-    }
-  }
-
-  if (!artifacts.length) return null
-
-  const lines = artifacts.map((artifact, index) => (
-    `${index === 0 ? 'latest generated image' : `generated image ${index + 1}`}: path=${artifact.path}; url=${artifact.url}`
-  ))
-
-  return [
-    'Recent generated image artifacts are available for follow-up file/tool operations.',
-    'Use these absolute paths when the user refers to "the image", "that image", "the last generated image", or asks to save/upload/edit a generated image.',
-    ...lines,
-  ].join('\n')
-}
-
-function appendHiddenSystemContext(messages: ChatMessage[], hint: string | null): ChatMessage[] {
-  if (!hint) return messages
-  let systemIndex = -1
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === 'system') {
-      systemIndex = i
-      break
-    }
-  }
-  if (systemIndex === -1) {
-    return [{ role: 'system', content: hint }, ...messages]
-  }
-
-  return messages.map((message, index) => {
-    if (index !== systemIndex) return message
-    const content = typeof message.content === 'string'
-      ? message.content
-      : message.content.filter((part) => part.type === 'text').map((part) => part.text).join('\n')
-    return {
-      ...message,
-      content: `${content}\n\n${hint}`
-    }
-  })
-}
-
-function imageMimeFromPath(filePath: string): string {
-  switch (extname(filePath).toLowerCase()) {
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg'
-    case '.gif':
-      return 'image/gif'
-    case '.webp':
-      return 'image/webp'
-    case '.bmp':
-      return 'image/bmp'
-    case '.svg':
-      return 'image/svg+xml'
-    default:
-      return 'image/png'
-  }
-}
-
-function localFileUrlToDataUrl(url: string): string {
-  const filePath = extractFilePathFromFileUrl(url)
-  if (!filePath || !existsSync(filePath)) return url
-  try {
-    const data = readFileSync(filePath).toString('base64')
-    return `data:${imageMimeFromPath(filePath)};base64,${data}`
-  } catch {
-    return url
-  }
-}
-
-function parseJsonArray<T>(json: string | null): T[] {
-  if (!json) return []
-  try {
-    const parsed = JSON.parse(json)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function normalizeInlineAttachmentTextLimit(value: unknown): number {
-  const numeric = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(numeric)) return DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT
-  return Math.max(MIN_INLINE_ATTACHMENT_TEXT_LIMIT, Math.min(MAX_INLINE_ATTACHMENT_TEXT_LIMIT, Math.floor(numeric)))
-}
-
-function getChatAttachmentConfig(db = getDb()): { inlineAttachmentTextLimit: number } {
-  const row = db.prepare("SELECT value_json FROM settings WHERE key = 'chatAttachments'").get() as { value_json: string } | undefined
-  if (!row) return { inlineAttachmentTextLimit: DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT }
-  try {
-    const parsed = JSON.parse(row.value_json) as { inlineAttachmentTextLimit?: unknown }
-    return { inlineAttachmentTextLimit: normalizeInlineAttachmentTextLimit(parsed.inlineAttachmentTextLimit) }
-  } catch {
-    return { inlineAttachmentTextLimit: DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT }
-  }
-}
-
-function buildHistoryContent(
-  row: ChatHistoryRow,
-  inlineAttachmentTextLimit: number,
-  fileAttachments: FileAttachmentArtifact[],
-): string | ContentPart[] {
-  if (row.role !== 'user') return row.content
-
-  const imageUrls = parseJsonArray<string>(row.image_urls_json).filter((url) => typeof url === 'string')
-  const audioUrls = parseJsonArray<string>(row.audio_urls_json).filter((url) => typeof url === 'string')
-
-  if (!fileAttachments.length && !imageUrls.length && !audioUrls.length) {
-    return row.content
-  }
-
-  const parts: ContentPart[] = [{ type: 'text', text: row.content }]
-  for (const file of fileAttachments) {
-    if (file.textBytes > inlineAttachmentTextLimit && file.chunkCount && file.chunkCount > 0) {
-      parts.push({
-        type: 'text',
-        text: `[Attached file: ${file.name}]\nThis attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}). Use the current attachment context or attachment_search/attachment_retrieve_chunks when details are needed.`
-      })
-      continue
-    }
-    const fileText = readFileAttachmentText(file)
-    if (fileText === null) continue
-    parts.push({
-      type: 'text',
-      text: `[Attached file: ${file.name}]\n${fileText}`
-    })
-  }
-  for (const url of imageUrls) {
-    parts.push({ type: 'image_url', image_url: { url: localFileUrlToDataUrl(url) } })
-  }
-  for (const url of audioUrls) {
-    parts.push({ type: 'audio_url', audio_url: { url } })
-  }
-  return parts
-}
 
 export async function registerChatRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   const gateway = getGateway()
@@ -269,11 +79,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     if (!Number.isFinite(Number(rawLimit))) {
       return reply.status(400).send({ error: 'inlineAttachmentTextLimit must be a number' })
     }
-    const inlineAttachmentTextLimit = normalizeInlineAttachmentTextLimit(rawLimit)
-    const db = getDb()
-    db.prepare(
-      "INSERT OR REPLACE INTO settings (key, value_json) VALUES ('chatAttachments', ?)"
-    ).run(JSON.stringify({ inlineAttachmentTextLimit }))
+    const { inlineAttachmentTextLimit } = saveChatAttachmentConfig({ inlineAttachmentTextLimit: rawLimit })
     return { success: true, inlineAttachmentTextLimit }
   })
 
@@ -293,17 +99,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       generateTitle?: boolean
       subAgents?: { agentId: string; codename: string; role: string }[]
       memorySpaceIds?: string[]
-      overrideSubAgents?: boolean
       thinkingEnabled?: boolean
       contextStrategy?: ContextStrategy
       autoToolRouting?: boolean
       selectedSkillIds?: string[]
       autoSkillRouting?: boolean
-      toolRouterProviderId?: string
-      toolRouterModel?: string
       autoMemory?: boolean
-      memoryRouterProviderId?: string
-      memoryRouterModel?: string
       skillRouterProviderId?: string
       skillRouterModel?: string
       compactProviderId?: string
@@ -318,17 +119,17 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, overrideSubAgents, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, toolRouterProviderId: reqToolRouterProviderId, toolRouterModel: reqToolRouterModel, autoMemory: reqAutoMemory, memoryRouterProviderId: reqMemoryRouterProviderId, memoryRouterModel: reqMemoryRouterModel, skillRouterProviderId: reqSkillRouterProviderId, skillRouterModel: reqSkillRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, inlineAttachmentTextLimit: reqInlineAttachmentTextLimit, enableEntityGraph: enableEntityGraphPref, entityGraphProviderId: entityGraphProviderIdPref, entityGraphModel: entityGraphModelPref } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, autoMemory: reqAutoMemory, skillRouterProviderId: reqSkillRouterProviderId, skillRouterModel: reqSkillRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, inlineAttachmentTextLimit: reqInlineAttachmentTextLimit, enableEntityGraph: enableEntityGraphPref, entityGraphProviderId: entityGraphProviderIdPref, entityGraphModel: entityGraphModelPref } = req.body
       const db = getDb()
       const inlineAttachmentTextLimit = reqInlineAttachmentTextLimit !== undefined
         ? normalizeInlineAttachmentTextLimit(reqInlineAttachmentTextLimit)
         : getChatAttachmentConfig(db).inlineAttachmentTextLimit
       const toolRegistry = getToolRegistry()
-      const selectedToolKeys = Array.isArray(allowedTools)
-        ? Array.from(new Set(allowedTools)).filter((name) => toolRegistry.hasKey(name))
-        : []
-      const hasExplicitToolAllowlist = Array.isArray(allowedTools)
-        && reqAutoToolRouting !== true
+      const { selectedToolKeys, hasExplicitToolAllowlist } = resolveToolSelection(
+        toolRegistry,
+        allowedTools,
+        reqAutoToolRouting,
+      )
 
       // Persist user-uploaded images as file artifacts and keep only file URLs in DB.
       // We still use inline data URLs for the immediate provider request in this send call.
@@ -397,50 +198,16 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
-      // Build message history
-      const historyRows = db
-        .prepare(
-          'SELECT id, role, content, tool_calls_json, tool_call_id, agent_id, image_urls_json, audio_urls_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
-        )
-        .all(conversationId) as ChatHistoryRow[]
-      const attachmentsByMessage = listConversationFileAttachmentsByMessage(db, conversationId)
-
-      // Filter out sub-agent intermediate messages.
-      // Keep: user messages, main-agent assistant messages + their tool results.
-      // Drop: sub-agent assistant messages and their tool results.
-      // Also drop compact event markers — they are UI-only and must never reach LLM context.
       const convRow = db.prepare('SELECT agent_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null } | undefined
       const mainAgentId: string | null = convRow?.agent_id || null
-      const keptToolCallIds = new Set<string>()
-      const filteredRows = historyRows.filter((row) => {
-        if (row.role === 'system' && row.content.startsWith(COMPACT_EVENT_PREFIX)) return false
-        if (row.role === 'user') return true
-        if (row.role === 'assistant') {
-          const isMainAgent = row.agent_id === null || row.agent_id === mainAgentId
-          if (isMainAgent) {
-            if (row.tool_calls_json) {
-              try {
-                for (const tc of JSON.parse(row.tool_calls_json)) {
-                  if (tc.id) keptToolCallIds.add(tc.id)
-                }
-              } catch { /* ignore parse errors */ }
-            }
-            return true
-          }
-          return false
-        }
-        if (row.role === 'tool') {
-          return !row.tool_call_id || keptToolCallIds.has(row.tool_call_id)
-        }
-        return true // system messages etc.
+      const history = buildConversationHistory({
+        db,
+        conversationId,
+        mainAgentId,
+        inlineAttachmentTextLimit,
       })
-
-      let messages: ChatMessage[] = filteredRows.map((row) => ({
-        role: row.role as ChatMessage['role'],
-        content: buildHistoryContent(row, inlineAttachmentTextLimit, attachmentsByMessage.get(row.id) || []),
-        toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
-        toolCallId: row.tool_call_id || undefined
-      }))
+      const { historyRows, filteredRows } = history
+      let messages: ChatMessage[] = history.messages
 
       // Replace last user message with multimodal version if images/files/audio present
       if (imageDataUrls?.length || audioDataUrls?.length || files?.length) {
@@ -454,21 +221,21 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const convCheck = db.prepare('SELECT agent_id, ma_workspace_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null; ma_workspace_id: string | null } | undefined
       const agentId: string | null = convCheck?.agent_id || null
       const resolvedAgent = agentId ? getAgent(agentId) : null
-      const effectiveOverrideSubAgents = overrideSubAgents !== undefined
-        ? overrideSubAgents
-        : (resolvedAgent?.overrideSubAgents === true)
-      const effectiveAutoMemory = reqAutoMemory !== undefined
-        ? reqAutoMemory === true
-        : (resolvedAgent?.autoMemory === true)
-      const effectiveAutoSkillRouting = reqAutoSkillRouting !== undefined
-        ? reqAutoSkillRouting === true
-        : (resolvedAgent?.autoSkillRouting !== false)
+      const effectiveRunFlags = resolveChatRunFlags({
+        resolvedAgent,
+        autoMemory: reqAutoMemory,
+        autoSkillRouting: reqAutoSkillRouting,
+      })
 
       // Resolve memory space overrides (request body ids -> { id, name } objects)
-      const memorySpaceOverrides = resolveMemorySpaceOverrides(db, reqMemorySpaceIds)
+      let memorySpaceOverrides = resolveMemorySpaceOverrides(db, reqMemorySpaceIds)
+      if (effectiveRunFlags.autoMemory && Array.isArray(memorySpaceOverrides) && memorySpaceOverrides.length === 0) {
+        memorySpaceOverrides = undefined
+      }
 
       // Create AbortController early so sub-agent tools can receive the signal
       const abortController = new AbortController()
+      const usedToolNames = new Set<string>()
 
       const planned = await planExecution({
         resolvedAgent,
@@ -485,19 +252,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           systemPrompt: systemPrompt || undefined,
           requestedSubAgents: reqSubAgents,
           memorySpaceOverrides,
-          overrideSubAgents: effectiveOverrideSubAgents,
           autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : undefined,
-          toolRouterProviderId: reqToolRouterProviderId || undefined,
-          toolRouterModel: reqToolRouterModel || undefined,
-          autoMemory: effectiveAutoMemory,
-          memoryRouterProviderId: reqMemoryRouterProviderId || undefined,
-          memoryRouterModel: reqMemoryRouterModel || undefined,
+          autoMemory: effectiveRunFlags.autoMemory,
           skillRouterProviderId: reqSkillRouterProviderId || undefined,
           skillRouterModel: reqSkillRouterModel || undefined,
           selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
           hasExplicitToolAllowlist,
+          usedToolNames,
           selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
-          autoSkillRouting: effectiveAutoSkillRouting,
+          autoSkillRouting: effectiveRunFlags.autoSkillRouting,
         },
       })
 
@@ -518,41 +281,23 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
       const streamId = nanoid()
-      activeAbortControllers.set(streamId, abortController)
-
-      const routedToolKeys = reqAutoToolRouting === true
-        ? Array.from(
-          new Set(
-            tools
-              .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
-              .map((tool) => tool.registryKey)
-              .filter((key): key is string => typeof key === 'string' && key.length > 0)
-              .filter((key) => toolRegistry.hasKey(key))
-              .filter((key) => !isBuiltInMemoryToolKey(key))
-          )
-        )
-        : []
-
-      const persistedAllowedTools = reqAutoToolRouting === true
-        ? routedToolKeys
-        : selectedToolKeys
 
       // Persist the full session config with RESOLVED model/provider so it can
       // be restored correctly when navigating back to this conversation.
-      const chatConfig: Record<string, unknown> = {
-        allowedTools: persistedAllowedTools,
-        subAgents: reqSubAgents ?? [],
-        memorySpaceIds: reqMemorySpaceIds ?? [],
-        systemPrompt: systemPrompt || '',
-        model: responseModel,
-        providerId: responseProvider,
-        overrideSubAgents: effectiveOverrideSubAgents,
+      const chatConfig = buildPersistedChatConfig({
+        selectedToolKeys,
+        routedToolKeys: [],
+        requestedSubAgents: reqSubAgents,
+        requestedMemorySpaceIds: reqMemorySpaceIds,
+        systemPrompt,
+        responseModel,
+        responseProvider,
         thinkingEnabled: reqThinkingEnabled ?? true,
         autoToolRouting: reqAutoToolRouting === true,
-        autoMemory: effectiveAutoMemory,
+        autoMemory: effectiveRunFlags.autoMemory,
         selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
-        autoSkillRouting: effectiveAutoSkillRouting,
-      }
+        autoSkillRouting: effectiveRunFlags.autoSkillRouting,
+      })
       db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
         JSON.stringify(chatConfig),
         conversationId
@@ -620,20 +365,24 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         contextStrategy,
         orchestrationRunId,
         isPrimaryExecutor: true,
+        usedToolNames,
       })
 
       const executionId = streamId
-      activeChatExecutions.set(executionId, {
+      registerActiveChatExecution({
         id: executionId,
         conversationId,
         agentId,
         model: responseModel,
         orchestrationRunId,
         startedAt: Date.now()
-      })
+      }, abortController)
 
       try {
         const result = await executor.run(messages)
+        if (reqAutoToolRouting === true) {
+          persistAutoRoutedUsedTools(db, conversationId, chatConfig, tools, usedToolNames, toolRegistry)
+        }
         if (orchestrationRunId) {
           closeOrchestrationRun(orchestrationRunId, 'completed', { summary: result.content.slice(0, 500) })
         }
@@ -694,6 +443,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
+          if (reqAutoToolRouting === true) {
+            persistAutoRoutedUsedTools(db, conversationId, chatConfig, tools, usedToolNames, toolRegistry)
+          }
           if (orchestrationRunId) {
             closeOrchestrationRun(orchestrationRunId, 'cancelled', { error: 'Cancelled' })
           }
@@ -704,12 +456,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if (orchestrationRunId) {
           closeOrchestrationRun(orchestrationRunId, 'error', { error: (err as Error).message })
         }
+        if (reqAutoToolRouting === true) {
+          persistAutoRoutedUsedTools(db, conversationId, chatConfig, tools, usedToolNames, toolRegistry)
+        }
         getEventBus().emit('task:error', { conversationId, error: (err as Error).message })
         broadcast('chat:stream-error', { streamId, conversationId, error: (err as Error).message })
         return { streamId }
       } finally {
-        activeAbortControllers.delete(streamId)
-        activeChatExecutions.delete(executionId)
+        unregisterActiveChatExecution(executionId)
       }
 
       return { streamId }
@@ -749,19 +503,4 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     const cancelled = cancelPostActions(conversationId)
     return { success: cancelled }
   })
-}
-
-function resolveMemorySpaceOverrides(
-  db: ReturnType<typeof getDb>,
-  requestedSpaceIds?: string[]
-): { id: string; name: string }[] | undefined {
-  if (!Array.isArray(requestedSpaceIds)) return undefined
-
-  const uniqueSpaceIds = Array.from(new Set(requestedSpaceIds.map((sid) => sid.trim()).filter(Boolean)))
-  const spaceRows = uniqueSpaceIds
-    .map((sid) => db.prepare('SELECT id, name FROM memory_spaces WHERE id = ?').get(sid) as { id: string; name: string } | undefined)
-    .filter((row): row is { id: string; name: string } => Boolean(row))
-
-  // Keep explicit empty overrides so downstream tools can fall back to default memory space behavior.
-  return spaceRows
 }
