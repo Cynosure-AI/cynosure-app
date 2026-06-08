@@ -175,12 +175,17 @@ function toggleAutoMemory(enabled: boolean) {
         :class="selected.includes(space.id)
           ? 'bg-accent-600/15 border border-accent-500/30'
           : 'hover:bg-theme-800 border border-transparent'"
-        :style="{ paddingLeft: `${12 + (space.depth || 0) * 12}px` }"
       >
+        <!-- Indent spacer -->
+        <span
+          v-if="(space.depth || 0) > 0"
+          :style="{ width: `${(space.depth || 0) * 16}px` }"
+          class="shrink-0"
+        />
+        <!-- Chevron: always rendered to keep all rows aligned -->
         <button
-          v-if="!space.isDefault"
-          class="p-0.5 text-theme-500 hover:text-theme-200"
-          :class="{ 'invisible': !hasChildren(space) }"
+          class="p-0.5 shrink-0 text-theme-500 hover:text-theme-200"
+          :class="{ 'invisible pointer-events-none': space.isDefault || !hasChildren(space) }"
           @click.stop="toggleCollapsed(space)"
         >
           <Icon
@@ -189,6 +194,7 @@ function toggleAutoMemory(enabled: boolean) {
             :class="{ '-rotate-90': collapsedFolders.has(space.relativePath || '') }"
           />
         </button>
+        <!-- Folder name / toggle selection -->
         <button
           class="flex items-center gap-3 flex-1 min-w-0 text-left"
           @click="toggle(space.id)"
