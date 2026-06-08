@@ -3,8 +3,11 @@ import { getEmbeddingProvider } from '../memory/embedding.js'
 import { makeSearchAvailableMcpToolsTool } from '../tools/builtin/expand-available-toolset.js'
 import {
     loadCachedRouterEmbeddings,
+    loadCachedToolEmbeddings,
     pruneRouterEmbeddingCache,
+    pruneToolEmbeddingCache,
     saveCachedRouterEmbedding,
+    saveCachedToolEmbedding,
     type RouterEmbeddingScope,
 } from './router-embedding-cache.js'
 import type { ChatMessage, ContentPart, RegistryAwareToolDefinition, ToolDefinition } from '../gateway/providers/base.provider.js'
@@ -73,8 +76,12 @@ export async function embeddingPreFilter(
     query: string,
     mcpGroups: McpToolGroup[],
     topK = MCP_CANDIDATE_COUNT,
-): Promise<string[]> {
-    if (mcpGroups.length <= topK) return mcpGroups.map(({ id }) => id)
+): Promise<{ groupIds: string[]; queryVector: number[] }> {
+    if (mcpGroups.length <= topK) {
+        const embedder = getEmbeddingProvider()
+        const { vector: queryVector } = await embedder.embed(query)
+        return { groupIds: mcpGroups.map(({ id }) => id), queryVector }
+    }
 
     try {
         const embedder = getEmbeddingProvider()
@@ -101,7 +108,7 @@ export async function embeddingPreFilter(
 
         pruneRouterEmbeddingCache(mcpGroups.map(({ id }) => id), scope)
 
-        return mcpGroups
+        const groupIds = mcpGroups
             .map((group) => ({
                 id: group.id,
                 score: cosineSimilarity(queryVector, groupVectors.get(group.id) || []),
@@ -109,9 +116,13 @@ export async function embeddingPreFilter(
             .sort((a, b) => b.score - a.score)
             .slice(0, topK)
             .map(({ id }) => id)
+
+        return { groupIds, queryVector }
     } catch (err) {
         console.warn('[tool-router] Embedding pre-filter failed, using lexical fallback:', err)
-        return lexicalPreFilter(query, mcpGroups, topK)
+        const embedder = getEmbeddingProvider()
+        const { vector: queryVector } = await embedder.embed(query)
+        return { groupIds: lexicalPreFilter(query, mcpGroups, topK), queryVector }
     }
 }
 
@@ -142,22 +153,22 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
             .filter((group) => countPreferredTools(group.tools, preferredToolNames) > 0)
             .map(({ id }) => id),
     )
-    const candidateGroupIds = new Set([
-        ...await embeddingPreFilter(query, groups, topK),
-        ...fixedGroupIds,
+    const stickyNames = collectStickyToolNames(recentMessages, usedToolNames)
+    const protectedNames = new Set([
+        ...fixedTools.map(({ name }) => name),
+        ...stickyNames,
     ])
+
+    // Single unified embedding pass: group pre-filter + tool ranking share the query vector.
+    const { groupIds: candidateGroupIdList, queryVector } = await embeddingPreFilter(query, groups, topK)
+    const candidateGroupIds = new Set([...candidateGroupIdList, ...fixedGroupIds])
 
     const candidateMcpTools = groups
         .filter(({ id }) => candidateGroupIds.has(id))
         .flatMap(({ tools }) => tools)
 
     const candidateTools = dedupeTools([...localTools, ...candidateMcpTools])
-    const stickyNames = collectStickyToolNames(recentMessages, usedToolNames)
-    const protectedNames = new Set([
-        ...fixedTools.map(({ name }) => name),
-        ...stickyNames,
-    ])
-    const selectedTools = await rankCandidateTools(query, candidateTools, maxTools, protectedNames)
+    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, maxTools, protectedNames)
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
     let routedTools: ToolDefinition[] = []
@@ -172,6 +183,7 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
 
 async function rankCandidateTools(
     query: string,
+    queryVector: number[],
     tools: ToolDefinition[],
     limit: number,
     protectedNames: Set<string>,
@@ -181,15 +193,35 @@ async function rankCandidateTools(
 
     try {
         const embedder = getEmbeddingProvider()
-        const embeddings = await embedder.embedBatch([
-            query,
-            ...rankable.map(toolEmbeddingText),
-        ])
-        const queryVector = embeddings[0].vector
+        const scope = getRouterEmbeddingScope(embedder)
+
+        // Compute content hashes for all rankable tools
+        const hashes = new Map(rankable.map((tool) => [tool.name, toolContentHash(tool)]))
+        const cachedVectors = loadCachedToolEmbeddings(
+            rankable.map(({ name }) => name), hashes, scope,
+        )
+        const missingTools = rankable.filter(({ name }) => !cachedVectors.has(name))
+
+        // Only embed tools not already cached — query vector is pre-computed
+        const toolVectors = new Map(cachedVectors)
+        if (missingTools.length) {
+            const embeddings = await embedder.embedBatch(missingTools.map(toolEmbeddingText))
+
+            missingTools.forEach((tool, index) => {
+                const vector = embeddings[index]?.vector
+                if (!vector) return
+
+                toolVectors.set(tool.name, vector)
+                saveCachedToolEmbedding(tool.name, hashes.get(tool.name) || '', vector, scope)
+            })
+
+            pruneToolEmbeddingCache(rankable.map(({ name }) => name), scope)
+        }
+
         const scored = rankable
             .map((tool, index) => ({
                 tool,
-                score: cosineSimilarity(queryVector, embeddings[index + 1]?.vector || []),
+                score: cosineSimilarity(queryVector, toolVectors.get(tool.name) || []),
                 index,
             }))
             .sort((a, b) => b.score - a.score || a.index - b.index)
@@ -283,6 +315,12 @@ function groupContentHash(group: McpToolGroup): string {
 
     return createHash('sha256')
         .update(`${group.id}\n${group.label}\n${group.description}\n${fullToolText}`)
+        .digest('hex')
+}
+
+function toolContentHash(tool: ToolDefinition): string {
+    return createHash('sha256')
+        .update(`${tool.name}\n${compactToolDescription(tool.description)}\n${JSON.stringify(tool.parameters || {})}`)
         .digest('hex')
 }
 
