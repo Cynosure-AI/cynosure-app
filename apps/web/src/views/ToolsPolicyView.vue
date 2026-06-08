@@ -60,7 +60,7 @@ const groupedTools = computed<NamespaceGroup[]>(() => {
   const groups = new Map<string, NamespaceGroup>()
 
   for (const tool of filteredTools.value) {
-    const namespace = normalizeNamespace(tool.namespace)
+    const namespace = normalizeNamespace(tool.namespace, tool)
     if (!groups.has(namespace.id)) {
       groups.set(namespace.id, {
         id: namespace.id,
@@ -78,9 +78,9 @@ const groupedTools = computed<NamespaceGroup[]>(() => {
       tools: [...group.tools].sort((a, b) => displayName(a).localeCompare(displayName(b))),
     }))
     .sort((a, b) => {
-      if (a.namespace.id === 'builtin' && b.namespace.id !== 'builtin') return -1
-      if (a.namespace.id !== 'builtin' && b.namespace.id === 'builtin') return 1
-      return a.namespace.label.localeCompare(b.namespace.label)
+      const rank = (ns: string) => (ns === 'builtin' ? 0 : ns === 'builtin:internal' ? 1 : 2)
+      const ra = rank(a.namespace.id), rb = rank(b.namespace.id)
+      return ra !== rb ? ra - rb : a.namespace.label.localeCompare(b.namespace.label)
     })
 })
 
@@ -88,14 +88,25 @@ const autoApprovedCount = computed(() =>
   tools.value.filter((tool) => isAutoApproved(approvalName(tool))).length
 )
 
-function normalizeNamespace(namespace: ToolNamespace): ToolNamespace {
-  if (namespace.id === 'builtin') return { ...namespace, label: 'Built-In' }
+function isInternalTool(tool: ToolInfo): boolean {
+  const name = tool.name
+  return name.startsWith('orchestrator_') || name.startsWith('memory_') || name === 'forget_memory'
+}
+
+function normalizeNamespace(namespace: ToolNamespace, tool?: ToolInfo): ToolNamespace {
+  if (namespace.id === 'builtin') {
+    if (tool && isInternalTool(tool)) return { id: 'builtin:internal', label: 'Internal' }
+    return { ...namespace, label: 'Built-In' }
+  }
   return namespace
 }
 
 function namespaceDescription(namespace: ToolNamespace, firstTool: ToolInfo): string {
+  if (namespace.id === 'builtin:internal') {
+    return 'Orchestration tools used internally for multi-step workflows. These are system-managed and always auto-approved.'
+  }
   if (namespace.id === 'builtin') {
-    return 'Memory, entity graph, notification, and orchestration tools bundled with Cynosure.'
+    return 'Memory, entity graph, and notification tools bundled with Cynosure.'
   }
   return displayDescription(firstTool)
 }
@@ -308,7 +319,7 @@ onMounted(loadPolicyTools)
                 <div class="flex flex-wrap items-center gap-2">
                   <span
                     class="text-sm font-semibold"
-                    :class="group.namespace.id === 'builtin' ? 'text-accent-400' : 'text-theme-100'"
+                    :class="group.namespace.id === 'builtin:internal' ? 'text-violet-400' : group.namespace.id === 'builtin' ? 'text-accent-400' : 'text-theme-100'"
                   >{{ group.namespace.label }}</span>
                   <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-theme-500">
                     {{ group.tools.length }} tool{{ group.tools.length === 1 ? '' : 's' }}
@@ -355,7 +366,7 @@ onMounted(loadPolicyTools)
                     <div class="flex flex-wrap items-center gap-2">
                       <span
                         class="font-mono text-sm"
-                        :class="group.namespace.id === 'builtin' ? 'text-accent-400' : 'text-theme-200'"
+                        :class="group.namespace.id === 'builtin:internal' ? 'text-violet-400' : group.namespace.id === 'builtin' ? 'text-accent-400' : 'text-theme-200'"
                       >{{ displayName(tool) }}</span>
                       <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-theme-500">
                         {{ toolCategory(tool) }}
