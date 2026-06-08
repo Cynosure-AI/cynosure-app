@@ -194,6 +194,18 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_tool_router_embeddings_updated ON tool_router_embeddings(updated_at);
 
+    CREATE TABLE IF NOT EXISTS tool_router_tool_embeddings (
+      tool_name TEXT NOT NULL,
+      embedding_provider_id TEXT NOT NULL DEFAULT '',
+      embedding_model TEXT NOT NULL,
+      embedding_dimensions INTEGER NOT NULL,
+      content_hash TEXT NOT NULL,
+      vector_json TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (tool_name, embedding_provider_id, embedding_model, embedding_dimensions)
+    );
+    CREATE INDEX IF NOT EXISTS idx_tool_router_tool_embeddings_updated ON tool_router_tool_embeddings(updated_at);
+
     CREATE TABLE IF NOT EXISTS skill_embeddings (
       skill_id TEXT NOT NULL,
       embedding_provider_id TEXT NOT NULL DEFAULT '',

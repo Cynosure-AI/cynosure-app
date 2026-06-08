@@ -1167,7 +1167,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             'entity_graph_edges', 'entity_graph_nodes',
             'memory_file_index', 'memory_spaces', 'agent_memory_spaces',
             'mcp_servers', 'providers', 'agents', 'skills', 'skill_embeddings',
-            'settings', 'tool_router_embeddings'
+            'settings', 'tool_router_embeddings', 'tool_router_tool_embeddings'
         ]
         for (const table of tables) {
             try { db.prepare(`DELETE FROM ${table}`).run() } catch { /* table may not exist */ }
