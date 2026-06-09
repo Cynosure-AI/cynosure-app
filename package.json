@@ -7,7 +7,7 @@
     "dev:server": "pnpm --filter cynosure-server dev",
     "dev:web": "pnpm --filter cynosure-web dev",
     "dev:electron": "pnpm --filter cynosure-desktop dev",
-    "dev": "pnpm --filter cynosure-server dev & pnpm --filter cynosure-web dev",
+    "dev": "concurrently --names server,web --prefix-colors blue,green \"pnpm dev:server\" \"pnpm dev:web\"",
     "build:server": "pnpm run build:web && pnpm --filter cynosure-server build",
     "build:web": "pnpm --filter cynosure-web build",
     "build:electron": "pnpm --filter cynosure-desktop build",
@@ -18,6 +18,9 @@
     "package:linux": "pnpm --filter cynosure-desktop package:linux",
     "package:win": "pnpm --filter cynosure-desktop package:win",
     "package:mac": "pnpm --filter cynosure-desktop package:mac"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
