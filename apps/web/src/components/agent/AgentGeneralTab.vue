@@ -57,6 +57,22 @@ onMounted(() =>
       </div>
 
       <div>
+        <label class="block text-sm text-theme-400 mb-1.5">Internal Name</label>
+        <p class="text-xs text-theme-600 mb-2">
+          Machine identifier used by the orchestrator to invoke this agent as a sub-agent (e.g. <code class="text-theme-400">web_researcher</code>). Auto-generated from the name if left empty.
+        </p>
+        <input
+          :value="agent.internalName"
+          type="text"
+          placeholder="auto-generated from name"
+          class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 font-mono placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          @change="
+            emit('update', 'internalName', ($event.target as HTMLInputElement).value)
+          "
+        >
+      </div>
+
+      <div>
         <label class="block text-sm text-theme-400 mb-1.5">Description</label>
         <textarea
           :value="agent.description"
