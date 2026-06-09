@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import type { AgentDefinition, SubAgentAssignment } from '../../api/types'
 import { Icon } from '@iconify/vue'
@@ -16,8 +16,6 @@ const agentDefs = useAgentDefinitionsStore()
 
 const showAddDialog = ref(false)
 const addAgentId = ref('')
-const addCodename = ref('')
-const addRole = ref('')
 
 const availableAgents = computed(() => {
   const assignedIds = new Set((props.agent.subAgents || []).map(sa => sa.agentId))
@@ -35,59 +33,31 @@ function removeMissing() {
   emit('update', 'subAgents', (props.agent.subAgents || []).filter(sa => !missingIds.has(sa.agentId)))
 }
 
-function toSubAgentCodename(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_|_$/g, '')
-    + '_agent'
-}
-
-watch(addAgentId, (newId) => {
-  if (newId) {
-    const agent = agentDefs.get(newId)
-    if (agent) {
-      addCodename.value = toSubAgentCodename(agent.name)
-      addRole.value = agent.description || ''
-    }
-  }
-})
 
 function addSubAgent() {
-  if (!addAgentId.value || !addCodename.value.trim()) return
+  if (!addAgentId.value) return
   const newAssignment: SubAgentAssignment = {
     agentId: addAgentId.value,
-    codename: addCodename.value.trim(),
-    role: addRole.value.trim(),
   }
   emit('update', 'subAgents', [...(props.agent.subAgents || []), newAssignment])
   showAddDialog.value = false
   addAgentId.value = ''
-  addCodename.value = ''
-  addRole.value = ''
 }
 
 function removeSubAgent(agentId: string) {
   emit('update', 'subAgents', (props.agent.subAgents || []).filter(sa => sa.agentId !== agentId))
 }
 
-function updateSubAgentCodename(agentId: string, codename: string) {
-  const updated = (props.agent.subAgents || []).map(sa =>
-    sa.agentId === agentId ? { ...sa, codename } : sa
-  )
-  emit('update', 'subAgents', updated)
-}
-
-function updateSubAgentRole(agentId: string, role: string) {
-  const updated = (props.agent.subAgents || []).map(sa =>
-    sa.agentId === agentId ? { ...sa, role } : sa
-  )
-  emit('update', 'subAgents', updated)
-}
-
 function getAgentName(id: string): string {
   return agentDefs.get(id)?.name || 'Unknown Agent'
+}
+
+function getAgentInternalName(id: string): string {
+  return agentDefs.get(id)?.internalName || ''
+}
+
+function getAgentDescription(id: string): string {
+  return agentDefs.get(id)?.description || ''
 }
 
 function getAgentIcon(id: string): string | null {
@@ -102,8 +72,8 @@ const subAgentItems = computed<SubAgentItem[]>(() =>
 
 const subAgentColumns: Column<SubAgentItem>[] = [
   { key: 'agent', label: 'Agent', width: 'minmax(0, 2fr)' },
-  { key: 'codename', label: 'Codename', width: 'minmax(0, 1.5fr)' },
-  { key: 'role', label: 'Role', width: 'minmax(0, 2fr)' },
+  { key: 'internalName', label: 'Internal Name', width: 'minmax(0, 1.5fr)' },
+  { key: 'description', label: 'Description', width: 'minmax(0, 2fr)' },
   { key: 'actions', label: '', width: '48px' },
 ]
 </script>
@@ -116,7 +86,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
           Assign sub-agents for multi-agent orchestration.
         </p>
         <p class="text-xs text-theme-600 mt-1">
-          When sub-agents are assigned, the agent acts as orchestrator — planning tasks and delegating to sub-agents by codename.
+          When sub-agents are assigned, the agent acts as orchestrator — planning tasks and delegating to sub-agents by internal name.
         </p>
       </div>
       <button
@@ -158,7 +128,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
                 icon="lucide:unplug"
                 class="w-3 h-3"
               />
-              {{ sa.codename }}
+              {{ sa.agentId }}
             </span>
           </div>
           <button
@@ -207,25 +177,12 @@ const subAgentColumns: Column<SubAgentItem>[] = [
         </div>
       </template>
 
-      <template #col-codename="{ item }">
-        <input
-          :value="item.codename"
-          type="text"
-          class="w-full px-2.5 py-1.5 bg-theme-900 border border-theme-600 rounded-lg text-xs text-theme-200 font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
-          @click.stop
-          @change="updateSubAgentCodename(item.agentId, ($event.target as HTMLInputElement).value)"
-        >
+      <template #col-internalName="{ item }">
+        <span class="px-2.5 py-1.5 text-xs text-theme-200 font-mono">{{ getAgentInternalName(item.agentId) }}</span>
       </template>
 
-      <template #col-role="{ item }">
-        <input
-          :value="item.role"
-          type="text"
-          placeholder="What this agent specializes in"
-          class="w-full px-2.5 py-1.5 bg-theme-900 border border-theme-600 rounded-lg text-xs text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
-          @click.stop
-          @change="updateSubAgentRole(item.agentId, ($event.target as HTMLInputElement).value)"
-        >
+      <template #col-description="{ item }">
+        <span class="px-2.5 py-1.5 text-xs text-theme-200">{{ getAgentDescription(item.agentId) || '—' }}</span>
       </template>
 
       <template #col-actions="{ item }">
@@ -281,28 +238,18 @@ const subAgentColumns: Column<SubAgentItem>[] = [
                 @change="addAgentId = $event"
               />
             </div>
-            <div>
-              <label class="block text-sm text-theme-400 mb-1.5">Codename</label>
-              <p class="text-xs text-theme-600 mb-2">
-                A short identifier the orchestrator uses to invoke this agent.
-              </p>
-              <input
-                v-model="addCodename"
-                type="text"
-                placeholder="e.g. web-researcher"
-                class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
-              >
-            </div>
-            <div>
-              <label class="block text-sm text-theme-400 mb-1.5">Role Description</label>
-              <p class="text-xs text-theme-600 mb-2">
-                What this agent specializes in. Helps the orchestrator choose the right agent for each task.
-              </p>
-              <textarea
-                v-model="addRole"
-                placeholder="e.g. Searches the web and summarizes findings"
-                class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none h-20"
-              />
+            <div
+              v-if="addAgentId"
+              class="rounded-lg bg-theme-800 border border-theme-700 p-3 space-y-1.5"
+            >
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-theme-500">Internal Name:</span>
+                <span class="text-xs text-theme-200 font-mono">{{ getAgentInternalName(addAgentId) || '—' }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-theme-500">Description:</span>
+                <span class="text-xs text-theme-200">{{ getAgentDescription(addAgentId) || '—' }}</span>
+              </div>
             </div>
           </div>
           <div class="flex justify-end gap-2 mt-6">
@@ -313,7 +260,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
               Cancel
             </button>
             <button
-              :disabled="!addAgentId || !addCodename.trim()"
+              :disabled="!addAgentId"
               class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-lg text-sm font-medium transition-colors"
               @click="addSubAgent"
             >

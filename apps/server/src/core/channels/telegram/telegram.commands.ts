@@ -21,7 +21,7 @@ export async function registerBotCommands(ctx: TelegramCtx): Promise<void> {
         { command: 'new', description: 'Start a fresh conversation with the last used agent' }
     ]
     for (const agent of agents) {
-        const cmd = agent.codename.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 32)
+        const cmd = agent.internalName.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 32)
         if (cmd) {
             commands.push({ command: cmd, description: `Switch to ${agent.name}` })
         }
@@ -80,11 +80,11 @@ export async function handleCommand(ctx: TelegramCtx, chatId: number, text: stri
         return true
     }
 
-    // Try to match an agent codename
+    // Try to match an agent internal name
     const agents = getAvailableAgents(ctx)
     const normalizedCmd = command.replace(/_/g, '-')
     const matchedAgent = agents.find(a => {
-        const lc = a.codename.toLowerCase()
+        const lc = a.internalName.toLowerCase()
         const agentCmd = lc.replace(/[^a-z0-9_]/g, '_')
         return agentCmd === command || lc === normalizedCmd || lc === command
     })

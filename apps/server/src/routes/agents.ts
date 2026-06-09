@@ -17,6 +17,7 @@ import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { makeOrchestrationTools } from '../core/tools/builtin/orchestration-tools.js'
+import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { listAllMemorySpaceRefs } from '../core/memory/memory-space-folders.js'
 
 function defaultMemorySpaceIds(db = getDb()): string[] {
@@ -176,15 +177,37 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
             .filter((tool) => includePolicyBuiltIns || !isBuiltInMemoryToolKey(tool.key))
 
         const policyBuiltIns = includePolicyBuiltIns
-            ? makeOrchestrationTools('').map((tool) => ({
-                key: `builtin::${tool.name}`,
-                name: tool.name,
-                executionName: tool.name,
-                description: tool.description,
-                parameters: tool.parameters,
-                namespace: { id: 'builtin', label: 'Built-In' },
-                ambiguous: false,
-            }))
+            ? [
+                ...makeOrchestrationTools('').map((tool) => ({
+                    key: `builtin::${tool.name}`,
+                    name: tool.name,
+                    executionName: tool.name,
+                    description: tool.description,
+                    parameters: tool.parameters,
+                    namespace: { id: 'builtin', label: 'Built-In' },
+                    ambiguous: false,
+                })),
+                // These tools are dynamically created at execution time but should
+                // appear in the policy view so users can configure their HITL behaviour.
+                {
+                    key: `builtin::${TOOL_SEARCH_TOOL_NAME}`,
+                    name: TOOL_SEARCH_TOOL_NAME,
+                    executionName: TOOL_SEARCH_TOOL_NAME,
+                    description: 'Search and load additional available tools when the current tools are insufficient.',
+                    parameters: { type: 'object', properties: { requested_capability: { type: 'string' }, limit: { type: 'number' } }, required: ['requested_capability'] },
+                    namespace: { id: 'builtin', label: 'Built-In' },
+                    ambiguous: false,
+                },
+                {
+                    key: 'builtin::spawn_subagent',
+                    name: 'spawn_subagent',
+                    executionName: 'spawn_subagent',
+                    description: 'Spawn a configured sub-agent by internal name to delegate a task.',
+                    parameters: { type: 'object', properties: { internalName: { type: 'string' }, instructions: { type: 'string' }, context: { type: 'string' } }, required: ['internalName', 'instructions'] },
+                    namespace: { id: 'builtin', label: 'Built-In' },
+                    ambiguous: false,
+                },
+            ]
             : []
 
         return [...items, ...policyBuiltIns].map((tool) => ({

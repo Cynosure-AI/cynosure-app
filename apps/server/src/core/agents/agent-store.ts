@@ -7,13 +7,11 @@ import { normalizeSkillIds } from '../skills/skill-store.js'
 
 export interface SubAgentAssignment {
     agentId: string
-    codename: string
-    role: string
 }
 
 export interface AgentConfig {
     name: string
-    codename: string
+    internalName: string
     description: string
     category: string
     providerId: string
@@ -47,7 +45,7 @@ export interface AgentData extends AgentConfig {
 
 export type CreateAgentInput = {
     name: string
-    codename?: string
+    internalName?: string
     description?: string
     category?: string
     iconUrl?: string | null
@@ -73,11 +71,11 @@ export type CreateAgentInput = {
     sortOrder?: number
 }
 
-export type UpdateAgentInput = Partial<Omit<CreateAgentInput, 'codename'> & { codename?: string; subAgents?: SubAgentAssignment[]; autoApproveTools?: boolean; autoToolRouting?: boolean; autoMemory?: boolean; autoSkillRouting?: boolean }>
+export type UpdateAgentInput = Partial<Omit<CreateAgentInput, 'internalName'> & { internalName?: string; subAgents?: SubAgentAssignment[]; autoApproveTools?: boolean; autoToolRouting?: boolean; autoMemory?: boolean; autoSkillRouting?: boolean }>
 
 // ---- Helpers ----
 
-function toCodename(name: string): string {
+function toInternalName(name: string): string {
     return name
         .toLowerCase()
         .trim()
@@ -115,20 +113,6 @@ function normalizeAgentTools(toolNames: string[]): string[] {
     return result
 }
 
-/**
- * Generate a sub-agent codename from a name.
- * Uses underscores (matching tool naming convention) and appends `_agent` suffix
- * so the LLM clearly sees these as delegatable agent tools.
- */
-export function toSubAgentCodename(name: string): string {
-    return name
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_|_$/g, '')
-        + '_agent'
-}
-
 /** DB row type matching the agents table */
 interface AgentRow {
     id: string
@@ -140,7 +124,7 @@ interface AgentRow {
     tools_json: string
     skills_json: string
     icon_url: string | null
-    codename: string
+    internal_name: string
     category: string
     sub_agents_json: string
     auto_approve_tools: number
@@ -168,7 +152,7 @@ function rowToAgentData(row: AgentRow): AgentData {
     return {
         id: row.id,
         name: row.name,
-        codename: row.codename || toCodename(row.name),
+        internalName: row.internal_name || toInternalName(row.name),
         description: row.description || '',
         category: row.category || '',
         iconUrl: hasIcon ? `/api/agents/${encodeURIComponent(row.id)}/icon?t=${row.updated_at}` : null,
@@ -222,7 +206,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
-    const codename = input.codename?.trim() || toCodename(input.name)
+    const internalName = input.internalName?.trim() || toInternalName(input.name)
 
     let iconData: Buffer | null = null
     let iconMime: string | null = null
@@ -237,7 +221,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
     const normalizedTools = normalizeAgentTools(input.tools || [])
 
     db.prepare(
-        `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, skills_json, icon_url, codename,
+        `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, skills_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, max_context_tokens,
             auto_tool_routing, tool_router_provider_id, tool_router_model,
             auto_memory, memory_router_provider_id, memory_router_model,
@@ -254,7 +238,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
         JSON.stringify(normalizedTools),
         JSON.stringify(normalizeSkillIds(input.skills)),
         null, // icon_url - not used for new agents; icon_data/icon_mime used instead
-        codename,
+        internalName,
         input.category || '',
         JSON.stringify(input.subAgents || []),
         input.autoApproveTools === true ? 1 : 0,
@@ -286,7 +270,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     if (!existing) return null
 
     const now = Date.now()
-    const resolvedCodename = toCodename(input.name ?? existing.name)
+    const resolvedInternalName = input.internalName?.trim() || toInternalName(input.name ?? existing.name)
 
     const updatedName = input.name ?? existing.name
     const updatedDescription = input.description ?? existing.description
@@ -332,7 +316,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
 
     db.prepare(
         `UPDATE agents SET name = ?, description = ?, provider_id = ?, model = ?, system_prompt = ?, tools_json = ?, skills_json = ?,
-         codename = ?, category = ?, sub_agents_json = ?, auto_approve_tools = ?,
+         internal_name = ?, category = ?, sub_agents_json = ?, auto_approve_tools = ?,
             thinking_enabled = ?, max_context_tokens = ?, auto_tool_routing = ?, tool_router_provider_id = ?, tool_router_model = ?,
             auto_memory = ?, memory_router_provider_id = ?, memory_router_model = ?,
             auto_skill_routing = ?, skill_router_provider_id = ?, skill_router_model = ?, sort_order = ?, cron_prompt = ?,
@@ -346,7 +330,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         updatedSystemPrompt,
         JSON.stringify(updatedTools),
         JSON.stringify(updatedSkills),
-        resolvedCodename,
+        resolvedInternalName,
         updatedCategory,
         JSON.stringify(updatedSubAgents),
         updatedAutoApprove ? 1 : 0,
@@ -386,10 +370,10 @@ export function duplicateAgent(id: string): AgentData | null {
     const newId = nanoid()
     const now = Date.now()
     const newName = `${existing.name} (copy)`
-    const newCodename = toCodename(newName)
+    const newInternalName = toInternalName(newName)
 
     db.prepare(
-        `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, skills_json, icon_url, codename,
+        `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, skills_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, max_context_tokens,
             auto_tool_routing, tool_router_provider_id, tool_router_model,
             auto_memory, memory_router_provider_id, memory_router_model,
@@ -406,7 +390,7 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.tools_json,
         existing.skills_json || '[]',
         existing.icon_url,
-        newCodename,
+        newInternalName,
         existing.category,
         existing.sub_agents_json,
         existing.auto_approve_tools,

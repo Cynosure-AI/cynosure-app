@@ -251,7 +251,7 @@ async function createAgent() {
   if (!newName.value.trim()) return
   const agent = await agentDefs.create({
     name: newName.value.trim(),
-    codename: '',
+    internalName: '',
     description: newDescription.value.trim(),
     category: pendingCreateCategory.value,
     iconUrl: null,
@@ -811,7 +811,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
                   :key="sa.agentId"
                   class="font-mono text-[10px] text-theme-300 truncate py-0.5"
                 >
-                  {{ agentDefs.get(sa.agentId)?.name ?? sa.codename }}
+                  {{ agentDefs.get(sa.agentId)?.name ?? sa.agentId }}
                 </div>
                 <div
                   v-if="item.subAgents.length > TOOLTIP_MAX_TOOLS"

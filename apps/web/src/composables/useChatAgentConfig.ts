@@ -290,13 +290,7 @@ export function useChatAgentConfig(
         }
         if (!arraysEqual(freeChatSubAgentIds.value, agentOriginalSubAgentIds.value)) {
             const existingAgent = agentDefs.get(activeAgentId.value)
-            updates.subAgents = freeChatSubAgentIds.value.map(id => {
-                const def = agentDefs.get(id)
-                const existing = existingAgent?.subAgents?.find(s => s.agentId === id)
-                const codename = existing?.codename
-                    || (def ? def.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent' : id)
-                return { agentId: id, codename, role: existing?.role || def?.description || '' }
-            })
+            updates.subAgents = freeChatSubAgentIds.value.map(id => ({ agentId: id }))
         }
         if (!arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value)) {
             updates.memorySpaces = [...freeChatMemorySpaceIds.value]
