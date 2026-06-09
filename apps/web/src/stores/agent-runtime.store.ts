@@ -40,7 +40,7 @@ export interface ExecutionStep {
   timestamp: number
   /** Task ID — unique per AgentExecutor run, used to match update events to the correct step */
   taskId?: string
-  /** Sub-agent codename (e.g. "researcher") */
+  /** Sub-agent internal name (e.g. "researcher") */
   maCodename?: string
   /** Sub-agent display name */
   maAgentName?: string

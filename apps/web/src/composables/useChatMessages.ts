@@ -49,25 +49,10 @@ export function useChatMessages(
         })
     }
 
-    function toSubAgentCodename(name: string): string {
-        return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent'
-    }
-
     function buildSubAgentAssignments(parentAgentId: string | null, selectedIds: string[]): SubAgentAssignment[] {
-        const agentDefs = useAgentDefinitionsStore()
-        const parentAgent = parentAgentId ? agentDefs.get(parentAgentId) : null
-
-        return selectedIds.map((id) => {
-            const def = agentDefs.get(id)
-            const assignment = parentAgent?.subAgents?.find((subAgent) => subAgent.agentId === id)
-            const codename = assignment?.codename || (def ? toSubAgentCodename(def.name) : id)
-
-            return {
-                agentId: id,
-                codename,
-                role: assignment?.role || def?.description || '',
-            }
-        })
+        return selectedIds.map((id) => ({
+            agentId: id,
+        }))
     }
 
     async function sendMessage(

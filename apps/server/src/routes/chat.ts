@@ -97,7 +97,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       files?: { name: string; content: string }[]
       systemPrompt?: string
       generateTitle?: boolean
-      subAgents?: { agentId: string; codename: string; role: string }[]
+      subAgents?: { agentId: string }[]
       memorySpaceIds?: string[]
       thinkingEnabled?: boolean
       contextStrategy?: ContextStrategy

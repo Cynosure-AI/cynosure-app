@@ -241,7 +241,7 @@ function createTables(db: Database.Database): void {
       tools_json TEXT NOT NULL DEFAULT '[]',
       temperature REAL,
       icon_url TEXT,
-      codename TEXT NOT NULL DEFAULT '',
+      internal_name TEXT NOT NULL DEFAULT '',
       memory_enabled INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -394,6 +394,12 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('agents', 'icon_data', 'BLOB')
   addColumnIfMissing('agents', 'icon_mime', 'TEXT')
   addColumnIfMissing('agents', 'skills_json', "TEXT NOT NULL DEFAULT '[]'")
+
+  // Migrate codename → internal_name
+  addColumnIfMissing('agents', 'internal_name', "TEXT NOT NULL DEFAULT ''")
+  try {
+    db.prepare("UPDATE agents SET internal_name = codename WHERE internal_name = '' AND codename != ''").run()
+  } catch { /* codename column may not exist on fresh installs */ }
 
   // Trigger output channel support
   addColumnIfMissing('cron_jobs', 'output_channel_id', "TEXT NOT NULL DEFAULT ''")

@@ -41,10 +41,6 @@ function agentIcon(agent: { iconUrl: string | null; providerId: string }): strin
   const prov = providerStore.providers.find(p => p.id === agent.providerId)
   return prov ? logoUrl(prov.type) : null
 }
-
-function toSubAgentCodename(name: string): string {
-  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_agent'
-}
 </script>
 
 <template>
@@ -109,7 +105,7 @@ function toSubAgentCodename(name: string): string {
         </div>
         <div
           class="flex-1 min-w-0"
-          :title="toSubAgentCodename(agent.name) ? `Codename: ${toSubAgentCodename(agent.name)}` : undefined"
+          :title="agent.internalName ? `Internal Name: ${agent.internalName}` : undefined"
         >
           <div
             class="text-sm text-theme-200 truncate"

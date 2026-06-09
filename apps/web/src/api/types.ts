@@ -111,7 +111,7 @@ export interface McpRegistryResponse {
 export interface AgentDefinition {
     id: string
     name: string
-    codename: string
+    internalName: string
     description: string
     category: string
     iconUrl: string | null
@@ -150,8 +150,6 @@ export interface SkillDefinition {
 
 export interface SubAgentAssignment {
     agentId: string
-    codename: string
-    role: string
 }
 
 // ── Notifications ───────────────────────────────────────────────────────────

@@ -42,18 +42,18 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
 
     if (!availableSubAgents.length) return []
 
-    const codenameList = availableSubAgents.map(({ assignment }) => assignment.codename).join(', ')
+    const nameList = availableSubAgents.map(({ agentData }) => agentData.internalName).join(', ')
 
     return [{
         name: 'spawn_subagent',
-        description: `Spawn one of the configured sub-agents by codename. Available codenames: ${codenameList}. The sub-agent has no memory of prior conversation — provide everything it needs.`,
+        description: `Spawn one of the configured sub-agents by internal name. Available agents: ${nameList}. The sub-agent has no memory of prior conversation — provide everything it needs.`,
         parameters: {
             type: 'object',
             properties: {
-                codename: {
+                internalName: {
                     type: 'string',
-                    description: 'The codename of the sub-agent to spawn.',
-                    enum: availableSubAgents.map(({ assignment }) => assignment.codename),
+                    description: 'The internal name of the sub-agent to spawn.',
+                    enum: availableSubAgents.map(({ agentData }) => agentData.internalName),
                 },
                 instructions: {
                     type: 'string',
@@ -64,18 +64,18 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     description: 'Relevant background the sub-agent needs to complete the task: conversation history, prior tool outputs, URLs, filenames, data, or any other details it would not otherwise have access to.'
                 }
             },
-            required: ['codename', 'instructions']
+            required: ['internalName', 'instructions']
         },
         timeout: SUB_AGENT_TIMEOUT_MS,
         execute: async (params: unknown): Promise<ToolResult> => {
-            const { codename, instructions, context } = params as { codename: string; instructions: string; context?: string }
-            const selected = availableSubAgents.find(({ assignment }) => assignment.codename === codename)
+            const { internalName, instructions, context } = params as { internalName: string; instructions: string; context?: string }
+            const selected = availableSubAgents.find(({ agentData }) => agentData.internalName === internalName)
 
             if (!selected) {
                 return {
                     success: false,
                     output: '',
-                    error: `Unknown sub-agent codename "${codename}". Available codenames: ${codenameList}`,
+                    error: `Unknown sub-agent internal name "${internalName}". Available agents: ${nameList}`,
                 }
             }
 
@@ -117,7 +117,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 streamEventPrefix: 'chat:subagent-stream',
                 saveMessages: true,
                 emitEvents: true,
-                eventMeta: { maCodename: assignment.codename, maAgentName: agentData.name },
+                eventMeta: { maCodename: agentData.internalName, maAgentName: agentData.name },
                 agentId: agentData.id,
                 agentName: agentData.name,
                 agentIconUrl: agentData.iconUrl || null,
@@ -169,7 +169,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 return {
                     success: false,
                     output: '',
-                    error: `Sub-agent "${assignment.codename}" failed: ${(err as Error).message}`,
+                    error: `Sub-agent "${agentData.internalName}" failed: ${(err as Error).message}`,
                 }
             }
         }
@@ -182,15 +182,15 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
 export function buildSubAgentPrompt(subAgents: SubAgentAssignment[]): string {
     const lines = [
         '\n## Sub-Agents',
-        'You have sub-agents you can delegate tasks to. Invoke them by calling the `spawn_subagent` tool with the sub-agent `codename`, `instructions`, and any needed `context`.',
-        'Each sub-agent is specialized — delegate tasks that match their role rather than trying to do everything yourself.',
+        'You have sub-agents you can delegate tasks to. Invoke them by calling the `spawn_subagent` tool with the sub-agent `internalName`, `instructions`, and any needed `context`.',
+        'Each sub-agent is specialized — delegate tasks that match their description rather than trying to do everything yourself.',
         'Sub-agents have no memory of your conversation. Use the `context` parameter to pass any relevant background they need, and `instructions` for the specific task.\n',
     ]
 
     for (const sa of subAgents) {
         const agentData = getAgent(sa.agentId)
         if (!agentData) continue
-        lines.push(`- **${sa.codename}** (${agentData.name}): ${sa.role}`)
+        lines.push(`- **${agentData.internalName}** (${agentData.name}): ${agentData.description}`)
     }
 
     return lines.join('\n')

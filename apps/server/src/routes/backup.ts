@@ -170,7 +170,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             if (requested.includes('agents')) {
                 const db = getDb()
                 const agentRows = db.prepare(
-                    `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, codename,
+                    `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
                      category, sub_agents_json, skills_json, auto_approve_tools, thinking_enabled,
                      max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                      auto_memory, memory_router_provider_id, memory_router_model,
@@ -408,7 +408,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
 
                             db.prepare(
                                 `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json,
-                                   skills_json, icon_url, codename, category, sub_agents_json, auto_approve_tools,
+                                   skills_json, icon_url, internal_name, category, sub_agents_json, auto_approve_tools,
                                  thinking_enabled, max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                                  auto_memory, memory_router_provider_id, memory_router_model,
                                  auto_skill_routing, skill_router_provider_id, skill_router_model,
@@ -425,7 +425,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 row.tools_json || '[]',
                                 row.skills_json || '[]',
                                 row.icon_url || null,
-                                row.codename || '',
+                                row.internal_name || row.codename || '',
                                 row.category || '',
                                 row.sub_agents_json || '[]',
                                 row.auto_approve_tools ?? 0,

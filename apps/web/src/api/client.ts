@@ -60,7 +60,7 @@ export const api = {
         lastContextTokens: number | null
         chatConfig?: {
           allowedTools?: string[]
-          subAgents?: { agentId: string; codename: string; role: string }[]
+          subAgents?: { agentId: string }[]
           memorySpaceIds?: string[]
           systemPrompt?: string
           model?: string

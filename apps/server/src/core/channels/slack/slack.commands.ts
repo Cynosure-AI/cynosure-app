@@ -66,7 +66,7 @@ Starting a fresh conversation.` }).catch(() => { })
 
     const agents = getAvailableAgents(ctx)
     const matchedAgent = agents.find(a => {
-        const lc = a.codename.toLowerCase()
+        const lc = a.internalName.toLowerCase()
         const agentCmd = lc.replace(/[^a-z0-9_]/g, '_')
         return agentCmd === command || lc === command
     })

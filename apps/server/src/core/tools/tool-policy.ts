@@ -13,14 +13,18 @@ export function isSubAgentDelegationTool(toolName: string): boolean {
   return toolName === 'spawn_subagent'
 }
 
-export function isSystemAutoApprovedTool(toolName: string): boolean {
+export function isInternalTool(toolName: string): boolean {
   return (
     toolName === TOOL_SEARCH_TOOL_NAME ||
-    isSubAgentDelegationTool(toolName) ||
+    toolName === 'spawn_subagent' ||
     isOrchestrationToolName(toolName) ||
     isMemoryReadToolName(toolName) ||
     isAttachmentToolName(toolName)
   )
+}
+
+export function isSystemAutoApprovedTool(toolName: string): boolean {
+  return isInternalTool(toolName)
 }
 
 export function isVisibleExecutionTool(toolName: string): boolean {

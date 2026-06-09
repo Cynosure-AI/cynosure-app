@@ -90,7 +90,7 @@ const autoApprovedCount = computed(() =>
 
 function isInternalTool(tool: ToolInfo): boolean {
   const name = tool.name
-  return name.startsWith('orchestrator_') || name.startsWith('memory_') || name === 'forget_memory'
+  return name.startsWith('orchestrator_') || name.startsWith('memory_') || name === 'forget_memory' || name === 'expand_available_toolset' || name === 'spawn_subagent'
 }
 
 function normalizeNamespace(namespace: ToolNamespace, tool?: ToolInfo): ToolNamespace {
@@ -103,7 +103,7 @@ function normalizeNamespace(namespace: ToolNamespace, tool?: ToolInfo): ToolName
 
 function namespaceDescription(namespace: ToolNamespace, firstTool: ToolInfo): string {
   if (namespace.id === 'builtin:internal') {
-    return 'Orchestration tools used internally for multi-step workflows. These are system-managed and always auto-approved.'
+    return 'Orchestration, tool routing, sub-agent delegation, memory, and other system-managed tools. These are always auto-approved.'
   }
   if (namespace.id === 'builtin') {
     return 'Memory, entity graph, and notification tools bundled with Cynosure.'
