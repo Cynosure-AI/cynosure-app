@@ -55,6 +55,7 @@ export const useChatStore = defineStore('chat', () => {
   const messages = ref<DisplayMessage[]>([])
   const loadingMessages = ref(false)
   const contextWindow = ref<number | null>(null)
+  const modelCost = ref<{ input: number; output: number } | null>(null)
   const memorySpaces = ref<MemorySpace[]>([])
   const postActionsMap = new Map<string, Set<string>>()
   const postActionsTrigger = ref(0)
@@ -326,8 +327,12 @@ export const useChatStore = defineStore('chat', () => {
         } else {
           contextWindow.value = null
         }
+        modelCost.value = info.cost ?? null
       })
-      .catch(() => { contextWindow.value = null })
+      .catch(() => {
+        contextWindow.value = null
+        modelCost.value = null
+      })
   }
 
   /**
@@ -510,6 +515,7 @@ export const useChatStore = defineStore('chat', () => {
     streamingThinking: streaming.streamingThinking,
     lastUsage: streaming.lastUsage,
     contextWindow,
+    modelCost,
     handleStreamStart: streaming.handleStreamStart,
     handleStreamChunk: streaming.handleStreamChunk,
     handleStreamThinking: streaming.handleStreamThinking,
