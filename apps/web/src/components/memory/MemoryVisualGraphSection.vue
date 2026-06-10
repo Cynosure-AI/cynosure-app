@@ -127,6 +127,14 @@ function formatConfidence(value: number): string {
   return `${Math.round((value || 0) * 100)}%`;
 }
 
+function importanceLabel(level: number): string {
+  return ["temporary", "minor", "useful", "core"][level] ?? "minor";
+}
+
+function importanceName(level: number): string {
+  return ["conversational", "mildly interesting", "useful durable fact", "core fact"][level] ?? "unknown";
+}
+
 function relationSortName(edge: EntityGraphEdge): string {
   return `${edge.fromName} ${edge.toName}`;
 }
@@ -386,8 +394,18 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               <div class="entity-node-label">
                 {{ data.label }}
               </div>
-              <div class="entity-node-type">
-                {{ data.entity.type }}
+              <div class="entity-node-meta">
+                <span class="entity-node-type">
+                  {{ data.entity.type }}
+                </span>
+                <span
+                  v-if="data.entity.importance > 0"
+                  class="entity-node-importance"
+                  :class="`entity-node-importance-${data.entity.importance}`"
+                  :title="importanceLabel(data.entity.importance)"
+                >
+                  {{ importanceLabel(data.entity.importance) }}
+                </span>
               </div>
             </div>
 
@@ -463,6 +481,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               </h3>
               <div class="entity-node-sidebar-meta">
                 <span>{{ selectedGraphNode?.type || "selection" }}</span>
+                <span v-if="selectedGraphNode">{{ importanceName(selectedGraphNode.importance) }}</span>
                 <span>{{ formatCount(selectedMentionCount) }} mentions</span>
                 <span>{{ formatCount(selectedSourceCount) }} sources</span>
               </div>
@@ -558,6 +577,11 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               </div>
               <div class="entity-node-sidebar-relation-detail">
                 <span>{{ formatRelation(edge.relation) }}</span>
+                <span
+                  class="entity-sidebar-importance"
+                  :class="`entity-sidebar-importance-${edge.importance}`"
+                  :title="importanceName(edge.importance)"
+                >{{ importanceLabel(edge.importance) }}</span>
                 <span>{{ formatConfidence(edge.confidence) }}</span>
               </div>
             </div>

@@ -142,7 +142,7 @@ async function layoutGraph() {
 
   const seedIds = new Set(graph.value.seedNodes.map((node) => node.id));
   const dimensions = new Map<string, { width: number; height: number }>(
-    [...nodeLabels.entries()].map(([id, node]) => [id, nodeDimensions(node.name)]),
+    [...nodeLabels.entries()].map(([id, node]) => [id, nodeDimensions(node.name, node.importance)]),
   );
 
   const elk = await getElk();
@@ -239,6 +239,7 @@ function fallbackGraphNode(id: string, name: string): EntityGraphNode {
     normalizedName: name.toLowerCase(),
     type: "other",
     aliases: [],
+    importance: 1,
     mentionCount: 0,
     sourceCount: 0,
     firstSeenAt: 0,
@@ -246,10 +247,12 @@ function fallbackGraphNode(id: string, name: string): EntityGraphNode {
   };
 }
 
-function nodeDimensions(label: string): { width: number; height: number } {
+function nodeDimensions(label: string, importance: number = 1): { width: number; height: number } {
+  const baseHeight = label.length > 18 ? 56 : 44;
+  const importanceScale = 1 + (importance * 0.1);
   return {
-    width: Math.max(150, Math.min(250, label.length * 8 + 54)),
-    height: label.length > 18 ? 56 : 44,
+    width: Math.max(150, Math.min(250, label.length * 8 + 54)) * importanceScale,
+    height: baseHeight * importanceScale,
   };
 }
 

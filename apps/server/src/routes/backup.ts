@@ -821,14 +821,15 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                         try {
                             db.prepare(`
                                 INSERT OR REPLACE INTO entity_graph_nodes
-                                    (id, name, normalized_name, type, aliases_json, mention_count, source_count, first_seen_at, last_seen_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    (id, name, normalized_name, type, aliases_json, importance, mention_count, source_count, first_seen_at, last_seen_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             `).run(
                                 node.id,
                                 node.name || '',
                                 node.normalized_name || '',
                                 node.type || 'other',
                                 node.aliases_json || '[]',
+                                node.importance ?? 1,
                                 node.mention_count ?? 1,
                                 node.source_count ?? 1,
                                 node.first_seen_at || Date.now(),
@@ -844,13 +845,14 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                         try {
                             db.prepare(`
                                 INSERT OR REPLACE INTO entity_graph_edges
-                                    (id, from_node_id, to_node_id, relation, confidence, evidence, source_kind, source_id, mention_count, first_seen_at, last_seen_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    (id, from_node_id, to_node_id, relation, importance, confidence, evidence, source_kind, source_id, mention_count, first_seen_at, last_seen_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             `).run(
                                 edge.id,
                                 edge.from_node_id,
                                 edge.to_node_id,
                                 edge.relation || '',
+                                edge.importance ?? 1,
                                 edge.confidence ?? 0.7,
                                 edge.evidence || '',
                                 edge.source_kind || 'conversation',

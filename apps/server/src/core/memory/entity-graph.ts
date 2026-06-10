@@ -4,12 +4,22 @@ import { getGateway } from '../gateway/gateway.js'
 
 export type EntityType = 'person' | 'place' | 'organization' | 'project' | 'event' | 'date' | 'technology' | 'product' | 'artifact' | 'concept' | 'other'
 
+/**
+ * Importance levels for entity graph nodes and edges:
+ *   0 = random / conversational / temporary
+ *   1 = mildly interesting but probably not worth saving (default)
+ *   2 = useful durable fact
+ *   3 = core fact about user, project, person, preference, goal, or long-running context
+ */
+export type ImportanceLevel = 0 | 1 | 2 | 3
+
 export interface EntityNode {
   id: string
   name: string
   normalizedName: string
   type: EntityType
   aliases: string[]
+  importance: ImportanceLevel
   mentionCount: number
   sourceCount: number
   firstSeenAt: number
@@ -23,6 +33,7 @@ export interface EntityEdge {
   fromName: string
   toName: string
   relation: string
+  importance: ImportanceLevel
   confidence: number
   evidence: string
   sourceKind: string
@@ -59,6 +70,7 @@ interface ExtractedRelation {
   from: ExtractedEntity
   relation: string
   to: ExtractedEntity
+  importance?: ImportanceLevel
   confidence?: number
   evidence?: string
 }
@@ -176,6 +188,11 @@ function clampConfidence(value: unknown): number {
   return Math.max(0.1, Math.min(1, value))
 }
 
+function clampImportance(value: unknown): ImportanceLevel {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 1
+  return Math.max(0, Math.min(3, Math.round(value))) as ImportanceLevel
+}
+
 function tokenizeEntityQuery(value: string): string[] {
   return Array.from(new Set(
     normalizeName(value)
@@ -192,6 +209,7 @@ function rowToNode(row: Record<string, unknown>): EntityNode {
     normalizedName: row.normalized_name as string,
     type: row.type as EntityType,
     aliases: JSON.parse((row.aliases_json as string) || '[]') as string[],
+    importance: clampImportance(row.importance),
     mentionCount: row.mention_count as number,
     sourceCount: row.source_count as number,
     firstSeenAt: row.first_seen_at as number,
@@ -211,6 +229,7 @@ function rowToEdge(row: Record<string, unknown>): EntityEdge {
     fromName: row.from_name as string,
     toName: row.to_name as string,
     relation: row.relation as string,
+    importance: clampImportance(row.importance),
     confidence: row.confidence as number,
     evidence: row.evidence as string,
     sourceKind: row.source_kind as string,
@@ -269,27 +288,48 @@ export class EntityGraphStore {
     const db = getDb()
     const rel = normalizeRelation(relation.relation)
     const evidence = cleanEvidence(relation.evidence)
+    const importance = clampImportance(relation.importance)
     const existing = db.prepare(`
       SELECT * FROM entity_graph_edges
       WHERE from_node_id = ? AND relation = ? AND to_node_id = ?
     `).get(from.id, rel, to.id) as Record<string, unknown> | undefined
 
+    let edgeId: string
     if (!existing) {
-      const id = nanoid()
+      edgeId = nanoid()
       db.prepare(`
         INSERT INTO entity_graph_edges
-          (id, from_node_id, to_node_id, relation, confidence, evidence, source_kind, source_id, mention_count, first_seen_at, last_seen_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-      `).run(id, from.id, to.id, rel, clampConfidence(relation.confidence), evidence, sourceKind, sourceId, now, now)
-      return this.getEdge(id)
+          (id, from_node_id, to_node_id, relation, importance, confidence, evidence, source_kind, source_id, mention_count, first_seen_at, last_seen_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+      `).run(edgeId, from.id, to.id, rel, importance, clampConfidence(relation.confidence), evidence, sourceKind, sourceId, now, now)
+    } else {
+      edgeId = existing.id as string
+      db.prepare(`
+        UPDATE entity_graph_edges
+        SET importance = MAX(importance, ?), confidence = MAX(confidence, ?), evidence = ?, source_kind = ?, source_id = ?, mention_count = mention_count + 1, last_seen_at = ?
+        WHERE id = ?
+      `).run(importance, clampConfidence(relation.confidence), evidence || existing.evidence, sourceKind, sourceId, now, edgeId)
     }
 
-    db.prepare(`
-      UPDATE entity_graph_edges
-      SET confidence = MAX(confidence, ?), evidence = ?, source_kind = ?, source_id = ?, mention_count = mention_count + 1, last_seen_at = ?
-      WHERE id = ?
-    `).run(clampConfidence(relation.confidence), evidence || existing.evidence, sourceKind, sourceId, now, existing.id)
-    return this.getEdge(existing.id as string)
+    // Derive node importance from connected edges: max importance of all edges touching this node
+    this.refreshNodeImportance(from.id)
+    this.refreshNodeImportance(to.id)
+
+    return this.getEdge(edgeId)
+  }
+
+  /**
+   * Derive a node's importance as the max importance of all its connected edges.
+   */
+  private refreshNodeImportance(nodeId: string): void {
+    const db = getDb()
+    const row = db.prepare(`
+      SELECT MAX(e.importance) AS max_importance
+      FROM entity_graph_edges e
+      WHERE e.from_node_id = ? OR e.to_node_id = ?
+    `).get(nodeId, nodeId) as { max_importance: number | null } | undefined
+    const derivedImportance = row?.max_importance ?? 1
+    db.prepare('UPDATE entity_graph_nodes SET importance = ? WHERE id = ?').run(derivedImportance, nodeId)
   }
 
   getNode(id: string): EntityNode | null {
@@ -310,7 +350,7 @@ export class EntityGraphStore {
 
   updateNode(
     id: string,
-    patch: { name?: string; type?: EntityType; aliases?: string[] },
+    patch: { name?: string; type?: EntityType; aliases?: string[]; importance?: ImportanceLevel },
   ): EntityNode | null {
     const existing = this.getNode(id)
     if (!existing) return null
@@ -327,6 +367,9 @@ export class EntityGraphStore {
     const aliases = patch.aliases !== undefined
       ? Array.from(new Set(patch.aliases.map(cleanName).filter(Boolean))).slice(0, 16)
       : existing.aliases
+    const importance = patch.importance !== undefined
+      ? clampImportance(patch.importance)
+      : existing.importance
 
     const conflict = getDb().prepare(`
       SELECT id FROM entity_graph_nodes
@@ -337,16 +380,16 @@ export class EntityGraphStore {
     const now = Date.now()
     getDb().prepare(`
       UPDATE entity_graph_nodes
-      SET name = ?, normalized_name = ?, type = ?, aliases_json = ?, last_seen_at = ?
+      SET name = ?, normalized_name = ?, type = ?, aliases_json = ?, importance = ?, last_seen_at = ?
       WHERE id = ?
-    `).run(name, normalizedName, type, JSON.stringify(aliases), now, id)
+    `).run(name, normalizedName, type, JSON.stringify(aliases), importance, now, id)
 
     return this.mergeNodeIdentityCollisions([name, ...aliases], now) || this.getNode(id)
   }
 
   updateEdge(
     id: string,
-    patch: { relation?: string; evidence?: string; confidence?: number },
+    patch: { relation?: string; evidence?: string; confidence?: number; importance?: ImportanceLevel },
   ): EntityEdge | null {
     const existing = this.getEdge(id)
     if (!existing) return null
@@ -360,12 +403,19 @@ export class EntityGraphStore {
     const confidence = patch.confidence !== undefined
       ? clampConfidence(patch.confidence)
       : existing.confidence
+    const importance = patch.importance !== undefined
+      ? clampImportance(patch.importance)
+      : existing.importance
 
     getDb().prepare(`
       UPDATE entity_graph_edges
-      SET relation = ?, evidence = ?, confidence = ?, last_seen_at = ?
+      SET relation = ?, evidence = ?, confidence = ?, importance = ?, last_seen_at = ?
       WHERE id = ?
-    `).run(relation, evidence, confidence, Date.now(), id)
+    `).run(relation, evidence, confidence, importance, Date.now(), id)
+
+    // Refresh node importance for both endpoints
+    this.refreshNodeImportance(existing.fromNodeId)
+    this.refreshNodeImportance(existing.toNodeId)
 
     return this.getEdge(id)
   }
@@ -397,6 +447,10 @@ export class EntityGraphStore {
 
       return { edgeDeleted: true, orphanedNodeIds }
     })()
+
+    // Refresh importance for surviving nodes
+    if (!deleted.orphanedNodeIds.includes(edge.fromNodeId)) this.refreshNodeImportance(edge.fromNodeId)
+    if (!deleted.orphanedNodeIds.includes(edge.toNodeId)) this.refreshNodeImportance(edge.toNodeId)
 
     return deleted
   }
@@ -582,7 +636,8 @@ export class EntityGraphStore {
         GROUP BY n.id
       )
       SELECT e.*, fn.name AS from_name, tn.name AS to_name,
-        (e.mention_count * 4)
+        (e.importance * 8)
+        + (e.mention_count * 4)
         + (MAX(fd.degree, td.degree) * 1.5)
         + CASE WHEN e.last_seen_at >= ? THEN 12 ELSE 0 END AS overview_score
       FROM entity_graph_edges e
@@ -852,7 +907,7 @@ export class EntityGraphStore {
     const now = Date.now()
     for (const item of rawRelations.slice(0, 24)) {
       if (!item || typeof item !== 'object') continue
-      const obj = item as { action?: unknown; from?: unknown; relation?: unknown; to?: unknown; confidence?: unknown; evidence?: unknown }
+      const obj = item as { action?: unknown; from?: unknown; relation?: unknown; to?: unknown; importance?: unknown; confidence?: unknown; evidence?: unknown }
       const from = toEntity(obj.from)
       const to = toEntity(obj.to)
       if (!from || !to || typeof obj.relation !== 'string') continue
@@ -861,6 +916,7 @@ export class EntityGraphStore {
         from,
         relation: obj.relation,
         to,
+        importance: clampImportance(obj.importance),
         confidence: clampConfidence(obj.confidence),
         evidence: typeof obj.evidence === 'string' ? obj.evidence : ''
       }
@@ -919,10 +975,12 @@ export class EntityGraphStore {
 
   formatWalk(walk: GraphWalkResult): string {
     if (walk.edges.length === 0) return ''
+    const importanceLabel = (level: ImportanceLevel): string =>
+      ['temporary', 'minor', 'useful', 'core'][level] || 'minor'
     return '## Entity Graph Context\n' + walk.edges.map((edge) => {
       const relation = edge.relation.replace(/_/g, ' ')
       const evidence = edge.evidence ? ` Evidence: ${edge.evidence}` : ''
-      return `- ${edge.fromName} -> ${relation} -> ${edge.toName}.${evidence}`
+      return `- [${importanceLabel(edge.importance)}] ${edge.fromName} -> ${relation} -> ${edge.toName}.${evidence}`
     }).join('\n')
   }
 }

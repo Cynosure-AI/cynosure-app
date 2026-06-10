@@ -119,7 +119,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   // PATCH /api/memory/graph/nodes/:id — manually correct an entity node
   app.patch<{
     Params: { id: string }
-    Body: { name?: string; type?: string; aliases?: string[] }
+    Body: { name?: string; type?: string; aliases?: string[]; importance?: number }
   }>('/graph/nodes/:id', async (req, reply) => {
     const name = req.body.name?.trim()
     if (name !== undefined && name.length === 0) {
@@ -130,7 +130,8 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       const updated = getEntityGraphStore().updateNode(req.params.id, {
         name,
         type: req.body.type as EntityType | undefined,
-        aliases: Array.isArray(req.body.aliases) ? req.body.aliases : undefined
+        aliases: Array.isArray(req.body.aliases) ? req.body.aliases : undefined,
+        importance: typeof req.body.importance === 'number' ? req.body.importance as 0 | 1 | 2 | 3 : undefined
       })
       if (!updated) return reply.status(404).send({ error: 'Entity not found' })
       return updated
@@ -156,7 +157,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   // PATCH /api/memory/graph/edges/:id — manually correct a relationship
   app.patch<{
     Params: { id: string }
-    Body: { relation?: string; evidence?: string; confidence?: number }
+    Body: { relation?: string; evidence?: string; confidence?: number; importance?: number }
   }>('/graph/edges/:id', async (req, reply) => {
     const relation = req.body.relation?.trim()
     if (relation !== undefined && relation.length === 0) {
@@ -165,7 +166,8 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const updated = getEntityGraphStore().updateEdge(req.params.id, {
       relation,
       evidence: req.body.evidence,
-      confidence: req.body.confidence
+      confidence: req.body.confidence,
+      importance: typeof req.body.importance === 'number' ? req.body.importance as 0 | 1 | 2 | 3 : undefined
     })
     if (!updated) return reply.status(404).send({ error: 'Relationship not found' })
     return updated
