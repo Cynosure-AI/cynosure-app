@@ -200,6 +200,7 @@ export interface EntityGraphNode {
     normalizedName: string
     type: 'person' | 'place' | 'organization' | 'project' | 'event' | 'date' | 'technology' | 'product' | 'artifact' | 'concept' | 'other'
     aliases: string[]
+    importance: 0 | 1 | 2 | 3
     mentionCount: number
     sourceCount: number
     firstSeenAt: number
@@ -215,6 +216,7 @@ export interface EntityGraphEdge {
     fromName: string
     toName: string
     relation: string
+    importance: 0 | 1 | 2 | 3
     confidence: number
     evidence: string
     sourceKind: string

@@ -345,11 +345,11 @@ export const api = {
       if (limit) params.set('limit', String(limit))
       return get<EntityGraphSuggestionsResponse>(`/api/memory/graph/suggestions?${params.toString()}`)
     },
-    updateGraphNode: (id: string, data: { name?: string; type?: EntityGraphResponse['nodes'][number]['type']; aliases?: string[] }) =>
+    updateGraphNode: (id: string, data: { name?: string; type?: EntityGraphResponse['nodes'][number]['type']; aliases?: string[]; importance?: number }) =>
       patch<EntityGraphResponse['nodes'][number]>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`, data),
     deleteGraphNode: (id: string) =>
       del<{ success: boolean }>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`),
-    updateGraphEdge: (id: string, data: { relation?: string; evidence?: string; confidence?: number }) =>
+    updateGraphEdge: (id: string, data: { relation?: string; evidence?: string; confidence?: number; importance?: number }) =>
       patch<EntityGraphResponse['edges'][number]>(`/api/memory/graph/edges/${encodeURIComponent(id)}`, data),
     deleteGraphEdge: (id: string) =>
       del<{ success: boolean; orphanedNodeIds: string[] }>(`/api/memory/graph/edges/${encodeURIComponent(id)}`),

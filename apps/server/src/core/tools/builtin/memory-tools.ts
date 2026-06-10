@@ -92,12 +92,14 @@ const ENTITY_TYPES = ['person', 'place', 'organization', 'project', 'event', 'da
 
 function formatEntityNode(node: EntityNode): string {
     const aliases = node.aliases.length ? ` aliases=${node.aliases.join(', ')}` : ''
-    return `- ${node.name} (${node.type}, id=${node.id}, mentions=${node.mentionCount}${aliases})`
+    const importanceLabel = ['temporary', 'minor', 'useful', 'core'][node.importance] ?? 'minor'
+    return `- [${importanceLabel}] ${node.name} (${node.type}, id=${node.id}, mentions=${node.mentionCount}${aliases})`
 }
 
 function formatEntityEdge(edge: EntityEdge): string {
+    const importanceLabel = ['temporary', 'minor', 'useful', 'core'][edge.importance] ?? 'minor'
     const evidence = edge.evidence ? ` Evidence: ${edge.evidence}` : ''
-    return `- ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${edge.id}, confidence=${edge.confidence.toFixed(2)}, mentions=${edge.mentionCount}).${evidence}`
+    return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${edge.id}, confidence=${edge.confidence.toFixed(2)}, mentions=${edge.mentionCount}).${evidence}`
 }
 
 function normalizeEntityType(value: unknown): EntityType {

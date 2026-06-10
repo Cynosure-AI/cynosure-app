@@ -324,6 +324,7 @@ function createTables(db: Database.Database): void {
       normalized_name TEXT NOT NULL,
       type TEXT NOT NULL,
       aliases_json TEXT NOT NULL DEFAULT '[]',
+      importance INTEGER NOT NULL DEFAULT 1,
       mention_count INTEGER NOT NULL DEFAULT 1,
       source_count INTEGER NOT NULL DEFAULT 1,
       first_seen_at INTEGER NOT NULL,
@@ -339,6 +340,7 @@ function createTables(db: Database.Database): void {
       from_node_id TEXT NOT NULL REFERENCES entity_graph_nodes(id) ON DELETE CASCADE,
       to_node_id TEXT NOT NULL REFERENCES entity_graph_nodes(id) ON DELETE CASCADE,
       relation TEXT NOT NULL,
+      importance INTEGER NOT NULL DEFAULT 1,
       confidence REAL NOT NULL DEFAULT 0.7,
       evidence TEXT NOT NULL DEFAULT '',
       source_kind TEXT NOT NULL DEFAULT 'conversation',
@@ -371,6 +373,10 @@ function createTables(db: Database.Database): void {
   // Tasks table: reused for durable top-level orchestrator state.
   addColumnIfMissing('tasks', 'updated_at', 'INTEGER')
   db.prepare('UPDATE tasks SET updated_at = created_at WHERE updated_at IS NULL').run()
+
+  // Entity graph: add importance column for LLM-assigned importance scores
+  addColumnIfMissing('entity_graph_nodes', 'importance', 'INTEGER NOT NULL DEFAULT 1')
+  addColumnIfMissing('entity_graph_edges', 'importance', 'INTEGER NOT NULL DEFAULT 1')
 
   ensureDefaultMemorySpace(db)
 
