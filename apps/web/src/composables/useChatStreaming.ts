@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue'
+import { api } from '../api/client'
 import type { DisplayMessage } from '../stores/chat.store'
 
 export interface TokenUsage {
@@ -57,7 +58,7 @@ export interface ChatStreamingState {
 export function useChatStreaming(
     activeConversationId: Ref<string | null>,
     messages: Ref<DisplayMessage[]>,
-    conversations: Ref<{ id: string; title: string; updatedAt?: number }[]>,
+    conversations: Ref<{ id: string; title: string; updatedAt?: number; lastReadAt?: number | null }[]>,
     contextWindow: Ref<number | null>,
 ): ChatStreamingState {
     const isStreaming = ref(false)
@@ -466,6 +467,11 @@ export function useChatStreaming(
         const conv = conversations.value.find(c => c.id === data.conversationId)
         if (conv) {
             conv.updatedAt = Date.now()
+            // If the user is currently viewing this conversation, mark it as seen
+            if (data.conversationId === activeConversationId.value) {
+                conv.lastReadAt = conv.updatedAt
+                api.chat.markConversationRead(data.conversationId).catch(() => { /* non-critical */ })
+            }
         }
         if (data.conversationId === activeConversationId.value) {
             if (!messages.value.some(m => m.id === data.message.id)) {
