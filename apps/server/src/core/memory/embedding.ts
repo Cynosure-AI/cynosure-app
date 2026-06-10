@@ -70,9 +70,15 @@ export class EmbeddingProvider {
         if (provider.config.type === 'google') {
           this.googleClient = new GoogleGenAI({ apiKey: provider.config.apiKey || 'not-set' })
         } else {
+          const defaultHeaders: Record<string, string> = {}
+          if (provider.config.type === 'openrouter') {
+            defaultHeaders['HTTP-Referer'] = 'https://cynosure.app'
+            defaultHeaders['X-OpenRouter-Title'] = 'Cynosure Embedder'
+          }
           this.client = new OpenAI({
             baseURL: provider.config.baseUrl,
-            apiKey: provider.config.apiKey || 'no-key'
+            apiKey: provider.config.apiKey || 'no-key',
+            defaultHeaders
           })
         }
         this.configured = true
@@ -114,9 +120,17 @@ export class EmbeddingProvider {
         `Configure embedding separately via POST /api/memory/embeddings/configure.`
       )
     }
+
+    const defaultHeaders: Record<string, string> = {}
+    if (provider.config.type === 'openrouter') {
+      defaultHeaders['HTTP-Referer'] = 'https://cynosure.app'
+      defaultHeaders['X-OpenRouter-Title'] = 'Cynosure Embedder'
+    }
+
     return new OpenAI({
       baseURL: provider.config.baseUrl,
-      apiKey: provider.config.apiKey || 'no-key'
+      apiKey: provider.config.apiKey || 'no-key',
+      defaultHeaders
     })
   }
 
