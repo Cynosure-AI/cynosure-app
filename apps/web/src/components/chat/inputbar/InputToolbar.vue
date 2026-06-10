@@ -75,6 +75,17 @@ const currentProvider = computed(() =>
   providerStore.providers.find((p) => p.id === currentProviderId.value),
 );
 
+const formattedModelCost = computed(() => {
+  const cost = chatStore.modelCost;
+  if (!cost) return null;
+  const fmt = (n: number) => {
+    if (n < 0.01) return `$${n.toFixed(4)}`;
+    if (n < 1) return `$${n.toFixed(2)}`;
+    return `$${n.toFixed(2)}`;
+  };
+  return `${fmt(cost.input)} / ${fmt(cost.output)}`;
+});
+
 const mobileModelLabel = computed(() => {
   const override = chatStore.sessionModelOverride;
   if (override) {
@@ -233,11 +244,12 @@ async function toggleMic(): Promise<void> {
     <!-- Mobile: provider/model selector as a button that opens a modal -->
     <button
       v-if="currentProviderId"
-      class="lg:hidden max-w-44 flex items-center gap-1 px-2 py-1.5 rounded-lg  text-theme-300 hover:text-theme-100 transition-colors shrink min-w-0"
+      class="lg:hidden max-w-44 flex items-center gap-1 px-2 py-1.5 rounded-lg text-theme-300 hover:text-theme-100 transition-colors shrink min-w-0"
       aria-label="Select provider and model"
       @click="showModelModal = true"
     >
       <span class="truncate text-xs">{{ mobileModelLabel }}</span>
+
       <Icon
         icon="lucide:chevron-down"
         class="h-3.5 w-3.5 text-theme-500 shrink-0"
@@ -249,22 +261,36 @@ async function toggleMic(): Promise<void> {
       v-if="currentProviderId"
       class="hidden lg:flex items-center gap-1 shrink-0"
     >
-      <div class="w-56">
-        <ProviderModelSelect
-          :provider-id="selectedProviderIdForSelector"
-          :model-value="selectedModelForSelector"
-          :providers="providerStore.providers"
-          :include-default="!!selectedAgent"
-          :default-label="agentDefaultLabel"
-          placeholder="Select provider/model"
-          max-height="max-h-96"
-          dropdown-width="min-w-full"
-          :drop-up="true"
-          align="center"
-          size="sm"
-          @change="onModelProviderOverride"
-        />
-      </div>
+      <!-- Model cost indicator -->
+      <HoverTooltip
+        v-if="formattedModelCost"
+        placement="above"
+      >
+        <div class="w-56">
+          <ProviderModelSelect
+            :provider-id="selectedProviderIdForSelector"
+            :model-value="selectedModelForSelector"
+            :providers="providerStore.providers"
+            :include-default="!!selectedAgent"
+            :default-label="agentDefaultLabel"
+            placeholder="Select provider/model"
+            max-height="max-h-96"
+            dropdown-width="min-w-full"
+            :drop-up="true"
+            align="center"
+            size="sm"
+            @change="onModelProviderOverride"
+          />
+        </div>
+
+
+        <template #content>
+          <p class="text-xs text-theme-300 whitespace-nowrap">
+            Input / Output cost per 1M tokens
+          </p>
+          <span class="tabular-nums">{{ formattedModelCost }}</span>
+        </template>
+      </HoverTooltip>
     </div>
 
     <!-- Mic / voice input button -->

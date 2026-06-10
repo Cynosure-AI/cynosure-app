@@ -6,7 +6,7 @@ import {
   type StreamChunk,
   type ModelInfo
 } from './providers/base.provider.js'
-import { ensurePricingLoaded, getModelContextLength, getModelOutputModalities } from '../model-dev-fetcher.js'
+import { ensurePricingLoaded, getModelContextLength, getModelOutputModalities, getModelCost } from '../model-dev-fetcher.js'
 import { OpenAIProvider } from './providers/openai.provider.js'
 import { AnthropicProvider } from './providers/anthropic.provider.js'
 import { GoogleProvider } from './providers/google.provider.js'
@@ -156,6 +156,16 @@ export class LLMGateway {
       const outputModalities = getModelOutputModalities(providerType, modelId)
       if (outputModalities?.length) {
         info.outputModalities = outputModalities
+      }
+    }
+
+    // Fallback: cost from models.dev
+    if (!info.cost) {
+      await ensurePricingLoaded()
+      const providerType = provider.config.type
+      const cost = getModelCost(providerType, modelId)
+      if (cost) {
+        info.cost = cost
       }
     }
 
