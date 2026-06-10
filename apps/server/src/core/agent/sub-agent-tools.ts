@@ -94,6 +94,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 systemPromptSuffix: '\nYou are a sub-agent. Complete the task described below and report your results clearly.',
                 includeSubAgents: false,
                 userQuery: userMessage,
+                eventMeta: { maCodename: agentData.internalName, maAgentName: agentData.name },
             })
 
             // Sub-agent executor emits EventBus step events (for timeline cards)

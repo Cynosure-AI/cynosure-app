@@ -21,6 +21,8 @@ export interface ResolveSkillPromptInput {
     autoSkillRouting?: boolean
     skillRouterProviderId?: string
     skillRouterModel?: string
+    /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
+    eventMeta?: Record<string, unknown>
 }
 
 export async function resolveSkillSystemPrompt(input: ResolveSkillPromptInput): Promise<string | null> {
@@ -36,6 +38,7 @@ export async function resolveSkillSystemPrompt(input: ResolveSkillPromptInput): 
         autoSkillRouting,
         skillRouterProviderId,
         skillRouterModel,
+        eventMeta,
     } = input
 
     const manualSkills = getSkillsByIds([
@@ -66,6 +69,7 @@ export async function resolveSkillSystemPrompt(input: ResolveSkillPromptInput): 
         providerId: skillRouter.providerId,
         model,
         routerModel: skillRouter.model,
+        eventMeta,
     })
 
     return buildSkillsSystemPrompt(selectedSkills) || null

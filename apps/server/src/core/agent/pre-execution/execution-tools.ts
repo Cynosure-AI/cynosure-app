@@ -27,6 +27,8 @@ export interface ResolveExecutionToolsInput {
     signal?: AbortSignal
     memorySpaceOverrides?: ExecutionMemorySpaceRef[]
     hydrationAgentId?: string
+    /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
+    eventMeta?: Record<string, unknown>
 }
 
 export interface ResolvedExecutionTools {
@@ -55,6 +57,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         signal,
         memorySpaceOverrides,
         hydrationAgentId,
+        eventMeta,
     } = input
 
     const routingEnabled = isToolRoutingEnabled(preset, autoToolRouting)
@@ -80,6 +83,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             mcpMetadata: toolRegistry.getNamespaceMetadataForTools(tools),
             preferredToolNames: preferredToolNames.length ? new Set(preferredToolNames) : undefined,
             usedToolNames,
+            eventMeta,
         }) as RegistryAwareToolDefinition[]
     }
 

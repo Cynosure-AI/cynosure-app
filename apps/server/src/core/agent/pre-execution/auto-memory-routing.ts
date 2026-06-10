@@ -15,6 +15,8 @@ export interface ApplyAutoMemoryRoutingInput {
     recentMessages?: ChatMessage[]
     agentId?: string
     memorySpaceIds?: string[]
+    /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
+    eventMeta?: Record<string, unknown>
 }
 
 export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput): Promise<string | null> {
@@ -25,6 +27,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         recentMessages = [],
         agentId,
         memorySpaceIds,
+        eventMeta,
     } = input
 
     if (!shouldRouteMemory(userQuery, { enabled })) return null
@@ -33,7 +36,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
     const aggregator = getMemoryAggregator()
 
     try {
-        emitMemoryRoutingStatus(conversationId, taskId)
+        emitMemoryRoutingStatus(conversationId, taskId, eventMeta)
         const primaryQuery = userQuery?.trim() || ''
         const contextualQuery = buildRouterQuery(primaryQuery, recentMessages)
         let candidates = await aggregator.aggregate(primaryQuery, {
@@ -50,12 +53,12 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         }
 
         if (!candidates.permanent.length && !candidates.graph?.edges.length) {
-            emitMemoryRoutingSelection(conversationId, taskId, [])
+            emitMemoryRoutingSelection(conversationId, taskId, [], eventMeta)
             return null
         }
 
         if (!candidates.permanent.length && candidates.graph?.edges.length) {
-            emitMemoryRoutingSelection(conversationId, taskId, [])
+            emitMemoryRoutingSelection(conversationId, taskId, [], eventMeta)
             return aggregator.format({ permanent: [], graph: candidates.graph }) || null
         }
 
@@ -64,12 +67,12 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             graph: candidates.graph,
         }
 
-        emitMemoryRoutingSelection(conversationId, taskId, selectedMemory.permanent)
+        emitMemoryRoutingSelection(conversationId, taskId, selectedMemory.permanent, eventMeta)
         const formatted = aggregator.format(selectedMemory)
         return formatted || null
     } catch (err) {
         console.warn('[memory-router] Routing failed, continuing without auto-memory:', err)
-        emitMemoryRoutingSelection(conversationId, taskId, [])
+        emitMemoryRoutingSelection(conversationId, taskId, [], eventMeta)
         return null
     }
 }
@@ -112,21 +115,23 @@ function memoryLabel(chunk: RetrievedChunk): string {
     return label || 'Memory snippet'
 }
 
-function emitMemoryRoutingStatus(conversationId: string, taskId: string): void {
+function emitMemoryRoutingStatus(conversationId: string, taskId: string, eventMeta?: Record<string, unknown>): void {
     getEventBus().emit('step:status', {
         conversationId,
         taskId,
         iteration: 0,
         status: 'routing-memory',
         message: 'Selecting relevant memories...',
+        ...eventMeta,
     })
 }
 
-function emitMemoryRoutingSelection(conversationId: string, taskId: string, memories: RetrievedChunk[]): void {
+function emitMemoryRoutingSelection(conversationId: string, taskId: string, memories: RetrievedChunk[], eventMeta?: Record<string, unknown>): void {
     getEventBus().emit('step:tools-chosen', {
         conversationId,
         taskId,
         iteration: 0,
+        ...eventMeta,
         toolCalls: memories.map((memory) => ({
             name: memoryLabel(memory),
             arguments: JSON.stringify({
