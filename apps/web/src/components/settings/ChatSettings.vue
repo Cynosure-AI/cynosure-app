@@ -242,7 +242,7 @@ onMounted(async () => {
           @change="onEntityGraphSelection"
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          Entity extraction runs after each chat turn and stores durable relationships in the local entity graph.
+          Entity extraction whenever the agent writes and updates memories and stores durable relationships in the local entity graph.
         </p>
       </div>
     </BaseCard>

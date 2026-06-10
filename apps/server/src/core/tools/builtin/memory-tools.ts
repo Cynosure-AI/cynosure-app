@@ -996,10 +996,9 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                     writeTextFile(folderPath, fileName, appended)
                     const { chunkCount: indexedChunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                    // Re-extract entity graph from updated memory content
+                    // Extract only from appended content — old edges still valid
                     const sourceId = `memory:${fileName}`
-                    getEntityGraphStore().deleteEdgesBySourceId(sourceId)
-                    triggerMemoryGraphExtraction(appended, sourceId, conversationId, broadcast).catch(() => { })
+                    triggerMemoryGraphExtraction(content, sourceId, conversationId, broadcast).catch(() => { })
 
                     return {
                         success: true,
@@ -1022,10 +1021,9 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 
                 const { chunkCount: indexedChunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                // Re-extract entity graph from updated memory content
+                // Extract only from replacement content — old edges for unchanged chunks still valid
                 const sourceId = `memory:${fileName}`
-                getEntityGraphStore().deleteEdgesBySourceId(sourceId)
-                triggerMemoryGraphExtraction(replaced.content, sourceId, conversationId, broadcast).catch(() => { })
+                triggerMemoryGraphExtraction(content, sourceId, conversationId, broadcast).catch(() => { })
 
                 return {
                     success: true,
