@@ -91,7 +91,7 @@ export function useChatAgentConfig(
     const agentStore = useAgentStore()
 
     const activeAgentId = ref<string | null>(
-        localStorage.getItem(SK_ACTIVE_AGENT) || null
+        sessionStorage.getItem(SK_ACTIVE_AGENT) || null
     )
     const sessionModelOverride = ref<string | null>(null)
     const sessionProviderOverride = ref<string | null>(null)
@@ -323,12 +323,12 @@ export function useChatAgentConfig(
         if (!activeAgentId.value) captureFreeChatPreset()
         activeAgentId.value = id
         if (id) {
-            localStorage.setItem(SK_ACTIVE_AGENT, id)
+            sessionStorage.setItem(SK_ACTIVE_AGENT, id)
             const { preset, model, providerId } = agentPreset(id)
             applyPreset(preset)
             setAgentBaseline(preset, model, providerId)
         } else {
-            localStorage.removeItem(SK_ACTIVE_AGENT)
+            sessionStorage.removeItem(SK_ACTIVE_AGENT)
             ensureFreeChatPreset()
             applyPreset(freeChatPreset.value || regularFreeChatPreset())
             setAgentBaseline(regularFreeChatPreset(), null, null)
