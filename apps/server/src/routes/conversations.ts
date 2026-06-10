@@ -310,6 +310,13 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }
     )
 
+    // PATCH /api/chat/conversations/:id/read — mark conversation as read
+    app.patch<{ Params: { id: string } }>('/conversations/:id/read', async (req) => {
+        const db = getDb()
+        db.prepare('UPDATE conversations SET last_read_at = ? WHERE id = ?').run(Date.now(), req.params.id)
+        return { success: true }
+    })
+
     // DELETE /api/chat/conversations/:id — delete (blocked for pinned conversations)
     app.delete<{ Params: { id: string } }>('/conversations/:id', async (req, reply) => {
         const db = getDb()

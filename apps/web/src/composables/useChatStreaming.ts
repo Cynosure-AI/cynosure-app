@@ -57,7 +57,7 @@ export interface ChatStreamingState {
 export function useChatStreaming(
     activeConversationId: Ref<string | null>,
     messages: Ref<DisplayMessage[]>,
-    conversations: Ref<{ id: string; title: string }[]>,
+    conversations: Ref<{ id: string; title: string; updatedAt?: number }[]>,
     contextWindow: Ref<number | null>,
 ): ChatStreamingState {
     const isStreaming = ref(false)
@@ -462,6 +462,11 @@ export function useChatStreaming(
             agentIconUrl?: string | null
         }
     }): void {
+        // Bump updatedAt so the conversation shows as recently updated / unread
+        const conv = conversations.value.find(c => c.id === data.conversationId)
+        if (conv) {
+            conv.updatedAt = Date.now()
+        }
         if (data.conversationId === activeConversationId.value) {
             if (!messages.value.some(m => m.id === data.message.id)) {
                 messages.value.push({

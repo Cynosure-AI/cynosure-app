@@ -94,6 +94,8 @@ export const api = {
       patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/title`, { title }),
     pinConversation: (conversationId: string, pinned: boolean) =>
       patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/pin`, { pinned }),
+    markConversationRead: (conversationId: string) =>
+      patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/read`),
     send: (
       conversationId: string,
       content: string,

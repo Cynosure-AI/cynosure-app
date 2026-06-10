@@ -77,6 +77,7 @@ function mapConversationRow(row: {
   agent_id: string | null
   origin: string
   pinned: number
+  last_read_at: number | null
   created_at: number
   updated_at: number
 }): Conversation {
@@ -86,6 +87,7 @@ function mapConversationRow(row: {
     agentId: row.agent_id,
     origin: row.origin,
     pinned: !!row.pinned,
+    lastReadAt: row.last_read_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -225,6 +227,8 @@ const emptyConversationsMessage = computed(() => {
   return searchQuery.value ? 'No matching conversations' : 'No conversations yet'
 })
 
+const hasUnread = computed(() => visibleConversations.value.some(c => chatStore.isConversationUnread(c)))
+
 watch(showAllConversations, (enabled) => {
   clearPendingSearchLoad()
   if (enabled) {
@@ -261,17 +265,30 @@ onBeforeUnmount(() => {
     <!-- Header -->
     <div class="px-3 py-2.5 border-b border-theme-800/60 flex items-center justify-between">
       <span class="text-xs font-medium text-theme-500 uppercase tracking-wider">Chat History</span>
-      <button
-        v-if="showAllConversations ? allConversations.length > 0 : chatStore.sortedConversations.length > 0"
-        class="p-1 rounded-md text-theme-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-        title="Clear all history"
-        @click="showClearConfirm = true"
-      >
-        <Icon
-          icon="lucide:trash-2"
-          class="w-3.5 h-3.5"
-        />
-      </button>
+      <div class="flex items-center gap-0.5">
+        <button
+          v-if="hasUnread"
+          class="p-1 rounded-md text-theme-600 hover:text-accent-400 hover:bg-accent-500/10 transition-colors"
+          title="Mark all as read"
+          @click="chatStore.markAllAsRead()"
+        >
+          <Icon
+            icon="lucide:check-check"
+            class="w-3.5 h-3.5"
+          />
+        </button>
+        <button
+          v-if="showAllConversations ? allConversations.length > 0 : chatStore.sortedConversations.length > 0"
+          class="p-1 rounded-md text-theme-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          title="Clear all history"
+          @click="showClearConfirm = true"
+        >
+          <Icon
+            icon="lucide:trash-2"
+            class="w-3.5 h-3.5"
+          />
+        </button>
+      </div>
     </div>
 
     <!-- Search -->
@@ -335,6 +352,11 @@ onBeforeUnmount(() => {
       >
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
+            <span
+              v-if="chatStore.isConversationUnread(conv)"
+              class="w-2 h-2 rounded-full bg-accent-400 shrink-0"
+              title="Unread"
+            />
             <Icon
               v-if="conv.pinned"
               icon="lucide:pin"

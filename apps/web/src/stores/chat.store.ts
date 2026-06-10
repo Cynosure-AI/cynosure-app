@@ -15,6 +15,7 @@ export interface Conversation {
   agentId?: string | null
   origin?: string
   pinned: boolean
+  lastReadAt?: number | null
   createdAt: number
   updatedAt: number
 }
@@ -79,12 +80,13 @@ export const useChatStore = defineStore('chat', () => {
     const agentId = agentConfig.activeAgentId.value
     const rows = await api.chat.listConversations(agentId !== null ? agentId : '')
     conversations.value = rows.map(
-      (r: { id: string; title: string; agent_id: string | null; origin: string; pinned: number; created_at: number; updated_at: number }) => ({
+      (r: { id: string; title: string; agent_id: string | null; origin: string; pinned: number; last_read_at: number | null; created_at: number; updated_at: number }) => ({
         id: r.id,
         title: r.title,
         agentId: r.agent_id,
         origin: r.origin,
         pinned: !!r.pinned,
+        lastReadAt: r.last_read_at,
         createdAt: r.created_at,
         updatedAt: r.updated_at
       })
@@ -123,6 +125,7 @@ export const useChatStore = defineStore('chat', () => {
       agentId: conv.agentId,
       origin: conv.origin,
       pinned: false,
+      lastReadAt: conv.createdAt,
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt
     })
@@ -153,6 +156,10 @@ export const useChatStore = defineStore('chat', () => {
   async function selectConversation(id: string, agentIdHint?: string | null): Promise<void> {
     activeConversationId.value = id
     agentStore.setActiveViewConversation(id)
+    // Mark conversation as read
+    const conv = conversations.value.find(c => c.id === id)
+    if (conv) conv.lastReadAt = Date.now()
+    api.chat.markConversationRead(id).catch(() => { /* non-critical */ })
     if (agentIdHint !== undefined) {
       agentConfig.setConversationAgent(agentIdHint)
     }
@@ -494,6 +501,21 @@ export const useChatStore = defineStore('chat', () => {
     conversations.value.find((c) => c.id === activeConversationId.value)
   )
 
+  /** A conversation is unread when it has been updated after the user last read it. */
+  function isConversationUnread(conv: Conversation): boolean {
+    if (conv.id === activeConversationId.value) return false
+    return !conv.lastReadAt || conv.updatedAt > conv.lastReadAt
+  }
+
+  /** Mark all conversations as read. */
+  function markAllAsRead(): void {
+    const now = Date.now()
+    for (const conv of conversations.value) {
+      conv.lastReadAt = now
+      api.chat.markConversationRead(conv.id).catch(() => { /* non-critical */ })
+    }
+  }
+
   void loadMemorySpaces()
 
   return {
@@ -507,6 +529,10 @@ export const useChatStore = defineStore('chat', () => {
     activeConversation,
     activePostActions,
     isConversationLocked,
+
+    // Unread helpers
+    isConversationUnread,
+    markAllAsRead,
 
     // Streaming (delegated)
     isStreaming: streaming.isStreaming,

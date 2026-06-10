@@ -43,6 +43,7 @@ interface HistoryItem {
   agent_id: string | null;
   origin: string;
   updated_at: number;
+  last_read_at: number | null;
   last_user_message: string | null;
 }
 
@@ -209,6 +210,10 @@ const runningConversationIds = computed(
         .filter((id): id is string => Boolean(id)),
     ),
 );
+
+function isHistoryItemUnread(item: HistoryItem): boolean {
+  return !item.last_read_at || item.updated_at > item.last_read_at;
+}
 
 const timelineItems = computed<TimelineItem[]>(() => {
   const running: TimelineItem[] = [...instances.value]
@@ -387,12 +392,19 @@ onUnmounted(() => {
                 />
               </div>
               <div class="min-w-0">
-                <div class="text-sm font-medium text-theme-200 truncate">
-                  {{
-                    item.kind === "running"
-                      ? item.running.agentName
-                      : item.history.title || "Untitled"
-                  }}
+                <div class="flex items-center gap-1.5">
+                  <span
+                    v-if="item.kind === 'history' && isHistoryItemUnread(item.history)"
+                    class="w-2 h-2 rounded-full bg-accent-400 shrink-0"
+                    title="Unread"
+                  />
+                  <span class="text-sm font-medium text-theme-200 truncate">
+                    {{
+                      item.kind === "running"
+                        ? item.running.agentName
+                        : item.history.title || "Untitled"
+                    }}
+                  </span>
                 </div>
                 <div
                   v-if="

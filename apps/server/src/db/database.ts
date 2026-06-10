@@ -62,6 +62,7 @@ function createTables(db: Database.Database): void {
       ma_workspace_id TEXT,
       origin TEXT NOT NULL DEFAULT 'chat',
       pinned INTEGER NOT NULL DEFAULT 0,
+      last_read_at INTEGER,
       last_context_tokens INTEGER,
       config_json TEXT,
       created_at INTEGER NOT NULL,
@@ -407,6 +408,9 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('cron_jobs', 'notification_mode', "TEXT NOT NULL DEFAULT 'always'")
   addColumnIfMissing('cron_jobs', 'notification_condition', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('cron_jobs', 'last_run_at', 'INTEGER')
+
+  // Conversation unread tracking
+  addColumnIfMissing('conversations', 'last_read_at', 'INTEGER')
 }
 
 export function closeDb(): void {
