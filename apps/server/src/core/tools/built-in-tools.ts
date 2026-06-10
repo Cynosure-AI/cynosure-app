@@ -90,12 +90,18 @@ const BUILTIN_TOOL_HYDRATORS = {
     }),
     memory_create: (ctx: BuiltInHydrationContext) => makeMemoryCreateTool({
         assignedSpaces: ctx.assignedSpaces,
+        conversationId: ctx.conversationId,
+        broadcast: ctx.broadcast,
     }),
     memory_update: (ctx: BuiltInHydrationContext) => makeMemoryUpdateTool({
         assignedSpaces: ctx.assignedSpaces,
+        conversationId: ctx.conversationId,
+        broadcast: ctx.broadcast,
     }),
     forget_memory: (ctx: BuiltInHydrationContext) => makeForgetMemoryTool({
         assignedSpaces: ctx.assignedSpaces,
+        conversationId: ctx.conversationId,
+        broadcast: ctx.broadcast,
     }),
     entity_graph_search: () => makeEntityGraphSearchTool(),
     entity_graph_assert: () => makeEntityGraphAssertTool(),

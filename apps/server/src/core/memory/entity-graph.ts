@@ -760,10 +760,44 @@ export class EntityGraphStore {
     model?: string
     signal?: AbortSignal
   }): Promise<{ insertedOrUpdated: number; deleted: number }> {
+    return this.extractFromContent({
+      content: `<user>\n${opts.userMessage.slice(0, 4000)}\n</user>\n\n<assistant>\n${opts.assistantResponse.slice(0, 4000)}\n</assistant>`,
+      sourceId: opts.conversationId,
+      sourceKind: 'conversation',
+      providerId: opts.providerId,
+      model: opts.model,
+      signal: opts.signal,
+      systemPrompt: 'Extract durable named entities and explicit relationships from a chat turn.',
+    })
+  }
+
+  async extractFromContent(opts: {
+    content: string
+    sourceId: string
+    sourceKind?: string
+    providerId?: string
+    model?: string
+    signal?: AbortSignal
+    systemPrompt?: string
+  }): Promise<{ insertedOrUpdated: number; deleted: number }> {
     const gateway = getGateway()
     const provider = opts.providerId
       ? gateway.getProvider(opts.providerId) || gateway.getLastUsedProvider()
       : gateway.getLastUsedProvider()
+
+    const systemContent = [
+      opts.systemPrompt || 'Extract durable named entities and explicit relationships from the provided content.',
+      'Return strict JSON only: an array of objects with keys action, from, relation, to, confidence, evidence.',
+      'action is "assert" for facts that are true now, or "delete" for facts explicitly corrected, negated, or no longer true.',
+      'from and to are objects with name, type, and optional aliases.',
+      'Allowed types: person, place, organization, project, event, date, technology, product, artifact, concept, other.',
+      'Only include facts that would remain useful later. Skip vague, temporary, or unsupported claims.',
+      'Use concise snake_case relation names such as works_at, depends_on, located_in, owns, uses, met_on, discussed_with.',
+      'When a fact changes, emit a delete for the old relationship if the turn names it, and an assert for the replacement.',
+      "Evidence should be one short sentence on why the fact is true.",
+      'If there are no durable relationships, return [].'
+    ].join('\n')
+
     const result = await gateway.complete({
       model: opts.model || provider.config.defaultModel,
       signal: opts.signal,
@@ -771,33 +805,8 @@ export class EntityGraphStore {
       temperature: 0,
       thinkingEnabled: false,
       messages: [
-        {
-          role: 'system',
-          content: [
-            'Extract durable named entities and explicit relationships from a chat turn.',
-            'Return strict JSON only: an array of objects with keys action, from, relation, to, confidence, evidence.',
-            'action is "assert" for facts that are true now, or "delete" for facts explicitly corrected, negated, or no longer true.',
-            'from and to are objects with name, type, and optional aliases.',
-            'Allowed types: person, place, organization, project, event, date, technology, product, artifact, concept, other.',
-            'Only include facts that would remain useful later. Skip vague, temporary, or unsupported claims.',
-            'Use concise snake_case relation names such as works_at, depends_on, located_in, owns, uses, met_on, discussed_with.',
-            'When a fact changes, emit a delete for the old relationship if the turn names it, and an assert for the replacement.',
-            "Evidence should be one short sentence on why the fact is true.",
-            'If there are no durable relationships, return [].'
-          ].join('\n')
-        },
-        {
-          role: 'user',
-          content: [
-            '<user>',
-            opts.userMessage.slice(0, 4000),
-            '</user>',
-            '',
-            '<assistant>',
-            opts.assistantResponse.slice(0, 4000),
-            '</assistant>'
-          ].join('\n')
-        }
+        { role: 'system', content: systemContent },
+        { role: 'user', content: opts.content.slice(0, 8000) }
       ]
     }, provider.config.id)
 
@@ -823,10 +832,53 @@ export class EntityGraphStore {
         if (this.deleteMatchingEdge(extracted).edgeDeleted) deleted++
         continue
       }
-      const edge = this.upsertEdge(extracted, 'conversation', opts.conversationId, now)
+      const edge = this.upsertEdge(extracted, opts.sourceKind || 'content', opts.sourceId, now)
       if (edge) count++
     }
     return { insertedOrUpdated: count, deleted }
+  }
+
+  deleteEdgesBySourceId(sourceId: string): { edgesDeleted: number; orphanedNodeIds: string[] } {
+    const db = getDb()
+    const edges = db.prepare(`
+      SELECT id, from_node_id, to_node_id FROM entity_graph_edges WHERE source_id = ?
+    `).all(sourceId) as { id: string; from_node_id: string; to_node_id: string }[]
+
+    if (edges.length === 0) return { edgesDeleted: 0, orphanedNodeIds: [] }
+
+    const allOrphanedNodeIds = new Set<string>()
+
+    db.transaction(() => {
+      // Delete all edges
+      db.prepare('DELETE FROM entity_graph_edges WHERE source_id = ?').run(sourceId)
+
+      // Collect all nodes involved in deleted edges
+      const involvedNodeIds = new Set<string>()
+      for (const edge of edges) {
+        involvedNodeIds.add(edge.from_node_id)
+        involvedNodeIds.add(edge.to_node_id)
+      }
+
+      // Check which nodes are now orphaned (no remaining edges)
+      for (const nodeId of involvedNodeIds) {
+        const remaining = db.prepare(`
+          SELECT 1 FROM entity_graph_edges WHERE from_node_id = ? OR to_node_id = ? LIMIT 1
+        `).get(nodeId, nodeId)
+        if (!remaining) {
+          allOrphanedNodeIds.add(nodeId)
+        }
+      }
+
+      // Delete orphaned nodes
+      for (const nodeId of allOrphanedNodeIds) {
+        db.prepare('DELETE FROM entity_graph_nodes WHERE id = ?').run(nodeId)
+      }
+    })()
+
+    return {
+      edgesDeleted: edges.length,
+      orphanedNodeIds: Array.from(allOrphanedNodeIds)
+    }
   }
 
   formatWalk(walk: GraphWalkResult): string {
