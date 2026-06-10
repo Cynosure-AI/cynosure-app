@@ -10,7 +10,7 @@ import { closeOrchestrationRun } from '../core/agent/orchestration-state.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
-import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions, extractEntityGraph } from '../core/agent/post-execution.js'
+import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
 import type { ChatMessage, ContentPart, RegistryAwareToolDefinition } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
@@ -112,14 +112,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       titleProviderId?: string
       titleModel?: string
       inlineAttachmentTextLimit?: number
-      enableEntityGraph?: boolean
-      entityGraphProviderId?: string
-      entityGraphModel?: string
     }
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, autoMemory: reqAutoMemory, skillRouterProviderId: reqSkillRouterProviderId, skillRouterModel: reqSkillRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, inlineAttachmentTextLimit: reqInlineAttachmentTextLimit, enableEntityGraph: enableEntityGraphPref, entityGraphProviderId: entityGraphProviderIdPref, entityGraphModel: entityGraphModelPref } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, autoMemory: reqAutoMemory, skillRouterProviderId: reqSkillRouterProviderId, skillRouterModel: reqSkillRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, inlineAttachmentTextLimit: reqInlineAttachmentTextLimit } = req.body
       const db = getDb()
       const inlineAttachmentTextLimit = reqInlineAttachmentTextLimit !== undefined
         ? normalizeInlineAttachmentTextLimit(reqInlineAttachmentTextLimit)
@@ -431,16 +428,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           }
         }
 
-        if (enableEntityGraphPref !== false) {
-          extractEntityGraph({
-            conversationId,
-            userMessage: content,
-            assistantResponse: result.content,
-            broadcast,
-            providerId: entityGraphProviderIdPref || responseProvider,
-            model: entityGraphModelPref || (entityGraphProviderIdPref ? undefined : responseModel)
-          }).catch(() => { })
-        }
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           if (reqAutoToolRouting === true) {
