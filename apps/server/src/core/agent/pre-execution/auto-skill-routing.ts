@@ -16,6 +16,8 @@ export interface ApplyAutoSkillRoutingInput {
     providerId?: string
     model: string
     routerModel?: string
+    /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
+    eventMeta?: Record<string, unknown>
 }
 
 export async function applyAutoSkillRouting(input: ApplyAutoSkillRoutingInput): Promise<SkillData[]> {
@@ -30,6 +32,7 @@ export async function applyAutoSkillRouting(input: ApplyAutoSkillRoutingInput): 
         providerId,
         model,
         routerModel,
+        eventMeta,
     } = input
 
     if (!shouldRouteSkills(availableSkills, userQuery, { enabled })) {
@@ -38,7 +41,7 @@ export async function applyAutoSkillRouting(input: ApplyAutoSkillRoutingInput): 
 
     const taskId = `skill_router_${nanoid()}`
     try {
-        emitSkillRoutingStatus(conversationId, taskId)
+        emitSkillRoutingStatus(conversationId, taskId, eventMeta)
         const routedSkills = await routeSkills({
             userQuery: userQuery || '',
             recentMessages: recentMessages || [],
@@ -50,11 +53,11 @@ export async function applyAutoSkillRouting(input: ApplyAutoSkillRoutingInput): 
         })
 
         const selectedSkills = mergeSkills(manualSkills, routedSkills)
-        emitSkillRoutingSelection(conversationId, taskId, selectedSkills)
+        emitSkillRoutingSelection(conversationId, taskId, selectedSkills, eventMeta)
         return selectedSkills
     } catch (err) {
         console.warn('[skill-router] Routing failed, using manual skill list:', err)
-        emitSkillRoutingSelection(conversationId, taskId, manualSkills)
+        emitSkillRoutingSelection(conversationId, taskId, manualSkills, eventMeta)
         return manualSkills
     }
 }
@@ -65,21 +68,23 @@ function mergeSkills(first: SkillData[], second: SkillData[]): SkillData[] {
     return [...byId.values()]
 }
 
-function emitSkillRoutingStatus(conversationId: string, taskId: string): void {
+function emitSkillRoutingStatus(conversationId: string, taskId: string, eventMeta?: Record<string, unknown>): void {
     getEventBus().emit('step:status', {
         conversationId,
         taskId,
         iteration: 0,
         status: 'routing-skills',
         message: 'Selecting relevant skills...',
+        ...eventMeta,
     })
 }
 
-function emitSkillRoutingSelection(conversationId: string, taskId: string, skills: SkillData[]): void {
+function emitSkillRoutingSelection(conversationId: string, taskId: string, skills: SkillData[], eventMeta?: Record<string, unknown>): void {
     getEventBus().emit('step:tools-chosen', {
         conversationId,
         taskId,
         iteration: 0,
+        ...eventMeta,
         toolCalls: skills.map((skill) => ({
             name: skill.name,
             arguments: JSON.stringify({

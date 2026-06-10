@@ -31,6 +31,8 @@ export interface ExecutionRequest {
         selectedSkillIds?: string[]
         autoSkillRouting?: boolean
     }
+    /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
+    eventMeta?: Record<string, unknown>
 }
 
 export interface ExecutionPlanInput {
@@ -57,6 +59,7 @@ export interface ExecutionPlanInput {
     usedToolNames?: Set<string>
     selectedSkillIds?: string[]
     autoSkillRouting?: boolean
+    eventMeta?: Record<string, unknown>
 }
 
 export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanInput {
@@ -85,5 +88,6 @@ export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanIn
         usedToolNames: run.usedToolNames,
         selectedSkillIds: run.selectedSkillIds,
         autoSkillRouting: run.autoSkillRouting,
+        eventMeta: request.eventMeta,
     }
 }

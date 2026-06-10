@@ -56,6 +56,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         usedToolNames,
         selectedSkillIds = [],
         autoSkillRouting = false,
+        eventMeta,
     } = input
     const selectedToolKeys = stripRuntimeMemoryToolKeys(input.selectedToolKeys ?? [])
     const hasRequestToolSelection = input.selectedToolKeys !== undefined
@@ -113,6 +114,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         recentMessages: messages,
         userQuery: userText,
         memorySpaceOverrides,
+        eventMeta,
     })
 
     const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id

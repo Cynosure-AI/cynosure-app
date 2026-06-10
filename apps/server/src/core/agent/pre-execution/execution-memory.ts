@@ -11,6 +11,8 @@ export interface ResolveMemoryContextInput {
     memorySpaceOverrides?: ExecutionMemorySpaceRef[]
     userQuery?: string
     recentMessages?: ChatMessage[]
+    /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
+    eventMeta?: Record<string, unknown>
 }
 
 export function isAutoMemoryEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
@@ -42,6 +44,7 @@ export async function resolveMemorySystemMessages(input: ResolveMemoryContextInp
         memorySpaceOverrides,
         userQuery,
         recentMessages,
+        eventMeta,
     } = input
 
     if (!isAutoMemoryEnabled(preset, autoMemory)) return []
@@ -54,6 +57,7 @@ export async function resolveMemorySystemMessages(input: ResolveMemoryContextInp
         recentMessages,
         agentId: preset.id === '__agentless__' ? undefined : preset.id,
         memorySpaceIds: memorySpaceOverrides?.map((space) => space.id),
+        eventMeta,
     })
 
     return memoryContext ? [{ role: 'system', content: memoryContext }] : []

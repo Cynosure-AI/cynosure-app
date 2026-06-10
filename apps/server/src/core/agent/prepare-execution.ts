@@ -77,6 +77,8 @@ export interface PrepareExecutionInput {
     memorySpaceOverrides?: { id: string; name: string }[]
     /** Agent id used during built-in tool hydration. Defaults to agent.id. */
     hydrationAgentId?: string
+    /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
+    eventMeta?: Record<string, unknown>
 }
 
 export interface PreparedExecution {
@@ -145,6 +147,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         signal: input.signal,
         memorySpaceOverrides,
         hydrationAgentId: input.hydrationAgentId,
+        eventMeta: input.eventMeta,
     })
 
     const skillsPrompt = await resolveSkillSystemPrompt({
@@ -159,6 +162,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         autoSkillRouting: input.autoSkillRouting,
         skillRouterProviderId: input.skillRouterProviderId,
         skillRouterModel: input.skillRouterModel,
+        eventMeta: input.eventMeta,
     })
 
     const systemMessages = [
@@ -176,6 +180,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             memorySpaceOverrides,
             userQuery: input.userQuery,
             recentMessages: input.recentMessages,
+            eventMeta: input.eventMeta,
         }),
     ]
 

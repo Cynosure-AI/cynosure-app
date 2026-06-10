@@ -15,6 +15,8 @@ export interface ApplyAutoToolRoutingInput {
     /** Explicitly selected tool names that must be included after routing. */
     preferredToolNames?: Set<string>
     usedToolNames?: Set<string>
+    /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
+    eventMeta?: Record<string, unknown>
 }
 
 export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Promise<ToolDefinition[]> {
@@ -27,6 +29,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         mcpMetadata,
         preferredToolNames,
         usedToolNames,
+        eventMeta,
     } = input
 
     if (!shouldRouteTools(tools, userQuery, { enabled })) {
@@ -35,7 +38,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
 
     const taskId = `router_${nanoid()}`
     try {
-        emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Selecting relevant tools...')
+        emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Selecting relevant tools...', eventMeta)
         const routedTools = await routeTools({
             userQuery: userQuery || '',
             recentMessages: recentMessages || [],
@@ -44,31 +47,33 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             preferredToolNames,
             usedToolNames,
         })
-        emitToolRoutingSelection(conversationId, taskId, routedTools)
+        emitToolRoutingSelection(conversationId, taskId, routedTools, eventMeta)
         return routedTools
     } catch (err) {
         console.warn('[tool-router] Routing failed, using local tool list:', err)
         const fallbackTools = tools.filter((tool) => !tool.namespaceId?.startsWith('mcp:'))
-        emitToolRoutingSelection(conversationId, taskId, fallbackTools)
+        emitToolRoutingSelection(conversationId, taskId, fallbackTools, eventMeta)
         return fallbackTools
     }
 }
 
-function emitToolRoutingStatus(conversationId: string, taskId: string, status: string, message: string): void {
+function emitToolRoutingStatus(conversationId: string, taskId: string, status: string, message: string, eventMeta?: Record<string, unknown>): void {
     getEventBus().emit('step:status', {
         conversationId,
         taskId,
         iteration: 0,
         status,
         message,
+        ...eventMeta,
     })
 }
 
-function emitToolRoutingSelection(conversationId: string, taskId: string, tools: ToolDefinition[]): void {
+function emitToolRoutingSelection(conversationId: string, taskId: string, tools: ToolDefinition[], eventMeta?: Record<string, unknown>): void {
     getEventBus().emit('step:tools-chosen', {
         conversationId,
         taskId,
         iteration: 0,
+        ...eventMeta,
         toolCalls: tools
             .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
             .map((tool) => ({ name: tool.name, arguments: '{}' })),
