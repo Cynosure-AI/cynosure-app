@@ -111,6 +111,42 @@ function parseJsonArray(raw: string): unknown[] {
         if (Array.isArray(parsed)) return parsed
       } catch { /* ignore */ }
     }
+    // Attempt to salvage truncated JSON by extracting complete objects
+    if (start >= 0) {
+      const objects = fenced.slice(start)
+      const extracted: unknown[] = []
+      let i = 0
+      while (i < objects.length) {
+        const objStart = objects.indexOf('{', i)
+        if (objStart < 0) break
+        let depth = 0
+        let inString = false
+        let escaped = false
+        let j = objStart
+        while (j < objects.length) {
+          const ch = objects[j]
+          if (escaped) { escaped = false; j++; continue }
+          if (ch === '\\') { escaped = true; j++; continue }
+          if (ch === '"') { inString = !inString; j++; continue }
+          if (inString) { j++; continue }
+          if (ch === '{') depth++
+          else if (ch === '}') {
+            depth--
+            if (depth === 0) {
+              try {
+                const obj = JSON.parse(objects.slice(objStart, j + 1))
+                if (obj && typeof obj === 'object') extracted.push(obj)
+              } catch { /* incomplete object, skip */ }
+              i = j + 1
+              break
+            }
+          }
+          j++
+        }
+        if (j >= objects.length) break // truncated mid-object, stop
+      }
+      if (extracted.length > 0) return extracted
+    }
   }
   return []
 }
@@ -801,7 +837,7 @@ export class EntityGraphStore {
     const result = await gateway.complete({
       model: opts.model || provider.config.defaultModel,
       signal: opts.signal,
-      maxTokens: 900,
+      maxTokens: 4096,
       temperature: 0,
       thinkingEnabled: false,
       messages: [
