@@ -193,7 +193,7 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
                     key: `builtin::${TOOL_SEARCH_TOOL_NAME}`,
                     name: TOOL_SEARCH_TOOL_NAME,
                     executionName: TOOL_SEARCH_TOOL_NAME,
-                    description: 'Search and load additional available tools when the current tools are insufficient.',
+                    description: 'Search and load additional available tools when the current tools are insufficient. Used by the auto-tool mode.',
                     parameters: { type: 'object', properties: { requested_capability: { type: 'string' }, limit: { type: 'number' } }, required: ['requested_capability'] },
                     namespace: { id: 'builtin', label: 'Built-In' },
                     ambiguous: false,
