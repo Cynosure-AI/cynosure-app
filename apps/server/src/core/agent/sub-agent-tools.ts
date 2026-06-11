@@ -96,6 +96,10 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 userQuery: userMessage,
                 eventMeta: { maCodename: agentData.internalName, maAgentName: agentData.name },
             })
+            const gateway = getGateway()
+            const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id
+            const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(prepared.model, responseProvider)
+            const responseTools = responseSupportsToolCalls ? prepared.tools : []
 
             // Sub-agent executor emits EventBus step events (for timeline cards)
             // and broadcasts WebSocket stream events so the user can see
@@ -104,8 +108,8 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             // ended before tool execution begins (sequential, not concurrent).
 
             const executor = new AgentExecutor({
-                gateway: getGateway(),
-                tools: prepared.tools,
+                gateway,
+                tools: responseTools,
                 conversationId,
                 broadcast,
                 providerId: prepared.providerId,
