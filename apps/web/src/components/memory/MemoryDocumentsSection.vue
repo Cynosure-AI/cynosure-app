@@ -212,8 +212,8 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
           >
             <!-- Indent spacer -->
             <span
-              v-if="(space.depth || 0) > 0"
-              :style="{ width: `${(space.depth || 0) * 16}px` }"
+              v-if="(space.depth || 0) > 1"
+              :style="{ width: `${(space.depth || 0) * 8}px` }"
               class="shrink-0"
             />
             <!-- Chevron: always rendered to keep all rows aligned -->
