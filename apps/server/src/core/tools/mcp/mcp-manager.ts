@@ -13,9 +13,9 @@ import { getAppDataDir } from '../../data-dir.js'
 
 /** Rewrite absolute file paths in tool text output to API-served URLs */
 function rewriteFilePathsInText(text: string): string {
-    // Match absolute paths to common image/media files
+    // Match absolute paths to common generated/readable artifact files.
     return text.replace(
-        /(?:^|\s)(\/[^\s"'<>]+\.(?:png|jpe?g|gif|webp|bmp|svg|mp4|webm|ogg|mp3|wav|flac|pdf))\b/gi,
+        /(?:^|\s|\()((?:\/[^\s"'<>)]|%20)+\.(?:png|jpe?g|gif|webp|bmp|svg|mp4|webm|ogg|mp3|wav|flac|pdf|docx?|odt|rtf|txt|md))\b/gi,
         (match, path) => match.replace(path, `/api/files?path=${encodeURIComponent(path)}`)
     )
 }
