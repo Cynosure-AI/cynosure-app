@@ -331,37 +331,7 @@ const settingsItems: NavItem[] = [
         </template>
       </HoverTooltip>
 
-      <!-- Notifications -->
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/notifications"
-          class="nav-item"
-          :class="{ active: isActive('/notifications', true) }"
-        >
-          <Icon
-            icon="lucide:bell"
-            class="w-4.5 h-4.5"
-          />
-          <span>Notifications</span>
-          <span
-            v-if="notificationStore.unreadCount > 0"
-            class="ml-auto rounded-full bg-accent-500 text-[10px] font-bold text-white w-5 h-5 flex items-center justify-center leading-none shrink-0"
-          >
-            {{
-              notificationStore.unreadCount > 9
-                ? "9+"
-                : notificationStore.unreadCount
-            }}
-          </span>
-        </RouterLink>
-        <template #content>
-          Notifications
-        </template>
-      </HoverTooltip>
+
 
       <!-- Triggers -->
       <div class="section-separator" />
