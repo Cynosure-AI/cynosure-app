@@ -32,6 +32,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
   { id: 'midnight-purple', label: 'Midnight', icon: 'lucide:sparkles', colors: { bg: '#130f1b', surface: '#1a1528', accent: '#a855f7', text: '#ebe5f5' } },
   { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#111114', surface: '#181819', accent: '#f9f002', text: '#e8e8f0' } },
   { id: 'matrix', label: 'Matrix', icon: 'lucide:terminal', colors: { bg: '#030705', surface: '#0a120e', accent: '#00ff41', text: '#d8eed8' } },
+  { id: 'sakura', label: 'Sakura', icon: 'lucide:flower-2', colors: { bg: '#170e1a', surface: '#241426', accent: '#f43f8f', text: '#ffe8f3' } },
 ]
 </script>
 
