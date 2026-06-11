@@ -506,7 +506,7 @@ async function manualClearGraph() {
             Entity Extraction Model
           </h3>
           <p class="text-xs text-theme-500 mt-0.5">
-            Provider and model used when memory writes and document indexing extract entities and relationships for the local entity graph.
+            Provider and model used when explicit document entity indexing extracts entities and relationships for the local entity graph.
           </p>
         </div>
       </div>
@@ -531,7 +531,7 @@ async function manualClearGraph() {
           @change="saveEntityExtractionSelection"
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          This setting is always active for entity creation calls. Leaving it on the default uses the server's active provider and that provider's default model.
+          This setting is used for explicit entity extraction calls. Leaving it on the default uses the server's active provider and that provider's default model.
         </p>
       </div>
     </BaseCard>
