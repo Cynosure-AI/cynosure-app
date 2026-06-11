@@ -154,7 +154,9 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         enabledModes: autoModes,
         eventMeta: input.eventMeta,
     })
-    const routingQuery = taskContext?.routerQuery || input.userQuery
+    const toolRoutingQuery = taskContext?.toolQuery || taskContext?.routerQuery || input.userQuery
+    const skillRoutingQuery = taskContext?.skillQuery || taskContext?.routerQuery || input.userQuery
+    const memoryRoutingQuery = taskContext?.memoryQuery || taskContext?.routerQuery || input.userQuery
     const routingMessages = taskContext ? [] : input.recentMessages
 
     const toolLayer = await resolveExecutionTools({
@@ -165,7 +167,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         resolvedProviderId: providerModel.providerId,
         providerOverride,
         modelOverride,
-        userQuery: routingQuery,
+        userQuery: toolRoutingQuery,
         recentMessages: routingMessages,
         usedToolNames: input.usedToolNames,
         preferredToolKeys: input.preferredToolKeys,
@@ -185,7 +187,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         conversationId,
         providerId: providerModel.providerId,
         model: providerModel.model,
-        userQuery: routingQuery,
+        userQuery: skillRoutingQuery,
         recentMessages: routingMessages,
         selectedSkillIds: input.selectedSkillIds,
         autoSkillRouting: input.autoSkillRouting,
@@ -212,7 +214,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             conversationId,
             autoMemory: input.autoMemory,
             memorySpaceOverrides,
-            userQuery: routingQuery,
+            userQuery: memoryRoutingQuery,
             recentMessages: routingMessages,
             eventMeta: input.eventMeta,
         }),

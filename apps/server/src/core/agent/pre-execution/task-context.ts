@@ -10,6 +10,9 @@ const MAX_SYSTEM_CONTEXT_LENGTH = 2_500
 
 export interface TaskContext {
     routerQuery: string
+    toolQuery: string
+    skillQuery: string
+    memoryQuery: string
     systemContext: string
     focusAreas: string[]
 }
@@ -44,9 +47,13 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                     content: [
                         'You prepare a compact task context before the main assistant run.',
                         'Given the current request and recent conversation, call set_task_context with:',
-                        '- routerQuery: the best retrieval/routing query for automatic tools, skills, and memories.',
+                        '- routerQuery: the best general semantic query for automatic routing.',
+                        '- toolQuery: action/capability terms for tool selection, including likely services, resources, and operations.',
+                        '- skillQuery: instruction/workflow terms for selecting reusable skills.',
+                        '- memoryQuery: knowledge/entity terms for memory retrieval, including names, topics, documents, accounts, and time cues.',
                         '- systemContext: concise facts, constraints, and intent the main assistant should start with.',
                         '- focusAreas: short labels for the information or capabilities likely needed.',
+                        'Use empty strings for mode-specific queries whose auto mode is disabled or not useful.',
                         'Do not answer the user. Keep the context specific and omit irrelevant conversation details. /no_think',
                     ].join('\n'),
                 },
@@ -107,7 +114,19 @@ function buildTaskContextTool(): ToolDefinition {
             properties: {
                 routerQuery: {
                     type: 'string',
-                    description: 'A compact query for selecting relevant auto tools, skills, and memories.',
+                    description: 'A compact general semantic query for automatic routing.',
+                },
+                toolQuery: {
+                    type: 'string',
+                    description: 'A compact semantic query optimized for selecting relevant tools and tool namespaces.',
+                },
+                skillQuery: {
+                    type: 'string',
+                    description: 'A compact semantic query optimized for selecting relevant reusable skills.',
+                },
+                memoryQuery: {
+                    type: 'string',
+                    description: 'A compact semantic query optimized for memory retrieval.',
                 },
                 systemContext: {
                     type: 'string',
@@ -119,7 +138,7 @@ function buildTaskContextTool(): ToolDefinition {
                     items: { type: 'string' },
                 },
             },
-            required: ['routerQuery', 'systemContext', 'focusAreas'],
+            required: ['routerQuery', 'toolQuery', 'skillQuery', 'memoryQuery', 'systemContext', 'focusAreas'],
         },
         execute: async () => ({ success: true, output: 'ok' }),
     }
@@ -129,19 +148,29 @@ function parseTaskContextArguments(raw: string): TaskContext | null {
     try {
         const parsed = JSON.parse(raw) as {
             routerQuery?: unknown
+            toolQuery?: unknown
+            skillQuery?: unknown
+            memoryQuery?: unknown
             systemContext?: unknown
             focusAreas?: unknown
         }
         const routerQuery = typeof parsed.routerQuery === 'string' ? parsed.routerQuery.trim() : ''
+        const toolQuery = typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : ''
+        const skillQuery = typeof parsed.skillQuery === 'string' ? parsed.skillQuery.trim() : ''
+        const memoryQuery = typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : ''
         const systemContext = typeof parsed.systemContext === 'string' ? parsed.systemContext.trim() : ''
         const focusAreas = Array.isArray(parsed.focusAreas)
             ? parsed.focusAreas.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
             : []
 
-        if (!routerQuery && !systemContext) return null
+        const fallbackQuery = routerQuery || toolQuery || skillQuery || memoryQuery || systemContext
+        if (!fallbackQuery) return null
         return {
-            routerQuery: (routerQuery || systemContext).slice(0, MAX_ROUTER_QUERY_LENGTH),
-            systemContext: (systemContext || routerQuery).slice(0, MAX_SYSTEM_CONTEXT_LENGTH),
+            routerQuery: fallbackQuery.slice(0, MAX_ROUTER_QUERY_LENGTH),
+            toolQuery: (toolQuery || fallbackQuery).slice(0, MAX_ROUTER_QUERY_LENGTH),
+            skillQuery: (skillQuery || fallbackQuery).slice(0, MAX_ROUTER_QUERY_LENGTH),
+            memoryQuery: (memoryQuery || fallbackQuery).slice(0, MAX_ROUTER_QUERY_LENGTH),
+            systemContext: (systemContext || fallbackQuery).slice(0, MAX_SYSTEM_CONTEXT_LENGTH),
             focusAreas: [...new Set(focusAreas)].slice(0, 8),
         }
     } catch {
@@ -158,6 +187,9 @@ function fallbackTaskContext(currentRequest: string, messages: ChatMessage[]): T
 
     return {
         routerQuery: routerQuery.slice(0, MAX_ROUTER_QUERY_LENGTH),
+        toolQuery: routerQuery.slice(0, MAX_ROUTER_QUERY_LENGTH),
+        skillQuery: routerQuery.slice(0, MAX_ROUTER_QUERY_LENGTH),
+        memoryQuery: routerQuery.slice(0, MAX_ROUTER_QUERY_LENGTH),
         systemContext: currentRequest.slice(0, MAX_SYSTEM_CONTEXT_LENGTH),
         focusAreas: [],
     }
@@ -219,9 +251,12 @@ function emitTaskContextSelection(conversationId: string, taskId: string, contex
         toolCalls: [{
             name: 'Task context',
             arguments: JSON.stringify({
-                type: 'auto-router',
+                type: 'task-context',
                 focusAreas: context.focusAreas,
                 routerQuery: context.routerQuery,
+                toolQuery: context.toolQuery,
+                skillQuery: context.skillQuery,
+                memoryQuery: context.memoryQuery,
             }),
         }],
     })
