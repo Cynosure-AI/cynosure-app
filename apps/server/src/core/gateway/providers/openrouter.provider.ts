@@ -19,6 +19,7 @@ interface OpenRouterModel {
     context_length?: number
     input_modalities?: unknown
     output_modalities?: unknown
+    supported_parameters?: unknown
     architecture?: {
         input_modalities?: unknown
         output_modalities?: unknown
@@ -101,6 +102,14 @@ export class OpenRouterProvider extends BaseLLMProvider {
         return this.getModalities(model?.output_modalities ?? model?.architecture?.output_modalities)
     }
 
+    private modelSupportsToolCalls(model: OpenRouterModel | undefined): boolean | undefined {
+        if (!model || !Array.isArray(model.supported_parameters)) return undefined
+        const supported = model.supported_parameters
+            .filter((item): item is string => typeof item === 'string')
+            .map((item) => item.toLowerCase())
+        return supported.includes('tools')
+    }
+
     private async modelSupportsImageOutput(modelId: string): Promise<boolean> {
         await ensurePricingLoaded().catch(() => { /* best-effort capability metadata */ })
         const supportsImageOutput = modelSupportsOutputModality(this.config.type, modelId, 'image')
@@ -129,6 +138,11 @@ export class OpenRouterProvider extends BaseLLMProvider {
             if (typeof url === 'string' && !urls.includes(url)) urls.push(url)
         }
         return urls
+    }
+
+    private isToolSupportRoutingError(err: unknown): boolean {
+        const message = err instanceof Error ? err.message : String(err)
+        return /support tool use|tool use|tools?/i.test(message) && /no endpoints?|unsupported|not support/i.test(message)
     }
 
     /** Convert internal messages to OpenAI Chat Completions format */
@@ -259,9 +273,22 @@ export class OpenRouterProvider extends BaseLLMProvider {
             }
         }
 
-        const response = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, {
-            signal: request.signal
-        })
+        let response: OpenAI.Chat.ChatCompletion
+        try {
+            response = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, {
+                signal: request.signal
+            })
+        } catch (err) {
+            if (!request.toolChoice && request.tools?.length && this.isToolSupportRoutingError(err)) {
+                delete params.tools
+                delete params.tool_choice
+                response = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, {
+                    signal: request.signal
+                })
+            } else {
+                throw err
+            }
+        }
 
         const choice = response.choices[0]
         const msg = choice?.message as unknown as Record<string, unknown> | undefined
@@ -350,9 +377,22 @@ export class OpenRouterProvider extends BaseLLMProvider {
             }
         }
 
-        const stream = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsStreaming, {
-            signal: request.signal
-        })
+        let stream: AsyncIterable<OpenAI.Chat.ChatCompletionChunk>
+        try {
+            stream = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsStreaming, {
+                signal: request.signal
+            })
+        } catch (err) {
+            if (!request.toolChoice && request.tools?.length && this.isToolSupportRoutingError(err)) {
+                delete params.tools
+                delete params.tool_choice
+                stream = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsStreaming, {
+                    signal: request.signal
+                })
+            } else {
+                throw err
+            }
+        }
 
         const toolCallAccumulator = new Map<
             number,
@@ -579,7 +619,8 @@ export class OpenRouterProvider extends BaseLLMProvider {
                 id: modelId,
                 contextLength: model?.context_length || undefined,
                 inputModalities: inputModalities.length ? inputModalities : undefined,
-                outputModalities: outputModalities.length ? outputModalities : undefined
+                outputModalities: outputModalities.length ? outputModalities : undefined,
+                supportsToolCalls: this.modelSupportsToolCalls(model)
             }
         } catch {
             return { id: modelId }

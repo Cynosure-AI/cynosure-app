@@ -187,6 +187,23 @@ export class LLMGateway {
     return info
   }
 
+  async modelSupportsToolCalls(modelId: string, providerId?: string): Promise<boolean> {
+    const provider = providerId
+      ? this.providers.get(providerId)
+      : this.getLastUsedProvider()
+    if (!provider) throw new Error(`Provider not found`)
+    if (!provider.config.supportsToolCalls) return false
+
+    try {
+      const info = await this.getModelInfo(modelId, providerId)
+      if (typeof info.supportsToolCalls === 'boolean') return info.supportsToolCalls
+    } catch {
+      // Fall back to provider-level capability below.
+    }
+
+    return provider.config.supportsToolCalls
+  }
+
   async testConnection(providerId: string): Promise<boolean> {
     const provider = this.providers.get(providerId)
     if (!provider) return false

@@ -273,7 +273,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const tools: RegistryAwareToolDefinition[] = plannedTools
       messages = planned.messages
 
-      tools.push(...makeAttachmentTools(conversationId))
+      const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(responseModel, responseProvider)
+      if (responseSupportsToolCalls) {
+        tools.push(...makeAttachmentTools(conversationId))
+      }
       messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, content, db))
       messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
