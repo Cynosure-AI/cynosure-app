@@ -7,6 +7,7 @@ import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import CustomSelect from '../shared/CustomSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import type { SelectOptionGroup } from '../shared/CustomSelect.vue'
+import SettingsSubheading from './SettingsSubheading.vue'
 
 const prefs = usePreferencesStore()
 const { status, progress, fileProgress, downloadedModels, errorMessage, loadModel, clearDownloadedModels, dispose } = useWhisper()
@@ -18,6 +19,10 @@ const props = withDefaults(defineProps<{
 
 function showSection(id: string): boolean {
   return props.visibleSections.length === 0 || props.visibleSections.includes(id)
+}
+
+function showAnySection(ids: string[]): boolean {
+  return ids.some(showSection)
 }
 
 const whisperModels: { id: string; label: string; size: string; description: string }[] = [
@@ -179,6 +184,11 @@ onMounted(() => {
 
 <template>
   <div class="space-y-4">
+    <SettingsSubheading
+      v-if="showAnySection(['enable-voice'])"
+      label="Input"
+    />
+
     <!-- Enable/Disable -->
     <BaseCard
       v-if="showSection('enable-voice')"
@@ -204,6 +214,11 @@ onMounted(() => {
         <ToggleSwitch v-model="prefs.whisperEnabled" />
       </div>
     </BaseCard>
+
+    <SettingsSubheading
+      v-if="showAnySection(['voice-model', 'voice-language', 'microphone'])"
+      label="Recognition"
+    />
 
     <!-- Model & Quantization -->
     <BaseCard
@@ -337,6 +352,11 @@ onMounted(() => {
         </div>
       </div>
     </BaseCard>
+
+    <SettingsSubheading
+      v-if="showAnySection(['download-cache', 'voice-help'])"
+      label="Local Model"
+    />
 
     <!-- Download & Cache -->
     <BaseCard

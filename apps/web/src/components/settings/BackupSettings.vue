@@ -4,6 +4,7 @@ import BackupExport from './BackupExport.vue'
 import BackupImport from './BackupImport.vue'
 import BackupReset from './BackupReset.vue'
 import BaseCard from '../shared/BaseCard.vue'
+import SettingsSubheading from './SettingsSubheading.vue'
 
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
@@ -14,10 +15,19 @@ const props = withDefaults(defineProps<{
 function showSection(id: string): boolean {
   return props.visibleSections.length === 0 || props.visibleSections.includes(id)
 }
+
+function showAnySection(ids: string[]): boolean {
+  return ids.some(showSection)
+}
 </script>
 
 <template>
   <div class="space-y-4">
+    <SettingsSubheading
+      v-if="showAnySection(['backup-export', 'backup-import'])"
+      label="Backup Files"
+    />
+
     <!-- Export -->
     <BaseCard
       v-if="showSection('backup-export')"
@@ -69,6 +79,11 @@ function showSection(id: string): boolean {
         <BackupImport />
       </div>
     </BaseCard>
+
+    <SettingsSubheading
+      v-if="showAnySection(['backup-reset'])"
+      label="Danger Zone"
+    />
 
     <!-- Reset -->
     <BaseCard

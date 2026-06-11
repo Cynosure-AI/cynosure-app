@@ -6,6 +6,7 @@ import type { ThemeId } from '../../stores/preferences.store'
 import { useOnboardingStore } from '../../stores/onboarding.store'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import BaseCard from '../shared/BaseCard.vue'
+import SettingsSubheading from './SettingsSubheading.vue'
 
 const prefs = usePreferencesStore()
 const onboardingStore = useOnboardingStore()
@@ -18,6 +19,10 @@ const props = withDefaults(defineProps<{
 
 function showSection(id: string): boolean {
   return props.visibleSections.length === 0 || props.visibleSections.includes(id)
+}
+
+function showAnySection(ids: string[]): boolean {
+  return ids.some(showSection)
 }
 
 function redoOnboarding() {
@@ -38,6 +43,11 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
 
 <template>
   <div class="space-y-4">
+    <SettingsSubheading
+      v-if="showAnySection(['theme'])"
+      label="Theme"
+    />
+
     <!-- Theme -->
     <BaseCard
       v-if="showSection('theme')"
@@ -119,6 +129,11 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
       </div>
     </BaseCard>
 
+    <SettingsSubheading
+      v-if="showAnySection(['auto-expand-thinking', 'auto-expand-tool-calls'])"
+      label="Chat Display"
+    />
+
     <!-- Auto-expand Thinking -->
     <BaseCard
       v-if="showSection('auto-expand-thinking')"
@@ -170,6 +185,11 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
         <ToggleSwitch v-model="prefs.autoExpandToolCalls" />
       </div>
     </BaseCard>
+
+    <SettingsSubheading
+      v-if="showAnySection(['setup-guide'])"
+      label="Onboarding"
+    />
 
     <!-- Onboarding -->
     <BaseCard

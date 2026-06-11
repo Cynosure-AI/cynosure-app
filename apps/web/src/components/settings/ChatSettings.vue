@@ -10,6 +10,7 @@ import { api } from "../../api/client";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import BaseCard from "../shared/BaseCard.vue";
+import SettingsSubheading from "./SettingsSubheading.vue";
 
 const prefs = usePreferencesStore();
 const providerStore = useProviderStore();
@@ -22,6 +23,10 @@ const props = withDefaults(defineProps<{
 
 function showSection(id: string): boolean {
   return props.visibleSections.length === 0 || props.visibleSections.includes(id)
+}
+
+function showAnySection(ids: string[]): boolean {
+  return ids.some(showSection)
 }
 
 const contextStrategyOptions: {
@@ -106,6 +111,11 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-4">
+    <SettingsSubheading
+      v-if="showAnySection(['skill-router', 'generated-titles'])"
+      label="Automation"
+    />
+
     <!-- Auto Router -->
     <BaseCard
       v-if="showSection('skill-router')"
@@ -191,6 +201,11 @@ onMounted(async () => {
         />
       </div>
     </BaseCard>
+
+    <SettingsSubheading
+      v-if="showAnySection(['attachment-context', 'context-strategy'])"
+      label="Context"
+    />
 
     <!-- Attachment Context -->
     <BaseCard

@@ -7,6 +7,7 @@ import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue
 import ProviderCard from './ProviderCard.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import { Icon } from '@iconify/vue'
+import SettingsSubheading from './SettingsSubheading.vue'
 
 const { providerLogos } = useProviderLogos()
 
@@ -234,10 +235,15 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
 </script>
 
 <template>
-  <div>
+  <div class="space-y-4">
+    <SettingsSubheading
+      v-if="showSection('provider-actions')"
+      label="Provider Management"
+    />
+
     <div
       v-if="showSection('provider-actions')"
-      class="flex items-center justify-end mb-4"
+      class="flex items-center justify-end"
     >
       <button
         class="px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg transition-colors"
@@ -250,7 +256,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
     <!-- Add Provider Form -->
     <div
       v-if="showSection('provider-actions') && showAddForm"
-      class="bg-theme-800 border border-theme-700 rounded-xl p-4 mb-6 space-y-4"
+      class="bg-theme-800 border border-theme-700 rounded-xl p-4 space-y-4"
     >
       <div class="grid grid-cols-2 gap-4">
         <div>
