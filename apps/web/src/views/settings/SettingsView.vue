@@ -43,18 +43,18 @@ const categories: SettingsCategory[] = [
     component: ProviderSettings
   },
   {
-    id: 'memory',
-    label: 'Memory',
-    description: 'Tune embeddings, entity extraction, reranking, chunking, OCR, and vector storage.',
-    icon: 'lucide:brain',
-    component: MemorySettings
-  },
-  {
     id: 'chat',
     label: 'Chat',
     description: 'Control automatic tool and memory modes, generated titles, and context handling for conversations.',
     icon: 'lucide:message-square',
     component: ChatSettings
+  },
+  {
+    id: 'memory',
+    label: 'Memory',
+    description: 'Tune embeddings, entity extraction, reranking, chunking, OCR, and vector storage.',
+    icon: 'lucide:brain',
+    component: MemorySettings
   },
   {
     id: 'speech-to-text',

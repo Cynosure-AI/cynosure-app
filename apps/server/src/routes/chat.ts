@@ -258,6 +258,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           usedToolNames,
           selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
           autoSkillRouting: effectiveRunFlags.autoSkillRouting,
+          thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
         },
       })
 
