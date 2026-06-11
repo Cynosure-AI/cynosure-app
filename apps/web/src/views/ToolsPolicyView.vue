@@ -90,7 +90,7 @@ const autoApprovedCount = computed(() =>
 
 function isInternalTool(tool: ToolInfo): boolean {
   const name = tool.name
-  return name.startsWith('orchestrator_') || name.startsWith('memory_') || name === 'forget_memory' || name === 'expand_available_toolset' || name === 'spawn_subagent'
+  return name.startsWith('orchestrator_') || name.startsWith('memory_') || name.startsWith('entity_graph_') || name === 'forget_memory' || name === 'expand_available_toolset' || name === 'spawn_subagent'
 }
 
 function normalizeNamespace(namespace: ToolNamespace, tool?: ToolInfo): ToolNamespace {
