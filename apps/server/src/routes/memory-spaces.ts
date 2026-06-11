@@ -568,14 +568,13 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     lanceDbEqFilter('spaceId', source.id),
                     lanceDbEqFilter('sourceFile', sf),
                 )
-                if (!srcFilter) continue
-                await rag.updateSourceFile('permanent_memory', srcFilter, uniqueName)
+                if (srcFilter) await rag.updateSourceFile('permanent_memory', srcFilter, uniqueName)
             }
 
             // Move vectors to target space
             const filter = andLanceDbFilters(
                 lanceDbEqFilter('spaceId', source.id),
-                lanceDbEqFilter('sourceFile', sf),
+                lanceDbEqFilter('sourceFile', uniqueName),
             )
             if (!filter) continue
             await rag.updateSpaceId('permanent_memory', filter, target.id)
