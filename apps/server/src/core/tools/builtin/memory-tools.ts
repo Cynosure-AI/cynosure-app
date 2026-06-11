@@ -3,13 +3,13 @@ import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getMemorySpaceFolderPath, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import { relativePathForFolder } from '../../memory/memory-space-folders.js'
-import { readTextFile, writeTextFile, fileExists, backupToRevisions } from '../../memory/memory-file-manager.js'
+import { readTextFile, writeTextFile, fileExists, backupToRevisions, resolveUniqueFileName } from '../../memory/memory-file-manager.js'
 import { getEntityGraphStore, type EntityEdge, type EntityNode, type EntityType } from '../../memory/entity-graph.js'
 import {
     deleteMemoryGraphSource,
     indexMemoryContentIntoEntityGraph,
-    memoryGraphSourceId,
 } from '../../memory/memory-entity-indexer.js'
+import { cancelMemoryIndexJobsForFile, startMemoryIndexJob } from '../../memory/memory-index-jobs.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -34,6 +34,7 @@ async function integrateMemoryContentIntoGraph(
         if ((err as Error).name !== 'AbortError') {
             console.warn('[entity-graph] Memory extraction failed:', err)
         }
+        throw err
     } finally {
         if (opts.conversationId && opts.broadcast) {
             opts.broadcast('chat:post-action', { conversationId: opts.conversationId, action: 'updating-entity-graph', status: 'completed' })
@@ -41,33 +42,52 @@ async function integrateMemoryContentIntoGraph(
     }
 }
 
-const pendingMemoryGraphIntegrations = new Map<string, AbortController>()
-
 function abortPendingMemoryGraphIntegration(spaceId: string, fileName: string): void {
-    const sourceId = memoryGraphSourceId(spaceId, fileName)
-    pendingMemoryGraphIntegrations.get(sourceId)?.abort()
-    pendingMemoryGraphIntegrations.delete(sourceId)
+    cancelMemoryIndexJobsForFile(spaceId, fileName)
 }
 
-function scheduleMemoryGraphIntegration(
+function scheduleMemoryGraphIntegrationJob(
     content: string,
     spaceId: string,
     fileName: string,
     opts: { replaceExisting?: boolean; conversationId?: string; broadcast?: BroadcastFn } = {},
 ): void {
-    const sourceId = memoryGraphSourceId(spaceId, fileName)
-    pendingMemoryGraphIntegrations.get(sourceId)?.abort()
+    startMemoryIndexJob({
+        kind: 'entity-index',
+        spaceId,
+        fileName,
+        replaceExisting: true,
+        run: async (signal) => {
+            await integrateMemoryContentIntoGraph(content, spaceId, fileName, {
+                ...opts,
+                signal,
+            })
+            return { success: true, fileName }
+        },
+    })
+}
 
-    const controller = new AbortController()
-    pendingMemoryGraphIntegrations.set(sourceId, controller)
-
-    void integrateMemoryContentIntoGraph(content, spaceId, fileName, {
-        ...opts,
-        signal: controller.signal,
-    }).finally(() => {
-        if (pendingMemoryGraphIntegrations.get(sourceId) === controller) {
-            pendingMemoryGraphIntegrations.delete(sourceId)
-        }
+function scheduleMemoryReindexJob(
+    content: string,
+    spaceId: string,
+    fileName: string,
+    opts: { replaceExisting?: boolean; conversationId?: string; broadcast?: BroadcastFn } = {},
+): void {
+    const folderPath = getMemorySpaceFolderPath(spaceId)
+    cancelMemoryIndexJobsForFile(spaceId, fileName)
+    startMemoryIndexJob({
+        kind: 'reindex',
+        spaceId,
+        fileName,
+        replaceExisting: true,
+        run: async (signal) => {
+            if (!folderPath) throw new Error('Memory folder has no folder configured')
+            const result = await getAgentMemory().reindexFile(folderPath, fileName, spaceId, { signal })
+            if (!signal.aborted) {
+                scheduleMemoryGraphIntegrationJob(content, spaceId, result.fileName, opts)
+            }
+            return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
+        },
     })
 }
 
@@ -945,14 +965,17 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
             const resolved = await resolveTargetSpace(assignedSpaces, folder, undefined, getKnownSpaces)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
-            const mem = getAgentMemory()
-
             // Ensure .md extension
             const fileName = title.endsWith('.md') ? title : `${title}.md`
+            const folderPath = getMemorySpaceFolderPath(resolved.spaceId)
+            if (!folderPath) {
+                return { success: false, output: `Memory folder "${resolved.spaceName}" has no folder configured. Cannot create memory.` }
+            }
 
-            const result = await mem.storeAsFile(content, fileName, resolved.spaceId)
+            const uniqueName = resolveUniqueFileName(folderPath, fileName)
+            writeTextFile(folderPath, uniqueName, content)
 
-            scheduleMemoryGraphIntegration(content, resolved.spaceId, result.fileName, {
+            scheduleMemoryReindexJob(content, resolved.spaceId, uniqueName, {
                 replaceExisting: true,
                 conversationId,
                 broadcast,
@@ -960,7 +983,7 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
 
             return {
                 success: true,
-                output: `Memory "${result.fileName}" created in "${resolved.spaceName}" (${result.chunkCount} chunk${result.chunkCount !== 1 ? 's' : ''} indexed). Entity graph update is running in the background.`
+                output: `Memory "${uniqueName}" created in "${resolved.spaceName}". Memory indexing and entity extraction are running in the background.`
             }
         }
     }
@@ -1051,9 +1074,8 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                     backupToRevisions(folderPath, fileName)
                     const appended = fileContent.trimEnd() + '\n\n' + content.trim() + '\n'
                     writeTextFile(folderPath, fileName, appended)
-                    const { chunkCount: indexedChunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                    scheduleMemoryGraphIntegration(appended, resolved.spaceId, fileName, {
+                    scheduleMemoryReindexJob(appended, resolved.spaceId, fileName, {
                         replaceExisting: true,
                         conversationId,
                         broadcast,
@@ -1061,7 +1083,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 
                     return {
                         success: true,
-                        output: `Content appended to "${fileName}" in "${resolved.spaceName}" (${indexedChunks} chunk${indexedChunks !== 1 ? 's' : ''} re-indexed). Entity graph update is running in the background.`
+                        output: `Content appended to "${fileName}" in "${resolved.spaceName}". Memory indexing and entity extraction are running in the background.`
                     }
                 }
 
@@ -1078,9 +1100,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 backupToRevisions(folderPath, fileName)
                 writeTextFile(folderPath, fileName, replaced.content)
 
-                const { chunkCount: indexedChunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
-
-                scheduleMemoryGraphIntegration(replaced.content, resolved.spaceId, fileName, {
+                scheduleMemoryReindexJob(replaced.content, resolved.spaceId, fileName, {
                     replaceExisting: true,
                     conversationId,
                     broadcast,
@@ -1088,15 +1108,14 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 
                 return {
                     success: true,
-                    output: `Chunks ${replaced.startIndex}-${replaced.endIndex} in "${fileName}" updated in "${resolved.spaceName}" (${indexedChunks} chunk${indexedChunks !== 1 ? 's' : ''} re-indexed). Entity graph update is running in the background.`
+                    output: `Chunks ${replaced.startIndex}-${replaced.endIndex} in "${fileName}" updated in "${resolved.spaceName}". Memory indexing and entity extraction are running in the background.`
                 }
             } else {
                 // Full replacement — backup original (if it exists on disk) then write directly
                 if (existsOnDisk) backupToRevisions(folderPath, fileName)
                 writeTextFile(folderPath, fileName, content)
-                const { chunkCount: chunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                scheduleMemoryGraphIntegration(content, resolved.spaceId, fileName, {
+                scheduleMemoryReindexJob(content, resolved.spaceId, fileName, {
                     replaceExisting: true,
                     conversationId,
                     broadcast,
@@ -1104,7 +1123,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 
                 return {
                     success: true,
-                    output: `Memory "${fileName}" fully updated in "${resolved.spaceName}" (${chunks} chunk${chunks !== 1 ? 's' : ''} re-indexed). Entity graph update is running in the background.`
+                    output: `Memory "${fileName}" fully updated in "${resolved.spaceName}". Memory indexing and entity extraction are running in the background.`
                 }
             }
         }
@@ -1193,9 +1212,8 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
                 }
 
                 writeTextFile(resolved.folderPath, resolved.fileName, removed.content)
-                const { chunkCount } = await mem.reindexFile(resolved.folderPath, resolved.fileName, resolved.spaceId)
 
-                scheduleMemoryGraphIntegration(removed.content, resolved.spaceId, resolved.fileName, {
+                scheduleMemoryReindexJob(removed.content, resolved.spaceId, resolved.fileName, {
                     replaceExisting: true,
                     conversationId,
                     broadcast,
@@ -1203,7 +1221,7 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
 
                 return {
                     success: true,
-                    output: `Chunks ${removed.startIndex}-${removed.endIndex} removed from "${resolved.fileName}" in "${resolved.spaceName}" (${chunkCount} remaining chunk${chunkCount !== 1 ? 's' : ''} re-indexed). Entity graph update is running in the background.`
+                    output: `Chunks ${removed.startIndex}-${removed.endIndex} removed from "${resolved.fileName}" in "${resolved.spaceName}". Memory indexing and entity extraction are running in the background.`
                 }
             }
 
