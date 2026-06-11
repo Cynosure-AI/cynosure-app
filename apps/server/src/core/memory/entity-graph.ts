@@ -101,7 +101,8 @@ const SINGLE_TARGET_RELATIONS = new Set([
   'part_of',
 ])
 
-function normalizeName(name: string): string {
+function normalizeName(name: unknown): string {
+  if (typeof name !== 'string') return ''
   return name
     .trim()
     .toLowerCase()
@@ -110,7 +111,8 @@ function normalizeName(name: string): string {
     .trim()
 }
 
-function normalizeRelation(relation: string): string {
+function normalizeRelation(relation: unknown): string {
+  if (typeof relation !== 'string') return 'related_to'
   return relation
     .trim()
     .toLowerCase()

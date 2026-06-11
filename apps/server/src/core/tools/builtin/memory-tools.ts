@@ -133,6 +133,20 @@ function clampToolNumber(value: unknown, fallback: number, min: number, max: num
     return Math.max(min, Math.min(max, value))
 }
 
+function cleanToolString(value: unknown): string {
+    return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
+}
+
+function pickToolString(params: unknown, keys: string[]): string {
+    if (!params || typeof params !== 'object') return ''
+    const obj = params as Record<string, unknown>
+    for (const key of keys) {
+        const value = cleanToolString(obj[key])
+        if (value) return value
+    }
+    return ''
+}
+
 function toEntityInput(value: unknown): { name: string; type: EntityType; aliases: string[] } | { error: string } {
     if (!value || typeof value !== 'object') return { error: 'Expected entity objects with name, type, and optional aliases.' }
     const obj = value as { name?: unknown; type?: unknown; aliases?: unknown }
@@ -600,7 +614,11 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { query, topK, folder } = params as { query: string; topK?: number; folder?: string }
+            const query = pickToolString(params, ['query', 'search_query', 'searchQuery', 'text'])
+            if (!query) {
+                return { success: false, output: 'A non-empty "query" string is required for memory_semantic_search.' }
+            }
+            const { topK, folder } = (params || {}) as { topK?: number; folder?: string }
             const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder, getKnownSpaces)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
@@ -680,14 +698,15 @@ export function makeEntityGraphSearchTool(): ToolDefinition {
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { query, depth, limit } = (params || {}) as { query?: string; depth?: number; limit?: number }
+            const query = pickToolString(params, ['query', 'entity', 'name', 'search_query', 'searchQuery'])
+            const { depth, limit } = (params || {}) as { depth?: number; limit?: number }
             const graph = getEntityGraphStore()
             const cappedLimit = Math.floor(clampToolNumber(limit, 20, 1, 80))
 
-            if (query?.trim()) {
+            if (query) {
                 const seedNodes = graph.findSeedNodes(query, [], Math.min(cappedLimit, 12))
                 if (seedNodes.length === 0) {
-                    return { success: false, output: `No entity graph nodes matched "${query.trim()}".` }
+                    return { success: false, output: `No entity graph nodes matched "${query}".` }
                 }
 
                 const walkDepth = Math.floor(clampToolNumber(depth, 2, 1, 3))
