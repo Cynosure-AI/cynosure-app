@@ -118,10 +118,12 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
     })
 
     const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id
+    const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(prepared.model, responseProvider)
+    const responseTools = responseSupportsToolCalls ? prepared.tools : []
     const orchestration = applyOrchestrationIfToolCapable(
         conversationId,
         userText,
-        prepared.tools,
+        responseTools,
         prepared.systemMessages,
     )
 

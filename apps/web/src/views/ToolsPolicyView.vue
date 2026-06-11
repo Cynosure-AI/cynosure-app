@@ -100,7 +100,7 @@ const autoApprovedCount = computed(() =>
 
 function isInternalTool(tool: ToolInfo): boolean {
   const name = tool.name
-  return name.startsWith('orchestrator_') || name.startsWith('memory_') || name.startsWith('entity_graph_') || name === 'forget_memory' || name === 'expand_available_toolset' || name === 'spawn_subagent'
+  return name.startsWith('orchestrator_') || name.startsWith('attachment_') || name.startsWith('memory_') || name.startsWith('entity_graph_') || name === 'forget_memory' || name === 'expand_available_toolset' || name === 'spawn_subagent'
 }
 
 function normalizeNamespace(namespace: ToolNamespace, tool?: ToolInfo): ToolNamespace {
@@ -113,7 +113,7 @@ function normalizeNamespace(namespace: ToolNamespace, tool?: ToolInfo): ToolName
 
 function namespaceDescription(namespace: ToolNamespace, firstTool: ToolInfo): string {
   if (namespace.id === 'builtin:internal') {
-    return 'Orchestration, tool routing, sub-agent delegation, memory, and other system-managed tools. These are always auto-approved.'
+    return 'Orchestration, attachments, tool routing, sub-agent delegation, memory, and other system-managed tools. These are always auto-approved.'
   }
   if (namespace.id === 'builtin') {
     return 'Memory, entity graph, and notification tools bundled with Cynosure.'
@@ -181,6 +181,7 @@ function toolCategory(tool: ToolInfo): string {
   if (name.startsWith('memory_') || name === 'forget_memory') return 'Memory'
   if (name.startsWith('entity_graph_')) return 'Entity'
   if (name.startsWith('orchestrator_')) return 'Orchestration'
+  if (name.startsWith('attachment_')) return 'Attachment'
   return 'Built-In'
 }
 

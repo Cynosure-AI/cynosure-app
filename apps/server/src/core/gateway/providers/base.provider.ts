@@ -78,6 +78,8 @@ export interface ModelInfo {
   contextLength?: number
   inputModalities?: string[]
   outputModalities?: string[]
+  /** Whether this specific model accepts tool/function declarations. */
+  supportsToolCalls?: boolean
   /** Cost in $ per 1M tokens: { input, output } */
   cost?: { input: number; output: number }
 }

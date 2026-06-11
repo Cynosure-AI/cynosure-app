@@ -28,6 +28,7 @@ export const api = {
         contextLength?: number
         inputModalities?: string[]
         outputModalities?: string[]
+        supportsToolCalls?: boolean
         cost?: { input: number; output: number }
       }>(`/api/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}/info`),
     loadSaved: () => Promise.resolve() // no-op in web — server loads on startup

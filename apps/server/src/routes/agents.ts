@@ -18,6 +18,7 @@ import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { makeOrchestrationTools } from '../core/tools/builtin/orchestration-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
+import { makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
 import { listAllMemorySpaceRefs } from '../core/memory/memory-space-folders.js'
 
 function defaultMemorySpaceIds(db = getDb()): string[] {
@@ -179,6 +180,15 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
         const policyBuiltIns = includePolicyBuiltIns
             ? [
                 ...makeOrchestrationTools('').map((tool) => ({
+                    key: `builtin::${tool.name}`,
+                    name: tool.name,
+                    executionName: tool.name,
+                    description: tool.description,
+                    parameters: tool.parameters,
+                    namespace: { id: 'builtin', label: 'Built-In' },
+                    ambiguous: false,
+                })),
+                ...makeAttachmentTools('').map((tool) => ({
                     key: `builtin::${tool.name}`,
                     name: tool.name,
                     executionName: tool.name,
