@@ -653,7 +653,7 @@ export class AgentExecutor {
         const { signal } = this.config
         try {
             const args = JSON.parse(tc.function.arguments)
-            const tool = this.config.tools.find(t => t.name === tc.function.name)
+            const tool = this.findToolForCall(tc.function.name)
 
             if (!tool) {
                 return { toolCallId: tc.id, name: tc.function.name, output: `Error: Unknown tool "${tc.function.name}"`, success: false }
@@ -694,6 +694,17 @@ export class AgentExecutor {
         } catch (err) {
             return { toolCallId: tc.id, name: tc.function.name, output: `Error: ${(err as Error).message}`, success: false }
         }
+    }
+
+    private findToolForCall(name: string): ToolDefinition | undefined {
+        const direct = this.config.tools.find(tool => tool.name === name)
+        if (direct) return direct
+
+        const originalNameMatches = this.config.tools.filter((tool) => {
+            const originalName = (tool as ToolDefinition & { originalName?: string }).originalName
+            return originalName === name
+        })
+        return originalNameMatches.length === 1 ? originalNameMatches[0] : undefined
     }
 
     private async materializeToolImages(res: ToolResult | undefined): Promise<string[] | undefined> {

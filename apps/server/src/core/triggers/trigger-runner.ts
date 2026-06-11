@@ -58,6 +58,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
 
     // Notify caller of the conversationId before execution starts
     onConversationCreated?.(conversationId)
+    const memorySpaces = getAssignedOrDefaultSpaces(agent.id).map((space) => ({ id: space.id, name: space.name }))
 
     const planned = await planExecution({
         resolvedAgent: agent,
@@ -70,6 +71,8 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         userText: userContent,
         run: {
             systemPromptSuffix,
+            memorySpaceOverrides: memorySpaces,
+            autoMemory: agent.autoMemory === true,
         },
     })
 
@@ -77,7 +80,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     const chatConfig = JSON.stringify({
         model: planned.responseModel,
         providerId: planned.providerId,
-        memorySpaceIds: getAssignedOrDefaultSpaces(agent.id).map((space) => space.id),
+        memorySpaceIds: memorySpaces.map((space) => space.id),
         thinkingEnabled: agent.thinkingEnabled !== false,
         autoMemory: agent.autoMemory === true,
     })

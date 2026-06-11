@@ -19,10 +19,16 @@ import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { makeOrchestrationTools } from '../core/tools/builtin/orchestration-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
-import { listAllMemorySpaceRefs } from '../core/memory/memory-space-folders.js'
+import { getDefaultMemorySpace } from '../core/memory/memory-space-scope.js'
 
 function defaultMemorySpaceIds(db = getDb()): string[] {
-    return listAllMemorySpaceRefs(db).map((space) => space.id)
+    const row = db
+        .prepare('SELECT id FROM memory_spaces WHERE is_default = 1 ORDER BY sort_order ASC, created_at ASC LIMIT 1')
+        .get() as { id: string } | undefined
+    if (row) return [row.id]
+
+    const defaultSpace = getDefaultMemorySpace()
+    return defaultSpace ? [defaultSpace.id] : []
 }
 
 function ensureAgentMemoryDefaults(agentId: string, db = getDb()): string[] {

@@ -2,7 +2,6 @@ import type { RegistryAwareToolDefinition, ToolDefinition } from "../gateway/pro
 import {
     buildMemorySpaceFilter,
     getAssignedOrDefaultSpaces,
-    getAllMemorySpaces,
     getDefaultMemorySpace,
     type MemorySpaceRef,
 } from "../memory/memory-space-scope.js";
@@ -160,8 +159,6 @@ export function registerBuiltInTools(): void {
  * Get the default memory space when no agent context is available.
  */
 function getDefaultMemorySpaces(): { id: string; name: string }[] {
-    const spaces = getAllMemorySpaces();
-    if (spaces.length > 0) return spaces;
     const defaultSpace = getDefaultMemorySpace();
     return defaultSpace ? [defaultSpace] : [];
 }
