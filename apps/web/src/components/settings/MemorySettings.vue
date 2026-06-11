@@ -11,6 +11,7 @@ import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
 import CustomSelect from '../shared/CustomSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
+import SettingsSubheading from './SettingsSubheading.vue'
 import {
   defaultEmbeddingModelForProviderId,
   withDefaultEmbeddingModel,
@@ -26,6 +27,10 @@ const props = withDefaults(defineProps<{
 
 function showSection(id: string): boolean {
   return props.visibleSections.length === 0 || props.visibleSections.includes(id)
+}
+
+function showAnySection(ids: string[]): boolean {
+  return ids.some(showSection)
 }
 
 // Embedding state
@@ -405,6 +410,11 @@ async function manualClearGraph() {
 
 <template>
   <div class="space-y-4">
+    <SettingsSubheading
+      v-if="showAnySection(['embedding-model', 'entity-graph-extraction', 'reranker'])"
+      label="Retrieval"
+    />
+
     <!-- Embedding Model -->
     <BaseCard
       v-if="showSection('embedding-model')"
@@ -618,6 +628,11 @@ async function manualClearGraph() {
       </button>
     </BaseCard>
 
+    <SettingsSubheading
+      v-if="showAnySection(['chunking', 'ocr'])"
+      label="Document Processing"
+    />
+
     <!-- Chunking -->
     <BaseCard
       v-if="showSection('chunking')"
@@ -719,6 +734,11 @@ async function manualClearGraph() {
         />
       </div>
     </BaseCard>
+
+    <SettingsSubheading
+      v-if="showAnySection(['vector-database'])"
+      label="Maintenance"
+    />
 
     <!-- Danger Zone -->
     <div

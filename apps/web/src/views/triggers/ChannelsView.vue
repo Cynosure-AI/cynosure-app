@@ -9,6 +9,7 @@ import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import BaseCard from '../../components/shared/BaseCard.vue'
 import AgentSelect from '../../components/shared/AgentSelect.vue'
 import MultiSelect from '../../components/shared/MultiSelect.vue'
+import SettingsSubheading from '../../components/settings/SettingsSubheading.vue'
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 
 const router = useRouter()
@@ -59,6 +60,10 @@ function agentNameById(id: string): string {
 
 function agentIconById(id: string): string | null {
   return allAgents.value.find(a => a.id === id)?.iconUrl || null
+}
+
+function showSection(id: string): boolean {
+  return props.visibleSections.length === 0 || props.visibleSections.includes(id)
 }
 
 function resetDialog() {
@@ -217,6 +222,11 @@ onUnmounted(() => {
           Add Channel
         </button>
       </div>
+
+      <SettingsSubheading
+        v-if="props.embedded && showSection('channel-management')"
+        label="Channel Management"
+      />
 
       <!-- Loading -->
       <BaseCard
