@@ -37,7 +37,8 @@
   --sk-leaf-soft: rgba(155, 216, 155, 0.16);
   --sk-ink: #fff0f7;
 
-  --theme-glow: 0 0 14px rgba(244, 63, 143, 0.16), 0 0 34px rgba(180, 92, 255, 0.06);
+  --theme-glow:
+    0 0 14px rgba(244, 63, 143, 0.16), 0 0 34px rgba(180, 92, 255, 0.06);
   --theme-glow-strong:
     0 0 14px rgba(244, 63, 143, 0.34), 0 0 42px rgba(180, 92, 255, 0.14);
   --theme-accent-rgb: 244, 63, 143;
@@ -47,8 +48,16 @@
 
 [data-theme="sakura"] body {
   background:
-    radial-gradient(circle at 12% 10%, rgba(244, 63, 143, 0.12), transparent 30rem),
-    radial-gradient(circle at 88% 8%, rgba(180, 92, 255, 0.1), transparent 26rem),
+    radial-gradient(
+      circle at 12% 10%,
+      rgba(244, 63, 143, 0.12),
+      transparent 30rem
+    ),
+    radial-gradient(
+      circle at 88% 8%,
+      rgba(180, 92, 255, 0.1),
+      transparent 26rem
+    ),
     var(--color-theme-950);
 }
 
@@ -59,7 +68,11 @@
 
 [data-theme="sakura"] .bg-theme-950 {
   background:
-    radial-gradient(circle at top left, rgba(244, 63, 143, 0.08), transparent 34rem),
+    radial-gradient(
+      circle at top left,
+      rgba(244, 63, 143, 0.08),
+      transparent 34rem
+    ),
     var(--color-theme-950);
 }
 
@@ -127,10 +140,15 @@
 [data-theme="sakura"] .nav-item.active,
 [data-theme="sakura"] nav a.router-link-active,
 [data-theme="sakura"] nav [data-active="true"] {
-  background:
-    linear-gradient(90deg, rgba(244, 63, 143, 0.16), rgba(180, 92, 255, 0.08)) !important;
+  background: linear-gradient(
+    90deg,
+    rgba(244, 63, 143, 0.16),
+    rgba(180, 92, 255, 0.08)
+  ) !important;
   border-left: 2px solid var(--sk-petal);
-  box-shadow: inset 5px 0 18px rgba(244, 63, 143, 0.1), var(--theme-glow);
+  box-shadow:
+    inset 5px 0 18px rgba(244, 63, 143, 0.1),
+    var(--theme-glow);
 }
 
 [data-theme="sakura"] .msg-markdown a {
@@ -172,35 +190,19 @@
 }
 
 [data-theme="sakura"] ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(255, 183, 213, 0.48), rgba(244, 63, 143, 0.32));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 183, 213, 0.48),
+    rgba(244, 63, 143, 0.32)
+  );
   border: 1px solid rgba(155, 216, 155, 0.18);
   border-radius: 999px;
 }
 
 [data-theme="sakura"] ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(255, 183, 213, 0.72), rgba(244, 63, 143, 0.5));
-}
-
-/* Subtle falling-petal sparkle without adding DOM elements. */
-[data-theme="sakura"] body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9999;
-  opacity: 0.58;
-  background-image:
-    radial-gradient(ellipse at center, rgba(255, 183, 213, 0.28) 0 32%, transparent 34%),
-    radial-gradient(ellipse at center, rgba(155, 216, 155, 0.12) 0 22%, transparent 24%),
-    radial-gradient(ellipse at center, rgba(255, 183, 213, 0.22) 0 30%, transparent 32%);
-  background-position:
-    8% 18%,
-    78% 24%,
-    92% 72%;
-  background-repeat: no-repeat;
-  background-size:
-    9px 14px,
-    7px 10px,
-    10px 15px;
-  filter: blur(0.1px);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 183, 213, 0.72),
+    rgba(244, 63, 143, 0.5)
+  );
 }
