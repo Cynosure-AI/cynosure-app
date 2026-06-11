@@ -146,8 +146,8 @@ export const recommendedServers: RegistryServerEntry[] = [
     ),
     cynosureMcp(
         '@cynosure-mcp/document-parser',
-        'Document Parser',
-        'Extract text from documents and return it as Markdown.',
+        'Document Reader & Writer',
+        'Read documents as Markdown, and create or edit DOCX files for downloadable artifacts.',
         'mcp-document-parser',
     ),
     cynosureMcp(

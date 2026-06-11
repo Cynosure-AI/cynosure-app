@@ -5,7 +5,7 @@ import { resolve, extname, isAbsolute } from 'path'
 const ALLOWED_EXTENSIONS = new Set([
     '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
     '.mp4', '.webm', '.ogg', '.mp3', '.wav', '.flac',
-    '.pdf'
+    '.pdf', '.docx', '.doc', '.odt', '.rtf', '.txt', '.md'
 ])
 
 const MIME_TYPES: Record<string, string> = {
@@ -22,7 +22,13 @@ const MIME_TYPES: Record<string, string> = {
     '.mp3': 'audio/mpeg',
     '.wav': 'audio/wav',
     '.flac': 'audio/flac',
-    '.pdf': 'application/pdf'
+    '.pdf': 'application/pdf',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.doc': 'application/msword',
+    '.odt': 'application/vnd.oasis.opendocument.text',
+    '.rtf': 'application/rtf',
+    '.txt': 'text/plain; charset=utf-8',
+    '.md': 'text/markdown; charset=utf-8'
 }
 
 export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
@@ -55,6 +61,9 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
 
         const mime = MIME_TYPES[ext] || 'application/octet-stream'
         reply.header('Content-Type', mime)
+        if (!mime.startsWith('image/') && !mime.startsWith('audio/') && !mime.startsWith('video/') && ext !== '.pdf') {
+            reply.header('Content-Disposition', `attachment; filename="${resolved.split('/').pop()?.replace(/"/g, '') || 'download'}"`)
+        }
         reply.header('Content-Length', stat.size)
         reply.header('Cache-Control', 'public, max-age=3600')
 

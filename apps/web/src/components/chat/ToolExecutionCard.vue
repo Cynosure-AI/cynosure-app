@@ -160,6 +160,33 @@ function prettifyJson(text: string): string {
   }
 }
 
+type FileArtifactLink = {
+  href: string
+  label: string
+  ext: string
+}
+
+function fileArtifactLinks(text: string): FileArtifactLink[] {
+  const links: FileArtifactLink[] = []
+  const seen = new Set<string>()
+  const re = /\/api\/files\?path=([^)\]\s"'<>]+)|(?:^|\s)(\/[^\s"'<>]+\.(?:pdf|docx?|odt|rtf|txt|md))\b/gi
+  let match: RegExpExecArray | null
+
+  while ((match = re.exec(text || ''))) {
+    const encodedPath = match[1]
+    const rawPath = encodedPath ? decodeURIComponent(encodedPath) : match[2]
+    if (!rawPath) continue
+    const href = `/api/files?path=${encodeURIComponent(rawPath)}`
+    if (seen.has(href)) continue
+    seen.add(href)
+    const filename = rawPath.split('/').pop() || 'document'
+    const ext = (filename.split('.').pop() || '').toUpperCase()
+    links.push({ href, label: filename, ext })
+  }
+
+  return links
+}
+
 /** Streaming content from this iteration */
 const streamingText = computed(() => {
   for (const step of [...props.steps].reverse()) {
@@ -358,6 +385,27 @@ const maContext = computed(() => {
                   ? 'text-theme-400 bg-theme-900/50'
                   : 'text-red-300/80 bg-red-950/30'"
               >{{ prettifyJson(r.output) }}</pre>
+              <!-- File artifacts -->
+              <div
+                v-if="fileArtifactLinks(r.output).length"
+                class="mt-2 flex flex-wrap gap-2"
+              >
+                <a
+                  v-for="artifact in fileArtifactLinks(r.output)"
+                  :key="artifact.href"
+                  :href="artifact.href"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-theme-600/50 bg-theme-900/70 px-2 py-1 text-[11px] text-theme-300 transition-colors hover:border-accent-500/50 hover:text-accent-200"
+                >
+                  <Icon
+                    icon="lucide:file-text"
+                    class="h-3.5 w-3.5 shrink-0 text-accent-300"
+                  />
+                  <span class="truncate">{{ artifact.label }}</span>
+                  <span class="shrink-0 rounded bg-theme-700 px-1 py-0.5 text-[9px] text-theme-400">{{ artifact.ext }}</span>
+                </a>
+              </div>
               <!-- Image thumbnails -->
               <div
                 v-if="r.images?.length"

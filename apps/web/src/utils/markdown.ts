@@ -98,22 +98,31 @@ marked.use({
 
 marked.setOptions({ breaks: true })
 
-/** Rewrite <img> src attributes that reference local filesystem paths to use the file-serving API. */
-function rewriteLocalImagePaths(html: string): string {
-    return html.replace(
+/** Rewrite local filesystem paths in rendered media/link attributes to use the file-serving API. */
+function rewriteLocalFilePaths(html: string): string {
+    return html
+      .replace(
         /(<img\s[^>]*\bsrc=["'])((?:file:\/\/)?\/[^"']+)(["'])/gi,
         (_match, before, src, after) => {
             const cleanPath = src.replace(/^file:\/\//, '')
             if (cleanPath.startsWith('/api/') || cleanPath.startsWith('/ws')) return _match
             return `${before}/api/files?path=${encodeURIComponent(cleanPath)}${after}`
         }
-    )
+      )
+      .replace(
+        /(<a\s[^>]*\bhref=["'])((?:file:\/\/)?\/[^"']+\.(?:pdf|docx?|odt|rtf|txt|md))(["'])/gi,
+        (_match, before, href, after) => {
+            const cleanPath = href.replace(/^file:\/\//, '')
+            if (cleanPath.startsWith('/api/') || cleanPath.startsWith('/ws')) return _match
+            return `${before}/api/files?path=${encodeURIComponent(cleanPath)}${after}`
+        }
+      )
 }
 
 export function renderMarkdown(text: string): string {
     try {
         const html = marked.parse(text) as string
-        return rewriteLocalImagePaths(html)
+        return rewriteLocalFilePaths(html)
     } catch {
         return text
     }
