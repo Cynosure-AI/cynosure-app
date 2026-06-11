@@ -37,6 +37,10 @@ function upsertFileIndex(
             INSERT INTO memory_file_index (space_id, file_name, content_hash, chunk_count, last_indexed_at, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(space_id, file_name) DO UPDATE SET
+                entity_indexed_at = CASE
+                    WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.entity_indexed_at
+                    ELSE 0
+                END,
                 content_hash = excluded.content_hash,
                 chunk_count = excluded.chunk_count,
                 last_indexed_at = excluded.last_indexed_at
@@ -307,15 +311,15 @@ export class AgentMemory {
     // File index read helpers
     // -----------------------------------------------------------------------
 
-    getFileIndex(spaceId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number }> {
+    getFileIndex(spaceId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number }> {
         try {
             const db = getDb()
             const rows = db
-                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at FROM memory_file_index WHERE space_id = ?')
-                .all(spaceId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number }[]
-            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number }>()
+                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at FROM memory_file_index WHERE space_id = ?')
+                .all(spaceId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number }[]
+            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number }>()
             for (const row of rows) {
-                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at })
+                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, entityIndexedAt: row.entity_indexed_at || 0 })
             }
             return map
         } catch {
@@ -323,14 +327,14 @@ export class AgentMemory {
         }
     }
 
-    getFileIndexEntry(spaceId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number } | undefined {
+    getFileIndexEntry(spaceId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number } | undefined {
         try {
             const db = getDb()
             const row = db
-                .prepare('SELECT content_hash, chunk_count, last_indexed_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
-                .get(spaceId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number } | undefined
+                .prepare('SELECT content_hash, chunk_count, last_indexed_at, entity_indexed_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
+                .get(spaceId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number } | undefined
             if (!row) return undefined
-            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at }
+            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, entityIndexedAt: row.entity_indexed_at || 0 }
         } catch {
             return undefined
         }

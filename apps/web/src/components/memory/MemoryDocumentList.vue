@@ -29,6 +29,7 @@ const deleting = ref(false);
 const moving = ref(false);
 const showMoveDialog = ref(false);
 const reindexingFile = ref<string | null>(null);
+const entityIndexingFile = ref<string | null>(null);
 
 // Upload
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -64,6 +65,9 @@ const allFilteredSelected = computed(
 const supportedFiles = computed(() => files.value.filter((f) => f.supported));
 const needsAttentionCount = computed(
   () => supportedFiles.value.filter((f) => f.status === "needs_reindex" || f.status === "not_indexed").length,
+);
+const selectedEntityIndexableFiles = computed(() =>
+  files.value.filter((f) => f.supported && f.status === "indexed" && selectedFiles.value.has(f.fileName)),
 );
 
 // --- Data loading ---
@@ -113,6 +117,8 @@ async function reindexFile(fileName: string) {
           status: "indexed",
           chunkCount: res.chunksStored,
           lastIndexedAt: Date.now(),
+          entityIndexed: false,
+          entityIndexedAt: undefined,
         };
       }
     }
@@ -120,6 +126,33 @@ async function reindexFile(fileName: string) {
     /* error */
   }
   reindexingFile.value = null;
+}
+
+// --- Entity graph indexing ---
+async function entityIndexFile(fileName: string) {
+  entityIndexingFile.value = fileName;
+  try {
+    const res = await api.memorySpaces.entityIndexFile(props.spaceId, fileName);
+    if (res.success) {
+      const idx = files.value.findIndex((f) => f.fileName === fileName);
+      if (idx !== -1) {
+        files.value[idx] = {
+          ...files.value[idx],
+          entityIndexed: true,
+          entityIndexedAt: res.entityIndexedAt,
+        };
+      }
+    }
+  } catch {
+    /* error */
+  }
+  entityIndexingFile.value = null;
+}
+
+async function entityIndexSelected() {
+  for (const f of selectedEntityIndexableFiles.value) {
+    await entityIndexFile(f.fileName);
+  }
 }
 
 async function reindexAll() {
@@ -476,6 +509,20 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             Move {{ selectedFiles.size }}
           </button>
           <button
+            v-if="selectedEntityIndexableFiles.length > 0"
+            :disabled="entityIndexingFile !== null"
+            class="flex items-center gap-1 px-2 py-1 text-xs bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded transition-colors disabled:opacity-50"
+            title="Integrate selected indexed documents into the entity graph"
+            @click="entityIndexSelected"
+          >
+            <Icon
+              :icon="entityIndexingFile ? 'lucide:loader-2' : 'lucide:network'"
+              class="w-3.5 h-3.5"
+              :class="{ 'animate-spin': entityIndexingFile }"
+            />
+            Entity index {{ selectedEntityIndexableFiles.length }}
+          </button>
+          <button
             :disabled="deleting"
             class="flex items-center gap-1 px-2 py-1 text-xs bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded transition-colors"
             @click="deleteSelectedFiles"
@@ -626,6 +673,19 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           </div>
         </div>
 
+        <!-- Entity graph indicator -->
+        <div
+          v-if="file.supported"
+          class="shrink-0"
+          :title="file.entityIndexed ? 'Entity indexed' : file.status === 'indexed' ? 'Not entity indexed' : 'Entity indexing requires regular indexing first'"
+        >
+          <Icon
+            :icon="file.entityIndexed ? 'lucide:network' : 'lucide:network-x'"
+            class="w-3.5 h-3.5"
+            :class="file.entityIndexed ? 'text-emerald-400' : 'text-theme-700'"
+          />
+        </div>
+
         <!-- Status indicator -->
         <div
           class="flex items-center gap-1.5 shrink-0"
@@ -672,6 +732,20 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             :icon="reindexingFile === file.fileName ? 'lucide:loader-2' : 'lucide:refresh-cw'"
             class="w-3.5 h-3.5"
             :class="{ 'animate-spin': reindexingFile === file.fileName }"
+          />
+        </button>
+
+        <button
+          v-if="file.supported && file.status === 'indexed'"
+          class="shrink-0 p-1 text-theme-600 hover:text-emerald-400 transition-colors opacity-0 group-hover/row:opacity-100 disabled:opacity-50"
+          title="Entity index"
+          :disabled="entityIndexingFile === file.fileName"
+          @click.stop="entityIndexFile(file.fileName)"
+        >
+          <Icon
+            :icon="entityIndexingFile === file.fileName ? 'lucide:loader-2' : 'lucide:network'"
+            class="w-3.5 h-3.5"
+            :class="{ 'animate-spin': entityIndexingFile === file.fileName }"
           />
         </button>
       </div>

@@ -25,6 +25,11 @@ import {
     validateRelativePath,
     type MemorySpaceFolderData,
 } from '../core/memory/memory-space-folders.js'
+import {
+    deleteMemoryGraphSource,
+    indexMemoryFileIntoEntityGraph,
+    moveMemoryGraphSource,
+} from '../core/memory/memory-entity-indexer.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -67,6 +72,8 @@ export interface MemoryFileStatus {
     status: 'indexed' | 'needs_reindex' | 'not_indexed' | 'unsupported'
     chunkCount?: number
     lastIndexedAt?: number
+    entityIndexed: boolean
+    entityIndexedAt?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -259,6 +266,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     supported: false,
                     textDirect: false,
                     status: 'unsupported' as const,
+                    entityIndexed: false,
                 }
             }
             const indexed = fileIndex.get(f.fileName)
@@ -271,6 +279,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     supported: true,
                     textDirect: f.textDirect,
                     status: 'not_indexed' as const,
+                    entityIndexed: false,
                 }
             }
             const currentHash = computeFileHash(f.filePath)
@@ -285,6 +294,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                 status,
                 chunkCount: indexed.chunkCount,
                 lastIndexedAt: indexed.lastIndexedAt,
+                entityIndexed: status === 'indexed' && indexed.entityIndexedAt > 0,
+                entityIndexedAt: indexed.entityIndexedAt || undefined,
             }
         })
 
@@ -306,6 +317,33 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         }
     })
 
+    // POST /api/memory-spaces/:id/files/:fileName/entity-index — integrate one indexed document into the entity graph
+    app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/entity-index', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
+
+        const mem = getAgentMemory()
+        const status = mem.checkFileStatus(row.id, req.params.fileName, row.folder_path)
+        if (status !== 'current') {
+            return reply.status(409).send({ error: status === 'not_indexed' ? 'File must be indexed before entity indexing.' : 'File must be re-indexed before entity indexing.' })
+        }
+
+        try {
+            return {
+                success: true,
+                ...(await indexMemoryFileIntoEntityGraph({
+                    folderPath: row.folder_path,
+                    spaceId: row.id,
+                    fileName: req.params.fileName,
+                    replaceExisting: true,
+                })),
+            }
+        } catch (err) {
+            return reply.status(500).send({ error: (err as Error).message || 'Failed to entity-index file' })
+        }
+    })
+
     // DELETE /api/memory-spaces/:id/files/:fileName — delete a file from the space
     app.delete<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
@@ -313,6 +351,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
         const mem = getAgentMemory()
         await mem.deleteSourceFile(req.params.fileName, row.id)
+        deleteMemoryGraphSource(row.id, req.params.fileName)
         return { success: true }
     })
 
@@ -409,6 +448,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const mem = getAgentMemory()
         for (const sf of sourceFiles) {
             await mem.deleteSourceFile(sf, row.id)
+            deleteMemoryGraphSource(row.id, sf)
         }
         return { success: true }
     })
@@ -462,12 +502,23 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             await rag.updateSpaceId('permanent_memory', filter, target.id)
 
             // Move file index entry
+            const existingIndex = db.prepare('SELECT content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
+                .get(source.id, sf) as { content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number; created_at: number } | undefined
             db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?').run(source.id, sf)
             const now = Date.now()
             db.prepare(`
-                INSERT OR REPLACE INTO memory_file_index (space_id, file_name, content_hash, chunk_count, last_indexed_at, created_at)
-                VALUES (?, ?, '', 0, 0, ?)
-            `).run(target.id, uniqueName, now)
+                INSERT OR REPLACE INTO memory_file_index (space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                target.id,
+                uniqueName,
+                existingIndex?.content_hash || '',
+                existingIndex?.chunk_count || 0,
+                existingIndex?.last_indexed_at || 0,
+                existingIndex?.entity_indexed_at || 0,
+                existingIndex?.created_at || now,
+            )
+            moveMemoryGraphSource(source.id, sf, target.id, uniqueName)
         }
 
         return { success: true, moved: sourceFiles.length, renamed: renamedCount }
