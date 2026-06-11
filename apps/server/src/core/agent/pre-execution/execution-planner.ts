@@ -56,6 +56,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         usedToolNames,
         selectedSkillIds = [],
         autoSkillRouting = false,
+        thinkingEnabled,
         eventMeta,
     } = input
     const selectedToolKeys = stripRuntimeMemoryToolKeys(input.selectedToolKeys ?? [])
@@ -120,11 +121,13 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
     const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id
     const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(prepared.model, responseProvider)
     const responseTools = responseSupportsToolCalls ? prepared.tools : []
+    const effectiveThinkingEnabled = thinkingEnabled ?? (resolvedAgent?.thinkingEnabled !== false)
     const orchestration = applyOrchestrationIfToolCapable(
         conversationId,
         userText,
         responseTools,
         prepared.systemMessages,
+        effectiveThinkingEnabled,
     )
 
     return {
@@ -149,7 +152,12 @@ function applyOrchestrationIfToolCapable(
     objective: string,
     tools: ToolDefinition[],
     systemMessages: ChatMessage[],
+    thinkingEnabled: boolean,
 ): { tools: ToolDefinition[]; systemMessages: ChatMessage[]; runId?: string } {
+    if (!thinkingEnabled) {
+        return { tools, systemMessages }
+    }
+
     const hasVisibleExecutionTool = tools.some((tool) => isVisibleExecutionTool(tool.name))
     if (!hasVisibleExecutionTool) {
         return { tools, systemMessages }

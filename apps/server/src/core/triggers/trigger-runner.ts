@@ -73,6 +73,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             systemPromptSuffix,
             memorySpaceOverrides: memorySpaces,
             autoMemory: agent.autoMemory === true,
+            thinkingEnabled: agent.thinkingEnabled !== false,
         },
     })
 
