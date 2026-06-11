@@ -8,6 +8,7 @@ import { getEntityGraphStore, type EntityEdge, type EntityNode, type EntityType 
 import {
     deleteMemoryGraphSource,
     indexMemoryContentIntoEntityGraph,
+    memoryGraphSourceId,
 } from '../../memory/memory-entity-indexer.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -16,7 +17,7 @@ async function integrateMemoryContentIntoGraph(
     content: string,
     spaceId: string,
     fileName: string,
-    opts: { replaceExisting?: boolean; conversationId?: string; broadcast?: BroadcastFn } = {},
+    opts: { replaceExisting?: boolean; conversationId?: string; broadcast?: BroadcastFn; signal?: AbortSignal } = {},
 ): Promise<void> {
     if (opts.conversationId && opts.broadcast) {
         opts.broadcast('chat:post-action', { conversationId: opts.conversationId, action: 'updating-entity-graph', status: 'started' })
@@ -27,6 +28,7 @@ async function integrateMemoryContentIntoGraph(
             spaceId,
             fileName,
             replaceExisting: opts.replaceExisting,
+            signal: opts.signal,
         })
     } catch (err) {
         if ((err as Error).name !== 'AbortError') {
@@ -37,6 +39,36 @@ async function integrateMemoryContentIntoGraph(
             opts.broadcast('chat:post-action', { conversationId: opts.conversationId, action: 'updating-entity-graph', status: 'completed' })
         }
     }
+}
+
+const pendingMemoryGraphIntegrations = new Map<string, AbortController>()
+
+function abortPendingMemoryGraphIntegration(spaceId: string, fileName: string): void {
+    const sourceId = memoryGraphSourceId(spaceId, fileName)
+    pendingMemoryGraphIntegrations.get(sourceId)?.abort()
+    pendingMemoryGraphIntegrations.delete(sourceId)
+}
+
+function scheduleMemoryGraphIntegration(
+    content: string,
+    spaceId: string,
+    fileName: string,
+    opts: { replaceExisting?: boolean; conversationId?: string; broadcast?: BroadcastFn } = {},
+): void {
+    const sourceId = memoryGraphSourceId(spaceId, fileName)
+    pendingMemoryGraphIntegrations.get(sourceId)?.abort()
+
+    const controller = new AbortController()
+    pendingMemoryGraphIntegrations.set(sourceId, controller)
+
+    void integrateMemoryContentIntoGraph(content, spaceId, fileName, {
+        ...opts,
+        signal: controller.signal,
+    }).finally(() => {
+        if (pendingMemoryGraphIntegrations.get(sourceId) === controller) {
+            pendingMemoryGraphIntegrations.delete(sourceId)
+        }
+    })
 }
 
 export const MEMORY_READ_TOOL_NAMES = [
@@ -920,7 +952,7 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
 
             const result = await mem.storeAsFile(content, fileName, resolved.spaceId)
 
-            await integrateMemoryContentIntoGraph(content, resolved.spaceId, result.fileName, {
+            scheduleMemoryGraphIntegration(content, resolved.spaceId, result.fileName, {
                 replaceExisting: true,
                 conversationId,
                 broadcast,
@@ -928,7 +960,7 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
 
             return {
                 success: true,
-                output: `Memory "${result.fileName}" created in "${resolved.spaceName}" (${result.chunkCount} chunk${result.chunkCount !== 1 ? 's' : ''} indexed).`
+                output: `Memory "${result.fileName}" created in "${resolved.spaceName}" (${result.chunkCount} chunk${result.chunkCount !== 1 ? 's' : ''} indexed). Entity graph update is running in the background.`
             }
         }
     }
@@ -1021,7 +1053,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                     writeTextFile(folderPath, fileName, appended)
                     const { chunkCount: indexedChunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                    await integrateMemoryContentIntoGraph(appended, resolved.spaceId, fileName, {
+                    scheduleMemoryGraphIntegration(appended, resolved.spaceId, fileName, {
                         replaceExisting: true,
                         conversationId,
                         broadcast,
@@ -1029,7 +1061,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 
                     return {
                         success: true,
-                        output: `Content appended to "${fileName}" in "${resolved.spaceName}" (${indexedChunks} chunk${indexedChunks !== 1 ? 's' : ''} re-indexed).`
+                        output: `Content appended to "${fileName}" in "${resolved.spaceName}" (${indexedChunks} chunk${indexedChunks !== 1 ? 's' : ''} re-indexed). Entity graph update is running in the background.`
                     }
                 }
 
@@ -1048,7 +1080,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 
                 const { chunkCount: indexedChunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                await integrateMemoryContentIntoGraph(replaced.content, resolved.spaceId, fileName, {
+                scheduleMemoryGraphIntegration(replaced.content, resolved.spaceId, fileName, {
                     replaceExisting: true,
                     conversationId,
                     broadcast,
@@ -1056,7 +1088,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 
                 return {
                     success: true,
-                    output: `Chunks ${replaced.startIndex}-${replaced.endIndex} in "${fileName}" updated in "${resolved.spaceName}" (${indexedChunks} chunk${indexedChunks !== 1 ? 's' : ''} re-indexed).`
+                    output: `Chunks ${replaced.startIndex}-${replaced.endIndex} in "${fileName}" updated in "${resolved.spaceName}" (${indexedChunks} chunk${indexedChunks !== 1 ? 's' : ''} re-indexed). Entity graph update is running in the background.`
                 }
             } else {
                 // Full replacement — backup original (if it exists on disk) then write directly
@@ -1064,7 +1096,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 writeTextFile(folderPath, fileName, content)
                 const { chunkCount: chunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                await integrateMemoryContentIntoGraph(content, resolved.spaceId, fileName, {
+                scheduleMemoryGraphIntegration(content, resolved.spaceId, fileName, {
                     replaceExisting: true,
                     conversationId,
                     broadcast,
@@ -1072,7 +1104,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 
                 return {
                     success: true,
-                    output: `Memory "${fileName}" fully updated in "${resolved.spaceName}" (${chunks} chunk${chunks !== 1 ? 's' : ''} re-indexed).`
+                    output: `Memory "${fileName}" fully updated in "${resolved.spaceName}" (${chunks} chunk${chunks !== 1 ? 's' : ''} re-indexed). Entity graph update is running in the background.`
                 }
             }
         }
@@ -1150,6 +1182,7 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
                 backupToRevisions(resolved.folderPath, resolved.fileName)
 
                 if (!removed.content.trim()) {
+                    abortPendingMemoryGraphIntegration(resolved.spaceId, resolved.fileName)
                     const deleted = await mem.deleteSourceFile(resolved.fileName, resolved.spaceId)
                     // Remove all entity graph edges sourced from this memory file
                     const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
@@ -1162,7 +1195,7 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
                 writeTextFile(resolved.folderPath, resolved.fileName, removed.content)
                 const { chunkCount } = await mem.reindexFile(resolved.folderPath, resolved.fileName, resolved.spaceId)
 
-                await integrateMemoryContentIntoGraph(removed.content, resolved.spaceId, resolved.fileName, {
+                scheduleMemoryGraphIntegration(removed.content, resolved.spaceId, resolved.fileName, {
                     replaceExisting: true,
                     conversationId,
                     broadcast,
@@ -1170,7 +1203,7 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
 
                 return {
                     success: true,
-                    output: `Chunks ${removed.startIndex}-${removed.endIndex} removed from "${resolved.fileName}" in "${resolved.spaceName}" (${chunkCount} remaining chunk${chunkCount !== 1 ? 's' : ''} re-indexed).`
+                    output: `Chunks ${removed.startIndex}-${removed.endIndex} removed from "${resolved.fileName}" in "${resolved.spaceName}" (${chunkCount} remaining chunk${chunkCount !== 1 ? 's' : ''} re-indexed). Entity graph update is running in the background.`
                 }
             }
 
@@ -1180,6 +1213,7 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
 
             const deleted = await mem.deleteSourceFile(resolved.fileName, resolved.spaceId)
             // Remove all entity graph edges sourced from this memory file
+            abortPendingMemoryGraphIntegration(resolved.spaceId, resolved.fileName)
             const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
             return {
                 success: true,
