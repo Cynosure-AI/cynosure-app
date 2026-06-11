@@ -432,18 +432,18 @@ function entityTypeClass(type: EntityGraphNodeType): string {
   return `entity-flow-node-type-${type}`;
 }
 
-async function loadGraph(query = graphQuery.value) {
+async function loadGraph(query = graphQuery.value, nodeId?: string) {
   const trimmedQuery = query.trim();
   const limit = activePanel.value === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_LIMIT;
   const view = activeGraphView.value || "visual";
-  const requestKey = `${view}:${trimmedQuery}:${limit}`;
+  const requestKey = `${view}:${trimmedQuery}:${nodeId || ""}:${limit}`;
   if (graphLoading.value && inFlightGraphKey === requestKey) return;
   const requestId = ++graphRequest;
   inFlightGraphKey = requestKey;
   graphLoading.value = true;
   graphSuggestions.value = [];
   try {
-    const nextGraph = await api.memory.getGraph(trimmedQuery || undefined, limit, view);
+    const nextGraph = await api.memory.getGraph(trimmedQuery || undefined, limit, view, nodeId);
     if (requestId !== graphRequest) return;
     graph.value = nextGraph;
     graphLimit.value = limit;
@@ -487,7 +487,7 @@ async function loadGraphSuggestions(query = graphQuery.value) {
 async function selectGraphSuggestion(node: EntityGraphNode) {
   graphQuery.value = node.name;
   graphSuggestions.value = [];
-  await loadGraph(node.name);
+  await loadGraph(node.name, node.id);
 }
 
 watch(graphQuery, (query) => {

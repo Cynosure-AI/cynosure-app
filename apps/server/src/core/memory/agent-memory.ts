@@ -2,6 +2,8 @@ import { getMemoryParser, type RetrievedChunk } from './parser.js'
 import { getRAGStore } from './rag.js'
 import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getMemorySpaceFolderPath } from './memory-space-scope.js'
+import { andLanceDbFilters, lanceDbEqFilter } from './lancedb-filter.js'
+import { moveMemoryGraphSource } from './memory-entity-indexer.js'
 import {
     ensureFolder,
     writeTextFile,
@@ -14,8 +16,9 @@ import {
     toMarkdownFileName,
 } from './memory-file-manager.js'
 import { join } from 'path'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
+import { cancelMemoryIndexJobsForFile } from './memory-index-jobs.js'
 
 const TABLE_NAME = 'permanent_memory'
 
@@ -62,6 +65,16 @@ function removeFileIndex(spaceId: string, fileName: string): void {
         const db = getDb()
         db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?').run(spaceId, fileName)
     } catch { /* non-fatal */ }
+}
+
+interface FileIndexMoveCandidate {
+    spaceId: string
+    fileName: string
+    contentHash: string
+    chunkCount: number
+    lastIndexedAt: number
+    entityIndexedAt: number
+    createdAt: number
 }
 
 /**
@@ -245,6 +258,98 @@ export class AgentMemory {
     /** Delete vectors by source file without touching the physical file. */
     async deleteBySource(sourceFile: string, filter?: string): Promise<number> {
         return getRAGStore().deleteBySource(TABLE_NAME, sourceFile, filter)
+    }
+
+    /**
+     * Re-map an existing index entry to a new file path when the file content
+     * hash proves it was moved or renamed. This keeps vectors and entity graph
+     * edges intact, avoiding a full re-index after filesystem moves.
+     */
+    async remapMovedFileByHash(
+        targetSpaceId: string,
+        targetFileName: string,
+        targetFolderPath: string,
+    ): Promise<{ remapped: boolean; fromSpaceId?: string; fromFileName?: string }> {
+        const existingTarget = this.getFileIndexEntry(targetSpaceId, targetFileName)
+        if (existingTarget) return { remapped: false }
+
+        const targetPath = join(targetFolderPath, targetFileName)
+        const contentHash = computeFileHash(targetPath)
+        if (!contentHash) return { remapped: false }
+
+        const db = getDb()
+        const candidates = db.prepare(`
+            SELECT space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at
+            FROM memory_file_index
+            WHERE content_hash = ?
+              AND NOT (space_id = ? AND file_name = ?)
+            ORDER BY last_indexed_at DESC
+        `).all(contentHash, targetSpaceId, targetFileName) as {
+            space_id: string
+            file_name: string
+            content_hash: string
+            chunk_count: number
+            last_indexed_at: number
+            entity_indexed_at: number
+            created_at: number
+        }[]
+
+        const candidate = candidates
+            .map((row): FileIndexMoveCandidate => ({
+                spaceId: row.space_id,
+                fileName: row.file_name,
+                contentHash: row.content_hash,
+                chunkCount: row.chunk_count,
+                lastIndexedAt: row.last_indexed_at,
+                entityIndexedAt: row.entity_indexed_at || 0,
+                createdAt: row.created_at,
+            }))
+            .find((row) => {
+                const oldFolderPath = getMemorySpaceFolderPath(row.spaceId)
+                return !oldFolderPath || !existsSync(join(oldFolderPath, row.fileName))
+            })
+
+        if (!candidate) return { remapped: false }
+
+        const ragStore = getRAGStore()
+        const oldFilter = andLanceDbFilters(
+            lanceDbEqFilter('spaceId', candidate.spaceId),
+            lanceDbEqFilter('sourceFile', candidate.fileName),
+        )
+        if (oldFilter && candidate.fileName !== targetFileName) {
+            await ragStore.updateSourceFile(TABLE_NAME, oldFilter, targetFileName)
+        }
+
+        const newNameFilter = andLanceDbFilters(
+            lanceDbEqFilter('spaceId', candidate.spaceId),
+            lanceDbEqFilter('sourceFile', targetFileName),
+        )
+        if (newNameFilter && candidate.spaceId !== targetSpaceId) {
+            await ragStore.updateSpaceId(TABLE_NAME, newNameFilter, targetSpaceId)
+        }
+
+        const moveIndex = db.transaction(() => {
+            db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?')
+                .run(candidate.spaceId, candidate.fileName)
+            db.prepare(`
+                INSERT OR REPLACE INTO memory_file_index
+                    (space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                targetSpaceId,
+                targetFileName,
+                candidate.contentHash,
+                candidate.chunkCount,
+                candidate.lastIndexedAt,
+                candidate.entityIndexedAt,
+                candidate.createdAt || Date.now(),
+            )
+        })
+        moveIndex()
+
+        moveMemoryGraphSource(candidate.spaceId, candidate.fileName, targetSpaceId, targetFileName)
+        cancelMemoryIndexJobsForFile(candidate.spaceId, candidate.fileName)
+        return { remapped: true, fromSpaceId: candidate.spaceId, fromFileName: candidate.fileName }
     }
 
     // -----------------------------------------------------------------------

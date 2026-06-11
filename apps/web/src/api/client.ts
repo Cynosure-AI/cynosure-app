@@ -332,9 +332,10 @@ export const api = {
       get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
     configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>
       post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/configure', opts),
-    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual') => {
+    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual', nodeId?: string) => {
       const params = new URLSearchParams()
       if (query) params.set('query', query)
+      if (nodeId) params.set('nodeId', nodeId)
       if (limit) params.set('limit', String(limit))
       if (view) params.set('view', view)
       const qs = params.toString()
