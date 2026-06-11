@@ -2,8 +2,9 @@
 import { ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProviderStore } from '../../stores/provider.store'
+import { useMemoryJobsStore } from '../../stores/memory-jobs.store'
 import { api } from '../../api/client'
-import type { AgentInstance, McpServerInfo } from '../../api/types'
+import type { AgentInstance, McpServerInfo, MemoryIndexJob } from '../../api/types'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps<{
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const providerStore = useProviderStore()
+const memoryJobsStore = useMemoryJobsStore()
 
 // Provider health
 interface ProviderHealth {
@@ -50,6 +52,7 @@ async function fetchStatus(force = false) {
   if (!force && lastFetchedAt && now - lastFetchedAt < CACHE_TTL) return
 
   refreshing.value = true
+  void memoryJobsStore.refresh()
 
   // Check providers (using listModels — free, no credits)
   providerChecked.value = false
@@ -96,6 +99,14 @@ function goTo(path: string) {
   emit('close')
   router.push(path)
 }
+
+function memoryJobLabel(job: MemoryIndexJob): string {
+  return job.kind === 'entity-index' ? 'Extracting entities' : 'Indexing memory'
+}
+
+function memoryJobIcon(job: MemoryIndexJob): string {
+  return job.kind === 'entity-index' ? 'lucide:network' : 'lucide:database-zap'
+}
 </script>
 
 <template>
@@ -126,6 +137,67 @@ function goTo(path: string) {
           />
         </button>
       </div>
+
+      <!-- ── Memory Jobs ── -->
+      <div>
+        <div class="flex items-center gap-2 mb-1.5">
+          <Icon
+            icon="lucide:database"
+            class="w-3.5 h-3.5 text-theme-500"
+          />
+          <span class="text-[11px] font-medium text-theme-400 uppercase tracking-wider">Memory Jobs</span>
+          <button
+            v-if="memoryJobsStore.runningJobs.length > 1"
+            class="ml-auto text-[10px] text-theme-500 hover:text-red-300 transition-colors"
+            :disabled="memoryJobsStore.refreshing"
+            @click="memoryJobsStore.cancelRunningJobs()"
+          >
+            Cancel all
+          </button>
+        </div>
+
+        <template v-if="memoryJobsStore.runningJobs.length > 0">
+          <div
+            v-for="job in memoryJobsStore.runningJobs"
+            :key="job.id"
+            class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-theme-800 transition-colors group"
+          >
+            <Icon
+              :icon="memoryJobIcon(job)"
+              class="w-3.5 h-3.5 text-accent-400 animate-pulse shrink-0"
+            />
+            <button
+              class="min-w-0 flex-1 text-left"
+              @click="goTo('/memory-spaces/documents')"
+            >
+              <div class="text-[11px] text-theme-300 truncate">
+                {{ memoryJobLabel(job) }}
+              </div>
+              <div class="text-[10px] text-theme-600 truncate">
+                {{ job.fileName }}
+              </div>
+            </button>
+            <button
+              class="p-1 rounded-md text-theme-500 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+              title="Cancel job"
+              @click="memoryJobsStore.cancelJob(job.id)"
+            >
+              <Icon
+                icon="lucide:x"
+                class="w-3 h-3"
+              />
+            </button>
+          </div>
+        </template>
+        <div
+          v-else
+          class="text-[11px] text-theme-600 px-2"
+        >
+          No memory jobs
+        </div>
+      </div>
+
+      <div class="border-t border-theme-800" />
 
       <!-- ── Running Instances ── -->
       <div>
