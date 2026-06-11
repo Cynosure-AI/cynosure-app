@@ -80,6 +80,12 @@ const router = createRouter({
       name: 'tools-policy',
       component: () => import('@/views/ToolsPolicyView.vue')
     },
+    // Notifications
+    {
+      path: '/notifications',
+      name: 'notifications',
+      component: () => import('@/views/NotificationsView.vue')
+    },
     // Usage
     {
       path: '/usage',
