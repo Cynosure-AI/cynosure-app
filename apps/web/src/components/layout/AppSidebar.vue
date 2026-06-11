@@ -203,6 +203,13 @@ const settingsItems: NavItem[] = [
               <div class="flex items-center justify-between px-3 py-2.5 border-b border-theme-800">
                 <span class="text-xs font-semibold text-theme-200">Notifications</span>
                 <div class="flex items-center gap-1">
+                  <RouterLink
+                    to="/notifications"
+                    class="text-[10px] text-accent-400 hover:text-accent-300 transition-colors px-1.5 py-0.5"
+                    @click="showNotifications = false"
+                  >
+                    View all
+                  </RouterLink>
                   <button
                     v-if="notificationStore.unreadCount > 0"
                     class="text-[10px] text-accent-400 hover:text-accent-300 transition-colors px-1.5 py-0.5"
@@ -321,6 +328,38 @@ const settingsItems: NavItem[] = [
         </RouterLink>
         <template #content>
           Chat
+        </template>
+      </HoverTooltip>
+
+      <!-- Notifications -->
+      <HoverTooltip
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
+      >
+        <RouterLink
+          to="/notifications"
+          class="nav-item"
+          :class="{ active: isActive('/notifications', true) }"
+        >
+          <Icon
+            icon="lucide:bell"
+            class="w-4.5 h-4.5"
+          />
+          <span>Notifications</span>
+          <span
+            v-if="notificationStore.unreadCount > 0"
+            class="ml-auto rounded-full bg-accent-500 text-[10px] font-bold text-white w-5 h-5 flex items-center justify-center leading-none shrink-0"
+          >
+            {{
+              notificationStore.unreadCount > 9
+                ? "9+"
+                : notificationStore.unreadCount
+            }}
+          </span>
+        </RouterLink>
+        <template #content>
+          Notifications
         </template>
       </HoverTooltip>
 
