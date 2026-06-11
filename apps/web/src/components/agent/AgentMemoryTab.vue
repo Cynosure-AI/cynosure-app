@@ -210,13 +210,18 @@ onMounted(() => loadSpaces())
             :key="space.id"
             class="flex items-center gap-2 w-full px-3 py-2.5 border-b border-theme-800 last:border-0 cursor-pointer transition-colors"
             :class="assignedIds.has(space.id) ? 'bg-accent-600/10 hover:bg-accent-600/15' : 'hover:bg-theme-800/60'"
-            :style="{ paddingLeft: `${12 + (space.depth || 0) * 12}px` }"
             @click="toggleSpace(space.id)"
           >
+            <!-- Indent spacer -->
+            <span
+              v-if="(space.depth || 0) > 1"
+              :style="{ width: `${(space.depth || 0) * 8}px` }"
+              class="shrink-0"
+            />
+            <!-- Chevron: always rendered to keep all rows aligned -->
             <button
-              v-if="!space.isDefault"
-              class="p-0.5 text-theme-500 hover:text-theme-200 shrink-0"
-              :class="{ 'invisible': !hasChildren(space) }"
+              class="p-0.5 shrink-0 text-theme-500 hover:text-theme-200 transition-colors"
+              :class="{ 'invisible pointer-events-none': space.isDefault || !hasChildren(space) }"
               @click.stop="toggleCollapsed(space)"
             >
               <Icon
