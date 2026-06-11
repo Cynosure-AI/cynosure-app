@@ -24,6 +24,13 @@ export interface ReindexFileResult {
     chunkCount: number
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+    if (!signal?.aborted) return
+    const err = new Error('Cancelled')
+    err.name = 'AbortError'
+    throw err
+}
+
 function upsertFileIndex(
     spaceId: string,
     fileName: string,
@@ -69,12 +76,12 @@ export class AgentMemory {
     // Core: ingest text into LanceDB (low-level, no file I/O)
     // -----------------------------------------------------------------------
 
-    private async ingestText(text: string, sourceFile: string, spaceId: string): Promise<number> {
+    private async ingestText(text: string, sourceFile: string, spaceId: string, signal?: AbortSignal): Promise<number> {
         return this.parser.ingest(TABLE_NAME, text, {
             source: 'permanent',
             sourceFile,
             spaceId,
-        })
+        }, { signal })
     }
 
     // -----------------------------------------------------------------------
@@ -115,7 +122,9 @@ export class AgentMemory {
         folderPath: string,
         fileName: string,
         spaceId: string,
+        opts?: { signal?: AbortSignal },
     ): Promise<ReindexFileResult> {
+        throwIfAborted(opts?.signal)
         const filePath = join(folderPath, fileName)
         const ragStore = getRAGStore()
 
@@ -126,16 +135,20 @@ export class AgentMemory {
             text = readTextFile(folderPath, fileName)
         } else if (isParseableDocument(fileName)) {
             const buf = readFileSync(filePath)
+            throwIfAborted(opts?.signal)
             text = await parseDocument(buf, fileName)
+            throwIfAborted(opts?.signal)
             const mdName = resolveUniqueFileName(folderPath, toMarkdownFileName(fileName))
             const mdPath = writeTextFile(folderPath, mdName, text)
 
             moveToRevisions(folderPath, fileName)
 
             await ragStore.deleteBySources(TABLE_NAME, [fileName, mdName], buildMemorySpaceFilter([{ id: spaceId }]))
+            throwIfAborted(opts?.signal)
             removeFileIndex(spaceId, fileName)
 
-            const count = await this.ingestText(text, mdName, spaceId)
+            const count = await this.ingestText(text, mdName, spaceId, opts?.signal)
+            throwIfAborted(opts?.signal)
             const hash = computeFileHash(mdPath)
             upsertFileIndex(spaceId, mdName, hash, count)
             return { fileName: mdName, chunkCount: count }
@@ -145,8 +158,10 @@ export class AgentMemory {
 
         // Remove old vectors for this file in this space
         await ragStore.deleteBySource(TABLE_NAME, fileName, buildMemorySpaceFilter([{ id: spaceId }]))
+        throwIfAborted(opts?.signal)
 
-        const count = await this.ingestText(text, fileName, spaceId)
+        const count = await this.ingestText(text, fileName, spaceId, opts?.signal)
+        throwIfAborted(opts?.signal)
         const hash = computeFileHash(filePath)
         upsertFileIndex(spaceId, fileName, hash, count)
         return { fileName, chunkCount: count }

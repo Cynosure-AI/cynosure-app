@@ -23,6 +23,13 @@ export interface RetrievedChunk {
   totalChunks?: number
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return
+  const err = new Error('Cancelled')
+  err.name = 'AbortError'
+  throw err
+}
+
 /** Average characters per token — used to convert token-based chunk settings to the
  * character counts that RecursiveCharacterTextSplitter expects. */
 const CHARS_PER_TOKEN = 4
@@ -74,9 +81,12 @@ export class MemoryParser {
   async ingest(
     tableName: string,
     text: string,
-    meta: DocumentMeta
+    meta: DocumentMeta,
+    opts?: { signal?: AbortSignal }
   ): Promise<number> {
+    throwIfAborted(opts?.signal)
     const chunks = await this.chunk(text)
+    throwIfAborted(opts?.signal)
     if (chunks.length === 0) return 0
 
     const embedder = getEmbeddingProvider()
@@ -92,6 +102,7 @@ export class MemoryParser {
 
     try {
       for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+        throwIfAborted(opts?.signal)
         const batch = chunks.slice(i, i + BATCH_SIZE)
 
         // Start embedding current batch immediately so it runs concurrently
@@ -103,6 +114,7 @@ export class MemoryParser {
         if (pendingWrite) totalStored += pendingWrite.count
 
         const embeddings = await embedPromise
+        throwIfAborted(opts?.signal)
 
         // Resolve dimensions once; they never change for a given provider.
         if (dimensions === undefined) dimensions = embeddings[0].dimensions
@@ -128,9 +140,11 @@ export class MemoryParser {
       // Flush the last in-flight write.
       if (pendingWrite) {
         await pendingWrite.promise
+        throwIfAborted(opts?.signal)
         totalStored += pendingWrite.count
       }
     } catch (err) {
+      if (opts?.signal?.aborted || (err as Error | undefined)?.name === 'AbortError') throw err
       // Ensure any in-flight write is settled so totalStored reflects reality
       // before we log and return the partial count.
       if (pendingWrite) {

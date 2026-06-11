@@ -1,7 +1,7 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage } from './http'
 import type {
   LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryResponse,
-  AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus,
+  AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob,
   AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
   MetricsSummary, OrchestrationState,
   SkillDefinition,
@@ -374,14 +374,30 @@ export const api = {
     /** List files in the space folder with their index status. Hash computation is async server-side. */
     listFiles: (spaceId: string) =>
       get<MemoryFileStatus[]>(`/api/memory-spaces/${encodeURIComponent(spaceId)}/files`),
+    listJobs: (spaceId: string) =>
+      get<MemoryIndexJob[]>(`/api/memory-spaces/${encodeURIComponent(spaceId)}/jobs`),
+    getJob: (jobId: string) =>
+      get<MemoryIndexJob>(`/api/memory-spaces/jobs/${encodeURIComponent(jobId)}`),
+    cancelJob: (jobId: string) =>
+      post<MemoryIndexJob>(`/api/memory-spaces/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
     reindexFile: (spaceId: string, fileName: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string }>(
         `/api/memory-spaces/${encodeURIComponent(spaceId)}/reingest-file`,
         { fileName }
       ),
+    startReindexFile: (spaceId: string, fileName: string) =>
+      post<MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }>>(
+        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}/reindex-job`,
+        {}
+      ),
     entityIndexFile: (spaceId: string, fileName: string) =>
       post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; entityIndexedAt: number }>(
         `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}/entity-index`,
+        {}
+      ),
+    startEntityIndexFile: (spaceId: string, fileName: string) =>
+      post<MemoryIndexJob<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; entityIndexedAt: number }>>(
+        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}/entity-index-job`,
         {}
       ),
     deleteFile: (spaceId: string, fileName: string) =>
