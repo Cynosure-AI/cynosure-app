@@ -3,38 +3,92 @@ import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getMemorySpaceFolderPath, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import { relativePathForFolder } from '../../memory/memory-space-folders.js'
-import { readTextFile, writeTextFile, fileExists, backupToRevisions } from '../../memory/memory-file-manager.js'
+import { readTextFile, writeTextFile, fileExists, backupToRevisions, resolveUniqueFileName } from '../../memory/memory-file-manager.js'
 import { getEntityGraphStore, type EntityEdge, type EntityNode, type EntityType } from '../../memory/entity-graph.js'
+import {
+    deleteMemoryGraphSource,
+    indexMemoryContentIntoEntityGraph,
+} from '../../memory/memory-entity-indexer.js'
+import { cancelMemoryIndexJobsForFile, startMemoryIndexJob } from '../../memory/memory-index-jobs.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
-/**
- * Trigger entity graph extraction from memory content.
- * Called after memory_create / memory_update to keep the entity graph as a
- * secondary index of intentional memory writes.
- */
-async function triggerMemoryGraphExtraction(
+async function integrateMemoryContentIntoGraph(
     content: string,
-    sourceId: string,
-    conversationId?: string,
-    broadcast?: BroadcastFn,
+    spaceId: string,
+    fileName: string,
+    opts: { replaceExisting?: boolean; conversationId?: string; broadcast?: BroadcastFn; signal?: AbortSignal } = {},
 ): Promise<void> {
-    if (!conversationId || !broadcast) return
-
-    broadcast('chat:post-action', { conversationId, action: 'updating-entity-graph', status: 'started' })
+    if (opts.conversationId && opts.broadcast) {
+        opts.broadcast('chat:post-action', { conversationId: opts.conversationId, action: 'updating-entity-graph', status: 'started' })
+    }
     try {
-        await getEntityGraphStore().extractFromContent({
+        await indexMemoryContentIntoEntityGraph({
             content,
-            sourceId,
-            sourceKind: 'memory',
+            spaceId,
+            fileName,
+            replaceExisting: opts.replaceExisting,
+            signal: opts.signal,
         })
     } catch (err) {
         if ((err as Error).name !== 'AbortError') {
             console.warn('[entity-graph] Memory extraction failed:', err)
         }
+        throw err
     } finally {
-        broadcast('chat:post-action', { conversationId, action: 'updating-entity-graph', status: 'completed' })
+        if (opts.conversationId && opts.broadcast) {
+            opts.broadcast('chat:post-action', { conversationId: opts.conversationId, action: 'updating-entity-graph', status: 'completed' })
+        }
     }
+}
+
+function abortPendingMemoryGraphIntegration(spaceId: string, fileName: string): void {
+    cancelMemoryIndexJobsForFile(spaceId, fileName)
+}
+
+function scheduleMemoryGraphIntegrationJob(
+    content: string,
+    spaceId: string,
+    fileName: string,
+    opts: { replaceExisting?: boolean; conversationId?: string; broadcast?: BroadcastFn } = {},
+): void {
+    startMemoryIndexJob({
+        kind: 'entity-index',
+        spaceId,
+        fileName,
+        replaceExisting: true,
+        run: async (signal) => {
+            await integrateMemoryContentIntoGraph(content, spaceId, fileName, {
+                ...opts,
+                signal,
+            })
+            return { success: true, fileName }
+        },
+    })
+}
+
+function scheduleMemoryReindexJob(
+    content: string,
+    spaceId: string,
+    fileName: string,
+    opts: { replaceExisting?: boolean; conversationId?: string; broadcast?: BroadcastFn } = {},
+): void {
+    const folderPath = getMemorySpaceFolderPath(spaceId)
+    cancelMemoryIndexJobsForFile(spaceId, fileName)
+    startMemoryIndexJob({
+        kind: 'reindex',
+        spaceId,
+        fileName,
+        replaceExisting: true,
+        run: async (signal) => {
+            if (!folderPath) throw new Error('Memory folder has no folder configured')
+            const result = await getAgentMemory().reindexFile(folderPath, fileName, spaceId, { signal })
+            if (!signal.aborted) {
+                scheduleMemoryGraphIntegrationJob(content, spaceId, result.fileName, opts)
+            }
+            return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
+        },
+    })
 }
 
 export const MEMORY_READ_TOOL_NAMES = [
@@ -92,12 +146,14 @@ const ENTITY_TYPES = ['person', 'place', 'organization', 'project', 'event', 'da
 
 function formatEntityNode(node: EntityNode): string {
     const aliases = node.aliases.length ? ` aliases=${node.aliases.join(', ')}` : ''
-    return `- ${node.name} (${node.type}, id=${node.id}, mentions=${node.mentionCount}${aliases})`
+    const importanceLabel = ['temporary', 'minor', 'useful', 'core'][node.importance] ?? 'minor'
+    return `- [${importanceLabel}] ${node.name} (${node.type}, id=${node.id}, mentions=${node.mentionCount}${aliases})`
 }
 
 function formatEntityEdge(edge: EntityEdge): string {
+    const importanceLabel = ['temporary', 'minor', 'useful', 'core'][edge.importance] ?? 'minor'
     const evidence = edge.evidence ? ` Evidence: ${edge.evidence}` : ''
-    return `- ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${edge.id}, confidence=${edge.confidence.toFixed(2)}, mentions=${edge.mentionCount}).${evidence}`
+    return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${edge.id}, confidence=${edge.confidence.toFixed(2)}, mentions=${edge.mentionCount}).${evidence}`
 }
 
 function normalizeEntityType(value: unknown): EntityType {
@@ -127,6 +183,20 @@ function cleanEntityName(value: unknown): string {
 function clampToolNumber(value: unknown, fallback: number, min: number, max: number): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
     return Math.max(min, Math.min(max, value))
+}
+
+function cleanToolString(value: unknown): string {
+    return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
+}
+
+function pickToolString(params: unknown, keys: string[]): string {
+    if (!params || typeof params !== 'object') return ''
+    const obj = params as Record<string, unknown>
+    for (const key of keys) {
+        const value = cleanToolString(obj[key])
+        if (value) return value
+    }
+    return ''
 }
 
 function toEntityInput(value: unknown): { name: string; type: EntityType; aliases: string[] } | { error: string } {
@@ -596,7 +666,11 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { query, topK, folder } = params as { query: string; topK?: number; folder?: string }
+            const query = pickToolString(params, ['query', 'search_query', 'searchQuery', 'text'])
+            if (!query) {
+                return { success: false, output: 'A non-empty "query" string is required for memory_semantic_search.' }
+            }
+            const { topK, folder } = (params || {}) as { topK?: number; folder?: string }
             const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder, getKnownSpaces)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
@@ -676,14 +750,15 @@ export function makeEntityGraphSearchTool(): ToolDefinition {
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { query, depth, limit } = (params || {}) as { query?: string; depth?: number; limit?: number }
+            const query = pickToolString(params, ['query', 'entity', 'name', 'search_query', 'searchQuery'])
+            const { depth, limit } = (params || {}) as { depth?: number; limit?: number }
             const graph = getEntityGraphStore()
             const cappedLimit = Math.floor(clampToolNumber(limit, 20, 1, 80))
 
-            if (query?.trim()) {
+            if (query) {
                 const seedNodes = graph.findSeedNodes(query, [], Math.min(cappedLimit, 12))
                 if (seedNodes.length === 0) {
-                    return { success: false, output: `No entity graph nodes matched "${query.trim()}".` }
+                    return { success: false, output: `No entity graph nodes matched "${query}".` }
                 }
 
                 const walkDepth = Math.floor(clampToolNumber(depth, 2, 1, 3))
@@ -753,14 +828,15 @@ export function makeEntityGraphAssertTool(): ToolDefinition {
                     required: ['name'],
                 },
                 confidence: { type: 'number', description: 'Confidence from 0.1 to 1.0 (default: 0.9 for explicit user-provided facts).' },
+                importance: { type: 'number', enum: [0, 1, 2, 3], description: 'Importance level: 0 temporary, 1 minor, 2 useful durable fact, 3 core fact.' },
                 evidence: { type: 'string', description: 'Short evidence phrase explaining why this relationship is true.' },
             },
             required: ['from', 'relation', 'to'],
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { from, relation, to, confidence, evidence } = (params || {}) as {
-                from?: unknown; relation?: unknown; to?: unknown; confidence?: unknown; evidence?: unknown
+            const { from, relation, to, confidence, importance, evidence } = (params || {}) as {
+                from?: unknown; relation?: unknown; to?: unknown; confidence?: unknown; importance?: unknown; evidence?: unknown
             }
             const fromEntity = toEntityInput(from)
             if ('error' in fromEntity) return { success: false, output: `Invalid from entity: ${fromEntity.error}` }
@@ -778,6 +854,7 @@ export function makeEntityGraphAssertTool(): ToolDefinition {
                 relation: rel,
                 to: toEntity,
                 confidence: clampToolNumber(confidence, 0.9, 0.1, 1),
+                importance: Math.round(clampToolNumber(importance, 1, 0, 3)) as 0 | 1 | 2 | 3,
                 evidence: typeof evidence === 'string' ? evidence.replace(/\s+/g, ' ').trim().slice(0, 280) : '',
             }, 'tool', 'entity_graph_assert')
 
@@ -890,20 +967,25 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
             const resolved = await resolveTargetSpace(assignedSpaces, folder, undefined, getKnownSpaces)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
-            const mem = getAgentMemory()
-
             // Ensure .md extension
             const fileName = title.endsWith('.md') ? title : `${title}.md`
+            const folderPath = getMemorySpaceFolderPath(resolved.spaceId)
+            if (!folderPath) {
+                return { success: false, output: `Memory folder "${resolved.spaceName}" has no folder configured. Cannot create memory.` }
+            }
 
-            const result = await mem.storeAsFile(content, fileName, resolved.spaceId)
+            const uniqueName = resolveUniqueFileName(folderPath, fileName)
+            writeTextFile(folderPath, uniqueName, content)
 
-            // Trigger entity graph extraction from the written memory content
-            const sourceId = `memory:${result.fileName}`
-            triggerMemoryGraphExtraction(content, sourceId, conversationId, broadcast).catch(() => { })
+            scheduleMemoryReindexJob(content, resolved.spaceId, uniqueName, {
+                replaceExisting: true,
+                conversationId,
+                broadcast,
+            })
 
             return {
                 success: true,
-                output: `Memory "${result.fileName}" created in "${resolved.spaceName}" (${result.chunkCount} chunk${result.chunkCount !== 1 ? 's' : ''} indexed).`
+                output: `Memory "${uniqueName}" created in "${resolved.spaceName}". Memory indexing and entity extraction are running in the background.`
             }
         }
     }
@@ -994,15 +1076,16 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                     backupToRevisions(folderPath, fileName)
                     const appended = fileContent.trimEnd() + '\n\n' + content.trim() + '\n'
                     writeTextFile(folderPath, fileName, appended)
-                    const { chunkCount: indexedChunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                    // Extract only from appended content — old edges still valid
-                    const sourceId = `memory:${fileName}`
-                    triggerMemoryGraphExtraction(content, sourceId, conversationId, broadcast).catch(() => { })
+                    scheduleMemoryReindexJob(appended, resolved.spaceId, fileName, {
+                        replaceExisting: true,
+                        conversationId,
+                        broadcast,
+                    })
 
                     return {
                         success: true,
-                        output: `Content appended to "${fileName}" in "${resolved.spaceName}" (${indexedChunks} chunk${indexedChunks !== 1 ? 's' : ''} re-indexed).`
+                        output: `Content appended to "${fileName}" in "${resolved.spaceName}". Memory indexing and entity extraction are running in the background.`
                     }
                 }
 
@@ -1019,30 +1102,30 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 backupToRevisions(folderPath, fileName)
                 writeTextFile(folderPath, fileName, replaced.content)
 
-                const { chunkCount: indexedChunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
-
-                // Extract only from replacement content — old edges for unchanged chunks still valid
-                const sourceId = `memory:${fileName}`
-                triggerMemoryGraphExtraction(content, sourceId, conversationId, broadcast).catch(() => { })
+                scheduleMemoryReindexJob(replaced.content, resolved.spaceId, fileName, {
+                    replaceExisting: true,
+                    conversationId,
+                    broadcast,
+                })
 
                 return {
                     success: true,
-                    output: `Chunks ${replaced.startIndex}-${replaced.endIndex} in "${fileName}" updated in "${resolved.spaceName}" (${indexedChunks} chunk${indexedChunks !== 1 ? 's' : ''} re-indexed).`
+                    output: `Chunks ${replaced.startIndex}-${replaced.endIndex} in "${fileName}" updated in "${resolved.spaceName}". Memory indexing and entity extraction are running in the background.`
                 }
             } else {
                 // Full replacement — backup original (if it exists on disk) then write directly
                 if (existsOnDisk) backupToRevisions(folderPath, fileName)
                 writeTextFile(folderPath, fileName, content)
-                const { chunkCount: chunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                // Re-extract entity graph from updated memory content
-                const sourceId = `memory:${fileName}`
-                getEntityGraphStore().deleteEdgesBySourceId(sourceId)
-                triggerMemoryGraphExtraction(content, sourceId, conversationId, broadcast).catch(() => { })
+                scheduleMemoryReindexJob(content, resolved.spaceId, fileName, {
+                    replaceExisting: true,
+                    conversationId,
+                    broadcast,
+                })
 
                 return {
                     success: true,
-                    output: `Memory "${fileName}" fully updated in "${resolved.spaceName}" (${chunks} chunk${chunks !== 1 ? 's' : ''} re-indexed).`
+                    output: `Memory "${fileName}" fully updated in "${resolved.spaceName}". Memory indexing and entity extraction are running in the background.`
                 }
             }
         }
@@ -1120,10 +1203,10 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
                 backupToRevisions(resolved.folderPath, resolved.fileName)
 
                 if (!removed.content.trim()) {
+                    abortPendingMemoryGraphIntegration(resolved.spaceId, resolved.fileName)
                     const deleted = await mem.deleteSourceFile(resolved.fileName, resolved.spaceId)
                     // Remove all entity graph edges sourced from this memory file
-                    const graphSourceId = `memory:${resolved.fileName}`
-                    const { edgesDeleted } = getEntityGraphStore().deleteEdgesBySourceId(graphSourceId)
+                    const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
                     return {
                         success: true,
                         output: `Chunks ${removed.startIndex}-${removed.endIndex} removed; "${resolved.fileName}" is now empty and was forgotten from "${resolved.spaceName}" (${deleted} indexed chunk${deleted !== 1 ? 's' : ''} deleted, ${edgesDeleted} graph edge${edgesDeleted !== 1 ? 's' : ''} removed).`
@@ -1131,16 +1214,16 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
                 }
 
                 writeTextFile(resolved.folderPath, resolved.fileName, removed.content)
-                const { chunkCount } = await mem.reindexFile(resolved.folderPath, resolved.fileName, resolved.spaceId)
 
-                // Re-extract entity graph from remaining memory content
-                const graphSourceId = `memory:${resolved.fileName}`
-                getEntityGraphStore().deleteEdgesBySourceId(graphSourceId)
-                triggerMemoryGraphExtraction(removed.content, graphSourceId, conversationId, broadcast).catch(() => { })
+                scheduleMemoryReindexJob(removed.content, resolved.spaceId, resolved.fileName, {
+                    replaceExisting: true,
+                    conversationId,
+                    broadcast,
+                })
 
                 return {
                     success: true,
-                    output: `Chunks ${removed.startIndex}-${removed.endIndex} removed from "${resolved.fileName}" in "${resolved.spaceName}" (${chunkCount} remaining chunk${chunkCount !== 1 ? 's' : ''} re-indexed).`
+                    output: `Chunks ${removed.startIndex}-${removed.endIndex} removed from "${resolved.fileName}" in "${resolved.spaceName}". Memory indexing and entity extraction are running in the background.`
                 }
             }
 
@@ -1150,8 +1233,8 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
 
             const deleted = await mem.deleteSourceFile(resolved.fileName, resolved.spaceId)
             // Remove all entity graph edges sourced from this memory file
-            const graphSourceId = `memory:${resolved.fileName}`
-            const { edgesDeleted } = getEntityGraphStore().deleteEdgesBySourceId(graphSourceId)
+            abortPendingMemoryGraphIntegration(resolved.spaceId, resolved.fileName)
+            const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
             return {
                 success: true,
                 output: `Memory "${resolved.fileName}" forgotten from "${resolved.spaceName}" (${deleted} indexed chunk${deleted !== 1 ? 's' : ''} deleted, ${edgesDeleted} graph edge${edgesDeleted !== 1 ? 's' : ''} removed).`

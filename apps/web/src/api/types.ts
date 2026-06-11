@@ -192,6 +192,20 @@ export interface MemoryFileStatus {
     status: 'indexed' | 'needs_reindex' | 'not_indexed' | 'unsupported'
     chunkCount?: number
     lastIndexedAt?: number
+    entityIndexed: boolean
+    entityIndexedAt?: number
+}
+
+export interface MemoryIndexJob<T = unknown> {
+    id: string
+    kind: 'reindex' | 'entity-index'
+    spaceId: string
+    fileName: string
+    status: 'running' | 'completed' | 'cancelled' | 'error'
+    createdAt: number
+    updatedAt: number
+    result?: T
+    error?: string
 }
 
 export interface EntityGraphNode {
@@ -200,13 +214,23 @@ export interface EntityGraphNode {
     normalizedName: string
     type: 'person' | 'place' | 'organization' | 'project' | 'event' | 'date' | 'technology' | 'product' | 'artifact' | 'concept' | 'other'
     aliases: string[]
+    importance: 0 | 1 | 2 | 3
     mentionCount: number
     sourceCount: number
+    origins?: EntityGraphOrigin[]
     firstSeenAt: number
     lastSeenAt: number
 }
 
 export type EntityGraphNodeType = EntityGraphNode['type']
+
+export interface EntityGraphOrigin {
+    sourceKind: string
+    sourceId: string
+    label: string
+    count: number
+    lastSeenAt: number
+}
 
 export interface EntityGraphEdge {
     id: string
@@ -215,6 +239,7 @@ export interface EntityGraphEdge {
     fromName: string
     toName: string
     relation: string
+    importance: 0 | 1 | 2 | 3
     confidence: number
     evidence: string
     sourceKind: string

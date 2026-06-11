@@ -305,13 +305,13 @@ const maContext = computed(() => {
               :class="isSubAgentSpawnCall(tc.name)
                 ? 'bg-indigo-950/15 border-indigo-500/25'
                 : 'bg-theme-900/60 border-theme-700/30'"
-              >
-                <div class="flex items-center gap-1.5 mb-1">
-                  <Icon
-                    :icon="toolCallIcon(tc)"
-                    class="w-3 h-3"
-                    :class="toolCallIconClass(tc.name)"
-                  />
+            >
+              <div class="flex items-center gap-1.5 mb-1">
+                <Icon
+                  :icon="toolCallIcon(tc)"
+                  class="w-3 h-3"
+                  :class="toolCallIconClass(tc.name)"
+                />
                 <span
                   class="text-[11px] font-medium"
                   :class="isSubAgentSpawnCall(tc.name) ? 'text-indigo-300' : 'text-accent-300'"

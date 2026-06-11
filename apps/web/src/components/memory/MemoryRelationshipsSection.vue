@@ -30,12 +30,21 @@ const columns: Column<EntityGraphEdge>[] = [
   { key: "fromName", label: "From", width: "minmax(0, 1.5fr)", sortable: true },
   { key: "relation", label: "Relation", width: "minmax(0, 1.5fr)", sortable: true, sortValue: (e) => e.relation },
   { key: "toName", label: "To", width: "minmax(0, 1.5fr)", sortable: true },
+  { key: "importance", label: "Importance", width: "120px", sortable: true, sortValue: (e) => e.importance },
   { key: "lastSeenAt", label: "Last Seen", width: "140px", sortable: true },
   { key: "actions", label: "", width: "80px" },
 ];
 
 function formatRelation(relation: string): string {
   return relation.replace(/_/g, " ");
+}
+
+function importanceLabel(level: number): string {
+  return ["temporary", "minor", "useful", "core"][level] ?? "minor";
+}
+
+function importanceName(level: number): string {
+  return ["conversational", "mildly interesting", "useful durable fact", "core fact"][level] ?? "unknown";
 }
 
 function formatDate(ts: number): string {
@@ -279,6 +288,19 @@ function handleBulkDelete() {
 
         <template #col-toName="{ item }">
           <span class="font-medium text-theme-100">{{ item.toName }}</span>
+        </template>
+
+        <template #col-importance="{ item }">
+          <span
+            class="inline-block rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+            :class="{
+              'bg-theme-800 text-theme-400': item.importance === 0,
+              'bg-theme-700/50 text-theme-300': item.importance === 1,
+              'bg-green-900/30 text-green-400': item.importance === 2,
+              'bg-accent-900/30 text-accent-300': item.importance === 3,
+            }"
+            :title="importanceName(item.importance)"
+          >{{ importanceLabel(item.importance) }}</span>
         </template>
 
         <template #col-lastSeenAt="{ item }">

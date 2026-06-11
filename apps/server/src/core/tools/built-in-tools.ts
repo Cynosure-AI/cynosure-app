@@ -131,11 +131,11 @@ function getBuiltInToolSpecs(): BuiltInToolSpec[] {
 }
 
 export function isBuiltInMemoryToolKey(toolKey: string): boolean {
-    return MEMORY_TOOL_NAMES.some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+    return [...MEMORY_TOOL_NAMES, ...ENTITY_GRAPH_TOOL_NAMES].some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
 }
 
 export function getBuiltInMemoryToolKeys(): string[] {
-    return MEMORY_TOOL_NAMES.map((toolName) => `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+    return [...MEMORY_TOOL_NAMES, ...ENTITY_GRAPH_TOOL_NAMES].map((toolName) => `${BUILTIN_NAMESPACE_ID}::${toolName}`);
 }
 
 export function isBuiltInEntityGraphToolKey(toolKey: string): boolean {

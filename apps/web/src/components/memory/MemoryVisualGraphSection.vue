@@ -91,6 +91,25 @@ const selectedSourceCount = computed(() =>
 
 const selectedNodeAliases = computed(() => selectedGraphNode.value?.aliases || []);
 
+const selectedOrigins = computed(() => {
+  const origins = new Map<string, { sourceKind: string; sourceId: string; label: string; count: number; lastSeenAt: number }>();
+  for (const node of selectedGraphNodes.value) {
+    for (const origin of node.origins || []) {
+      const key = `${origin.sourceKind}:${origin.sourceId}`;
+      const existing = origins.get(key);
+      if (existing) {
+        existing.count += origin.count;
+        existing.lastSeenAt = Math.max(existing.lastSeenAt, origin.lastSeenAt);
+      } else {
+        origins.set(key, { ...origin });
+      }
+    }
+  }
+  return [...origins.values()]
+    .sort((a, b) => b.lastSeenAt - a.lastSeenAt || b.count - a.count)
+    .slice(0, 8);
+});
+
 const selectedNodeRelationships = computed(() => {
   if (selectedNodeIds.value.size === 0 || !props.graph) return [];
   return props.graph.edges
@@ -125,6 +144,20 @@ function formatRelation(relation: string): string {
 
 function formatConfidence(value: number): string {
   return `${Math.round((value || 0) * 100)}%`;
+}
+
+function formatOriginKind(kind: string): string {
+  if (kind === "memory") return "Memory";
+  if (kind === "conversation") return "Chat";
+  return kind.replace(/_/g, " ");
+}
+
+function importanceLabel(level: number): string {
+  return ["temporary", "minor", "useful", "core"][level] ?? "minor";
+}
+
+function importanceName(level: number): string {
+  return ["conversational", "mildly interesting", "useful durable fact", "core fact"][level] ?? "unknown";
 }
 
 function relationSortName(edge: EntityGraphEdge): string {
@@ -386,8 +419,18 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               <div class="entity-node-label">
                 {{ data.label }}
               </div>
-              <div class="entity-node-type">
-                {{ data.entity.type }}
+              <div class="entity-node-meta">
+                <span class="entity-node-type">
+                  {{ data.entity.type }}
+                </span>
+                <span
+                  v-if="data.entity.importance > 0"
+                  class="entity-node-importance"
+                  :class="`entity-node-importance-${data.entity.importance}`"
+                  :title="importanceLabel(data.entity.importance)"
+                >
+                  {{ importanceLabel(data.entity.importance) }}
+                </span>
               </div>
             </div>
 
@@ -463,6 +506,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               </h3>
               <div class="entity-node-sidebar-meta">
                 <span>{{ selectedGraphNode?.type || "selection" }}</span>
+                <span v-if="selectedGraphNode">{{ importanceName(selectedGraphNode.importance) }}</span>
                 <span>{{ formatCount(selectedMentionCount) }} mentions</span>
                 <span>{{ formatCount(selectedSourceCount) }} sources</span>
               </div>
@@ -535,6 +579,43 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           <div class="entity-node-sidebar-divider" />
 
           <div class="entity-node-sidebar-section-header">
+            <span>Origins</span>
+            <span>{{ formatCount(selectedOrigins.length) }}</span>
+          </div>
+
+          <div
+            v-if="selectedOrigins.length"
+            class="entity-node-sidebar-list"
+          >
+            <div
+              v-for="origin in selectedOrigins"
+              :key="`${origin.sourceKind}:${origin.sourceId}`"
+              class="entity-node-sidebar-relation"
+            >
+              <div class="entity-node-sidebar-relation-path">
+                <Icon
+                  :icon="origin.sourceKind === 'memory' ? 'lucide:file-text' : 'lucide:message-circle'"
+                  class="h-3 w-3 shrink-0 text-theme-600"
+                />
+                <span>{{ origin.label }}</span>
+              </div>
+              <div class="entity-node-sidebar-relation-detail">
+                <span>{{ formatOriginKind(origin.sourceKind) }}</span>
+                <span>{{ formatCount(origin.count) }} mentions</span>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else
+            class="entity-node-sidebar-empty"
+          >
+            No origin data for this selection.
+          </div>
+
+          <div class="entity-node-sidebar-divider" />
+
+          <div class="entity-node-sidebar-section-header">
             <span>Relationships</span>
             <span>{{ formatCount(selectedNodeRelationships.length) }}</span>
           </div>
@@ -558,6 +639,11 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               </div>
               <div class="entity-node-sidebar-relation-detail">
                 <span>{{ formatRelation(edge.relation) }}</span>
+                <span
+                  class="entity-sidebar-importance"
+                  :class="`entity-sidebar-importance-${edge.importance}`"
+                  :title="importanceName(edge.importance)"
+                >{{ importanceLabel(edge.importance) }}</span>
                 <span>{{ formatConfidence(edge.confidence) }}</span>
               </div>
             </div>
