@@ -127,6 +127,12 @@ export const recommendedServers: RegistryServerEntry[] = [
         ],
     ),
     cynosureMcp(
+        '@cynosure-mcp/codex-terminal',
+        'Codex Terminal',
+        'Start and control OpenAI Codex CLI coding sessions from another agent.',
+        'mcp-codex-terminal',
+    ),
+    cynosureMcp(
         '@cynosure-mcp/cynosure',
         'Cynosure',
         'Manage Cynosure agents, conversations, memory, providers, MCP servers, and settings.',
