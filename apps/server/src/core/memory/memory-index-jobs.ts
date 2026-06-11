@@ -24,8 +24,17 @@ const jobs = new Map<string, MemoryIndexJob>()
 const COMPLETED_TTL_MS = 5 * 60 * 1000
 
 function snapshot<T>(job: MemoryIndexJob<T>): MemoryIndexJobSnapshot<T> {
-    const { controller: _controller, promise: _promise, ...data } = job
-    return data
+    return {
+        id: job.id,
+        kind: job.kind,
+        spaceId: job.spaceId,
+        fileName: job.fileName,
+        status: job.status,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        result: job.result,
+        error: job.error,
+    }
 }
 
 function isActive(job: MemoryIndexJobSnapshot): boolean {
@@ -45,6 +54,7 @@ export function startMemoryIndexJob<T>(opts: {
     kind: MemoryIndexJobKind
     spaceId: string
     fileName: string
+    replaceExisting?: boolean
     run: (signal: AbortSignal) => Promise<T>
 }): MemoryIndexJobSnapshot<T> {
     pruneJobs()
@@ -54,7 +64,12 @@ export function startMemoryIndexJob<T>(opts: {
         job.spaceId === opts.spaceId &&
         job.fileName === opts.fileName
     ) as MemoryIndexJob<T> | undefined
-    if (existing) return snapshot(existing)
+    if (existing) {
+        if (!opts.replaceExisting) return snapshot(existing)
+        existing.controller.abort()
+        existing.status = 'cancelled'
+        existing.updatedAt = Date.now()
+    }
 
     const now = Date.now()
     const controller = new AbortController()
@@ -94,6 +109,16 @@ export function startMemoryIndexJob<T>(opts: {
 
     jobs.set(job.id, job)
     return snapshot(job)
+}
+
+export function cancelMemoryIndexJobsForFile(spaceId: string, fileName: string): void {
+    pruneJobs()
+    for (const job of jobs.values()) {
+        if (job.status !== 'running' || job.spaceId !== spaceId || job.fileName !== fileName) continue
+        job.controller.abort()
+        job.status = 'cancelled'
+        job.updatedAt = Date.now()
+    }
 }
 
 export function listMemoryIndexJobs(spaceId?: string): MemoryIndexJobSnapshot[] {
