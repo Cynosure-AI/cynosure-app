@@ -148,7 +148,12 @@ export const useChatStore = defineStore('chat', () => {
   async function sendMessage(...args: Parameters<typeof chatMessages.sendMessage>): Promise<void> {
     if (!memorySpaces.value.length) await loadMemorySpaces()
     agentConfig.ensureFreeChatPreset()
-    return chatMessages.sendMessage(...args)
+    const conversationId = activeConversationId.value
+    await chatMessages.sendMessage(...args)
+    const currentConversationId = activeConversationId.value
+    if (currentConversationId && (!conversationId || currentConversationId === conversationId)) {
+      markConversationRead(currentConversationId)
+    }
   }
 
   // ── Conversation CRUD ──
@@ -156,10 +161,7 @@ export const useChatStore = defineStore('chat', () => {
   async function selectConversation(id: string, agentIdHint?: string | null): Promise<void> {
     activeConversationId.value = id
     agentStore.setActiveViewConversation(id)
-    // Mark conversation as read
-    const conv = conversations.value.find(c => c.id === id)
-    if (conv) conv.lastReadAt = Date.now()
-    api.chat.markConversationRead(id).catch(() => { /* non-critical */ })
+    markConversationRead(id)
     if (agentIdHint !== undefined) {
       agentConfig.setConversationAgent(agentIdHint)
     }
@@ -285,6 +287,7 @@ export const useChatStore = defineStore('chat', () => {
         agentConfig.syncAgentBaseline()
       }
     } finally {
+      if (activeConversationId.value === id) markConversationRead(id)
       loadingMessages.value = false
     }
   }
@@ -507,11 +510,20 @@ export const useChatStore = defineStore('chat', () => {
     return !conv.lastReadAt || conv.updatedAt > conv.lastReadAt
   }
 
+  /** Mark one conversation as read locally and persist it best-effort. */
+  function markConversationRead(id: string): void {
+    const conv = conversations.value.find(c => c.id === id)
+    if (conv) {
+      conv.lastReadAt = Math.max(Date.now(), conv.updatedAt, conv.lastReadAt || 0)
+    }
+    api.chat.markConversationRead(id).catch(() => { /* non-critical */ })
+  }
+
   /** Mark all conversations as read. */
   function markAllAsRead(): void {
     const now = Date.now()
     for (const conv of conversations.value) {
-      conv.lastReadAt = now
+      conv.lastReadAt = Math.max(now, conv.updatedAt, conv.lastReadAt || 0)
       api.chat.markConversationRead(conv.id).catch(() => { /* non-critical */ })
     }
   }
@@ -532,6 +544,7 @@ export const useChatStore = defineStore('chat', () => {
 
     // Unread helpers
     isConversationUnread,
+    markConversationRead,
     markAllAsRead,
 
     // Streaming (delegated)

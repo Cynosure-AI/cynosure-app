@@ -313,7 +313,10 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     // PATCH /api/chat/conversations/:id/read — mark conversation as read
     app.patch<{ Params: { id: string } }>('/conversations/:id/read', async (req) => {
         const db = getDb()
-        db.prepare('UPDATE conversations SET last_read_at = ? WHERE id = ?').run(Date.now(), req.params.id)
+        const now = Date.now()
+        db.prepare(
+            'UPDATE conversations SET last_read_at = MAX(COALESCE(last_read_at, 0), updated_at, ?) WHERE id = ?'
+        ).run(now, req.params.id)
         return { success: true }
     })
 

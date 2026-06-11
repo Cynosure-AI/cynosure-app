@@ -386,6 +386,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
         // Save final assistant message with metadata
         const assistantMsgId = nanoid()
+        const assistantNow = Date.now()
         db.prepare(
           `INSERT INTO messages (id, conversation_id, role, content, thinking, image_urls_json, memory_sources_json, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -403,9 +404,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           result.usage?.promptTokens ?? null,
           result.usage?.completionTokens ?? null,
           result.contextTokens ?? null,
-          result.usage ? Date.now() - now : null,
-          Date.now()
+          result.usage ? assistantNow - now : null,
+          assistantNow
         )
+        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
 
         // Auto-generate conversation title on first exchange (fire-and-forget)
         const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined

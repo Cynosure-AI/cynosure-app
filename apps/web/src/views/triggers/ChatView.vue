@@ -4,10 +4,12 @@ import ChatHeaderBar from '../../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import InputBar from '../../components/chat/InputBar.vue'
 import OrchestratorTaskList from '../../components/chat/OrchestratorTaskList.vue'
-import { ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 import { useChatSidebar } from '../../composables/useSidebar'
+import { useChatStore } from '../../stores/chat.store'
 
 const { chatSidebarOpen, toggle } = useChatSidebar()
+const chatStore = useChatStore()
 const inputBarRef = ref<InstanceType<typeof InputBar> | null>(null)
 const isDragOver = ref(false)
 let dragCounter = 0
@@ -40,6 +42,11 @@ function onDrop(e: DragEvent) {
     inputBarRef.value.processFiles(Array.from(files))
   }
 }
+
+onUnmounted(() => {
+  const conversationId = chatStore.activeConversationId
+  if (conversationId) chatStore.markConversationRead(conversationId)
+})
 </script>
 
 <template>
