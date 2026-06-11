@@ -828,14 +828,15 @@ export function makeEntityGraphAssertTool(): ToolDefinition {
                     required: ['name'],
                 },
                 confidence: { type: 'number', description: 'Confidence from 0.1 to 1.0 (default: 0.9 for explicit user-provided facts).' },
+                importance: { type: 'number', enum: [0, 1, 2, 3], description: 'Importance level: 0 temporary, 1 minor, 2 useful durable fact, 3 core fact.' },
                 evidence: { type: 'string', description: 'Short evidence phrase explaining why this relationship is true.' },
             },
             required: ['from', 'relation', 'to'],
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { from, relation, to, confidence, evidence } = (params || {}) as {
-                from?: unknown; relation?: unknown; to?: unknown; confidence?: unknown; evidence?: unknown
+            const { from, relation, to, confidence, importance, evidence } = (params || {}) as {
+                from?: unknown; relation?: unknown; to?: unknown; confidence?: unknown; importance?: unknown; evidence?: unknown
             }
             const fromEntity = toEntityInput(from)
             if ('error' in fromEntity) return { success: false, output: `Invalid from entity: ${fromEntity.error}` }
@@ -853,6 +854,7 @@ export function makeEntityGraphAssertTool(): ToolDefinition {
                 relation: rel,
                 to: toEntity,
                 confidence: clampToolNumber(confidence, 0.9, 0.1, 1),
+                importance: Math.round(clampToolNumber(importance, 1, 0, 3)) as 0 | 1 | 2 | 3,
                 evidence: typeof evidence === 'string' ? evidence.replace(/\s+/g, ' ').trim().slice(0, 280) : '',
             }, 'tool', 'entity_graph_assert')
 

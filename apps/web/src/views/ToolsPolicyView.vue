@@ -18,6 +18,16 @@ interface ToolParam {
   type: string
   required: boolean
   description?: string
+  children?: ToolParam[]
+}
+
+interface ToolParamSchema {
+  type?: unknown
+  enum?: unknown[]
+  items?: { type?: unknown }
+  description?: string
+  properties?: Record<string, ToolParamSchema>
+  required?: string[]
 }
 
 const agentStore = useAgentStore()
@@ -175,7 +185,7 @@ function toolCategory(tool: ToolInfo): string {
 }
 
 function toolParams(tool: ToolInfo): ToolParam[] {
-  const schema = tool.parameters as { properties?: Record<string, { type?: unknown; enum?: unknown[]; items?: { type?: unknown }; description?: string }>; required?: string[] } | undefined
+  const schema = tool.parameters as { properties?: Record<string, ToolParamSchema>; required?: string[] } | undefined
   if (!schema?.properties) return []
 
   const required = new Set(schema.required ?? [])
@@ -184,6 +194,19 @@ function toolParams(tool: ToolInfo): ToolParam[] {
     type: paramType(def),
     required: required.has(name),
     description: def.description,
+    children: nestedParams(def),
+  }))
+}
+
+function nestedParams(def: ToolParamSchema): ToolParam[] | undefined {
+  if (!def.properties) return undefined
+  const required = new Set(def.required ?? [])
+  return Object.entries(def.properties).map(([name, child]) => ({
+    name,
+    type: paramType(child),
+    required: required.has(name),
+    description: child.description,
+    children: nestedParams(child),
   }))
 }
 
@@ -191,6 +214,13 @@ function paramType(def: { type?: unknown; enum?: unknown[]; items?: { type?: unk
   if (Array.isArray(def.enum) && def.enum.length) return def.enum.map(String).join(' | ')
   if (def.type === 'array') return `${String(def.items?.type ?? 'any')}[]`
   return typeof def.type === 'string' ? def.type : 'any'
+}
+
+function paramDescription(param: ToolParam): string | undefined {
+  const childLines = param.children?.length
+    ? param.children.map((child) => `${child.name}: ${child.type}${child.required ? '' : '?'}${child.description ? ` - ${child.description}` : ''}`)
+    : []
+  return [param.description, ...childLines].filter(Boolean).join('\n') || undefined
 }
 
 function isExpanded(groupId: string): boolean {
@@ -383,18 +413,18 @@ onMounted(loadPolicyTools)
                       <HoverTooltip
                         v-for="param in toolParams(tool)"
                         :key="param.name"
-                        :disabled="!param.description"
+                        :disabled="!paramDescription(param)"
                         placement="above"
-                        :max-width="240"
+                        :max-width="320"
                       >
                         <span class="inline-flex items-baseline gap-1 rounded border border-theme-800 bg-theme-950/70 px-2 py-1 font-mono text-[11px]">
                           <span class="text-theme-300">{{ param.name }}</span>
                           <span class="text-theme-500">: {{ param.type }}{{ param.required ? '' : '?' }}</span>
                         </span>
                         <template #content>
-                          <p class="text-xs leading-relaxed text-theme-300">
-                            {{ param.description }}
-                          </p>
+                          <div class="whitespace-pre-line text-xs leading-relaxed text-theme-300">
+                            {{ paramDescription(param) }}
+                          </div>
                         </template>
                       </HoverTooltip>
                     </div>
