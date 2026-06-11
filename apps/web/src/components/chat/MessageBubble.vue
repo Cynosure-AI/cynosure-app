@@ -6,6 +6,8 @@ import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import { useAppBranding } from '../../composables/useAppBranding'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
+import FileArtifactLinks from './FileArtifactLinks.vue'
+import type { FileArtifactLink } from '../../utils/file-artifacts'
 
 const markdownRef = ref<HTMLElement | null>(null)
 
@@ -17,6 +19,7 @@ const props = defineProps<{
   imageDataUrls?: string[]
   audioDataUrls?: string[]
   fileAttachments?: { name: string }[]
+  fileArtifacts?: FileArtifactLink[]
   agentId?: string | null
   agentIconUrl?: string | null
   agentName?: string | null
@@ -106,6 +109,7 @@ const renderedContent = computed(() => {
 
 const isUser = computed(() => props.role === 'user')
 const hasAssistantImages = computed(() => !isUser.value && Boolean(props.imageDataUrls?.length))
+const hasAssistantFileArtifacts = computed(() => !isUser.value && Boolean(props.fileArtifacts?.length))
 const imageGridClass = computed(() => {
   const count = props.imageDataUrls?.length || 0
   if (count > 1) return 'grid grid-cols-2 md:grid-cols-3 gap-2 w-full min-w-72 max-w-3xl'
@@ -330,6 +334,12 @@ const imageGridClass = computed(() => {
         class="msg-markdown prose dark:prose-invert prose-sm max-w-none"
         @click="handleMarkdownClick"
         v-html="renderedContent"
+      />
+
+      <!-- File artifacts produced while building this assistant response -->
+      <FileArtifactLinks
+        v-if="hasAssistantFileArtifacts"
+        :artifacts="fileArtifacts"
       />
 
       <!-- Model-generated images (assistant) -->
