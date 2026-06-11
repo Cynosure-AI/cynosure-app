@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, onUnmounted, watch } from "vue";
 import { api } from "../../api/client";
-import type { MemorySpace, MemoryFileStatus } from "../../api/types";
+import type { MemorySpace, MemoryFileStatus, MemoryIndexJob } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentModal from "./MemoryDocumentModal.vue";
 
@@ -28,8 +28,9 @@ const selectedFiles = ref<Set<string>>(new Set());
 const deleting = ref(false);
 const moving = ref(false);
 const showMoveDialog = ref(false);
-const reindexingFile = ref<string | null>(null);
-const entityIndexingFile = ref<string | null>(null);
+const jobs = ref<MemoryIndexJob[]>([]);
+const handledTerminalJobIds = ref<Set<string>>(new Set());
+let jobsPollTimer: ReturnType<typeof setInterval> | null = null;
 
 // Upload
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -69,6 +70,10 @@ const needsAttentionCount = computed(
 const selectedEntityIndexableFiles = computed(() =>
   files.value.filter((f) => f.supported && f.status === "indexed" && selectedFiles.value.has(f.fileName)),
 );
+const runningJobs = computed(() => jobs.value.filter((job) => job.status === "running"));
+const selectedEntityIndexableIdleCount = computed(() =>
+  selectedEntityIndexableFiles.value.filter((f) => !isJobRunning("entity-index", f.fileName)).length,
+);
 
 // --- Data loading ---
 async function loadFiles() {
@@ -79,6 +84,61 @@ async function loadFiles() {
     files.value = [];
   }
   filesLoading.value = false;
+}
+
+function upsertJob(job: MemoryIndexJob) {
+  const next = jobs.value.filter((item) => item.id !== job.id);
+  next.push(job);
+  jobs.value = next;
+  if (job.status === "running") startJobsPolling();
+}
+
+function runningJob(kind: MemoryIndexJob["kind"], fileName: string): MemoryIndexJob | undefined {
+  return jobs.value.find((job) =>
+    job.kind === kind &&
+    job.fileName === fileName &&
+    job.status === "running",
+  );
+}
+
+function isJobRunning(kind: MemoryIndexJob["kind"], fileName: string): boolean {
+  return Boolean(runningJob(kind, fileName));
+}
+
+async function applyTerminalJobs(nextJobs: MemoryIndexJob[]) {
+  const seen = new Set(handledTerminalJobIds.value);
+  const terminalJobs = nextJobs.filter((job) => job.status !== "running" && !seen.has(job.id));
+  if (terminalJobs.length === 0) return;
+  for (const job of terminalJobs) seen.add(job.id);
+  handledTerminalJobIds.value = seen;
+  await loadFiles();
+  emit("spacesChanged");
+}
+
+async function loadJobs() {
+  try {
+    const nextJobs = await api.memorySpaces.listJobs(props.spaceId);
+    jobs.value = nextJobs;
+    await applyTerminalJobs(nextJobs);
+    if (nextJobs.some((job) => job.status === "running")) startJobsPolling();
+    else stopJobsPolling();
+  } catch {
+    jobs.value = [];
+    stopJobsPolling();
+  }
+}
+
+function startJobsPolling() {
+  if (jobsPollTimer) return;
+  jobsPollTimer = setInterval(() => {
+    void loadJobs();
+  }, 2000);
+}
+
+function stopJobsPolling() {
+  if (!jobsPollTimer) return;
+  clearInterval(jobsPollTimer);
+  jobsPollTimer = null;
 }
 
 // --- Selection ---
@@ -99,59 +159,25 @@ function selectAll() {
 
 // --- Re-index ---
 async function reindexFile(fileName: string) {
-  reindexingFile.value = fileName;
   try {
-    const res = await api.memorySpaces.reindexFile(props.spaceId, fileName);
-    if (res.success) {
-      if (res.fileName !== fileName) {
-        const selected = new Set(selectedFiles.value);
-        selected.delete(fileName);
-        selectedFiles.value = selected;
-        await loadFiles();
-        return;
-      }
-      const idx = files.value.findIndex((f) => f.fileName === fileName);
-      if (idx !== -1) {
-        files.value[idx] = {
-          ...files.value[idx],
-          status: "indexed",
-          chunkCount: res.chunksStored,
-          lastIndexedAt: Date.now(),
-          entityIndexed: false,
-          entityIndexedAt: undefined,
-        };
-      }
-    }
+    upsertJob(await api.memorySpaces.startReindexFile(props.spaceId, fileName));
   } catch {
     /* error */
   }
-  reindexingFile.value = null;
 }
 
 // --- Entity graph indexing ---
 async function entityIndexFile(fileName: string) {
-  entityIndexingFile.value = fileName;
   try {
-    const res = await api.memorySpaces.entityIndexFile(props.spaceId, fileName);
-    if (res.success) {
-      const idx = files.value.findIndex((f) => f.fileName === fileName);
-      if (idx !== -1) {
-        files.value[idx] = {
-          ...files.value[idx],
-          entityIndexed: true,
-          entityIndexedAt: res.entityIndexedAt,
-        };
-      }
-    }
+    upsertJob(await api.memorySpaces.startEntityIndexFile(props.spaceId, fileName));
   } catch {
     /* error */
   }
-  entityIndexingFile.value = null;
 }
 
 async function entityIndexSelected() {
   for (const f of selectedEntityIndexableFiles.value) {
-    await entityIndexFile(f.fileName);
+    if (!isJobRunning("entity-index", f.fileName)) await entityIndexFile(f.fileName);
   }
 }
 
@@ -160,7 +186,17 @@ async function reindexAll() {
     (f) => f.supported && (f.status === "needs_reindex" || f.status === "not_indexed"),
   );
   for (const f of toReindex) {
-    await reindexFile(f.fileName);
+    if (!isJobRunning("reindex", f.fileName)) await reindexFile(f.fileName);
+  }
+}
+
+async function cancelJob(job?: MemoryIndexJob) {
+  if (!job) return;
+  try {
+    upsertJob(await api.memorySpaces.cancelJob(job.id));
+    await loadFiles();
+  } catch {
+    /* ignore */
   }
 }
 
@@ -352,14 +388,21 @@ watch(
     files.value = [];
     selectedFiles.value = new Set();
     fileChunks.value = new Map();
+    jobs.value = [];
+    handledTerminalJobIds.value = new Set();
     showDocumentModal.value = false;
     modalFileName.value = "";
     searchQuery.value = "";
     page.value = 0;
     loadFiles();
+    loadJobs();
   },
   { immediate: true },
 );
+
+onUnmounted(() => {
+  stopJobsPolling();
+});
 
 defineExpose({ ingestFiles, moveGroupsToSpace });
 </script>
@@ -479,6 +522,9 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
     <div class="flex items-center justify-between mb-2">
       <div class="text-xs text-theme-500">
         {{ filteredFiles.length }} file{{ filteredFiles.length !== 1 ? "s" : "" }}
+        <template v-if="runningJobs.length > 0">
+          · {{ runningJobs.length }} job{{ runningJobs.length !== 1 ? "s" : "" }} running
+        </template>
       </div>
       <div class="flex items-center gap-2">
         <template v-if="selectedFiles.size > 0">
@@ -510,17 +556,17 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           </button>
           <button
             v-if="selectedEntityIndexableFiles.length > 0"
-            :disabled="entityIndexingFile !== null"
+            :disabled="selectedEntityIndexableIdleCount === 0"
             class="flex items-center gap-1 px-2 py-1 text-xs bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded transition-colors disabled:opacity-50"
             title="Integrate selected indexed documents into the entity graph"
             @click="entityIndexSelected"
           >
             <Icon
-              :icon="entityIndexingFile ? 'lucide:loader-2' : 'lucide:network'"
+              :icon="selectedEntityIndexableIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
               class="w-3.5 h-3.5"
-              :class="{ 'animate-spin': entityIndexingFile }"
+              :class="{ 'animate-spin': selectedEntityIndexableIdleCount === 0 }"
             />
-            Entity index {{ selectedEntityIndexableFiles.length }}
+            Entity index {{ selectedEntityIndexableIdleCount || selectedEntityIndexableFiles.length }}
           </button>
           <button
             :disabled="deleting"
@@ -707,45 +753,44 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <!-- Re-index button -->
         <button
           v-if="file.supported && (file.status === 'needs_reindex' || file.status === 'not_indexed')"
-          :disabled="reindexingFile === file.fileName"
           class="shrink-0 flex items-center gap-1 px-2 py-1 text-xs bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded transition-colors disabled:opacity-50"
-          title="Re-index this file"
-          @click.stop="reindexFile(file.fileName)"
+          :title="isJobRunning('reindex', file.fileName) ? 'Cancel re-index' : 'Re-index this file'"
+          @click.stop="isJobRunning('reindex', file.fileName) ? cancelJob(runningJob('reindex', file.fileName)) : reindexFile(file.fileName)"
         >
           <Icon
-            :icon="reindexingFile === file.fileName ? 'lucide:loader-2' : 'lucide:refresh-cw'"
+            :icon="isJobRunning('reindex', file.fileName) ? 'lucide:loader-2' : 'lucide:refresh-cw'"
             class="w-3.5 h-3.5"
-            :class="{ 'animate-spin': reindexingFile === file.fileName }"
+            :class="{ 'animate-spin': isJobRunning('reindex', file.fileName) }"
           />
-          Re-index
+          {{ isJobRunning("reindex", file.fileName) ? "Cancel" : "Re-index" }}
         </button>
 
         <!-- Re-index complete icon (idle state for indexed) — only shown on hover -->
         <button
           v-else-if="file.supported && file.status === 'indexed'"
           class="shrink-0 p-1 text-theme-600 hover:text-theme-400 transition-colors opacity-0 group-hover/row:opacity-100"
-          title="Force re-index"
-          :disabled="reindexingFile === file.fileName"
-          @click.stop="reindexFile(file.fileName)"
+          :class="{ 'opacity-100 text-orange-400 hover:text-orange-300': isJobRunning('reindex', file.fileName) }"
+          :title="isJobRunning('reindex', file.fileName) ? 'Cancel re-index' : 'Force re-index'"
+          @click.stop="isJobRunning('reindex', file.fileName) ? cancelJob(runningJob('reindex', file.fileName)) : reindexFile(file.fileName)"
         >
           <Icon
-            :icon="reindexingFile === file.fileName ? 'lucide:loader-2' : 'lucide:refresh-cw'"
+            :icon="isJobRunning('reindex', file.fileName) ? 'lucide:loader-2' : 'lucide:refresh-cw'"
             class="w-3.5 h-3.5"
-            :class="{ 'animate-spin': reindexingFile === file.fileName }"
+            :class="{ 'animate-spin': isJobRunning('reindex', file.fileName) }"
           />
         </button>
 
         <button
           v-if="file.supported && file.status === 'indexed'"
           class="shrink-0 p-1 text-theme-600 hover:text-emerald-400 transition-colors opacity-0 group-hover/row:opacity-100 disabled:opacity-50"
-          title="Entity index"
-          :disabled="entityIndexingFile === file.fileName"
-          @click.stop="entityIndexFile(file.fileName)"
+          :class="{ 'opacity-100 text-emerald-400': isJobRunning('entity-index', file.fileName) }"
+          :title="isJobRunning('entity-index', file.fileName) ? 'Cancel entity indexing' : 'Entity index'"
+          @click.stop="isJobRunning('entity-index', file.fileName) ? cancelJob(runningJob('entity-index', file.fileName)) : entityIndexFile(file.fileName)"
         >
           <Icon
-            :icon="entityIndexingFile === file.fileName ? 'lucide:loader-2' : 'lucide:network'"
+            :icon="isJobRunning('entity-index', file.fileName) ? 'lucide:loader-2' : 'lucide:network'"
             class="w-3.5 h-3.5"
-            :class="{ 'animate-spin': entityIndexingFile === file.fileName }"
+            :class="{ 'animate-spin': isJobRunning('entity-index', file.fileName) }"
           />
         </button>
       </div>

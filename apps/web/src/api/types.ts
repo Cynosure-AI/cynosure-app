@@ -196,6 +196,18 @@ export interface MemoryFileStatus {
     entityIndexedAt?: number
 }
 
+export interface MemoryIndexJob<T = unknown> {
+    id: string
+    kind: 'reindex' | 'entity-index'
+    spaceId: string
+    fileName: string
+    status: 'running' | 'completed' | 'cancelled' | 'error'
+    createdAt: number
+    updatedAt: number
+    result?: T
+    error?: string
+}
+
 export interface EntityGraphNode {
     id: string
     name: string

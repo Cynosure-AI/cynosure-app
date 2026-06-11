@@ -30,6 +30,12 @@ import {
     indexMemoryFileIntoEntityGraph,
     moveMemoryGraphSource,
 } from '../core/memory/memory-entity-indexer.js'
+import {
+    cancelMemoryIndexJob,
+    getMemoryIndexJob,
+    listMemoryIndexJobs,
+    startMemoryIndexJob,
+} from '../core/memory/memory-index-jobs.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -108,6 +114,20 @@ function loadSpaceRow(id: string): MemorySpaceRow | undefined {
 // ---------------------------------------------------------------------------
 
 export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<void> {
+
+    // GET /api/memory-spaces/jobs/:jobId — inspect one background indexing job
+    app.get<{ Params: { jobId: string } }>('/jobs/:jobId', async (req, reply) => {
+        const job = getMemoryIndexJob(req.params.jobId)
+        if (!job) return reply.status(404).send({ error: 'Job not found' })
+        return job
+    })
+
+    // POST /api/memory-spaces/jobs/:jobId/cancel — cancel one background indexing job
+    app.post<{ Params: { jobId: string } }>('/jobs/:jobId/cancel', async (req, reply) => {
+        const job = cancelMemoryIndexJob(req.params.jobId)
+        if (!job) return reply.status(404).send({ error: 'Job not found' })
+        return job
+    })
 
     // GET /api/memory-spaces — list all spaces with file counts
     app.get('/', async () => {
@@ -246,6 +266,13 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     // File browser
     // -----------------------------------------------------------------------
 
+    // GET /api/memory-spaces/:id/jobs — list recent indexing jobs for a space
+    app.get<{ Params: { id: string } }>('/:id/jobs', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        return listMemoryIndexJobs(row.id)
+    })
+
     // GET /api/memory-spaces/:id/files — list files in folder with index status
     app.get<{ Params: { id: string } }>('/:id/files', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
@@ -317,6 +344,24 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         }
     })
 
+    // POST /api/memory-spaces/:id/files/:fileName/reindex-job — start a background re-index job
+    app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/reindex-job', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
+
+        const mem = getAgentMemory()
+        return startMemoryIndexJob({
+            kind: 'reindex',
+            spaceId: row.id,
+            fileName: req.params.fileName,
+            run: async (signal) => {
+                const result = await mem.reindexFile(row.folder_path, req.params.fileName, row.id, { signal })
+                return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
+            },
+        })
+    })
+
     // POST /api/memory-spaces/:id/files/:fileName/entity-index — integrate one indexed document into the entity graph
     app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/entity-index', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
@@ -342,6 +387,35 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         } catch (err) {
             return reply.status(500).send({ error: (err as Error).message || 'Failed to entity-index file' })
         }
+    })
+
+    // POST /api/memory-spaces/:id/files/:fileName/entity-index-job — start a background entity graph indexing job
+    app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/entity-index-job', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
+
+        const mem = getAgentMemory()
+        const status = mem.checkFileStatus(row.id, req.params.fileName, row.folder_path)
+        if (status !== 'current') {
+            return reply.status(409).send({ error: status === 'not_indexed' ? 'File must be indexed before entity indexing.' : 'File must be re-indexed before entity indexing.' })
+        }
+
+        return startMemoryIndexJob({
+            kind: 'entity-index',
+            spaceId: row.id,
+            fileName: req.params.fileName,
+            run: async (signal) => ({
+                success: true,
+                ...(await indexMemoryFileIntoEntityGraph({
+                    folderPath: row.folder_path,
+                    spaceId: row.id,
+                    fileName: req.params.fileName,
+                    replaceExisting: true,
+                    signal,
+                })),
+            }),
+        })
     })
 
     // DELETE /api/memory-spaces/:id/files/:fileName — delete a file from the space
