@@ -19,9 +19,6 @@ async function integrateMemoryContentIntoGraph(
     fileName: string,
     opts: { replaceExisting?: boolean; conversationId?: string; broadcast?: BroadcastFn; signal?: AbortSignal } = {},
 ): Promise<void> {
-    if (opts.conversationId && opts.broadcast) {
-        opts.broadcast('chat:post-action', { conversationId: opts.conversationId, action: 'updating-entity-graph', status: 'started' })
-    }
     try {
         await indexMemoryContentIntoEntityGraph({
             content,
@@ -35,10 +32,6 @@ async function integrateMemoryContentIntoGraph(
             console.warn('[entity-graph] Memory extraction failed:', err)
         }
         throw err
-    } finally {
-        if (opts.conversationId && opts.broadcast) {
-            opts.broadcast('chat:post-action', { conversationId: opts.conversationId, action: 'updating-entity-graph', status: 'completed' })
-        }
     }
 }
 
