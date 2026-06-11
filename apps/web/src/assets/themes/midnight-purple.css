@@ -1,21 +1,20 @@
-/* ═══════════════════════════════════════════════════════════════════════════
-   Midnight Purple Theme
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ==========================================================================
+   Midnight Theme - deep night sky, violet horizon, and soft starlight
+   ========================================================================== */
 
-/* ── Variable overrides: deep indigo/purple tints ── */
 [data-theme="midnight-purple"] {
-  --color-theme-950: #130f1b;
-  --color-theme-900: #1a1528;
-  --color-theme-800: #24203c;
-  --color-theme-700: #30284c;
-  --color-theme-600: #3d2e5e;
-  --color-theme-500: #5c4880;
-  --color-theme-400: #8270a8;
-  --color-theme-300: #a898c8;
-  --color-theme-200: #ccc0e2;
-  --color-theme-100: #ebe5f5;
+  --color-theme-950: #070915;
+  --color-theme-900: #0d1022;
+  --color-theme-800: #171a32;
+  --color-theme-700: #25294b;
+  --color-theme-600: #363766;
+  --color-theme-500: #57548a;
+  --color-theme-400: #817bb1;
+  --color-theme-300: #ada6d5;
+  --color-theme-200: #d8d2f2;
+  --color-theme-100: #f1edff;
 
-  /* Accent: violet */
+  /* Accent: moonlit violet */
   --color-accent-50: #faf5ff;
   --color-accent-100: #f3e8ff;
   --color-accent-200: #e9d5ff;
@@ -28,15 +27,413 @@
   --color-accent-900: #581c87;
   --color-accent-950: #3b0764;
 
-  /* Theme effects */
-  --theme-glow: 0 0 12px #a855f720;
-  --theme-glow-strong: 0 0 24px #a855f738;
+  --md-night: #070915;
+  --md-sky: #101635;
+  --md-indigo: #5b6dff;
+  --md-violet: #a855f7;
+  --md-moon: #d8d2f2;
+  --md-star: rgba(216, 210, 242, 0.38);
+  --md-cyan: #67e8f9;
+  --md-cyan-soft: rgba(103, 232, 249, 0.14);
+
+  --theme-glow:
+    0 0 14px rgba(168, 85, 247, 0.18), 0 0 34px rgba(91, 109, 255, 0.08);
+  --theme-glow-strong:
+    0 0 16px rgba(168, 85, 247, 0.36), 0 0 46px rgba(91, 109, 255, 0.18);
   --theme-accent-rgb: 168, 85, 247;
 
   color-scheme: dark;
 }
 
-/* ── Focus glow ── */
+[data-theme="midnight-purple"] body {
+  background:
+    radial-gradient(
+      circle at 20% 4%,
+      rgba(216, 210, 242, 0.12),
+      transparent 16rem
+    ),
+    radial-gradient(
+      circle at 72% 12%,
+      rgba(91, 109, 255, 0.14),
+      transparent 28rem
+    ),
+    radial-gradient(
+      circle at 50% 100%,
+      rgba(168, 85, 247, 0.12),
+      transparent 34rem
+    ),
+    var(--md-night);
+}
+
 [data-theme="midnight-purple"] :is(button, a):focus-visible {
   box-shadow: var(--theme-glow-strong);
+  outline: 1px solid rgba(216, 210, 242, 0.28);
+}
+
+[data-theme="midnight-purple"] .bg-theme-950 {
+  background:
+    radial-gradient(
+      circle at 12% 8%,
+      rgba(216, 210, 242, 0.28) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 29% 18%,
+      rgba(103, 232, 249, 0.14) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 76% 13%,
+      rgba(216, 210, 242, 0.22) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at 18% 34%,
+      rgba(168, 85, 247, 0.18) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 61% 31%,
+      rgba(103, 232, 249, 0.13) 0 0.85px,
+      transparent 1.3px
+    ),
+    radial-gradient(
+      circle at 88% 42%,
+      rgba(216, 210, 242, 0.2) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at 7% 56%,
+      rgba(168, 85, 247, 0.16) 0 0.85px,
+      transparent 1.35px
+    ),
+    radial-gradient(
+      circle at 43% 63%,
+      rgba(216, 210, 242, 0.2) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at 72% 71%,
+      rgba(103, 232, 249, 0.12) 0 0.85px,
+      transparent 1.3px
+    ),
+    radial-gradient(
+      circle at 23% 82%,
+      rgba(216, 210, 242, 0.2) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at 91% 88%,
+      rgba(168, 85, 247, 0.18) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at top right,
+      rgba(91, 109, 255, 0.1),
+      transparent 32rem
+    ),
+    radial-gradient(
+      circle at bottom left,
+      rgba(168, 85, 247, 0.08),
+      transparent 36rem
+    ),
+    var(--color-theme-950);
+}
+
+[data-theme="midnight-purple"] .bg-theme-900,
+[data-theme="midnight-purple"] .bg-theme-900\/50,
+[data-theme="midnight-purple"] .bg-theme-900\/60 {
+  background-color: color-mix(in srgb, var(--color-theme-900) 88%, #5b6dff 12%);
+}
+
+[data-theme="midnight-purple"] .bg-theme-800,
+[data-theme="midnight-purple"] .bg-theme-800\/60,
+[data-theme="midnight-purple"] .bg-theme-800\/80 {
+  background-color: color-mix(in srgb, var(--color-theme-800) 90%, #a855f7 10%);
+  border-color: rgba(216, 210, 242, 0.14);
+}
+
+[data-theme="midnight-purple"] .border-theme-700,
+[data-theme="midnight-purple"] .border-theme-800,
+[data-theme="midnight-purple"] .border-theme-800\/60 {
+  border-color: rgba(173, 166, 213, 0.18);
+}
+
+[data-theme="midnight-purple"] .shadow-2xl,
+[data-theme="midnight-purple"] .shadow-xl {
+  box-shadow: 0 22px 70px rgba(5, 8, 24, 0.52);
+}
+
+[data-theme="midnight-purple"] h1,
+[data-theme="midnight-purple"] h2 {
+  text-shadow:
+    0 0 18px rgba(168, 85, 247, 0.18),
+    0 0 36px rgba(91, 109, 255, 0.08);
+}
+
+[data-theme="midnight-purple"] label,
+[data-theme="midnight-purple"] .text-theme-400 {
+  color: #928bc5;
+}
+
+[data-theme="midnight-purple"] input[type="checkbox"]:checked {
+  accent-color: var(--md-violet);
+}
+
+[data-theme="midnight-purple"] input:focus,
+[data-theme="midnight-purple"] textarea:focus,
+[data-theme="midnight-purple"] select:focus {
+  box-shadow:
+    0 0 0 1px rgba(168, 85, 247, 0.34),
+    0 0 18px rgba(91, 109, 255, 0.12),
+    inset 0 0 12px rgba(216, 210, 242, 0.03);
+  border-color: rgba(168, 85, 247, 0.44) !important;
+  outline: none;
+}
+
+[data-theme="midnight-purple"] button:hover {
+  text-shadow: 0 0 8px rgba(168, 85, 247, 0.18);
+}
+
+[data-theme="midnight-purple"] button.bg-accent-600,
+[data-theme="midnight-purple"] button.bg-accent-500,
+[data-theme="midnight-purple"] .bg-accent-600,
+[data-theme="midnight-purple"] .bg-accent-500 {
+  background-image: linear-gradient(135deg, #5b6dff, #9333ea 48%, #c084fc);
+  box-shadow: 0 12px 32px rgba(91, 109, 255, 0.2);
+}
+
+[data-theme="midnight-purple"] .nav-item.active,
+[data-theme="midnight-purple"] nav a.router-link-active,
+[data-theme="midnight-purple"] nav [data-active="true"] {
+  background: linear-gradient(
+    90deg,
+    rgba(91, 109, 255, 0.16),
+    rgba(168, 85, 247, 0.1)
+  ) !important;
+  border-left: 2px solid var(--md-moon);
+  box-shadow:
+    inset 5px 0 18px rgba(91, 109, 255, 0.1),
+    var(--theme-glow);
+}
+
+[data-theme="midnight-purple"] .msg-markdown a {
+  color: #c4b5fd;
+  text-decoration-color: rgba(196, 181, 253, 0.42);
+}
+
+[data-theme="midnight-purple"] .msg-markdown strong {
+  color: #faf7ff;
+}
+
+[data-theme="midnight-purple"] .msg-markdown :not(pre) > code {
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(216, 210, 242, 0.13);
+  color: #ddd6fe;
+}
+
+[data-theme="midnight-purple"] .code-header {
+  background: rgba(13, 16, 34, 0.94);
+  border-color: rgba(216, 210, 242, 0.14);
+}
+
+[data-theme="midnight-purple"] .code-copy-btn:hover {
+  background: rgba(168, 85, 247, 0.14);
+}
+
+[data-theme="midnight-purple"] ::selection {
+  background: rgba(168, 85, 247, 0.3);
+  color: var(--color-theme-100);
+}
+
+[data-theme="midnight-purple"] ::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+[data-theme="midnight-purple"] ::-webkit-scrollbar-track {
+  background: var(--md-night);
+}
+
+[data-theme="midnight-purple"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(216, 210, 242, 0.38),
+    rgba(91, 109, 255, 0.32)
+  );
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 999px;
+}
+
+[data-theme="midnight-purple"] ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(216, 210, 242, 0.58),
+    rgba(168, 85, 247, 0.48)
+  );
+}
+
+/* Chat sidebar: complementary starfield with more blue-indigo emphasis.
+   Reversed directional glows and different star positions give it a
+   distinct character while staying cohesive with the nav sidebar. */
+[data-theme="midnight-purple"] .bg-sidebar-chat {
+  background:
+    radial-gradient(
+      circle at 82% 6%,
+      rgba(91, 109, 255, 0.26) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 14% 22%,
+      rgba(216, 210, 242, 0.18) 0 0.85px,
+      transparent 1.35px
+    ),
+    radial-gradient(
+      circle at 53% 11%,
+      rgba(103, 232, 249, 0.16) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 71% 38%,
+      rgba(216, 210, 242, 0.22) 0 0.9px,
+      transparent 1.4px
+    ),
+    radial-gradient(
+      circle at 26% 47%,
+      rgba(91, 109, 255, 0.2) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 88% 55%,
+      rgba(168, 85, 247, 0.16) 0 0.85px,
+      transparent 1.3px
+    ),
+    radial-gradient(
+      circle at 45% 68%,
+      rgba(103, 232, 249, 0.14) 0 0.85px,
+      transparent 1.35px
+    ),
+    radial-gradient(
+      circle at 11% 74%,
+      rgba(216, 210, 242, 0.2) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at 67% 82%,
+      rgba(91, 109, 255, 0.18) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 35% 91%,
+      rgba(103, 232, 249, 0.14) 0 0.85px,
+      transparent 1.3px
+    ),
+    radial-gradient(
+      circle at 93% 85%,
+      rgba(168, 85, 247, 0.18) 0 0.9px,
+      transparent 1.4px
+    ),
+    radial-gradient(
+      circle at bottom right,
+      rgba(91, 109, 255, 0.12),
+      transparent 30rem
+    ),
+    radial-gradient(
+      circle at top left,
+      rgba(168, 85, 247, 0.09),
+      transparent 34rem
+    ),
+    var(--color-theme-950);
+}
+
+/* Fine-grain starlight overlay, intentionally subtle for long work sessions. */
+[data-theme="midnight-purple"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.5;
+  background-image:
+    radial-gradient(
+      circle at 4% 11%,
+      rgba(216, 210, 242, 0.46) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at 11% 48%,
+      rgba(103, 232, 249, 0.22) 0 0.9px,
+      transparent 1.35px
+    ),
+    radial-gradient(
+      circle at 17% 23%,
+      rgba(168, 85, 247, 0.26) 0 0.9px,
+      transparent 1.35px
+    ),
+    radial-gradient(
+      circle at 22% 86%,
+      rgba(241, 237, 255, 0.2) 0 0.75px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle at 31% 9%,
+      rgba(216, 210, 242, 0.32) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at 36% 61%,
+      rgba(103, 232, 249, 0.2) 0 0.85px,
+      transparent 1.3px
+    ),
+    radial-gradient(
+      circle at 43% 37%,
+      rgba(168, 85, 247, 0.24) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at 48% 94%,
+      rgba(216, 210, 242, 0.28) 0 0.85px,
+      transparent 1.3px
+    ),
+    radial-gradient(
+      circle at 55% 16%,
+      rgba(241, 237, 255, 0.22) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at 63% 72%,
+      rgba(103, 232, 249, 0.18) 0 0.85px,
+      transparent 1.3px
+    ),
+    radial-gradient(
+      circle at 69% 28%,
+      rgba(168, 85, 247, 0.2) 0 0.8px,
+      transparent 1.25px
+    ),
+    radial-gradient(
+      circle at 74% 54%,
+      rgba(216, 210, 242, 0.3) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at 81% 8%,
+      rgba(103, 232, 249, 0.18) 0 0.85px,
+      transparent 1.3px
+    ),
+    radial-gradient(
+      circle at 86% 83%,
+      rgba(216, 210, 242, 0.26) 0 0.85px,
+      transparent 1.3px
+    ),
+    radial-gradient(
+      circle at 94% 33%,
+      rgba(168, 85, 247, 0.24) 0 1px,
+      transparent 1.45px
+    ),
+    radial-gradient(
+      circle at 97% 69%,
+      rgba(241, 237, 255, 0.18) 0 0.75px,
+      transparent 1.2px
+    );
+  background-repeat: no-repeat;
 }
