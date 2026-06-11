@@ -133,6 +133,12 @@ export const recommendedServers: RegistryServerEntry[] = [
         'mcp-codex-terminal',
     ),
     cynosureMcp(
+        '@cynosure-mcp/claude-code-terminal',
+        'Claude Code Terminal',
+        'Start and control Anthropic Claude Code CLI coding sessions from another agent.',
+        'mcp-claude-code-terminal',
+    ),
+    cynosureMcp(
         '@cynosure-mcp/cynosure',
         'Cynosure',
         'Manage Cynosure agents, conversations, memory, providers, MCP servers, and settings.',
