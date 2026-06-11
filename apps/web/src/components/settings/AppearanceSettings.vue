@@ -31,6 +31,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
   { id: 'arasaka', label: 'Arasaka', icon: 'lucide:zap', colors: { bg: '#13090e', surface: '#1c1218', accent: '#00dce8', text: '#f0dce2' } },
   { id: 'midnight-purple', label: 'Midnight', icon: 'lucide:sparkles', colors: { bg: '#130f1b', surface: '#1a1528', accent: '#a855f7', text: '#ebe5f5' } },
   { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#111114', surface: '#181819', accent: '#f9f002', text: '#e8e8f0' } },
+  { id: 'matrix', label: 'Matrix', icon: 'lucide:terminal', colors: { bg: '#030705', surface: '#0a120e', accent: '#00ff41', text: '#d8eed8' } },
 ]
 </script>
 
@@ -58,7 +59,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
         </div>
       </div>
 
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <button
           v-for="t in themes"
           :key="t.id"
