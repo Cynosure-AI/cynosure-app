@@ -24,6 +24,13 @@ export interface ReindexFileResult {
     chunkCount: number
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+    if (!signal?.aborted) return
+    const err = new Error('Cancelled')
+    err.name = 'AbortError'
+    throw err
+}
+
 function upsertFileIndex(
     spaceId: string,
     fileName: string,
@@ -37,6 +44,10 @@ function upsertFileIndex(
             INSERT INTO memory_file_index (space_id, file_name, content_hash, chunk_count, last_indexed_at, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(space_id, file_name) DO UPDATE SET
+                entity_indexed_at = CASE
+                    WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.entity_indexed_at
+                    ELSE 0
+                END,
                 content_hash = excluded.content_hash,
                 chunk_count = excluded.chunk_count,
                 last_indexed_at = excluded.last_indexed_at
@@ -65,12 +76,12 @@ export class AgentMemory {
     // Core: ingest text into LanceDB (low-level, no file I/O)
     // -----------------------------------------------------------------------
 
-    private async ingestText(text: string, sourceFile: string, spaceId: string): Promise<number> {
+    private async ingestText(text: string, sourceFile: string, spaceId: string, signal?: AbortSignal): Promise<number> {
         return this.parser.ingest(TABLE_NAME, text, {
             source: 'permanent',
             sourceFile,
             spaceId,
-        })
+        }, { signal })
     }
 
     // -----------------------------------------------------------------------
@@ -111,7 +122,9 @@ export class AgentMemory {
         folderPath: string,
         fileName: string,
         spaceId: string,
+        opts?: { signal?: AbortSignal },
     ): Promise<ReindexFileResult> {
+        throwIfAborted(opts?.signal)
         const filePath = join(folderPath, fileName)
         const ragStore = getRAGStore()
 
@@ -122,16 +135,20 @@ export class AgentMemory {
             text = readTextFile(folderPath, fileName)
         } else if (isParseableDocument(fileName)) {
             const buf = readFileSync(filePath)
+            throwIfAborted(opts?.signal)
             text = await parseDocument(buf, fileName)
+            throwIfAborted(opts?.signal)
             const mdName = resolveUniqueFileName(folderPath, toMarkdownFileName(fileName))
             const mdPath = writeTextFile(folderPath, mdName, text)
 
             moveToRevisions(folderPath, fileName)
 
             await ragStore.deleteBySources(TABLE_NAME, [fileName, mdName], buildMemorySpaceFilter([{ id: spaceId }]))
+            throwIfAborted(opts?.signal)
             removeFileIndex(spaceId, fileName)
 
-            const count = await this.ingestText(text, mdName, spaceId)
+            const count = await this.ingestText(text, mdName, spaceId, opts?.signal)
+            throwIfAborted(opts?.signal)
             const hash = computeFileHash(mdPath)
             upsertFileIndex(spaceId, mdName, hash, count)
             return { fileName: mdName, chunkCount: count }
@@ -141,8 +158,10 @@ export class AgentMemory {
 
         // Remove old vectors for this file in this space
         await ragStore.deleteBySource(TABLE_NAME, fileName, buildMemorySpaceFilter([{ id: spaceId }]))
+        throwIfAborted(opts?.signal)
 
-        const count = await this.ingestText(text, fileName, spaceId)
+        const count = await this.ingestText(text, fileName, spaceId, opts?.signal)
+        throwIfAborted(opts?.signal)
         const hash = computeFileHash(filePath)
         upsertFileIndex(spaceId, fileName, hash, count)
         return { fileName, chunkCount: count }
@@ -307,15 +326,15 @@ export class AgentMemory {
     // File index read helpers
     // -----------------------------------------------------------------------
 
-    getFileIndex(spaceId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number }> {
+    getFileIndex(spaceId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number }> {
         try {
             const db = getDb()
             const rows = db
-                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at FROM memory_file_index WHERE space_id = ?')
-                .all(spaceId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number }[]
-            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number }>()
+                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at FROM memory_file_index WHERE space_id = ?')
+                .all(spaceId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number }[]
+            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number }>()
             for (const row of rows) {
-                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at })
+                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, entityIndexedAt: row.entity_indexed_at || 0 })
             }
             return map
         } catch {
@@ -323,14 +342,14 @@ export class AgentMemory {
         }
     }
 
-    getFileIndexEntry(spaceId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number } | undefined {
+    getFileIndexEntry(spaceId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number } | undefined {
         try {
             const db = getDb()
             const row = db
-                .prepare('SELECT content_hash, chunk_count, last_indexed_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
-                .get(spaceId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number } | undefined
+                .prepare('SELECT content_hash, chunk_count, last_indexed_at, entity_indexed_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
+                .get(spaceId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number } | undefined
             if (!row) return undefined
-            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at }
+            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, entityIndexedAt: row.entity_indexed_at || 0 }
         } catch {
             return undefined
         }

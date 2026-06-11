@@ -372,9 +372,15 @@ onBeforeUnmount(() => {
             </span>
             <span
               v-if="agentStore.awaitingHITLConvIds.has(conv.id)"
-              class="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"
+              class="relative inline-flex h-4 w-4 shrink-0 items-center justify-center text-accent-400"
               title="Awaiting tool confirmation"
-            />
+            >
+              <span class="absolute inline-flex h-full w-full rounded-full bg-accent-400/40 animate-ping" />
+              <Icon
+                icon="lucide:info"
+                class="relative h-3.5 w-3.5"
+              />
+            </span>
             <span
               v-if="conv.origin && conv.origin !== 'chat'"
               class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full"

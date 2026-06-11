@@ -19,6 +19,7 @@ const VISUAL_GRAPH_LIMIT = 200;
 const RELATIONSHIPS_GRAPH_LIMIT = 5000;
 
 type MemoryPanel = "documents" | "relationships" | "visual";
+type GraphViewMode = "relationships" | "visual";
 type FlowPoint = {
   x: number;
   y: number;
@@ -81,6 +82,7 @@ const graphLoading = ref(false);
 const graphQuery = ref("");
 const graphSuggestions = ref<EntityGraphNode[]>([]);
 const graphLimit = ref<number | null>(null);
+const graphView = ref<GraphViewMode | null>(null);
 const editingNode = ref<EntityGraphNode | null>(null);
 const editingEdge = ref<EntityGraphEdge | null>(null);
 const pendingDeleteNode = ref<EntityGraphNode | null>(null);
@@ -102,6 +104,10 @@ const { fitView } = useVueFlow(ENTITY_FLOW_ID);
 let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk-api").default>> | null = null;
 let graphSuggestionTimer: number | null = null;
 let graphSuggestionRequest = 0;
+let graphRequest = 0;
+let graphLayoutRequest = 0;
+let fitGraphAfterLayout = false;
+let inFlightGraphKey = "";
 
 const panelByRouteSegment: Record<string, MemoryPanel> = {
   documents: "documents",
@@ -111,6 +117,16 @@ const panelByRouteSegment: Record<string, MemoryPanel> = {
 
 const activeSection = computed(() =>
   memorySections.find((section) => section.id === activePanel.value) || memorySections[0],
+);
+
+const activeGraphView = computed<GraphViewMode | null>(() => {
+  if (activePanel.value === "relationships") return "relationships";
+  if (activePanel.value === "visual") return "visual";
+  return null;
+});
+
+const activeGraph = computed(() =>
+  activeGraphView.value && graphView.value === activeGraphView.value ? graph.value : null,
 );
 
 const selectedSpace = computed(() =>
@@ -127,22 +143,24 @@ async function getElk() {
 }
 
 async function layoutGraph() {
-  if (!graph.value) {
+  const requestId = ++graphLayoutRequest;
+  const currentGraph = activePanel.value === "visual" ? activeGraph.value : null;
+  if (!currentGraph) {
     graphFlowNodes.value = [];
     graphFlowEdges.value = [];
     return;
   }
 
   const nodeLabels = new Map<string, EntityGraphNode>();
-  for (const node of graph.value.nodes) nodeLabels.set(node.id, node);
-  for (const edge of graph.value.edges) {
+  for (const node of currentGraph.nodes) nodeLabels.set(node.id, node);
+  for (const edge of currentGraph.edges) {
     if (!nodeLabels.has(edge.fromNodeId)) nodeLabels.set(edge.fromNodeId, fallbackGraphNode(edge.fromNodeId, edge.fromName));
     if (!nodeLabels.has(edge.toNodeId)) nodeLabels.set(edge.toNodeId, fallbackGraphNode(edge.toNodeId, edge.toName));
   }
 
-  const seedIds = new Set(graph.value.seedNodes.map((node) => node.id));
+  const seedIds = new Set(currentGraph.seedNodes.map((node) => node.id));
   const dimensions = new Map<string, { width: number; height: number }>(
-    [...nodeLabels.entries()].map(([id, node]) => [id, nodeDimensions(node.name)]),
+    [...nodeLabels.entries()].map(([id, node]) => [id, nodeDimensions(node.name, node.importance)]),
   );
 
   const elk = await getElk();
@@ -161,7 +179,7 @@ async function layoutGraph() {
       width: dimensions.get(id)?.width || 150,
       height: dimensions.get(id)?.height || 44,
     })),
-    edges: graph.value.edges.map((edge) => ({
+    edges: currentGraph.edges.map((edge) => ({
       id: edge.id,
       sources: [edge.fromNodeId],
       targets: [edge.toNodeId],
@@ -179,7 +197,7 @@ async function layoutGraph() {
   }
 
   const edgeGroups = new Map<string, EntityGraphEdge[]>();
-  for (const edge of graph.value.edges) {
+  for (const edge of currentGraph.edges) {
     const key = edgePairKey(edge.fromNodeId, edge.toNodeId);
     if (!edgeGroups.has(key)) edgeGroups.set(key, []);
     edgeGroups.get(key)!.push(edge);
@@ -228,6 +246,7 @@ async function layoutGraph() {
       data: { entity, label: entity.name, isSeed: seedIds.has(id), connectedHandles: connectedHandles.get(id) ?? new Set() },
     });
   }
+  if (requestId !== graphLayoutRequest) return;
   graphFlowNodes.value = nodes;
   graphFlowEdges.value = edges;
 }
@@ -239,17 +258,21 @@ function fallbackGraphNode(id: string, name: string): EntityGraphNode {
     normalizedName: name.toLowerCase(),
     type: "other",
     aliases: [],
+    importance: 1,
     mentionCount: 0,
     sourceCount: 0,
+    origins: [],
     firstSeenAt: 0,
     lastSeenAt: 0,
   };
 }
 
-function nodeDimensions(label: string): { width: number; height: number } {
+function nodeDimensions(label: string, importance: number = 1): { width: number; height: number } {
+  const baseHeight = label.length > 18 ? 56 : 44;
+  const importanceScale = 1 + (importance * 0.1);
   return {
-    width: Math.max(150, Math.min(250, label.length * 8 + 54)),
-    height: label.length > 18 ? 56 : 44,
+    width: Math.max(150, Math.min(250, label.length * 8 + 54)) * importanceScale,
+    height: baseHeight * importanceScale,
   };
 }
 
@@ -293,9 +316,10 @@ function closestHandles(source?: FlowPoint, target?: FlowPoint): { sourceHandle:
     : { sourceHandle: "source-top", targetHandle: "target-bottom" };
 }
 
-watch([graph, () => activePanel.value], async () => {
+watch([activeGraph, () => activePanel.value], async () => {
   await layoutGraph();
-  if (activePanel.value !== "visual" || graphFlowNodes.value.length === 0) return;
+  if (!fitGraphAfterLayout || activePanel.value !== "visual" || graphFlowNodes.value.length === 0) return;
+  fitGraphAfterLayout = false;
   await nextTick();
   window.setTimeout(() => {
     fitView({ padding: 0.18, duration: 320 }).catch(() => undefined);
@@ -409,17 +433,32 @@ function entityTypeClass(type: EntityGraphNodeType): string {
 }
 
 async function loadGraph(query = graphQuery.value) {
+  const trimmedQuery = query.trim();
+  const limit = activePanel.value === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_LIMIT;
+  const view = activeGraphView.value || "visual";
+  const requestKey = `${view}:${trimmedQuery}:${limit}`;
+  if (graphLoading.value && inFlightGraphKey === requestKey) return;
+  const requestId = ++graphRequest;
+  inFlightGraphKey = requestKey;
   graphLoading.value = true;
   graphSuggestions.value = [];
   try {
-    const limit = activePanel.value === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_LIMIT;
-    graph.value = await api.memory.getGraph(query.trim() || undefined, limit);
+    const nextGraph = await api.memory.getGraph(trimmedQuery || undefined, limit, view);
+    if (requestId !== graphRequest) return;
+    graph.value = nextGraph;
     graphLimit.value = limit;
+    graphView.value = view;
   } catch {
+    if (requestId !== graphRequest) return;
     graph.value = null;
     graphLimit.value = null;
+    graphView.value = null;
+  } finally {
+    if (requestId === graphRequest) {
+      graphLoading.value = false;
+      inFlightGraphKey = "";
+    }
   }
-  graphLoading.value = false;
 }
 
 async function clearGraphWalk() {
@@ -537,9 +576,12 @@ watch(
   async (sectionParam) => {
     const section = Array.isArray(sectionParam) ? sectionParam[0] : sectionParam;
     const panel = panelByRouteSegment[section || "documents"] || "documents";
+    const enteringVisual = panel === "visual" && activePanel.value !== "visual";
     activePanel.value = panel;
+    if (enteringVisual) fitGraphAfterLayout = true;
     const expectedGraphLimit = panel === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_LIMIT;
-    if ((panel === "relationships" || panel === "visual") && (!graph.value || graphLimit.value !== expectedGraphLimit)) await loadGraph();
+    const expectedGraphView: GraphViewMode = panel === "relationships" ? "relationships" : "visual";
+    if ((panel === "relationships" || panel === "visual") && (!graph.value || graphLimit.value !== expectedGraphLimit || graphView.value !== expectedGraphView)) await loadGraph();
   },
   { immediate: true },
 );
@@ -641,7 +683,7 @@ onMounted(() => loadSpaces());
         <MemoryRelationshipsSection
           v-else-if="activePanel === 'relationships'"
           v-model:graph-query="graphQuery"
-          :graph="graph"
+          :graph="activeGraph"
           :graph-loading="graphLoading"
           :graph-suggestions="graphSuggestions"
           @load-graph="loadGraph"
@@ -658,7 +700,7 @@ onMounted(() => loadSpaces());
           v-model:node-spacing="nodeSpacing"
           v-model:edge-labels-visible="showGraphEdgeLabels"
           :flow-id="ENTITY_FLOW_ID"
-          :graph="graph"
+          :graph="activeGraph"
           :graph-loading="graphLoading"
           :graph-flow-nodes="graphFlowNodes"
           :graph-flow-edges="graphFlowEdges"

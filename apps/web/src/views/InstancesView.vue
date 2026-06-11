@@ -42,6 +42,7 @@ interface HistoryItem {
   title: string;
   agent_id: string | null;
   origin: string;
+  pinned: number;
   updated_at: number;
   last_read_at: number | null;
   last_user_message: string | null;
@@ -51,6 +52,9 @@ const historyItems = ref<HistoryItem[]>([]);
 const historyTotal = ref(0);
 const historyPage = ref(1);
 const historyLoading = ref(false);
+const selectedTimelineIds = ref<string[]>([]);
+const bulkDeleting = ref(false);
+const bulkMarkingRead = ref(false);
 const historyPages = computed(() =>
   Math.max(1, Math.ceil(historyTotal.value / PAGE_SIZE)),
 );
@@ -66,6 +70,7 @@ async function loadHistory() {
     );
     historyItems.value = res.items;
     historyTotal.value = res.total;
+    pruneTimelineSelection();
   } catch {
     // silently ignore
   } finally {
@@ -243,6 +248,71 @@ const showLoading = computed(
     (loading.value || historyLoading.value) && timelineItems.value.length === 0,
 );
 
+const selectedTimelineItems = computed(() => {
+  const selected = new Set(selectedTimelineIds.value);
+  return timelineItems.value.filter((item) => selected.has(item.id));
+});
+
+const selectedHistoryItems = computed(() =>
+  selectedTimelineItems.value
+    .filter((item): item is Extract<TimelineItem, { kind: "history" }> => item.kind === "history")
+    .map((item) => item.history),
+);
+
+const selectedDeletableHistoryItems = computed(() =>
+  selectedHistoryItems.value.filter((item) => !item.pinned),
+);
+
+const selectedUnreadHistoryItems = computed(() =>
+  selectedHistoryItems.value.filter(isHistoryItemUnread),
+);
+
+const hasBulkSelection = computed(() => selectedTimelineIds.value.length > 0);
+
+function pruneTimelineSelection() {
+  const validIds = new Set(timelineItems.value.map((item) => item.id));
+  selectedTimelineIds.value = selectedTimelineIds.value.filter((id) => validIds.has(id));
+}
+
+function clearTimelineSelection() {
+  selectedTimelineIds.value = [];
+}
+
+async function markSelectedHistoryRead() {
+  if (bulkMarkingRead.value || selectedUnreadHistoryItems.value.length === 0) return;
+  bulkMarkingRead.value = true;
+  try {
+    const nowTs = Date.now();
+    await Promise.all(selectedUnreadHistoryItems.value.map((item) => api.chat.markConversationRead(item.id)));
+    const readIds = new Set(selectedUnreadHistoryItems.value.map((item) => item.id));
+    for (const item of historyItems.value) {
+      if (readIds.has(item.id)) item.last_read_at = nowTs;
+    }
+    await chatStore.loadConversations();
+  } catch {
+    // non-critical; the next poll will refresh the timeline
+  } finally {
+    bulkMarkingRead.value = false;
+  }
+}
+
+async function deleteSelectedHistory() {
+  if (bulkDeleting.value || selectedDeletableHistoryItems.value.length === 0) return;
+  bulkDeleting.value = true;
+  try {
+    const ids = selectedDeletableHistoryItems.value.map((item) => item.id);
+    await Promise.all(ids.map((id) => api.chat.deleteConversation(id)));
+    historyItems.value = historyItems.value.filter((item) => !ids.includes(item.id));
+    historyTotal.value = Math.max(0, historyTotal.value - ids.length);
+    selectedTimelineIds.value = selectedTimelineIds.value.filter((id) => !ids.some((historyId) => id === `history:${historyId}`));
+    await chatStore.loadConversations();
+  } catch {
+    await loadHistory();
+  } finally {
+    bulkDeleting.value = false;
+  }
+}
+
 // ── Navigation ──
 async function openInstance(instance: AgentInstance) {
   await chatStore.setActiveAgent(instance.agentId || null);
@@ -355,8 +425,10 @@ onUnmounted(() => {
 
       <template v-else>
         <DataTable
+          v-model:selected-ids="selectedTimelineIds"
           :items="timelineItems"
           :columns="timelineColumns"
+          selectable
           empty-message="No timeline entries"
           @row-click="openTimelineItem"
         >
@@ -563,6 +635,60 @@ onUnmounted(() => {
             </div>
           </template>
         </DataTable>
+
+        <div
+          v-if="hasBulkSelection"
+          class="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-theme-700 bg-theme-900/95 px-4 py-3 shadow-xl shadow-black/20 backdrop-blur"
+        >
+          <div class="text-sm text-theme-300">
+            {{ selectedTimelineIds.length }} selected
+            <span
+              v-if="selectedTimelineItems.length !== selectedHistoryItems.length"
+              class="text-theme-500"
+            >
+              · {{ selectedTimelineItems.length - selectedHistoryItems.length }} running
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-lg border border-theme-700 px-3 py-1.5 text-xs text-theme-300 transition-colors hover:border-theme-600 hover:text-theme-100 disabled:opacity-40 disabled:pointer-events-none"
+              :disabled="bulkMarkingRead || selectedUnreadHistoryItems.length === 0"
+              @click="markSelectedHistoryRead"
+            >
+              <Icon
+                :icon="bulkMarkingRead ? 'lucide:loader-2' : 'lucide:check-check'"
+                class="h-3.5 w-3.5"
+                :class="{ 'animate-spin': bulkMarkingRead }"
+              />
+              Mark read
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-40 disabled:pointer-events-none"
+              :disabled="bulkDeleting || selectedDeletableHistoryItems.length === 0"
+              @click="deleteSelectedHistory"
+            >
+              <Icon
+                :icon="bulkDeleting ? 'lucide:loader-2' : 'lucide:trash-2'"
+                class="h-3.5 w-3.5"
+                :class="{ 'animate-spin': bulkDeleting }"
+              />
+              Delete
+            </button>
+            <button
+              type="button"
+              class="p-1.5 text-theme-500 transition-colors hover:text-theme-200"
+              title="Clear selection"
+              @click="clearTimelineSelection"
+            >
+              <Icon
+                icon="lucide:x"
+                class="h-4 w-4"
+              />
+            </button>
+          </div>
+        </div>
 
         <!-- Pagination -->
         <div

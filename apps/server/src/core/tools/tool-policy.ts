@@ -1,6 +1,6 @@
 import { isOrchestrationToolName } from './builtin/orchestration-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from './builtin/expand-available-toolset.js'
-import { isMemoryReadToolName } from './builtin/memory-tools.js'
+import { isEntityGraphToolName, isMemoryReadToolName } from './builtin/memory-tools.js'
 import { isAttachmentToolName } from '../artifacts/attachment-tools.js'
 
 /**
@@ -19,6 +19,7 @@ export function isInternalTool(toolName: string): boolean {
     toolName === 'spawn_subagent' ||
     isOrchestrationToolName(toolName) ||
     isMemoryReadToolName(toolName) ||
+    isEntityGraphToolName(toolName) ||
     isAttachmentToolName(toolName)
   )
 }
