@@ -32,9 +32,10 @@ const prefs = usePreferencesStore()
 const expanded = ref(prefs.autoExpandToolCalls)
 const lightboxSrc = ref<string | null>(null)
 const statusMeta: Record<string, { label: string; icon: string; color: string }> = {
+  'building-task-context': { label: 'Auto Router', icon: 'lucide:compass', color: 'text-cyan-300' },
   'routing-tools': { label: 'Auto tool routing', icon: 'lucide:route', color: 'text-accent-300' },
   'routing-memory': { label: 'Auto Memories', icon: 'lucide:brain-circuit', color: 'text-accent-300' },
-  'routing-skills': { label: 'Skill routing', icon: 'lucide:book-open-check', color: 'text-accent-300' },
+  'routing-skills': { label: 'Auto Skill Routing', icon: 'lucide:book-open-check', color: 'text-accent-300' },
   'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-amber-400' },
   denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-red-400' },
   executing: { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-400' },
@@ -60,11 +61,20 @@ function isMemoryCall(call: { arguments: string }): boolean {
   }
 }
 
+function isTaskContextCall(call: { name?: string; arguments: string }): boolean {
+  try {
+    return JSON.parse(call.arguments || '{}')?.type === 'auto-router'
+  } catch {
+    return false
+  }
+}
+
 function isSubAgentSpawnCall(name: string): boolean {
   return name === 'spawn_subagent'
 }
 
 function toolDisplayName(name: string): string {
+  if (name === 'Task context') return 'Auto Router'
   return isSubAgentSpawnCall(name) ? 'Spawn sub-agent' : name
 }
 
@@ -80,19 +90,22 @@ function subAgentCodenameFromArgs(args: string): string | null {
 }
 
 function toolChipClass(name: string): string {
+  if (name === 'Task context') return 'bg-cyan-500/10 text-cyan-300 ring-1 ring-cyan-500/15'
   return isSubAgentSpawnCall(name)
     ? 'bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/20'
     : 'bg-accent-500/10 text-accent-300'
 }
 
 function toolCallIcon(call: { name: string; arguments: string }): string {
+  if (isTaskContextCall(call)) return 'lucide:compass'
   if (isSubAgentSpawnCall(call.name)) return 'lucide:bot'
   if (isSkillRouting.value) return 'lucide:book-open-check'
   if (isMemoryCall(call)) return 'lucide:brain'
   return 'lucide:terminal'
 }
 
-function toolCallIconClass(name: string): string {
+function toolCallIconClass(name: string, args = ''): string {
+  if (isTaskContextCall({ name, arguments: args })) return 'text-cyan-300'
   return isSubAgentSpawnCall(name) ? 'text-indigo-400' : 'text-accent-400'
 }
 
@@ -104,10 +117,11 @@ const currentPhase = computed(() => {
 })
 
 const currentStatus = computed(() => props.steps[props.steps.length - 1]?.status ?? 'executing')
+const isTaskContext = computed(() => props.steps.some(step => step.status === 'building-task-context' || step.toolCalls?.some(isTaskContextCall)))
 const isToolRouting = computed(() => currentStatus.value === 'routing-tools')
 const isMemoryRouting = computed(() => currentStatus.value === 'routing-memory')
 const isSkillRoutingCurrent = computed(() => currentStatus.value === 'routing-skills')
-const isRoutingStatus = computed(() => isToolRouting.value || isMemoryRouting.value || isSkillRoutingCurrent.value)
+const isRoutingStatus = computed(() => isTaskContext.value || isToolRouting.value || isMemoryRouting.value || isSkillRoutingCurrent.value)
 
 /** All tool names from this iteration */
 const toolNames = computed(() => {
@@ -134,6 +148,25 @@ const toolCallArgs = computed(() => {
     if (step.toolCalls?.length) return step.toolCalls
   }
   return []
+})
+
+const taskContext = computed(() => {
+  const call = toolCallArgs.value.find(isTaskContextCall)
+  if (!call) return null
+  try {
+    const parsed = JSON.parse(call.arguments || '{}') as {
+      focusAreas?: unknown
+      routerQuery?: unknown
+    }
+    return {
+      focusAreas: Array.isArray(parsed.focusAreas)
+        ? parsed.focusAreas.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        : [],
+      routerQuery: typeof parsed.routerQuery === 'string' ? parsed.routerQuery.trim() : '',
+    }
+  } catch {
+    return null
+  }
 })
 
 /** Whether all results succeeded */
@@ -191,13 +224,17 @@ const maContext = computed(() => {
             v-bind="triggerAttrs"
             class="w-full flex items-center gap-2 px-3 py-2 rounded-2xl text-[13px] font-medium transition-all group shadow-sm"
             :class="[
-              isSubAgentSpawnIteration
+              isTaskContext
                 ? isExpanded
-                  ? 'bg-indigo-950/20 border border-indigo-500/35 shadow-md shadow-indigo-950/20'
-                  : 'bg-indigo-950/10 hover:bg-indigo-950/20 hover:border-indigo-500/35 border border-indigo-500/20'
-                : isExpanded
-                  ? 'bg-theme-800 border border-theme-700/60 shadow-md'
-                  : 'bg-theme-800/60 hover:bg-theme-800 hover:border-theme-700/50 border border-transparent',
+                  ? 'bg-cyan-950/20 border border-cyan-500/30 shadow-md shadow-cyan-950/10'
+                  : 'bg-cyan-950/10 hover:bg-cyan-950/20 hover:border-cyan-500/25 border border-cyan-500/15'
+                : isSubAgentSpawnIteration
+                  ? isExpanded
+                    ? 'bg-indigo-950/20 border border-indigo-500/35 shadow-md shadow-indigo-950/20'
+                    : 'bg-indigo-950/10 hover:bg-indigo-950/20 hover:border-indigo-500/35 border border-indigo-500/20'
+                  : isExpanded
+                    ? 'bg-theme-800 border border-theme-700/60 shadow-md'
+                    : 'bg-theme-800/60 hover:bg-theme-800 hover:border-theme-700/50 border border-transparent',
             ]"
             @click="toggle"
           >
@@ -207,6 +244,7 @@ const maContext = computed(() => {
               class="w-3.5 h-3.5 shrink-0"
               :class="[
                 currentPhase.label === 'Denied' ? 'text-red-400' :
+                isTaskContext ? 'text-cyan-300' :
                 isRoutingStatus ? 'text-accent-300' :
                 toolNames.length && !results.length ? (isActive ? 'text-accent-400' : 'text-theme-500') :
                 allSuccess ? 'text-emerald-400' :
@@ -228,12 +266,28 @@ const maContext = computed(() => {
 
             <!-- Tool / skill names -->
             <div class="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
-              <span
-                v-if="isRoutingStatus && toolNames.length"
-                class="text-theme-400 shrink-0"
-                :class="currentPhase.color"
-              >{{ currentPhase.label }}</span>
-              <template v-if="toolNames.length">
+              <template v-if="isTaskContext">
+                <span class="text-cyan-300 shrink-0">{{ currentPhase.label }}</span>
+                <template v-if="taskContext?.focusAreas.length">
+                  <span
+                    v-for="area in taskContext.focusAreas.slice(0, 3)"
+                    :key="area"
+                    class="inline-flex items-center gap-1 rounded-md bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-medium text-cyan-200 truncate max-w-35"
+                  >
+                    {{ area }}
+                  </span>
+                  <span
+                    v-if="taskContext.focusAreas.length > 3"
+                    class="text-[10px] text-theme-500"
+                  >+{{ taskContext.focusAreas.length - 3 }}</span>
+                </template>
+              </template>
+              <template v-else-if="toolNames.length">
+                <span
+                  v-if="isRoutingStatus"
+                  class="text-theme-400 shrink-0"
+                  :class="currentPhase.color"
+                >{{ currentPhase.label }}</span>
                 <span
                   v-for="name in toolNames.slice(0, 3)"
                   :key="name"
@@ -296,7 +350,39 @@ const maContext = computed(() => {
         <div class="mt-1.5 ml-3 space-y-2">
           <!-- Tool call arguments -->
           <div
-            v-if="toolCallArgs.length"
+            v-if="isTaskContext && taskContext"
+            class="rounded-lg border border-cyan-500/15 bg-cyan-500/5 px-3 py-2"
+          >
+            <div class="flex items-center gap-1.5 mb-1.5">
+              <Icon
+                icon="lucide:compass"
+                class="w-3 h-3 text-cyan-300"
+              />
+              <span class="text-[11px] font-medium text-cyan-200">Task context</span>
+            </div>
+            <div
+              v-if="taskContext.focusAreas.length"
+              class="flex flex-wrap gap-1 mb-2"
+            >
+              <span
+                v-for="area in taskContext.focusAreas"
+                :key="area"
+                class="rounded-md bg-theme-950/50 px-1.5 py-0.5 text-[10px] text-cyan-200/80"
+              >
+                {{ area }}
+              </span>
+            </div>
+            <p
+              v-if="taskContext.routerQuery"
+              class="text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap break-words rounded-md bg-theme-950/45 px-2 py-1.5"
+            >
+              {{ taskContext.routerQuery }}
+            </p>
+          </div>
+
+          <!-- Tool call arguments -->
+          <div
+            v-if="toolCallArgs.length && !isTaskContext"
             class="space-y-1.5"
           >
             <div
@@ -311,7 +397,7 @@ const maContext = computed(() => {
                 <Icon
                   :icon="toolCallIcon(tc)"
                   class="w-3 h-3"
-                  :class="toolCallIconClass(tc.name)"
+                  :class="toolCallIconClass(tc.name, tc.arguments)"
                 />
                 <span
                   class="text-[11px] font-medium"

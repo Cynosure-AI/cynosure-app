@@ -131,6 +131,13 @@ const sections: SettingsSection[] = [
     terms: ['danger zone', 'entity graph', 'clear entity graph', 'relationships', 'entities', 'clear vector database', 'vectors', 'delete embeddings', 'reset memory', 'drop vectors']
   },
   {
+    id: 'skill-router',
+    categoryId: 'chat',
+    label: 'Auto Router',
+    description: 'Choose the model that prepares task context for automatic tools, skills, and memories.',
+    terms: ['auto router', 'router', 'task context', 'auto tools', 'auto skills', 'auto memory', 'automatic routing', 'skill router']
+  },
+  {
     id: 'generated-titles',
     categoryId: 'chat',
     label: 'Generate Chat Titles',

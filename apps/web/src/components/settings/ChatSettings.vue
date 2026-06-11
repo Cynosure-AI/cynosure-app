@@ -51,7 +51,7 @@ const contextStrategyOptions: {
   },
 ];
 
-function onSkillRouterSelection(selection: {
+function onAutoRouterSelection(selection: {
   providerId: string;
   model: string;
 }): void {
@@ -106,7 +106,7 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-4">
-    <!-- Skill Router -->
+    <!-- Auto Router -->
     <BaseCard
       v-if="showSection('skill-router')"
       class="p-5 space-y-4"
@@ -122,10 +122,10 @@ onMounted(async () => {
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
-            Skill Router
+            Auto Router
           </h3>
           <p class="text-xs text-theme-500 mt-0.5">
-            Provider and model used to detect which skills a request needs
+            Provider and model used to prepare task context for automatic tools, skills, and memories
           </p>
         </div>
       </div>
@@ -139,10 +139,10 @@ onMounted(async () => {
           include-default
           default-label="Use chat provider"
           placeholder="Use chat provider"
-          @change="onSkillRouterSelection"
+          @change="onAutoRouterSelection"
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          Skills are prefiltered by embedding similarity, then confirmed by this router model.
+          Builds the task context used by auto routing before the main execution starts.
           Defaults to the current chat model when not set.
         </p>
       </div>
