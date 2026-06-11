@@ -73,15 +73,14 @@ function scrollMainToBottomIfNear(): void {
 
 const postActionLabels: Record<string, string> = {
   'generating-title': 'Generating title…',
-  'updating-entity-graph': 'Updating entity graph…'
 }
 function postActionLabel(action: string): string {
   return postActionLabels[action] || `${action}…`
 }
 
-const POST_ACTION_ORDER = ['generating-title', 'updating-entity-graph']
+const POST_ACTION_ORDER = ['generating-title']
 const activePostActionItems = computed(() =>
-  Array.from(chatStore.activePostActions).sort((a, b) => {
+  Array.from(chatStore.activePostActions).filter(action => action in postActionLabels).sort((a, b) => {
     const ai = POST_ACTION_ORDER.indexOf(a)
     const bi = POST_ACTION_ORDER.indexOf(b)
     if (ai === -1 && bi === -1) return a.localeCompare(b)
