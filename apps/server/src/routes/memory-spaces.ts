@@ -115,6 +115,11 @@ function loadSpaceRow(id: string): MemorySpaceRow | undefined {
 
 export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<void> {
 
+    // GET /api/memory-spaces/jobs — list recent background indexing jobs
+    app.get('/jobs', async () => {
+        return listMemoryIndexJobs()
+    })
+
     // GET /api/memory-spaces/jobs/:jobId — inspect one background indexing job
     app.get<{ Params: { jobId: string } }>('/jobs/:jobId', async (req, reply) => {
         const job = getMemoryIndexJob(req.params.jobId)

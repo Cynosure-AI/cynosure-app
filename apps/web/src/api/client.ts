@@ -371,6 +371,8 @@ export const api = {
       del<{ success: boolean }>(`/api/memory-spaces/${encodeURIComponent(id)}`),
     reorder: (ids: string[]) =>
       put<{ success: boolean }>('/api/memory-spaces/reorder', { ids }),
+    listAllJobs: () =>
+      get<MemoryIndexJob[]>('/api/memory-spaces/jobs'),
     /** List files in the space folder with their index status. Hash computation is async server-side. */
     listFiles: (spaceId: string) =>
       get<MemoryFileStatus[]>(`/api/memory-spaces/${encodeURIComponent(spaceId)}/files`),

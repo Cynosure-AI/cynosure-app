@@ -2,6 +2,7 @@
 import { ref, computed, onUnmounted, watch } from "vue";
 import { api } from "../../api/client";
 import type { MemorySpace, MemoryFileStatus, MemoryIndexJob } from "../../api/types";
+import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentModal from "./MemoryDocumentModal.vue";
 
@@ -11,6 +12,8 @@ const props = defineProps<{
   spaceId: string;
   spaces: MemorySpace[];
 }>();
+
+const memoryJobsStore = useMemoryJobsStore();
 
 const emit = defineEmits<{
   editSpace: [];
@@ -90,6 +93,7 @@ function upsertJob(job: MemoryIndexJob) {
   const next = jobs.value.filter((item) => item.id !== job.id);
   next.push(job);
   jobs.value = next;
+  memoryJobsStore.upsertJob(job);
   if (job.status === "running") startJobsPolling();
 }
 
