@@ -91,6 +91,25 @@ const selectedSourceCount = computed(() =>
 
 const selectedNodeAliases = computed(() => selectedGraphNode.value?.aliases || []);
 
+const selectedOrigins = computed(() => {
+  const origins = new Map<string, { sourceKind: string; sourceId: string; label: string; count: number; lastSeenAt: number }>();
+  for (const node of selectedGraphNodes.value) {
+    for (const origin of node.origins || []) {
+      const key = `${origin.sourceKind}:${origin.sourceId}`;
+      const existing = origins.get(key);
+      if (existing) {
+        existing.count += origin.count;
+        existing.lastSeenAt = Math.max(existing.lastSeenAt, origin.lastSeenAt);
+      } else {
+        origins.set(key, { ...origin });
+      }
+    }
+  }
+  return [...origins.values()]
+    .sort((a, b) => b.lastSeenAt - a.lastSeenAt || b.count - a.count)
+    .slice(0, 8);
+});
+
 const selectedNodeRelationships = computed(() => {
   if (selectedNodeIds.value.size === 0 || !props.graph) return [];
   return props.graph.edges
@@ -125,6 +144,12 @@ function formatRelation(relation: string): string {
 
 function formatConfidence(value: number): string {
   return `${Math.round((value || 0) * 100)}%`;
+}
+
+function formatOriginKind(kind: string): string {
+  if (kind === "memory") return "Memory";
+  if (kind === "conversation") return "Chat";
+  return kind.replace(/_/g, " ");
 }
 
 function importanceLabel(level: number): string {
@@ -549,6 +574,43 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               />
               {{ selectedGraphNodes.length > 1 ? `Delete ${selectedGraphNodes.length}` : "Delete" }}
             </button>
+          </div>
+
+          <div class="entity-node-sidebar-divider" />
+
+          <div class="entity-node-sidebar-section-header">
+            <span>Origins</span>
+            <span>{{ formatCount(selectedOrigins.length) }}</span>
+          </div>
+
+          <div
+            v-if="selectedOrigins.length"
+            class="entity-node-sidebar-list"
+          >
+            <div
+              v-for="origin in selectedOrigins"
+              :key="`${origin.sourceKind}:${origin.sourceId}`"
+              class="entity-node-sidebar-relation"
+            >
+              <div class="entity-node-sidebar-relation-path">
+                <Icon
+                  :icon="origin.sourceKind === 'memory' ? 'lucide:file-text' : 'lucide:message-circle'"
+                  class="h-3 w-3 shrink-0 text-theme-600"
+                />
+                <span>{{ origin.label }}</span>
+              </div>
+              <div class="entity-node-sidebar-relation-detail">
+                <span>{{ formatOriginKind(origin.sourceKind) }}</span>
+                <span>{{ formatCount(origin.count) }} mentions</span>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else
+            class="entity-node-sidebar-empty"
+          >
+            No origin data for this selection.
           </div>
 
           <div class="entity-node-sidebar-divider" />

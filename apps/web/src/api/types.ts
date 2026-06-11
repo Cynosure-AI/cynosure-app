@@ -205,11 +205,20 @@ export interface EntityGraphNode {
     importance: 0 | 1 | 2 | 3
     mentionCount: number
     sourceCount: number
+    origins?: EntityGraphOrigin[]
     firstSeenAt: number
     lastSeenAt: number
 }
 
 export type EntityGraphNodeType = EntityGraphNode['type']
+
+export interface EntityGraphOrigin {
+    sourceKind: string
+    sourceId: string
+    label: string
+    count: number
+    lastSeenAt: number
+}
 
 export interface EntityGraphEdge {
     id: string

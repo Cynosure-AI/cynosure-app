@@ -261,6 +261,7 @@ function fallbackGraphNode(id: string, name: string): EntityGraphNode {
     importance: 1,
     mentionCount: 0,
     sourceCount: 0,
+    origins: [],
     firstSeenAt: 0,
     lastSeenAt: 0,
   };
