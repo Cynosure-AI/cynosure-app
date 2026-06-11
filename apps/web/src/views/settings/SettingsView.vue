@@ -141,8 +141,8 @@ const sections: SettingsSection[] = [
     id: 'entity-graph-extraction',
     categoryId: 'memory',
     label: 'Entity Extraction Model',
-    description: 'Provider and model used when memory writes and document indexing create entity graph relationships.',
-    terms: ['entity graph', 'entity extraction', 'entity extraction model', 'relationships', 'relation extraction', 'memory graph', 'memory writes', 'document indexing']
+    description: 'Provider and model used when explicit document entity indexing creates entity graph relationships.',
+    terms: ['entity graph', 'entity extraction', 'entity extraction model', 'relationships', 'relation extraction', 'memory graph', 'document indexing']
   },
   {
     id: 'context-strategy',
