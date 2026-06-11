@@ -192,6 +192,8 @@ export interface MemoryFileStatus {
     status: 'indexed' | 'needs_reindex' | 'not_indexed' | 'unsupported'
     chunkCount?: number
     lastIndexedAt?: number
+    entityIndexed: boolean
+    entityIndexedAt?: number
 }
 
 export interface EntityGraphNode {

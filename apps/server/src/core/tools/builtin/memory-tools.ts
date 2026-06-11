@@ -5,35 +5,37 @@ import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getM
 import { relativePathForFolder } from '../../memory/memory-space-folders.js'
 import { readTextFile, writeTextFile, fileExists, backupToRevisions } from '../../memory/memory-file-manager.js'
 import { getEntityGraphStore, type EntityEdge, type EntityNode, type EntityType } from '../../memory/entity-graph.js'
+import {
+    deleteMemoryGraphSource,
+    indexMemoryContentIntoEntityGraph,
+} from '../../memory/memory-entity-indexer.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
-/**
- * Trigger entity graph extraction from memory content.
- * Called after memory_create / memory_update to keep the entity graph as a
- * secondary index of intentional memory writes.
- */
-async function triggerMemoryGraphExtraction(
+async function integrateMemoryContentIntoGraph(
     content: string,
-    sourceId: string,
-    conversationId?: string,
-    broadcast?: BroadcastFn,
+    spaceId: string,
+    fileName: string,
+    opts: { replaceExisting?: boolean; conversationId?: string; broadcast?: BroadcastFn } = {},
 ): Promise<void> {
-    if (!conversationId || !broadcast) return
-
-    broadcast('chat:post-action', { conversationId, action: 'updating-entity-graph', status: 'started' })
+    if (opts.conversationId && opts.broadcast) {
+        opts.broadcast('chat:post-action', { conversationId: opts.conversationId, action: 'updating-entity-graph', status: 'started' })
+    }
     try {
-        await getEntityGraphStore().extractFromContent({
+        await indexMemoryContentIntoEntityGraph({
             content,
-            sourceId,
-            sourceKind: 'memory',
+            spaceId,
+            fileName,
+            replaceExisting: opts.replaceExisting,
         })
     } catch (err) {
         if ((err as Error).name !== 'AbortError') {
             console.warn('[entity-graph] Memory extraction failed:', err)
         }
     } finally {
-        broadcast('chat:post-action', { conversationId, action: 'updating-entity-graph', status: 'completed' })
+        if (opts.conversationId && opts.broadcast) {
+            opts.broadcast('chat:post-action', { conversationId: opts.conversationId, action: 'updating-entity-graph', status: 'completed' })
+        }
     }
 }
 
@@ -899,9 +901,11 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
 
             const result = await mem.storeAsFile(content, fileName, resolved.spaceId)
 
-            // Trigger entity graph extraction from the written memory content
-            const sourceId = `memory:${result.fileName}`
-            triggerMemoryGraphExtraction(content, sourceId, conversationId, broadcast).catch(() => { })
+            await integrateMemoryContentIntoGraph(content, resolved.spaceId, result.fileName, {
+                replaceExisting: true,
+                conversationId,
+                broadcast,
+            })
 
             return {
                 success: true,
@@ -998,9 +1002,11 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                     writeTextFile(folderPath, fileName, appended)
                     const { chunkCount: indexedChunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                    // Extract only from appended content — old edges still valid
-                    const sourceId = `memory:${fileName}`
-                    triggerMemoryGraphExtraction(content, sourceId, conversationId, broadcast).catch(() => { })
+                    await integrateMemoryContentIntoGraph(appended, resolved.spaceId, fileName, {
+                        replaceExisting: true,
+                        conversationId,
+                        broadcast,
+                    })
 
                     return {
                         success: true,
@@ -1023,9 +1029,11 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 
                 const { chunkCount: indexedChunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                // Extract only from replacement content — old edges for unchanged chunks still valid
-                const sourceId = `memory:${fileName}`
-                triggerMemoryGraphExtraction(content, sourceId, conversationId, broadcast).catch(() => { })
+                await integrateMemoryContentIntoGraph(replaced.content, resolved.spaceId, fileName, {
+                    replaceExisting: true,
+                    conversationId,
+                    broadcast,
+                })
 
                 return {
                     success: true,
@@ -1037,10 +1045,11 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 writeTextFile(folderPath, fileName, content)
                 const { chunkCount: chunks } = await mem.reindexFile(folderPath, fileName, resolved.spaceId)
 
-                // Re-extract entity graph from updated memory content
-                const sourceId = `memory:${fileName}`
-                getEntityGraphStore().deleteEdgesBySourceId(sourceId)
-                triggerMemoryGraphExtraction(content, sourceId, conversationId, broadcast).catch(() => { })
+                await integrateMemoryContentIntoGraph(content, resolved.spaceId, fileName, {
+                    replaceExisting: true,
+                    conversationId,
+                    broadcast,
+                })
 
                 return {
                     success: true,
@@ -1124,8 +1133,7 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
                 if (!removed.content.trim()) {
                     const deleted = await mem.deleteSourceFile(resolved.fileName, resolved.spaceId)
                     // Remove all entity graph edges sourced from this memory file
-                    const graphSourceId = `memory:${resolved.fileName}`
-                    const { edgesDeleted } = getEntityGraphStore().deleteEdgesBySourceId(graphSourceId)
+                    const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
                     return {
                         success: true,
                         output: `Chunks ${removed.startIndex}-${removed.endIndex} removed; "${resolved.fileName}" is now empty and was forgotten from "${resolved.spaceName}" (${deleted} indexed chunk${deleted !== 1 ? 's' : ''} deleted, ${edgesDeleted} graph edge${edgesDeleted !== 1 ? 's' : ''} removed).`
@@ -1135,10 +1143,11 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
                 writeTextFile(resolved.folderPath, resolved.fileName, removed.content)
                 const { chunkCount } = await mem.reindexFile(resolved.folderPath, resolved.fileName, resolved.spaceId)
 
-                // Re-extract entity graph from remaining memory content
-                const graphSourceId = `memory:${resolved.fileName}`
-                getEntityGraphStore().deleteEdgesBySourceId(graphSourceId)
-                triggerMemoryGraphExtraction(removed.content, graphSourceId, conversationId, broadcast).catch(() => { })
+                await integrateMemoryContentIntoGraph(removed.content, resolved.spaceId, resolved.fileName, {
+                    replaceExisting: true,
+                    conversationId,
+                    broadcast,
+                })
 
                 return {
                     success: true,
@@ -1152,8 +1161,7 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
 
             const deleted = await mem.deleteSourceFile(resolved.fileName, resolved.spaceId)
             // Remove all entity graph edges sourced from this memory file
-            const graphSourceId = `memory:${resolved.fileName}`
-            const { edgesDeleted } = getEntityGraphStore().deleteEdgesBySourceId(graphSourceId)
+            const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
             return {
                 success: true,
                 output: `Memory "${resolved.fileName}" forgotten from "${resolved.spaceName}" (${deleted} indexed chunk${deleted !== 1 ? 's' : ''} deleted, ${edgesDeleted} graph edge${edgesDeleted !== 1 ? 's' : ''} removed).`

@@ -332,10 +332,11 @@ export const api = {
       get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
     configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>
       post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/configure', opts),
-    getGraph: (query?: string, limit?: number) => {
+    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual') => {
       const params = new URLSearchParams()
       if (query) params.set('query', query)
       if (limit) params.set('limit', String(limit))
+      if (view) params.set('view', view)
       const qs = params.toString()
       return get<EntityGraphResponse>(`/api/memory/graph${qs ? `?${qs}` : ''}`)
     },
@@ -377,6 +378,11 @@ export const api = {
       post<{ success: boolean; chunksStored: number; fileName: string }>(
         `/api/memory-spaces/${encodeURIComponent(spaceId)}/reingest-file`,
         { fileName }
+      ),
+    entityIndexFile: (spaceId: string, fileName: string) =>
+      post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; entityIndexedAt: number }>(
+        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}/entity-index`,
+        {}
       ),
     deleteFile: (spaceId: string, fileName: string) =>
       del<{ success: boolean }>(

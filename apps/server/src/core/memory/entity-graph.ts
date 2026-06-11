@@ -78,6 +78,19 @@ interface ExtractedRelation {
 const ENTITY_TYPES = new Set<EntityType>(['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'])
 const RESERVED_ENTITY_NAMES = new Set(['user', 'assistant', 'system', 'tool'])
 const MAX_SEED_SEARCH_TERMS = 32
+const SINGLE_TARGET_RELATIONS = new Set([
+  'works_at',
+  'employed_by',
+  'lives_in',
+  'located_in',
+  'based_in',
+  'born_in',
+  'founded_by',
+  'owned_by',
+  'managed_by',
+  'reports_to',
+  'part_of',
+])
 
 function normalizeName(name: string): string {
   return name
@@ -289,6 +302,15 @@ export class EntityGraphStore {
     const rel = normalizeRelation(relation.relation)
     const evidence = cleanEvidence(relation.evidence)
     const importance = clampImportance(relation.importance)
+
+    if (SINGLE_TARGET_RELATIONS.has(rel)) {
+      const staleRows = db.prepare(`
+        SELECT id FROM entity_graph_edges
+        WHERE from_node_id = ? AND relation = ? AND to_node_id != ?
+      `).all(from.id, rel, to.id) as { id: string }[]
+      for (const stale of staleRows) this.deleteEdge(stale.id)
+    }
+
     const existing = db.prepare(`
       SELECT * FROM entity_graph_edges
       WHERE from_node_id = ? AND relation = ? AND to_node_id = ?
@@ -627,7 +649,6 @@ export class EntityGraphStore {
   list(limit = 80): GraphSnapshot {
     const db = getDb()
     const edgeLimit = limit
-    const nodeLimit = limit
     const edgeRows = db.prepare(`
       WITH node_degrees AS (
         SELECT n.id AS id, COUNT(e.id) AS degree
@@ -652,12 +673,7 @@ export class EntityGraphStore {
     const nodeIds = Array.from(new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId])))
 
     if (nodeIds.length === 0) {
-      const nodes = db.prepare(`
-        SELECT * FROM entity_graph_nodes
-        ORDER BY mention_count DESC, last_seen_at DESC
-        LIMIT ?
-      `).all(nodeLimit) as Record<string, unknown>[]
-      return { nodes: nodes.map(rowToNode), edges }
+      return { nodes: [], edges }
     }
 
     const placeholders = nodeIds.map(() => '?').join(', ')
@@ -665,23 +681,30 @@ export class EntityGraphStore {
       SELECT * FROM entity_graph_nodes
       WHERE id IN (${placeholders})
     `).all(...nodeIds) as Record<string, unknown>[]
-    const remaining = Math.max(nodeLimit - nodes.length, 0)
-    const standaloneNodes = remaining > 0
-      ? db.prepare(`
-        WITH node_degrees AS (
-          SELECT n.id AS id, COUNT(e.id) AS degree
-          FROM entity_graph_nodes n
-          LEFT JOIN entity_graph_edges e ON e.from_node_id = n.id OR e.to_node_id = n.id
-          GROUP BY n.id
-        )
-        SELECT * FROM entity_graph_nodes
-        JOIN node_degrees USING (id)
-        WHERE id NOT IN (${placeholders})
-        ORDER BY degree DESC, mention_count DESC, last_seen_at DESC
-        LIMIT ?
-      `).all(...nodeIds, remaining) as Record<string, unknown>[]
-      : []
-    return { nodes: [...nodes, ...standaloneNodes].map(rowToNode), edges }
+    return { nodes: nodes.map(rowToNode), edges }
+  }
+
+  listRelationships(limit = 5000): GraphSnapshot {
+    const db = getDb()
+    const edgeRows = db.prepare(`
+      SELECT e.*, fn.name AS from_name, tn.name AS to_name
+      FROM entity_graph_edges e
+      JOIN entity_graph_nodes fn ON fn.id = e.from_node_id
+      JOIN entity_graph_nodes tn ON tn.id = e.to_node_id
+      ORDER BY e.last_seen_at DESC, e.importance DESC, e.mention_count DESC
+      LIMIT ?
+    `).all(limit) as Record<string, unknown>[]
+    const edges = edgeRows.map(rowToEdge)
+    const nodeIds = Array.from(new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId])))
+
+    if (nodeIds.length === 0) return { nodes: [], edges }
+
+    const placeholders = nodeIds.map(() => '?').join(', ')
+    const nodes = db.prepare(`
+      SELECT * FROM entity_graph_nodes
+      WHERE id IN (${placeholders})
+    `).all(...nodeIds) as Record<string, unknown>[]
+    return { nodes: nodes.map(rowToNode), edges }
   }
 
   stats(): { nodeCount: number; edgeCount: number; recentEdgeCount: number } {
@@ -850,7 +873,7 @@ export class EntityGraphStore {
     providerId?: string
     model?: string
     signal?: AbortSignal
-  }): Promise<{ insertedOrUpdated: number; deleted: number }> {
+  }): Promise<{ insertedOrUpdated: number; deleted: number; touchedEdgeIds: string[] }> {
     return this.extractFromContent({
       content: `<user>\n${opts.userMessage.slice(0, 4000)}\n</user>\n\n<assistant>\n${opts.assistantResponse.slice(0, 4000)}\n</assistant>`,
       sourceId: opts.conversationId,
@@ -870,7 +893,7 @@ export class EntityGraphStore {
     model?: string
     signal?: AbortSignal
     systemPrompt?: string
-  }): Promise<{ insertedOrUpdated: number; deleted: number }> {
+  }): Promise<{ insertedOrUpdated: number; deleted: number; touchedEdgeIds: string[] }> {
     const gateway = getGateway()
     const provider = opts.providerId
       ? gateway.getProvider(opts.providerId) || gateway.getLastUsedProvider()
@@ -904,6 +927,7 @@ export class EntityGraphStore {
     const rawRelations = parseJsonArray(result.content)
     let count = 0
     let deleted = 0
+    const touchedEdgeIds: string[] = []
     const now = Date.now()
     for (const item of rawRelations.slice(0, 24)) {
       if (!item || typeof item !== 'object') continue
@@ -925,9 +949,30 @@ export class EntityGraphStore {
         continue
       }
       const edge = this.upsertEdge(extracted, opts.sourceKind || 'content', opts.sourceId, now)
-      if (edge) count++
+      if (edge) {
+        count++
+        touchedEdgeIds.push(edge.id)
+      }
     }
-    return { insertedOrUpdated: count, deleted }
+    return { insertedOrUpdated: count, deleted, touchedEdgeIds }
+  }
+
+  edgeIdsBySourceId(sourceId: string): string[] {
+    const rows = getDb().prepare('SELECT id FROM entity_graph_edges WHERE source_id = ?').all(sourceId) as { id: string }[]
+    return rows.map((row) => row.id)
+  }
+
+  deleteEdgesBySourceIdExcept(sourceId: string, keepEdgeIds: string[]): DeleteEdgeResult {
+    const keep = new Set(keepEdgeIds)
+    const edgeIds = this.edgeIdsBySourceId(sourceId).filter((id) => !keep.has(id))
+    const orphanedNodeIds = new Set<string>()
+    let edgeDeleted = false
+    for (const edgeId of edgeIds) {
+      const result = this.deleteEdge(edgeId)
+      if (result.edgeDeleted) edgeDeleted = true
+      for (const nodeId of result.orphanedNodeIds) orphanedNodeIds.add(nodeId)
+    }
+    return { edgeDeleted, orphanedNodeIds: Array.from(orphanedNodeIds) }
   }
 
   deleteEdgesBySourceId(sourceId: string): { edgesDeleted: number; orphanedNodeIds: string[] } {

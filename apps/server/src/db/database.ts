@@ -305,6 +305,7 @@ function createTables(db: Database.Database): void {
       content_hash TEXT NOT NULL DEFAULT '',
       chunk_count INTEGER NOT NULL DEFAULT 0,
       last_indexed_at INTEGER NOT NULL DEFAULT 0,
+      entity_indexed_at INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       PRIMARY KEY (space_id, file_name)
     );
@@ -377,6 +378,7 @@ function createTables(db: Database.Database): void {
   // Entity graph: add importance column for LLM-assigned importance scores
   addColumnIfMissing('entity_graph_nodes', 'importance', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('entity_graph_edges', 'importance', 'INTEGER NOT NULL DEFAULT 1')
+  addColumnIfMissing('memory_file_index', 'entity_indexed_at', 'INTEGER NOT NULL DEFAULT 0')
 
   ensureDefaultMemorySpace(db)
 
