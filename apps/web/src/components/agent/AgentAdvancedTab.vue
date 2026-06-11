@@ -18,7 +18,7 @@ const skillRouterLeadingSelections = [
   {
     providerId: "",
     model: "",
-    label: "Use global router model",
+    label: "Use global auto router",
     iconName: "lucide:settings",
   },
   {
@@ -35,7 +35,7 @@ onMounted(() => {
   }
 });
 
-function onSkillRouterSelection(selection: {
+function onAutoRouterSelection(selection: {
   providerId: string;
   model: string;
 }): void {
@@ -111,7 +111,7 @@ function onMaxCtxBlur() {
       </div>
     </div>
 
-    <!-- Skill Routing -->
+    <!-- Auto Router -->
     <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
       <div class="flex items-center gap-2 mb-1">
         <Icon
@@ -119,12 +119,12 @@ function onMaxCtxBlur() {
           class="w-4 h-4 text-accent-400"
         />
         <h3 class="text-sm font-medium text-theme-200">
-          Skill Router Model
+          Auto Router Model
         </h3>
       </div>
       <p class="text-xs text-theme-500 leading-relaxed">
-        Override the provider and model this agent uses when auto skill
-        routing is enabled. Leave blank to use the global skill router settings
+        Override the provider and model this agent uses to prepare task context
+        for automatic tools, skills, and memories. Leave blank to use the global auto router settings
         from Preferences.
       </p>
 
@@ -135,8 +135,8 @@ function onMaxCtxBlur() {
           :model-value="agent.skillRouterModel || ''"
           :providers="providerStore.providers"
           :leading-selections="skillRouterLeadingSelections"
-          placeholder="Use global router model"
-          @change="onSkillRouterSelection"
+          placeholder="Use global auto router"
+          @change="onAutoRouterSelection"
         />
       </div>
     </div>

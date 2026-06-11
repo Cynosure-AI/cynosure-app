@@ -9,16 +9,20 @@
 
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
-import { resolveProviderAndModel } from './pre-execution/execution-resolvers.js'
+import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
 import { resolveExecutionTools } from './pre-execution/execution-tools.js'
 import { resolveSkillSystemPrompt } from './pre-execution/execution-skills.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemorySystemMessages } from './pre-execution/execution-memory.js'
+import { appendTaskContextSystemMessage, buildTaskContext } from './pre-execution/task-context.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
+import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
+const AGENT_ROUTER_PROVIDER = '__agent_provider__'
+const AGENT_ROUTER_MODEL = '__agent_model__'
 
 export interface PrepareExecutionInput {
     /** The resolved agent config */
@@ -53,9 +57,9 @@ export interface PrepareExecutionInput {
     autoToolRouting?: boolean
     /** Enable automatic memory retrieval for this execution. */
     autoMemory?: boolean
-    /** Optional provider override for the skill router confirmation pass */
+    /** Optional provider override for the auto router pass. Legacy name kept for API compatibility. */
     skillRouterProviderId?: string
-    /** Optional model override for the skill router confirmation pass */
+    /** Optional model override for the auto router pass. Legacy name kept for API compatibility. */
     skillRouterModel?: string
     /** Explicit/manual skill ids selected for this execution. */
     selectedSkillIds?: string[]
@@ -127,6 +131,31 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         providerOverride,
         modelOverride,
     })
+    const autoModes = {
+        tools: isToolRoutingEnabled(preset, input.autoToolRouting),
+        skills: isSkillRoutingEnabled(preset, input.autoSkillRouting),
+        memories: isAutoMemoryEnabled(preset, input.autoMemory, memorySpaceOverrides),
+    }
+    const taskContextRouter = resolveTaskContextRouter({
+        gateway,
+        preset,
+        fallbackProviderId: providerModel.providerId,
+        fallbackModel: providerModel.model,
+        requestRouterProviderId: input.skillRouterProviderId,
+        requestRouterModel: input.skillRouterModel,
+    })
+    const taskContext = await buildTaskContext({
+        conversationId,
+        gateway,
+        providerId: taskContextRouter.providerId,
+        model: taskContextRouter.model,
+        userQuery: input.userQuery,
+        recentMessages: input.recentMessages,
+        enabledModes: autoModes,
+        eventMeta: input.eventMeta,
+    })
+    const routingQuery = taskContext?.routerQuery || input.userQuery
+    const routingMessages = taskContext ? [] : input.recentMessages
 
     const toolLayer = await resolveExecutionTools({
         preset,
@@ -136,8 +165,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         resolvedProviderId: providerModel.providerId,
         providerOverride,
         modelOverride,
-        userQuery: input.userQuery,
-        recentMessages: input.recentMessages,
+        userQuery: routingQuery,
+        recentMessages: routingMessages,
         usedToolNames: input.usedToolNames,
         preferredToolKeys: input.preferredToolKeys,
         autoToolRouting: input.autoToolRouting,
@@ -156,8 +185,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         conversationId,
         providerId: providerModel.providerId,
         model: providerModel.model,
-        userQuery: input.userQuery,
-        recentMessages: input.recentMessages,
+        userQuery: routingQuery,
+        recentMessages: routingMessages,
         selectedSkillIds: input.selectedSkillIds,
         autoSkillRouting: input.autoSkillRouting,
         skillRouterProviderId: input.skillRouterProviderId,
@@ -165,21 +194,26 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         eventMeta: input.eventMeta,
     })
 
-    const systemMessages = [
-        ...await resolveSystemPromptMessages({
+    const promptMessages = appendTaskContextSystemMessage(
+        await resolveSystemPromptMessages({
             basePrompt: preset.systemPrompt,
             overridePrompt: systemPromptOverride,
             suffix: systemPromptSuffix,
             skillsPrompt,
             subAgents: toolLayer.effectiveSubAgents,
         }),
+        taskContext,
+    )
+
+    const systemMessages = [
+        ...promptMessages,
         ...await resolveMemorySystemMessages({
             preset,
             conversationId,
             autoMemory: input.autoMemory,
             memorySpaceOverrides,
-            userQuery: input.userQuery,
-            recentMessages: input.recentMessages,
+            userQuery: routingQuery,
+            recentMessages: routingMessages,
             eventMeta: input.eventMeta,
         }),
     ]
@@ -191,4 +225,50 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         systemMessages,
         hasSubAgents: toolLayer.hasSubAgents,
     }
+}
+
+function resolveTaskContextRouter(params: {
+    gateway: LLMGateway
+    preset: ExecutionPreset
+    fallbackProviderId: string
+    fallbackModel: string
+    requestRouterProviderId?: string
+    requestRouterModel?: string
+}) {
+    const useAgentRouterProvider = params.preset.skillRouterProviderId === AGENT_ROUTER_PROVIDER
+    const useAgentRouterModel = params.preset.skillRouterModel === AGENT_ROUTER_MODEL
+    return resolveRouterProviderModel({
+        gateway: params.gateway,
+        fallbackProviderId: params.fallbackProviderId,
+        fallbackModel: params.fallbackModel,
+        agentRouterProviderId: useAgentRouterProvider ? params.preset.providerId : (params.preset.skillRouterProviderId || undefined),
+        agentRouterModel: useAgentRouterModel ? (params.preset.model || undefined) : (params.preset.skillRouterModel || undefined),
+        requestRouterProviderId: params.requestRouterProviderId,
+        requestRouterModel: useAgentRouterProvider ? undefined : params.requestRouterModel,
+    })
+}
+
+function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
+    if (preset.disableToolRouting === true) return false
+    if (preset.toolRoutingEnabled === false) return false
+    if (sessionEnabled === true) return true
+    if (sessionEnabled === false) return false
+    return preset.autoToolRouting === true || preset.toolRoutingEnabled === true
+}
+
+function isSkillRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
+    if (sessionEnabled === true) return true
+    if (sessionEnabled === false) return false
+    return preset.autoSkillRouting === true
+}
+
+function isAutoMemoryEnabled(
+    preset: ExecutionPreset,
+    sessionEnabled: boolean | undefined,
+    memorySpaceOverrides: { id: string; name: string }[] | undefined,
+): boolean {
+    if (Array.isArray(memorySpaceOverrides) && memorySpaceOverrides.length === 0) return false
+    if (sessionEnabled === true) return true
+    if (sessionEnabled === false) return false
+    return preset.autoMemory === true
 }
