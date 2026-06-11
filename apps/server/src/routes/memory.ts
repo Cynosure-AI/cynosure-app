@@ -8,6 +8,7 @@ import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/rer
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
 import { getEntityGraphStore, type EntityType } from '../core/memory/entity-graph.js'
+import { getMemoryEntityExtractionConfig, saveMemoryEntityExtractionConfig, type MemoryEntityExtractionConfig } from '../core/memory/memory-entity-indexer.js'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import OpenAI from 'openai'
@@ -304,6 +305,24 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     await rag.deleteTable('permanent_memory')
     getDb().prepare('DELETE FROM memory_file_index').run()
     return { success: true }
+  })
+
+  // GET /api/memory/entity-extraction/config — get LLM target for memory entity extraction
+  app.get('/entity-extraction/config', async () => {
+    return getMemoryEntityExtractionConfig()
+  })
+
+  // POST /api/memory/entity-extraction/configure — set LLM target for memory entity extraction
+  app.post<{ Body: MemoryEntityExtractionConfig }>('/entity-extraction/configure', async (req, reply) => {
+    const providerId = req.body.providerId?.trim()
+    if (providerId && !getGateway().getProvider(providerId)) {
+      return reply.status(400).send({ error: 'Entity extraction provider not found' })
+    }
+    const config = saveMemoryEntityExtractionConfig({
+      providerId,
+      model: req.body.model,
+    })
+    return { success: true, ...config }
   })
 
   // POST /api/memory/embeddings/probe — test-embed a token to detect output dimensions

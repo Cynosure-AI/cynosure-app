@@ -45,7 +45,7 @@ const categories: SettingsCategory[] = [
   {
     id: 'memory',
     label: 'Memory',
-    description: 'Tune embeddings, reranking, chunking, OCR, and vector storage.',
+    description: 'Tune embeddings, entity extraction, reranking, chunking, OCR, and vector storage.',
     icon: 'lucide:brain',
     component: MemorySettings
   },
@@ -139,10 +139,10 @@ const sections: SettingsSection[] = [
   },
   {
     id: 'entity-graph-extraction',
-    categoryId: 'chat',
-    label: 'Entity Graph Extraction',
-    description: 'Provider and model used to extract post-turn entities and relationships.',
-    terms: ['entity graph', 'entity extraction', 'relationships', 'relation extraction', 'post turn actions', 'memory graph']
+    categoryId: 'memory',
+    label: 'Entity Extraction Model',
+    description: 'Provider and model used when memory writes and document indexing create entity graph relationships.',
+    terms: ['entity graph', 'entity extraction', 'entity extraction model', 'relationships', 'relation extraction', 'memory graph', 'memory writes', 'document indexing']
   },
   {
     id: 'context-strategy',

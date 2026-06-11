@@ -139,10 +139,7 @@ export function useChatMessages(
             activeAgent?.skillRouterModel || prefs.skillRouterModel || undefined,
             prefs.compactProviderId || undefined,
             prefs.compactModel || undefined,
-            prefs.inlineAttachmentTextLimit,
-            prefs.enableEntityGraph,
-            prefs.entityGraphProviderId || undefined,
-            prefs.entityGraphModel || undefined
+            prefs.inlineAttachmentTextLimit
         )
     }
 

@@ -13,6 +13,40 @@ export interface MemoryEntityIndexResult {
   entityIndexedAt: number
 }
 
+export interface MemoryEntityExtractionConfig {
+  providerId?: string
+  model?: string
+}
+
+const ENTITY_EXTRACTION_SETTINGS_KEY = 'memoryEntityExtraction'
+
+function normalizeEntityExtractionConfig(config: Partial<MemoryEntityExtractionConfig> | undefined): MemoryEntityExtractionConfig {
+  return {
+    providerId: config?.providerId?.trim() || undefined,
+    model: config?.model?.trim() || undefined,
+  }
+}
+
+export function getMemoryEntityExtractionConfig(): MemoryEntityExtractionConfig {
+  try {
+    const row = getDb()
+      .prepare('SELECT value_json FROM settings WHERE key = ?')
+      .get(ENTITY_EXTRACTION_SETTINGS_KEY) as { value_json: string } | undefined
+    if (!row) return {}
+    return normalizeEntityExtractionConfig(JSON.parse(row.value_json) as Partial<MemoryEntityExtractionConfig>)
+  } catch {
+    return {}
+  }
+}
+
+export function saveMemoryEntityExtractionConfig(config: Partial<MemoryEntityExtractionConfig>): MemoryEntityExtractionConfig {
+  const normalized = normalizeEntityExtractionConfig(config)
+  getDb()
+    .prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (?, ?)')
+    .run(ENTITY_EXTRACTION_SETTINGS_KEY, JSON.stringify(normalized))
+  return normalized
+}
+
 export function memoryGraphSourceId(spaceId: string, fileName: string): string {
   return `memory:${spaceId}:${fileName}`
 }
@@ -72,12 +106,13 @@ export async function indexMemoryContentIntoEntityGraph(opts: {
   const sourceId = memoryGraphSourceId(opts.spaceId, opts.fileName)
   const graph = getEntityGraphStore()
   const existingEdgeIds = graph.edgeIdsBySourceId(sourceId)
+  const configuredTarget = getMemoryEntityExtractionConfig()
   const result = await graph.extractFromContent({
     content: opts.content,
     sourceId,
     sourceKind: 'memory',
-    providerId: opts.providerId,
-    model: opts.model,
+    providerId: opts.providerId || configuredTarget.providerId,
+    model: opts.model || configuredTarget.model,
     signal: opts.signal,
     systemPrompt: 'Extract durable named entities and explicit relationships from this saved memory document.',
   })

@@ -128,10 +128,7 @@ export const api = {
       skillRouterModel?: string,
       compactProviderId?: string,
       compactModel?: string,
-      inlineAttachmentTextLimit?: number,
-      enableEntityGraph?: boolean,
-      entityGraphProviderId?: string,
-      entityGraphModel?: string
+      inlineAttachmentTextLimit?: number
     ) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, {
         content,
@@ -158,10 +155,7 @@ export const api = {
         titleModel: titleModel || undefined,
         selectedSkillIds,
         autoSkillRouting,
-        inlineAttachmentTextLimit,
-        enableEntityGraph,
-        entityGraphProviderId: entityGraphProviderId || undefined,
-        entityGraphModel: entityGraphModel || undefined
+        inlineAttachmentTextLimit
       }),
     getAttachmentConfig: () =>
       get<{ inlineAttachmentTextLimit: number }>('/api/chat/attachment-config'),
@@ -322,6 +316,10 @@ export const api = {
     }) => post<{ success: boolean; vectorsDropped: boolean; reembedded: boolean; reembeddedCount: number; dimensions: number }>('/api/memory/embeddings/configure', opts),
     getEmbeddingConfig: () =>
       get<{ providerId?: string; model: string; dimensions: number }>('/api/memory/embeddings/config'),
+    getEntityExtractionConfig: () =>
+      get<{ providerId?: string; model?: string }>('/api/memory/entity-extraction/config'),
+    configureEntityExtraction: (opts: { providerId?: string; model?: string }) =>
+      post<{ success: boolean; providerId?: string; model?: string }>('/api/memory/entity-extraction/configure', opts),
     dropVectors: () =>
       post<{ success: boolean }>('/api/memory/embeddings/drop', {}),
     probeEmbedding: (opts: { providerId?: string; model: string }) =>

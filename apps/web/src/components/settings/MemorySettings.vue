@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProviderStore } from '../../stores/provider.store'
+import { usePreferencesStore } from '../../stores/preferences.store'
 import { api } from '../../api/client'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
 import MultiSelect from '../shared/MultiSelect.vue'
 import ProviderSelect from '../shared/ProviderSelect.vue'
+import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
 import CustomSelect from '../shared/CustomSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
@@ -15,6 +17,7 @@ import {
 } from '../../utils/embedding-defaults'
 
 const providerStore = useProviderStore()
+const prefs = usePreferencesStore()
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
 }>(), {
@@ -53,6 +56,11 @@ const rerankProviderId = ref('')
 const rerankModel = ref('cohere/rerank-4-fast')
 const rerankCandidateCount = ref(12)
 const rerankSaving = ref(false)
+
+// Entity extraction state
+const entityExtractionProviderId = ref('')
+const entityExtractionModel = ref('')
+const entityExtractionSaving = ref(false)
 
 const RERANK_MODEL_OPTIONS = [
   { value: 'cohere/rerank-4-fast', label: 'Cohere Rerank 4 Fast', hint: 'cohere/rerank-4-fast' },
@@ -154,6 +162,7 @@ const clearingGraph = ref(false)
 onMounted(async () => {
   await providerStore.loadProviders()
   await loadEmbeddingConfig()
+  await loadEntityExtractionConfig()
   await loadChunkingConfig()
   await loadParserConfig()
   await loadRerankerConfig()
@@ -216,6 +225,41 @@ async function loadRerankerConfig() {
   } catch {
     rerankProviderId.value = openRouterProviders.value[0]?.id || ''
   }
+}
+
+async function loadEntityExtractionConfig() {
+  try {
+    const config = await api.memory.getEntityExtractionConfig()
+    entityExtractionProviderId.value = config.providerId || ''
+    entityExtractionModel.value = config.model || ''
+
+    if (!entityExtractionProviderId.value && !entityExtractionModel.value && (prefs.entityGraphProviderId || prefs.entityGraphModel)) {
+      await saveEntityExtractionSelection({
+        providerId: prefs.entityGraphProviderId,
+        model: prefs.entityGraphModel,
+      })
+    }
+  } catch {
+    entityExtractionProviderId.value = prefs.entityGraphProviderId || ''
+    entityExtractionModel.value = prefs.entityGraphModel || ''
+  }
+}
+
+async function saveEntityExtractionSelection(selection: { providerId: string; model: string }) {
+  entityExtractionProviderId.value = selection.providerId
+  entityExtractionModel.value = selection.model
+  prefs.entityGraphProviderId = selection.providerId
+  prefs.entityGraphModel = selection.model
+  entityExtractionSaving.value = true
+  try {
+    const res = await api.memory.configureEntityExtraction({
+      providerId: selection.providerId || undefined,
+      model: selection.model || undefined,
+    })
+    entityExtractionProviderId.value = res.providerId || ''
+    entityExtractionModel.value = res.model || ''
+  } catch { /* error handling */ }
+  entityExtractionSaving.value = false
 }
 
 async function toggleOcr() {
@@ -443,6 +487,53 @@ async function manualClearGraph() {
         <span v-if="embSaving || embProbing">Saving...</span>
         <span v-else>Save Embedding Config</span>
       </button>
+    </BaseCard>
+
+    <!-- Entity Extraction Model -->
+    <BaseCard
+      v-if="showSection('entity-graph-extraction')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
+          <Icon
+            icon="lucide:network"
+            class="w-5 h-5 text-theme-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Entity Extraction Model
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Provider and model used when memory writes and document indexing extract entities and relationships for the local entity graph.
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-1 border-t border-theme-700">
+        <div class="flex items-center justify-between gap-3 mb-1.5">
+          <label class="block text-xs text-theme-400">Provider / Model</label>
+          <span
+            v-if="entityExtractionSaving"
+            class="text-[11px] text-theme-500"
+          >
+            Saving...
+          </span>
+        </div>
+        <ProviderModelSelect
+          :provider-id="entityExtractionProviderId"
+          :model-value="entityExtractionModel"
+          :providers="providerStore.providers"
+          include-default
+          default-label="Use active provider default"
+          placeholder="Use active provider default"
+          @change="saveEntityExtractionSelection"
+        />
+        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
+          This setting is always active for entity creation calls. Leaving it on the default uses the server's active provider and that provider's default model.
+        </p>
+      </div>
     </BaseCard>
 
     <!-- Reranking -->
