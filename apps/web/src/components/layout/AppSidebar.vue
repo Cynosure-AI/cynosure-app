@@ -5,6 +5,7 @@ import { useProviderStore } from "../../stores/provider.store";
 import { useNotificationStore } from "../../stores/notification.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { useChatStore } from "../../stores/chat.store";
+import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import { api } from "../../api/client";
 import { wsConnected } from "../../api/http";
 import type { AgentInstance } from "../../api/types";
@@ -20,6 +21,7 @@ const providerStore = useProviderStore();
 const notificationStore = useNotificationStore();
 const agentDefs = useAgentDefinitionsStore();
 const chatStore = useChatStore();
+const memoryJobsStore = useMemoryJobsStore();
 const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar();
 const { logoIconUrl, logoTextUrl } = useAppBranding();
 
@@ -65,6 +67,7 @@ async function navigateToInstance(instance: AgentInstance) {
 
 onMounted(() => {
   loadInstances();
+  memoryJobsStore.startPolling();
   instancePollTimer = setInterval(loadInstances, 3_000);
   unsubHITLRequest = api.agent.onHITLRequest(() => {
     loadInstances();
@@ -78,6 +81,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearInterval(instancePollTimer);
+  memoryJobsStore.stopPolling();
   unsubHITLRequest?.();
   unsubExecutionUpdate?.();
 });
@@ -532,18 +536,22 @@ const settingsItems: NavItem[] = [
             'bg-red-500 animate-pulse': !wsConnected,
             'bg-amber-500 animate-pulse': wsConnected && hasAwaitingApproval,
             'bg-accent-500 animate-pulse':
-              wsConnected && instances.length > 0 && !hasAwaitingApproval,
+              wsConnected &&
+              !hasAwaitingApproval &&
+              (instances.length > 0 || memoryJobsStore.hasRunningJobs),
             'bg-emerald-500':
               wsConnected &&
               instances.length === 0 &&
+              !memoryJobsStore.hasRunningJobs &&
               providerStore.providers.length > 0,
-            'bg-theme-600': wsConnected && !providerStore.providers.length,
+            'bg-theme-600': wsConnected && !memoryJobsStore.hasRunningJobs && !providerStore.providers.length,
           }"
         />
         <span class="text-[11px] text-theme-400 truncate flex-1">
           <template v-if="!wsConnected">Connecting...</template>
           <template v-else-if="hasAwaitingApproval">Needs Attention</template>
           <template v-else-if="instances.length > 0">Agents Running...</template>
+          <template v-else-if="memoryJobsStore.hasRunningJobs">{{ memoryJobsStore.statusLabel }}</template>
           <template v-else-if="!providerStore.providers.length">No providers</template>
           <template v-else>Ready</template>
         </span>
