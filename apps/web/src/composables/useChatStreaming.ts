@@ -443,6 +443,10 @@ export function useChatStreaming(
         const conv = conversations.value.find((c) => c.id === data.conversationId)
         if (conv) {
             conv.title = data.title
+            if (data.conversationId === activeConversationId.value) {
+                conv.lastReadAt = Math.max(Date.now(), conv.updatedAt || 0, conv.lastReadAt || 0)
+                api.chat.markConversationRead(data.conversationId).catch(() => { /* non-critical */ })
+            }
         }
     }
 
