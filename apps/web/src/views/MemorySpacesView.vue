@@ -119,6 +119,16 @@ const activeSection = computed(() =>
   memorySections.find((section) => section.id === activePanel.value) || memorySections[0],
 );
 
+const activeGraphView = computed<GraphViewMode | null>(() => {
+  if (activePanel.value === "relationships") return "relationships";
+  if (activePanel.value === "visual") return "visual";
+  return null;
+});
+
+const activeGraph = computed(() =>
+  activeGraphView.value && graphView.value === activeGraphView.value ? graph.value : null,
+);
+
 const selectedSpace = computed(() =>
   spaces.value.find((s) => s.id === selectedSpaceId.value) || null,
 );
@@ -134,7 +144,7 @@ async function getElk() {
 
 async function layoutGraph() {
   const requestId = ++graphLayoutRequest;
-  const currentGraph = graph.value;
+  const currentGraph = activePanel.value === "visual" ? activeGraph.value : null;
   if (!currentGraph) {
     graphFlowNodes.value = [];
     graphFlowEdges.value = [];
@@ -305,7 +315,7 @@ function closestHandles(source?: FlowPoint, target?: FlowPoint): { sourceHandle:
     : { sourceHandle: "source-top", targetHandle: "target-bottom" };
 }
 
-watch([graph, () => activePanel.value], async () => {
+watch([activeGraph, () => activePanel.value], async () => {
   await layoutGraph();
   if (!fitGraphAfterLayout || activePanel.value !== "visual" || graphFlowNodes.value.length === 0) return;
   fitGraphAfterLayout = false;
@@ -424,7 +434,7 @@ function entityTypeClass(type: EntityGraphNodeType): string {
 async function loadGraph(query = graphQuery.value) {
   const trimmedQuery = query.trim();
   const limit = activePanel.value === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_LIMIT;
-  const view: GraphViewMode = activePanel.value === "relationships" ? "relationships" : "visual";
+  const view = activeGraphView.value || "visual";
   const requestKey = `${view}:${trimmedQuery}:${limit}`;
   if (graphLoading.value && inFlightGraphKey === requestKey) return;
   const requestId = ++graphRequest;
@@ -672,7 +682,7 @@ onMounted(() => loadSpaces());
         <MemoryRelationshipsSection
           v-else-if="activePanel === 'relationships'"
           v-model:graph-query="graphQuery"
-          :graph="graph"
+          :graph="activeGraph"
           :graph-loading="graphLoading"
           :graph-suggestions="graphSuggestions"
           @load-graph="loadGraph"
@@ -689,7 +699,7 @@ onMounted(() => loadSpaces());
           v-model:node-spacing="nodeSpacing"
           v-model:edge-labels-visible="showGraphEdgeLabels"
           :flow-id="ENTITY_FLOW_ID"
-          :graph="graph"
+          :graph="activeGraph"
           :graph-loading="graphLoading"
           :graph-flow-nodes="graphFlowNodes"
           :graph-flow-edges="graphFlowEdges"

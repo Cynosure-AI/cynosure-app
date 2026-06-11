@@ -649,6 +649,7 @@ export class EntityGraphStore {
   list(limit = 80): GraphSnapshot {
     const db = getDb()
     const edgeLimit = limit
+    const now = Date.now()
     const edgeRows = db.prepare(`
       WITH node_degrees AS (
         SELECT n.id AS id, COUNT(e.id) AS degree
@@ -657,10 +658,11 @@ export class EntityGraphStore {
         GROUP BY n.id
       )
       SELECT e.*, fn.name AS from_name, tn.name AS to_name,
-        (e.importance * 8)
-        + (e.mention_count * 4)
+        (e.importance * 10)
+        + (e.mention_count * 3)
         + (MAX(fd.degree, td.degree) * 1.5)
-        + CASE WHEN e.last_seen_at >= ? THEN 12 ELSE 0 END AS overview_score
+        + (MAX(0, 96.0 - ((? - e.last_seen_at) / 3600000.0)) * 0.9)
+        + CASE WHEN e.last_seen_at >= ? THEN 24 ELSE 0 END AS overview_score
       FROM entity_graph_edges e
       JOIN entity_graph_nodes fn ON fn.id = e.from_node_id
       JOIN entity_graph_nodes tn ON tn.id = e.to_node_id
@@ -668,7 +670,7 @@ export class EntityGraphStore {
       JOIN node_degrees td ON td.id = e.to_node_id
       ORDER BY overview_score DESC, e.last_seen_at DESC
       LIMIT ?
-    `).all(Date.now() - 7 * 24 * 60 * 60 * 1000, edgeLimit) as Record<string, unknown>[]
+    `).all(now, now - 24 * 60 * 60 * 1000, edgeLimit) as Record<string, unknown>[]
     const edges = edgeRows.map(rowToEdge)
     const nodeIds = Array.from(new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId])))
 
