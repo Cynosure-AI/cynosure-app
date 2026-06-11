@@ -10,6 +10,7 @@ import ContextCompactCard from '../chat/ContextCompactCard.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import { Icon } from '@iconify/vue'
+import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
 
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
@@ -261,6 +262,46 @@ function toggleSubAgentFullHeight(key: string): void {
   } else {
     fullHeightSubAgentGroups.add(key)
   }
+}
+
+function collectFileArtifactsFromText(text: string, seen: Set<string>, artifacts: FileArtifactLink[]): void {
+  for (const artifact of fileArtifactLinks(text)) {
+    if (seen.has(artifact.href)) continue
+    seen.add(artifact.href)
+    artifacts.push(artifact)
+  }
+}
+
+function hasLaterToolGroupInTurn(entries: TimelineEntry[], index: number): boolean {
+  for (let i = index + 1; i < entries.length; i++) {
+    const entry = entries[i]
+    if (entry.type === 'message' && entry.msg.role === 'user') return false
+    if (entry.type === 'tool-group') return true
+  }
+  return false
+}
+
+function assistantFileArtifacts(entry: TimelineEntry, entries = unifiedTimeline.value): FileArtifactLink[] {
+  if (entry.type !== 'message' || entry.msg.role !== 'assistant' || entry.msg.isStreaming) return []
+  const index = entries.findIndex((candidate) => candidate.key === entry.key)
+  if (index === -1 || hasLaterToolGroupInTurn(entries, index)) return []
+
+  const artifacts: FileArtifactLink[] = []
+  const seen = new Set<string>()
+
+  for (let i = index - 1; i >= 0; i--) {
+    const previous = entries[i]
+    if (previous.type === 'message' && previous.msg.role === 'user') break
+    if (previous.type !== 'tool-group') continue
+    for (const step of previous.group.steps) {
+      for (const result of step.results || []) {
+        collectFileArtifactsFromText(result.output || '', seen, artifacts)
+      }
+    }
+  }
+
+  collectFileArtifactsFromText(entry.msg.content, seen, artifacts)
+  return artifacts.reverse()
 }
 
 function toggleSubAgentCollapsed(key: string): void {
@@ -519,6 +560,7 @@ onMounted(() => {
                   :image-data-urls="inner.msg.imageDataUrls"
                   :audio-data-urls="inner.msg.audioDataUrls"
                   :file-attachments="inner.msg.fileAttachments"
+                  :file-artifacts="assistantFileArtifacts(inner, entry.entries)"
                   :agent-id="resolveAgentId(inner.msg)"
                   :agent-icon-url="resolveAgentIconUrl(inner.msg)"
                   :agent-name="resolveAgentName(inner.msg)"
@@ -593,6 +635,7 @@ onMounted(() => {
           :image-data-urls="entry.msg.imageDataUrls"
           :audio-data-urls="entry.msg.audioDataUrls"
           :file-attachments="entry.msg.fileAttachments"
+          :file-artifacts="assistantFileArtifacts(entry)"
           :agent-id="resolveAgentId(entry.msg)"
           :agent-icon-url="resolveAgentIconUrl(entry.msg)"
           :agent-name="resolveAgentName(entry.msg)"
