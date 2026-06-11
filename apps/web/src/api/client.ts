@@ -41,7 +41,7 @@ export const api = {
         params.set('agentId', agentId ?? '')
       }
       const qs = params.toString()
-      return get<{ id: string; title: string; agent_id: string | null; ma_workspace_id: string | null; origin: string; pinned: number; created_at: number; updated_at: number; last_user_message: string | null }[]>(
+      return get<{ id: string; title: string; agent_id: string | null; ma_workspace_id: string | null; origin: string; pinned: number; last_read_at: number | null; created_at: number; updated_at: number; last_user_message: string | null }[]>(
         `/api/chat/conversations${qs ? `?${qs}` : ''}`
       )
     },
@@ -49,7 +49,7 @@ export const api = {
       const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
       if (sort) params.set('sort', sort)
       if (search) params.set('search', search)
-      return get<{ items: { id: string; title: string; agent_id: string | null; ma_workspace_id: string | null; origin: string; pinned: number; created_at: number; updated_at: number; last_user_message: string | null }[]; total: number }>(
+      return get<{ items: { id: string; title: string; agent_id: string | null; ma_workspace_id: string | null; origin: string; pinned: number; last_read_at: number | null; created_at: number; updated_at: number; last_user_message: string | null }[]; total: number }>(
         `/api/chat/conversations?${params}`
       )
     },

@@ -22,6 +22,7 @@ export interface EntityNode {
   importance: ImportanceLevel
   mentionCount: number
   sourceCount: number
+  origins?: EntityOrigin[]
   firstSeenAt: number
   lastSeenAt: number
 }
@@ -40,6 +41,14 @@ export interface EntityEdge {
   sourceId: string
   mentionCount: number
   firstSeenAt: number
+  lastSeenAt: number
+}
+
+export interface EntityOrigin {
+  sourceKind: string
+  sourceId: string
+  label: string
+  count: number
   lastSeenAt: number
 }
 
@@ -206,6 +215,40 @@ function clampImportance(value: unknown): ImportanceLevel {
   return Math.max(0, Math.min(3, Math.round(value))) as ImportanceLevel
 }
 
+function inferImportance(value: unknown, relation: string, sourceKind: string): ImportanceLevel {
+  if (typeof value === 'number' && Number.isFinite(value)) return clampImportance(value)
+  const normalizedRelation = normalizeRelation(relation)
+  if (sourceKind === 'memory') return 2
+  if (['prefers', 'preference', 'likes', 'dislikes', 'works_at', 'employed_by', 'lives_in', 'owns', 'uses', 'goal', 'working_on'].includes(normalizedRelation)) return 3
+  if (['depends_on', 'part_of', 'located_in', 'based_in', 'created', 'founded_by', 'managed_by'].includes(normalizedRelation)) return 2
+  return 1
+}
+
+function effectiveImportance(value: unknown, relation: string, sourceKind: string): ImportanceLevel {
+  const stored = clampImportance(value)
+  if (stored !== 1) return stored
+  return inferImportance(undefined, relation, sourceKind)
+}
+
+function memorySourceLabel(sourceId: string): string | null {
+  if (!sourceId.startsWith('memory:')) return null
+  const parts = sourceId.split(':')
+  if (parts.length >= 3) return parts.slice(2).join(':')
+  return parts.slice(1).join(':') || null
+}
+
+function conversationSourceLabel(sourceId: string): string | null {
+  if (!sourceId) return null
+  const row = getDb().prepare('SELECT title FROM conversations WHERE id = ?').get(sourceId) as { title: string } | undefined
+  return row?.title || null
+}
+
+function sourceLabel(sourceKind: string, sourceId: string): string {
+  if (sourceKind === 'memory') return memorySourceLabel(sourceId) || 'Memory document'
+  if (sourceKind === 'conversation') return conversationSourceLabel(sourceId) || 'Conversation'
+  return sourceId || sourceKind
+}
+
 function tokenizeEntityQuery(value: string): string[] {
   return Array.from(new Set(
     normalizeName(value)
@@ -222,12 +265,70 @@ function rowToNode(row: Record<string, unknown>): EntityNode {
     normalizedName: row.normalized_name as string,
     type: row.type as EntityType,
     aliases: JSON.parse((row.aliases_json as string) || '[]') as string[],
-    importance: clampImportance(row.importance),
+    importance: effectiveImportance(row.importance, row.relation as string, row.source_kind as string),
     mentionCount: row.mention_count as number,
     sourceCount: row.source_count as number,
     firstSeenAt: row.first_seen_at as number,
     lastSeenAt: row.last_seen_at as number
   }
+}
+
+function hydrateNodeOrigins(nodes: EntityNode[]): EntityNode[] {
+  if (nodes.length === 0) return nodes
+  const nodeIds = nodes.map((node) => node.id)
+  const rows = getDb().prepare(`
+    SELECT node_id, source_kind, source_id, SUM(mention_count) AS count, MAX(last_seen_at) AS last_seen_at
+    FROM (
+      SELECT from_node_id AS node_id, source_kind, source_id, mention_count, last_seen_at
+      FROM entity_graph_edges
+      WHERE from_node_id IN (${nodeIds.map(() => '?').join(', ')})
+      UNION ALL
+      SELECT to_node_id AS node_id, source_kind, source_id, mention_count, last_seen_at
+      FROM entity_graph_edges
+      WHERE to_node_id IN (${nodeIds.map(() => '?').join(', ')})
+    )
+    GROUP BY node_id, source_kind, source_id
+    ORDER BY last_seen_at DESC
+  `).all(...nodeIds, ...nodeIds) as {
+    node_id: string
+    source_kind: string
+    source_id: string
+    count: number
+    last_seen_at: number
+  }[]
+
+  const originsByNode = new Map<string, EntityOrigin[]>()
+  for (const row of rows) {
+    const origins = originsByNode.get(row.node_id) || []
+    origins.push({
+      sourceKind: row.source_kind,
+      sourceId: row.source_id,
+      label: sourceLabel(row.source_kind, row.source_id),
+      count: row.count,
+      lastSeenAt: row.last_seen_at,
+    })
+    originsByNode.set(row.node_id, origins)
+  }
+
+  return nodes.map((node) => ({
+    ...node,
+    origins: (originsByNode.get(node.id) || []).slice(0, 8),
+  }))
+}
+
+function applyEffectiveNodeImportance(nodes: EntityNode[], edges: EntityEdge[]): EntityNode[] {
+  if (nodes.length === 0 || edges.length === 0) return nodes
+  const importanceByNode = new Map<string, ImportanceLevel>()
+  for (const edge of edges) {
+    for (const nodeId of [edge.fromNodeId, edge.toNodeId]) {
+      const current = importanceByNode.get(nodeId) ?? 1
+      importanceByNode.set(nodeId, Math.max(current, edge.importance) as ImportanceLevel)
+    }
+  }
+  return nodes.map((node) => ({
+    ...node,
+    importance: Math.max(node.importance, importanceByNode.get(node.id) ?? node.importance) as ImportanceLevel,
+  }))
 }
 
 function rowAliases(row: Record<string, unknown>): string[] {
@@ -683,7 +784,7 @@ export class EntityGraphStore {
       SELECT * FROM entity_graph_nodes
       WHERE id IN (${placeholders})
     `).all(...nodeIds) as Record<string, unknown>[]
-    return { nodes: nodes.map(rowToNode), edges }
+    return { nodes: hydrateNodeOrigins(applyEffectiveNodeImportance(nodes.map(rowToNode), edges)), edges }
   }
 
   listRelationships(limit = 5000): GraphSnapshot {
@@ -706,7 +807,7 @@ export class EntityGraphStore {
       SELECT * FROM entity_graph_nodes
       WHERE id IN (${placeholders})
     `).all(...nodeIds) as Record<string, unknown>[]
-    return { nodes: nodes.map(rowToNode), edges }
+    return { nodes: hydrateNodeOrigins(applyEffectiveNodeImportance(nodes.map(rowToNode), edges)), edges }
   }
 
   stats(): { nodeCount: number; edgeCount: number; recentEdgeCount: number } {
@@ -863,7 +964,7 @@ export class EntityGraphStore {
     const nodeRows = placeholders
       ? db.prepare(`SELECT * FROM entity_graph_nodes WHERE id IN (${placeholders})`).all(...allIds) as Record<string, unknown>[]
       : []
-    const nodes = nodeRows.map(rowToNode)
+    const nodes = hydrateNodeOrigins(applyEffectiveNodeImportance(nodeRows.map(rowToNode), Array.from(edgeMap.values())))
     const seedNodes = nodes.filter((node) => seedIds.includes(node.id))
     return { seedNodes, nodes, edges: Array.from(edgeMap.values()) }
   }
@@ -903,11 +1004,12 @@ export class EntityGraphStore {
 
     const systemContent = [
       opts.systemPrompt || 'Extract durable named entities and explicit relationships from the provided content.',
-      'Return strict JSON only: an array of objects with keys action, from, relation, to, confidence, evidence.',
+      'Return strict JSON only: an array of objects with keys action, from, relation, to, importance, confidence, evidence.',
       'action is "assert" for facts that are true now, or "delete" for facts explicitly corrected, negated, or no longer true.',
       'from and to are objects with name, type, and optional aliases.',
       'Allowed types: person, place, organization, project, event, date, technology, product, artifact, concept, other.',
       'Only include facts that would remain useful later. Skip vague, temporary, or unsupported claims.',
+      'Set importance as 0 for throwaway context, 1 for minor context, 2 for useful durable facts, 3 for core facts about a user, project, preference, goal, identity, or long-running work.',
       'Use concise snake_case relation names such as works_at, depends_on, located_in, owns, uses, met_on, discussed_with.',
       'When a fact changes, emit a delete for the old relationship if the turn names it, and an assert for the replacement.',
       "Evidence should be one short sentence on why the fact is true.",
@@ -942,7 +1044,7 @@ export class EntityGraphStore {
         from,
         relation: obj.relation,
         to,
-        importance: clampImportance(obj.importance),
+        importance: inferImportance(obj.importance, obj.relation, opts.sourceKind || 'content'),
         confidence: clampConfidence(obj.confidence),
         evidence: typeof obj.evidence === 'string' ? obj.evidence : ''
       }
