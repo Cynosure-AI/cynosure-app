@@ -48,6 +48,12 @@ let contextExactLookup: Map<string, number> = new Map()
 /** model → context length (first-seen across all providers) */
 let contextModelOnlyLookup: Map<string, number> = new Map()
 
+/** (provider, model) → input modalities */
+let inputModalitiesExactLookup: Map<string, string[]> = new Map()
+
+/** model → input modalities (first-seen across all providers) */
+let inputModalitiesModelOnlyLookup: Map<string, string[]> = new Map()
+
 /** (provider, model) → output modalities */
 let outputModalitiesExactLookup: Map<string, string[]> = new Map()
 
@@ -116,12 +122,25 @@ export function getModelContextLength(provider: string, model: string): number |
 }
 
 export function getModelOutputModalities(provider: string, model: string): string[] | null {
+    return getModelModalities(provider, model, outputModalitiesExactLookup, outputModalitiesModelOnlyLookup)
+}
+
+export function getModelInputModalities(provider: string, model: string): string[] | null {
+    return getModelModalities(provider, model, inputModalitiesExactLookup, inputModalitiesModelOnlyLookup)
+}
+
+function getModelModalities(
+    provider: string,
+    model: string,
+    exactLookupMap: Map<string, string[]>,
+    modelOnlyLookupMap: Map<string, string[]>
+): string[] | null {
     const normProvider = normaliseProvider(provider)
 
-    const exact = outputModalitiesExactLookup.get(`${normProvider}/${model}`)
+    const exact = exactLookupMap.get(`${normProvider}/${model}`)
     if (exact) return exact
 
-    const fallback = outputModalitiesModelOnlyLookup.get(model)
+    const fallback = modelOnlyLookupMap.get(model)
     if (fallback) return fallback
 
     // OpenRouter-style IDs: "openai/gpt-5-image" → try "openai" + "gpt-5-image"
@@ -129,9 +148,9 @@ export function getModelOutputModalities(provider: string, model: string): strin
     if (slashIdx > 0) {
         const embeddedProvider = normaliseProvider(model.slice(0, slashIdx))
         const embeddedModel = model.slice(slashIdx + 1)
-        const nested = outputModalitiesExactLookup.get(`${embeddedProvider}/${embeddedModel}`)
+        const nested = exactLookupMap.get(`${embeddedProvider}/${embeddedModel}`)
         if (nested) return nested
-        const nestedFallback = outputModalitiesModelOnlyLookup.get(embeddedModel)
+        const nestedFallback = modelOnlyLookupMap.get(embeddedModel)
         if (nestedFallback) return nestedFallback
     }
 
@@ -179,6 +198,8 @@ function buildLookups(data: ModelsDevData): void {
     const newModelOnly = new Map<string, ModelCost>()
     const newCtxExact = new Map<string, number>()
     const newCtxModelOnly = new Map<string, number>()
+    const newInputModalitiesExact = new Map<string, string[]>()
+    const newInputModalitiesModelOnly = new Map<string, string[]>()
     const newOutputModalitiesExact = new Map<string, string[]>()
     const newOutputModalitiesModelOnly = new Map<string, string[]>()
 
@@ -207,19 +228,20 @@ function buildLookups(data: ModelsDevData): void {
                 }
             }
 
-            // Output modality lookup
-            const outputModalities = modelInfo?.modalities?.output
-            if (Array.isArray(outputModalities)) {
-                const modalities = outputModalities
-                    .filter((item): item is string => typeof item === 'string')
-                    .map((item) => item.toLowerCase())
-                if (modalities.length) {
-                    newOutputModalitiesExact.set(`${providerKey}/${modelId}`, modalities)
-                    if (!newOutputModalitiesModelOnly.has(modelId)) {
-                        newOutputModalitiesModelOnly.set(modelId, modalities)
-                    }
-                }
-            }
+            addModalities(
+                providerKey,
+                modelId,
+                modelInfo?.modalities?.input,
+                newInputModalitiesExact,
+                newInputModalitiesModelOnly
+            )
+            addModalities(
+                providerKey,
+                modelId,
+                modelInfo?.modalities?.output,
+                newOutputModalitiesExact,
+                newOutputModalitiesModelOnly
+            )
         }
     }
 
@@ -227,6 +249,27 @@ function buildLookups(data: ModelsDevData): void {
     modelOnlyLookup = newModelOnly
     contextExactLookup = newCtxExact
     contextModelOnlyLookup = newCtxModelOnly
+    inputModalitiesExactLookup = newInputModalitiesExact
+    inputModalitiesModelOnlyLookup = newInputModalitiesModelOnly
     outputModalitiesExactLookup = newOutputModalitiesExact
     outputModalitiesModelOnlyLookup = newOutputModalitiesModelOnly
+}
+
+function addModalities(
+    providerKey: string,
+    modelId: string,
+    raw: unknown,
+    exactLookupMap: Map<string, string[]>,
+    modelOnlyLookupMap: Map<string, string[]>
+): void {
+    if (!Array.isArray(raw)) return
+    const modalities = raw
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.toLowerCase())
+    if (!modalities.length) return
+
+    exactLookupMap.set(`${providerKey}/${modelId}`, modalities)
+    if (!modelOnlyLookupMap.has(modelId)) {
+        modelOnlyLookupMap.set(modelId, modalities)
+    }
 }

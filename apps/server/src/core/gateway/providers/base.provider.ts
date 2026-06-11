@@ -76,6 +76,7 @@ export interface ToolResult {
 export interface ModelInfo {
   id: string
   contextLength?: number
+  inputModalities?: string[]
   outputModalities?: string[]
   /** Cost in $ per 1M tokens: { input, output } */
   cost?: { input: number; output: number }

@@ -86,6 +86,27 @@ const formattedModelCost = computed(() => {
   return `${fmt(cost.input)} / ${fmt(cost.output)}`;
 });
 
+function formatModalityName(modality: string): string {
+  return modality
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function formatModalities(modalities?: string[]): string {
+  if (!modalities?.length) return "Unknown";
+  return modalities.map(formatModalityName).join(", ");
+}
+
+const formattedInputModalities = computed(() =>
+  formatModalities(chatStore.modelModalities?.input),
+);
+
+const formattedOutputModalities = computed(() =>
+  formatModalities(chatStore.modelModalities?.output),
+);
+
 const mobileModelLabel = computed(() => {
   const override = chatStore.sessionModelOverride;
   if (override) {
@@ -263,8 +284,8 @@ async function toggleMic(): Promise<void> {
     >
       <!-- Model cost indicator -->
       <HoverTooltip
-        v-if="formattedModelCost"
         placement="above"
+        :max-width="280"
       >
         <div class="w-56">
           <ProviderModelSelect
@@ -285,10 +306,26 @@ async function toggleMic(): Promise<void> {
 
 
         <template #content>
-          <p class="text-xs text-theme-300 whitespace-nowrap">
-            Input / Output cost per 1M tokens
-          </p>
-          <span class="tabular-nums">{{ formattedModelCost }}</span>
+          <div class="space-y-2">
+            <div>
+              <p class="text-xs font-medium text-theme-300">
+                Capabilities
+              </p>
+              <div class="mt-1 grid grid-cols-[auto,1fr] gap-x-2 gap-y-1 text-xs">
+                <span class="text-theme-500">Input</span>
+                <span class="text-theme-200">{{ formattedInputModalities }}</span>
+                <span class="text-theme-500">Output</span>
+                <span class="text-theme-200">{{ formattedOutputModalities }}</span>
+              </div>
+            </div>
+
+            <div v-if="formattedModelCost">
+              <p class="text-xs text-theme-300 whitespace-nowrap">
+                Input / Output cost per 1M tokens
+              </p>
+              <span class="tabular-nums">{{ formattedModelCost }}</span>
+            </div>
+          </div>
         </template>
       </HoverTooltip>
     </div>

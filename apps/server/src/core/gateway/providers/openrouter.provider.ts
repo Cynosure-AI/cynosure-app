@@ -17,8 +17,10 @@ const MODEL_CACHE_TTL_MS = 10 * 60 * 1000
 interface OpenRouterModel {
     id: string
     context_length?: number
+    input_modalities?: unknown
     output_modalities?: unknown
     architecture?: {
+        input_modalities?: unknown
         output_modalities?: unknown
     }
 }
@@ -86,10 +88,17 @@ export class OpenRouterProvider extends BaseLLMProvider {
         return models
     }
 
-    private getOutputModalities(model: OpenRouterModel | undefined): string[] {
-        const raw = model?.output_modalities ?? model?.architecture?.output_modalities
+    private getModalities(raw: unknown): string[] {
         if (!Array.isArray(raw)) return []
         return raw.filter((item): item is string => typeof item === 'string').map((item) => item.toLowerCase())
+    }
+
+    private getInputModalities(model: OpenRouterModel | undefined): string[] {
+        return this.getModalities(model?.input_modalities ?? model?.architecture?.input_modalities)
+    }
+
+    private getOutputModalities(model: OpenRouterModel | undefined): string[] {
+        return this.getModalities(model?.output_modalities ?? model?.architecture?.output_modalities)
     }
 
     private async modelSupportsImageOutput(modelId: string): Promise<boolean> {
@@ -564,10 +573,12 @@ export class OpenRouterProvider extends BaseLLMProvider {
         try {
             const models = await this.fetchModels()
             const model = models.find(m => m.id === modelId)
+            const inputModalities = this.getInputModalities(model)
             const outputModalities = this.getOutputModalities(model)
             return {
                 id: modelId,
                 contextLength: model?.context_length || undefined,
+                inputModalities: inputModalities.length ? inputModalities : undefined,
                 outputModalities: outputModalities.length ? outputModalities : undefined
             }
         } catch {
