@@ -393,8 +393,15 @@ onMounted(() => {
       v-else-if="chatStore.messages.length === 0"
       class="flex flex-col items-center justify-center h-full text-theme-400"
     >
-      <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl">
+      <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
+        <img
+          v-if="activeAgentIconUrl"
+          :src="activeAgentIconUrl"
+          class="w-full h-full object-cover"
+          alt=""
+        >
         <Icon
+          v-else
           icon="lucide:bot-message-square"
           class="w-10 h-10 text-accent-400"
         />
