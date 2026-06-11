@@ -89,7 +89,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
 
     if (isRuntimeMemoryEnabled(preset, autoMemory, memorySpaceOverrides)) {
         const memoryTools = toolRegistry.resolveForExecution(getBuiltInMemoryToolKeys())
-        tools = dedupeToolsByName([...tools, ...memoryTools])
+        tools = dedupeToolsByName([...memoryTools, ...tools])
     }
 
     const effectiveSubAgents = includeSubAgents

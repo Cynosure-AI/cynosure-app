@@ -3,6 +3,7 @@ import { getAgent, type SubAgentAssignment } from '../agents/agent-store.js'
 import { AgentExecutor } from './agent-executor.js'
 import { prepareAgentExecution } from './prepare-execution.js'
 import { getDb } from '../../db/database.js'
+import { getAssignedOrDefaultSpaces } from '../memory/memory-space-scope.js'
 import { nanoid } from 'nanoid'
 import type { ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 
@@ -94,6 +95,8 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 systemPromptSuffix: '\nYou are a sub-agent. Complete the task described below and report your results clearly.',
                 includeSubAgents: false,
                 userQuery: userMessage,
+                autoMemory: agentData.autoMemory === true,
+                memorySpaceOverrides: getAssignedOrDefaultSpaces(agentData.id).map((space) => ({ id: space.id, name: space.name })),
                 eventMeta: { maCodename: agentData.internalName, maAgentName: agentData.name },
             })
             const gateway = getGateway()

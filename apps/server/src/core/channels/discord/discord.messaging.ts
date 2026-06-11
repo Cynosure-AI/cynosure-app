@@ -7,6 +7,7 @@ import { generateTitle } from '../../agent/post-execution.js'
 import { getAgent } from '../../agents/agent-store.js'
 import { getToolRegistry } from '../../tools/tool-registry.js'
 import { getEventBus } from '../../telemetry/event-bus.js'
+import { getAssignedOrDefaultSpaces } from '../../memory/memory-space-scope.js'
 import type { ChatMessage, ContentPart } from '../../gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 import type { DiscordCtx } from './discord.types.js'
@@ -169,6 +170,10 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         toolRegistry: getToolRegistry(),
         messages,
         userText,
+        run: {
+            memorySpaceOverrides: getAssignedOrDefaultSpaces(resolvedAgent.id).map((space) => ({ id: space.id, name: space.name })),
+            autoMemory: resolvedAgent.autoMemory === true,
+        },
     })
     messages = planned.messages
 
