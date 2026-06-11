@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { useChatStore } from '../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import InputToolbar from './inputbar/InputToolbar.vue'
 import SaveAgentModal from './inputbar/SaveAgentModal.vue'
 import ContextRing from './inputbar/ContextRing.vue'
+import HoverTooltip from '../shared/HoverTooltip.vue'
 
 const chatStore = useChatStore()
 
@@ -14,6 +15,15 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<{ url: string; name: string }[]>([])
 const attachedFiles = ref<{ name: string; content: string }[]>([])
 const attachedAudio = ref<{ url: string; name: string }[]>([])
+
+function modelHasInputModality(modality: string): boolean | null {
+  const inputModalities = chatStore.modelModalities?.input
+  if (!inputModalities?.length) return null
+  return inputModalities.some((item) => item.toLowerCase() === modality)
+}
+
+const imageInputUnsupported = computed(() => modelHasInputModality('image') === false)
+const audioInputUnsupported = computed(() => modelHasInputModality('audio') === false)
 
 async function send(): Promise<void> {
   const content = inputText.value.trim()
@@ -178,6 +188,21 @@ defineExpose({ processFiles })
             :alt="img.name"
             class="h-16 w-16 rounded-lg object-cover border border-theme-700"
           >
+          <HoverTooltip
+            v-if="imageInputUnsupported"
+            placement="above"
+            :max-width="220"
+          >
+            <span class="absolute -bottom-1.5 -left-1.5 h-5 w-5 rounded-full border border-amber-300/70 bg-amber-500 text-black flex items-center justify-center shadow-lg shadow-black/30">
+              <Icon
+                icon="mdi:alert"
+                class="h-3.5 w-3.5"
+              />
+            </span>
+            <template #content>
+              The selected model does not support image input.
+            </template>
+          </HoverTooltip>
           <button
             class="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-600 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
             aria-label="Remove image"
@@ -234,6 +259,21 @@ defineExpose({ processFiles })
             class="h-4 w-4 text-theme-400 shrink-0"
           />
           <span class="text-xs text-theme-300 max-w-32 truncate">{{ audio.name }}</span>
+          <HoverTooltip
+            v-if="audioInputUnsupported"
+            placement="above"
+            :max-width="220"
+          >
+            <span class="h-4 w-4 rounded-full border border-amber-300/70 bg-amber-500 text-black flex items-center justify-center shrink-0">
+              <Icon
+                icon="mdi:alert"
+                class="h-3 w-3"
+              />
+            </span>
+            <template #content>
+              The selected model does not support audio input.
+            </template>
+          </HoverTooltip>
           <button
             class="ml-1 h-4 w-4 rounded-full bg-red-600 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
             aria-label="Remove audio"

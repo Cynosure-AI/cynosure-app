@@ -23,7 +23,13 @@ export const api = {
       return get<string[]>(`/api/providers/${encodeURIComponent(id)}/models${params}`)
     },
     getModelInfo: (providerId: string, modelId: string) =>
-      get<{ id: string; contextLength?: number; outputModalities?: string[]; cost?: { input: number; output: number } }>(`/api/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}/info`),
+      get<{
+        id: string
+        contextLength?: number
+        inputModalities?: string[]
+        outputModalities?: string[]
+        cost?: { input: number; output: number }
+      }>(`/api/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}/info`),
     loadSaved: () => Promise.resolve() // no-op in web — server loads on startup
   },
 

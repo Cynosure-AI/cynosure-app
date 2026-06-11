@@ -57,6 +57,7 @@ export const useChatStore = defineStore('chat', () => {
   const loadingMessages = ref(false)
   const contextWindow = ref<number | null>(null)
   const modelCost = ref<{ input: number; output: number } | null>(null)
+  const modelModalities = ref<{ input: string[]; output: string[] } | null>(null)
   const memorySpaces = ref<MemorySpace[]>([])
   const postActionsMap = new Map<string, Set<string>>()
   const postActionsTrigger = ref(0)
@@ -338,10 +339,17 @@ export const useChatStore = defineStore('chat', () => {
           contextWindow.value = null
         }
         modelCost.value = info.cost ?? null
+        modelModalities.value = (info.inputModalities?.length || info.outputModalities?.length)
+          ? {
+              input: info.inputModalities ?? [],
+              output: info.outputModalities ?? []
+            }
+          : null
       })
       .catch(() => {
         contextWindow.value = null
         modelCost.value = null
+        modelModalities.value = null
       })
   }
 
@@ -389,6 +397,8 @@ export const useChatStore = defineStore('chat', () => {
       fetchContextWindow(resolved.providerId, resolved.model)
     } else {
       contextWindow.value = null
+      modelCost.value = null
+      modelModalities.value = null
     }
   }, { immediate: true })
 
@@ -555,6 +565,7 @@ export const useChatStore = defineStore('chat', () => {
     lastUsage: streaming.lastUsage,
     contextWindow,
     modelCost,
+    modelModalities,
     handleStreamStart: streaming.handleStreamStart,
     handleStreamChunk: streaming.handleStreamChunk,
     handleStreamThinking: streaming.handleStreamThinking,
