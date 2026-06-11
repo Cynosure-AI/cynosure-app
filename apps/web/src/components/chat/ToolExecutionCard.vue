@@ -32,7 +32,7 @@ const prefs = usePreferencesStore()
 const expanded = ref(prefs.autoExpandToolCalls)
 const lightboxSrc = ref<string | null>(null)
 const statusMeta: Record<string, { label: string; icon: string; color: string }> = {
-  'building-task-context': { label: 'Auto Router', icon: 'lucide:compass', color: 'text-cyan-300' },
+  'building-task-context': { label: 'Preparing Context', icon: 'lucide:compass', color: 'text-cyan-300' },
   'routing-tools': { label: 'Auto tool routing', icon: 'lucide:route', color: 'text-accent-300' },
   'routing-memory': { label: 'Auto Memories', icon: 'lucide:brain-circuit', color: 'text-accent-300' },
   'routing-skills': { label: 'Auto Skill Routing', icon: 'lucide:book-open-check', color: 'text-accent-300' },
@@ -63,7 +63,8 @@ function isMemoryCall(call: { arguments: string }): boolean {
 
 function isTaskContextCall(call: { name?: string; arguments: string }): boolean {
   try {
-    return JSON.parse(call.arguments || '{}')?.type === 'auto-router'
+    const type = JSON.parse(call.arguments || '{}')?.type
+    return type === 'task-context' || type === 'auto-router'
   } catch {
     return false
   }
@@ -74,7 +75,7 @@ function isSubAgentSpawnCall(name: string): boolean {
 }
 
 function toolDisplayName(name: string): string {
-  if (name === 'Task context') return 'Auto Router'
+  if (name === 'Task context') return 'Preparing Context'
   return isSubAgentSpawnCall(name) ? 'Spawn sub-agent' : name
 }
 
@@ -157,16 +158,34 @@ const taskContext = computed(() => {
     const parsed = JSON.parse(call.arguments || '{}') as {
       focusAreas?: unknown
       routerQuery?: unknown
+      toolQuery?: unknown
+      skillQuery?: unknown
+      memoryQuery?: unknown
     }
     return {
       focusAreas: Array.isArray(parsed.focusAreas)
         ? parsed.focusAreas.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
         : [],
       routerQuery: typeof parsed.routerQuery === 'string' ? parsed.routerQuery.trim() : '',
+      toolQuery: typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : '',
+      skillQuery: typeof parsed.skillQuery === 'string' ? parsed.skillQuery.trim() : '',
+      memoryQuery: typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : '',
     }
   } catch {
     return null
   }
+})
+
+const taskContextQueries = computed(() => {
+  if (!taskContext.value) return []
+  const queries = [
+    { label: 'Tools', value: taskContext.value.toolQuery },
+    { label: 'Skills', value: taskContext.value.skillQuery },
+    { label: 'Memory', value: taskContext.value.memoryQuery },
+  ]
+    .map((query) => ({ ...query, value: query.value.trim() }))
+    .filter((query) => query.value && query.value !== taskContext.value?.routerQuery)
+  return queries
 })
 
 /** Whether all results succeeded */
@@ -358,7 +377,7 @@ const maContext = computed(() => {
                 icon="lucide:compass"
                 class="w-3 h-3 text-cyan-300"
               />
-              <span class="text-[11px] font-medium text-cyan-200">Task context</span>
+              <span class="text-[11px] font-medium text-cyan-200">Preparing context</span>
             </div>
             <div
               v-if="taskContext.focusAreas.length"
@@ -378,6 +397,23 @@ const maContext = computed(() => {
             >
               {{ taskContext.routerQuery }}
             </p>
+            <div
+              v-if="taskContextQueries.length"
+              class="mt-2 grid gap-1.5"
+            >
+              <div
+                v-for="query in taskContextQueries"
+                :key="query.label"
+                class="rounded-md bg-theme-950/35 px-2 py-1.5"
+              >
+                <div class="text-[10px] font-medium uppercase tracking-wide text-cyan-300/70">
+                  {{ query.label }}
+                </div>
+                <p class="mt-0.5 text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap break-words">
+                  {{ query.value }}
+                </p>
+              </div>
+            </div>
           </div>
 
           <!-- Tool call arguments -->
