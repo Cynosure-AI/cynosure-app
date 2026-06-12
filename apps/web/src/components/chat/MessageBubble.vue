@@ -524,6 +524,18 @@ const imageGridClass = computed(() => {
 .msg-markdown li > p { margin: 0.125rem 0; }
 .msg-markdown strong { color: rgba(244, 244, 245, 1); }
 
+/* ── Blockquotes ── */
+.msg-markdown blockquote {
+  margin: 0.5rem 0;
+  padding: 0.375rem 0.75rem;
+  border-left: 3px solid var(--color-theme-600);
+  background: rgba(39, 39, 42, 0.3);
+  border-radius: 0 0.375rem 0.375rem 0;
+  color: var(--color-theme-300);
+}
+.msg-markdown blockquote p { margin: 0.25rem 0; }
+.msg-markdown blockquote blockquote { margin-top: 0.25rem; }
+
 /* ── Tables ── */
 .msg-markdown table {
   width: 100%;
