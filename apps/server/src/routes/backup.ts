@@ -174,7 +174,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                      category, sub_agents_json, skills_json, auto_approve_tools, thinking_enabled,
                      max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                      auto_memory, memory_router_provider_id, memory_router_model,
-                     auto_skill_routing, skill_router_provider_id, skill_router_model,
+                     auto_skill_routing, auto_router_provider_id, auto_router_model,
                      sort_order, cron_prompt, icon_mime, created_at, updated_at
                      FROM agents ORDER BY created_at`
                 ).all() as Record<string, unknown>[]
@@ -411,7 +411,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                    skills_json, icon_url, internal_name, category, sub_agents_json, auto_approve_tools,
                                  thinking_enabled, max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                                  auto_memory, memory_router_provider_id, memory_router_model,
-                                 auto_skill_routing, skill_router_provider_id, skill_router_model,
+                                 auto_skill_routing, auto_router_provider_id, auto_router_model,
                                  sort_order, cron_prompt, icon_data, icon_mime,
                                  created_at, updated_at)
                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -438,8 +438,8 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 row.memory_router_provider_id || '',
                                 row.memory_router_model || '',
                                 row.auto_skill_routing ?? 1,
-                                row.skill_router_provider_id || '',
-                                row.skill_router_model || '',
+                                row.auto_router_provider_id || row.skill_router_provider_id || '',
+                                row.auto_router_model || row.skill_router_model || '',
                                 row.sort_order ?? 0,
                                 row.cron_prompt || '',
                                 iconData,

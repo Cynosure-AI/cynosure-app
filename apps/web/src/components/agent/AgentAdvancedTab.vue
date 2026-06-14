@@ -14,7 +14,7 @@ const AGENT_ROUTER_MODEL = "__agent_model__";
 
 const providerStore = useProviderStore();
 
-const skillRouterLeadingSelections = [
+const autoRouterLeadingSelections = [
   {
     providerId: "",
     model: "",
@@ -39,8 +39,8 @@ function onAutoRouterSelection(selection: {
   providerId: string;
   model: string;
 }): void {
-  emit("update", "skillRouterProviderId", selection.providerId);
-  emit("update", "skillRouterModel", selection.model);
+  emit("update", "autoRouterProviderId", selection.providerId);
+  emit("update", "autoRouterModel", selection.model);
 }
 
 // ── Max Context Tokens local state ──
@@ -131,10 +131,10 @@ function onMaxCtxBlur() {
       <div class="mt-4">
         <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
         <ProviderModelSelect
-          :provider-id="agent.skillRouterProviderId || ''"
-          :model-value="agent.skillRouterModel || ''"
+          :provider-id="agent.autoRouterProviderId || ''"
+          :model-value="agent.autoRouterModel || ''"
           :providers="providerStore.providers"
-          :leading-selections="skillRouterLeadingSelections"
+          :leading-selections="autoRouterLeadingSelections"
           placeholder="Use global auto router"
           @change="onAutoRouterSelection"
         />

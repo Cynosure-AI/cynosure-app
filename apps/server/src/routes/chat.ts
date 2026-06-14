@@ -105,8 +105,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       selectedSkillIds?: string[]
       autoSkillRouting?: boolean
       autoMemory?: boolean
-      skillRouterProviderId?: string
-      skillRouterModel?: string
+      autoRouterProviderId?: string
+      autoRouterModel?: string
       compactProviderId?: string
       compactModel?: string
       titleProviderId?: string
@@ -116,7 +116,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, autoMemory: reqAutoMemory, skillRouterProviderId: reqSkillRouterProviderId, skillRouterModel: reqSkillRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, inlineAttachmentTextLimit: reqInlineAttachmentTextLimit } = req.body
+      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, autoMemory: reqAutoMemory, autoRouterProviderId: reqAutoRouterProviderId, autoRouterModel: reqAutoRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, inlineAttachmentTextLimit: reqInlineAttachmentTextLimit } = req.body
+      const legacyBody = req.body as Record<string, unknown>
+      const legacyAutoRouterProviderId = typeof legacyBody['skillRouterProviderId'] === 'string' ? legacyBody['skillRouterProviderId'] : ''
+      const legacyAutoRouterModel = typeof legacyBody['skillRouterModel'] === 'string' ? legacyBody['skillRouterModel'] : ''
       const db = getDb()
       const inlineAttachmentTextLimit = reqInlineAttachmentTextLimit !== undefined
         ? normalizeInlineAttachmentTextLimit(reqInlineAttachmentTextLimit)
@@ -251,8 +254,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           memorySpaceOverrides,
           autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : undefined,
           autoMemory: effectiveRunFlags.autoMemory,
-          skillRouterProviderId: reqSkillRouterProviderId || undefined,
-          skillRouterModel: reqSkillRouterModel || undefined,
+          autoRouterProviderId: reqAutoRouterProviderId || legacyAutoRouterProviderId || undefined,
+          autoRouterModel: reqAutoRouterModel || legacyAutoRouterModel || undefined,
           selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
           hasExplicitToolAllowlist,
           usedToolNames,

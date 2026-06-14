@@ -135,8 +135,8 @@ export function useChatMessages(
             executionRun.selectedSkillIds,
             executionRun.autoSkillRouting,
             executionRun.autoMemory,
-            activeAgent?.skillRouterProviderId || prefs.skillRouterProviderId || undefined,
-            activeAgent?.skillRouterModel || prefs.skillRouterModel || undefined,
+            activeAgent?.autoRouterProviderId || prefs.autoRouterProviderId || undefined,
+            activeAgent?.autoRouterModel || prefs.autoRouterModel || undefined,
             prefs.compactProviderId || undefined,
             prefs.compactModel || undefined,
             prefs.inlineAttachmentTextLimit

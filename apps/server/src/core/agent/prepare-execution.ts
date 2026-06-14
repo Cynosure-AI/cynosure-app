@@ -57,10 +57,10 @@ export interface PrepareExecutionInput {
     autoToolRouting?: boolean
     /** Enable automatic memory retrieval for this execution. */
     autoMemory?: boolean
-    /** Optional provider override for the auto router pass. Legacy name kept for API compatibility. */
-    skillRouterProviderId?: string
-    /** Optional model override for the auto router pass. Legacy name kept for API compatibility. */
-    skillRouterModel?: string
+    /** Optional provider override for the auto router pass. */
+    autoRouterProviderId?: string
+    /** Optional model override for the auto router pass. */
+    autoRouterModel?: string
     /** Explicit/manual skill ids selected for this execution. */
     selectedSkillIds?: string[]
     /** Enable automatic skill selection for this execution. */
@@ -141,8 +141,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         preset,
         fallbackProviderId: providerModel.providerId,
         fallbackModel: providerModel.model,
-        requestRouterProviderId: input.skillRouterProviderId,
-        requestRouterModel: input.skillRouterModel,
+        requestRouterProviderId: input.autoRouterProviderId,
+        requestRouterModel: input.autoRouterModel,
     })
     const taskContext = await buildTaskContext({
         conversationId,
@@ -191,8 +191,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         recentMessages: routingMessages,
         selectedSkillIds: input.selectedSkillIds,
         autoSkillRouting: input.autoSkillRouting,
-        skillRouterProviderId: input.skillRouterProviderId,
-        skillRouterModel: input.skillRouterModel,
+        autoRouterProviderId: input.autoRouterProviderId,
+        autoRouterModel: input.autoRouterModel,
         eventMeta: input.eventMeta,
     })
 
@@ -237,14 +237,14 @@ function resolveTaskContextRouter(params: {
     requestRouterProviderId?: string
     requestRouterModel?: string
 }) {
-    const useAgentRouterProvider = params.preset.skillRouterProviderId === AGENT_ROUTER_PROVIDER
-    const useAgentRouterModel = params.preset.skillRouterModel === AGENT_ROUTER_MODEL
+    const useAgentRouterProvider = params.preset.autoRouterProviderId === AGENT_ROUTER_PROVIDER
+    const useAgentRouterModel = params.preset.autoRouterModel === AGENT_ROUTER_MODEL
     return resolveRouterProviderModel({
         gateway: params.gateway,
         fallbackProviderId: params.fallbackProviderId,
         fallbackModel: params.fallbackModel,
-        agentRouterProviderId: useAgentRouterProvider ? params.preset.providerId : (params.preset.skillRouterProviderId || undefined),
-        agentRouterModel: useAgentRouterModel ? (params.preset.model || undefined) : (params.preset.skillRouterModel || undefined),
+        agentRouterProviderId: useAgentRouterProvider ? params.preset.providerId : (params.preset.autoRouterProviderId || undefined),
+        agentRouterModel: useAgentRouterModel ? (params.preset.model || undefined) : (params.preset.autoRouterModel || undefined),
         requestRouterProviderId: params.requestRouterProviderId,
         requestRouterModel: useAgentRouterProvider ? undefined : params.requestRouterModel,
     })

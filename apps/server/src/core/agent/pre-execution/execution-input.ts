@@ -23,8 +23,8 @@ export interface ExecutionRequest {
         memorySpaceOverrides?: { id: string; name: string }[]
         autoToolRouting?: boolean
         autoMemory?: boolean
-        skillRouterProviderId?: string
-        skillRouterModel?: string
+        autoRouterProviderId?: string
+        autoRouterModel?: string
         selectedToolKeys?: string[]
         hasExplicitToolAllowlist?: boolean
         usedToolNames?: Set<string>
@@ -53,8 +53,8 @@ export interface ExecutionPlanInput {
     memorySpaceOverrides?: { id: string; name: string }[]
     autoToolRouting?: boolean
     autoMemory?: boolean
-    skillRouterProviderId?: string
-    skillRouterModel?: string
+    autoRouterProviderId?: string
+    autoRouterModel?: string
     selectedToolKeys?: string[]
     hasExplicitToolAllowlist?: boolean
     usedToolNames?: Set<string>
@@ -83,8 +83,8 @@ export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanIn
         memorySpaceOverrides: run.memorySpaceOverrides,
         autoToolRouting: run.autoToolRouting,
         autoMemory: run.autoMemory,
-        skillRouterProviderId: run.skillRouterProviderId,
-        skillRouterModel: run.skillRouterModel,
+        autoRouterProviderId: run.autoRouterProviderId,
+        autoRouterModel: run.autoRouterModel,
         selectedToolKeys: run.selectedToolKeys,
         hasExplicitToolAllowlist: run.hasExplicitToolAllowlist,
         usedToolNames: run.usedToolNames,

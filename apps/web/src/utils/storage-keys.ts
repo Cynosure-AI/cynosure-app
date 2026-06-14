@@ -12,8 +12,10 @@ export const SK_TITLE_PROVIDER = 'cy-title-provider'
 export const SK_TITLE_MODEL = 'cy-title-model'
 export const SK_ENTITY_GRAPH_PROVIDER = 'cy-entity-graph-provider'
 export const SK_ENTITY_GRAPH_MODEL = 'cy-entity-graph-model'
-export const SK_SKILL_ROUTER_PROVIDER = 'cy-skill-router-provider'
-export const SK_SKILL_ROUTER_MODEL = 'cy-skill-router-model'
+export const SK_AUTO_ROUTER_PROVIDER = 'cy-auto-router-provider'
+export const SK_AUTO_ROUTER_MODEL = 'cy-auto-router-model'
+export const SK_LEGACY_SKILL_ROUTER_PROVIDER = 'cy-skill-router-provider'
+export const SK_LEGACY_SKILL_ROUTER_MODEL = 'cy-skill-router-model'
 export const SK_CONTEXT_STRATEGY = 'cy-context-strategy'
 export const SK_INLINE_ATTACHMENT_TEXT_LIMIT = 'cy-inline-attachment-text-limit'
 export const SK_COMPACT_PROVIDER = 'cy-compact-provider'
@@ -54,8 +56,8 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_TITLE_MODEL,
     SK_ENTITY_GRAPH_PROVIDER,
     SK_ENTITY_GRAPH_MODEL,
-    SK_SKILL_ROUTER_PROVIDER,
-    SK_SKILL_ROUTER_MODEL,
+    SK_AUTO_ROUTER_PROVIDER,
+    SK_AUTO_ROUTER_MODEL,
     SK_CONTEXT_STRATEGY,
     SK_INLINE_ATTACHMENT_TEXT_LIMIT,
     SK_COMPACT_PROVIDER,

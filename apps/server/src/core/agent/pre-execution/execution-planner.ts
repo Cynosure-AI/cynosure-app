@@ -50,8 +50,8 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         memorySpaceOverrides,
         autoToolRouting,
         autoMemory,
-        skillRouterProviderId,
-        skillRouterModel,
+        autoRouterProviderId,
+        autoRouterModel,
         hasExplicitToolAllowlist = false,
         usedToolNames,
         selectedSkillIds = [],
@@ -89,8 +89,8 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
             autoToolRouting: autoToolRouting === true,
             autoMemory,
             autoSkillRouting,
-            skillRouterProviderId,
-            skillRouterModel,
+            autoRouterProviderId,
+            autoRouterModel,
         })
 
     const prepared = await prepareAgentExecution({
@@ -106,8 +106,8 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         signal: abortSignal,
         autoToolRouting,
         autoMemory,
-        skillRouterProviderId,
-        skillRouterModel,
+        autoRouterProviderId,
+        autoRouterModel,
         preferredToolKeys: fixedToolKeys,
         usedToolNames,
         selectedSkillIds,
