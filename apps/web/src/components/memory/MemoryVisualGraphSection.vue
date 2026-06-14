@@ -45,6 +45,7 @@ const emit = defineEmits<{
   "edit-node": [node: EntityGraphNode];
   "delete-node": [node: EntityGraphNode];
   "delete-nodes": [nodes: EntityGraphNode[]];
+  "hover-node": [nodeId: string | null];
 }>();
 
 const selectedNodeId = ref<string | null>(null);
@@ -166,6 +167,10 @@ function relationSortName(edge: EntityGraphEdge): string {
 
 function selectGraphNode(event: { node: Node<FlowNodeData> }): void {
   selectedNodeId.value = event.node.id;
+}
+
+function hoverGraphNode(event: { node: Node<FlowNodeData> }): void {
+  emit("hover-node", event.node.id);
 }
 
 function clearSelection(): void {
@@ -320,14 +325,14 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               :value="nodeSpacing"
               type="range"
               min="0.5"
-              max="3"
+              max="8"
               step="0.25"
-              class="w-24 accent-accent-500 cursor-pointer"
+              class="w-32 accent-accent-500 cursor-pointer"
               title="Node spacing"
               @input="emit('update:nodeSpacing', Number(($event.target as HTMLInputElement).value))"
               @change="emit('relayout')"
             >
-            <span class="text-xs text-theme-300 w-6 text-right">{{ nodeSpacing }}x</span>
+            <span class="text-xs text-theme-300 w-8 text-right">{{ nodeSpacing }}x</span>
           </label>
           <div class="h-5 w-px bg-theme-700/70" />
           <button
@@ -354,6 +359,8 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           :max-zoom="1.8"
           class="entity-flow"
           @node-click="selectGraphNode"
+          @node-mouse-enter="hoverGraphNode"
+          @node-mouse-leave="emit('hover-node', null)"
         >
           <template #edge-stacked="edgeProps">
             <BaseEdge
@@ -367,6 +374,10 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
             <EdgeLabelRenderer v-if="edgeLabelsVisible">
               <div
                 class="entity-edge-label-stack nodrag nopan"
+                :class="{
+                  'entity-edge-label-stack-hover-focused': edgeProps.data.isHoverFocused,
+                  'entity-edge-label-stack-hover-dimmed': edgeProps.data.isHoverDimmed,
+                }"
                 :style="{
                   transform: `translate(-50%, -50%) translate(${stackedEdgePath(edgeProps)[1]}px, ${stackedEdgePath(edgeProps)[2]}px)`,
                 }"
@@ -414,7 +425,11 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           <template #node-entity="{ data, selected }">
             <div
               class="entity-node-body"
-              :class="{ 'entity-node-body-selected': selected || selectedNodeId === data.entity.id }"
+              :class="{
+                'entity-node-body-selected': selected || selectedNodeId === data.entity.id,
+                'entity-node-body-hover-focused': data.isHoverFocused,
+                'entity-node-body-hover-dimmed': data.isHoverDimmed,
+              }"
             >
               <div class="entity-node-label">
                 {{ data.label }}

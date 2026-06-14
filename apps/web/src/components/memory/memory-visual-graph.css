@@ -182,6 +182,21 @@
     0 14px 28px var(--memory-flow-shadow);
 }
 
+.memory-graph-panel .entity-flow-node-hover-focused {
+  z-index: 8;
+  border-color: color-mix(in srgb, var(--color-accent-200) 86%, white);
+  filter: saturate(1.16) brightness(1.08);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-accent-300) 32%, transparent),
+    0 0 24px color-mix(in srgb, var(--color-accent-400) 24%, transparent),
+    0 14px 28px var(--memory-flow-shadow);
+}
+
+.memory-graph-panel .entity-flow-node-hover-dimmed {
+  opacity: 0.24;
+  filter: grayscale(0.45);
+}
+
 .memory-graph-panel .entity-flow-node-type-person {
   --memory-flow-node-fill: var(--memory-flow-person-fill);
   --memory-flow-node-border: var(--memory-flow-person-border);
@@ -284,6 +299,22 @@
 
 .memory-graph-panel .entity-flow-edge path {
   stroke: var(--memory-flow-edge);
+  transition:
+    opacity 130ms ease,
+    stroke-width 130ms ease,
+    filter 130ms ease;
+}
+
+.memory-graph-panel .entity-flow-edge-hover-focused path {
+  opacity: 1;
+  stroke-width: 3;
+  filter: drop-shadow(
+    0 0 5px color-mix(in srgb, var(--color-accent-300) 62%, transparent)
+  );
+}
+
+.memory-graph-panel .entity-flow-edge-hover-dimmed path {
+  opacity: 0.13;
 }
 
 .memory-graph-panel .entity-edge-label-stack {
@@ -297,6 +328,17 @@
   background: var(--memory-flow-edge-label-bg);
   box-shadow: 0 8px 18px var(--memory-flow-shadow);
   pointer-events: none;
+  transition:
+    opacity 130ms ease,
+    filter 130ms ease;
+}
+
+.memory-graph-panel .entity-edge-label-stack-hover-focused {
+  filter: brightness(1.12);
+}
+
+.memory-graph-panel .entity-edge-label-stack-hover-dimmed {
+  opacity: 0.18;
 }
 
 .memory-graph-panel .entity-edge-label-direction {
@@ -356,6 +398,13 @@
   gap: 2px;
   padding: 8px 12px;
   text-align: center;
+  transition:
+    opacity 130ms ease,
+    filter 130ms ease;
+}
+
+.memory-graph-panel .entity-node-body-hover-focused .entity-node-label {
+  color: var(--color-theme-50);
 }
 
 .memory-graph-panel .entity-node-meta {

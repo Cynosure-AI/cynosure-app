@@ -5,6 +5,8 @@ export type FlowNodeData = {
   label: string;
   isSeed: boolean;
   connectedHandles: Set<string>;
+  isHoverFocused?: boolean;
+  isHoverDimmed?: boolean;
 };
 
 export type FlowEdgeData = {
@@ -17,4 +19,9 @@ export type FlowEdgeData = {
     labels: string[];
   }[];
   isBidirectional: boolean;
+  edgeIds: string[];
+  fromNodeId: string;
+  toNodeId: string;
+  isHoverFocused?: boolean;
+  isHoverDimmed?: boolean;
 };
