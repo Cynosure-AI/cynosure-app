@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { api } from '../../api/client'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
@@ -19,6 +19,7 @@ const allConversationsLoading = ref(false)
 const allConversationsError = ref<string | null>(null)
 const allConversationsQuery = ref('')
 const allConversationsRequestToken = ref(0)
+const openConversationMenuId = ref<string | null>(null)
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const ALL_PAGE_SIZE = 50
@@ -49,6 +50,7 @@ async function selectChat(conv: Conversation): Promise<void> {
 
 async function deleteChat(id: string, event: Event): Promise<void> {
   event.stopPropagation()
+  openConversationMenuId.value = null
   await chatStore.deleteConversation(id)
   if (showAllConversations.value) {
     const idx = allConversations.value.findIndex(conv => conv.id === id)
@@ -61,6 +63,7 @@ async function deleteChat(id: string, event: Event): Promise<void> {
 
 async function togglePin(id: string, pinned: boolean, event: Event): Promise<void> {
   event.stopPropagation()
+  openConversationMenuId.value = null
   await chatStore.pinConversation(id, !pinned)
   if (showAllConversations.value) {
     const conv = allConversations.value.find(c => c.id === id)
@@ -70,6 +73,43 @@ async function togglePin(id: string, pinned: boolean, event: Event): Promise<voi
       allConversations.value = sortPinnedFirst(allConversations.value)
     }
   }
+}
+
+function toggleConversationMenu(id: string, event: Event): void {
+  event.stopPropagation()
+  openConversationMenuId.value = openConversationMenuId.value === id ? null : id
+}
+
+function closeConversationMenu(): void {
+  openConversationMenuId.value = null
+}
+
+function onConversationMenuKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    closeConversationMenu()
+  }
+}
+
+function markVisibleConversationsRead(event?: Event): void {
+  event?.stopPropagation()
+  openConversationMenuId.value = null
+
+  if (!showAllConversations.value) {
+    chatStore.markAllAsRead()
+    return
+  }
+
+  const now = Date.now()
+  for (const conv of allConversations.value) {
+    conv.lastReadAt = Math.max(now, conv.updatedAt, conv.lastReadAt || 0)
+    api.chat.markConversationRead(conv.id).catch(() => { /* non-critical */ })
+  }
+}
+
+function confirmClearHistory(event?: Event): void {
+  event?.stopPropagation()
+  openConversationMenuId.value = null
+  showClearConfirm.value = true
 }
 
 function mapConversationRow(row: {
@@ -229,6 +269,9 @@ const emptyConversationsMessage = computed(() => {
 })
 
 const hasUnread = computed(() => visibleConversations.value.some(c => chatStore.isConversationUnread(c)))
+const hasConversations = computed(() => (
+  showAllConversations.value ? allConversations.value.length > 0 : chatStore.sortedConversations.length > 0
+))
 
 watch(showAllConversations, (enabled) => {
   clearPendingSearchLoad()
@@ -257,7 +300,14 @@ watch(searchQuery, (query) => {
 
 onBeforeUnmount(() => {
   clearPendingSearchLoad()
+  document.removeEventListener('click', closeConversationMenu)
+  document.removeEventListener('keydown', onConversationMenuKeydown)
   allConversationsRequestToken.value += 1
+})
+
+onMounted(() => {
+  document.addEventListener('click', closeConversationMenu)
+  document.addEventListener('keydown', onConversationMenuKeydown)
 })
 </script>
 
@@ -266,30 +316,6 @@ onBeforeUnmount(() => {
     <!-- Header -->
     <div class="px-3 py-2.5 border-b border-theme-800/60 flex items-center justify-between">
       <span class="text-xs font-medium text-theme-500 uppercase tracking-wider">Chat History</span>
-      <div class="flex items-center gap-0.5">
-        <button
-          v-if="hasUnread"
-          class="p-1 rounded-md text-theme-600 hover:text-accent-400 hover:bg-accent-500/10 transition-colors"
-          title="Mark all as read"
-          @click="chatStore.markAllAsRead()"
-        >
-          <Icon
-            icon="lucide:check-check"
-            class="w-3.5 h-3.5"
-          />
-        </button>
-        <button
-          v-if="showAllConversations ? allConversations.length > 0 : chatStore.sortedConversations.length > 0"
-          class="p-1 rounded-md text-theme-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-          title="Clear all history"
-          @click="showClearConfirm = true"
-        >
-          <Icon
-            icon="lucide:trash-2"
-            class="w-3.5 h-3.5"
-          />
-        </button>
-      </div>
     </div>
 
     <!-- Search -->
@@ -347,7 +373,7 @@ onBeforeUnmount(() => {
       <div
         v-for="conv in filteredConversations"
         :key="conv.id"
-        class="group flex items-center px-3 py-2.5 mx-2 my-0.5 rounded-lg cursor-pointer transition-colors hover:bg-theme-800/60"
+        class="group relative flex items-center px-3 py-2.5 mx-2 my-0.5 rounded-lg cursor-pointer transition-colors hover:bg-theme-800/60"
         :class="{ 'bg-theme-800': conv.id === chatStore.activeConversationId }"
         @click="selectChat(conv)"
       >
@@ -397,27 +423,78 @@ onBeforeUnmount(() => {
             {{ formatDate(conv.updatedAt) }}
           </div>
         </div>
-        <button
-          class="opacity-0 group-hover:opacity-100 p-1 transition-all"
-          :class="conv.pinned ? 'text-amber-400 hover:text-amber-300' : 'text-theme-500 hover:text-amber-400'"
-          :title="conv.pinned ? 'Unpin conversation' : 'Pin conversation'"
-          @click="togglePin(conv.id, conv.pinned, $event)"
-        >
-          <Icon
-            :icon="conv.pinned ? 'lucide:pin-off' : 'lucide:pin'"
-            class="w-3.5 h-3.5"
-          />
-        </button>
-        <button
-          v-if="!conv.pinned"
-          class="opacity-0 group-hover:opacity-100 p-1 text-theme-500 hover:text-red-400 transition-all"
-          @click="deleteChat(conv.id, $event)"
-        >
-          <Icon
-            icon="lucide:x"
-            class="w-3.5 h-3.5"
-          />
-        </button>
+        <div class="relative shrink-0">
+          <button
+            type="button"
+            class="p-1 rounded-md text-theme-500 opacity-0 transition-all hover:bg-theme-700/60 hover:text-theme-200 group-hover:opacity-100"
+            :class="{ 'opacity-100 bg-theme-700/60 text-theme-200': openConversationMenuId === conv.id }"
+            title="Conversation options"
+            aria-label="Conversation options"
+            :aria-expanded="openConversationMenuId === conv.id"
+            @click="toggleConversationMenu(conv.id, $event)"
+          >
+            <Icon
+              icon="lucide:ellipsis-vertical"
+              class="w-3.5 h-3.5"
+            />
+          </button>
+
+          <div
+            v-if="openConversationMenuId === conv.id"
+            class="absolute right-0 top-7 z-30 min-w-40 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl shadow-black/30"
+            @click.stop
+          >
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100"
+              @click="togglePin(conv.id, conv.pinned, $event)"
+            >
+              <Icon
+                :icon="conv.pinned ? 'lucide:pin-off' : 'lucide:pin'"
+                class="h-3.5 w-3.5 text-amber-400"
+              />
+              {{ conv.pinned ? 'Unpin' : 'Pin' }}
+            </button>
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
+              @click="deleteChat(conv.id, $event)"
+            >
+              <Icon
+                icon="lucide:trash-2"
+                class="h-3.5 w-3.5"
+              />
+              Delete
+            </button>
+
+            <div class="my-1 border-t border-theme-700/70" />
+
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100 disabled:opacity-40 disabled:pointer-events-none"
+              :disabled="!hasUnread"
+              @click="markVisibleConversationsRead($event)"
+            >
+              <Icon
+                icon="lucide:check-check"
+                class="h-3.5 w-3.5 text-accent-400"
+              />
+              Read all
+            </button>
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200 disabled:opacity-40 disabled:pointer-events-none"
+              :disabled="!hasConversations"
+              @click="confirmClearHistory($event)"
+            >
+              <Icon
+                icon="lucide:trash-2"
+                class="h-3.5 w-3.5"
+              />
+              Delete all
+            </button>
+          </div>
+        </div>
       </div>
 
       <div
