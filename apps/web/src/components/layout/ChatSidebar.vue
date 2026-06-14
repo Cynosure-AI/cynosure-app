@@ -455,19 +455,7 @@ onMounted(() => {
               />
               {{ conv.pinned ? 'Unpin' : 'Pin' }}
             </button>
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
-              @click="deleteChat(conv.id, $event)"
-            >
-              <Icon
-                icon="lucide:trash-2"
-                class="h-3.5 w-3.5"
-              />
-              Delete
-            </button>
 
-            <div class="my-1 border-t border-theme-700/70" />
 
             <button
               type="button"
@@ -481,6 +469,22 @@ onMounted(() => {
               />
               Read all
             </button>
+
+            <!-- Divider -->
+            <div class="my-1 border-t border-theme-700/70" />
+
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
+              @click="deleteChat(conv.id, $event)"
+            >
+              <Icon
+                icon="lucide:trash-2"
+                class="h-3.5 w-3.5"
+              />
+              Delete
+            </button>
+
             <button
               type="button"
               class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200 disabled:opacity-40 disabled:pointer-events-none"
