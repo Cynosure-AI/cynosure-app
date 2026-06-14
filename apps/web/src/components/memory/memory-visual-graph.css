@@ -182,7 +182,7 @@
     0 14px 28px var(--memory-flow-shadow);
 }
 
-.memory-graph-panel .entity-flow-node-hover-focused {
+.memory-graph-panel .entity-flow-node-focus-highlighted {
   z-index: 8;
   border-color: color-mix(in srgb, var(--color-accent-200) 86%, white);
   filter: saturate(1.16) brightness(1.08);
@@ -192,7 +192,7 @@
     0 14px 28px var(--memory-flow-shadow);
 }
 
-.memory-graph-panel .entity-flow-node-hover-dimmed {
+.memory-graph-panel .entity-flow-node-focus-dimmed {
   opacity: 0.24;
   filter: grayscale(0.45);
 }
@@ -305,7 +305,7 @@
     filter 130ms ease;
 }
 
-.memory-graph-panel .entity-flow-edge-hover-focused path {
+.memory-graph-panel .entity-flow-edge-focus-highlighted path {
   opacity: 1;
   stroke-width: 3;
   filter: drop-shadow(
@@ -313,7 +313,7 @@
   );
 }
 
-.memory-graph-panel .entity-flow-edge-hover-dimmed path {
+.memory-graph-panel .entity-flow-edge-focus-dimmed path {
   opacity: 0.13;
 }
 
@@ -333,11 +333,11 @@
     filter 130ms ease;
 }
 
-.memory-graph-panel .entity-edge-label-stack-hover-focused {
+.memory-graph-panel .entity-edge-label-stack-focus-highlighted {
   filter: brightness(1.12);
 }
 
-.memory-graph-panel .entity-edge-label-stack-hover-dimmed {
+.memory-graph-panel .entity-edge-label-stack-focus-dimmed {
   opacity: 0.18;
 }
 
@@ -403,7 +403,7 @@
     filter 130ms ease;
 }
 
-.memory-graph-panel .entity-node-body-hover-focused .entity-node-label {
+.memory-graph-panel .entity-node-body-focus-highlighted .entity-node-label {
   color: var(--color-theme-50);
 }
 

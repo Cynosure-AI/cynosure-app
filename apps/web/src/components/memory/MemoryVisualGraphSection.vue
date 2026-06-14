@@ -7,6 +7,8 @@ import {
   Position,
   VueFlow,
   getBezierPath,
+  getSmoothStepPath,
+  getStraightPath,
   useVueFlow,
   type Edge,
   type EdgeProps,
@@ -19,7 +21,7 @@ import "@vue-flow/core/dist/theme-default.css";
 import "@vue-flow/controls/dist/style.css";
 import "./memory-visual-graph.css";
 import type { EntityGraphEdge, EntityGraphNode, EntityGraphResponse } from "../../api/types";
-import type { FlowEdgeData, FlowNodeData } from "./memory-graph-types";
+import type { FlowEdgeData, FlowNodeData, GraphEdgePathType } from "./memory-graph-types";
 import EntityGraphSearchBox from "./EntityGraphSearchBox.vue";
 
 const props = defineProps<{
@@ -32,12 +34,20 @@ const props = defineProps<{
   graphFlowEdges: Edge<FlowEdgeData>[];
   nodeSpacing: number;
   edgeLabelsVisible: boolean;
+  edgePathType: GraphEdgePathType;
 }>();
+
+const edgePathModes: { id: GraphEdgePathType; label: string; icon: string }[] = [
+  { id: "bezier", label: "Bezier", icon: "lucide:spline" },
+  { id: "step", label: "Step", icon: "lucide:corner-down-right" },
+  { id: "straight", label: "Line", icon: "lucide:slash" },
+];
 
 const emit = defineEmits<{
   "update:graphQuery": [value: string];
   "update:nodeSpacing": [value: number];
   "update:edgeLabelsVisible": [value: boolean];
+  "update:edgePathType": [value: GraphEdgePathType];
   "load-graph": [query?: string];
   "clear-walk": [];
   "select-suggestion": [node: EntityGraphNode];
@@ -45,7 +55,7 @@ const emit = defineEmits<{
   "edit-node": [node: EntityGraphNode];
   "delete-node": [node: EntityGraphNode];
   "delete-nodes": [nodes: EntityGraphNode[]];
-  "hover-node": [nodeId: string | null];
+  "focus-node": [nodeId: string | null];
 }>();
 
 const selectedNodeId = ref<string | null>(null);
@@ -167,15 +177,13 @@ function relationSortName(edge: EntityGraphEdge): string {
 
 function selectGraphNode(event: { node: Node<FlowNodeData> }): void {
   selectedNodeId.value = event.node.id;
-}
-
-function hoverGraphNode(event: { node: Node<FlowNodeData> }): void {
-  emit("hover-node", event.node.id);
+  emit("focus-node", event.node.id);
 }
 
 function clearSelection(): void {
   selectedNodeId.value = null;
   removeSelectedElements();
+  emit("focus-node", null);
 }
 
 function deleteSelectedNodes(): void {
@@ -187,14 +195,17 @@ function deleteSelectedNodes(): void {
 }
 
 function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBezierPath> {
-  return getBezierPath({
+  const pathOptions = {
     sourceX: edge.sourceX,
     sourceY: edge.sourceY,
     sourcePosition: edge.sourcePosition,
     targetX: edge.targetX,
     targetY: edge.targetY,
     targetPosition: edge.targetPosition,
-  });
+  };
+  if (props.edgePathType === "straight") return getStraightPath(pathOptions);
+  if (props.edgePathType === "step") return getSmoothStepPath({ ...pathOptions, borderRadius: 0 });
+  return getBezierPath(pathOptions);
 }
 </script>
 
@@ -335,6 +346,31 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
             <span class="text-xs text-theme-300 w-8 text-right">{{ nodeSpacing }}x</span>
           </label>
           <div class="h-5 w-px bg-theme-700/70" />
+          <div class="flex items-center gap-1">
+            <Icon
+              icon="lucide:git-branch"
+              class="w-3.5 h-3.5 text-theme-500 shrink-0"
+            />
+            <span class="text-xs text-theme-500 shrink-0">Edges</span>
+            <div class="inline-flex rounded-md border border-theme-700/60 bg-theme-950/55 p-0.5">
+              <button
+                v-for="mode in edgePathModes"
+                :key="mode.id"
+                type="button"
+                class="inline-flex h-7 w-7 items-center justify-center rounded text-xs transition-colors"
+                :class="edgePathType === mode.id ? 'bg-accent-500/18 text-accent-200' : 'text-theme-500 hover:bg-theme-800 hover:text-theme-200'"
+                :title="`${mode.label} edges`"
+                :aria-pressed="edgePathType === mode.id"
+                @click="emit('update:edgePathType', mode.id)"
+              >
+                <Icon
+                  :icon="mode.icon"
+                  class="h-3.5 w-3.5"
+                />
+              </button>
+            </div>
+          </div>
+          <div class="h-5 w-px bg-theme-700/70" />
           <button
             type="button"
             class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors"
@@ -359,8 +395,6 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           :max-zoom="1.8"
           class="entity-flow"
           @node-click="selectGraphNode"
-          @node-mouse-enter="hoverGraphNode"
-          @node-mouse-leave="emit('hover-node', null)"
         >
           <template #edge-stacked="edgeProps">
             <BaseEdge
@@ -375,8 +409,8 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               <div
                 class="entity-edge-label-stack nodrag nopan"
                 :class="{
-                  'entity-edge-label-stack-hover-focused': edgeProps.data.isHoverFocused,
-                  'entity-edge-label-stack-hover-dimmed': edgeProps.data.isHoverDimmed,
+                  'entity-edge-label-stack-focus-highlighted': edgeProps.data.isFocusHighlighted,
+                  'entity-edge-label-stack-focus-dimmed': edgeProps.data.isFocusDimmed,
                 }"
                 :style="{
                   transform: `translate(-50%, -50%) translate(${stackedEdgePath(edgeProps)[1]}px, ${stackedEdgePath(edgeProps)[2]}px)`,
@@ -427,8 +461,8 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               class="entity-node-body"
               :class="{
                 'entity-node-body-selected': selected || selectedNodeId === data.entity.id,
-                'entity-node-body-hover-focused': data.isHoverFocused,
-                'entity-node-body-hover-dimmed': data.isHoverDimmed,
+                'entity-node-body-focus-highlighted': data.isFocusHighlighted,
+                'entity-node-body-focus-dimmed': data.isFocusDimmed,
               }"
             >
               <div class="entity-node-label">
