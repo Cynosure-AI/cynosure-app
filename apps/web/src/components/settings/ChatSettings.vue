@@ -60,8 +60,8 @@ function onAutoRouterSelection(selection: {
   providerId: string;
   model: string;
 }): void {
-  prefs.skillRouterProviderId = selection.providerId;
-  prefs.skillRouterModel = selection.model;
+  prefs.autoRouterProviderId = selection.providerId;
+  prefs.autoRouterModel = selection.model;
 }
 
 function onTitleSelection(selection: {
@@ -112,13 +112,13 @@ onMounted(async () => {
 <template>
   <div class="space-y-4">
     <SettingsSubheading
-      v-if="showAnySection(['skill-router', 'generated-titles'])"
+      v-if="showAnySection(['auto-router', 'generated-titles'])"
       label="Automation"
     />
 
     <!-- Auto Router -->
     <BaseCard
-      v-if="showSection('skill-router')"
+      v-if="showSection('auto-router')"
       class="p-5 space-y-4"
     >
       <div class="flex items-center gap-3">
@@ -143,8 +143,8 @@ onMounted(async () => {
       <div class="pt-1 border-t border-theme-700">
         <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
         <ProviderModelSelect
-          :provider-id="prefs.skillRouterProviderId"
-          :model-value="prefs.skillRouterModel"
+          :provider-id="prefs.autoRouterProviderId"
+          :model-value="prefs.autoRouterModel"
           :providers="providerStore.providers"
           include-default
           default-label="Use chat provider"

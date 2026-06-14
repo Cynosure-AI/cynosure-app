@@ -19,8 +19,8 @@ export interface ResolveSkillPromptInput {
     recentMessages?: ChatMessage[]
     selectedSkillIds?: string[]
     autoSkillRouting?: boolean
-    skillRouterProviderId?: string
-    skillRouterModel?: string
+    autoRouterProviderId?: string
+    autoRouterModel?: string
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
     eventMeta?: Record<string, unknown>
 }
@@ -36,8 +36,8 @@ export async function resolveSkillSystemPrompt(input: ResolveSkillPromptInput): 
         recentMessages,
         selectedSkillIds,
         autoSkillRouting,
-        skillRouterProviderId,
-        skillRouterModel,
+        autoRouterProviderId,
+        autoRouterModel,
         eventMeta,
     } = input
 
@@ -46,16 +46,16 @@ export async function resolveSkillSystemPrompt(input: ResolveSkillPromptInput): 
         ...(selectedSkillIds || []),
     ], { enabledOnly: true })
 
-    const useAgentSkillRouterProvider = preset.skillRouterProviderId === AGENT_ROUTER_PROVIDER
-    const useAgentSkillRouterModel = preset.skillRouterModel === AGENT_ROUTER_MODEL
-    const skillRouter = resolveRouterProviderModel({
+    const useAgentAutoRouterProvider = preset.autoRouterProviderId === AGENT_ROUTER_PROVIDER
+    const useAgentAutoRouterModel = preset.autoRouterModel === AGENT_ROUTER_MODEL
+    const autoRouter = resolveRouterProviderModel({
         gateway,
         fallbackProviderId: providerId,
         fallbackModel: model,
-        agentRouterProviderId: useAgentSkillRouterProvider ? preset.providerId : (preset.skillRouterProviderId || undefined),
-        agentRouterModel: useAgentSkillRouterModel ? (preset.model || undefined) : (preset.skillRouterModel || undefined),
-        requestRouterProviderId: skillRouterProviderId,
-        requestRouterModel: useAgentSkillRouterProvider ? undefined : skillRouterModel,
+        agentRouterProviderId: useAgentAutoRouterProvider ? preset.providerId : (preset.autoRouterProviderId || undefined),
+        agentRouterModel: useAgentAutoRouterModel ? (preset.model || undefined) : (preset.autoRouterModel || undefined),
+        requestRouterProviderId: autoRouterProviderId,
+        requestRouterModel: useAgentAutoRouterProvider ? undefined : autoRouterModel,
     })
 
     const selectedSkills = await applyAutoSkillRouting({
@@ -66,9 +66,9 @@ export async function resolveSkillSystemPrompt(input: ResolveSkillPromptInput): 
         recentMessages,
         manualSkills,
         availableSkills: listSkills({ enabledOnly: true }),
-        providerId: skillRouter.providerId,
+        providerId: autoRouter.providerId,
         model,
-        routerModel: skillRouter.model,
+        routerModel: autoRouter.model,
         eventMeta,
     })
 

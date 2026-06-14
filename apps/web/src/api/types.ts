@@ -126,8 +126,8 @@ export interface AgentDefinition {
     autoToolRouting: boolean
     autoMemory: boolean
     autoSkillRouting: boolean
-    skillRouterProviderId: string
-    skillRouterModel: string
+    autoRouterProviderId: string
+    autoRouterModel: string
     generateTitle: boolean
     thinkingEnabled: boolean
     maxContextTokens: number | null
