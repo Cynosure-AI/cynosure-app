@@ -1,12 +1,14 @@
 import type { EntityGraphNode } from "../../api/types";
 
+export type GraphEdgePathType = "bezier" | "step" | "straight";
+
 export type FlowNodeData = {
   entity: EntityGraphNode;
   label: string;
   isSeed: boolean;
   connectedHandles: Set<string>;
-  isHoverFocused?: boolean;
-  isHoverDimmed?: boolean;
+  isFocusHighlighted?: boolean;
+  isFocusDimmed?: boolean;
 };
 
 export type FlowEdgeData = {
@@ -22,6 +24,6 @@ export type FlowEdgeData = {
   edgeIds: string[];
   fromNodeId: string;
   toNodeId: string;
-  isHoverFocused?: boolean;
-  isHoverDimmed?: boolean;
+  isFocusHighlighted?: boolean;
+  isFocusDimmed?: boolean;
 };

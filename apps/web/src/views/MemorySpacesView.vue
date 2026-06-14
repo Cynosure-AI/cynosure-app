@@ -10,9 +10,9 @@ import ModalDialog from "../components/shared/ModalDialog.vue";
 import MemoryDocumentsSection from "../components/memory/MemoryDocumentsSection.vue";
 import MemoryRelationshipsSection from "../components/memory/MemoryRelationshipsSection.vue";
 import MemoryVisualGraphSection from "../components/memory/MemoryVisualGraphSection.vue";
-import type { FlowEdgeData, FlowNodeData } from "../components/memory/memory-graph-types";
+import type { FlowEdgeData, FlowNodeData, GraphEdgePathType } from "../components/memory/memory-graph-types";
 import { syncPrefsToElectron } from "../utils/electron-prefs";
-import { SK_MEMORY_GRAPH_EDGE_LABELS, SK_MEMORY_GRAPH_NODE_SPACING } from "../utils/storage-keys";
+import { SK_MEMORY_GRAPH_EDGE_LABELS, SK_MEMORY_GRAPH_EDGE_PATH_TYPE, SK_MEMORY_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
 const ENTITY_FLOW_ID = "memory-entity-graph";
 const VISUAL_GRAPH_LIMIT = 200;
@@ -98,7 +98,8 @@ const graphFlowNodes = ref<Node<FlowNodeData>[]>([]);
 const graphFlowEdges = ref<Edge<FlowEdgeData>[]>([]);
 const nodeSpacing = useLocalStorage(SK_MEMORY_GRAPH_NODE_SPACING, 1.0);
 const showGraphEdgeLabels = useLocalStorage(SK_MEMORY_GRAPH_EDGE_LABELS, true);
-const hoveredGraphNodeId = ref<string | null>(null);
+const graphEdgePathType = useLocalStorage<GraphEdgePathType>(SK_MEMORY_GRAPH_EDGE_PATH_TYPE, "bezier");
+const focusedGraphNodeId = ref<string | null>(null);
 
 const route = useRoute();
 const { fitView } = useVueFlow(ENTITY_FLOW_ID);
@@ -209,8 +210,8 @@ async function layoutGraph() {
     const edge = group[0];
     const labelGroups = groupedEdgeLabels(group);
     const isBidirectional = labelGroups.length > 1;
-    const isHoverFocused = isGraphEdgeHoverFocused(edge.fromNodeId, edge.toNodeId);
-    const isHoverDimmed = Boolean(hoveredGraphNodeId.value) && !isHoverFocused;
+    const isFocusHighlighted = isGraphEdgeFocusHighlighted(edge.fromNodeId, edge.toNodeId);
+    const isFocusDimmed = Boolean(focusedGraphNodeId.value) && !isFocusHighlighted;
     const handles = closestHandles(points.get(edge.fromNodeId), points.get(edge.toNodeId));
     if (!connectedHandles.has(edge.fromNodeId)) connectedHandles.set(edge.fromNodeId, new Set());
     if (!connectedHandles.has(edge.toNodeId)) connectedHandles.set(edge.toNodeId, new Set());
@@ -227,8 +228,8 @@ async function layoutGraph() {
       markerStart: isBidirectional ? MarkerType.ArrowClosed : undefined,
       class: [
         "entity-flow-edge",
-        isHoverFocused ? "entity-flow-edge-hover-focused" : "",
-        isHoverDimmed ? "entity-flow-edge-hover-dimmed" : "",
+        isFocusHighlighted ? "entity-flow-edge-focus-highlighted" : "",
+        isFocusDimmed ? "entity-flow-edge-focus-dimmed" : "",
       ].filter(Boolean).join(" "),
       data: {
         labels: labelGroups.flatMap((item) => item.labels),
@@ -237,8 +238,8 @@ async function layoutGraph() {
         edgeIds: group.map((item) => item.id),
         fromNodeId: edge.fromNodeId,
         toNodeId: edge.toNodeId,
-        isHoverFocused,
-        isHoverDimmed,
+        isFocusHighlighted,
+        isFocusDimmed,
       },
       style: { stroke: "var(--memory-flow-edge)", strokeWidth: 1.8 },
     };
@@ -246,8 +247,8 @@ async function layoutGraph() {
 
   const nodes: Node<FlowNodeData>[] = [];
   for (const [id, entity] of nodeLabels.entries()) {
-    const isHoverFocused = isGraphNodeHoverFocused(id, currentGraph.edges);
-    const isHoverDimmed = Boolean(hoveredGraphNodeId.value) && !isHoverFocused;
+    const isFocusHighlighted = isGraphNodeFocusHighlighted(id, currentGraph.edges);
+    const isFocusDimmed = Boolean(focusedGraphNodeId.value) && !isFocusHighlighted;
     nodes.push({
       id,
       type: "entity",
@@ -256,16 +257,16 @@ async function layoutGraph() {
         "entity-flow-node",
         entityTypeClass(entity.type),
         seedIds.has(id) ? "entity-flow-node-seed" : "",
-        isHoverFocused ? "entity-flow-node-hover-focused" : "",
-        isHoverDimmed ? "entity-flow-node-hover-dimmed" : "",
+        isFocusHighlighted ? "entity-flow-node-focus-highlighted" : "",
+        isFocusDimmed ? "entity-flow-node-focus-dimmed" : "",
       ].filter(Boolean).join(" "),
       data: {
         entity,
         label: entity.name,
         isSeed: seedIds.has(id),
         connectedHandles: connectedHandles.get(id) ?? new Set(),
-        isHoverFocused,
-        isHoverDimmed,
+        isFocusHighlighted,
+        isFocusDimmed,
       },
     });
   }
@@ -274,28 +275,28 @@ async function layoutGraph() {
   graphFlowEdges.value = edges;
 }
 
-function isGraphNodeHoverFocused(nodeId: string, edges: EntityGraphEdge[]): boolean {
-  const hoveredId = hoveredGraphNodeId.value;
-  if (!hoveredId) return false;
-  if (nodeId === hoveredId) return true;
+function isGraphNodeFocusHighlighted(nodeId: string, edges: EntityGraphEdge[]): boolean {
+  const focusedId = focusedGraphNodeId.value;
+  if (!focusedId) return false;
+  if (nodeId === focusedId) return true;
   return edges.some((edge) =>
-    (edge.fromNodeId === hoveredId && edge.toNodeId === nodeId)
-    || (edge.toNodeId === hoveredId && edge.fromNodeId === nodeId),
+    (edge.fromNodeId === focusedId && edge.toNodeId === nodeId)
+    || (edge.toNodeId === focusedId && edge.fromNodeId === nodeId),
   );
 }
 
-function isGraphEdgeHoverFocused(fromNodeId: string, toNodeId: string): boolean {
-  const hoveredId = hoveredGraphNodeId.value;
-  return Boolean(hoveredId && (fromNodeId === hoveredId || toNodeId === hoveredId));
+function isGraphEdgeFocusHighlighted(fromNodeId: string, toNodeId: string): boolean {
+  const focusedId = focusedGraphNodeId.value;
+  return Boolean(focusedId && (fromNodeId === focusedId || toNodeId === focusedId));
 }
 
-function setHoveredGraphNode(nodeId: string | null): void {
-  if (hoveredGraphNodeId.value === nodeId) return;
-  hoveredGraphNodeId.value = nodeId;
-  applyGraphHoverState();
+function setFocusedGraphNode(nodeId: string | null): void {
+  if (focusedGraphNodeId.value === nodeId) return;
+  focusedGraphNodeId.value = nodeId;
+  applyGraphFocusState();
 }
 
-function applyGraphHoverState(): void {
+function applyGraphFocusState(): void {
   const currentGraph = activeGraph.value;
   if (!currentGraph) return;
   const seedIds = new Set(currentGraph.seedNodes.map((node) => node.id));
@@ -306,21 +307,21 @@ function applyGraphHoverState(): void {
       continue;
     }
     const entity = node.data.entity;
-    const isHoverFocused = isGraphNodeHoverFocused(node.id, currentGraph.edges);
-    const isHoverDimmed = Boolean(hoveredGraphNodeId.value) && !isHoverFocused;
+    const isFocusHighlighted = isGraphNodeFocusHighlighted(node.id, currentGraph.edges);
+    const isFocusDimmed = Boolean(focusedGraphNodeId.value) && !isFocusHighlighted;
     nextNodes.push({
       ...node,
       class: [
         "entity-flow-node",
         entityTypeClass(entity.type),
         seedIds.has(node.id) ? "entity-flow-node-seed" : "",
-        isHoverFocused ? "entity-flow-node-hover-focused" : "",
-        isHoverDimmed ? "entity-flow-node-hover-dimmed" : "",
+        isFocusHighlighted ? "entity-flow-node-focus-highlighted" : "",
+        isFocusDimmed ? "entity-flow-node-focus-dimmed" : "",
       ].filter(Boolean).join(" "),
       data: {
         ...node.data,
-        isHoverFocused,
-        isHoverDimmed,
+        isFocusHighlighted,
+        isFocusDimmed,
       },
     } as Node<FlowNodeData>);
   }
@@ -328,19 +329,19 @@ function applyGraphHoverState(): void {
 
   const nextEdges: Edge<FlowEdgeData>[] = [];
   for (const edge of graphFlowEdges.value) {
-    const isHoverFocused = isGraphEdgeHoverFocused(edge.data?.fromNodeId || edge.source, edge.data?.toNodeId || edge.target);
-    const isHoverDimmed = Boolean(hoveredGraphNodeId.value) && !isHoverFocused;
+    const isFocusHighlighted = isGraphEdgeFocusHighlighted(edge.data?.fromNodeId || edge.source, edge.data?.toNodeId || edge.target);
+    const isFocusDimmed = Boolean(focusedGraphNodeId.value) && !isFocusHighlighted;
     nextEdges.push({
       ...edge,
       class: [
         "entity-flow-edge",
-        isHoverFocused ? "entity-flow-edge-hover-focused" : "",
-        isHoverDimmed ? "entity-flow-edge-hover-dimmed" : "",
+        isFocusHighlighted ? "entity-flow-edge-focus-highlighted" : "",
+        isFocusDimmed ? "entity-flow-edge-focus-dimmed" : "",
       ].filter(Boolean).join(" "),
       data: edge.data ? {
         ...edge.data,
-        isHoverFocused,
-        isHoverDimmed,
+        isFocusHighlighted,
+        isFocusDimmed,
       } : edge.data,
     } as Edge<FlowEdgeData>);
   }
@@ -422,7 +423,7 @@ watch([activeGraph, () => activePanel.value], async () => {
   }, 40);
 });
 
-watch([nodeSpacing, showGraphEdgeLabels], () => {
+watch([nodeSpacing, showGraphEdgeLabels, graphEdgePathType], () => {
   syncPrefsToElectron();
 });
 
@@ -541,7 +542,7 @@ async function loadGraph(query = graphQuery.value, nodeId?: string) {
   try {
     const nextGraph = await api.memory.getGraph(trimmedQuery || undefined, limit, view, nodeId);
     if (requestId !== graphRequest) return;
-    hoveredGraphNodeId.value = null;
+    focusedGraphNodeId.value = null;
     graph.value = nextGraph;
     graphLimit.value = limit;
     graphView.value = view;
@@ -796,6 +797,7 @@ onMounted(() => loadSpaces());
           v-model:graph-query="graphQuery"
           v-model:node-spacing="nodeSpacing"
           v-model:edge-labels-visible="showGraphEdgeLabels"
+          v-model:edge-path-type="graphEdgePathType"
           :flow-id="ENTITY_FLOW_ID"
           :graph="activeGraph"
           :graph-loading="graphLoading"
@@ -809,7 +811,7 @@ onMounted(() => loadSpaces());
           @edit-node="openEditNode"
           @delete-node="confirmDeleteNode"
           @delete-nodes="confirmDeleteNodes"
-          @hover-node="setHoveredGraphNode"
+          @focus-node="setFocusedGraphNode"
         />
       </main>
 

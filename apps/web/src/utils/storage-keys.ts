@@ -25,6 +25,7 @@ export const SK_AGENT_CATEGORIES = 'cy-agent-categories'
 export const SK_MA_CATEGORIES = 'cy-ma-categories'
 export const SK_MEMORY_GRAPH_NODE_SPACING = 'cy-memory-graph-node-spacing'
 export const SK_MEMORY_GRAPH_EDGE_LABELS = 'cy-memory-graph-edge-labels'
+export const SK_MEMORY_GRAPH_EDGE_PATH_TYPE = 'cy-memory-graph-edge-path-type'
 
 // ── Whisper / STT ──────────────────────────────────────────────────────────────
 export const SK_WHISPER_MODEL = 'cy-whisper-model'
@@ -67,6 +68,7 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_MA_CATEGORIES,
     SK_MEMORY_GRAPH_NODE_SPACING,
     SK_MEMORY_GRAPH_EDGE_LABELS,
+    SK_MEMORY_GRAPH_EDGE_PATH_TYPE,
     SK_WHISPER_MODEL,
     SK_WHISPER_ENABLED,
     SK_WHISPER_QUANTIZATION,
