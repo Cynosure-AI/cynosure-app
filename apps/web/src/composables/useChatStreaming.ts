@@ -69,11 +69,11 @@ export function useChatStreaming(
     const primaryStreamId = ref<string | null>(null)
     const primaryStreamAgent = ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>({})
     const streamBuffers = new Map<string, StreamBuffer>()
-    const subAgentStreamMsg = ref<DisplayMessage | null>(null)
+    const subAgentStreamMsgs = new Map<string, DisplayMessage>()
     /** Tracks the last completed (non-empty) sub-agent message so the final
      *  subagent-stream-end event (which carries model/usage) can find it
-     *  even after subAgentStreamMsg has been nulled. */
-    const lastCompletedSubAgentMsg = ref<DisplayMessage | null>(null)
+     *  even after subAgentStreamMsgs has been cleared for a stream. */
+    const lastCompletedSubAgentMsgs = new Map<string, DisplayMessage>()
     /** All primary-stream messages created in the current turn (reset on stream-start).
      *  Used to back-fill the model on earlier round messages when stream-end arrives. */
     const currentTurnMsgs: DisplayMessage[] = []
@@ -364,16 +364,18 @@ export function useChatStreaming(
     function handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void {
         if (data.conversationId !== activeConversationId.value) return
 
-        if (subAgentStreamMsg.value) {
-            subAgentStreamMsg.value.isStreaming = false
-            if (!subAgentStreamMsg.value.content && !subAgentStreamMsg.value.thinking && !subAgentStreamMsg.value.imageDataUrls?.length) {
-                const idx = messages.value.indexOf(subAgentStreamMsg.value)
+        const existingMsg = subAgentStreamMsgs.get(data.streamId)
+        if (existingMsg) {
+            existingMsg.isStreaming = false
+            if (!existingMsg.content && !existingMsg.thinking && !existingMsg.imageDataUrls?.length) {
+                const idx = messages.value.indexOf(existingMsg)
                 if (idx !== -1) messages.value.splice(idx, 1)
             }
+            subAgentStreamMsgs.delete(data.streamId)
         }
 
         const msg: DisplayMessage = {
-            id: `sa_stream_${Date.now()}`,
+            id: `sa_stream_${data.streamId}_${Date.now()}`,
             role: 'assistant',
             content: '',
             agentId: data.agentId,
@@ -383,59 +385,64 @@ export function useChatStreaming(
             isStreaming: true
         }
         messages.value.push(msg)
-        subAgentStreamMsg.value = msg
+        subAgentStreamMsgs.set(data.streamId, msg)
     }
 
     function handleSubAgentStreamChunk(data: { streamId: string; conversationId: string; content: string }): void {
         if (data.conversationId !== activeConversationId.value) return
-        if (subAgentStreamMsg.value) {
-            subAgentStreamMsg.value.content += data.content
+        const msg = subAgentStreamMsgs.get(data.streamId)
+        if (msg) {
+            msg.content += data.content
         }
     }
 
     function handleSubAgentStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void {
         if (data.conversationId !== activeConversationId.value) return
-        if (subAgentStreamMsg.value) {
-            subAgentStreamMsg.value.thinking = (subAgentStreamMsg.value.thinking || '') + data.thinking
+        const msg = subAgentStreamMsgs.get(data.streamId)
+        if (msg) {
+            msg.thinking = (msg.thinking || '') + data.thinking
         }
     }
 
     function handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void {
         if (data.conversationId !== activeConversationId.value) return
-        if (subAgentStreamMsg.value) {
-            appendUniqueImages(subAgentStreamMsg.value, data.images)
+        const msg = subAgentStreamMsgs.get(data.streamId)
+        if (msg) {
+            appendUniqueImages(msg, data.images)
         }
     }
 
     function handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void {
         if (data.conversationId !== activeConversationId.value) return
-        if (subAgentStreamMsg.value) {
-            subAgentStreamMsg.value.isStreaming = false
+        const msg = subAgentStreamMsgs.get(data.streamId)
+        if (msg) {
+            msg.isStreaming = false
             if (data.model) {
-                subAgentStreamMsg.value.model = data.model
+                msg.model = data.model
             }
             if (data.usage) {
-                subAgentStreamMsg.value.promptTokens = data.usage.promptTokens
-                subAgentStreamMsg.value.completionTokens = data.usage.completionTokens
+                msg.promptTokens = data.usage.promptTokens
+                msg.completionTokens = data.usage.completionTokens
             }
-            if (!subAgentStreamMsg.value.content && !subAgentStreamMsg.value.thinking && !subAgentStreamMsg.value.imageDataUrls?.length) {
-                const idx = messages.value.indexOf(subAgentStreamMsg.value)
+            if (!msg.content && !msg.thinking && !msg.imageDataUrls?.length) {
+                const idx = messages.value.indexOf(msg)
                 if (idx !== -1) messages.value.splice(idx, 1)
             } else {
-                lastCompletedSubAgentMsg.value = subAgentStreamMsg.value
+                lastCompletedSubAgentMsgs.set(data.streamId, msg)
             }
-            subAgentStreamMsg.value = null
-        } else if (lastCompletedSubAgentMsg.value && (data.model || data.usage)) {
-            // Final subagent-stream-end from run() arrives after per-round ends already nulled subAgentStreamMsg.
+            subAgentStreamMsgs.delete(data.streamId)
+        } else if (lastCompletedSubAgentMsgs.has(data.streamId) && (data.model || data.usage)) {
+            // Final subagent-stream-end from run() arrives after per-round ends already cleared the stream message.
             // Apply the model/usage to the last completed sub-agent message.
+            const completedMsg = lastCompletedSubAgentMsgs.get(data.streamId)!
             if (data.model) {
-                lastCompletedSubAgentMsg.value.model = data.model
+                completedMsg.model = data.model
             }
             if (data.usage) {
-                lastCompletedSubAgentMsg.value.promptTokens = data.usage.promptTokens
-                lastCompletedSubAgentMsg.value.completionTokens = data.usage.completionTokens
+                completedMsg.promptTokens = data.usage.promptTokens
+                completedMsg.completionTokens = data.usage.completionTokens
             }
-            lastCompletedSubAgentMsg.value = null
+            lastCompletedSubAgentMsgs.delete(data.streamId)
         }
     }
 

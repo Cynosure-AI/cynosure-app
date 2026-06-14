@@ -83,17 +83,30 @@ export interface MemoryToolOptions {
 }
 
 const ENTITY_TYPES = ['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'] as const
+const ENTITY_GRAPH_SHORT_ID_LENGTH = 8
+
+function shortEntityGraphId(prefix: 'n' | 'e', id: string): string {
+    return `${prefix}:${id.slice(0, ENTITY_GRAPH_SHORT_ID_LENGTH)}`
+}
+
+function resolveEntityGraphEdgeId(value: string): string {
+    const trimmed = value.trim()
+    const shortId = trimmed.startsWith('e:') ? trimmed.slice(2) : trimmed
+    if (!trimmed.startsWith('e:') || shortId.length === 0) return trimmed
+    const rows = getDb().prepare('SELECT id FROM entity_graph_edges WHERE id LIKE ? ORDER BY last_seen_at DESC LIMIT 2').all(`${shortId}%`) as { id: string }[]
+    return rows.length === 1 ? rows[0].id : trimmed
+}
 
 function formatEntityNode(node: EntityNode): string {
     const aliases = node.aliases.length ? ` aliases=${node.aliases.join(', ')}` : ''
     const importanceLabel = ['temporary', 'minor', 'useful', 'core'][node.importance] ?? 'minor'
-    return `- [${importanceLabel}] ${node.name} (${node.type}, id=${node.id}, mentions=${node.mentionCount}${aliases})`
+    return `- [${importanceLabel}] ${node.name} (${node.type}, id=${shortEntityGraphId('n', node.id)}, mentions=${node.mentionCount}${aliases})`
 }
 
 function formatEntityEdge(edge: EntityEdge): string {
     const importanceLabel = ['temporary', 'minor', 'useful', 'core'][edge.importance] ?? 'minor'
     const evidence = edge.evidence ? ` Evidence: ${edge.evidence}` : ''
-    return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${edge.id}, confidence=${edge.confidence.toFixed(2)}, mentions=${edge.mentionCount}).${evidence}`
+    return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${shortEntityGraphId('e', edge.id)}, confidence=${edge.confidence.toFixed(2)}, mentions=${edge.mentionCount}).${evidence}`
 }
 
 function normalizeEntityType(value: unknown): EntityType {
@@ -817,7 +830,7 @@ export function makeEntityGraphDeleteTool(): ToolDefinition {
         parameters: {
             type: 'object',
             properties: {
-                edgeId: { type: 'string', description: 'Relationship edge ID to delete.' },
+                edgeId: { type: 'string', description: 'Relationship edge ID to delete. The short e:xxxxxxxx ID from entity_graph_search is accepted.' },
                 from: {
                     type: 'object',
                     description: 'Source entity for exact triple deletion when edgeId is not available.',
@@ -845,7 +858,8 @@ export function makeEntityGraphDeleteTool(): ToolDefinition {
             const graph = getEntityGraphStore()
 
             if (edgeId?.trim()) {
-                const result = graph.deleteEdge(edgeId.trim())
+                const resolvedEdgeId = resolveEntityGraphEdgeId(edgeId)
+                const result = graph.deleteEdge(resolvedEdgeId)
                 return result.edgeDeleted
                     ? { success: true, output: formatEntityGraphDeleteOutput(`Deleted entity graph relationship ${edgeId.trim()}.`, result.orphanedNodeIds.length) }
                     : { success: false, output: `No relationship found with id ${edgeId.trim()}.` }

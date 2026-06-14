@@ -98,6 +98,7 @@ const graphFlowNodes = ref<Node<FlowNodeData>[]>([]);
 const graphFlowEdges = ref<Edge<FlowEdgeData>[]>([]);
 const nodeSpacing = useLocalStorage(SK_MEMORY_GRAPH_NODE_SPACING, 1.0);
 const showGraphEdgeLabels = useLocalStorage(SK_MEMORY_GRAPH_EDGE_LABELS, true);
+const hoveredGraphNodeId = ref<string | null>(null);
 
 const route = useRoute();
 const { fitView } = useVueFlow(ENTITY_FLOW_ID);
@@ -208,6 +209,8 @@ async function layoutGraph() {
     const edge = group[0];
     const labelGroups = groupedEdgeLabels(group);
     const isBidirectional = labelGroups.length > 1;
+    const isHoverFocused = isGraphEdgeHoverFocused(edge.fromNodeId, edge.toNodeId);
+    const isHoverDimmed = Boolean(hoveredGraphNodeId.value) && !isHoverFocused;
     const handles = closestHandles(points.get(edge.fromNodeId), points.get(edge.toNodeId));
     if (!connectedHandles.has(edge.fromNodeId)) connectedHandles.set(edge.fromNodeId, new Set());
     if (!connectedHandles.has(edge.toNodeId)) connectedHandles.set(edge.toNodeId, new Set());
@@ -222,11 +225,20 @@ async function layoutGraph() {
       targetHandle: handles.targetHandle,
       markerEnd: MarkerType.ArrowClosed,
       markerStart: isBidirectional ? MarkerType.ArrowClosed : undefined,
-      class: "entity-flow-edge",
+      class: [
+        "entity-flow-edge",
+        isHoverFocused ? "entity-flow-edge-hover-focused" : "",
+        isHoverDimmed ? "entity-flow-edge-hover-dimmed" : "",
+      ].filter(Boolean).join(" "),
       data: {
         labels: labelGroups.flatMap((item) => item.labels),
         labelGroups,
         isBidirectional,
+        edgeIds: group.map((item) => item.id),
+        fromNodeId: edge.fromNodeId,
+        toNodeId: edge.toNodeId,
+        isHoverFocused,
+        isHoverDimmed,
       },
       style: { stroke: "var(--memory-flow-edge)", strokeWidth: 1.8 },
     };
@@ -234,6 +246,8 @@ async function layoutGraph() {
 
   const nodes: Node<FlowNodeData>[] = [];
   for (const [id, entity] of nodeLabels.entries()) {
+    const isHoverFocused = isGraphNodeHoverFocused(id, currentGraph.edges);
+    const isHoverDimmed = Boolean(hoveredGraphNodeId.value) && !isHoverFocused;
     nodes.push({
       id,
       type: "entity",
@@ -242,13 +256,95 @@ async function layoutGraph() {
         "entity-flow-node",
         entityTypeClass(entity.type),
         seedIds.has(id) ? "entity-flow-node-seed" : "",
+        isHoverFocused ? "entity-flow-node-hover-focused" : "",
+        isHoverDimmed ? "entity-flow-node-hover-dimmed" : "",
       ].filter(Boolean).join(" "),
-      data: { entity, label: entity.name, isSeed: seedIds.has(id), connectedHandles: connectedHandles.get(id) ?? new Set() },
+      data: {
+        entity,
+        label: entity.name,
+        isSeed: seedIds.has(id),
+        connectedHandles: connectedHandles.get(id) ?? new Set(),
+        isHoverFocused,
+        isHoverDimmed,
+      },
     });
   }
   if (requestId !== graphLayoutRequest) return;
   graphFlowNodes.value = nodes;
   graphFlowEdges.value = edges;
+}
+
+function isGraphNodeHoverFocused(nodeId: string, edges: EntityGraphEdge[]): boolean {
+  const hoveredId = hoveredGraphNodeId.value;
+  if (!hoveredId) return false;
+  if (nodeId === hoveredId) return true;
+  return edges.some((edge) =>
+    (edge.fromNodeId === hoveredId && edge.toNodeId === nodeId)
+    || (edge.toNodeId === hoveredId && edge.fromNodeId === nodeId),
+  );
+}
+
+function isGraphEdgeHoverFocused(fromNodeId: string, toNodeId: string): boolean {
+  const hoveredId = hoveredGraphNodeId.value;
+  return Boolean(hoveredId && (fromNodeId === hoveredId || toNodeId === hoveredId));
+}
+
+function setHoveredGraphNode(nodeId: string | null): void {
+  if (hoveredGraphNodeId.value === nodeId) return;
+  hoveredGraphNodeId.value = nodeId;
+  applyGraphHoverState();
+}
+
+function applyGraphHoverState(): void {
+  const currentGraph = activeGraph.value;
+  if (!currentGraph) return;
+  const seedIds = new Set(currentGraph.seedNodes.map((node) => node.id));
+  const nextNodes: Node<FlowNodeData>[] = [];
+  for (const node of graphFlowNodes.value) {
+    if (!node.data) {
+      nextNodes.push(node as Node<FlowNodeData>);
+      continue;
+    }
+    const entity = node.data.entity;
+    const isHoverFocused = isGraphNodeHoverFocused(node.id, currentGraph.edges);
+    const isHoverDimmed = Boolean(hoveredGraphNodeId.value) && !isHoverFocused;
+    nextNodes.push({
+      ...node,
+      class: [
+        "entity-flow-node",
+        entityTypeClass(entity.type),
+        seedIds.has(node.id) ? "entity-flow-node-seed" : "",
+        isHoverFocused ? "entity-flow-node-hover-focused" : "",
+        isHoverDimmed ? "entity-flow-node-hover-dimmed" : "",
+      ].filter(Boolean).join(" "),
+      data: {
+        ...node.data,
+        isHoverFocused,
+        isHoverDimmed,
+      },
+    } as Node<FlowNodeData>);
+  }
+  graphFlowNodes.value = nextNodes;
+
+  const nextEdges: Edge<FlowEdgeData>[] = [];
+  for (const edge of graphFlowEdges.value) {
+    const isHoverFocused = isGraphEdgeHoverFocused(edge.data?.fromNodeId || edge.source, edge.data?.toNodeId || edge.target);
+    const isHoverDimmed = Boolean(hoveredGraphNodeId.value) && !isHoverFocused;
+    nextEdges.push({
+      ...edge,
+      class: [
+        "entity-flow-edge",
+        isHoverFocused ? "entity-flow-edge-hover-focused" : "",
+        isHoverDimmed ? "entity-flow-edge-hover-dimmed" : "",
+      ].filter(Boolean).join(" "),
+      data: edge.data ? {
+        ...edge.data,
+        isHoverFocused,
+        isHoverDimmed,
+      } : edge.data,
+    } as Edge<FlowEdgeData>);
+  }
+  graphFlowEdges.value = nextEdges;
 }
 
 function fallbackGraphNode(id: string, name: string): EntityGraphNode {
@@ -445,6 +541,7 @@ async function loadGraph(query = graphQuery.value, nodeId?: string) {
   try {
     const nextGraph = await api.memory.getGraph(trimmedQuery || undefined, limit, view, nodeId);
     if (requestId !== graphRequest) return;
+    hoveredGraphNodeId.value = null;
     graph.value = nextGraph;
     graphLimit.value = limit;
     graphView.value = view;
@@ -712,6 +809,7 @@ onMounted(() => loadSpaces());
           @edit-node="openEditNode"
           @delete-node="confirmDeleteNode"
           @delete-nodes="confirmDeleteNodes"
+          @hover-node="setHoveredGraphNode"
         />
       </main>
 
