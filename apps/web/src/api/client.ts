@@ -412,6 +412,15 @@ export const api = {
       del<{ success: boolean }>(
         `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}`
       ),
+    getFileContent: (spaceId: string, fileName: string) =>
+      get<{ fileName: string; content: string }>(
+        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}/content`
+      ),
+    updateFileContent: (spaceId: string, fileName: string, content: string) =>
+      put<{ success: boolean; chunksStored: number; fileName: string }>(
+        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}/content`,
+        { content }
+      ),
     /** Legacy: list indexed source files from LanceDB (no disk status). */
     listGroups: (spaceId: string) =>
       get<{ sourceFile: string; chunkCount: number; createdAt: number }[]>(

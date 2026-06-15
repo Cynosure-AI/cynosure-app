@@ -10,8 +10,12 @@ import {
     computeFileHash,
     copyFileToFolder,
     deleteFile as deletePhysicalFile,
+    backupToRevisions,
+    readTextFile,
+    writeTextFile,
+    PLAIN_TEXT_EXTENSIONS,
 } from '../core/memory/memory-file-manager.js'
-import { join, sep } from 'path'
+import { basename, extname, join, sep } from 'path'
 import { watchMemorySpace, stopWatchingMemorySpace } from '../core/memory/memory-space-watcher.js'
 import {
     archiveMemorySpaceFolder,
@@ -107,6 +111,18 @@ function loadSpaceRow(id: string): MemorySpaceRow | undefined {
     const db = getDb()
     syncMemorySpacesFromFolders(db)
     return db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(id) as MemorySpaceRow | undefined
+}
+
+function validateEditableFileName(fileName: string): string {
+    const cleanName = basename(fileName || '')
+    if (!cleanName || cleanName !== fileName) {
+        throw new Error('Invalid file name')
+    }
+    const ext = extname(cleanName).toLowerCase()
+    if (!PLAIN_TEXT_EXTENSIONS.has(ext)) {
+        throw new Error('Only plain-text memory files can be edited')
+    }
+    return cleanName
 }
 
 // ---------------------------------------------------------------------------
@@ -432,6 +448,51 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         await mem.deleteSourceFile(req.params.fileName, row.id)
         deleteMemoryGraphSource(row.id, req.params.fileName)
         return { success: true }
+    })
+
+    // GET /api/memory-spaces/:id/files/:fileName/content — read editable file content
+    app.get<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/content', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
+
+        let fileName: string
+        try {
+            fileName = validateEditableFileName(req.params.fileName)
+        } catch (err) {
+            return reply.status(400).send({ error: (err as Error).message })
+        }
+
+        try {
+            return { fileName, content: readTextFile(row.folder_path, fileName) }
+        } catch {
+            return reply.status(404).send({ error: 'File not found' })
+        }
+    })
+
+    // PUT /api/memory-spaces/:id/files/:fileName/content — update editable file content and refresh vectors
+    app.put<{ Params: { id: string; fileName: string }; Body: { content: string } }>('/:id/files/:fileName/content', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
+        if (typeof req.body.content !== 'string') return reply.status(400).send({ error: 'content is required' })
+
+        let fileName: string
+        try {
+            fileName = validateEditableFileName(req.params.fileName)
+        } catch (err) {
+            return reply.status(400).send({ error: (err as Error).message })
+        }
+
+        try {
+            backupToRevisions(row.folder_path, fileName)
+            writeTextFile(row.folder_path, fileName, req.body.content)
+            deleteMemoryGraphSource(row.id, fileName)
+            const result = await getAgentMemory().reindexFile(row.folder_path, fileName, row.id)
+            return { success: true, fileName: result.fileName, chunksStored: result.chunkCount }
+        } catch (err) {
+            return reply.status(500).send({ error: (err as Error).message || 'Failed to update file' })
+        }
     })
 
     // -----------------------------------------------------------------------
