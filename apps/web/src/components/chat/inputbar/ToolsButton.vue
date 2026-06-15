@@ -73,8 +73,8 @@ const missingTools = computed(() => {
         Auto-selection enabled
       </div>
       <template v-if="missingTools.length">
-        <div class="mb-1.5 px-1 py-1 rounded bg-amber-500/10 border border-amber-500/20">
-          <div class="flex items-center gap-1 text-amber-400 text-[10px] font-medium mb-1">
+        <div class="mb-1.5 px-1 py-1 rounded bg-amber-100/60 border border-amber-400/30 dark:bg-amber-500/10 dark:border-amber-500/20">
+          <div class="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px] font-medium mb-1">
             <Icon
               icon="lucide:alert-triangle"
               class="w-3 h-3 shrink-0"
@@ -84,13 +84,13 @@ const missingTools = computed(() => {
           <div
             v-for="name in missingTools.slice(0, 5)"
             :key="name"
-            class="text-amber-300/70 font-mono text-[10px] truncate pl-4"
+            class="text-amber-700/70 dark:text-amber-300/70 font-mono text-[10px] truncate pl-4"
           >
             {{ name }}
           </div>
           <div
             v-if="missingTools.length > 5"
-            class="text-amber-400/50 text-[9px] pl-4"
+            class="text-amber-500 dark:text-amber-400/50 text-[9px] pl-4"
           >
             +{{ missingTools.length - 5 }} more
           </div>
