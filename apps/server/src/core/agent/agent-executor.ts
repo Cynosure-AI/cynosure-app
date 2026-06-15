@@ -213,7 +213,7 @@ export class AgentExecutor {
         pendingToolCalls = initialResult.toolCalls
         usage = initialResult.usage
         contextTokens = maxTokens(contextTokens, usage?.totalTokens)
-        this.maybeUpdateContextTokens(conversationId, contextTokens)
+        this.publishContextUsage(conversationId, usage, contextTokens)
 
         // No tool calls → done
         if (!pendingToolCalls?.length) {
@@ -253,7 +253,7 @@ export class AgentExecutor {
                         ; ({ fullContent, lastRoundThinking, pendingToolCalls, usage, contextTokens, activeStreamId } = roundResult)
                         fullThinking += roundResult.lastRoundThinking
                         collectedImages.push(...roundResult.images)
-                        this.maybeUpdateContextTokens(conversationId, contextTokens)
+                        this.publishContextUsage(conversationId, usage, contextTokens)
                         continue
                     }
                     // If roundResult is null, approval was granted — fall through to execution
@@ -264,6 +264,14 @@ export class AgentExecutor {
                 if (this.config.saveMessages) {
                     this.saveAssistantToolCallMessage(conversationId, fullContent, lastRoundThinking, pendingToolCalls)
                 }
+                contextTokens = maxTokens(
+                    contextTokens,
+                    estimateTotalTokens([
+                        ...currentMessages,
+                        { role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls },
+                    ])
+                )
+                this.publishContextUsage(conversationId, usage, contextTokens)
 
                 if (visibleToolCalls.length) {
                     this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'executing', message: `Executing ${visibleToolCalls.length} tool(s)...` })
@@ -291,9 +299,9 @@ export class AgentExecutor {
                 }
 
                 // Append tool results to context (with multimodal content for LLM vision)
-                currentMessages.push(
-                    { role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls },
-                    ...toolResults.map(tr => ({
+                currentMessages.push({ role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls })
+                for (const tr of toolResults) {
+                    currentMessages.push({
                         role: 'tool' as const,
                         content: tr.imageDataUrls?.length
                             ? [
@@ -302,8 +310,10 @@ export class AgentExecutor {
                             ]
                             : tr.output,
                         toolCallId: tr.toolCallId,
-                    }))
-                )
+                    })
+                    contextTokens = maxTokens(contextTokens, estimateTotalTokens(currentMessages))
+                    this.publishContextUsage(conversationId, usage, contextTokens)
+                }
 
                 currentMessages = this.maybeTrimContext(currentMessages)
                 contextTokens = maxTokens(contextTokens, estimateTotalTokens(currentMessages))
@@ -318,15 +328,7 @@ export class AgentExecutor {
                 usage = accumulateUsage(usage, roundResult.usage)
                 if (this.config.streamMode === 'per-round') activeStreamId = roundResult.streamId
 
-                // Broadcast accumulated usage after each round so the client can update
-                // the context circle without waiting for the full turn to end.
-                if (usage) {
-                    this.config.broadcast(`${this._sp}-usage`, {
-                        conversationId, usage, model: this.config.model,
-                        contextWindow: this.config.contextWindow, contextTokens,
-                    })
-                }
-                this.maybeUpdateContextTokens(conversationId, contextTokens)
+                this.publishContextUsage(conversationId, usage, contextTokens)
             }
         } finally {
             // Guarantee stream-end is always sent even if an error escapes the loop
@@ -392,6 +394,25 @@ export class AgentExecutor {
         try {
             getDb().prepare('UPDATE conversations SET last_context_tokens = ? WHERE id = ?').run(tokens, conversationId)
         } catch { /* best-effort — don't crash the execution loop */ }
+    }
+
+    /**
+     * Publish context usage to both live clients and persistent conversation
+     * metadata so the Context Ring updates during long tool-running turns.
+     */
+    private publishContextUsage(conversationId: string, usage: Usage, contextTokens: number | undefined): void {
+        if (contextTokens == null) return
+
+        if (usage) {
+            this.config.broadcast(`${this._sp}-usage`, {
+                conversationId,
+                usage,
+                model: this.config.model,
+                contextWindow: this.config.contextWindow,
+                contextTokens,
+            })
+        }
+        this.maybeUpdateContextTokens(conversationId, contextTokens)
     }
 
     /**
