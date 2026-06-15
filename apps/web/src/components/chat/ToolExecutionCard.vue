@@ -426,8 +426,8 @@ const maContext = computed(() => {
               :key="i"
               class="rounded-lg border px-3 py-2"
               :class="isSubAgentSpawnCall(tc.name)
-                ? 'bg-indigo-100/50 border-indigo-400/30 dark:bg-indigo-950/15 dark:border-indigo-500/25'
-                : 'bg-theme-800/50 border-theme-700/25 dark:bg-theme-900/60 dark:border-theme-700/30'"
+                ? 'bg-indigo-500/10 border-indigo-500/20 dark:bg-indigo-950/15 dark:border-indigo-500/25'
+                : 'bg-theme-950 border-theme-700 dark:bg-theme-900/60 dark:border-theme-700/30'"
             >
               <div class="flex items-center gap-1.5 mb-1">
                 <Icon
@@ -446,7 +446,7 @@ const maContext = computed(() => {
               </div>
               <pre
                 v-if="tc.arguments && tc.arguments !== '{}'"
-                class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-100/60 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
+                class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
               >{{ prettifyJson(tc.arguments) }}</pre>
             </div>
           </div>
@@ -472,14 +472,14 @@ const maContext = computed(() => {
                 />
                 <span
                   class="text-[11px] font-medium"
-                  :class="r.success ? 'text-theme-300' : 'text-red-300'"
+                  :class="r.success ? 'text-theme-300' : 'text-red-600 dark:text-red-300'"
                 >{{ r.name }}</span>
               </div>
               <pre
                 class="text-[10px] whitespace-pre-wrap break-all rounded px-2 py-1.5 max-h-64 overflow-y-auto font-mono"
                 :class="r.success
                   ? 'text-theme-400 bg-theme-900/50'
-                  : 'text-red-300/80 bg-red-950/30'"
+                  : 'text-red-700/80 bg-red-100/80 dark:text-red-300/80 dark:bg-red-950/30'"
               >{{ prettifyJson(r.output) }}</pre>
               <!-- File artifacts -->
               <FileArtifactLinks :text="r.output" />
@@ -499,7 +499,7 @@ const maContext = computed(() => {
               </div>
               <p
                 v-if="r.error"
-                class="mt-1 text-[10px] text-red-400"
+                class="mt-1 text-[10px] text-red-600 dark:text-red-400"
               >
                 {{ r.error }}
               </p>
