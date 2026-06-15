@@ -100,9 +100,11 @@ export class MemoryReranker {
         if (item.index == null) return null
         const result = results[item.index]
         if (!result) return null
+        const rerankerScore = typeof item.relevance_score === 'number' ? item.relevance_score : undefined
         return {
           ...result,
-          score: typeof item.relevance_score === 'number' ? item.relevance_score : result.score
+          score: rerankerScore ?? result.score,
+          ...(rerankerScore !== undefined ? { rerankerScore } : {}),
         }
       })
       .filter((item): item is SearchResult => item != null)
