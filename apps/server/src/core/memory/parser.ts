@@ -16,6 +16,7 @@ export interface RetrievedChunk {
   text: string
   source: string
   score: number
+  rerankerScore?: number
   sourceFile?: string
   chunkIndex?: number
   spaceId?: string
@@ -200,6 +201,7 @@ export class MemoryParser {
       text: r.text,
       source: r.source,
       score: r.score,
+      rerankerScore: r.rerankerScore,
       sourceFile: r.sourceFile,
       chunkIndex: r.chunkIndex,
       spaceId: r.spaceId

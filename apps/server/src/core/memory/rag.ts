@@ -28,6 +28,7 @@ export interface SearchResult {
   chunkIndex?: number
   spaceId?: string
   score: number
+  rerankerScore?: number
   createdAt: number
 }
 

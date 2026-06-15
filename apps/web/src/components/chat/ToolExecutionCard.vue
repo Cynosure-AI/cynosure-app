@@ -49,6 +49,8 @@ const statusMeta: Record<string, { label: string; icon: string; color: string }>
   'memory-retrieved': { label: 'Memory retrieved', icon: 'lucide:brain', color: 'text-accent-500 dark:text-accent-300' },
 }
 
+type ToolCall = { name: string; arguments: string }
+
 function meta(s: string) {
   return statusMeta[s] ?? { label: s, icon: 'lucide:circle', color: 'text-theme-400' }
 }
@@ -77,6 +79,25 @@ function isSubAgentSpawnCall(name: string): boolean {
 function toolDisplayName(name: string): string {
   if (name === 'Task context') return 'Preparing Context'
   return isSubAgentSpawnCall(name) ? 'Spawn sub-agent' : name
+}
+
+function parseToolCallArgs(args: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(args || '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+function formatRerankerScore(call: ToolCall): string | null {
+  const parsed = parseToolCallArgs(call.arguments)
+  const score = parsed?.rerankerScore
+  if (typeof score !== 'number' || !Number.isFinite(score)) return null
+  const normalized = score > 1 ? score / 100 : score
+  return `${Math.round(Math.max(0, Math.min(1, normalized)) * 100)}%`
 }
 
 function subAgentCodenameFromArgs(args: string): string | null {
@@ -439,6 +460,17 @@ const maContext = computed(() => {
                   class="text-[11px] font-medium"
                   :class="isSubAgentSpawnCall(tc.name) ? 'text-indigo-600 dark:text-indigo-300' : 'text-accent-500 dark:text-accent-300'"
                 >{{ toolDisplayName(tc.name) }}</span>
+                <span
+                  v-if="isMemoryCall(tc) && formatRerankerScore(tc)"
+                  class="ml-auto inline-flex items-center gap-1 rounded-md bg-accent-100/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-700 ring-1 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-200 dark:ring-accent-500/20"
+                  title="Reranker match score"
+                >
+                  <Icon
+                    icon="lucide:percent"
+                    class="w-3 h-3"
+                  />
+                  {{ formatRerankerScore(tc) }}
+                </span>
                 <span
                   v-if="subAgentCodenameFromArgs(tc.arguments)"
                   class="ml-1 inline-flex rounded bg-indigo-200/40 px-1.5 py-0.5 text-[10px] text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"
