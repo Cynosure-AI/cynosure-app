@@ -26,6 +26,12 @@ export function unregisterActiveChatExecution(executionId: string): void {
     activeChatExecutions.delete(executionId)
 }
 
+export function updateActiveChatExecution(executionId: string, patch: Partial<Pick<ActiveChatExecution, 'model' | 'orchestrationRunId'>>): void {
+    const execution = activeChatExecutions.get(executionId)
+    if (!execution) return
+    activeChatExecutions.set(executionId, { ...execution, ...patch })
+}
+
 export function cancelChatExecution(executionId: string): boolean {
     const controller = activeAbortControllers.get(executionId)
     if (!controller) return false
