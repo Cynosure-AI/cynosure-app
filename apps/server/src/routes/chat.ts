@@ -23,6 +23,7 @@ import {
   cancelChatExecutionByConversation,
   registerActiveChatExecution,
   unregisterActiveChatExecution,
+  updateActiveChatExecution,
 } from '../core/chat/active-executions.js'
 import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
@@ -236,34 +237,55 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       // Create AbortController early so sub-agent tools can receive the signal
       const abortController = new AbortController()
       const usedToolNames = new Set<string>()
+      const streamId = nanoid()
+      const executionId = streamId
 
-      const planned = await planExecution({
-        resolvedAgent,
+      registerActiveChatExecution({
+        id: executionId,
         conversationId,
-        broadcast,
-        abortSignal: abortController.signal,
-        gateway,
-        toolRegistry,
-        messages,
-        userText: content,
-        run: {
-          providerOverride: providerOverride || undefined,
-          modelOverride: model || undefined,
-          systemPrompt: systemPrompt || undefined,
-          requestedSubAgents: reqSubAgents,
-          memorySpaceOverrides,
-          autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : undefined,
-          autoMemory: effectiveRunFlags.autoMemory,
-          autoRouterProviderId: reqAutoRouterProviderId || legacyAutoRouterProviderId || undefined,
-          autoRouterModel: reqAutoRouterModel || legacyAutoRouterModel || undefined,
-          selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
-          hasExplicitToolAllowlist,
-          usedToolNames,
-          selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
-          autoSkillRouting: effectiveRunFlags.autoSkillRouting,
-          thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
-        },
-      })
+        agentId,
+        model: model || resolvedAgent?.model || null,
+        startedAt: Date.now()
+      }, abortController)
+
+      let planned: Awaited<ReturnType<typeof planExecution>>
+      try {
+        planned = await planExecution({
+          resolvedAgent,
+          conversationId,
+          broadcast,
+          abortSignal: abortController.signal,
+          gateway,
+          toolRegistry,
+          messages,
+          userText: content,
+          run: {
+            providerOverride: providerOverride || undefined,
+            modelOverride: model || undefined,
+            systemPrompt: systemPrompt || undefined,
+            requestedSubAgents: reqSubAgents,
+            memorySpaceOverrides,
+            autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : undefined,
+            autoMemory: effectiveRunFlags.autoMemory,
+            autoRouterProviderId: reqAutoRouterProviderId || legacyAutoRouterProviderId || undefined,
+            autoRouterModel: reqAutoRouterModel || legacyAutoRouterModel || undefined,
+            selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
+            hasExplicitToolAllowlist,
+            usedToolNames,
+            selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
+            autoSkillRouting: effectiveRunFlags.autoSkillRouting,
+            thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
+          },
+        })
+      } catch (err) {
+        unregisterActiveChatExecution(executionId)
+        if ((err as Error).name === 'AbortError' || abortController.signal.aborted) {
+          getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
+          broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
+          return { streamId }
+        }
+        throw err
+      }
 
       const {
         tools: plannedTools,
@@ -274,117 +296,116 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         chatAgentName,
         chatAgentIconUrl,
       } = planned
+      updateActiveChatExecution(executionId, { model: responseModel, orchestrationRunId })
+      if (abortController.signal.aborted) {
+        unregisterActiveChatExecution(executionId)
+        if (orchestrationRunId) {
+          closeOrchestrationRun(orchestrationRunId, 'cancelled', { error: 'Cancelled' })
+        }
+        getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
+        broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
+        return { streamId }
+      }
       const tools: RegistryAwareToolDefinition[] = plannedTools
-      messages = planned.messages
-
-      const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(responseModel, responseProvider)
-      if (responseSupportsToolCalls) {
-        tools.push(...makeAttachmentTools(conversationId))
-      }
-      messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, content, db))
-      messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
-
-      const streamId = nanoid()
-
-      // Persist the full session config with RESOLVED model/provider so it can
-      // be restored correctly when navigating back to this conversation.
-      const chatConfig = buildPersistedChatConfig({
-        selectedToolKeys,
-        routedToolKeys: [],
-        requestedSubAgents: reqSubAgents,
-        requestedMemorySpaceIds: reqMemorySpaceIds,
-        systemPrompt,
-        responseModel,
-        responseProvider,
-        thinkingEnabled: reqThinkingEnabled ?? true,
-        autoToolRouting: reqAutoToolRouting === true,
-        autoMemory: effectiveRunFlags.autoMemory,
-        selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
-        autoSkillRouting: effectiveRunFlags.autoSkillRouting,
-      })
-      db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
-        JSON.stringify(chatConfig),
-        conversationId
-      )
-
-      // Fetch context window size (best-effort, non-blocking for the critical path)
-      let contextWindow: number | undefined
+      let chatConfig: Record<string, unknown> | null = null
       try {
-        const modelInfo = await gateway.getModelInfo(responseModel, providerId)
-        contextWindow = modelInfo.contextLength
-      } catch { /* ignore — context window info is optional */ }
+        messages = planned.messages
 
-      // If the agent defines a hard max-context-token limit, use the lower of
-      // the model's context window and the agent's cap as the effective window.
-      const agentMaxCtx = resolvedAgent?.maxContextTokens
-      if (typeof agentMaxCtx === 'number' && agentMaxCtx > 0) {
-        contextWindow = contextWindow
-          ? Math.min(contextWindow, agentMaxCtx)
-          : agentMaxCtx
-      }
+        const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(responseModel, responseProvider)
+        if (responseSupportsToolCalls) {
+          tools.push(...makeAttachmentTools(conversationId))
+        }
+        messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, content, db))
+        messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
-      // Apply context strategy (trim or compact) to fit the model's context window
-      const contextStrategy = reqContextStrategy || 'sliding-window'
-      let initialContextEstimate: number | undefined
-      if (contextStrategy === 'compact' && contextWindow) {
-        const compactResult = await applyCompactStrategy({
-          messages,
-          historyRows,
-          filteredRows,
-          contextWindow,
-          gateway,
-          providerId,
+        // Persist the full session config with RESOLVED model/provider so it can
+        // be restored correctly when navigating back to this conversation.
+        chatConfig = buildPersistedChatConfig({
+          selectedToolKeys,
+          routedToolKeys: [],
+          requestedSubAgents: reqSubAgents,
+          requestedMemorySpaceIds: reqMemorySpaceIds,
+          systemPrompt,
           responseModel,
-          compactProviderId: reqCompactProviderId || undefined,
-          compactModel: reqCompactModel || undefined,
-          conversationId,
-          db,
-          broadcast,
+          responseProvider,
+          thinkingEnabled: reqThinkingEnabled ?? true,
+          autoToolRouting: reqAutoToolRouting === true,
+          autoMemory: effectiveRunFlags.autoMemory,
+          selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
+          autoSkillRouting: effectiveRunFlags.autoSkillRouting,
         })
-        messages = compactResult.messages
-        initialContextEstimate = compactResult.initialContextEstimate
-      } else if (contextWindow) {
-        initialContextEstimate = estimateTotalTokens(messages)
-        messages = trimMessagesToContextLimit(messages, contextWindow, undefined, contextStrategy)
-      }
+        db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
+          JSON.stringify(chatConfig),
+          conversationId
+        )
 
-      const executor = new AgentExecutor({
-        gateway,
-        tools,
-        conversationId,
-        broadcast,
-        providerId,
-        model: responseModel,
-        hitl: resolvedAgent ? !resolvedAgent.autoApproveTools : true,
-        maxRounds: MAIN_AGENT_MAX_ROUNDS,
-        thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
-        streamMode: 'single',
-        signal: abortController.signal,
-        streamId,
-        agentId: agentId || undefined,
-        agentName: chatAgentName,
-        agentIconUrl: chatAgentIconUrl,
-        contextWindow,
-        initialContextEstimate,
-        contextStrategy,
-        orchestrationRunId,
-        isPrimaryExecutor: true,
-        usedToolNames,
-      })
+        // Fetch context window size (best-effort, non-blocking for the critical path)
+        let contextWindow: number | undefined
+        try {
+          const modelInfo = await gateway.getModelInfo(responseModel, providerId)
+          contextWindow = modelInfo.contextLength
+        } catch { /* ignore — context window info is optional */ }
 
-      const executionId = streamId
-      registerActiveChatExecution({
-        id: executionId,
-        conversationId,
-        agentId,
-        model: responseModel,
-        orchestrationRunId,
-        startedAt: Date.now()
-      }, abortController)
+        // If the agent defines a hard max-context-token limit, use the lower of
+        // the model's context window and the agent's cap as the effective window.
+        const agentMaxCtx = resolvedAgent?.maxContextTokens
+        if (typeof agentMaxCtx === 'number' && agentMaxCtx > 0) {
+          contextWindow = contextWindow
+            ? Math.min(contextWindow, agentMaxCtx)
+            : agentMaxCtx
+        }
 
-      try {
+        // Apply context strategy (trim or compact) to fit the model's context window
+        const contextStrategy = reqContextStrategy || 'sliding-window'
+        let initialContextEstimate: number | undefined
+        if (contextStrategy === 'compact' && contextWindow) {
+          const compactResult = await applyCompactStrategy({
+            messages,
+            historyRows,
+            filteredRows,
+            contextWindow,
+            gateway,
+            providerId,
+            responseModel,
+            compactProviderId: reqCompactProviderId || undefined,
+            compactModel: reqCompactModel || undefined,
+            conversationId,
+            db,
+            broadcast,
+          })
+          messages = compactResult.messages
+          initialContextEstimate = compactResult.initialContextEstimate
+        } else if (contextWindow) {
+          initialContextEstimate = estimateTotalTokens(messages)
+          messages = trimMessagesToContextLimit(messages, contextWindow, undefined, contextStrategy)
+        }
+
+        const executor = new AgentExecutor({
+          gateway,
+          tools,
+          conversationId,
+          broadcast,
+          providerId,
+          model: responseModel,
+          hitl: resolvedAgent ? !resolvedAgent.autoApproveTools : true,
+          maxRounds: MAIN_AGENT_MAX_ROUNDS,
+          thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
+          streamMode: 'single',
+          signal: abortController.signal,
+          streamId,
+          agentId: agentId || undefined,
+          agentName: chatAgentName,
+          agentIconUrl: chatAgentIconUrl,
+          contextWindow,
+          initialContextEstimate,
+          contextStrategy,
+          orchestrationRunId,
+          isPrimaryExecutor: true,
+          usedToolNames,
+        })
+
         const result = await executor.run(messages)
-        if (reqAutoToolRouting === true) {
+        if (reqAutoToolRouting === true && chatConfig) {
           persistAutoRoutedUsedTools(db, conversationId, chatConfig, tools, usedToolNames, toolRegistry)
         }
         if (orchestrationRunId) {
@@ -439,7 +460,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
-          if (reqAutoToolRouting === true) {
+          if (reqAutoToolRouting === true && chatConfig) {
             persistAutoRoutedUsedTools(db, conversationId, chatConfig, tools, usedToolNames, toolRegistry)
           }
           if (orchestrationRunId) {
@@ -452,7 +473,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if (orchestrationRunId) {
           closeOrchestrationRun(orchestrationRunId, 'error', { error: (err as Error).message })
         }
-        if (reqAutoToolRouting === true) {
+        if (reqAutoToolRouting === true && chatConfig) {
           persistAutoRoutedUsedTools(db, conversationId, chatConfig, tools, usedToolNames, toolRegistry)
         }
         getEventBus().emit('task:error', { conversationId, error: (err as Error).message })
