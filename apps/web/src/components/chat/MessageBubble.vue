@@ -35,6 +35,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   retry: []
   edit: [string]
+  fork: []
 }>()
 
 const router = useRouter()
@@ -108,6 +109,7 @@ const renderedContent = computed(() => {
 })
 
 const isUser = computed(() => props.role === 'user')
+const isForkable = computed(() =>  props.role === 'assistant') //Could also include user too though it doesn't make as much sense since user messages are editable
 const hasAssistantImages = computed(() => !isUser.value && Boolean(props.imageDataUrls?.length))
 const hasAssistantFileArtifacts = computed(() => !isUser.value && Boolean(props.fileArtifacts?.length))
 const imageGridClass = computed(() => {
@@ -164,7 +166,7 @@ const imageGridClass = computed(() => {
         isEditing ? 'w-[85%] md:w-[80%]' : ''
       ]"
     >
-      <!-- Action buttons: copy (all), retry + edit (user only) -->
+      <!-- Action buttons: copy/fork (all normal messages), retry + edit (user only) -->
       <div
         v-if="content && !isStreaming"
         class="absolute -top-2 right-1 flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity"
@@ -188,6 +190,17 @@ const imageGridClass = computed(() => {
         >
           <Icon
             icon="mdi:refresh"
+            class="h-3.5 w-3.5"
+          />
+        </button>
+        <button
+          v-if="isForkable"
+          class="p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
+          title="Fork"
+          @click="$emit('fork')"
+        >
+          <Icon
+            icon="lucide:git-fork"
             class="h-3.5 w-3.5"
           />
         </button>

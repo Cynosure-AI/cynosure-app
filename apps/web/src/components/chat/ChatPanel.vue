@@ -573,6 +573,7 @@ onMounted(() => {
                   :is-error="inner.msg.isError"
                   @retry="chatStore.retryFromMessage(inner.msg.id)"
                   @edit="(content) => chatStore.editMessage(inner.msg.id, content)"
+                  @fork="chatStore.forkConversationFromMessage(inner.msg.id)"
                 />
                 <ToolExecutionCard
                   v-else-if="inner.type === 'tool-group'"
@@ -648,6 +649,7 @@ onMounted(() => {
           :is-error="entry.msg.isError"
           @retry="chatStore.retryFromMessage(entry.msg.id)"
           @edit="(content) => chatStore.editMessage(entry.msg.id, content)"
+          @fork="chatStore.forkConversationFromMessage(entry.msg.id)"
         />
 
         <!-- Tool execution group (from live execution steps) -->

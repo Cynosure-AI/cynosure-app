@@ -481,6 +481,24 @@ export const useChatStore = defineStore('chat', () => {
     if (conv) conv.title = trimmed
   }
 
+  async function forkConversationFromMessage(messageId: string): Promise<void> {
+    const sourceConversationId = activeConversationId.value
+    if (!sourceConversationId || isConversationLocked.value) return
+    const fork = await api.chat.forkConversation(sourceConversationId, messageId)
+    conversations.value.unshift({
+      id: fork.id,
+      title: fork.title,
+      agentId: fork.agentId,
+      origin: fork.origin,
+      pinned: false,
+      lastReadAt: fork.createdAt,
+      createdAt: fork.createdAt,
+      updatedAt: fork.updatedAt
+    })
+    streaming.streamBuffers.delete(fork.id)
+    await selectConversation(fork.id, fork.agentId)
+  }
+
   // ── Post-actions ──
 
   function handlePostAction(data: { conversationId: string; action: string; status: 'started' | 'completed' }): void {
@@ -590,6 +608,7 @@ export const useChatStore = defineStore('chat', () => {
     sendMessage,
     retryFromMessage: chatMessages.retryFromMessage,
     editMessage: chatMessages.editMessage,
+    forkConversationFromMessage,
     cancelStream: chatMessages.cancelStream,
     cancelPostActions: chatMessages.cancelPostActions,
 

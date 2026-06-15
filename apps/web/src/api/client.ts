@@ -167,6 +167,11 @@ export const api = {
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/truncate`,
         { messageId }
       ),
+    forkConversation: (conversationId: string, messageId: string) =>
+      post<{ id: string; title: string; agentId: string | null; maWorkspaceId: string | null; origin: string; createdAt: number; updatedAt: number }>(
+        `/api/chat/conversations/${encodeURIComponent(conversationId)}/fork`,
+        { messageId }
+      ),
     cancelStream: (streamId: string, conversationId?: string) => post<void>('/api/chat/cancel', { streamId: streamId || undefined, conversationId: conversationId || undefined }),
 
     // Stream event listeners — via WebSocket
