@@ -8,6 +8,7 @@ import { getChannelManager } from '../channels/channel-manager.js'
 import { enqueueCoalescedTrigger } from './trigger-queue.js'
 import { resolveChannelTarget } from './channel-target-resolver.js'
 import { getGateway } from '../gateway/gateway.js'
+import { generateTitle } from '../agent/post-execution.js'
 import type { AgentExecutorResult } from '../agent/agent-executor.js'
 
 type CronNotificationMode = 'always' | 'conditional'
@@ -255,13 +256,14 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
     const userContent = job.prompt
         ? `Scheduled cron job due at ${scheduledDate.toISOString()} and started at ${now.toISOString()}.\n\n${job.prompt}`
         : `Scheduled cron job due at ${scheduledDate.toISOString()} and started at ${now.toISOString()}. Execute your scheduled task as described in your instructions.`
+    const titleSource = job.prompt.trim() || agent.cronPrompt.trim() || 'Execute scheduled agent task'
 
     try {
         const { conversationId, result } = await runTriggerExecution({
             agent,
             userContent,
             origin: 'cron',
-            title: `Cron Job ${now.toLocaleString()}`,
+            title: 'New Chat',
             systemPromptSuffix: '\nUse your tools to perform the scheduled task.',
             broadcast,
             signal: abortController.signal,
@@ -271,6 +273,15 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
                 if (run) run.conversationId = id
             },
         })
+
+        generateTitle({
+            conversationId,
+            userMessage: titleSource,
+            assistantResponse: result.content,
+            broadcast,
+            providerId: result.provider || undefined,
+            model: result.model || undefined,
+        }).catch(() => { })
 
         // Send result to configured output channel if set
         if (job.outputChannelId) {
