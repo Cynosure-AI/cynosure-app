@@ -4,7 +4,7 @@ import UsageMetrics from '../components/shared/UsageMetrics.vue'
 
 <template>
   <div class="h-full overflow-y-auto">
-    <div class="max-w-4xl mx-auto py-8 px-6">
+    <div class="max-w-6xl mx-auto py-8 px-6">
       <!-- Header -->
       <div class="mb-8">
         <h1 class="text-2xl font-bold text-theme-100">

@@ -58,6 +58,11 @@ const maxToolCalls = computed(() => {
   return metrics.value.toolUsage[0].callCount
 })
 
+const maxAuxiliaryRequests = computed(() => {
+  if (!metrics.value?.auxiliaryModelUsage.length) return 1
+  return metrics.value.auxiliaryModelUsage[0].requestCount
+})
+
 function formatCost(cost: number | null): string {
   if (cost === null) return '—'
   if (cost < 0.01) return '<$0.01'
@@ -255,6 +260,12 @@ async function confirmReset(): Promise<void> {
           <div class="flex justify-between text-theme-400 mb-0.5">
             <span>Estimated cost</span><span class="text-amber-400">{{ formatCost(metrics.totals.estimatedCost) }}</span>
           </div>
+          <div class="flex justify-between text-theme-400 mb-0.5">
+            <span>Chat models</span><span class="text-theme-300">{{ formatCost(metrics.totals.chatEstimatedCost) }}</span>
+          </div>
+          <div class="flex justify-between text-theme-400 mb-0.5">
+            <span>Embeddings + rerankers</span><span class="text-theme-300">{{ formatCost(metrics.totals.auxiliaryEstimatedCost) }}</span>
+          </div>
           <div class="flex justify-between text-theme-400">
             <span>Avg latency</span><span class="text-theme-300">{{ metrics.totals.avgLatencyMs.toLocaleString() }}ms</span>
           </div>
@@ -287,8 +298,8 @@ async function confirmReset(): Promise<void> {
       :days="selectedDays"
     />
 
-    <!-- Two-column: Models + Tools -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <!-- Usage breakdown -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
       <!-- Model Usage -->
       <BaseCard class="p-4">
         <h3 class="text-xs font-medium text-theme-400 mb-3">
@@ -320,6 +331,46 @@ async function confirmReset(): Promise<void> {
             </div>
             <div class="text-[10px] text-theme-600 mt-0.5">
               {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
+              <span
+                v-if="m.estimatedCost !== null"
+                class="text-amber-500/80 ml-1"
+              >· {{ formatCost(m.estimatedCost) }}</span>
+            </div>
+          </div>
+        </div>
+      </BaseCard>
+
+      <!-- Embedding / Reranker Usage -->
+      <BaseCard class="p-4">
+        <h3 class="text-xs font-medium text-theme-400 mb-3">
+          Embeddings &amp; Rerankers
+        </h3>
+        <div
+          v-if="!metrics.auxiliaryModelUsage.length"
+          class="text-xs text-theme-600 py-4 text-center"
+        >
+          No embedding or reranker data
+        </div>
+        <div
+          v-else
+          class="space-y-2"
+        >
+          <div
+            v-for="m in metrics.auxiliaryModelUsage.slice(0, 8)"
+            :key="m.kind + m.provider + m.model"
+          >
+            <div class="flex items-center justify-between text-xs mb-0.5">
+              <span class="text-theme-300 truncate mr-2">{{ m.model }}</span>
+              <span class="text-theme-500 shrink-0">{{ formatNumber(m.requestCount) }} reqs</span>
+            </div>
+            <div class="w-full h-1.5 bg-theme-800 rounded-full overflow-hidden">
+              <div
+                class="h-full bg-sky-500/70 rounded-full"
+                :style="{ width: (m.requestCount / maxAuxiliaryRequests * 100) + '%' }"
+              />
+            </div>
+            <div class="text-[10px] text-theme-600 mt-0.5">
+              {{ m.kind === 'embedding' ? 'Embedding' : 'Reranker' }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
                 class="text-amber-500/80 ml-1"
