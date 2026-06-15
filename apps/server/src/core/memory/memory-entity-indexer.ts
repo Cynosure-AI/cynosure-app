@@ -104,8 +104,8 @@ export async function indexMemoryContentIntoEntityGraph(opts: {
   signal?: AbortSignal
 }): Promise<MemoryEntityIndexResult> {
   const sourceId = memoryGraphSourceId(opts.spaceId, opts.fileName)
+  const legacySourceId = legacyMemoryGraphSourceId(opts.fileName)
   const graph = getEntityGraphStore()
-  const existingEdgeIds = graph.edgeIdsBySourceId(sourceId)
   const configuredTarget = getMemoryEntityExtractionConfig()
   const result = await graph.extractFromContent({
     content: opts.content,
@@ -115,15 +115,10 @@ export async function indexMemoryContentIntoEntityGraph(opts: {
     model: opts.model || configuredTarget.model,
     signal: opts.signal,
     systemPrompt: 'Extract durable named entities and explicit relationships from this saved memory document.',
+    replaceSourceIds: opts.replaceExisting === false
+      ? undefined
+      : Array.from(new Set([sourceId, legacySourceId])),
   })
-  if (opts.replaceExisting !== false && result.touchedEdgeIds.length > 0) {
-    graph.deleteEdgesBySourceIdExcept(sourceId, result.touchedEdgeIds)
-    const legacy = legacyMemoryGraphSourceId(opts.fileName)
-    if (legacy !== sourceId) graph.deleteEdgesBySourceId(legacy)
-  } else if (opts.replaceExisting !== false && existingEdgeIds.length === 0 && result.touchedEdgeIds.length === 0) {
-    const legacy = legacyMemoryGraphSourceId(opts.fileName)
-    if (legacy !== sourceId) graph.deleteEdgesBySourceId(legacy)
-  }
   const entityIndexedAt = Date.now()
   markMemoryFileEntityIndexed(opts.spaceId, opts.fileName, entityIndexedAt)
   return {

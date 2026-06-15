@@ -998,6 +998,7 @@ export class EntityGraphStore {
     model?: string
     signal?: AbortSignal
     systemPrompt?: string
+    replaceSourceIds?: string[]
   }): Promise<{ insertedOrUpdated: number; deleted: number; touchedEdgeIds: string[] }> {
     const gateway = getGateway()
     const provider = opts.providerId
@@ -1035,6 +1036,9 @@ export class EntityGraphStore {
     let deleted = 0
     const touchedEdgeIds: string[] = []
     const now = Date.now()
+    for (const sourceId of Array.from(new Set(opts.replaceSourceIds || [])).filter(Boolean)) {
+      deleted += this.deleteEdgesBySourceId(sourceId).edgesDeleted
+    }
     for (const item of rawRelations.slice(0, 24)) {
       if (!item || typeof item !== 'object') continue
       const obj = item as { action?: unknown; from?: unknown; relation?: unknown; to?: unknown; importance?: unknown; confidence?: unknown; evidence?: unknown }
@@ -1061,24 +1065,6 @@ export class EntityGraphStore {
       }
     }
     return { insertedOrUpdated: count, deleted, touchedEdgeIds }
-  }
-
-  edgeIdsBySourceId(sourceId: string): string[] {
-    const rows = getDb().prepare('SELECT id FROM entity_graph_edges WHERE source_id = ?').all(sourceId) as { id: string }[]
-    return rows.map((row) => row.id)
-  }
-
-  deleteEdgesBySourceIdExcept(sourceId: string, keepEdgeIds: string[]): DeleteEdgeResult {
-    const keep = new Set(keepEdgeIds)
-    const edgeIds = this.edgeIdsBySourceId(sourceId).filter((id) => !keep.has(id))
-    const orphanedNodeIds = new Set<string>()
-    let edgeDeleted = false
-    for (const edgeId of edgeIds) {
-      const result = this.deleteEdge(edgeId)
-      if (result.edgeDeleted) edgeDeleted = true
-      for (const nodeId of result.orphanedNodeIds) orphanedNodeIds.add(nodeId)
-    }
-    return { edgeDeleted, orphanedNodeIds: Array.from(orphanedNodeIds) }
   }
 
   deleteEdgesBySourceId(sourceId: string): { edgesDeleted: number; orphanedNodeIds: string[] } {
