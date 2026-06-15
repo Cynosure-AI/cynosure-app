@@ -5,6 +5,7 @@ import type { MemorySpace, MemoryFileStatus, MemoryIndexJob } from "../../api/ty
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentModal from "./MemoryDocumentModal.vue";
+import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
 
@@ -313,7 +314,9 @@ interface MemoryEntry {
 }
 
 const showDocumentModal = ref(false);
+const showEditorModal = ref(false);
 const modalFileName = ref("");
+const editorFileName = ref("");
 const fileChunks = ref<Map<string, MemoryEntry[]>>(new Map());
 const fileChunksLoading = ref<Set<string>>(new Set());
 
@@ -341,6 +344,21 @@ function openDocumentModal(fileName: string) {
   modalFileName.value = fileName;
   showDocumentModal.value = true;
   loadFileChunks(fileName);
+}
+
+function openEditorModal(fileName: string) {
+  const file = files.value.find((f) => f.fileName === fileName);
+  if (!file?.textDirect) return;
+  editorFileName.value = fileName;
+  showEditorModal.value = true;
+}
+
+async function handleEditorSaved() {
+  showEditorModal.value = false;
+  fileChunks.value = new Map();
+  await loadFiles();
+  await loadJobs();
+  emit("spacesChanged");
 }
 
 // --- Drag ---
@@ -395,7 +413,9 @@ watch(
     jobs.value = [];
     handledTerminalJobIds.value = new Set();
     showDocumentModal.value = false;
+    showEditorModal.value = false;
     modalFileName.value = "";
+    editorFileName.value = "";
     searchQuery.value = "";
     page.value = 0;
     loadFiles();
@@ -754,7 +774,19 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           </span>
         </div>
 
-        <!-- Re-index button -->
+        <!-- File actions -->
+        <button
+          v-if="file.textDirect"
+          class="shrink-0 p-1.5 text-theme-500 hover:text-accent-300 rounded-lg hover:bg-theme-800/70 transition-colors opacity-0 group-hover/row:opacity-100 focus:opacity-100"
+          title="Edit memory"
+          @click.stop="openEditorModal(file.fileName)"
+        >
+          <Icon
+            icon="lucide:pencil"
+            class="w-3.5 h-3.5"
+          />
+        </button>
+
         <button
           v-if="file.supported && (file.status === 'needs_reindex' || file.status === 'not_indexed')"
           class="shrink-0 flex items-center gap-1 px-2 py-1 text-xs bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded transition-colors disabled:opacity-50"
@@ -831,6 +863,14 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       :chunks="fileChunks.get(modalFileName) ?? []"
       :loading="fileChunksLoading.has(modalFileName)"
       @close="showDocumentModal = false"
+    />
+
+    <MemoryDocumentEditorModal
+      :show="showEditorModal"
+      :space-id="spaceId"
+      :source-file="editorFileName"
+      @close="showEditorModal = false"
+      @saved="handleEditorSaved"
     />
 
     <!-- Hidden file input -->
