@@ -1,0 +1,450 @@
+# Memory System
+
+The Cynosure memory system provides agents with **durable, retrievable knowledge** that persists across conversations. It is composed of two fundamentally different subsystems that work together to give agents rich context:
+
+1. **Vector/Semantic Memory** — chunked text stored in LanceDB, retrieved via hybrid (vector + FTS) search
+2. **Entity Graph** — a structured knowledge graph of named entities and their relationships, stored in SQLite
+
+---
+
+## Table of Contents
+
+- [Architecture Overview](#architecture-overview)
+- [Vector / Semantic Memory (RAG)](#vector--semantic-memory-rag)
+  - [Ingestion pipeline (chunk → embed → store)](#ingestion-pipeline)
+  - [Hybrid Search (vector + FTS + RRF)](#hybrid-search)
+  - [Optional LLM Reranker](#optional-llm-reranker)
+  - [What is returned & how much](#what-is-returned--how-much)
+  - [Memory Spaces & scoping](#memory-spaces--scoping)
+- [Entity Graph](#entity-graph)
+  - [Entity extraction](#entity-extraction)
+  - [Graph storage & deduplication](#graph-storage--deduplication)
+  - [Seed node search](#seed-node-search)
+  - [Graph walk (traversal)](#graph-walk)
+  - [What is returned & how much](#entity-graph-returned)
+- [Memory Aggregator — combining both subsystems](#memory-aggregator)
+  - [How they are coupled](#how-they-are-coupled)
+  - [Formatting for prompt injection](#formatting-for-prompt-injection)
+- [Auto Memory Routing](#auto-memory-routing)
+- [Key files](#key-files)
+
+---
+
+## Architecture Overview
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                        MemoryAggregator                              │
+│  ┌──────────────────────────────┐   ┌──────────────────────────────┐ │
+│  │      AgentMemory (RAG)       │   │    EntityGraphStore          │ │
+│  │  ┌──────────┐ ┌───────────┐  │   │  ┌──────────┐ ┌───────────┐ │ │
+│  │  │ Memory   │ │ LanceDB   │  │   │  │ SQLite   │ │ LLM-based │ │ │
+│  │  │ Parser   │ │ (vector + │  │   │  │ (nodes + │ │ extraction│ │ │
+│  │  │ (chunk)  │ │  FTS)     │  │   │  │  edges)  │ │ pipeline  │ │ │
+│  │  └──────────┘ └───────────┘  │   │  └──────────┘ └───────────┘ │ │
+│  └──────────────────────────────┘   └──────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────┘
+         ▲                                       ▲
+         │                                       │
+    ┌────┴────┐                           ┌──────┴──────┐
+    │Embedding│                           │  Gateway    │
+    │Provider │                           │  (LLM call) │
+    └─────────┘                           └─────────────┘
+```
+
+**Key insight**: these two subsystems are **loosely coupled**. The entity graph is an _enrichment layer_ on top of semantic memory — the aggregator first retrieves vector chunks, then uses them to find relevant entities. One can function without the other.
+
+---
+
+## Vector / Semantic Memory (RAG)
+
+### Ingestion pipeline
+
+When a memory file is added or re-indexed, the pipeline is:
+
+```
+File on disk
+    │
+    ▼
+Read & parse ────► If document (PDF, docx), convert to markdown
+    │
+    ▼
+Chunk ────► RecursiveCharacterTextSplitter (markdown-aware)
+    │           │ Default: 512 tokens per chunk, 64 token overlap
+    │           │ Configurable via DB setting 'chunking'
+    │           │ Heading-only chunks are merged forward
+    │           ▼
+    │    Produces N text chunks
+    │
+    ▼
+Embed ────► EmbeddingProvider.embedBatch()
+    │           │ Supports OpenAI-compatible APIs & Google Gemini
+    │           │ Batches of 32, with retry (2 attempts, exponential backoff)
+    │           │ Sliding-window pipeline: embed next batch concurrent with
+    │           │   LanceDB write of previous batch
+    │           ▼
+    │    Produces N embedding vectors (default 1536-dim)
+    │
+    ▼
+Store ────► RAGStore.addDocuments() into LanceDB table "permanent_memory"
+                │ FTS index rebuilt 15s after last write (debounced)
+                │ BTree index on spaceId for fast scoping
+                ▼
+         LanceDB row: { id, text, vector, source, sourceFile,
+                        chunkIndex, spaceId, createdAt }
+```
+
+**Configurable chunk settings** (via `settings` table, key `'chunking'`):
+
+| Setting        | Default | Description                           |
+| -------------- | ------- | ------------------------------------- |
+| `chunkSize`    | 512     | Target tokens per chunk               |
+| `chunkOverlap` | 64      | Token overlap between adjacent chunks |
+
+### Hybrid Search
+
+Retrieval from LanceDB uses a **hybrid** approach combining two signals:
+
+```python
+hybridSearch(queryText):
+    1. Embed queryText → queryVector (via EmbeddingProvider)
+    2. Determine candidateCount:
+         - If LLM reranker enabled: max(topK, configured candidateCount)
+         - Otherwise: topK
+    3. Run TWO queries CONCURRENTLY:
+       a. Hybrid query: vector + FTS + RRF reranker
+            → LanceDB native hybrid (cosine + BM25 merged via RRF)
+            → Returns topK results
+       b. Vector-only query: cosine distance only
+            → Returns topK*3 results (used ONLY for score extraction
+               because hybrid query doesn't expose individual scores)
+    4. Score each hybrid result using the vector-only distance score:
+         score = 1 - cosine_distance
+    5. Optionally pass through LLM reranker
+    6. Return topK ranked chunks
+```
+
+**The FTS (full-text search)** index uses LanceDB's built-in BM25 via `createIndex('text', { config: lancedb.Index.fts() })`. It is rebuilt:
+
+- Eagerly after bulk deletes
+- 15 seconds after the last write (debounced, to batch bulk uploads)
+- Lazily on first search if stale
+
+**Fallback**: If the hybrid query fails (missing FTS index), the system falls back to pure vector-only search.
+
+### Optional LLM Reranker
+
+The `MemoryReranker` can optionally improve ranking via an OpenRouter-compatible reranking endpoint:
+
+| Setting          | Default                | Description                                                            |
+| ---------------- | ---------------------- | ---------------------------------------------------------------------- |
+| `enabled`        | false                  | Whether to use LLM reranking                                           |
+| `model`          | `cohere/rerank-4-fast` | Allowed: cohere/rerank-v3.5, cohere/rerank-4-fast, cohere/rerank-4-pro |
+| `candidateCount` | 30                     | How many hybrid results to fetch before reranking (min 3, max 50)      |
+| `providerId`     | —                      | OpenRouter provider ID for reranking                                   |
+
+When enabled, the pipeline is:
+
+```
+hybridSearch(topK=30) → rerank(query, 30 results) → return topK=5
+```
+
+If reranking fails, it logs a warning and falls back to the raw hybrid ranking.
+
+### What is returned & how much
+
+**Default `topK = 3`** is used by `AgentMemory.recall()`, which is called by `MemoryAggregator.aggregate()`.
+
+The `MemoryAggregator` allows callers to override via `permanentTopK` (e.g., auto-routing uses 12).
+
+Each `RetrievedChunk` contains:
+
+```typescript
+{
+  id: string           // nanoid
+  text: string         // The chunk content
+  source: string       // Always "permanent"
+  score: number        // Cosine similarity (0..1, higher = better)
+  rerankerScore?: number // If LLM reranker was used
+  sourceFile?: string  // Filename in the memory space
+  chunkIndex?: number  // Sequential index within the file
+  spaceId?: string     // UUID of the memory space
+  spaceName?: string   // Resolved human-readable name
+  totalChunks?: number // Total chunks for this source file (enriched by aggregator)
+}
+```
+
+### Memory Spaces & scoping
+
+All memory is scoped to **memory spaces** (UUIDs stored in `memory_spaces` SQLite table). Each space has:
+
+- An `id` (UUID)
+- A `name` (human-readable)
+- A `folder_path` on disk where files live
+- An `is_default` flag
+
+Scoping is enforced via LanceDB `WHERE spaceId IN (...)` filters. The aggregator resolves scopes in this priority order:
+
+1. Explicit `spaceIds[]` passed by caller
+2. Agent's assigned spaces in `agent_memory_spaces` table
+3. All spaces (fallback)
+
+---
+
+## Entity Graph
+
+The entity graph stores **structured facts** as nodes (entities) and edges (relationships) in SQLite tables `entity_graph_nodes` and `entity_graph_edges`.
+
+### Entity types
+
+| Type           | Description                      |
+| -------------- | -------------------------------- |
+| `person`       | Named individuals                |
+| `place`        | Geographic locations             |
+| `organization` | Companies, groups, teams         |
+| `project`      | Named initiatives                |
+| `event`        | Specific occurrences             |
+| `date`         | Temporal references              |
+| `technology`   | Tools, frameworks, languages     |
+| `product`      | Commercial products              |
+| `artifact`     | Documents, files, code artifacts |
+| `concept`      | Abstract ideas                   |
+| `other`        | Default fallback                 |
+
+### Importance levels
+
+| Level | Label     | Description                                               |
+| ----- | --------- | --------------------------------------------------------- |
+| 0     | temporary | Random / conversational / throwaway                       |
+| 1     | minor     | Mildly interesting, probably not worth saving (default)   |
+| 2     | useful    | Durable fact worth remembering                            |
+| 3     | core      | Core fact about user, project, preference, goal, identity |
+
+Importance is **auto-inferred** if not explicitly provided by the LLM:
+
+- Source kind `memory` → level 2
+- Relations like `prefers`, `works_at`, `lives_in`, `goal`, `working_on` → level 3
+- Relations like `depends_on`, `part_of`, `located_in`, `created` → level 2
+- Everything else → level 1
+
+Node importance is **derived from edges**: a node's importance is the maximum importance of all edges connected to it.
+
+### Entity extraction
+
+Entity extraction is done by an **LLM call** (not by the embedding model). The pipeline:
+
+```
+Memory file or chat turn
+    │
+    ▼
+LLM call via Gateway ────► System prompt instructs JSON output format
+    │                          │ Extract named entities + relationships
+    │                          │ Return array of { action, from, relation, to,
+    │                          │   importance, confidence, evidence }
+    │                          │ action: "assert" or "delete"
+    │                          ▼
+    │                   Raw LLM response (up to 4096 tokens)
+    │
+    ▼
+parseJsonArray() ────► Robust JSON extraction:
+                          │ Strips markdown fences
+                          │ Falls back to finding [ ] brackets
+                          │ Attempts to salvage truncated JSON
+                          │ Limits to 24 relations per extraction
+    │
+    ▼
+For each relation:
+  "assert" → EntityGraphStore.upsertEdge()
+                │ upsertNode() for both endpoints (dedup by normalized name)
+                │ upsertEdge(): if single-target relation (e.g. works_at),
+                │   delete previous edge to different target
+                │ Merge duplicate nodes if name collision detected
+  "delete" → EntityGraphStore.deleteMatchingEdge()
+```
+
+Extraction sources:
+
+- **Memory files**: triggered by `indexMemoryContentIntoEntityGraph()` via `memory-entity-indexer.ts`
+- **Conversation turns**: triggered by `extractFromTurn()` via chat processing pipeline
+- **Configuration**: provider/model configurable via DB setting `'memoryEntityExtraction'`
+
+Content is truncated to **8000 characters** sent to the LLM.
+
+### Graph storage & deduplication
+
+**Nodes** (`entity_graph_nodes`):
+
+| Column                           | Description                                       |
+| -------------------------------- | ------------------------------------------------- |
+| `id`                             | nanoid (unique)                                   |
+| `name`                           | Display name (as written)                         |
+| `normalized_name`                | Lowercased, punctuation-stripped (used for dedup) |
+| `type`                           | One of the 11 entity types                        |
+| `aliases_json`                   | JSON array of alias strings                       |
+| `importance`                     | 0–3                                               |
+| `mention_count`                  | How many times seen                               |
+| `source_count`                   | How many distinct sources mentioned it            |
+| `first_seen_at` / `last_seen_at` | Timestamps                                        |
+
+**Edges** (`entity_graph_edges`):
+
+| Column                           | Description                                           |
+| -------------------------------- | ----------------------------------------------------- |
+| `id`                             | nanoid (unique)                                       |
+| `from_node_id` / `to_node_id`    | FK to nodes                                           |
+| `relation`                       | Normalized snake_case (e.g. `works_at`, `located_in`) |
+| `importance`                     | 0–3                                                   |
+| `confidence`                     | 0.1–1.0                                               |
+| `evidence`                       | Short sentence justifying the fact                    |
+| `source_kind`                    | `"memory"` or `"conversation"`                        |
+| `source_id`                      | Source document ID or conversation ID                 |
+| `mention_count`                  | How many times this edge was asserted                 |
+| `first_seen_at` / `last_seen_at` | Timestamps                                            |
+
+**Deduplication logic**:
+
+- Nodes are deduplicated by `normalized_name` (case-insensitive, punctuation-ignored)
+- Alias matching: `aliases_json` is searched with SQL `LIKE`
+- When a new name matches multiple existing nodes, they are **merged**:
+  - Aliases are unioned
+  - Mention/source counts are summed
+  - Edges are re-pointed to the survivor node
+  - Duplicate edges (same from/relation/to) are merged (confidence maxed, mention counts summed)
+- Single-target relations (e.g., `works_at`, `lives_in`, `reports_to`) replace the previous edge to a different target
+
+### Seed node search
+
+`findSeedNodes(text, extraTexts[], limit = 8)` — finds entity nodes relevant to a query:
+
+1. **Tokenize** the query and extra texts into tokens of 3+ characters
+2. **Exact match phase**: search `normalized_name` and `aliases_json` for exact token matches
+3. **Scoring**: each node gets a composite score:
+   - exact name match = +100
+   - name contains query = +80
+   - query contains name (≥3 chars) = +70
+   - haystack contains name = +45
+   - per-token: exact = +40, partial = +24, token-in-name = +18, prefix match = +8
+4. **Fallback phase**: if no exact seeds found, search by prefix (first 3 chars of each token)
+5. Returns top `limit` (default 8) nodes, sorted by score → mentionCount → lastSeenAt
+
+### Graph walk
+
+`walk(seedNodeIds, depth = 2, edgeLimit = 40)` — BFS traversal from seed nodes:
+
+- Starts with seed node IDs
+- At each depth level, fetches all edges where `from_node_id` OR `to_node_id` is in the frontier
+- Adds new node IDs to the frontier for the next level
+- Edges sorted by: confidence DESC, mention_count DESC, last_seen_at DESC
+- Per-depth limit: `ceil(edgeLimit / depth)` with remaining budget on the last level
+- Returns `{ seedNodes, nodes, edges }` — all unique, up to `edgeLimit` edges
+
+### What is returned
+
+A `GraphWalkResult` contains:
+
+```typescript
+{
+  seedNodes: EntityNode[],   // The matched seed nodes (with origins hydrated)
+  nodes: EntityNode[],       // All nodes reached by the walk
+  edges: EntityEdge[],       // All edges traversed
+}
+```
+
+Each `EntityNode` includes an `origins` field (up to 8) showing which sources contributed to it:
+
+```typescript
+{
+  sourceKind: "memory" | "conversation",
+  sourceId: string,
+  label: string,        // Human-readable source name
+  count: number,        // How many mentions from this source
+  lastSeenAt: number
+}
+```
+
+When formatted for prompt injection via `formatWalk()`, it produces:
+
+```
+## Entity Graph Context
+- [core] Alice -> works_at -> Acme Corp. Evidence: Alice is the CEO of Acme Corp.
+- [useful] Bob -> manages -> Alice. Evidence: Bob is Alice's direct manager.
+```
+
+---
+
+## Memory Aggregator
+
+**`MemoryAggregator.aggregate(query, opts?)`** is the main entry point that **combines both subsystems**.
+
+### How they are coupled
+
+The coupling is **loose but intentional**:
+
+1. **Semantic search runs first** — retrieves up to `permanentTopK` (default 3, auto-routing uses 12) chunks from LanceDB
+2. **Deduplication**: chunks with identical first-100-characters are collapsed
+3. **Chunk enrichment**: totalChunks per source file is computed
+4. **Entity graph enrichment**: the aggregator calls:
+
+   ```
+   graph.findSeedNodes(query, chunkTexts, 8) → seed nodes
+   if seedNodes.length > 0:
+       graph.walk(seedNodeIds, depth=2, edgeLimit=32) → full walk
+   ```
+
+   - The seed search uses **both** the original query AND the retrieved chunk texts
+   - If no seed nodes match, `graph` is `undefined` — the aggregator still returns semantic results
+   - If the graph walk fails (e.g., DB error), it's caught and logged as a warning; semantic results are still returned
+
+5. **Both results are returned** as `{ permanent: RetrievedChunk[], graph?: GraphWalkResult }`
+
+**Important**: The entity graph enriches semantic memory, but does NOT replace it. You can have:
+
+- Semantic results only (no entities matched)
+- Graph results only (semantic query returned nothing but entities matched — **not possible** in current code since graph enrichment requires semantic results first)
+- Both combined (normal case)
+
+### Formatting for prompt injection
+
+`format(memory)` produces a string suitable for injecting into the agent's system prompt:
+
+```
+## Relevant Knowledge
+- [MemorySpaceName · filename.md · Part 1/3] Chunk text content here...
+- [MemorySpaceName · filename.md · Part 2/3] More chunk text...
+
+## Entity Graph Context
+- [core] Entity A -> relation -> Entity B. Evidence: ...
+```
+
+---
+
+## Auto Memory Routing
+
+The `auto-memory-routing.ts` module decides **whether** and **how** to retrieve memory during a conversation turn.
+
+1. **Gate check**: `shouldRouteMemory()` — currently always returns `true` if the feature is enabled
+2. **Primary retrieval**: aggregate with `permanentTopK=12` using the user's query
+3. **Fallback retrieval**: if primary returned nothing AND there's contextual history, retry with a built contextual query
+4. **Selection**: from the 12 candidates, select up to 5 most relevant chunks (via LLM call)
+5. **Chunk expansion**: if a selected chunk references a multi-chunk file, fetch adjacent chunks
+6. **Format & inject**: the selected/formatted memory is prepended to the system message
+
+---
+
+## Key files
+
+| File                                                              | Purpose                                                              |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `apps/server/src/core/memory/agent-memory.ts`                     | `AgentMemory` class — file-backed operations, ingest, recall, delete |
+| `apps/server/src/core/memory/parser.ts`                           | `MemoryParser` — chunking, embedding, retrieval pipeline             |
+| `apps/server/src/core/memory/rag.ts`                              | `RAGStore` — LanceDB lifecycle, vector & hybrid search, FTS index    |
+| `apps/server/src/core/memory/embedding.ts`                        | `EmbeddingProvider` — connects to OpenAI / Gemini for embeddings     |
+| `apps/server/src/core/memory/reranker.ts`                         | `MemoryReranker` — optional OpenRouter-based reranking               |
+| `apps/server/src/core/memory/entity-graph.ts`                     | `EntityGraphStore` — node/edge CRUD, dedup, extraction, walk         |
+| `apps/server/src/core/memory/memory-entity-indexer.ts`            | Bridge: triggers entity extraction when memory files are indexed     |
+| `apps/server/src/core/memory/memory-aggregator.ts`                | `MemoryAggregator` — combines RAG + entity graph                     |
+| `apps/server/src/core/memory/memory-index-jobs.ts`                | Job tracking for async reindex/entity-index operations               |
+| `apps/server/src/core/memory/memory-space-scope.ts`               | Memory space resolution & LanceDB filter construction                |
+| `apps/server/src/core/memory/lancedb-filter.ts`                   | SQL filter builders for LanceDB WHERE clauses                        |
+| `apps/server/src/core/memory/history.ts`                          | `HistoryStore` — conversation execution history (SQLite + JSONL)     |
+| `apps/server/src/core/agent/pre-execution/auto-memory-routing.ts` | Per-turn decision logic for automatic memory retrieval               |
