@@ -32,21 +32,21 @@ const prefs = usePreferencesStore()
 const expanded = ref(prefs.autoExpandToolCalls)
 const lightboxSrc = ref<string | null>(null)
 const statusMeta: Record<string, { label: string; icon: string; color: string }> = {
-  'building-task-context': { label: 'Preparing Context', icon: 'lucide:compass', color: 'text-cyan-300' },
-  'routing-tools': { label: 'Auto tool routing', icon: 'lucide:route', color: 'text-accent-300' },
-  'routing-memory': { label: 'Auto Memories', icon: 'lucide:brain-circuit', color: 'text-accent-300' },
-  'routing-skills': { label: 'Auto Skill Routing', icon: 'lucide:book-open-check', color: 'text-accent-300' },
-  'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-amber-400' },
-  denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-red-400' },
-  executing: { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-400' },
-  'ma-status': { label: 'Orchestrator', icon: 'lucide:network', color: 'text-violet-400' },
-  'ma-subagent-running': { label: 'Sub-agent running', icon: 'lucide:bot', color: 'text-indigo-400' },
-  'ma-subagent-done': { label: 'Sub-agent done', icon: 'lucide:check', color: 'text-emerald-400' },
-  'ma-subagent-failed': { label: 'Sub-agent failed', icon: 'lucide:x', color: 'text-red-400' },
-  'ma-done': { label: 'Complete', icon: 'lucide:check-circle-2', color: 'text-emerald-400' },
-  'ma-error': { label: 'Error', icon: 'lucide:alert-circle', color: 'text-red-400' },
+  'building-task-context': { label: 'Preparing Context', icon: 'lucide:compass', color: 'text-cyan-600 dark:text-cyan-300' },
+  'routing-tools': { label: 'Auto tool routing', icon: 'lucide:route', color: 'text-accent-500 dark:text-accent-300' },
+  'routing-memory': { label: 'Auto Memories', icon: 'lucide:brain-circuit', color: 'text-accent-500 dark:text-accent-300' },
+  'routing-skills': { label: 'Auto Skill Routing', icon: 'lucide:book-open-check', color: 'text-accent-500 dark:text-accent-300' },
+  'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-amber-500 dark:text-amber-400' },
+  denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-red-500 dark:text-red-400' },
+  executing: { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-500 dark:text-emerald-400' },
+  'ma-status': { label: 'Orchestrator', icon: 'lucide:network', color: 'text-violet-500 dark:text-violet-400' },
+  'ma-subagent-running': { label: 'Sub-agent running', icon: 'lucide:bot', color: 'text-indigo-500 dark:text-indigo-400' },
+  'ma-subagent-done': { label: 'Sub-agent done', icon: 'lucide:check', color: 'text-emerald-500 dark:text-emerald-400' },
+  'ma-subagent-failed': { label: 'Sub-agent failed', icon: 'lucide:x', color: 'text-red-500 dark:text-red-400' },
+  'ma-done': { label: 'Complete', icon: 'lucide:check-circle-2', color: 'text-emerald-500 dark:text-emerald-400' },
+  'ma-error': { label: 'Error', icon: 'lucide:alert-circle', color: 'text-red-500 dark:text-red-400' },
   'ma-file': { label: 'File', icon: 'lucide:file-text', color: 'text-theme-400' },
-  'memory-retrieved': { label: 'Memory retrieved', icon: 'lucide:brain', color: 'text-accent-300' },
+  'memory-retrieved': { label: 'Memory retrieved', icon: 'lucide:brain', color: 'text-accent-500 dark:text-accent-300' },
 }
 
 function meta(s: string) {
@@ -91,10 +91,10 @@ function subAgentCodenameFromArgs(args: string): string | null {
 }
 
 function toolChipClass(name: string): string {
-  if (name === 'Task context') return 'bg-cyan-500/10 text-cyan-300 ring-1 ring-cyan-500/15'
+  if (name === 'Task context') return 'bg-cyan-200/40 text-cyan-700 ring-1 ring-cyan-400/25 dark:bg-cyan-500/10 dark:text-cyan-300 dark:ring-cyan-500/15'
   return isSubAgentSpawnCall(name)
-    ? 'bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/20'
-    : 'bg-accent-500/10 text-accent-300'
+    ? 'bg-indigo-200/40 text-indigo-700 ring-1 ring-indigo-400/30 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-500/20'
+    : 'bg-accent-200/40 text-accent-700 dark:bg-accent-500/10 dark:text-accent-300'
 }
 
 function toolCallIcon(call: { name: string; arguments: string }): string {
@@ -106,8 +106,8 @@ function toolCallIcon(call: { name: string; arguments: string }): string {
 }
 
 function toolCallIconClass(name: string, args = ''): string {
-  if (isTaskContextCall({ name, arguments: args })) return 'text-cyan-300'
-  return isSubAgentSpawnCall(name) ? 'text-indigo-400' : 'text-accent-400'
+  if (isTaskContextCall({ name, arguments: args })) return 'text-cyan-600 dark:text-cyan-300'
+  return isSubAgentSpawnCall(name) ? 'text-indigo-500 dark:text-indigo-400' : 'text-accent-500 dark:text-accent-400'
 }
 
 /** Current phase — the last meaningful status in this iteration */
@@ -245,12 +245,12 @@ const maContext = computed(() => {
             :class="[
               isTaskContext
                 ? isExpanded
-                  ? 'bg-cyan-950/20 border border-cyan-500/30 shadow-md shadow-cyan-950/10'
-                  : 'bg-cyan-950/10 hover:bg-cyan-950/20 hover:border-cyan-500/25 border border-cyan-500/15'
+                  ? 'bg-cyan-100/60 border border-cyan-400/40 shadow-md shadow-cyan-500/5 dark:bg-cyan-950/20 dark:border-cyan-500/30 dark:shadow-cyan-950/10'
+                  : 'bg-cyan-50/80 hover:bg-cyan-100/60 hover:border-cyan-400/35 border border-cyan-300/30 dark:bg-cyan-950/10 dark:hover:bg-cyan-950/20 dark:hover:border-cyan-500/25 dark:border-cyan-500/15'
                 : isSubAgentSpawnIteration
                   ? isExpanded
-                    ? 'bg-indigo-950/20 border border-indigo-500/35 shadow-md shadow-indigo-950/20'
-                    : 'bg-indigo-950/10 hover:bg-indigo-950/20 hover:border-indigo-500/35 border border-indigo-500/20'
+                    ? 'bg-indigo-100/60 border border-indigo-400/40 shadow-md shadow-indigo-500/5 dark:bg-indigo-950/20 dark:border-indigo-500/35 dark:shadow-indigo-950/20'
+                    : 'bg-indigo-50/80 hover:bg-indigo-100/60 hover:border-indigo-400/35 border border-indigo-300/30 dark:bg-indigo-950/10 dark:hover:bg-indigo-950/20 dark:hover:border-indigo-500/35 dark:border-indigo-500/20'
                   : isExpanded
                     ? 'bg-theme-800 border border-theme-700/60 shadow-md'
                     : 'bg-theme-800/60 hover:bg-theme-800 hover:border-theme-700/50 border border-transparent',
@@ -262,12 +262,12 @@ const maContext = computed(() => {
               :icon="currentPhase.label === 'Denied' ? 'lucide:shield-x' : isRoutingStatus ? currentPhase.icon : toolNames.length && !results.length ? (isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash') : allSuccess ? 'lucide:check-circle' : anyFailed ? 'lucide:alert-circle' : currentPhase.icon"
               class="w-3.5 h-3.5 shrink-0"
               :class="[
-                currentPhase.label === 'Denied' ? 'text-red-400' :
-                isTaskContext ? 'text-cyan-300' :
-                isRoutingStatus ? 'text-accent-300' :
-                toolNames.length && !results.length ? (isActive ? 'text-accent-400' : 'text-theme-500') :
-                allSuccess ? 'text-emerald-400' :
-                anyFailed ? 'text-red-400' :
+                currentPhase.label === 'Denied' ? 'text-red-500 dark:text-red-400' :
+                isTaskContext ? 'text-cyan-600 dark:text-cyan-300' :
+                isRoutingStatus ? 'text-accent-500 dark:text-accent-300' :
+                toolNames.length && !results.length ? (isActive ? 'text-accent-500 dark:text-accent-400' : 'text-theme-500') :
+                allSuccess ? 'text-emerald-500 dark:text-emerald-400' :
+                anyFailed ? 'text-red-500 dark:text-red-400' :
                 currentPhase.color
               ]"
             />
@@ -275,7 +275,7 @@ const maContext = computed(() => {
             <!-- MA context label -->
             <span
               v-if="maContext?.codename"
-              class="text-[10px] text-indigo-400/80 truncate max-w-16"
+              class="text-[10px] text-indigo-500/80 dark:text-indigo-400/80 truncate max-w-16"
               :title="maContext.agentName || maContext.codename"
             >{{ maContext.codename }}</span>
             <span
@@ -286,12 +286,12 @@ const maContext = computed(() => {
             <!-- Tool / skill names -->
             <div class="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
               <template v-if="isTaskContext">
-                <span class="text-cyan-300 shrink-0">{{ currentPhase.label }}</span>
+                <span class="text-cyan-600 dark:text-cyan-300 shrink-0">{{ currentPhase.label }}</span>
                 <template v-if="taskContext?.focusAreas.length">
                   <span
                     v-for="area in taskContext.focusAreas.slice(0, 3)"
                     :key="area"
-                    class="inline-flex items-center gap-1 rounded-md bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-medium text-cyan-200 truncate max-w-35"
+                    class="inline-flex items-center gap-1 rounded-md bg-cyan-100/60 px-1.5 py-0.5 text-[10px] font-medium text-cyan-700 truncate max-w-35 dark:bg-cyan-500/10 dark:text-cyan-200"
                   >
                     {{ area }}
                   </span>
@@ -336,7 +336,7 @@ const maContext = computed(() => {
             <span
               v-if="results.length"
               class="text-[10px] shrink-0"
-              :class="allSuccess ? 'text-emerald-400/70' : 'text-red-400/70'"
+              :class="allSuccess ? 'text-emerald-500/70 dark:text-emerald-400/70' : 'text-red-500/70 dark:text-red-400/70'"
             >{{ results.filter(r => r.success).length }}/{{ results.length }} ok</span>
 
             <!-- Elapsed -->
@@ -370,14 +370,14 @@ const maContext = computed(() => {
           <!-- Tool call arguments -->
           <div
             v-if="isTaskContext && taskContext"
-            class="rounded-lg border border-cyan-500/15 bg-cyan-500/5 px-3 py-2"
+            class="rounded-lg border border-cyan-300/30 bg-cyan-50/80 px-3 py-2 dark:border-cyan-500/15 dark:bg-cyan-500/5"
           >
             <div class="flex items-center gap-1.5 mb-1.5">
               <Icon
                 icon="lucide:compass"
-                class="w-3 h-3 text-cyan-300"
+                class="w-3 h-3 text-cyan-600 dark:text-cyan-300"
               />
-              <span class="text-[11px] font-medium text-cyan-200">Preparing context</span>
+              <span class="text-[11px] font-medium text-cyan-700 dark:text-cyan-200">Preparing context</span>
             </div>
             <div
               v-if="taskContext.focusAreas.length"
@@ -386,14 +386,14 @@ const maContext = computed(() => {
               <span
                 v-for="area in taskContext.focusAreas"
                 :key="area"
-                class="rounded-md bg-theme-950/50 px-1.5 py-0.5 text-[10px] text-cyan-200/80"
+                class="rounded-md bg-cyan-100/50 px-1.5 py-0.5 text-[10px] text-cyan-700/80 dark:bg-theme-950/50 dark:text-cyan-200/80"
               >
                 {{ area }}
               </span>
             </div>
             <p
               v-if="taskContext.routerQuery"
-              class="text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap break-words rounded-md bg-theme-950/45 px-2 py-1.5"
+              class="text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap break-words rounded-md bg-cyan-50/60 px-2 py-1.5 dark:bg-theme-950/45"
             >
               {{ taskContext.routerQuery }}
             </p>
@@ -404,9 +404,9 @@ const maContext = computed(() => {
               <div
                 v-for="query in taskContextQueries"
                 :key="query.label"
-                class="rounded-md bg-theme-950/35 px-2 py-1.5"
+                class="rounded-md bg-cyan-50/50 px-2 py-1.5 dark:bg-theme-950/35"
               >
-                <div class="text-[10px] font-medium uppercase tracking-wide text-cyan-300/70">
+                <div class="text-[10px] font-medium uppercase tracking-wide text-cyan-600/70 dark:text-cyan-300/70">
                   {{ query.label }}
                 </div>
                 <p class="mt-0.5 text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap break-words">
@@ -426,8 +426,8 @@ const maContext = computed(() => {
               :key="i"
               class="rounded-lg border px-3 py-2"
               :class="isSubAgentSpawnCall(tc.name)
-                ? 'bg-indigo-950/15 border-indigo-500/25'
-                : 'bg-theme-900/60 border-theme-700/30'"
+                ? 'bg-indigo-100/50 border-indigo-400/30 dark:bg-indigo-950/15 dark:border-indigo-500/25'
+                : 'bg-theme-800/50 border-theme-700/25 dark:bg-theme-900/60 dark:border-theme-700/30'"
             >
               <div class="flex items-center gap-1.5 mb-1">
                 <Icon
@@ -437,16 +437,16 @@ const maContext = computed(() => {
                 />
                 <span
                   class="text-[11px] font-medium"
-                  :class="isSubAgentSpawnCall(tc.name) ? 'text-indigo-300' : 'text-accent-300'"
+                  :class="isSubAgentSpawnCall(tc.name) ? 'text-indigo-600 dark:text-indigo-300' : 'text-accent-500 dark:text-accent-300'"
                 >{{ toolDisplayName(tc.name) }}</span>
                 <span
                   v-if="subAgentCodenameFromArgs(tc.arguments)"
-                  class="ml-1 inline-flex rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] text-indigo-300"
+                  class="ml-1 inline-flex rounded bg-indigo-200/40 px-1.5 py-0.5 text-[10px] text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"
                 >{{ subAgentCodenameFromArgs(tc.arguments) }}</span>
               </div>
               <pre
                 v-if="tc.arguments && tc.arguments !== '{}'"
-                class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-950/50 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono"
+                class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-100/60 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
               >{{ prettifyJson(tc.arguments) }}</pre>
             </div>
           </div>
@@ -461,14 +461,14 @@ const maContext = computed(() => {
               :key="i"
               class="rounded-lg border px-3 py-2"
               :class="r.success
-                ? 'bg-emerald-500/5 border-emerald-500/15'
-                : 'bg-red-500/5 border-red-500/15'"
+                ? 'bg-emerald-50/80 border-emerald-300/30 dark:bg-emerald-500/5 dark:border-emerald-500/15'
+                : 'bg-red-50/80 border-red-300/30 dark:bg-red-500/5 dark:border-red-500/15'"
             >
               <div class="flex items-center gap-1.5 mb-1">
                 <Icon
                   :icon="r.success ? 'lucide:check' : 'lucide:x'"
                   class="w-3 h-3"
-                  :class="r.success ? 'text-emerald-400' : 'text-red-400'"
+                  :class="r.success ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'"
                 />
                 <span
                   class="text-[11px] font-medium"
