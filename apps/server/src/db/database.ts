@@ -219,6 +219,19 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_skill_embeddings_updated ON skill_embeddings(updated_at);
 
+    CREATE TABLE IF NOT EXISTS auxiliary_model_usage (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL DEFAULT '',
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      request_count INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_auxiliary_model_usage_created ON auxiliary_model_usage(created_at);
+    CREATE INDEX IF NOT EXISTS idx_auxiliary_model_usage_kind ON auxiliary_model_usage(kind);
+
     CREATE TABLE IF NOT EXISTS pending_hitl (
       task_id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL,

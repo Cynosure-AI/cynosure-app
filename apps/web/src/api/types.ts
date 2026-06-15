@@ -369,8 +369,19 @@ export interface MetricsSummary {
         totalTokens: number
         avgLatencyMs: number
         estimatedCost: number | null
+        chatEstimatedCost: number | null
+        auxiliaryEstimatedCost: number | null
     }
     modelUsage: {
+        provider: string
+        model: string
+        requestCount: number
+        totalPromptTokens: number
+        totalCompletionTokens: number
+        estimatedCost: number | null
+    }[]
+    auxiliaryModelUsage: {
+        kind: 'embedding' | 'reranker'
         provider: string
         model: string
         requestCount: number

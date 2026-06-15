@@ -1,5 +1,6 @@
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
+import { estimateTextTokens, estimateTextsTokens, recordAuxiliaryModelUsage } from '../usage-metering.js'
 import type { SearchResult } from './rag.js'
 
 export interface MemoryRerankerConfig {
@@ -95,6 +96,13 @@ export class MemoryReranker {
     }
 
     const data = await res.json() as OpenRouterRerankResponse
+    recordAuxiliaryModelUsage({
+      kind: 'reranker',
+      provider: provider.config.type,
+      model: config.model,
+      inputTokens: estimateTextTokens(query) + estimateTextsTokens(results.map((r) => r.text)),
+    })
+
     const reranked = (data.results || [])
       .map((item) => {
         if (item.index == null) return null

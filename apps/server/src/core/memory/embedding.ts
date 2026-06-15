@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import { GoogleGenAI } from '@google/genai'
 import { getGateway } from '../gateway/gateway.js'
 import { getDb } from '../../db/database.js'
+import { estimateTextsTokens, recordAuxiliaryModelUsage } from '../usage-metering.js'
 
 export interface EmbeddingConfig {
   providerId?: string
@@ -177,6 +178,13 @@ export class EmbeddingProvider {
         throw new Error(`Gemini embedding response returned ${embeddings.length} vectors for ${texts.length} inputs`)
       }
 
+      recordAuxiliaryModelUsage({
+        kind: 'embedding',
+        provider: this.providerId || 'google',
+        model: this.model,
+        inputTokens: estimateTextsTokens(texts),
+      })
+
       return embeddings.map((item) => {
         const vector = item.values || []
         if (vector.length === 0) {
@@ -196,6 +204,14 @@ export class EmbeddingProvider {
       model: this.model,
       input: texts,
       dimensions: this.dimensions
+    })
+
+    const usage = (response as { usage?: { prompt_tokens?: number; total_tokens?: number } }).usage
+    recordAuxiliaryModelUsage({
+      kind: 'embedding',
+      provider: this.providerId || 'openai',
+      model: response.model || this.model,
+      inputTokens: usage?.prompt_tokens ?? usage?.total_tokens ?? estimateTextsTokens(texts),
     })
 
     return response.data.map((item) => ({
