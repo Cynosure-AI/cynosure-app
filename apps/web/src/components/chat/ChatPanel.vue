@@ -434,17 +434,24 @@ onMounted(() => {
       class="flex flex-col items-center justify-center h-full text-theme-400"
     >
       <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
-        <img
+        <!--Icon Wrapped into a Routerlink to the agents config-->
+        <RouterLink
           v-if="activeAgentIconUrl"
-          :src="activeAgentIconUrl"
-          class="w-full h-full object-cover"
-          alt=""
+          :to="`/agents/${chatStore.activeAgentId}`"
+          class="absolute inset-0 w-full h-full"
         >
-        <Icon
-          v-else
-          icon="lucide:bot-message-square"
-          class="w-10 h-10 text-accent-400"
-        />
+          <img
+            v-if="activeAgentIconUrl"
+            :src="activeAgentIconUrl"
+            class="w-full h-full object-cover"
+            alt=""
+          >
+          <Icon
+            v-else
+            icon="lucide:bot-message-square"
+            class="w-10 h-10 text-accent-400"
+          />
+        </RouterLink>
       </div>
       <template v-if="!wsConnected">
         <Icon
