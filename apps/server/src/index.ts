@@ -37,7 +37,7 @@ import { runFolderModelCleanupOnce, syncMemorySpacesFromFolders } from './core/m
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { registerSkillRoutes } from './routes/skills.js'
-import { addClient, broadcast, startHeartbeat } from './ws.js'
+import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat } from './ws.js'
 import { getMcpManager } from './core/tools/mcp/mcp-manager.js'
 import { getEmbeddingProvider } from './core/memory/embedding.js'
 import { startCronScheduler, stopCronScheduler } from './core/triggers/cron-scheduler.js'
@@ -324,6 +324,15 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
           const msg = JSON.parse(raw.toString()) as {
             event: string
             data: Record<string, unknown>
+          }
+
+          if (msg.event === 'client:subscribe-conversations') {
+            const rawIds = msg.data?.conversationIds
+            const conversationIds = Array.isArray(rawIds)
+              ? rawIds.filter((id): id is string => typeof id === 'string')
+              : []
+            setClientConversationSubscriptions(ws, conversationIds)
+            return
           }
 
           if (msg.event !== 'hitl:response') {

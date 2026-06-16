@@ -77,6 +77,8 @@ const wsListeners = new Map<string, Set<WsHandler>>()
 let ws: WebSocket | null = null
 let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
 const pendingWsMessages: string[] = []
+let currentConversationSubscriptions: string[] = []
+let hasConversationSubscription = false
 
 function getWsUrl(): string {
     if (BASE_URL) {
@@ -100,8 +102,16 @@ function connectWs(): void {
 
     ws.onopen = () => {
         wsConnected.value = true
-        while (pendingWsMessages.length > 0 && ws?.readyState === WebSocket.OPEN) {
-            ws.send(pendingWsMessages.shift()!)
+        const socket = ws
+        if (!socket) return
+        if (hasConversationSubscription) {
+            socket.send(JSON.stringify({
+                event: 'client:subscribe-conversations',
+                data: { conversationIds: currentConversationSubscriptions }
+            }))
+        }
+        while (pendingWsMessages.length > 0 && socket.readyState === WebSocket.OPEN) {
+            socket.send(pendingWsMessages.shift()!)
         }
     }
 
@@ -151,4 +161,10 @@ export function sendWsMessage(event: string, data: unknown): void {
         return
     }
     pendingWsMessages.push(message)
+}
+
+export function subscribeWsConversations(conversationIds: string[]): void {
+    currentConversationSubscriptions = [...conversationIds]
+    hasConversationSubscription = true
+    sendWsMessage('client:subscribe-conversations', { conversationIds })
 }

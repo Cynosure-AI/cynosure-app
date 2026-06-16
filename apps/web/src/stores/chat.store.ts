@@ -67,6 +67,10 @@ export const useChatStore = defineStore('chat', () => {
     return postActionsMap.get(activeConversationId.value) || new Set<string>()
   })
 
+  watch(activeConversationId, (conversationId) => {
+    api.chat.subscribeLiveConversations(conversationId ? [conversationId] : [])
+  }, { immediate: true })
+
   // ── Composables ──
 
   const streaming = useChatStreaming(activeConversationId, messages, conversations, contextWindow)
@@ -169,6 +173,7 @@ export const useChatStore = defineStore('chat', () => {
     loadingMessages.value = true
     try {
       const response = await api.chat.getMessages(id)
+      if (activeConversationId.value !== id) return
       const rows = response.messages
       const lastContextTokens = response.lastContextTokens
       const COMPACT_EVENT_PREFIX = '[CONTEXT_COMPACT_EVENT] '
@@ -203,6 +208,7 @@ export const useChatStore = defineStore('chat', () => {
       // Hydrate server-side post-action state
       try {
         const { actions } = await api.chat.getPostActions(id)
+        if (activeConversationId.value !== id) return
         if (actions.length) {
           postActionsMap.set(id, new Set(actions))
         } else {
@@ -241,17 +247,21 @@ export const useChatStore = defineStore('chat', () => {
         streaming.streamingThinking.value = ''
       }
 
+      streaming.restoreSubAgentStreams(id)
+
       // Restore context usage from DB-persisted last_context_tokens (updated mid-execution),
       // falling back to per-message token data for completed executions.
       restoreContextUsage(lastContextTokens)
 
       // Restore execution steps so tool calls render as grouped cards
       await agentStore.restoreForConversation(id)
+      if (activeConversationId.value !== id) return
 
       // If we navigated into a conversation after its websocket start events
       // already fired, hydrate the lock state from the server-side instance list.
       try {
         const instances = await api.instances.list()
+        if (activeConversationId.value !== id) return
         const activeInstance = instances.find((instance) => instance.conversationId === id)
         agentStore.setConversationExecutionState(id, Boolean(activeInstance))
       } catch {
@@ -289,7 +299,9 @@ export const useChatStore = defineStore('chat', () => {
       }
     } finally {
       if (activeConversationId.value === id) markConversationRead(id)
-      loadingMessages.value = false
+      if (activeConversationId.value === id) {
+        loadingMessages.value = false
+      }
     }
   }
 
