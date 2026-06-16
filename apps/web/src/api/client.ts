@@ -1,4 +1,4 @@
-import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage } from './http'
+import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
   LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryResponse,
   AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob,
@@ -173,6 +173,7 @@ export const api = {
         { messageId }
       ),
     cancelStream: (streamId: string, conversationId?: string) => post<void>('/api/chat/cancel', { streamId: streamId || undefined, conversationId: conversationId || undefined }),
+    subscribeLiveConversations: (conversationIds: string[]) => subscribeWsConversations(conversationIds),
 
     // Stream event listeners — via WebSocket
     onStreamStart: (cb: (data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }) => void) =>

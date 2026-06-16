@@ -13,6 +13,7 @@ export interface TokenUsage {
 
 interface StreamBuffer {
     streamId: string
+    conversationId: string
     content: string
     thinking: string
     images: string[]
@@ -33,7 +34,9 @@ export interface ChatStreamingState {
     primaryStreamId: Ref<string | null>
     primaryStreamAgent: Ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>
     streamBuffers: Map<string, StreamBuffer>
+    subAgentStreamBuffers: Map<string, StreamBuffer>
     findStreamingMsg(): DisplayMessage | undefined
+    restoreSubAgentStreams(conversationId: string): void
     finalizeCurrentStreaming(conversationId: string): void
     handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void
     handleStreamChunk(data: { streamId: string; conversationId: string; content: string }): void
@@ -69,6 +72,7 @@ export function useChatStreaming(
     const primaryStreamId = ref<string | null>(null)
     const primaryStreamAgent = ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>({})
     const streamBuffers = new Map<string, StreamBuffer>()
+    const subAgentStreamBuffers = new Map<string, StreamBuffer>()
     const subAgentStreamMsgs = new Map<string, DisplayMessage>()
     /** Tracks the last completed (non-empty) sub-agent message so the final
      *  subagent-stream-end event (which carries model/usage) can find it
@@ -98,6 +102,29 @@ export function useChatStreaming(
         }
     }
 
+    function restoreSubAgentStreams(conversationId: string): void {
+        for (const [streamId, buf] of subAgentStreamBuffers.entries()) {
+            if (!buf.active || buf.conversationId !== conversationId) continue
+            const existingMsg = subAgentStreamMsgs.get(streamId)
+            if (existingMsg && messages.value.includes(existingMsg)) continue
+            if (existingMsg) subAgentStreamMsgs.delete(streamId)
+            const msg: DisplayMessage = {
+                id: `sa_stream_${streamId}_${Date.now()}`,
+                role: 'assistant',
+                content: buf.content,
+                thinking: buf.thinking || undefined,
+                imageDataUrls: buf.images.length ? [...buf.images] : undefined,
+                agentId: buf.agentId,
+                agentName: buf.agentName,
+                agentIconUrl: buf.agentIconUrl,
+                createdAt: buf.createdAt,
+                isStreaming: true
+            }
+            messages.value.push(msg)
+            subAgentStreamMsgs.set(streamId, msg)
+        }
+    }
+
     function finalizeCurrentStreaming(conversationId: string): void {
         if (conversationId !== activeConversationId.value) return
         const streamMsg = findStreamingMsg()
@@ -114,6 +141,7 @@ export function useChatStreaming(
 
         streamBuffers.set(data.conversationId, {
             streamId: data.streamId,
+            conversationId: data.conversationId,
             content: '',
             thinking: '',
             images: [],
@@ -214,7 +242,7 @@ export function useChatStreaming(
             buf.createdAt = Date.now()
         } else {
             buf = {
-                streamId: data.streamId, content: '', thinking: '', images: [], active: true,
+                streamId: data.streamId, conversationId: data.conversationId, content: '', thinking: '', images: [], active: true,
                 agentId: primaryStreamAgent.value.agentId,
                 agentName: primaryStreamAgent.value.agentName,
                 agentIconUrl: primaryStreamAgent.value.agentIconUrl,
@@ -362,6 +390,19 @@ export function useChatStreaming(
     }
 
     function handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void {
+        subAgentStreamBuffers.set(data.streamId, {
+            streamId: data.streamId,
+            conversationId: data.conversationId,
+            content: '',
+            thinking: '',
+            images: [],
+            active: true,
+            agentId: data.agentId,
+            agentName: data.agentName,
+            agentIconUrl: data.agentIconUrl,
+            createdAt: Date.now()
+        })
+
         if (data.conversationId !== activeConversationId.value) return
 
         const existingMsg = subAgentStreamMsgs.get(data.streamId)
@@ -389,6 +430,11 @@ export function useChatStreaming(
     }
 
     function handleSubAgentStreamChunk(data: { streamId: string; conversationId: string; content: string }): void {
+        const buf = subAgentStreamBuffers.get(data.streamId)
+        if (buf && buf.conversationId === data.conversationId) {
+            buf.content += data.content
+        }
+
         if (data.conversationId !== activeConversationId.value) return
         const msg = subAgentStreamMsgs.get(data.streamId)
         if (msg) {
@@ -397,6 +443,11 @@ export function useChatStreaming(
     }
 
     function handleSubAgentStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void {
+        const buf = subAgentStreamBuffers.get(data.streamId)
+        if (buf && buf.conversationId === data.conversationId) {
+            buf.thinking += data.thinking
+        }
+
         if (data.conversationId !== activeConversationId.value) return
         const msg = subAgentStreamMsgs.get(data.streamId)
         if (msg) {
@@ -405,6 +456,17 @@ export function useChatStreaming(
     }
 
     function handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void {
+        const buf = subAgentStreamBuffers.get(data.streamId)
+        if (buf && buf.conversationId === data.conversationId) {
+            const existing = new Set(buf.images)
+            for (const image of data.images) {
+                if (!existing.has(image)) {
+                    existing.add(image)
+                    buf.images.push(image)
+                }
+            }
+        }
+
         if (data.conversationId !== activeConversationId.value) return
         const msg = subAgentStreamMsgs.get(data.streamId)
         if (msg) {
@@ -413,6 +475,12 @@ export function useChatStreaming(
     }
 
     function handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void {
+        const buf = subAgentStreamBuffers.get(data.streamId)
+        if (buf && buf.conversationId === data.conversationId) {
+            buf.active = false
+            subAgentStreamBuffers.delete(data.streamId)
+        }
+
         if (data.conversationId !== activeConversationId.value) return
         const msg = subAgentStreamMsgs.get(data.streamId)
         if (msg) {
@@ -546,7 +614,9 @@ export function useChatStreaming(
         primaryStreamId,
         primaryStreamAgent,
         streamBuffers,
+        subAgentStreamBuffers,
         findStreamingMsg,
+        restoreSubAgentStreams,
         finalizeCurrentStreaming,
         handleStreamStart,
         handleStreamChunk,
