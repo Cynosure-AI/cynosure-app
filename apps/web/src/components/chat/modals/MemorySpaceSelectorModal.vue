@@ -178,7 +178,7 @@ function toggleAutoMemory(enabled: boolean) {
       >
         <!-- Indent spacer -->
         <span
-          v-if="(space.depth || 0) > 1"
+          v-if="(space.depth || 0) > 0"
           :style="{ width: `${(space.depth || 0) * 8}px` }"
           class="shrink-0"
         />

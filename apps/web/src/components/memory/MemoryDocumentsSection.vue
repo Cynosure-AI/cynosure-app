@@ -210,9 +210,9 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
             @dragover.stop="onDragOver($event)"
             @drop.stop="onFolderDrop($event, space.id)"
           >
-            <!-- Indent spacer -->
+            <!-- Indent spacer, change this to adjust starting padding -->
             <span
-              v-if="(space.depth || 0) > 1"
+              v-if="(space.depth || 0) > 0"
               :style="{ width: `${(space.depth || 0) * 8}px` }"
               class="shrink-0"
             />
