@@ -50,7 +50,7 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                         '- routerQuery: the best general semantic query for automatic routing.',
                         '- toolQuery: action/capability terms for tool selection, including likely services, resources, and operations.',
                         '- skillQuery: instruction/workflow terms for selecting reusable skills.',
-                        '- memoryQuery: knowledge/entity terms for memory retrieval, including names, topics, documents, accounts, and time cues.',
+                        '- memoryQuery: a compact semantic retrieval query for memory search. Use a short natural-language phrase or sentence, and include required names, topics, documents, accounts, and time cues.',
                         '- systemContext: concise facts, constraints, and intent the main assistant should start with.',
                         '- focusAreas: short labels for the information or capabilities likely needed.',
                         'Use empty strings for mode-specific queries whose auto mode is disabled or not useful.',
