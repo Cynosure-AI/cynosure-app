@@ -110,9 +110,6 @@
           <!-- Memory -->
           <OnboardingMemory v-else-if="currentStep === STEP_MEMORY" />
 
-          <!-- Memory Folder -->
-          <OnboardingMemorySpace v-else-if="currentStep === STEP_MEMORY_SPACE" />
-
           <!-- Popular MCPs -->
           <OnboardingPopularMcps v-else-if="currentStep === STEP_POPULAR_MCPS" />
 
@@ -236,7 +233,6 @@ import OnboardingWelcome from '../components/onboarding/OnboardingWelcome.vue'
 import OnboardingProvider from '../components/onboarding/OnboardingProvider.vue'
 import OnboardingCynosureMcp from '../components/onboarding/OnboardingCynosureMcp.vue'
 import OnboardingMemory from '../components/onboarding/OnboardingMemory.vue'
-import OnboardingMemorySpace from '../components/onboarding/OnboardingMemorySpace.vue'
 import OnboardingPopularMcps from '../components/onboarding/OnboardingPopularMcps.vue'
 
 const router = useRouter()
@@ -248,11 +244,10 @@ const STEP_WELCOME = 0
 const STEP_PROVIDER = 1
 const STEP_CYNOSURE_MCP = 2
 const STEP_MEMORY = 3
-const STEP_MEMORY_SPACE = 4
-const STEP_POPULAR_MCPS = 5
-const STEP_DONE = 6
+const STEP_POPULAR_MCPS = 4
+const STEP_DONE = 5
 
-const totalSteps = STEP_DONE + 1 // 0..6
+const totalSteps = STEP_DONE + 1 // 0..5
 
 // ── Navigation state ──────────────────────────────────────────────
 const currentStep = ref(STEP_WELCOME)
@@ -269,13 +264,12 @@ const breadcrumbSteps = [
   { id: 'provider',      label: 'AI Provider',    globalIndex: STEP_PROVIDER },
   { id: 'cynosure',      label: 'Cynosure MCP',   globalIndex: STEP_CYNOSURE_MCP },
   { id: 'memory',        label: 'Embeddings',     globalIndex: STEP_MEMORY },
-  { id: 'memory-space',  label: 'Memory Folder',  globalIndex: STEP_MEMORY_SPACE },
   { id: 'popular-mcps',  label: 'Popular Tools',  globalIndex: STEP_POPULAR_MCPS },
 ]
 
 // Which breadcrumb index is active (0-based within breadcrumbSteps)
 const breadcrumbStepIndex = computed(() =>
-  Math.max(0, currentStep.value - 1) // steps 1-5 map to breadcrumb 0-4
+  Math.max(0, currentStep.value - 1) // steps 1-4 map to breadcrumb 0-3
 )
 
 const showBreadcrumb = computed(() =>
