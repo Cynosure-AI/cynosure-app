@@ -8,7 +8,8 @@
  */
 
 import chokidar, { type FSWatcher } from 'chokidar'
-import { basename } from 'path'
+import { existsSync } from 'fs'
+import { basename, resolve } from 'path'
 import { getAgentMemory } from './agent-memory.js'
 import { deleteMemoryGraphSource } from './memory-entity-indexer.js'
 
@@ -22,6 +23,13 @@ interface PendingDelete {
 }
 
 const pendingDeletes = new Map<string, PendingDelete>()
+
+function isExpectedWatchError(err: unknown): boolean {
+    const code = typeof err === 'object' && err !== null && 'code' in err
+        ? (err as { code?: unknown }).code
+        : undefined
+    return code === 'EPERM' || code === 'ENOENT'
+}
 
 function pendingDeleteKey(spaceId: string, fileName: string): string {
     return `${spaceId}\0${fileName}`
@@ -67,11 +75,18 @@ async function tryRemapAddedFile(spaceId: string, folderPath: string, fileName: 
 export function watchMemorySpace(spaceId: string, folderPath: string): void {
     stopWatchingMemorySpace(spaceId)
 
+    if (!existsSync(folderPath)) {
+        console.warn(`[memory-watcher] not watching missing folder for space ${spaceId}: ${folderPath}`)
+        return
+    }
+
     const seenOnDisk = new Set<string>()
+    const watchedRoot = resolve(folderPath)
 
     const watcher = chokidar.watch(folderPath, {
         persistent: false,
         ignoreInitial: false,  // fire `add` for existing files so we can diff against DB
+        ignorePermissionErrors: true,
         depth: 0,
     })
 
@@ -113,9 +128,19 @@ export function watchMemorySpace(spaceId: string, folderPath: string): void {
         scheduleDelete(spaceId, fileName)
     })
 
+    watcher.on('unlinkDir', (deletedPath) => {
+        if (resolve(deletedPath) !== watchedRoot) return
+        console.warn(`[memory-watcher] watched folder for space ${spaceId} was removed: ${folderPath}`)
+        stopWatchingMemorySpace(spaceId)
+    })
+
     watcher.on('error', (err) => {
-        console.warn(`[memory-watcher] watcher error for space ${spaceId}:`, err)
-        activeWatchers.delete(spaceId)
+        if (isExpectedWatchError(err) && !existsSync(folderPath)) {
+            console.warn(`[memory-watcher] stopped watching removed folder for space ${spaceId}: ${folderPath}`)
+        } else {
+            console.warn(`[memory-watcher] watcher error for space ${spaceId}:`, err)
+        }
+        stopWatchingMemorySpace(spaceId)
     })
 
     activeWatchers.set(spaceId, watcher)
