@@ -232,7 +232,7 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
                     </span>
                   </label>
                   <div
-                    class="flex-1 cursor-pointer select-none"
+                    class="flex cursor-pointer select-none justify-between items-center flex-1 gap-2"
                     @click="toggle"
                   >
                     <p
