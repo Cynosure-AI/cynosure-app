@@ -5,8 +5,9 @@ import type { AgentDefinition } from "../../api/types";
 import IconUpload from "../shared/IconUpload.vue";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import BaseCard from "../shared/BaseCard.vue";
+import PromptSmartTagPicker from "../shared/PromptSmartTagPicker.vue";
 
-defineProps<{ agent: AgentDefinition }>();
+const props = defineProps<{ agent: AgentDefinition }>();
 const emit = defineEmits<{ update: [field: string, value: unknown] }>();
 
 const providerStore = useProviderStore();
@@ -16,6 +17,27 @@ function autoResize(e: Event) {
   const el = e.target as HTMLTextAreaElement;
   el.style.height = "auto";
   el.style.height = el.scrollHeight + "px";
+}
+
+function insertSystemPromptTag(tag: string): void {
+  const el = systemPromptRef.value;
+  if (!el) {
+    emit("update", "systemPrompt", `${props.agent.systemPrompt}${tag}`);
+    return;
+  }
+
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  const next = `${el.value.slice(0, start)}${tag}${el.value.slice(end)}`;
+  emit("update", "systemPrompt", next);
+
+  nextTick(() => {
+    el.focus();
+    const cursor = start + tag.length;
+    el.setSelectionRange(cursor, cursor);
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  });
 }
 
 onMounted(() =>
@@ -117,7 +139,10 @@ onMounted(() =>
 
     <!-- ── System Prompt ──────────────────────────────────────── -->
     <BaseCard class="p-5">
-      <label class="block text-sm text-theme-400 mb-1.5">System Prompt</label>
+      <div class="flex items-center justify-between gap-3 mb-1.5">
+        <label class="block text-sm text-theme-400">System Prompt</label>
+        <PromptSmartTagPicker @insert="insertSystemPromptTag" />
+      </div>
       <p class="text-xs text-theme-600 mb-2">
         Prepended as a system message alongside the built-in agentic
         instructions — does not replace them.

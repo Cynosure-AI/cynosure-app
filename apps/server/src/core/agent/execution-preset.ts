@@ -2,6 +2,8 @@ import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 
 export interface ExecutionPreset {
     id: string
+    name?: string
+    internalName?: string
     providerId?: string
     model?: string
     systemPrompt?: string
@@ -26,6 +28,8 @@ export function presetFromAgent(
 ): ExecutionPreset {
     return {
         id: agent.id,
+        name: agent.name,
+        internalName: agent.internalName,
         providerId: agent.providerId,
         model: agent.model,
         systemPrompt: agent.systemPrompt,
@@ -52,6 +56,8 @@ export function presetFromAgentless(options: {
 }): ExecutionPreset {
     return {
         id: '__agentless__',
+        name: 'Free Chat',
+        internalName: 'free_chat',
         tools: options.tools,
         skills: options.skills ?? [],
         subAgents: options.subAgents ?? [],

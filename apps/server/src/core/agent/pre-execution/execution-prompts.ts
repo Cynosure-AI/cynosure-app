@@ -1,5 +1,6 @@
 import type { SubAgentAssignment } from '../../agents/agent-store.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
+import { resolvePromptSmartTags, type PromptSmartTagContext } from './prompt-smart-tags.js'
 
 export interface ResolveSystemPromptInput {
     basePrompt?: string
@@ -7,6 +8,7 @@ export interface ResolveSystemPromptInput {
     suffix?: string
     skillsPrompt?: string | null
     subAgents?: SubAgentAssignment[]
+    smartTagContext?: PromptSmartTagContext
 }
 
 export async function resolveSystemPromptMessages(input: ResolveSystemPromptInput): Promise<ChatMessage[]> {
@@ -16,6 +18,7 @@ export async function resolveSystemPromptMessages(input: ResolveSystemPromptInpu
         suffix,
         skillsPrompt,
         subAgents,
+        smartTagContext,
     } = input
 
     let effectiveSystemPrompt = overridePrompt ?? basePrompt ?? ''
@@ -32,6 +35,8 @@ export async function resolveSystemPromptMessages(input: ResolveSystemPromptInpu
     if (skillsPrompt) {
         effectiveSystemPrompt = appendPrompt(effectiveSystemPrompt, skillsPrompt, '\n\n')
     }
+
+    effectiveSystemPrompt = resolvePromptSmartTags(effectiveSystemPrompt, smartTagContext ?? {})
 
     return effectiveSystemPrompt ? [{ role: 'system', content: effectiveSystemPrompt }] : []
 }

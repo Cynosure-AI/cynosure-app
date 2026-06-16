@@ -202,6 +202,14 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         suffix: systemPromptSuffix,
         skillsPrompt,
         subAgents: toolLayer.effectiveSubAgents,
+        smartTagContext: {
+            agentId: preset.id,
+            agentName: preset.name,
+            agentInternalName: preset.internalName,
+            providerId: providerModel.providerId,
+            model: providerModel.model,
+            conversationId,
+        },
     })
 
     const systemMessages = [
