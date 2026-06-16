@@ -587,6 +587,15 @@ function setupExecutionStepPersistence(eventBus: EventBusType): Array<() => void
   return cleanups
 }
 
+function isWindowsWatchPermissionError(error: unknown): boolean {
+  if (process.platform !== 'win32' || !(error instanceof Error)) {
+    return false
+  }
+
+  const err = error as NodeJS.ErrnoException
+  return err.code === 'EPERM' && err.syscall === 'watch'
+}
+
 async function runCli(): Promise<void> {
   const options = parseCliArgs(process.argv.slice(2))
 
@@ -630,6 +639,15 @@ async function runCli(): Promise<void> {
     void shutdown('SIGTERM')
   })
 }
+
+process.on('uncaughtException', (error) => {
+  if (isWindowsWatchPermissionError(error)) {
+    console.warn('Ignoring Windows filesystem watcher error:', error.message)
+    return
+  }
+
+  throw error
+})
 
 runCli().catch((error) => {
   console.error('Failed to start server:', error)
