@@ -177,17 +177,11 @@ const taskContext = computed(() => {
   if (!call) return null
   try {
     const parsed = JSON.parse(call.arguments || '{}') as {
-      focusAreas?: unknown
-      routerQuery?: unknown
       toolQuery?: unknown
       skillQuery?: unknown
       memoryQuery?: unknown
     }
     return {
-      focusAreas: Array.isArray(parsed.focusAreas)
-        ? parsed.focusAreas.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-        : [],
-      routerQuery: typeof parsed.routerQuery === 'string' ? parsed.routerQuery.trim() : '',
       toolQuery: typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : '',
       skillQuery: typeof parsed.skillQuery === 'string' ? parsed.skillQuery.trim() : '',
       memoryQuery: typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : '',
@@ -205,9 +199,11 @@ const taskContextQueries = computed(() => {
     { label: 'Memory', value: taskContext.value.memoryQuery },
   ]
     .map((query) => ({ ...query, value: query.value.trim() }))
-    .filter((query) => query.value && query.value !== taskContext.value?.routerQuery)
+    .filter((query) => query.value)
   return queries
 })
+
+const taskContextQueryLabels = computed(() => taskContextQueries.value.map((query) => query.label))
 
 /** Whether all results succeeded */
 const allSuccess = computed(() => results.value.length > 0 && results.value.every(r => r.success))
@@ -308,18 +304,18 @@ const maContext = computed(() => {
             <div class="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
               <template v-if="isTaskContext">
                 <span class="text-cyan-600 dark:text-cyan-300 shrink-0">{{ currentPhase.label }}</span>
-                <template v-if="taskContext?.focusAreas.length">
+                <template v-if="taskContextQueryLabels.length">
                   <span
-                    v-for="area in taskContext.focusAreas.slice(0, 3)"
-                    :key="area"
+                    v-for="label in taskContextQueryLabels.slice(0, 3)"
+                    :key="label"
                     class="inline-flex items-center gap-1 rounded-md bg-cyan-100/60 px-1.5 py-0.5 text-[10px] font-medium text-cyan-700 truncate max-w-35 dark:bg-cyan-500/10 dark:text-cyan-200"
                   >
-                    {{ area }}
+                    {{ label }}
                   </span>
                   <span
-                    v-if="taskContext.focusAreas.length > 3"
+                    v-if="taskContextQueryLabels.length > 3"
                     class="text-[10px] text-theme-500"
-                  >+{{ taskContext.focusAreas.length - 3 }}</span>
+                  >+{{ taskContextQueryLabels.length - 3 }}</span>
                 </template>
               </template>
               <template v-else-if="toolNames.length">
@@ -401,26 +397,8 @@ const maContext = computed(() => {
               <span class="text-[11px] font-medium text-cyan-700 dark:text-cyan-200">Preparing context</span>
             </div>
             <div
-              v-if="taskContext.focusAreas.length"
-              class="flex flex-wrap gap-1 mb-2"
-            >
-              <span
-                v-for="area in taskContext.focusAreas"
-                :key="area"
-                class="rounded-md bg-cyan-100/50 px-1.5 py-0.5 text-[10px] text-cyan-700/80 dark:bg-theme-950/50 dark:text-cyan-200/80"
-              >
-                {{ area }}
-              </span>
-            </div>
-            <p
-              v-if="taskContext.routerQuery"
-              class="text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap wrap-break-word rounded-md bg-cyan-50/60 px-2 py-1.5 dark:bg-theme-950/45"
-            >
-              {{ taskContext.routerQuery }}
-            </p>
-            <div
               v-if="taskContextQueries.length"
-              class="mt-2 grid gap-1.5"
+              class="grid gap-1.5"
             >
               <div
                 v-for="query in taskContextQueries"

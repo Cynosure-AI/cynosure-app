@@ -14,7 +14,7 @@ import { resolveExecutionTools } from './pre-execution/execution-tools.js'
 import { resolveSkillSystemPrompt } from './pre-execution/execution-skills.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemorySystemMessages } from './pre-execution/execution-memory.js'
-import { appendTaskContextSystemMessage, buildTaskContext } from './pre-execution/task-context.js'
+import { buildTaskContext } from './pre-execution/task-context.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
 import type { LLMGateway } from '../gateway/gateway.js'
@@ -154,9 +154,9 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         enabledModes: autoModes,
         eventMeta: input.eventMeta,
     })
-    const toolRoutingQuery = taskContext?.toolQuery || taskContext?.routerQuery || input.userQuery
-    const skillRoutingQuery = taskContext?.skillQuery || taskContext?.routerQuery || input.userQuery
-    const memoryRoutingQuery = taskContext?.memoryQuery || taskContext?.routerQuery || input.userQuery
+    const toolRoutingQuery = taskContext?.toolQuery || input.userQuery
+    const skillRoutingQuery = taskContext?.skillQuery || input.userQuery
+    const memoryRoutingQuery = taskContext?.memoryQuery || input.userQuery
     const routingMessages = taskContext ? [] : input.recentMessages
 
     const toolLayer = await resolveExecutionTools({
@@ -196,16 +196,13 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         eventMeta: input.eventMeta,
     })
 
-    const promptMessages = appendTaskContextSystemMessage(
-        await resolveSystemPromptMessages({
-            basePrompt: preset.systemPrompt,
-            overridePrompt: systemPromptOverride,
-            suffix: systemPromptSuffix,
-            skillsPrompt,
-            subAgents: toolLayer.effectiveSubAgents,
-        }),
-        taskContext,
-    )
+    const promptMessages = await resolveSystemPromptMessages({
+        basePrompt: preset.systemPrompt,
+        overridePrompt: systemPromptOverride,
+        suffix: systemPromptSuffix,
+        skillsPrompt,
+        subAgents: toolLayer.effectiveSubAgents,
+    })
 
     const systemMessages = [
         ...promptMessages,

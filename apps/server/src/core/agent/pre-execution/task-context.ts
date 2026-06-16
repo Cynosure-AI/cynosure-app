@@ -6,15 +6,11 @@ import type { ChatMessage, ContentPart, ToolDefinition } from '../../gateway/pro
 const TASK_CONTEXT_TOOL_NAME = 'set_task_context'
 const TURN_CHAR_LIMIT = 500
 const MAX_ROUTER_QUERY_LENGTH = 2_000
-const MAX_SYSTEM_CONTEXT_LENGTH = 2_500
 
 export interface TaskContext {
-    routerQuery: string
-    toolQuery: string
-    skillQuery: string
-    memoryQuery: string
-    systemContext: string
-    focusAreas: string[]
+    toolQuery?: string
+    skillQuery?: string
+    memoryQuery?: string
 }
 
 export interface BuildTaskContextInput {
@@ -45,15 +41,13 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                 {
                     role: 'system',
                     content: [
-                        'You prepare a compact task context before the main assistant run.',
-                        'Given the current request and recent conversation, call set_task_context with:',
-                        '- routerQuery: the best general semantic query for automatic routing.',
-                        '- toolQuery: action/capability terms for tool selection, including likely services, resources, and operations.',
-                        '- skillQuery: instruction/workflow terms for selecting reusable skills.',
-                        '- memoryQuery: a compact semantic retrieval query for memory search. Use a short natural-language phrase or sentence, and include required names, topics, documents, accounts, and time cues.',
-                        '- systemContext: concise facts, constraints, and intent the main assistant should start with.',
-                        '- focusAreas: short labels for the information or capabilities likely needed.',
-                        'Use empty strings for mode-specific queries whose auto mode is disabled or not useful.',
+                        'You prepare routing queries before the main assistant run.',
+                        'Given the current request and recent conversation, call set_task_context with one query for each enabled auto mode.',
+                        ...enabledQueryInstructions(input.enabledModes),
+                        'Each query must be specific to what that subsystem needs to retrieve or select.',
+                        'Do not copy the user request verbatim unless it is already the best possible retrieval query.',
+                        'Do not include disabled auto modes.',
+                        'Do not add execution instructions or answer the user.',
                         'Do not answer the user. Keep the context specific and omit irrelevant conversation details. /no_think',
                     ].join('\n'),
                 },
@@ -70,128 +64,82 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
             ],
             model: input.model,
             maxTokens: 700,
-            tools: [buildTaskContextTool()],
+            tools: [buildTaskContextTool(input.enabledModes)],
             toolChoice: { type: 'function', name: TASK_CONTEXT_TOOL_NAME },
             thinkingEnabled: false,
         }, input.providerId)
 
         const contextCall = result.toolCalls?.find((call) => call.function.name === TASK_CONTEXT_TOOL_NAME)
-        const parsed = contextCall ? parseTaskContextArguments(contextCall.function.arguments) : null
-        const context = parsed || fallbackTaskContext(currentRequest, input.recentMessages || [])
-        emitTaskContextSelection(input.conversationId, taskId, context, input.eventMeta)
-        return context
+        const parsed = contextCall ? parseTaskContextArguments(contextCall.function.arguments, input.enabledModes) : null
+        emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta)
+        return parsed
     } catch (err) {
-        console.warn('[auto-router] Task context build failed, using local fallback:', err)
-        const context = fallbackTaskContext(currentRequest, input.recentMessages || [])
-        emitTaskContextSelection(input.conversationId, taskId, context, input.eventMeta)
-        return context
+        console.warn('[auto-router] Task context build failed, using original request in downstream routers:', err)
+        emitTaskContextSelection(input.conversationId, taskId, null, input.eventMeta)
+        return null
     }
 }
 
-export function appendTaskContextSystemMessage(messages: ChatMessage[], taskContext: TaskContext | null): ChatMessage[] {
-    if (!taskContext?.systemContext.trim()) return messages
-    return [
-        ...messages,
-        {
-            role: 'system',
-            content: [
-                'Task context prepared before execution:',
-                taskContext.systemContext.trim(),
-                taskContext.focusAreas.length ? `Likely relevant focus: ${taskContext.focusAreas.join(', ')}` : '',
-            ].filter(Boolean).join('\n'),
-        },
-    ]
-}
+function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes']): ToolDefinition {
+    const properties: Record<string, unknown> = {}
+    const required: string[] = []
+    if (enabledModes.tools) {
+        properties.toolQuery = {
+            type: 'string',
+            description: 'A compact semantic query optimized for selecting relevant tools and tool namespaces.',
+        }
+        required.push('toolQuery')
+    }
+    if (enabledModes.skills) {
+        properties.skillQuery = {
+            type: 'string',
+            description: 'A compact semantic query optimized for selecting relevant reusable skills.',
+        }
+        required.push('skillQuery')
+    }
+    if (enabledModes.memories) {
+        properties.memoryQuery = {
+            type: 'string',
+            description: 'A compact semantic query optimized for memory retrieval.',
+        }
+        required.push('memoryQuery')
+    }
 
-function buildTaskContextTool(): ToolDefinition {
     return {
         name: TASK_CONTEXT_TOOL_NAME,
-        description: 'Set the compact task context used to route automatic capabilities and start the main execution.',
-        timeout: 1_000,
+        description: 'Set the mode-specific queries used to route automatic capabilities.',
+        timeout: 10_000,
         parameters: {
             type: 'object',
             additionalProperties: false,
-            properties: {
-                routerQuery: {
-                    type: 'string',
-                    description: 'A compact general semantic query for automatic routing.',
-                },
-                toolQuery: {
-                    type: 'string',
-                    description: 'A compact semantic query optimized for selecting relevant tools and tool namespaces.',
-                },
-                skillQuery: {
-                    type: 'string',
-                    description: 'A compact semantic query optimized for selecting relevant reusable skills.',
-                },
-                memoryQuery: {
-                    type: 'string',
-                    description: 'A compact semantic query optimized for memory retrieval.',
-                },
-                systemContext: {
-                    type: 'string',
-                    description: 'Concise task facts and constraints to include in the main execution context.',
-                },
-                focusAreas: {
-                    type: 'array',
-                    description: 'Short labels for information or capabilities likely needed.',
-                    items: { type: 'string' },
-                },
-            },
-            required: ['routerQuery', 'toolQuery', 'skillQuery', 'memoryQuery', 'systemContext', 'focusAreas'],
+            properties,
+            required,
         },
         execute: async () => ({ success: true, output: 'ok' }),
     }
 }
 
-function parseTaskContextArguments(raw: string): TaskContext | null {
+function parseTaskContextArguments(raw: string, enabledModes: BuildTaskContextInput['enabledModes']): TaskContext | null {
     try {
         const parsed = JSON.parse(raw) as {
-            routerQuery?: unknown
             toolQuery?: unknown
             skillQuery?: unknown
             memoryQuery?: unknown
-            systemContext?: unknown
-            focusAreas?: unknown
         }
-        const routerQuery = typeof parsed.routerQuery === 'string' ? parsed.routerQuery.trim() : ''
-        const toolQuery = typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : ''
-        const skillQuery = typeof parsed.skillQuery === 'string' ? parsed.skillQuery.trim() : ''
-        const memoryQuery = typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : ''
-        const systemContext = typeof parsed.systemContext === 'string' ? parsed.systemContext.trim() : ''
-        const focusAreas = Array.isArray(parsed.focusAreas)
-            ? parsed.focusAreas.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
-            : []
+        const toolQuery = enabledModes.tools && typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : ''
+        const skillQuery = enabledModes.skills && typeof parsed.skillQuery === 'string' ? parsed.skillQuery.trim() : ''
+        const memoryQuery = enabledModes.memories && typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : ''
 
-        const fallbackQuery = routerQuery || toolQuery || skillQuery || memoryQuery || systemContext
-        if (!fallbackQuery) return null
+        if (enabledModes.tools && !toolQuery) return null
+        if (enabledModes.skills && !skillQuery) return null
+        if (enabledModes.memories && !memoryQuery) return null
         return {
-            routerQuery: fallbackQuery.slice(0, MAX_ROUTER_QUERY_LENGTH),
-            toolQuery: (toolQuery || fallbackQuery).slice(0, MAX_ROUTER_QUERY_LENGTH),
-            skillQuery: (skillQuery || fallbackQuery).slice(0, MAX_ROUTER_QUERY_LENGTH),
-            memoryQuery: (memoryQuery || fallbackQuery).slice(0, MAX_ROUTER_QUERY_LENGTH),
-            systemContext: (systemContext || fallbackQuery).slice(0, MAX_SYSTEM_CONTEXT_LENGTH),
-            focusAreas: [...new Set(focusAreas)].slice(0, 8),
+            toolQuery: toolQuery ? toolQuery.slice(0, MAX_ROUTER_QUERY_LENGTH) : undefined,
+            skillQuery: skillQuery ? skillQuery.slice(0, MAX_ROUTER_QUERY_LENGTH) : undefined,
+            memoryQuery: memoryQuery ? memoryQuery.slice(0, MAX_ROUTER_QUERY_LENGTH) : undefined,
         }
     } catch {
         return null
-    }
-}
-
-function fallbackTaskContext(currentRequest: string, messages: ChatMessage[]): TaskContext {
-    const recent = buildRecentConversationBlock(messages)
-    const routerQuery = [
-        recent,
-        `Current request: ${currentRequest}`,
-    ].filter(Boolean).join('\n\n')
-
-    return {
-        routerQuery: routerQuery.slice(0, MAX_ROUTER_QUERY_LENGTH),
-        toolQuery: routerQuery.slice(0, MAX_ROUTER_QUERY_LENGTH),
-        skillQuery: routerQuery.slice(0, MAX_ROUTER_QUERY_LENGTH),
-        memoryQuery: routerQuery.slice(0, MAX_ROUTER_QUERY_LENGTH),
-        systemContext: currentRequest.slice(0, MAX_SYSTEM_CONTEXT_LENGTH),
-        focusAreas: [],
     }
 }
 
@@ -231,6 +179,20 @@ function enabledModeLabels(modes: BuildTaskContextInput['enabledModes']): string
     ].filter(Boolean)
 }
 
+function enabledQueryInstructions(modes: BuildTaskContextInput['enabledModes']): string[] {
+    return [
+        modes.tools
+            ? '- toolQuery: what capabilities, services, filesystems, APIs, or operations should be selected as tools for this task.'
+            : '',
+        modes.skills
+            ? '- skillQuery: what reusable workflow, procedure, domain method, or instruction pattern would help perform this task correctly.'
+            : '',
+        modes.memories
+            ? '- memoryQuery: what remembered knowledge, entities, locations, user preferences, prior project facts, documents, or account-specific context should be retrieved.'
+            : '',
+    ].filter(Boolean)
+}
+
 function emitTaskContextStatus(conversationId: string, taskId: string, eventMeta?: Record<string, unknown>): void {
     getEventBus().emit('step:status', {
         conversationId,
@@ -242,22 +204,24 @@ function emitTaskContextStatus(conversationId: string, taskId: string, eventMeta
     })
 }
 
-function emitTaskContextSelection(conversationId: string, taskId: string, context: TaskContext, eventMeta?: Record<string, unknown>): void {
+function emitTaskContextSelection(conversationId: string, taskId: string, context: TaskContext | null, eventMeta?: Record<string, unknown>): void {
     getEventBus().emit('step:tools-chosen', {
         conversationId,
         taskId,
         iteration: 0,
         ...eventMeta,
-        toolCalls: [{
+        toolCalls: context ? [{
             name: 'Task context',
-            arguments: JSON.stringify({
+            arguments: JSON.stringify(stripUndefined({
                 type: 'task-context',
-                focusAreas: context.focusAreas,
-                routerQuery: context.routerQuery,
                 toolQuery: context.toolQuery,
                 skillQuery: context.skillQuery,
                 memoryQuery: context.memoryQuery,
-            }),
-        }],
+            })),
+        }] : [],
     })
+}
+
+function stripUndefined(value: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined))
 }
