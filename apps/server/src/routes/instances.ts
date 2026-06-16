@@ -5,6 +5,7 @@ import { cancelChatExecution, listActiveChatExecutions } from '../core/chat/acti
 import { cancelPostActions } from '../core/agent/post-execution.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
+import { getEventBus } from '../core/telemetry/event-bus.js'
 
 type InstanceType = 'chat' | 'multi-agent' | 'cron' | 'channel'
 
@@ -39,6 +40,10 @@ function parseInstanceId(value: string): { type: InstanceType; id: string } | un
         }
     }
     return undefined
+}
+
+function clearPendingHITLForConversation(conversationId: string): void {
+    getEventBus().emit('hitl:clear-conversation', { conversationId })
 }
 
 export async function registerInstanceRoutes(app: FastifyInstance): Promise<void> {
@@ -111,6 +116,7 @@ export async function registerInstanceRoutes(app: FastifyInstance): Promise<void
             const executionId = parsed.id
             // Find the conversationId before cancelling (needed for post-actions)
             const execution = listActiveChatExecutions().find(e => e.id === executionId)
+            if (execution) clearPendingHITLForConversation(execution.conversationId)
             cancelled = cancelChatExecution(executionId)
             if (execution) cancelPostActions(execution.conversationId)
         } else if (parsed?.type === 'cron') {

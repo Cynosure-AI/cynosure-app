@@ -20,6 +20,17 @@ export class HITLGate {
     return new Set(this.pendingByConversation.values())
   }
 
+  /** Clear pending HITL bookkeeping for a conversation and return affected task IDs. */
+  clearPendingForConversation(conversationId: string): string[] {
+    const taskIds: string[] = []
+    for (const [taskId, pendingConversationId] of this.pendingByConversation.entries()) {
+      if (pendingConversationId !== conversationId) continue
+      taskIds.push(taskId)
+      this.pendingByConversation.delete(taskId)
+    }
+    return taskIds
+  }
+
   /** Returns true if the given tool is auto-approved (whitelisted). */
   isAutoApproved(toolName: string): boolean {
     if (isSystemAutoApprovedTool(toolName)) return true

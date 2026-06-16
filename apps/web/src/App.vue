@@ -135,8 +135,9 @@ onMounted(async () => {
       if (isHITLRequestPayload(data)) agentStore.handleHITLRequest(data)
     }),
     api.agent.onHITLResolved((data) => {
-      const payload = data as { taskId?: string } | null
+      const payload = data as { taskId?: string; conversationId?: string } | null
       agentStore.dismissHITLByTaskId(payload?.taskId)
+      agentStore.dismissHITLByConversation(payload?.conversationId)
     }),
     api.agent.onExecutionUpdate((data) => {
       if (isExecutionUpdatePayload(data)) agentStore.handleExecutionUpdate(data)

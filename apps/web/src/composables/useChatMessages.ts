@@ -192,6 +192,7 @@ export function useChatMessages(
         }
         if (convId) {
             agentStore.setConversationExecutionState(convId, false)
+            agentStore.dismissHITLByConversation(convId)
         }
 
         if (convId) {
