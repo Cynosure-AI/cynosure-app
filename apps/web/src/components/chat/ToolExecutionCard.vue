@@ -414,7 +414,7 @@ const maContext = computed(() => {
             </div>
             <p
               v-if="taskContext.routerQuery"
-              class="text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap break-words rounded-md bg-cyan-50/60 px-2 py-1.5 dark:bg-theme-950/45"
+              class="text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap wrap-break-word rounded-md bg-cyan-50/60 px-2 py-1.5 dark:bg-theme-950/45"
             >
               {{ taskContext.routerQuery }}
             </p>
@@ -430,7 +430,7 @@ const maContext = computed(() => {
                 <div class="text-[10px] font-medium uppercase tracking-wide text-cyan-600/70 dark:text-cyan-300/70">
                   {{ query.label }}
                 </div>
-                <p class="mt-0.5 text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap break-words">
+                <p class="mt-0.5 text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap wrap-break-word">
                   {{ query.value }}
                 </p>
               </div>
