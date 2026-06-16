@@ -65,6 +65,10 @@ function persistAutoRoutedUsedTools(
   )
 }
 
+function clearPendingHITLForConversation(conversationId: string): void {
+  getEventBus().emit('hitl:clear-conversation', { conversationId })
+}
+
 
 export async function registerChatRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   const gateway = getGateway()
@@ -498,6 +502,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     }
     // Fallback: cancel by conversationId (handles post-reload or sub-agent-only streaming)
     if (conversationId) {
+      clearPendingHITLForConversation(conversationId)
       cancelChatExecutionByConversation(conversationId)
       cancelPostActions(conversationId)
     }

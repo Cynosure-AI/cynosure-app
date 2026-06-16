@@ -402,6 +402,30 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
     const data = args[0] as { taskId: string }
     pendingHITLResolvers.delete(data.taskId)
   })
+  const removeHitlClearConversationListener = eventBus.on('hitl:clear-conversation', (...args: unknown[]) => {
+    const data = args[0] as { conversationId?: string }
+    if (!data.conversationId) return
+
+    const rows = getDb()
+      .prepare('SELECT task_id FROM pending_hitl WHERE conversation_id = ?')
+      .all(data.conversationId) as { task_id: string }[]
+
+    const taskIds = new Set<string>(rows.map((row) => row.task_id))
+    for (const taskId of getHITLGate().clearPendingForConversation(data.conversationId)) {
+      taskIds.add(taskId)
+    }
+
+    getDb().prepare('DELETE FROM pending_hitl WHERE conversation_id = ?').run(data.conversationId)
+
+    for (const taskId of taskIds) {
+      pendingHITLResolvers.delete(taskId)
+      broadcast('agent:hitl-resolved', {
+        taskId,
+        conversationId: data.conversationId,
+        cancelled: true
+      })
+    }
+  })
 
   const executionListenerCleanups = executionEvents.map((eventName) => {
     const listener = (data: unknown) => {
@@ -480,6 +504,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       clearInterval(heartbeat)
       removeHitlRequestListener()
       removeHitlResolvedListener()
+      removeHitlClearConversationListener()
       for (const cleanup of executionListenerCleanups) {
         cleanup()
       }

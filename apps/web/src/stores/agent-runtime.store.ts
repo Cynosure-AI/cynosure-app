@@ -177,6 +177,21 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  function dismissHITLByConversation(conversationId?: string): void {
+    if (!conversationId) return
+    const removedTaskIds = hitlQueue.value
+      .filter((request) => request.conversationId === conversationId)
+      .map((request) => request.taskId)
+    if (!removedTaskIds.length && !awaitingHITLConvIds.value.has(conversationId)) return
+
+    hitlQueue.value = hitlQueue.value.filter((request) => request.conversationId !== conversationId)
+    for (const taskId of removedTaskIds) {
+      hitlTaskToConv.delete(taskId)
+    }
+    awaitingHITLConvIds.value.delete(conversationId)
+    awaitingHITLConvIds.value = new Set(awaitingHITLConvIds.value)
+  }
+
   async function respondHITL(approved: boolean, reason?: string, approvalType?: 'once' | 'session' | 'always', overrideToolNames?: string[]): Promise<void> {
     if (!pendingHITL.value) return
     const toolNames = overrideToolNames || [...new Set(pendingHITL.value.toolCalls.map(tc => tc.name))]
@@ -539,6 +554,7 @@ export const useAgentStore = defineStore('agent', () => {
     isToolAutoApproved,
     handleHITLRequest,
     dismissHITLByTaskId,
+    dismissHITLByConversation,
     respondHITL,
     awaitingHITLConvIds,
     handleExecutionUpdate,
