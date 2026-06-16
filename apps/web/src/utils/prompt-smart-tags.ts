@@ -36,11 +36,6 @@ export const PROMPT_SMART_TAGS: PromptSmartTag[] = [
     description: "Current time in the server locale and timezone.",
   },
   {
-    name: "isoDateTime",
-    label: "ISO date/time",
-    description: "Current UTC timestamp in ISO format.",
-  },
-  {
     name: "isoDate",
     label: "ISO date",
     description: "Current UTC date as YYYY-MM-DD.",
@@ -94,6 +89,11 @@ export const PROMPT_SMART_TAGS: PromptSmartTag[] = [
     name: "conversationId",
     label: "Conversation ID",
     description: "Conversation identifier for the current run.",
+  },
+  {
+    name: "selectedMemFolderNames",
+    label: "Selected memory folders",
+    description: "Names of the memory folders provided to this execution.",
   },
 ];
 

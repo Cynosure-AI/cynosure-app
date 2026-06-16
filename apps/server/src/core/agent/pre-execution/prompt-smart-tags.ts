@@ -5,6 +5,7 @@ export interface PromptSmartTagContext {
     providerId?: string
     model?: string
     conversationId?: string
+    selectedMemFolderNames?: string[]
     now?: Date
 }
 
@@ -35,7 +36,6 @@ function buildPromptSmartTagValues(context: PromptSmartTagContext): PromptSmartT
         localDateTime: formatDateTime(now, locale, timezone),
         localDate: formatDate(now, locale, timezone),
         localTime: formatTime(now, locale, timezone),
-        isoDateTime: now.toISOString(),
         isoDate: now.toISOString().slice(0, 10),
         isoTime: now.toISOString().slice(11, 19),
         timezone,
@@ -47,7 +47,15 @@ function buildPromptSmartTagValues(context: PromptSmartTagContext): PromptSmartT
         providerId: context.providerId || '',
         model: context.model || '',
         conversationId: context.conversationId || '',
+        selectedMemFolderNames: formatSelectedMemoryFolderNames(context.selectedMemFolderNames),
     }
+}
+
+function formatSelectedMemoryFolderNames(names: string[] | undefined): string {
+    const uniqueNames = Array.from(new Set((names ?? []).map((name) => name.trim()).filter(Boolean)))
+    return uniqueNames.length
+        ? `Provided Memory Spaces are: ${uniqueNames.join(', ')}`
+        : ''
 }
 
 function formatDateTime(date: Date, locale: string, timeZone: string): string {

@@ -15,6 +15,7 @@ import { resolveSkillSystemPrompt } from './pre-execution/execution-skills.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemorySystemMessages } from './pre-execution/execution-memory.js'
 import { buildTaskContext } from './pre-execution/task-context.js'
+import { getAssignedOrDefaultSpaces } from '../memory/memory-space-scope.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
 import type { LLMGateway } from '../gateway/gateway.js'
@@ -209,6 +210,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             providerId: providerModel.providerId,
             model: providerModel.model,
             conversationId,
+            selectedMemFolderNames: resolveSelectedMemoryFolderNames(preset.id, memorySpaceOverrides),
         },
     })
 
@@ -232,6 +234,19 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         systemMessages,
         hasSubAgents: toolLayer.hasSubAgents,
     }
+}
+
+function resolveSelectedMemoryFolderNames(
+    agentId: string,
+    memorySpaceOverrides: { id: string; name: string }[] | undefined,
+): string[] {
+    if (Array.isArray(memorySpaceOverrides)) {
+        return memorySpaceOverrides.map((space) => space.name)
+    }
+
+    if (agentId === '__agentless__') return []
+
+    return getAssignedOrDefaultSpaces(agentId).map((space) => space.name)
 }
 
 function resolveTaskContextRouter(params: {

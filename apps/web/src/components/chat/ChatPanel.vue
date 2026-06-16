@@ -441,17 +441,16 @@ onMounted(() => {
           class="absolute inset-0 w-full h-full"
         >
           <img
-            v-if="activeAgentIconUrl"
             :src="activeAgentIconUrl"
             class="w-full h-full object-cover"
             alt=""
           >
-          <Icon
-            v-else
-            icon="lucide:bot-message-square"
-            class="w-10 h-10 text-accent-400"
-          />
         </RouterLink>
+        <Icon
+          v-else
+          icon="lucide:bot-message-square"
+          class="w-10 h-10 text-accent-400"
+        />
       </div>
       <template v-if="!wsConnected">
         <Icon
