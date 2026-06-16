@@ -56,7 +56,7 @@ onBeforeUnmount(() =>
 
     <div
       v-if="open"
-      class="absolute right-0 z-50 mt-1 w-80 max-h-80 overflow-y-auto rounded-lg border border-theme-700 bg-theme-900 shadow-xl py-1"
+      class="absolute right-0 z-50 mt-1 w-100 max-h-80 overflow-y-auto rounded-lg border border-theme-700 bg-theme-900 shadow-xl py-1"
     >
       <button
         v-for="tag in PROMPT_SMART_TAGS"
