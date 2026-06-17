@@ -130,10 +130,15 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
         return rows.map((row) => {
             const srvInfo = manager.getServerInfo(row.id) || null
 
-            // Resolve icon: explicit icon_url > protocol-native icons > local icon file
-            const iconUrl = row.icon_url
-                || srvInfo?.icons?.[0]?.src
-                || (findMcpIcon(row.command, row.args_json) ? `/api/mcp/servers/${row.id}/icon` : null)
+            // Resolve icon: a local icon.png sitting next to the server entry
+            // wins over remote URLs, since remote icons can 404 or be blocked
+            // by CORS / offline mode, while the on-disk one is always reachable.
+            const localIcon = findMcpIcon(row.command, row.args_json)
+            const iconUrl = localIcon
+                ? `/api/mcp/servers/${row.id}/icon`
+                : (row.icon_url
+                    || srvInfo?.icons?.[0]?.src
+                    || null)
 
             // Resolve env hints: local server.json > stored DB hints
             const liveHints = findEnvHints(row.command, row.args_json)
@@ -199,14 +204,19 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
         } | undefined
         if (!row) return reply.status(404).send({ error: 'Server not found' })
 
-        // If the server has an explicit icon_url, redirect to it
+        // Always prefer a local icon file over the stored remote URL — the
+        // local file is always reachable, the remote one may 404 or be
+        // blocked by CORS / offline mode.
+        const localIcon = findMcpIcon(row.command, row.args_json)
+        if (localIcon) {
+            const data = readFileSync(localIcon.path)
+            return reply.header('Content-Type', localIcon.mime).header('Cache-Control', 'public, max-age=3600').send(data)
+        }
+
+        // No local icon — fall back to the stored remote URL
         if (row.icon_url) return reply.redirect(row.icon_url)
 
-        const icon = findMcpIcon(row.command, row.args_json)
-        if (!icon) return reply.status(404).send({ error: 'No icon found' })
-
-        const data = readFileSync(icon.path)
-        return reply.header('Content-Type', icon.mime).header('Cache-Control', 'public, max-age=3600').send(data)
+        return reply.status(404).send({ error: 'No icon found' })
     })
 
     // POST /api/mcp/servers — add a new MCP server
