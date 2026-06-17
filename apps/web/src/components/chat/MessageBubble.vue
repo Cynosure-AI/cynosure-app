@@ -17,6 +17,7 @@ const props = defineProps<{
   messageId?: string
   thinking?: string
   imageDataUrls?: string[]
+  videoDataUrls?: string[]
   audioDataUrls?: string[]
   fileAttachments?: { name: string }[]
   fileArtifacts?: FileArtifactLink[]
@@ -111,6 +112,7 @@ const renderedContent = computed(() => {
 const isUser = computed(() => props.role === 'user')
 const isForkable = computed(() =>  props.role === 'assistant') //Could also include user too though it doesn't make as much sense since user messages are editable
 const hasAssistantImages = computed(() => !isUser.value && Boolean(props.imageDataUrls?.length))
+const hasAssistantVideos = computed(() => !isUser.value && Boolean(props.videoDataUrls?.length))
 const hasAssistantFileArtifacts = computed(() => !isUser.value && Boolean(props.fileArtifacts?.length))
 const imageGridClass = computed(() => {
   const count = props.imageDataUrls?.length || 0
@@ -369,6 +371,38 @@ const imageGridClass = computed(() => {
           title="Click to enlarge"
           @click="lightboxSrc = url"
         >
+      </div>
+
+      <!-- Model-generated videos (assistant) -->
+      <div
+        v-if="hasAssistantVideos"
+        class="mt-3 space-y-3 w-full min-w-64 max-w-3xl"
+      >
+        <div
+          v-for="(url, idx) in videoDataUrls"
+          :key="idx"
+          class="rounded-lg border border-theme-600 bg-theme-950/50 overflow-hidden"
+        >
+          <video
+            :src="url"
+            controls
+            playsinline
+            class="w-full max-h-[70vh] bg-black"
+          />
+          <div class="flex items-center justify-end gap-2 px-2 py-2 border-t border-theme-700/60">
+            <a
+              :href="url"
+              :download="`video-${idx + 1}.mp4`"
+              class="inline-flex items-center gap-1.5 rounded-md bg-theme-800 hover:bg-theme-700 text-theme-200 px-2 py-1 text-xs transition-colors"
+            >
+              <Icon
+                icon="lucide:download"
+                class="w-3.5 h-3.5"
+              />
+              Download
+            </a>
+          </div>
+        </div>
       </div>
 
       <!-- Streaming cursor -->

@@ -1,5 +1,5 @@
 import { OpenRouterProvider } from './openrouter.provider.js'
-import type { ModelInfo } from './base.provider.js'
+import type { ModelInfo, ModelListType } from './base.provider.js'
 
 /**
  * Groq provider — uses the OpenAI-compatible Chat Completions API
@@ -12,7 +12,8 @@ export class GroqProvider extends OpenRouterProvider {
     protected override get defaultBaseUrl(): string { return 'https://api.groq.com/openai/v1' }
     protected get supportsReasoningParam(): boolean { return false }
 
-    async listModels(_type?: 'llm' | 'embedding'): Promise<string[]> {
+    async listModels(_type?: ModelListType): Promise<string[]> {
+        if (_type === 'video') return []
         // Groq uses the standard OpenAI models endpoint
         const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 

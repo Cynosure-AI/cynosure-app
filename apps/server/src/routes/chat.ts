@@ -12,7 +12,7 @@ import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
-import type { ChatMessage, ContentPart, RegistryAwareToolDefinition } from '../core/gateway/providers/base.provider.js'
+import type { ChatMessage, ContentPart, RegistryAwareToolDefinition, VideoGenerationJob } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
@@ -69,6 +69,48 @@ function clearPendingHITLForConversation(conversationId: string): void {
   getEventBus().emit('hitl:clear-conversation', { conversationId })
 }
 
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'))
+      return
+    }
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer)
+      reject(new DOMException('Aborted', 'AbortError'))
+    }, { once: true })
+  })
+}
+
+function isTerminalVideoStatus(status: string): boolean {
+  return ['completed', 'failed', 'cancelled', 'expired'].includes(status.toLowerCase())
+}
+
+async function pollVideoGeneration(
+  gateway: ReturnType<typeof getGateway>,
+  providerId: string,
+  initialJob: VideoGenerationJob,
+  signal?: AbortSignal,
+): Promise<VideoGenerationJob> {
+  let job = initialJob
+  const deadline = Date.now() + 10 * 60 * 1000
+  while (!isTerminalVideoStatus(job.status) && Date.now() < deadline) {
+    await sleep(4_000, signal)
+    job = await gateway.getVideoGenerationJob(job.id, providerId)
+  }
+  if (!isTerminalVideoStatus(job.status)) {
+    throw new Error('Video generation did not finish before the polling timeout')
+  }
+  if (job.status.toLowerCase() !== 'completed') {
+    throw new Error(job.error || `Video generation ${job.status}`)
+  }
+  return job
+}
+
+function videoContentUrl(providerId: string, jobId: string, index = 0): string {
+  return `/api/providers/${encodeURIComponent(providerId)}/videos/${encodeURIComponent(jobId)}/content?index=${encodeURIComponent(String(index))}`
+}
 
 export async function registerChatRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   const gateway = getGateway()
@@ -343,10 +385,80 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           conversationId
         )
 
+        const resolvedModelInfo = await gateway.getModelInfo(responseModel, responseProvider).catch(() => null)
+        const isVideoOutputModel = resolvedModelInfo?.outputModalities
+          ?.some((modality) => modality.toLowerCase() === 'video') === true
+        if (isVideoOutputModel) {
+          broadcast('chat:stream-start', {
+            streamId,
+            conversationId,
+            agentId: agentId || undefined,
+            agentName: chatAgentName,
+            agentIconUrl: chatAgentIconUrl,
+          })
+          broadcast('chat:stream-chunk', {
+            streamId,
+            conversationId,
+            content: 'Generating video...',
+          })
+
+          const submittedJob = await gateway.generateVideo({
+            model: responseModel,
+            prompt: content,
+            signal: abortController.signal,
+          }, responseProvider)
+          const completedJob = await pollVideoGeneration(gateway, responseProvider, submittedJob, abortController.signal)
+          const videoUrls = [videoContentUrl(responseProvider, completedJob.id)]
+
+          broadcast('chat:stream-videos', { streamId, conversationId, videos: videoUrls })
+          broadcast('chat:stream-end', { streamId, conversationId, model: responseModel })
+
+          const assistantMsgId = nanoid()
+          const assistantNow = Date.now()
+          const assistantContent = 'Generated video.'
+          db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, video_urls_json, agent_id, provider, model, latency_ms, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ).run(
+            assistantMsgId,
+            conversationId,
+            'assistant',
+            assistantContent,
+            JSON.stringify(videoUrls),
+            agentId,
+            responseProvider,
+            responseModel,
+            assistantNow - now,
+            assistantNow
+          )
+          db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
+
+          const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
+          if (conv && conv.title === 'New Chat') {
+            if (generateTitlePref !== false) {
+              generateTitle({
+                conversationId,
+                userMessage: content,
+                assistantResponse: assistantContent,
+                broadcast,
+                providerId: titleProviderIdPref || responseProvider,
+                model: titleModelPref || (titleProviderIdPref ? undefined : responseModel)
+              }).catch(() => { })
+            } else {
+              const fallback = buildFallbackTitle(content)
+              if (fallback) {
+                db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(fallback, Date.now(), conversationId)
+                broadcast('chat:title-updated', { conversationId, title: fallback })
+              }
+            }
+          }
+          return { streamId }
+        }
+
         // Fetch context window size (best-effort, non-blocking for the critical path)
         let contextWindow: number | undefined
         try {
-          const modelInfo = await gateway.getModelInfo(responseModel, providerId)
+          const modelInfo = resolvedModelInfo || await gateway.getModelInfo(responseModel, providerId)
           contextWindow = modelInfo.contextLength
         } catch { /* ignore — context window info is optional */ }
 

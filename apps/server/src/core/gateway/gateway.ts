@@ -4,7 +4,12 @@ import {
   type CompletionRequest,
   type CompletionResponse,
   type StreamChunk,
-  type ModelInfo
+  type ModelInfo,
+  type ModelListType,
+  type VideoGenerationContent,
+  type VideoGenerationJob,
+  type VideoGenerationModelInfo,
+  type VideoGenerationRequest
 } from './providers/base.provider.js'
 import {
   ensurePricingLoaded,
@@ -118,12 +123,54 @@ export class LLMGateway {
     yield* provider.streamComplete(request)
   }
 
-  async listModels(providerId?: string, type?: 'llm' | 'embedding'): Promise<string[]> {
+  async listModels(providerId?: string, type?: ModelListType): Promise<string[]> {
     const provider = providerId
       ? this.providers.get(providerId)
       : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
     return provider.listModels(type)
+  }
+
+  async listVideoModels(providerId?: string): Promise<VideoGenerationModelInfo[]> {
+    const provider = providerId
+      ? this.providers.get(providerId)
+      : this.getLastUsedProvider()
+    if (!provider) throw new Error(`Provider not found`)
+    return provider.listVideoModels()
+  }
+
+  async generateVideo(
+    request: VideoGenerationRequest,
+    providerId?: string
+  ): Promise<VideoGenerationJob> {
+    const provider = providerId
+      ? this.providers.get(providerId)
+      : this.getLastUsedProvider()
+    if (!provider) throw new Error(`Provider not found`)
+    return provider.generateVideo(request)
+  }
+
+  async getVideoGenerationJob(
+    jobIdOrUrl: string,
+    providerId?: string
+  ): Promise<VideoGenerationJob> {
+    const provider = providerId
+      ? this.providers.get(providerId)
+      : this.getLastUsedProvider()
+    if (!provider) throw new Error(`Provider not found`)
+    return provider.getVideoGenerationJob(jobIdOrUrl)
+  }
+
+  async getVideoGenerationContent(
+    jobId: string,
+    index = 0,
+    providerId?: string
+  ): Promise<VideoGenerationContent> {
+    const provider = providerId
+      ? this.providers.get(providerId)
+      : this.getLastUsedProvider()
+    if (!provider) throw new Error(`Provider not found`)
+    return provider.getVideoGenerationContent(jobId, index)
   }
 
   /**

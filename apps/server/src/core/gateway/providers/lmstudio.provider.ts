@@ -1,5 +1,5 @@
 import { OpenAIProvider } from './openai.provider.js'
-import type { LLMProviderConfig, ModelInfo } from './base.provider.js'
+import type { LLMProviderConfig, ModelInfo, ModelListType } from './base.provider.js'
 
 interface LMStudioModel {
   type: 'llm' | 'embedding'
@@ -32,7 +32,8 @@ export class LMStudioProvider extends OpenAIProvider {
    * and lets us filter out embedding models.
    * Endpoint: GET {host}/api/v1/models
    */
-  async listModels(type?: 'llm' | 'embedding'): Promise<string[]> {
+  async listModels(type?: ModelListType): Promise<string[]> {
+    if (type === 'video') return []
     // Derive the host from the configured baseUrl (strip /v1 suffix)
     const base = (this.config.baseUrl || 'http://localhost:1234/v1').replace(/\/v1\/?$/, '')
     const url = `${base}/api/v1/models`

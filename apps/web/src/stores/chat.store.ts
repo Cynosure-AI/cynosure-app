@@ -26,6 +26,7 @@ export interface DisplayMessage {
   content: string
   thinking?: string
   imageDataUrls?: string[]
+  videoDataUrls?: string[]
   audioDataUrls?: string[]
   fileAttachments?: { name: string }[]
   agentId?: string
@@ -184,6 +185,7 @@ export const useChatStore = defineStore('chat', () => {
           content: r.content,
           thinking: r.thinking || undefined,
           imageDataUrls: r.imageDataUrls || undefined,
+          videoDataUrls: r.videoDataUrls || undefined,
           audioDataUrls: r.audioDataUrls || undefined,
           fileAttachments: r.fileAttachments || undefined,
           agentId: r.agentId || undefined,
@@ -233,6 +235,7 @@ export const useChatStore = defineStore('chat', () => {
           content: buf.content,
           thinking: buf.thinking || undefined,
           imageDataUrls: buf.images.length ? buf.images : undefined,
+          videoDataUrls: buf.videos.length ? buf.videos : undefined,
           agentId: buf.agentId,
           agentName: buf.agentName,
           agentIconUrl: buf.agentIconUrl,
@@ -600,6 +603,7 @@ export const useChatStore = defineStore('chat', () => {
     handleStreamChunk: streaming.handleStreamChunk,
     handleStreamThinking: streaming.handleStreamThinking,
     handleStreamImages: streaming.handleStreamImages,
+    handleStreamVideos: streaming.handleStreamVideos,
     handleStreamReset: streaming.handleStreamReset,
     handleStreamUsage: streaming.handleStreamUsage,
     finalizeCurrentStreaming: streaming.finalizeCurrentStreaming,

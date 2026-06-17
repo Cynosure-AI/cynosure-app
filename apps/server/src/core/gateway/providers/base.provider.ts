@@ -73,6 +73,8 @@ export interface ToolResult {
   imageDataUrls?: string[]
 }
 
+export type ModelListType = 'llm' | 'embedding' | 'video'
+
 export interface ModelInfo {
   id: string
   contextLength?: number
@@ -82,6 +84,74 @@ export interface ModelInfo {
   supportsToolCalls?: boolean
   /** Cost in $ per 1M tokens: { input, output } */
   cost?: { input: number; output: number }
+}
+
+export interface VideoGenerationFrameImage {
+  type: 'image_url'
+  image_url: { url: string }
+  frame_type: 'first_frame' | 'last_frame'
+}
+
+export interface VideoGenerationReferenceImage {
+  type: 'image_url'
+  image_url: { url: string }
+}
+
+export interface VideoGenerationRequest {
+  model: string
+  prompt: string
+  duration?: number
+  resolution?: string
+  aspect_ratio?: string
+  size?: string
+  frame_images?: VideoGenerationFrameImage[]
+  input_references?: VideoGenerationReferenceImage[]
+  generate_audio?: boolean
+  seed?: number
+  callback_url?: string
+  provider?: Record<string, unknown>
+  signal?: AbortSignal
+}
+
+export type VideoGenerationStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'expired'
+
+export interface VideoGenerationJob {
+  id: string
+  generation_id?: string | null
+  polling_url?: string
+  status: VideoGenerationStatus | string
+  model?: string | null
+  unsigned_urls?: string[]
+  usage?: {
+    cost?: number
+    is_byok?: boolean
+  }
+  error?: string
+}
+
+export interface VideoGenerationModelInfo {
+  id: string
+  canonical_slug?: string
+  name?: string
+  description?: string
+  created?: number
+  supported_resolutions?: string[] | null
+  supported_aspect_ratios?: string[] | null
+  supported_sizes?: string[] | null
+  supported_frame_images?: string[] | null
+  pricing_skus?: Record<string, string> | null
+  allowed_passthrough_parameters?: string[] | null
+}
+
+export interface VideoGenerationContent {
+  data: ArrayBuffer
+  contentType: string
 }
 
 export interface CompletionRequest {
@@ -131,8 +201,24 @@ export abstract class BaseLLMProvider {
   abstract streamComplete(
     request: CompletionRequest
   ): AsyncIterable<StreamChunk>
-  abstract listModels(type?: 'llm' | 'embedding'): Promise<string[]>
+  abstract listModels(type?: ModelListType): Promise<string[]>
   abstract testConnection(): Promise<boolean>
+
+  async listVideoModels(): Promise<VideoGenerationModelInfo[]> {
+    return []
+  }
+
+  async generateVideo(_request: VideoGenerationRequest): Promise<VideoGenerationJob> {
+    throw new Error(`${this.config.name} does not support video generation`)
+  }
+
+  async getVideoGenerationJob(_jobIdOrUrl: string): Promise<VideoGenerationJob> {
+    throw new Error(`${this.config.name} does not support video generation`)
+  }
+
+  async getVideoGenerationContent(_jobId: string, _index = 0): Promise<VideoGenerationContent> {
+    throw new Error(`${this.config.name} does not support video generation`)
+  }
 
   /**
    * Return metadata for a specific model — most importantly contextLength.

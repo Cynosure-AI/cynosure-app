@@ -115,6 +115,7 @@ onMounted(async () => {
     api.chat.onStreamChunk((data) => chatStore.handleStreamChunk(data)),
     api.chat.onStreamThinking((data) => chatStore.handleStreamThinking(data)),
     api.chat.onStreamImages((data) => chatStore.handleStreamImages(data)),
+    api.chat.onStreamVideos((data) => chatStore.handleStreamVideos(data)),
     api.chat.onStreamReset((data) => chatStore.handleStreamReset(data)),
     api.chat.onStreamUsage((data) => chatStore.handleStreamUsage(data)),
     api.chat.onStreamEnd((data) => chatStore.handleStreamEnd(data)),

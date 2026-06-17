@@ -5,6 +5,10 @@ import type {
   AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
   MetricsSummary, OrchestrationState,
   SkillDefinition,
+  ModelListType,
+  VideoGenerationJob,
+  VideoGenerationModelInfo,
+  VideoGenerationRequest,
 } from './types'
 import type { WsHandler } from './http'
 
@@ -18,10 +22,18 @@ export const api = {
     setLastUsed: (id: string) => put<void>('/api/providers/active', { id }),
     getLastUsed: () => get<{ id: string }>('/api/providers/active').then((r) => r.id),
     test: (id: string) => post<{ success: boolean }>(`/api/providers/${encodeURIComponent(id)}/test`).then((r) => r.success),
-    listModels: (id: string, type?: 'llm' | 'embedding') => {
+    listModels: (id: string, type?: ModelListType) => {
       const params = type ? `?type=${type}` : ''
       return get<string[]>(`/api/providers/${encodeURIComponent(id)}/models${params}`)
     },
+    listVideoModels: (id: string) =>
+      get<VideoGenerationModelInfo[]>(`/api/providers/${encodeURIComponent(id)}/videos/models`),
+    generateVideo: (id: string, request: VideoGenerationRequest) =>
+      post<VideoGenerationJob>(`/api/providers/${encodeURIComponent(id)}/videos`, request),
+    getVideoJob: (id: string, jobId: string) =>
+      get<VideoGenerationJob>(`/api/providers/${encodeURIComponent(id)}/videos/${encodeURIComponent(jobId)}`),
+    getVideoContentUrl: (id: string, jobId: string, index = 0) =>
+      `${BASE_URL}/api/providers/${encodeURIComponent(id)}/videos/${encodeURIComponent(jobId)}/content?index=${encodeURIComponent(String(index))}`,
     getModelInfo: (providerId: string, modelId: string) =>
       get<{
         id: string
@@ -187,6 +199,9 @@ export const api = {
     onStreamImages: (
       cb: (data: { streamId: string; conversationId: string; images: string[] }) => void
     ) => onWsEvent('chat:stream-images', cb as WsHandler),
+    onStreamVideos: (
+      cb: (data: { streamId: string; conversationId: string; videos: string[] }) => void
+    ) => onWsEvent('chat:stream-videos', cb as WsHandler),
     onStreamEnd: (
       cb: (data: {
         streamId: string

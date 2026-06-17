@@ -13,6 +13,70 @@ export interface LLMProviderConfig {
     supportsVision: boolean
 }
 
+export type ModelListType = 'llm' | 'embedding' | 'video'
+
+export interface VideoGenerationFrameImage {
+    type: 'image_url'
+    image_url: { url: string }
+    frame_type: 'first_frame' | 'last_frame'
+}
+
+export interface VideoGenerationReferenceImage {
+    type: 'image_url'
+    image_url: { url: string }
+}
+
+export interface VideoGenerationRequest {
+    model: string
+    prompt: string
+    duration?: number
+    resolution?: string
+    aspect_ratio?: string
+    size?: string
+    frame_images?: VideoGenerationFrameImage[]
+    input_references?: VideoGenerationReferenceImage[]
+    generate_audio?: boolean
+    seed?: number
+    callback_url?: string
+    provider?: Record<string, unknown>
+}
+
+export type VideoGenerationStatus =
+    | 'pending'
+    | 'in_progress'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+    | 'expired'
+
+export interface VideoGenerationJob {
+    id: string
+    generation_id?: string | null
+    polling_url?: string
+    status: VideoGenerationStatus | string
+    model?: string | null
+    unsigned_urls?: string[]
+    usage?: {
+        cost?: number
+        is_byok?: boolean
+    }
+    error?: string
+}
+
+export interface VideoGenerationModelInfo {
+    id: string
+    canonical_slug?: string
+    name?: string
+    description?: string
+    created?: number
+    supported_resolutions?: string[] | null
+    supported_aspect_ratios?: string[] | null
+    supported_sizes?: string[] | null
+    supported_frame_images?: string[] | null
+    pricing_skus?: Record<string, string> | null
+    allowed_passthrough_parameters?: string[] | null
+}
+
 export interface StoredMessage {
     id: string
     conversationId: string
@@ -22,6 +86,7 @@ export interface StoredMessage {
     toolCalls?: unknown[]
     toolCallId?: string
     imageDataUrls?: string[]
+    videoDataUrls?: string[]
     audioDataUrls?: string[]
     fileAttachments?: { name: string }[]
     agentId?: string
