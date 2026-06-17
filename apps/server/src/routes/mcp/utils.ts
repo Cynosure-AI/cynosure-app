@@ -51,22 +51,37 @@ const MIME_MAP: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', 
 
 /**
  * Try to find an icon file (icon.png, icon.jpg, etc.) in the MCP server's folder.
- * Derives the folder from the first path-like argument.
+ * Derives the folder from the first path-like argument, then walks up a few
+ * levels. Falls back to process.cwd() so local servers launched with a
+ * relative path (e.g. `node server.js`) still pick up an icon.png in the
+ * user's project directory.
  */
 export function findMcpIcon(command: string, argsJson: string): { path: string; mime: string } | null {
     const args = JSON.parse(argsJson) as string[]
     const entryPath = args.find(a => isAbsolute(a) && !a.startsWith('-'))
-    if (!entryPath) return null
 
-    let dir = dirname(resolve(entryPath))
-    const root = dirname(dir)
-    for (let i = 0; i < 3 && dir.length > 1; i++) {
+    const searchDirs: string[] = []
+    if (entryPath) {
+        let dir = dirname(resolve(entryPath))
+        const root = dirname(dir)
+        for (let i = 0; i < 3 && dir.length > 1; i++) {
+            searchDirs.push(dir)
+            if (dir === root) break
+            dir = dirname(dir)
+        }
+    }
+
+    // Fallback: also look in process.cwd() so `node server.js` (no absolute
+    // path) still finds an icon.png in the project root the user is in.
+    const cwd = process.cwd()
+    if (!searchDirs.includes(cwd)) searchDirs.push(cwd)
+    if (!searchDirs.includes(dirname(cwd))) searchDirs.push(dirname(cwd))
+
+    for (const dir of searchDirs) {
         for (const ext of ICON_EXTS) {
             const p = join(dir, `icon.${ext}`)
             if (existsSync(p)) return { path: p, mime: MIME_MAP[ext] }
         }
-        if (dir === root) break
-        dir = dirname(dir)
     }
     return null
 }
