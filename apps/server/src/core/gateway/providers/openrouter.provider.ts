@@ -8,7 +8,12 @@ import {
     type ChatMessage,
     type ContentPart,
     type ToolCall,
-    type ModelInfo
+    type ModelInfo,
+    type ModelListType,
+    type VideoGenerationContent,
+    type VideoGenerationJob,
+    type VideoGenerationModelInfo,
+    type VideoGenerationRequest
 } from './base.provider.js'
 import { ensurePricingLoaded, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
 
@@ -121,6 +126,56 @@ export class OpenRouterProvider extends BaseLLMProvider {
             return this.getOutputModalities(model).includes('image')
         } catch {
             return false
+        }
+    }
+
+    private async requestOpenRouter<T>(
+        pathOrUrl: string,
+        init: RequestInit = {}
+    ): Promise<T> {
+        const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
+        const url = pathOrUrl.startsWith('http')
+            ? pathOrUrl
+            : `${baseUrl}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`
+        const headers = new Headers(init.headers)
+        if (this.config.apiKey) headers.set('Authorization', `Bearer ${this.config.apiKey}`)
+        if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+
+        const res = await fetch(url, { ...init, headers })
+        if (!res.ok) {
+            let detail = `${res.status} ${res.statusText}`
+            try {
+                const data = await res.json() as { error?: { message?: string } | string; message?: string }
+                const message = typeof data.error === 'string'
+                    ? data.error
+                    : data.error?.message || data.message
+                if (message) detail = message
+            } catch {
+                const text = await res.text().catch(() => '')
+                if (text) detail = text
+            }
+            throw new Error(`OpenRouter request failed: ${detail}`)
+        }
+
+        return await res.json() as T
+    }
+
+    private async requestOpenRouterContent(pathOrUrl: string): Promise<VideoGenerationContent> {
+        const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
+        const url = pathOrUrl.startsWith('http')
+            ? pathOrUrl
+            : `${baseUrl}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`
+        const headers = new Headers()
+        if (this.config.apiKey) headers.set('Authorization', `Bearer ${this.config.apiKey}`)
+
+        const res = await fetch(url, { headers })
+        if (!res.ok) {
+            throw new Error(`OpenRouter content request failed: ${res.status} ${res.statusText}`)
+        }
+
+        return {
+            data: await res.arrayBuffer(),
+            contentType: res.headers.get('content-type') || 'video/mp4'
         }
     }
 
@@ -558,10 +613,10 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
     }
 
-    async listModels(type?: 'llm' | 'embedding'): Promise<string[]> {
+    async listModels(type?: ModelListType): Promise<string[]> {
         const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 
-        const modality = type === 'embedding' ? 'embeddings' : 'text'
+        const modality = type === 'embedding' ? 'embeddings' : type === 'video' ? 'video' : 'text'
         const url = `${baseUrl}/models?output_modalities=${modality}`
 
         const res = await fetch(url, {
@@ -580,6 +635,31 @@ export class OpenRouterProvider extends BaseLLMProvider {
             data: Array<{ id: string; name: string }>
         }
         return data.data.map((m) => m.id).sort()
+    }
+
+    async listVideoModels(): Promise<VideoGenerationModelInfo[]> {
+        const data = await this.requestOpenRouter<{ data?: VideoGenerationModelInfo[] }>('/videos/models')
+        return Array.isArray(data.data) ? data.data : []
+    }
+
+    async generateVideo(request: VideoGenerationRequest): Promise<VideoGenerationJob> {
+        const { signal, ...payload } = request
+        return await this.requestOpenRouter<VideoGenerationJob>('/videos', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            signal
+        })
+    }
+
+    async getVideoGenerationJob(jobIdOrUrl: string): Promise<VideoGenerationJob> {
+        const path = jobIdOrUrl.startsWith('http')
+            ? jobIdOrUrl
+            : `/videos/${encodeURIComponent(jobIdOrUrl)}`
+        return await this.requestOpenRouter<VideoGenerationJob>(path)
+    }
+
+    async getVideoGenerationContent(jobId: string, index = 0): Promise<VideoGenerationContent> {
+        return await this.requestOpenRouterContent(`/videos/${encodeURIComponent(jobId)}/content?index=${encodeURIComponent(String(index))}`)
     }
 
     async testConnection(): Promise<boolean> {

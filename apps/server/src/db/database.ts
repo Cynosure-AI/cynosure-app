@@ -86,6 +86,7 @@ function createTables(db: Database.Database): void {
       completion_tokens INTEGER,
       latency_ms INTEGER,
       image_urls_json TEXT,
+      video_urls_json TEXT,
       agent_id TEXT,
       memory_sources_json TEXT,
       thinking TEXT,
@@ -382,6 +383,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('mcp_servers', 'description', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('mcp_servers', 'original_name', 'TEXT')
   addColumnIfMissing('mcp_servers', 'custom_name', 'TEXT')
+  addColumnIfMissing('messages', 'video_urls_json', 'TEXT')
   db.prepare("UPDATE mcp_servers SET original_name = name WHERE original_name IS NULL OR original_name = ''").run()
 
   // Tasks table: reused for durable top-level orchestrator state.

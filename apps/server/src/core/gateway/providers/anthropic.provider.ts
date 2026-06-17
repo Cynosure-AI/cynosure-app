@@ -7,7 +7,8 @@ import {
   type StreamChunk,
   type ChatMessage,
   type ContentPart,
-  type ModelInfo
+  type ModelInfo,
+  type ModelListType
 } from './base.provider.js'
 
 export class AnthropicProvider extends BaseLLMProvider {
@@ -302,7 +303,8 @@ export class AnthropicProvider extends BaseLLMProvider {
     }
   }
 
-  async listModels(_type?: 'llm' | 'embedding'): Promise<string[]> {
+  async listModels(_type?: ModelListType): Promise<string[]> {
+    if (_type === 'video') return []
     try {
       const response = await this.client.models.list()
       return response.data.map((m) => m.id).sort()
