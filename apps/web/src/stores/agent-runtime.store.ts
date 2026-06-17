@@ -321,6 +321,12 @@ export const useAgentStore = defineStore('agent', () => {
 
       case 'step:status': {
         const step = buildStep(eventData, taskId)
+        const previousStep = isForActiveView
+          ? findLastStepByTask(taskId)
+          : convId ? findLastStepInArray(stepsPerConversation.get(convId) || [], taskId) : undefined
+        if (step.status === 'executing' && previousStep?.iteration === step.iteration && previousStep.toolCalls?.length) {
+          step.toolCalls = previousStep.toolCalls
+        }
         if (isForActiveView) executionSteps.value.push(step)
         const cid = convId || executionConversationId.value
         if (cid) {
