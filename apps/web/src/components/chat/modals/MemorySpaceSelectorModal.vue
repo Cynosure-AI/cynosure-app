@@ -102,7 +102,7 @@ function toggleAutoMemory(enabled: boolean) {
     title="Memory Folders"
     icon="lucide:brain"
     icon-color="accent"
-    max-width="max-w-sm"
+    max-width="max-w-lg"
     @close="visible = false"
   >
     <div class="mb-4 rounded-lg border border-theme-700 bg-theme-900/50 p-3 flex items-start justify-between gap-3">
