@@ -50,6 +50,7 @@ const statusMeta: Record<string, { label: string; icon: string; color: string }>
 }
 
 type ToolCall = { name: string; arguments: string }
+type ToolResult = { name: string; success: boolean; output: string; error?: string; images?: string[] }
 
 function meta(s: string) {
   return statusMeta[s] ?? { label: s, icon: 'lucide:circle', color: 'text-theme-400' }
@@ -170,6 +171,21 @@ const toolCallArgs = computed(() => {
     if (step.toolCalls?.length) return step.toolCalls
   }
   return []
+})
+
+const toolExecutions = computed(() => {
+  const remainingResults = [...results.value]
+  const executions = toolCallArgs.value.map((call, index) => {
+    let resultIndex = remainingResults.findIndex(result => result.name === call.name)
+    if (resultIndex === -1 && remainingResults[index]) resultIndex = index
+    const result = resultIndex === -1 ? undefined : remainingResults.splice(resultIndex, 1)[0]
+    return { call, result }
+  })
+
+  return [
+    ...executions,
+    ...remainingResults.map(result => ({ call: null, result })),
+  ] as Array<{ call: ToolCall | null; result?: ToolResult }>
 })
 
 const taskContext = computed(() => {
@@ -415,31 +431,39 @@ const maContext = computed(() => {
             </div>
           </div>
 
-          <!-- Tool call arguments -->
+          <!-- Tool executions -->
           <div
-            v-if="toolCallArgs.length && !isTaskContext"
+            v-if="toolExecutions.length && !isTaskContext"
             class="space-y-1.5"
           >
             <div
-              v-for="(tc, i) in toolCallArgs"
+              v-for="(execution, i) in toolExecutions"
               :key="i"
               class="rounded-lg border px-3 py-2"
-              :class="isSubAgentSpawnCall(tc.name)
+              :class="execution.call && isSubAgentSpawnCall(execution.call.name)
                 ? 'bg-indigo-500/10 border-indigo-500/20 dark:bg-indigo-950/15 dark:border-indigo-500/25'
-                : 'bg-theme-950 border-theme-700 dark:bg-theme-900/60 dark:border-theme-700/30'"
+                : execution.result?.success === false
+                  ? 'bg-red-50/80 border-red-300/30 dark:bg-red-500/5 dark:border-red-500/15'
+                  : execution.result
+                    ? 'bg-emerald-50/80 border-emerald-300/30 dark:bg-emerald-500/5 dark:border-emerald-500/15'
+                    : 'bg-theme-950 border-theme-700 dark:bg-theme-900/60 dark:border-theme-700/30'"
             >
               <div class="flex items-center gap-1.5 mb-1">
                 <Icon
-                  :icon="toolCallIcon(tc)"
+                  :icon="execution.result ? (execution.result.success ? 'lucide:check' : 'lucide:x') : execution.call ? toolCallIcon(execution.call) : 'lucide:terminal'"
                   class="w-3 h-3"
-                  :class="toolCallIconClass(tc.name, tc.arguments)"
+                  :class="execution.result
+                    ? execution.result.success ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'
+                    : execution.call ? toolCallIconClass(execution.call.name, execution.call.arguments) : 'text-theme-500'"
                 />
                 <span
                   class="text-[11px] font-medium"
-                  :class="isSubAgentSpawnCall(tc.name) ? 'text-indigo-600 dark:text-indigo-300' : 'text-accent-500 dark:text-accent-300'"
-                >{{ toolDisplayName(tc.name) }}</span>
+                  :class="execution.result?.success === false
+                    ? 'text-red-600 dark:text-red-300'
+                    : execution.call && isSubAgentSpawnCall(execution.call.name) ? 'text-indigo-600 dark:text-indigo-300' : 'text-accent-500 dark:text-accent-300'"
+                >{{ toolDisplayName(execution.call?.name || execution.result?.name || 'Tool') }}</span>
                 <span
-                  v-if="isMemoryCall(tc) && formatRerankerScore(tc)"
+                  v-if="execution.call && isMemoryCall(execution.call) && formatRerankerScore(execution.call)"
                   class="ml-auto inline-flex items-center gap-1 rounded-md bg-accent-100/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-700 ring-1 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-200 dark:ring-accent-500/20"
                   title="Reranker match score"
                 >
@@ -447,74 +471,53 @@ const maContext = computed(() => {
                     icon="lucide:percent"
                     class="w-3 h-3"
                   />
-                  {{ formatRerankerScore(tc) }}
+                  {{ formatRerankerScore(execution.call) }}
                 </span>
                 <span
-                  v-if="subAgentCodenameFromArgs(tc.arguments)"
+                  v-if="execution.call && subAgentCodenameFromArgs(execution.call.arguments)"
                   class="ml-1 inline-flex rounded bg-indigo-200/40 px-1.5 py-0.5 text-[10px] text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"
-                >{{ subAgentCodenameFromArgs(tc.arguments) }}</span>
+                >{{ subAgentCodenameFromArgs(execution.call.arguments) }}</span>
               </div>
               <pre
-                v-if="tc.arguments && tc.arguments !== '{}'"
+                v-if="execution.call?.arguments && execution.call.arguments !== '{}'"
                 class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
-              >{{ prettifyJson(tc.arguments) }}</pre>
-            </div>
-          </div>
-
-          <!-- Results -->
-          <div
-            v-if="results.length"
-            class="space-y-1.5"
-          >
-            <div
-              v-for="(r, i) in results"
-              :key="i"
-              class="rounded-lg border px-3 py-2"
-              :class="r.success
-                ? 'bg-emerald-50/80 border-emerald-300/30 dark:bg-emerald-500/5 dark:border-emerald-500/15'
-                : 'bg-red-50/80 border-red-300/30 dark:bg-red-500/5 dark:border-red-500/15'"
-            >
-              <div class="flex items-center gap-1.5 mb-1">
-                <Icon
-                  :icon="r.success ? 'lucide:check' : 'lucide:x'"
-                  class="w-3 h-3"
-                  :class="r.success ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'"
-                />
-                <span
-                  class="text-[11px] font-medium"
-                  :class="r.success ? 'text-theme-300' : 'text-red-600 dark:text-red-300'"
-                >{{ r.name }}</span>
-              </div>
+              >{{ prettifyJson(execution.call.arguments) }}</pre>
               <pre
+                v-if="execution.result"
                 class="text-[10px] whitespace-pre-wrap break-all rounded px-2 py-1.5 max-h-64 overflow-y-auto font-mono"
-                :class="r.success
-                  ? 'text-theme-400 bg-theme-900/50'
-                  : 'text-red-700/80 bg-red-100/80 dark:text-red-300/80 dark:bg-red-950/30'"
-              >{{ prettifyJson(r.output) }}</pre>
-              <!-- File artifacts -->
-              <FileArtifactLinks :text="r.output" />
-              <!-- Image thumbnails -->
+                :class="[
+                  execution.call?.arguments && execution.call.arguments !== '{}' ? 'mt-1.5' : '',
+                  execution.result.success
+                    ? 'text-theme-400 bg-theme-900/50'
+                    : 'text-red-700/80 bg-red-100/80 dark:text-red-300/80 dark:bg-red-950/30'
+                ]"
+              >{{ prettifyJson(execution.result.output) }}</pre>
+              <FileArtifactLinks
+                v-if="execution.result"
+                :text="execution.result.output"
+              />
               <div
-                v-if="r.images?.length"
+                v-if="execution.result?.images?.length"
                 class="flex gap-2 mt-2 flex-wrap"
               >
                 <img
-                  v-for="(img, ii) in r.images"
+                  v-for="(img, ii) in execution.result.images"
                   :key="ii"
                   :src="img"
                   class="h-24 rounded-lg border border-theme-600 object-cover cursor-pointer hover:border-accent-500 transition-colors"
-                  :title="`Click to enlarge — Image ${ii + 1} from ${r.name}`"
+                  :title="`Click to enlarge - Image ${ii + 1} from ${execution.result.name}`"
                   @click.stop="lightboxSrc = img"
                 >
               </div>
               <p
-                v-if="r.error"
+                v-if="execution.result?.error"
                 class="mt-1 text-[10px] text-red-600 dark:text-red-400"
               >
-                {{ r.error }}
+                {{ execution.result.error }}
               </p>
             </div>
           </div>
+
         </div>
       </CollapsibleSection>
     </div>
