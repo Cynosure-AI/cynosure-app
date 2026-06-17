@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { LLMProviderConfig } from "../../api/types";
+import type { LLMProviderConfig, ModelListType } from "../../api/types";
 import CustomSelect, {
   type SelectOption,
   type SelectOptionGroup,
@@ -13,7 +13,7 @@ import { SK_PROVIDER_MODEL_FAVORITES } from "../../utils/storage-keys";
 interface ProviderModelSelection {
   providerId: string;
   model: string;
-  modelType?: "llm" | "embedding";
+  modelType?: ModelListType;
   label: string;
   imgSrc?: string | null;
   iconName?: string;
@@ -29,7 +29,8 @@ const props = withDefaults(
       LLMProviderConfig,
       "id" | "name" | "type" | "defaultModel"
     >[];
-    modelType?: "llm" | "embedding";
+    modelType?: ModelListType;
+    modelTypes?: ModelListType[];
     includeDefault?: boolean;
     defaultLabel?: string;
     defaultIcon?: string;
@@ -45,6 +46,7 @@ const props = withDefaults(
   }>(),
   {
     modelType: "llm",
+    modelTypes: undefined,
     includeDefault: false,
     defaultLabel: "Use defaults",
     defaultIcon: "lucide:settings",
@@ -76,8 +78,12 @@ const loadingByProvider = ref<Record<string, boolean>>({});
 const favoriteModels = ref<ProviderModelSelection[]>(loadFavoriteModels());
 
 function cacheKey(providerId: string): string {
-  return `${props.modelType}:${providerId}`;
+  return `${activeModelTypes.value.join("+")}:${providerId}`;
 }
+
+const activeModelTypes = computed(() =>
+  props.modelTypes?.length ? props.modelTypes : [props.modelType],
+);
 
 function encode(providerId: string, model: string): string {
   return JSON.stringify({ providerId, model });
@@ -189,7 +195,10 @@ async function ensureProviderModels(providerId: string): Promise<void> {
 
   loadingByProvider.value = { ...loadingByProvider.value, [providerId]: true };
   try {
-    const models = await providerStore.listModels(providerId, props.modelType);
+    const results = await Promise.all(
+      activeModelTypes.value.map((type) => providerStore.listModels(providerId, type)),
+    );
+    const models = Array.from(new Set(results.flat())).sort();
     sharedModelCache.set(key, models);
     providerModels.value = { ...providerModels.value, [providerId]: models };
   } catch {
@@ -218,7 +227,9 @@ const selectedEncoded = computed(() =>
 
 const groups = computed((): SelectOptionGroup[] => {
   const topOptions: SelectOption[] = [];
-  const providerById = new Map(props.providers.map((provider) => [provider.id, provider]));
+  const providerById = new Map(
+    props.providers.map((provider) => [provider.id, provider]),
+  );
 
   if (props.includeDefault) {
     topOptions.push({

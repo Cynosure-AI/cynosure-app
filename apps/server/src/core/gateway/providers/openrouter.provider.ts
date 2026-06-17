@@ -8,9 +8,14 @@ import {
     type ChatMessage,
     type ContentPart,
     type ToolCall,
-    type ModelInfo
+    type ModelInfo,
+    type ModelListType,
+    type VideoGenerationContent,
+    type VideoGenerationJob,
+    type VideoGenerationModelInfo,
+    type VideoGenerationRequest
 } from './base.provider.js'
-import { ensurePricingLoaded, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
+import { ensurePricingLoaded, getModelOutputModalities, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
 
 const MODEL_CACHE_TTL_MS = 10 * 60 * 1000
 
@@ -121,6 +126,82 @@ export class OpenRouterProvider extends BaseLLMProvider {
             return this.getOutputModalities(model).includes('image')
         } catch {
             return false
+        }
+    }
+
+    private async getImageGenerationModalities(modelId: string): Promise<string[] | undefined> {
+        await ensurePricingLoaded().catch(() => { /* best-effort capability metadata */ })
+        const modelsDevModalities = getModelOutputModalities(this.config.type, modelId)
+            ?.map((item) => item.toLowerCase())
+        if (modelsDevModalities?.includes('image')) {
+            return modelsDevModalities.includes('text') ? ['image', 'text'] : ['image']
+        }
+
+        try {
+            const models = await this.fetchModels()
+            const model = models.find(m => m.id === modelId)
+            const outputModalities = this.getOutputModalities(model)
+            if (outputModalities.includes('image')) {
+                return outputModalities.includes('text') ? ['image', 'text'] : ['image']
+            }
+        } catch {
+            // Fall through to the conservative default below.
+        }
+
+        if (await this.modelSupportsImageOutput(modelId)) {
+            return ['image', 'text']
+        }
+
+        return undefined
+    }
+
+    private async requestOpenRouter<T>(
+        pathOrUrl: string,
+        init: RequestInit = {}
+    ): Promise<T> {
+        const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
+        const url = pathOrUrl.startsWith('http')
+            ? pathOrUrl
+            : `${baseUrl}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`
+        const headers = new Headers(init.headers)
+        if (this.config.apiKey) headers.set('Authorization', `Bearer ${this.config.apiKey}`)
+        if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+
+        const res = await fetch(url, { ...init, headers })
+        if (!res.ok) {
+            let detail = `${res.status} ${res.statusText}`
+            try {
+                const data = await res.json() as { error?: { message?: string } | string; message?: string }
+                const message = typeof data.error === 'string'
+                    ? data.error
+                    : data.error?.message || data.message
+                if (message) detail = message
+            } catch {
+                const text = await res.text().catch(() => '')
+                if (text) detail = text
+            }
+            throw new Error(`OpenRouter request failed: ${detail}`)
+        }
+
+        return await res.json() as T
+    }
+
+    private async requestOpenRouterContent(pathOrUrl: string): Promise<VideoGenerationContent> {
+        const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
+        const url = pathOrUrl.startsWith('http')
+            ? pathOrUrl
+            : `${baseUrl}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`
+        const headers = new Headers()
+        if (this.config.apiKey) headers.set('Authorization', `Bearer ${this.config.apiKey}`)
+
+        const res = await fetch(url, { headers })
+        if (!res.ok) {
+            throw new Error(`OpenRouter content request failed: ${res.status} ${res.statusText}`)
+        }
+
+        return {
+            data: await res.arrayBuffer(),
+            contentType: res.headers.get('content-type') || 'video/mp4'
         }
     }
 
@@ -253,9 +334,10 @@ export class OpenRouterProvider extends BaseLLMProvider {
             stream: false
         }
         if (request.temperature != null) params.temperature = request.temperature
-        if (await this.modelSupportsImageOutput(model)) {
+        const imageModalities = await this.getImageGenerationModalities(model)
+        if (imageModalities) {
             const imageParams = params as Record<string, unknown>
-            imageParams.modalities = ['image', 'text']
+            imageParams.modalities = imageModalities
         }
 
         // Send reasoning parameter for OpenRouter native thinking support
@@ -357,9 +439,10 @@ export class OpenRouterProvider extends BaseLLMProvider {
             stream_options: { include_usage: true }
         }
         if (request.temperature != null) params.temperature = request.temperature
-        if (await this.modelSupportsImageOutput(model)) {
+        const imageModalities = await this.getImageGenerationModalities(model)
+        if (imageModalities) {
             const imageParams = params as Record<string, unknown>
-            imageParams.modalities = ['image', 'text']
+            imageParams.modalities = imageModalities
         }
 
         // Send reasoning parameter for OpenRouter native thinking support
@@ -558,10 +641,16 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
     }
 
-    async listModels(type?: 'llm' | 'embedding'): Promise<string[]> {
+    async listModels(type?: ModelListType): Promise<string[]> {
         const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 
-        const modality = type === 'embedding' ? 'embeddings' : 'text'
+        const modality = type === 'embedding'
+            ? 'embeddings'
+            : type === 'video'
+                ? 'video'
+                : type === 'image'
+                    ? 'image'
+                    : 'text'
         const url = `${baseUrl}/models?output_modalities=${modality}`
 
         const res = await fetch(url, {
@@ -580,6 +669,31 @@ export class OpenRouterProvider extends BaseLLMProvider {
             data: Array<{ id: string; name: string }>
         }
         return data.data.map((m) => m.id).sort()
+    }
+
+    async listVideoModels(): Promise<VideoGenerationModelInfo[]> {
+        const data = await this.requestOpenRouter<{ data?: VideoGenerationModelInfo[] }>('/videos/models')
+        return Array.isArray(data.data) ? data.data : []
+    }
+
+    async generateVideo(request: VideoGenerationRequest): Promise<VideoGenerationJob> {
+        const { signal, ...payload } = request
+        return await this.requestOpenRouter<VideoGenerationJob>('/videos', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            signal
+        })
+    }
+
+    async getVideoGenerationJob(jobIdOrUrl: string): Promise<VideoGenerationJob> {
+        const path = jobIdOrUrl.startsWith('http')
+            ? jobIdOrUrl
+            : `/videos/${encodeURIComponent(jobIdOrUrl)}`
+        return await this.requestOpenRouter<VideoGenerationJob>(path)
+    }
+
+    async getVideoGenerationContent(jobId: string, index = 0): Promise<VideoGenerationContent> {
+        return await this.requestOpenRouterContent(`/videos/${encodeURIComponent(jobId)}/content?index=${encodeURIComponent(String(index))}`)
     }
 
     async testConnection(): Promise<boolean> {

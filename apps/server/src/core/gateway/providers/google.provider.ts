@@ -13,7 +13,8 @@ import {
   type ChatMessage,
   type ContentPart,
   type ToolDefinition,
-  type ModelInfo
+  type ModelInfo,
+  type ModelListType
 } from './base.provider.js'
 import { ensurePricingLoaded, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
 
@@ -306,7 +307,8 @@ export class GoogleProvider extends BaseLLMProvider {
     }
   }
 
-  async listModels(type?: 'llm' | 'embedding'): Promise<string[]> {
+  async listModels(type?: ModelListType): Promise<string[]> {
+    if (type === 'video' || type === 'image') return []
     try {
       const pager = await this.client.models.list()
       const models: string[] = []

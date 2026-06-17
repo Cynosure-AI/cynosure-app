@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
-import type { LLMProviderConfig } from '../core/gateway/providers/base.provider.js'
+import type { LLMProviderConfig, ModelListType, VideoGenerationRequest } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 
 /** Load providers from DB into the gateway (called once at startup) */
@@ -112,7 +112,7 @@ export async function registerProviderRoutes(app: FastifyInstance): Promise<void
   })
 
   // GET /api/providers/:id/models — list models
-  app.get<{ Params: { id: string }; Querystring: { type?: 'llm' | 'embedding' } }>('/:id/models', async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { type?: ModelListType } }>('/:id/models', async (req, reply) => {
     try {
       const models = await gateway.listModels(req.params.id, req.query.type)
       return models
@@ -126,6 +126,51 @@ export async function registerProviderRoutes(app: FastifyInstance): Promise<void
     try {
       const info = await gateway.getModelInfo(decodeURIComponent(req.params.model), req.params.id)
       return info
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error).message })
+    }
+  })
+
+  // GET /api/providers/:id/videos/models — list video generation models with capabilities
+  app.get<{ Params: { id: string } }>('/:id/videos/models', async (req, reply) => {
+    try {
+      const models = await gateway.listVideoModels(req.params.id)
+      return models
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error).message })
+    }
+  })
+
+  // POST /api/providers/:id/videos — submit an async video generation job
+  app.post<{ Params: { id: string }; Body: VideoGenerationRequest }>('/:id/videos', async (req, reply) => {
+    try {
+      const job = await gateway.generateVideo(req.body, req.params.id)
+      return reply.status(202).send(job)
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error).message })
+    }
+  })
+
+  // GET /api/providers/:id/videos/:jobId/content?index=0 — download generated video content
+  app.get<{ Params: { id: string; jobId: string }; Querystring: { index?: string } }>('/:id/videos/:jobId/content', async (req, reply) => {
+    try {
+      const index = Number.parseInt(req.query.index || '0', 10)
+      const content = await gateway.getVideoGenerationContent(
+        decodeURIComponent(req.params.jobId),
+        Number.isFinite(index) ? index : 0,
+        req.params.id
+      )
+      return reply.type(content.contentType).send(Buffer.from(content.data))
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error).message })
+    }
+  })
+
+  // GET /api/providers/:id/videos/:jobId — poll an async video generation job
+  app.get<{ Params: { id: string; jobId: string } }>('/:id/videos/:jobId', async (req, reply) => {
+    try {
+      const job = await gateway.getVideoGenerationJob(decodeURIComponent(req.params.jobId), req.params.id)
+      return job
     } catch (err) {
       return reply.status(500).send({ error: (err as Error).message })
     }

@@ -127,6 +127,7 @@ const unifiedTimeline = computed(() => {
       !msg.content &&
       !msg.thinking &&
       !msg.imageDataUrls?.length &&
+      !msg.videoDataUrls?.length &&
       !msg.isStreaming &&
       !msg.isError
     ) continue
@@ -368,6 +369,7 @@ function scrollSubAgentBoxesIfNear(): void {
 watch(() => chatStore.messages.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
 watch(() => chatStore.messages[chatStore.messages.length - 1]?.content, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
 watch(() => chatStore.messages[chatStore.messages.length - 1]?.imageDataUrls?.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
+watch(() => chatStore.messages[chatStore.messages.length - 1]?.videoDataUrls?.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
 watch(() => agentStore.executionSteps.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
 watch(() => agentStore.pendingHITL, scrollMainToBottomIfNear)
 // When loading finishes the spinner is replaced by rendered messages — scroll then
@@ -564,6 +566,7 @@ onMounted(() => {
                   :content="inner.msg.content"
                   :thinking="inner.msg.thinking"
                   :image-data-urls="inner.msg.imageDataUrls"
+                  :video-data-urls="inner.msg.videoDataUrls"
                   :audio-data-urls="inner.msg.audioDataUrls"
                   :file-attachments="inner.msg.fileAttachments"
                   :file-artifacts="assistantFileArtifacts(inner, entry.entries)"
@@ -640,6 +643,7 @@ onMounted(() => {
           :content="entry.msg.content"
           :thinking="entry.msg.thinking"
           :image-data-urls="entry.msg.imageDataUrls"
+          :video-data-urls="entry.msg.videoDataUrls"
           :audio-data-urls="entry.msg.audioDataUrls"
           :file-attachments="entry.msg.fileAttachments"
           :file-artifacts="assistantFileArtifacts(entry)"

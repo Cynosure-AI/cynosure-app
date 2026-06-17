@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useProviderStore } from '../../stores/provider.store'
-import type { LLMProviderConfig } from '../../api/types'
+import type { LLMProviderConfig, ModelListType } from '../../api/types'
 import { useProviderLogos } from '../../composables/useProviderLogos'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
 import ProviderCard from './ProviderCard.vue'
@@ -26,6 +26,7 @@ const testResult = ref<Map<string, boolean>>(new Map())
 const fetchedModels = ref<string[]>([])
 const loadingModels = ref(false)
 type ProviderType = LLMProviderConfig['type']
+const responseModelTypes: ModelListType[] = ['llm', 'image', 'video']
 
 const newProvider = reactive<{
   name: string
@@ -95,7 +96,7 @@ function onTypeChange(): void {
 async function fetchModelsForEdit(providerId: string): Promise<void> {
   loadingModels.value = true
   try {
-    fetchedModels.value = await providerStore.listModels(providerId)
+    fetchedModels.value = await listResponseModels(providerId)
   } catch {
     fetchedModels.value = []
   } finally {
@@ -127,13 +128,20 @@ async function fetchModelsForNew(): Promise<void> {
   loadingModels.value = true
   try {
     await providerStore.addProvider(config)
-    fetchedModels.value = await providerStore.listModels(tempId)
+    fetchedModels.value = await listResponseModels(tempId)
   } catch {
     fetchedModels.value = []
   } finally {
     try { await providerStore.removeProvider(tempId) } catch { /* ignore */ }
     loadingModels.value = false
   }
+}
+
+async function listResponseModels(providerId: string): Promise<string[]> {
+  const results = await Promise.all(
+    responseModelTypes.map((type) => providerStore.listModels(providerId, type))
+  )
+  return Array.from(new Set(results.flat())).sort()
 }
 
 async function addProvider(): Promise<void> {

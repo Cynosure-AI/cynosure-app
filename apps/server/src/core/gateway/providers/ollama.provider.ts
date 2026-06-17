@@ -1,5 +1,5 @@
 import { OpenAIProvider } from './openai.provider.js'
-import type { LLMProviderConfig, ModelInfo } from './base.provider.js'
+import type { LLMProviderConfig, ModelInfo, ModelListType } from './base.provider.js'
 
 /**
  * Ollama provider — uses the OpenAI-compatible API.
@@ -20,7 +20,8 @@ export class OllamaProvider extends OpenAIProvider {
      * Use Ollama's native REST API to list models.
      * Endpoint: GET {host}/api/tags
      */
-    async listModels(type?: 'llm' | 'embedding'): Promise<string[]> {
+    async listModels(type?: ModelListType): Promise<string[]> {
+        if (type === 'video' || type === 'image') return []
         const base = (this.config.baseUrl || 'http://localhost:11434/v1').replace(/\/v1\/?$/, '')
         const url = `${base}/api/tags`
 
