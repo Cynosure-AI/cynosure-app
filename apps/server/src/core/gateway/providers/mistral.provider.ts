@@ -10,7 +10,7 @@ export class MistralProvider extends OpenRouterProvider {
     protected get supportsReasoningParam(): boolean { return false }
 
     async listModels(_type?: ModelListType): Promise<string[]> {
-        if (_type === 'video') return []
+        if (_type === 'video' || _type === 'image') return []
         const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 
         const res = await fetch(`${baseUrl}/models`, {

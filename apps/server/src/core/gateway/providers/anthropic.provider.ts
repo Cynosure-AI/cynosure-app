@@ -304,7 +304,7 @@ export class AnthropicProvider extends BaseLLMProvider {
   }
 
   async listModels(_type?: ModelListType): Promise<string[]> {
-    if (_type === 'video') return []
+    if (_type === 'video' || _type === 'image') return []
     try {
       const response = await this.client.models.list()
       return response.data.map((m) => m.id).sort()

@@ -289,7 +289,7 @@ async function toggleMic(): Promise<void> {
       >
         <div class="w-56">
           <ProviderModelSelect
-            :model-types="['llm', 'video']"
+            :model-types="['llm', 'image', 'video']"
             :provider-id="selectedProviderIdForSelector"
             :model-value="selectedModelForSelector"
             :providers="providerStore.providers"

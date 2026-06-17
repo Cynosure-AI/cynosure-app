@@ -627,6 +627,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
               :provider-id="bulkProviderId"
               :model-value="bulkModel"
               :providers="providerStore.providers"
+              :model-types="['llm', 'image', 'video']"
               placeholder="Set model for selected agents"
               size="sm"
               dropdown-width="w-[28rem]"

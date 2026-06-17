@@ -308,7 +308,7 @@ export class GoogleProvider extends BaseLLMProvider {
   }
 
   async listModels(type?: ModelListType): Promise<string[]> {
-    if (type === 'video') return []
+    if (type === 'video' || type === 'image') return []
     try {
       const pager = await this.client.models.list()
       const models: string[] = []

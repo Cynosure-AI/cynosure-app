@@ -112,7 +112,7 @@ function onSelectionChange(selection: {
         :provider-id="selectedProviderIdForSelector"
         :model-value="selectedModelForSelector"
         :providers="providerStore.providers"
-        :model-types="['llm', 'video']"
+        :model-types="['llm', 'image', 'video']"
         :include-default="!!selectedAgent"
         :default-label="agentDefaultLabel"
         placeholder="Select provider/model"

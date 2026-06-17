@@ -33,7 +33,7 @@ export class LMStudioProvider extends OpenAIProvider {
    * Endpoint: GET {host}/api/v1/models
    */
   async listModels(type?: ModelListType): Promise<string[]> {
-    if (type === 'video') return []
+    if (type === 'video' || type === 'image') return []
     // Derive the host from the configured baseUrl (strip /v1 suffix)
     const base = (this.config.baseUrl || 'http://localhost:1234/v1').replace(/\/v1\/?$/, '')
     const url = `${base}/api/v1/models`

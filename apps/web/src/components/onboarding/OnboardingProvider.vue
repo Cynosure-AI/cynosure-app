@@ -265,12 +265,13 @@ import { ref, computed, reactive } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useProviderStore } from '../../stores/provider.store'
 import { useProviderLogos } from '../../composables/useProviderLogos'
-import type { LLMProviderConfig } from '../../api/types'
+import type { LLMProviderConfig, ModelListType } from '../../api/types'
 
 const providerStore = useProviderStore()
 const { providerLogos } = useProviderLogos()
 
 type ProviderType = LLMProviderConfig['type']
+const responseModelTypes: ModelListType[] = ['llm', 'image', 'video']
 
 const showApiKey = ref(false)
 const fetchedModels = ref<string[]>([])
@@ -371,13 +372,20 @@ async function fetchModels() {
   error.value = ''
   try {
     await providerStore.addProvider(config)
-    fetchedModels.value = await providerStore.listModels(tempId)
+    fetchedModels.value = await listResponseModels(tempId)
   } catch {
     fetchedModels.value = []
   } finally {
     try { await providerStore.removeProvider(tempId) } catch { /* ignore */ }
     loadingModels.value = false
   }
+}
+
+async function listResponseModels(providerId: string): Promise<string[]> {
+  const results = await Promise.all(
+    responseModelTypes.map((type) => providerStore.listModels(providerId, type))
+  )
+  return Array.from(new Set(results.flat())).sort()
 }
 
 async function addProvider() {

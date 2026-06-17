@@ -73,7 +73,7 @@ export interface ToolResult {
   imageDataUrls?: string[]
 }
 
-export type ModelListType = 'llm' | 'embedding' | 'video'
+export type ModelListType = 'llm' | 'embedding' | 'image' | 'video'
 
 export interface ModelInfo {
   id: string
