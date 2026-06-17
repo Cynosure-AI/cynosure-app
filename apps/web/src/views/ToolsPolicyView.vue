@@ -116,7 +116,7 @@ function namespaceDescription(namespace: ToolNamespace, firstTool: ToolInfo): st
     return 'Orchestration, attachments, tool routing, sub-agent delegation, memory, and other system-managed tools. These are always auto-approved.'
   }
   if (namespace.id === 'builtin') {
-    return 'Memory, entity graph, and notification tools bundled with Cynosure.'
+    return 'All built-in on-demand tools bundled with Cynosure.'
   }
   return displayDescription(firstTool)
 }

@@ -1,5 +1,5 @@
 import { OpenRouterProvider } from './openrouter.provider.js'
-import type { ModelInfo } from './base.provider.js'
+import type { ModelInfo, ModelListType } from './base.provider.js'
 
 /**
  * Mistral provider — uses the OpenAI-compatible Chat Completions API
@@ -9,7 +9,8 @@ export class MistralProvider extends OpenRouterProvider {
     protected override get defaultBaseUrl(): string { return 'https://api.mistral.ai/v1' }
     protected get supportsReasoningParam(): boolean { return false }
 
-    async listModels(_type?: 'llm' | 'embedding'): Promise<string[]> {
+    async listModels(_type?: ModelListType): Promise<string[]> {
+        if (_type === 'video' || _type === 'image') return []
         const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 
         const res = await fetch(`${baseUrl}/models`, {

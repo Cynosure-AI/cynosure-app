@@ -8,7 +8,8 @@ import {
   type ChatMessage,
   type ContentPart,
   type ToolCall,
-  type ModelInfo
+  type ModelInfo,
+  type ModelListType
 } from './base.provider.js'
 import { ensurePricingLoaded, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
 
@@ -418,7 +419,8 @@ export class OpenAIProvider extends BaseLLMProvider {
     yield* this.streamCompleteViaResponses(request)
   }
 
-  async listModels(_type?: 'llm' | 'embedding'): Promise<string[]> {
+  async listModels(_type?: ModelListType): Promise<string[]> {
+    if (_type === 'video' || _type === 'image') return []
     const models = await this.client.models.list()
     return models.data.map((m) => m.id).sort()
   }

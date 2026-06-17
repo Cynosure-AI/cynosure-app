@@ -1,7 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../api/client'
-import type { LLMProviderConfig } from '../api/types'
+import type { LLMProviderConfig, ModelListType } from '../api/types'
 
 export type { LLMProviderConfig }
 
@@ -48,7 +48,7 @@ export const useProviderStore = defineStore('provider', () => {
     return result
   }
 
-  async function listModels(id: string, type?: 'llm' | 'embedding'): Promise<string[]> {
+  async function listModels(id: string, type?: ModelListType): Promise<string[]> {
     return api.provider.listModels(id, type)
   }
 
