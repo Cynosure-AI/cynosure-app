@@ -21,7 +21,7 @@ export class OllamaProvider extends OpenAIProvider {
      * Endpoint: GET {host}/api/tags
      */
     async listModels(type?: ModelListType): Promise<string[]> {
-        if (type === 'video') return []
+        if (type === 'video' || type === 'image') return []
         const base = (this.config.baseUrl || 'http://localhost:11434/v1').replace(/\/v1\/?$/, '')
         const url = `${base}/api/tags`
 

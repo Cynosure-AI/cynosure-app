@@ -124,6 +124,7 @@ onMounted(() =>
               :provider-id="agent.providerId"
               :model-value="agent.model || ''"
               :providers="providerStore.providers"
+              :model-types="['llm', 'image', 'video']"
               placeholder="Use provider default"
               @change="
                 (selection) => {

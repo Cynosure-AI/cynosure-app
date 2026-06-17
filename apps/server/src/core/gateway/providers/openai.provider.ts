@@ -420,7 +420,7 @@ export class OpenAIProvider extends BaseLLMProvider {
   }
 
   async listModels(_type?: ModelListType): Promise<string[]> {
-    if (_type === 'video') return []
+    if (_type === 'video' || _type === 'image') return []
     const models = await this.client.models.list()
     return models.data.map((m) => m.id).sort()
   }

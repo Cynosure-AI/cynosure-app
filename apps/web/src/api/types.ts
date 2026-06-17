@@ -13,7 +13,7 @@ export interface LLMProviderConfig {
     supportsVision: boolean
 }
 
-export type ModelListType = 'llm' | 'embedding' | 'video'
+export type ModelListType = 'llm' | 'embedding' | 'image' | 'video'
 
 export interface VideoGenerationFrameImage {
     type: 'image_url'

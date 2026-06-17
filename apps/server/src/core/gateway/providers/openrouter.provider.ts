@@ -15,7 +15,7 @@ import {
     type VideoGenerationModelInfo,
     type VideoGenerationRequest
 } from './base.provider.js'
-import { ensurePricingLoaded, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
+import { ensurePricingLoaded, getModelOutputModalities, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
 
 const MODEL_CACHE_TTL_MS = 10 * 60 * 1000
 
@@ -127,6 +127,32 @@ export class OpenRouterProvider extends BaseLLMProvider {
         } catch {
             return false
         }
+    }
+
+    private async getImageGenerationModalities(modelId: string): Promise<string[] | undefined> {
+        await ensurePricingLoaded().catch(() => { /* best-effort capability metadata */ })
+        const modelsDevModalities = getModelOutputModalities(this.config.type, modelId)
+            ?.map((item) => item.toLowerCase())
+        if (modelsDevModalities?.includes('image')) {
+            return modelsDevModalities.includes('text') ? ['image', 'text'] : ['image']
+        }
+
+        try {
+            const models = await this.fetchModels()
+            const model = models.find(m => m.id === modelId)
+            const outputModalities = this.getOutputModalities(model)
+            if (outputModalities.includes('image')) {
+                return outputModalities.includes('text') ? ['image', 'text'] : ['image']
+            }
+        } catch {
+            // Fall through to the conservative default below.
+        }
+
+        if (await this.modelSupportsImageOutput(modelId)) {
+            return ['image', 'text']
+        }
+
+        return undefined
     }
 
     private async requestOpenRouter<T>(
@@ -308,9 +334,10 @@ export class OpenRouterProvider extends BaseLLMProvider {
             stream: false
         }
         if (request.temperature != null) params.temperature = request.temperature
-        if (await this.modelSupportsImageOutput(model)) {
+        const imageModalities = await this.getImageGenerationModalities(model)
+        if (imageModalities) {
             const imageParams = params as Record<string, unknown>
-            imageParams.modalities = ['image', 'text']
+            imageParams.modalities = imageModalities
         }
 
         // Send reasoning parameter for OpenRouter native thinking support
@@ -412,9 +439,10 @@ export class OpenRouterProvider extends BaseLLMProvider {
             stream_options: { include_usage: true }
         }
         if (request.temperature != null) params.temperature = request.temperature
-        if (await this.modelSupportsImageOutput(model)) {
+        const imageModalities = await this.getImageGenerationModalities(model)
+        if (imageModalities) {
             const imageParams = params as Record<string, unknown>
-            imageParams.modalities = ['image', 'text']
+            imageParams.modalities = imageModalities
         }
 
         // Send reasoning parameter for OpenRouter native thinking support
@@ -616,7 +644,13 @@ export class OpenRouterProvider extends BaseLLMProvider {
     async listModels(type?: ModelListType): Promise<string[]> {
         const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 
-        const modality = type === 'embedding' ? 'embeddings' : type === 'video' ? 'video' : 'text'
+        const modality = type === 'embedding'
+            ? 'embeddings'
+            : type === 'video'
+                ? 'video'
+                : type === 'image'
+                    ? 'image'
+                    : 'text'
         const url = `${baseUrl}/models?output_modalities=${modality}`
 
         const res = await fetch(url, {

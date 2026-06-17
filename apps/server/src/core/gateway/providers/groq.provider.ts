@@ -13,7 +13,7 @@ export class GroqProvider extends OpenRouterProvider {
     protected get supportsReasoningParam(): boolean { return false }
 
     async listModels(_type?: ModelListType): Promise<string[]> {
-        if (_type === 'video') return []
+        if (_type === 'video' || _type === 'image') return []
         // Groq uses the standard OpenAI models endpoint
         const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 
