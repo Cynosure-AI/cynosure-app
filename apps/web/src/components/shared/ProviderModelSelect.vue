@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { LLMProviderConfig, ModelListType } from "../../api/types";
+import type { LLMProviderConfig, ModelListItem, ModelListType, ModelPricing } from "../../api/types";
 import CustomSelect, {
   type SelectOption,
   type SelectOptionGroup,
@@ -71,9 +71,9 @@ const emit = defineEmits<{
 const providerStore = useProviderStore();
 const { logoUrl } = useProviderLogos();
 
-const sharedModelCache = new Map<string, string[]>();
+const sharedModelCache = new Map<string, ModelListItem[]>();
 
-const providerModels = ref<Record<string, string[]>>({});
+const providerModels = ref<Record<string, ModelListItem[]>>({});
 const loadingByProvider = ref<Record<string, boolean>>({});
 const favoriteModels = ref<ProviderModelSelection[]>(loadFavoriteModels());
 
@@ -107,6 +107,105 @@ function favoriteKey(
   modelType = props.modelType,
 ): string {
   return `${modelType}:${providerId}:${model}`;
+}
+
+function modelId(model: string | ModelListItem): string {
+  return typeof model === "string" ? model : model.id;
+}
+
+function dollarsPerMillion(price?: number): number | undefined {
+  return price == null ? undefined : price * 1_000_000;
+}
+
+function formatMoney(value: number): string {
+  if (value === 0) return "$0";
+  if (value < 0.01) return `$${value.toFixed(4)}`;
+  if (value < 1) return `$${value.toFixed(2)}`;
+  return `$${value.toFixed(2)}`;
+}
+
+function firstVideoSku(pricing?: ModelPricing): { key: string; value: number } | null {
+  const entries = Object.entries(pricing?.skus ?? {})
+    .filter(([, value]) => Number.isFinite(value))
+    .sort(([a], [b]) => {
+      const aScore = a.includes("720p") ? 0 : a.includes("duration") ? 1 : 2;
+      const bScore = b.includes("720p") ? 0 : b.includes("duration") ? 1 : 2;
+      return aScore - bScore || a.localeCompare(b);
+    });
+  if (!entries.length) return null;
+  const [key, value] = entries[0];
+  return { key, value };
+}
+
+function humanizeSku(key: string): string {
+  return key
+    .replace(/^cents_per_/, "cents ")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function pricingTag(model: ModelListItem): string | undefined {
+  const inputPerM = dollarsPerMillion(model.pricing?.prompt);
+  const outputPerM = dollarsPerMillion(model.pricing?.completion);
+  if (inputPerM !== undefined || outputPerM !== undefined) {
+    return `${formatMoney(inputPerM ?? 0)}/${formatMoney(outputPerM ?? 0)}`;
+  }
+
+  const image = model.pricing?.image;
+  if (image !== undefined) return `${formatMoney(image)}/img`;
+
+  const sku = firstVideoSku(model.pricing);
+  if (!sku) return undefined;
+  const value = sku.key.startsWith("cents_per_") ? sku.value / 100 : sku.value;
+  return `${formatMoney(value)}/sec`;
+}
+
+function pricingTooltip(model: ModelListItem): string | undefined {
+  const lines: string[] = [];
+  if (model.name && model.name !== model.id) lines.push(model.name);
+
+  const inputPerM = dollarsPerMillion(model.pricing?.prompt);
+  const outputPerM = dollarsPerMillion(model.pricing?.completion);
+  if (inputPerM !== undefined || outputPerM !== undefined) {
+    lines.push(`Tokens: ${formatMoney(inputPerM ?? 0)} input / ${formatMoney(outputPerM ?? 0)} output per 1M`);
+  }
+  if (model.pricing?.image !== undefined) {
+    lines.push(`Image: ${formatMoney(model.pricing.image)} per image`);
+  }
+  if (model.pricing?.request !== undefined && model.pricing.request > 0) {
+    lines.push(`Request: ${formatMoney(model.pricing.request)} per request`);
+  }
+
+  const skus = Object.entries(model.pricing?.skus ?? {}).slice(0, 4);
+  for (const [key, value] of skus) {
+    const amount = key.startsWith("cents_per_") ? value / 100 : value;
+    lines.push(`${humanizeSku(key)}: ${formatMoney(amount)}`);
+  }
+
+  const modalities = [
+    model.inputModalities?.length ? `Input: ${model.inputModalities.join(", ")}` : "",
+    model.outputModalities?.length ? `Output: ${model.outputModalities.join(", ")}` : "",
+  ].filter(Boolean);
+  lines.push(...modalities);
+
+  return lines.length ? lines.join("\n") : undefined;
+}
+
+function mergeModelItems(existing: ModelListItem, incoming: ModelListItem): ModelListItem {
+  return {
+    ...existing,
+    ...incoming,
+    inputModalities: incoming.inputModalities?.length ? incoming.inputModalities : existing.inputModalities,
+    outputModalities: incoming.outputModalities?.length ? incoming.outputModalities : existing.outputModalities,
+    pricing: {
+      ...existing.pricing,
+      ...incoming.pricing,
+      skus: {
+        ...existing.pricing?.skus,
+        ...incoming.pricing?.skus,
+      },
+    },
+  };
 }
 
 function loadFavoriteModels(): ProviderModelSelection[] {
@@ -196,9 +295,21 @@ async function ensureProviderModels(providerId: string): Promise<void> {
   loadingByProvider.value = { ...loadingByProvider.value, [providerId]: true };
   try {
     const results = await Promise.all(
-      activeModelTypes.value.map((type) => providerStore.listModels(providerId, type)),
+      activeModelTypes.value.map(async (type) => {
+        try {
+          return await providerStore.listModelItems(providerId, type);
+        } catch {
+          const models = await providerStore.listModels(providerId, type);
+          return models.map((id) => ({ id }));
+        }
+      }),
     );
-    const models = Array.from(new Set(results.flat())).sort();
+    const modelMap = new Map<string, ModelListItem>();
+    for (const model of results.flat()) {
+      const existing = modelMap.get(model.id);
+      modelMap.set(model.id, existing ? mergeModelItems(existing, model) : model);
+    }
+    const models = Array.from(modelMap.values()).sort((a, b) => a.id.localeCompare(b.id));
     sharedModelCache.set(key, models);
     providerModels.value = { ...providerModels.value, [providerId]: models };
   } catch {
@@ -212,7 +323,7 @@ async function ensureProviderModels(providerId: string): Promise<void> {
 }
 
 watch(
-  () => [props.providers.map((p) => p.id).join("|"), props.modelType],
+  () => [props.providers.map((p) => p.id).join("|"), activeModelTypes.value.join("+")],
   () => {
     for (const provider of props.providers) {
       void ensureProviderModels(provider.id);
@@ -270,6 +381,7 @@ const groups = computed((): SelectOptionGroup[] => {
   const providerGroups: SelectOptionGroup[] = props.providers.map(
     (provider) => {
       const models = providerModels.value[provider.id] || [];
+      const modelIds = models.map(modelId);
       const isLoading = !!loadingByProvider.value[provider.id];
       const options: SelectOption[] = [
         {
@@ -299,17 +411,19 @@ const groups = computed((): SelectOptionGroup[] => {
       } else {
         for (const model of models) {
           options.push({
-            value: encode(provider.id, model),
-            label: model,
+            value: encode(provider.id, model.id),
+            label: model.id,
             imgSrc: logoUrl(provider.type),
-            ...favoriteAction(provider.id, model),
+            tag: pricingTag(model),
+            tooltip: pricingTooltip(model),
+            ...favoriteAction(provider.id, model.id),
           });
         }
 
         if (
           props.providerId === provider.id &&
           props.modelValue &&
-          !models.includes(props.modelValue)
+          !modelIds.includes(props.modelValue)
         ) {
           options.unshift({
             value: encode(provider.id, props.modelValue),

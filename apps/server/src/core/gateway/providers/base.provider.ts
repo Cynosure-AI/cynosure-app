@@ -73,7 +73,29 @@ export interface ToolResult {
   imageDataUrls?: string[]
 }
 
-export type ModelListType = 'llm' | 'embedding' | 'image' | 'video'
+export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker'
+
+export interface ModelPricing {
+  /** Cost in $ per token. */
+  prompt?: number
+  /** Cost in $ per output token. */
+  completion?: number
+  /** Fixed cost in $ per request. */
+  request?: number
+  /** Cost in $ per image input/output unit, depending on the model endpoint. */
+  image?: number
+  /** Provider-specific video or media pricing SKUs. Values are in USD unless the key says cents. */
+  skus?: Record<string, number>
+}
+
+export interface ModelListItem {
+  id: string
+  name?: string
+  contextLength?: number
+  inputModalities?: string[]
+  outputModalities?: string[]
+  pricing?: ModelPricing
+}
 
 export interface ModelInfo {
   id: string
@@ -84,6 +106,7 @@ export interface ModelInfo {
   supportsToolCalls?: boolean
   /** Cost in $ per 1M tokens: { input, output } */
   cost?: { input: number; output: number }
+  pricing?: ModelPricing
 }
 
 export interface VideoGenerationFrameImage {
@@ -203,6 +226,11 @@ export abstract class BaseLLMProvider {
   ): AsyncIterable<StreamChunk>
   abstract listModels(type?: ModelListType): Promise<string[]>
   abstract testConnection(): Promise<boolean>
+
+  async listModelItems(type?: ModelListType): Promise<ModelListItem[]> {
+    const models = await this.listModels(type)
+    return models.map((id) => ({ id }))
+  }
 
   async listVideoModels(): Promise<VideoGenerationModelInfo[]> {
     return []

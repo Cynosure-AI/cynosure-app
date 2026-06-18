@@ -13,7 +13,34 @@ export interface LLMProviderConfig {
     supportsVision: boolean
 }
 
-export type ModelListType = 'llm' | 'embedding' | 'image' | 'video'
+export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker'
+
+export interface ModelPricing {
+    prompt?: number
+    completion?: number
+    request?: number
+    image?: number
+    skus?: Record<string, number>
+}
+
+export interface ModelListItem {
+    id: string
+    name?: string
+    contextLength?: number
+    inputModalities?: string[]
+    outputModalities?: string[]
+    pricing?: ModelPricing
+}
+
+export interface ModelInfo {
+    id: string
+    contextLength?: number
+    inputModalities?: string[]
+    outputModalities?: string[]
+    supportsToolCalls?: boolean
+    cost?: { input: number; output: number }
+    pricing?: ModelPricing
+}
 
 export interface VideoGenerationFrameImage {
     type: 'image_url'

@@ -9,7 +9,9 @@ import {
     type ContentPart,
     type ToolCall,
     type ModelInfo,
+    type ModelListItem,
     type ModelListType,
+    type ModelPricing,
     type VideoGenerationContent,
     type VideoGenerationJob,
     type VideoGenerationModelInfo,
@@ -25,6 +27,8 @@ interface OpenRouterModel {
     input_modalities?: unknown
     output_modalities?: unknown
     supported_parameters?: unknown
+    name?: string
+    pricing?: Record<string, unknown>
     architecture?: {
         input_modalities?: unknown
         output_modalities?: unknown
@@ -113,6 +117,50 @@ export class OpenRouterProvider extends BaseLLMProvider {
             .filter((item): item is string => typeof item === 'string')
             .map((item) => item.toLowerCase())
         return supported.includes('tools')
+    }
+
+    private parsePrice(value: unknown): number | undefined {
+        if (typeof value === 'number' && Number.isFinite(value)) return value
+        if (typeof value !== 'string' || !value.trim()) return undefined
+        const parsed = Number(value)
+        return Number.isFinite(parsed) ? parsed : undefined
+    }
+
+    private getPricing(pricing: Record<string, unknown> | null | undefined): ModelPricing | undefined {
+        if (!pricing) return undefined
+        const result: ModelPricing = {}
+        const prompt = this.parsePrice(pricing.prompt)
+        const completion = this.parsePrice(pricing.completion)
+        const request = this.parsePrice(pricing.request)
+        const image = this.parsePrice(pricing.image)
+        if (prompt !== undefined) result.prompt = prompt
+        if (completion !== undefined) result.completion = completion
+        if (request !== undefined) result.request = request
+        if (image !== undefined) result.image = image
+        return Object.keys(result).length ? result : undefined
+    }
+
+    private getSkuPricing(skus: Record<string, string> | null | undefined): Record<string, number> | undefined {
+        if (!skus) return undefined
+        const result: Record<string, number> = {}
+        for (const [key, value] of Object.entries(skus)) {
+            const parsed = this.parsePrice(value)
+            if (parsed !== undefined) result[key] = parsed
+        }
+        return Object.keys(result).length ? result : undefined
+    }
+
+    private toModelListItem(model: OpenRouterModel): ModelListItem {
+        const inputModalities = this.getInputModalities(model)
+        const outputModalities = this.getOutputModalities(model)
+        return {
+            id: model.id,
+            name: model.name,
+            contextLength: model.context_length || undefined,
+            inputModalities: inputModalities.length ? inputModalities : undefined,
+            outputModalities: outputModalities.length ? outputModalities : undefined,
+            pricing: this.getPricing(model.pricing)
+        }
     }
 
     private async modelSupportsImageOutput(modelId: string): Promise<boolean> {
@@ -648,9 +696,11 @@ export class OpenRouterProvider extends BaseLLMProvider {
             ? 'embeddings'
             : type === 'video'
                 ? 'video'
-                : type === 'image'
-                    ? 'image'
-                    : 'text'
+                : type === 'reranker'
+                    ? 'rerank'
+                    : type === 'image'
+                        ? 'image'
+                        : 'text'
         const url = `${baseUrl}/models?output_modalities=${modality}`
 
         const res = await fetch(url, {
@@ -669,6 +719,44 @@ export class OpenRouterProvider extends BaseLLMProvider {
             data: Array<{ id: string; name: string }>
         }
         return data.data.map((m) => m.id).sort()
+    }
+
+    async listModelItems(type?: ModelListType): Promise<ModelListItem[]> {
+        if (type === 'video') {
+            const models = await this.listVideoModels()
+            return models.map((model) => ({
+                id: model.id,
+                name: model.name,
+                outputModalities: ['video'],
+                pricing: (() => {
+                    const skus = this.getSkuPricing(model.pricing_skus)
+                    return skus ? { skus } : undefined
+                })()
+            }))
+        }
+
+        const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
+        const modality = type === 'embedding'
+            ? 'embeddings'
+            : type === 'reranker'
+                ? 'rerank'
+                : type === 'image'
+                    ? 'image'
+                    : 'text'
+        const res = await fetch(`${baseUrl}/models?output_modalities=${modality}`, {
+            headers: this.config.apiKey
+                ? { Authorization: `Bearer ${this.config.apiKey}` }
+                : {}
+        })
+
+        if (!res.ok) {
+            return (await this.listModels(type)).map((id) => ({ id }))
+        }
+
+        const data = (await res.json()) as { data?: OpenRouterModel[] }
+        return (Array.isArray(data.data) ? data.data : [])
+            .map((model) => this.toModelListItem(model))
+            .sort((a, b) => a.id.localeCompare(b.id))
     }
 
     async listVideoModels(): Promise<VideoGenerationModelInfo[]> {
@@ -727,6 +815,18 @@ export class OpenRouterProvider extends BaseLLMProvider {
         try {
             const models = await this.fetchModels()
             const model = models.find(m => m.id === modelId)
+            if (!model) {
+                const videoModel = (await this.listVideoModels().catch(() => []))
+                    .find((item) => item.id === modelId)
+                if (videoModel) {
+                    const skus = this.getSkuPricing(videoModel.pricing_skus)
+                    return {
+                        id: modelId,
+                        outputModalities: ['video'],
+                        pricing: skus ? { skus } : undefined
+                    }
+                }
+            }
             const inputModalities = this.getInputModalities(model)
             const outputModalities = this.getOutputModalities(model)
             return {
@@ -734,7 +834,8 @@ export class OpenRouterProvider extends BaseLLMProvider {
                 contextLength: model?.context_length || undefined,
                 inputModalities: inputModalities.length ? inputModalities : undefined,
                 outputModalities: outputModalities.length ? outputModalities : undefined,
-                supportsToolCalls: this.modelSupportsToolCalls(model)
+                supportsToolCalls: this.modelSupportsToolCalls(model),
+                pricing: this.getPricing(model?.pricing)
             }
         } catch {
             return { id: modelId }
