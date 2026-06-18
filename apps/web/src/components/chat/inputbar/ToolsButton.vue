@@ -13,13 +13,13 @@ const showModal = ref(false)
 
 const selectedToolsList = computed(() =>
   agentStore.availableTools.filter(t =>
-    agentStore.selectedToolNames.includes(t.key)
+    chatStore.selectedToolNames.includes(t.key)
   )
 )
 
 const missingTools = computed(() => {
   const availableKeys = new Set(agentStore.availableTools.map(t => t.key))
-  return agentStore.selectedToolNames.filter(name => !availableKeys.has(name))
+  return chatStore.selectedToolNames.filter(name => !availableKeys.has(name))
 })
 </script>
 
@@ -48,23 +48,23 @@ const missingTools = computed(() => {
         />
       </span>
       <span
-        v-else-if="chatStore.sessionAutoToolRouting || agentStore.selectedToolNames.length"
+        v-else-if="chatStore.sessionAutoToolRouting || chatStore.selectedToolNames.length"
         class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none"
         :class="chatStore.sessionAutoToolRouting ? 'bg-emerald-600' : 'bg-accent-600'"
       >
         <Icon
-          v-if="chatStore.sessionAutoToolRouting && !agentStore.selectedToolNames.length"
+          v-if="chatStore.sessionAutoToolRouting && !chatStore.selectedToolNames.length"
           icon="lucide:sparkles"
           class="w-2.5 h-2.5"
         />
         <template v-else>
-          {{ agentStore.selectedToolNames.length }}
+          {{ chatStore.selectedToolNames.length }}
         </template>
       </span>
     </button>
     <template #content>
       <div class="font-medium text-theme-300 mb-1.5">
-        Tools ({{ agentStore.selectedToolNames.length }}/{{ agentStore.availableTools.length }})
+        Tools ({{ chatStore.selectedToolNames.length }}/{{ agentStore.availableTools.length }})
       </div>
       <div
         v-if="chatStore.sessionAutoToolRouting"

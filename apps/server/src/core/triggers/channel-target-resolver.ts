@@ -11,11 +11,11 @@ export function resolveChannelTarget(channelId: string): string | null {
     if (!ch) return null
     const prefix = `${ch.type}:${channelId}:`
     const row = db.prepare(
-        `SELECT json_extract(config_json, '$.channelKey') AS channel_key
+        `SELECT json_extract(metadata_json, '$.channelKey') AS channel_key
          FROM conversations
          WHERE origin = 'channel'
-           AND json_extract(config_json, '$.channelKey') LIKE ?
-           AND json_extract(config_json, '$.archived') IS NULL
+           AND json_extract(metadata_json, '$.channelKey') LIKE ?
+           AND json_extract(metadata_json, '$.archived') IS NULL
          ORDER BY updated_at DESC
          LIMIT 1`
     ).get(`${prefix}%`) as { channel_key: string } | undefined

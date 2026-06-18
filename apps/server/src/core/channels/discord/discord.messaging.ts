@@ -382,10 +382,10 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
             Date.now() - now, Date.now()
         )
 
-        const convMeta = db.prepare("SELECT json_extract(config_json, '$.titleGenerated') as tg FROM conversations WHERE id = ?")
+        const convMeta = db.prepare("SELECT json_extract(metadata_json, '$.titleGenerated') as tg FROM conversations WHERE id = ?")
             .get(conversationId) as { tg: number | null } | undefined
         if (!convMeta?.tg) {
-            db.prepare("UPDATE conversations SET config_json = json_set(COALESCE(config_json, '{}'), '$.titleGenerated', 1) WHERE id = ?")
+            db.prepare("UPDATE conversations SET metadata_json = json_set(COALESCE(metadata_json, '{}'), '$.titleGenerated', 1) WHERE id = ?")
                 .run(conversationId)
             generateTitle({
                 conversationId,
@@ -451,23 +451,17 @@ export function getOrCreateConversation(ctx: DiscordCtx, discordChannelId: strin
     const channelKey = `discord:${ctx.channelId}:${discordChannelId}`
 
     const existing = db
-        .prepare("SELECT id FROM conversations WHERE origin = 'channel' AND agent_id = ? AND json_extract(config_json, '$.channelKey') = ? AND json_extract(config_json, '$.archived') IS NULL")
+        .prepare("SELECT id FROM conversations WHERE origin = 'channel' AND agent_id = ? AND json_extract(metadata_json, '$.channelKey') = ? AND json_extract(metadata_json, '$.archived') IS NULL")
         .get(resolvedAgentId, channelKey) as { id: string } | undefined
 
     if (existing) return existing.id
 
-    const legacy = db
-        .prepare('SELECT id FROM conversations WHERE origin = ? AND agent_id = ? AND title LIKE ? AND title NOT LIKE ?')
-        .get('channel', resolvedAgentId, `${channelKey}%`, '%|archived:%') as { id: string } | undefined
-
-    if (legacy) return legacy.id
-
     const id = nanoid()
     const now = Date.now()
-    const configJson = JSON.stringify({ channelKey })
+    const metadataJson = JSON.stringify({ channelKey })
     db.prepare(
-        'INSERT INTO conversations (id, title, agent_id, origin, config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, senderName, resolvedAgentId, 'channel', configJson, now, now)
+        'INSERT INTO conversations (id, title, agent_id, origin, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, senderName, resolvedAgentId, 'channel', metadataJson, now, now)
 
     return id
 }
