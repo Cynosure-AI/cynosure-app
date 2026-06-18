@@ -94,7 +94,7 @@ export function archiveConversation(ctx: DiscordCtx, discordChannelId: string, a
     const channelKey = `discord:${ctx.channelId}:${discordChannelId}`
 
     let existing = db
-        .prepare("SELECT id FROM conversations WHERE origin = 'channel' AND agent_id = ? AND json_extract(config_json, '$.channelKey') = ? AND json_extract(config_json, '$.archived') IS NULL")
+        .prepare("SELECT id FROM conversations WHERE origin = 'channel' AND agent_id = ? AND json_extract(metadata_json, '$.channelKey') = ? AND json_extract(metadata_json, '$.archived') IS NULL")
         .get(agentId, channelKey) as { id: string } | undefined
 
     if (!existing) {
@@ -104,7 +104,7 @@ export function archiveConversation(ctx: DiscordCtx, discordChannelId: string, a
     }
 
     if (existing) {
-        db.prepare("UPDATE conversations SET config_json = json_set(COALESCE(config_json, '{}'), '$.archived', ?), updated_at = ? WHERE id = ?")
+        db.prepare("UPDATE conversations SET metadata_json = json_set(COALESCE(metadata_json, '{}'), '$.archived', ?), updated_at = ? WHERE id = ?")
             .run(Date.now(), Date.now(), existing.id)
         ctx.conversationToChannel.delete(existing.id)
     }

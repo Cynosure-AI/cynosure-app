@@ -1,4 +1,4 @@
-import { ref, computed, type Ref, type ComputedRef } from 'vue'
+import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import type { Conversation, DisplayMessage } from '../stores/chat.store'
@@ -27,6 +27,7 @@ export interface ChatAgentConfigApi {
     sessionAutoToolRouting: Ref<boolean>
     sessionAutoMemory: Ref<boolean>
     sessionAutoSkillRouting: Ref<boolean>
+    selectedToolNames: Ref<string[]>
     agentOriginalSystemPrompt: Ref<string>
     freeChatSubAgentIds: Ref<string[]>
     freeChatMemorySpaceIds: Ref<string[]>
@@ -39,6 +40,7 @@ export interface ChatAgentConfigApi {
     hasAgentOverrides: ComputedRef<boolean>
     hasFreeChatOverrides: ComputedRef<boolean>
     markOverridesModified(): void
+    setSelectedToolNames(names: string[]): void
     resetAgentOverrides(): void
     resetToDefaults(): void
     applyOverridesToAgent(): Promise<void>
@@ -100,6 +102,7 @@ export function useChatAgentConfig(
     const sessionAutoToolRouting = ref<boolean>(!activeAgentId.value)
     const sessionAutoMemory = ref<boolean>(true)
     const sessionAutoSkillRouting = ref<boolean>(true)
+    const selectedToolNames = ref<string[]>([])
     const agentOriginalAutoToolRouting = ref<boolean>(false)
     const agentOriginalAutoMemory = ref<boolean>(true)
     const agentOriginalAutoSkillRouting = ref<boolean>(true)
@@ -117,6 +120,15 @@ export function useChatAgentConfig(
     const agentOriginalSkillIds = ref<string[]>([])
     const freeChatDefaultMemorySpaceIds = ref<string[]>([])
     const freeChatPreset = ref<ChatPreset | null>(null)
+
+    watch(() => agentStore.availableTools, (tools) => {
+        const availableKeys = new Set(tools.map((tool) => tool.key))
+        const filtered = selectedToolNames.value.filter((name) => availableKeys.has(name))
+        if (!arraysEqual(filtered, selectedToolNames.value)) {
+            selectedToolNames.value = filtered
+            captureFreeChatPreset()
+        }
+    }, { deep: true })
 
     function regularFreeChatPreset(): ChatPreset {
         return {
@@ -136,7 +148,7 @@ export function useChatAgentConfig(
 
     function currentPreset(): ChatPreset {
         return {
-            tools: [...agentStore.selectedToolNames],
+            tools: [...selectedToolNames.value],
             subAgentIds: [...freeChatSubAgentIds.value],
             memorySpaceIds: [...freeChatMemorySpaceIds.value],
             skillIds: [...freeChatSkillIds.value],
@@ -151,7 +163,7 @@ export function useChatAgentConfig(
     }
 
     function applyPreset(preset: ChatPreset): void {
-        agentStore.selectedToolNames = [...preset.tools]
+        selectedToolNames.value = [...preset.tools]
         freeChatSubAgentIds.value = [...preset.subAgentIds]
         freeChatMemorySpaceIds.value = [...preset.memorySpaceIds]
         freeChatMemorySelectionInitialized.value = true
@@ -215,6 +227,17 @@ export function useChatAgentConfig(
         freeChatPreset.value = currentPreset()
     }
 
+    function setSelectedToolNames(names: string[]): void {
+        const availableKeys = new Set(agentStore.availableTools.map((tool) => tool.key))
+        const seen = new Set<string>()
+        selectedToolNames.value = names.filter((name) => {
+            if (!availableKeys.has(name) || seen.has(name)) return false
+            seen.add(name)
+            return true
+        })
+        captureFreeChatPreset()
+    }
+
     function setFreeChatDefaultMemorySpaceIds(ids: string[]): void {
         const nextIds = [...ids]
         const previousDefault = regularFreeChatPreset()
@@ -231,7 +254,7 @@ export function useChatAgentConfig(
     const hasAgentOverrides = computed(() => {
         if (!activeAgentId.value) return false
         return (
-            !arraysEqual(agentStore.selectedToolNames, agentOriginalTools.value) ||
+            !arraysEqual(selectedToolNames.value, agentOriginalTools.value) ||
             !arraysEqual(freeChatSubAgentIds.value, agentOriginalSubAgentIds.value) ||
             !arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value) ||
             !arraysEqual(freeChatSkillIds.value, agentOriginalSkillIds.value) ||
@@ -285,11 +308,10 @@ export function useChatAgentConfig(
         const agentDefs = useAgentDefinitionsStore()
         const updates: Record<string, unknown> = {}
 
-        if (!arraysEqual(agentStore.selectedToolNames, agentOriginalTools.value)) {
-            updates.tools = [...agentStore.selectedToolNames]
+        if (!arraysEqual(selectedToolNames.value, agentOriginalTools.value)) {
+            updates.tools = [...selectedToolNames.value]
         }
         if (!arraysEqual(freeChatSubAgentIds.value, agentOriginalSubAgentIds.value)) {
-            const existingAgent = agentDefs.get(activeAgentId.value)
             updates.subAgents = freeChatSubAgentIds.value.map(id => ({ agentId: id }))
         }
         if (!arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value)) {
@@ -374,6 +396,7 @@ export function useChatAgentConfig(
         sessionAutoToolRouting,
         sessionAutoMemory,
         sessionAutoSkillRouting,
+        selectedToolNames,
         agentOriginalSystemPrompt,
         freeChatSubAgentIds,
         freeChatMemorySpaceIds,
@@ -386,6 +409,7 @@ export function useChatAgentConfig(
         hasAgentOverrides,
         hasFreeChatOverrides,
         markOverridesModified,
+        setSelectedToolNames,
         resetAgentOverrides,
         resetToDefaults,
         applyOverridesToAgent,

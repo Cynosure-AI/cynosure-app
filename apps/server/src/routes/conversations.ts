@@ -2,58 +2,18 @@ import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getLatestOrchestrationState } from '../core/agent/orchestration-state.js'
 import { getAgent } from '../core/agents/agent-store.js'
-import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { nanoid } from 'nanoid'
 import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
 import { basename, join } from 'path'
 import { cleanupConversationArtifacts, extractFilePathFromFileUrl, getConversationArtifactsDir, materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
-import { deleteConversationAttachmentIndex, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
+import { deleteConversationAttachmentIndexes, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import { getAssignedOrDefaultSpaces } from '../core/memory/memory-space-scope.js'
+import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
+import type { ConversationExecutionConfig } from '@cynosure/contracts'
 
 function escapeSqlLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
-}
-
-function hydrateChatConfigFromAgent(
-    chatConfig: Record<string, unknown> | undefined,
-    agentId: string | null | undefined,
-): Record<string, unknown> | undefined {
-    if (!agentId) return chatConfig
-    const agent = getAgent(agentId)
-    if (!agent) return chatConfig
-
-    const hydrated: Record<string, unknown> = { ...(chatConfig ?? {}) }
-
-    if (!Object.prototype.hasOwnProperty.call(hydrated, 'allowedTools')) {
-        hydrated.allowedTools = agent.tools
-    }
-    if (!Object.prototype.hasOwnProperty.call(hydrated, 'subAgents')) {
-        hydrated.subAgents = agent.subAgents
-    }
-    if (!Object.prototype.hasOwnProperty.call(hydrated, 'memorySpaceIds')) {
-        hydrated.memorySpaceIds = getAssignedOrDefaultSpaces(agentId).map((space) => space.id)
-    }
-    if (!Object.prototype.hasOwnProperty.call(hydrated, 'systemPrompt')) {
-        hydrated.systemPrompt = agent.systemPrompt
-    }
-    if (!Object.prototype.hasOwnProperty.call(hydrated, 'model')) {
-        hydrated.model = agent.model
-    }
-    if (!Object.prototype.hasOwnProperty.call(hydrated, 'providerId')) {
-        hydrated.providerId = agent.providerId
-    }
-    if (!Object.prototype.hasOwnProperty.call(hydrated, 'thinkingEnabled')) {
-        hydrated.thinkingEnabled = agent.thinkingEnabled
-    }
-    if (!Object.prototype.hasOwnProperty.call(hydrated, 'autoToolRouting')) {
-        hydrated.autoToolRouting = agent.autoToolRouting
-    }
-    if (!Object.prototype.hasOwnProperty.call(hydrated, 'autoMemory')) {
-        hydrated.autoMemory = agent.autoMemory
-    }
-
-    return hydrated
 }
 
 /** Delete artifact files and attachment vectors referenced by conversations. */
@@ -78,8 +38,8 @@ async function cleanupConversationArtifactsAndIndexes(conversationIds: string[])
         }
 
         cleanupConversationArtifacts(convId)
-        await deleteConversationAttachmentIndex(convId)
     }
+    await deleteConversationAttachmentIndexes(conversationIds)
 }
 
 function cloneAttachmentFile(sourcePath: string | null, conversationId: string, suffix = ''): string | null {
@@ -94,14 +54,17 @@ function cloneAttachmentFile(sourcePath: string | null, conversationId: string, 
 
 export async function registerConversationRoutes(app: FastifyInstance): Promise<void> {
     // POST /api/chat/conversations — create
-    app.post<{ Body: { title?: string; agentId?: string; maWorkspaceId?: string; origin?: string } }>('/conversations', async (req) => {
-        const { title, agentId, maWorkspaceId, origin } = req.body
+    app.post<{ Body: { title?: string; agentId?: string; maWorkspaceId?: string; origin?: string; executionConfig?: ConversationExecutionConfig } }>('/conversations', async (req) => {
+        const { title, agentId, maWorkspaceId, origin, executionConfig } = req.body
         const db = getDb()
         const id = nanoid()
         const now = Date.now()
+        const agent = agentId ? getAgent(agentId) : null
+        const memorySpaceIds = agentId ? getAssignedOrDefaultSpaces(agentId).map((space) => space.id) : []
+        const initialExecutionConfig = executionConfig ?? buildInitialExecutionConfig({ agent, memorySpaceIds })
         db.prepare(
-            'INSERT INTO conversations (id, title, agent_id, ma_workspace_id, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        ).run(id, title || 'New Chat', agentId || null, maWorkspaceId || null, origin || 'chat', now, now)
+            'INSERT INTO conversations (id, title, agent_id, ma_workspace_id, origin, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, title || 'New Chat', agentId || null, maWorkspaceId || null, origin || 'chat', JSON.stringify(initialExecutionConfig), '{}', now, now)
         return { id, title: title || 'New Chat', agentId: agentId || null, maWorkspaceId: maWorkspaceId || null, origin: origin || 'chat', createdAt: now, updatedAt: now }
     })
 
@@ -120,7 +83,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 agent_id: string | null
                 ma_workspace_id: string | null
                 origin: string
-                config_json: string | null
+                execution_config_json: string
+                metadata_json: string
             } | undefined
             if (!source) return reply.status(404).send({ error: 'Conversation not found' })
 
@@ -142,7 +106,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             db.prepare(`
                 INSERT INTO conversations (
                     id, title, agent_id, ma_workspace_id, origin, pinned,
-                    last_read_at, last_context_tokens, config_json, created_at, updated_at
+                    last_read_at, last_context_tokens, execution_config_json, metadata_json, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
             `).run(
                 id,
@@ -152,7 +116,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 source.origin || 'chat',
                 now,
                 lastContextTokens,
-                source.config_json,
+                source.execution_config_json,
+                source.metadata_json,
                 now,
                 now,
             )
@@ -397,8 +362,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     app.get<{ Params: { id: string } }>('/conversations/:id/messages', async (req) => {
         const db = getDb()
 
-        // Fetch conversation-level metadata (context tokens + session config)
-        const convRow = db.prepare('SELECT agent_id, last_context_tokens, config_json FROM conversations WHERE id = ?').get(req.params.id) as { agent_id: string | null; last_context_tokens: number | null; config_json: string | null } | undefined
+        // Fetch conversation-level metadata (context tokens + execution config)
+        const convRow = db.prepare('SELECT agent_id, last_context_tokens, execution_config_json FROM conversations WHERE id = ?').get(req.params.id) as { agent_id: string | null; last_context_tokens: number | null; execution_config_json: string } | undefined
 
         const rows = db
             .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
@@ -433,21 +398,12 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             attachmentsByMessage.set(row.message_id, existing)
         }
 
-        let chatConfig: Record<string, unknown> | undefined
-        try {
-            chatConfig = convRow?.config_json ? JSON.parse(convRow.config_json) : undefined
-            chatConfig = hydrateChatConfigFromAgent(chatConfig, convRow?.agent_id)
-            if (chatConfig && Array.isArray(chatConfig.allowedTools)) {
-                chatConfig.allowedTools = chatConfig.allowedTools.filter((toolKey) => (
-                    typeof toolKey === 'string' && !isBuiltInMemoryToolKey(toolKey)
-                ))
-            }
-        } catch { /* malformed JSON — ignore */ }
+        const executionConfig = parseExecutionConfig(convRow?.execution_config_json)
 
         return {
             conversationAgentId: convRow?.agent_id ?? null,
             lastContextTokens: convRow?.last_context_tokens ?? null,
-            chatConfig,
+            executionConfig,
             messages: rows.map((row) => {
                 let agentName: string | undefined
                 let agentIconUrl: string | null | undefined

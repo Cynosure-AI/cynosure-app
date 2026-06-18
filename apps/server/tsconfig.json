@@ -10,6 +10,12 @@
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
         "resolveJsonModule": true,
+        "baseUrl": ".",
+        "paths": {
+            "@cynosure/contracts": [
+                "../../packages/contracts/index.d.ts"
+            ]
+        },
         "declaration": true,
         "declarationMap": true,
         "sourceMap": true

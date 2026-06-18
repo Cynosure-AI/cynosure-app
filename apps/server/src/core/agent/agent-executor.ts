@@ -646,7 +646,7 @@ export class AgentExecutor {
     /** Execute an array of tool calls concurrently and return results in original order. */
     private async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolCallResult[]> {
         const results = new Array<ToolCallResult>(toolCalls.length)
-        const visibleToolCalls: Array<{ index: number; toolCall: ToolCall }> = []
+        const concurrentToolCalls: Array<{ index: number; toolCall: ToolCall }> = []
 
         for (const tc of toolCalls) {
             if (isVisibleExecutionTool(tc.function.name)) {
@@ -658,13 +658,13 @@ export class AgentExecutor {
             if (isOrchestrationToolName(toolCall.function.name)) {
                 results[index] = await this.executeSingleToolCall(toolCall)
             } else {
-                visibleToolCalls.push({ index, toolCall })
+                concurrentToolCalls.push({ index, toolCall })
             }
         }
 
-        const visibleResults = await Promise.all(visibleToolCalls.map(({ toolCall }) => this.executeSingleToolCall(toolCall)))
-        for (const [resultIndex, result] of visibleResults.entries()) {
-            results[visibleToolCalls[resultIndex].index] = result
+        const concurrentResults = await Promise.all(concurrentToolCalls.map(({ toolCall }) => this.executeSingleToolCall(toolCall)))
+        for (const [resultIndex, result] of concurrentResults.entries()) {
+            results[concurrentToolCalls[resultIndex].index] = result
         }
 
         return results

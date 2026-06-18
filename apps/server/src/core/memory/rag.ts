@@ -349,14 +349,16 @@ export class RAGStore {
   // Delete / utility operations
   // -----------------------------------------------------------------------
 
-  async deleteByFilter(tableName: string, filter: string): Promise<void> {
+  async deleteByFilter(tableName: string, filter: string, opts: { rebuildFts?: boolean } = {}): Promise<void> {
     if (!this.db || !filter) return
     try {
       const table = await this.openExistingTable(tableName)
       if (!table) return
       await table.delete(filter)
       this.ftsIndexCurrent.delete(tableName)
-      await this.rebuildFtsIndex(tableName)
+      if (opts.rebuildFts !== false) {
+        await this.rebuildFtsIndex(tableName)
+      }
     } catch { /* best-effort */ }
   }
 
@@ -516,7 +518,7 @@ export class RAGStore {
   }
 
   /** Delete all chunks for multiple source files. */
-  async deleteBySources(tableName: string, sourceFiles: string[], filter?: string): Promise<number> {
+  async deleteBySources(tableName: string, sourceFiles: string[], filter?: string, opts: { rebuildFts?: boolean } = {}): Promise<number> {
     if (!this.db || sourceFiles.length === 0) return 0
     try {
       const table = await this.openExistingTable(tableName)
@@ -527,7 +529,9 @@ export class RAGStore {
       const deletedCount = await table.countRows(whereClause)
       await table.delete(whereClause)
       this.ftsIndexCurrent.delete(tableName)
-      await this.rebuildFtsIndex(tableName)
+      if (opts.rebuildFts !== false) {
+        await this.rebuildFtsIndex(tableName)
+      }
       return deletedCount
     } catch {
       return 0
@@ -543,7 +547,7 @@ export class RAGStore {
   }
 
   /** Delete documents by their IDs. */
-  async deleteByIds(tableName: string, ids: string[]): Promise<void> {
+  async deleteByIds(tableName: string, ids: string[], opts: { rebuildFts?: boolean } = {}): Promise<void> {
     if (!this.db || ids.length === 0) return
     try {
       const table = await this.openExistingTable(tableName)
@@ -552,7 +556,9 @@ export class RAGStore {
       if (!filter) return
       await table.delete(filter)
       this.ftsIndexCurrent.delete(tableName)
-      await this.rebuildFtsIndex(tableName)
+      if (opts.rebuildFts !== false) {
+        await this.rebuildFtsIndex(tableName)
+      }
     } catch { /* best-effort */ }
   }
 

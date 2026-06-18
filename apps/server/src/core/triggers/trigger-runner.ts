@@ -9,6 +9,7 @@ import { getToolRegistry } from '../tools/tool-registry.js'
 import type { AgentData } from '../agents/agent-store.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
 import { getAssignedOrDefaultSpaces } from '../memory/memory-space-scope.js'
+import { buildPersistedChatConfig } from '../chat/run-config.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -78,14 +79,21 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     })
 
     // Persist session config so the chat view can restore the correct model/provider
-    const chatConfig = JSON.stringify({
-        model: planned.responseModel,
-        providerId: planned.providerId,
-        memorySpaceIds: memorySpaces.map((space) => space.id),
+    const executionConfig = buildPersistedChatConfig({
+        selectedToolKeys: agent.tools,
+        routedToolKeys: [],
+        requestedSubAgents: agent.subAgents,
+        requestedMemorySpaceIds: memorySpaces.map((space) => space.id),
+        systemPrompt: planned.messages.find((message) => message.role === 'system')?.content.toString(),
+        responseModel: planned.responseModel,
+        responseProvider: planned.responseProvider,
         thinkingEnabled: agent.thinkingEnabled !== false,
+        autoToolRouting: agent.autoToolRouting === true,
         autoMemory: agent.autoMemory === true,
+        selectedSkillIds: agent.skills,
+        autoSkillRouting: agent.autoSkillRouting !== false,
     })
-    db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(chatConfig, conversationId)
+    db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(JSON.stringify(executionConfig), conversationId)
 
     const messages: ChatMessage[] = planned.messages
 

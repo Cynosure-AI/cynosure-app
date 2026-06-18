@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { useAgentStore } from '../../../stores/agent-runtime.store'
 import { useChatStore } from '../../../stores/chat.store'
 import ModalDialog from '../../shared/ModalDialog.vue'
 import ToolSelector from '../../shared/ToolSelector.vue'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
 
-const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
 const visible = defineModel<boolean>({ required: true })
@@ -15,8 +13,7 @@ function closeModal(): void {
 }
 
 function onToolsUpdate(tools: string[]) {
-  agentStore.selectedToolNames = tools
-  chatStore.markOverridesModified()
+  chatStore.setSelectedToolNames(tools)
 }
 
 function onAutoRoutingUpdate(enabled: boolean): void {
@@ -60,7 +57,7 @@ function onAutoRoutingUpdate(enabled: boolean): void {
     </div>
 
     <ToolSelector
-      :model-value="agentStore.selectedToolNames"
+      :model-value="chatStore.selectedToolNames"
       :show-approvals="false"
       @update:model-value="onToolsUpdate"
     />
