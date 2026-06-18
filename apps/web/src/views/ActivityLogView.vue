@@ -114,9 +114,8 @@ function kindIcon(kind: ActivityKind): string {
 }
 
 function kindClass(item: ActivityItem): string {
-  if (item.kind === "notification" && item.severity === "critical") return "activity-critical";
-  if (item.kind === "notification" && item.severity === "warning") return "activity-warning";
-  if (item.kind === "instance" && item.status === "awaiting-approval") return "activity-warning";
+  if (item.kind === "instance") return "activity-instance";
+  if (item.kind === "notification") return "activity-notification";
   if (item.kind === "artifact") return "activity-artifact";
   if (item.kind === "cron") return "activity-cron";
   if (item.kind === "memory") return "activity-memory";
@@ -693,7 +692,9 @@ onUnmounted(() => {
 }
 
 .activity-info,
+.activity-instance,
 .activity-artifact,
+.activity-notification,
 .activity-cron,
 .activity-memory,
 .activity-warning,
@@ -709,28 +710,28 @@ onUnmounted(() => {
   --activity-border: color-mix(in srgb, #38bdf8 35%, var(--color-theme-800));
 }
 
+.activity-instance {
+  --activity-color: #f87171;
+  --activity-bg: color-mix(in srgb, #f87171 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #f87171 38%, var(--color-theme-800));
+}
+
 .activity-artifact {
   --activity-color: #22c55e;
   --activity-bg: color-mix(in srgb, #22c55e 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #22c55e 35%, var(--color-theme-800));
 }
 
-.activity-memory {
-  --activity-color: #a78bfa;
-  --activity-bg: color-mix(in srgb, #a78bfa 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #a78bfa 35%, var(--color-theme-800));
-}
-
-.activity-warning {
+.activity-notification {
   --activity-color: #f59e0b;
   --activity-bg: color-mix(in srgb, #f59e0b 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #f59e0b 38%, var(--color-theme-800));
 }
 
-.activity-critical {
-  --activity-color: #f87171;
-  --activity-bg: color-mix(in srgb, #f87171 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #f87171 38%, var(--color-theme-800));
+.activity-memory {
+  --activity-color: #a78bfa;
+  --activity-bg: color-mix(in srgb, #a78bfa 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #a78bfa 35%, var(--color-theme-800));
 }
 
 .empty-state {
