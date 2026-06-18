@@ -2,7 +2,7 @@ import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscri
 import type {
   LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryResponse,
   AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob,
-  AgentInstance, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
+  AgentInstance, ActivityItem, ActivityKind, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
   MetricsSummary, OrchestrationState,
   SkillDefinition,
   ModelListType,
@@ -520,6 +520,16 @@ export const api = {
       get<{ count: number }>('/api/notifications/unread-count').then((r) => r.count),
     onCreated: (cb: (data: AppNotification) => void) =>
       onWsEvent('notification:created', cb as WsHandler)
+  },
+
+  activity: {
+    list: (opts?: { limit?: number; types?: ActivityKind[] }) => {
+      const params = new URLSearchParams()
+      if (opts?.limit) params.set('limit', String(opts.limit))
+      if (opts?.types?.length) params.set('types', opts.types.join(','))
+      const qs = params.toString()
+      return get<{ items: ActivityItem[] }>(`/api/activity${qs ? `?${qs}` : ''}`).then((r) => r.items)
+    },
   },
 
   instances: {

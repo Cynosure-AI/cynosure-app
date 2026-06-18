@@ -49,6 +49,12 @@ const router = createRouter({
       name: 'instances',
       component: () => import('@/views/InstancesView.vue')
     },
+    // Activity
+    {
+      path: '/activity',
+      name: 'activity',
+      component: () => import('@/views/ActivityLogView.vue')
+    },
     // Agents
     {
       path: '/agents',
