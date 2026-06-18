@@ -68,7 +68,7 @@
 }
 
 /* ── Syntax highlighting overrides ──
-   atom-one-dark.css is imported globally (works for dark/cyberpunk/midnight).
+   atom-one-dark.css is imported globally (works for dark/cyberpunk/galaxy).
    Override key colours so code blocks remain readable on light backgrounds. */
 [data-theme="light"] .hljs {
   background: #f6f8fa;
