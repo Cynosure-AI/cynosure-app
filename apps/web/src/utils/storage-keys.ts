@@ -22,6 +22,8 @@ export const SK_INLINE_ATTACHMENT_TEXT_LIMIT = 'cy-inline-attachment-text-limit'
 export const SK_COMPACT_PROVIDER = 'cy-compact-provider'
 export const SK_COMPACT_MODEL = 'cy-compact-model'
 export const SK_PROVIDER_MODEL_FAVORITES = 'cy-provider-model-favorites'
+export const SK_FREE_CHAT_PROVIDER = 'cy-free-chat-provider'
+export const SK_FREE_CHAT_MODEL = 'cy-free-chat-model'
 export const SK_AGENT_CATEGORIES = 'cy-agent-categories'
 export const SK_MA_CATEGORIES = 'cy-ma-categories'
 export const SK_MEMORY_GRAPH_NODE_SPACING = 'cy-memory-graph-node-spacing'
@@ -66,6 +68,8 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_COMPACT_PROVIDER,
     SK_COMPACT_MODEL,
     SK_PROVIDER_MODEL_FAVORITES,
+    SK_FREE_CHAT_PROVIDER,
+    SK_FREE_CHAT_MODEL,
     SK_AGENT_CATEGORIES,
     SK_MA_CATEGORIES,
     SK_MEMORY_GRAPH_NODE_SPACING,
