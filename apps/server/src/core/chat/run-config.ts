@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ToolRegistry } from '../tools/tool-registry.js'
-import type { ConversationExecutionConfig } from '@cynosure/contracts'
+import type { ConversationExecutionConfig } from '@shared/types'
 
 export interface ToolSelectionConfig {
     selectedToolKeys: string[]

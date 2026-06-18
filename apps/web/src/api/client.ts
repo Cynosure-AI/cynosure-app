@@ -13,7 +13,7 @@ import type {
   VideoGenerationRequest,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatSendRequest, ConversationDto, ConversationMessagesResponse } from '@cynosure/contracts'
+import type { ChatSendRequest, ConversationDto, ConversationMessagesResponse } from '@shared/types'
 
 // ---- API object (same shape as window.api from preload) ----
 
