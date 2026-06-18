@@ -306,27 +306,29 @@ onUnmounted(() => {
                   </h2>
                 </div>
 
-                <span
-                  v-if="item.status"
-                  class="status-pill shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
-                >
-                  {{ item.status }}
-                </span>
+                <div class="flex gap-2">
+                  <span
+                    v-if="item.status"
+                    class="status-pill shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
+                  >
+                    {{ item.status }}
+                  </span>
 
-                <button
-                  v-if="canStopItem(item)"
-                  class="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-400/25 bg-red-400/10 px-2 py-0.5 text-[11px] font-bold text-red-400 transition hover:border-red-300/40 hover:bg-red-400/15 hover:text-red-200 disabled:cursor-wait disabled:opacity-70"
-                  :disabled="stoppingInstanceIds.has(item.sourceId!)"
-                  title="Stop instance"
-                  @click="stopInstance(item, $event)"
-                >
-                  <Icon
-                    :icon="stoppingInstanceIds.has(item.sourceId!) ? 'lucide:loader-2' : 'lucide:square'"
-                    class="w-3 h-3"
-                    :class="{ 'animate-spin': stoppingInstanceIds.has(item.sourceId!) }"
-                  />
-                  Stop
-                </button>
+                  <button
+                    v-if="canStopItem(item)"
+                    class="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-400/25 bg-red-400/10 px-2 py-0.5 text-[11px] font-bold text-red-400 transition hover:border-red-300/40 hover:bg-red-400/15 hover:text-red-200 disabled:cursor-wait disabled:opacity-70"
+                    :disabled="stoppingInstanceIds.has(item.sourceId!)"
+                    title="Stop instance"
+                    @click="stopInstance(item, $event)"
+                  >
+                    <Icon
+                      :icon="stoppingInstanceIds.has(item.sourceId!) ? 'lucide:loader-2' : 'lucide:square'"
+                      class="w-3 h-3"
+                      :class="{ 'animate-spin': stoppingInstanceIds.has(item.sourceId!) }"
+                    />
+                    Stop
+                  </button>
+                </div>
               </div>
 
               <p
