@@ -112,8 +112,11 @@ export async function registerProviderRoutes(app: FastifyInstance): Promise<void
   })
 
   // GET /api/providers/:id/models — list models
-  app.get<{ Params: { id: string }; Querystring: { type?: ModelListType } }>('/:id/models', async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { type?: ModelListType; details?: string } }>('/:id/models', async (req, reply) => {
     try {
+      if (req.query.details === 'true') {
+        return await gateway.listModelItems(req.params.id, req.query.type)
+      }
       const models = await gateway.listModels(req.params.id, req.query.type)
       return models
     } catch (err) {

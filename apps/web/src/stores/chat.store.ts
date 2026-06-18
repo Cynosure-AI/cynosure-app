@@ -1,7 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
-import type { MemorySpace, StoredMessage } from '../api/types'
+import type { MemorySpace, ModelPricing, StoredMessage } from '../api/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -58,6 +58,7 @@ export const useChatStore = defineStore('chat', () => {
   const loadingMessages = ref(false)
   const contextWindow = ref<number | null>(null)
   const modelCost = ref<{ input: number; output: number } | null>(null)
+  const modelPricing = ref<ModelPricing | null>(null)
   const modelModalities = ref<{ input: string[]; output: string[] } | null>(null)
   const memorySpaces = ref<MemorySpace[]>([])
   const postActionsMap = new Map<string, Set<string>>()
@@ -354,6 +355,7 @@ export const useChatStore = defineStore('chat', () => {
           contextWindow.value = null
         }
         modelCost.value = info.cost ?? null
+        modelPricing.value = info.pricing ?? null
         modelModalities.value = (info.inputModalities?.length || info.outputModalities?.length)
           ? {
               input: info.inputModalities ?? [],
@@ -364,6 +366,7 @@ export const useChatStore = defineStore('chat', () => {
       .catch(() => {
         contextWindow.value = null
         modelCost.value = null
+        modelPricing.value = null
         modelModalities.value = null
       })
   }
@@ -413,6 +416,7 @@ export const useChatStore = defineStore('chat', () => {
     } else {
       contextWindow.value = null
       modelCost.value = null
+      modelPricing.value = null
       modelModalities.value = null
     }
   }, { immediate: true })
@@ -598,6 +602,7 @@ export const useChatStore = defineStore('chat', () => {
     lastUsage: streaming.lastUsage,
     contextWindow,
     modelCost,
+    modelPricing,
     modelModalities,
     handleStreamStart: streaming.handleStreamStart,
     handleStreamChunk: streaming.handleStreamChunk,

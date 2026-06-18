@@ -6,6 +6,8 @@ import type {
   MetricsSummary, OrchestrationState,
   SkillDefinition,
   ModelListType,
+  ModelInfo,
+  ModelListItem,
   VideoGenerationJob,
   VideoGenerationModelInfo,
   VideoGenerationRequest,
@@ -26,6 +28,11 @@ export const api = {
       const params = type ? `?type=${type}` : ''
       return get<string[]>(`/api/providers/${encodeURIComponent(id)}/models${params}`)
     },
+    listModelItems: (id: string, type?: ModelListType) => {
+      const params = new URLSearchParams({ details: 'true' })
+      if (type) params.set('type', type)
+      return get<ModelListItem[]>(`/api/providers/${encodeURIComponent(id)}/models?${params}`)
+    },
     listVideoModels: (id: string) =>
       get<VideoGenerationModelInfo[]>(`/api/providers/${encodeURIComponent(id)}/videos/models`),
     generateVideo: (id: string, request: VideoGenerationRequest) =>
@@ -35,14 +42,7 @@ export const api = {
     getVideoContentUrl: (id: string, jobId: string, index = 0) =>
       `${BASE_URL}/api/providers/${encodeURIComponent(id)}/videos/${encodeURIComponent(jobId)}/content?index=${encodeURIComponent(String(index))}`,
     getModelInfo: (providerId: string, modelId: string) =>
-      get<{
-        id: string
-        contextLength?: number
-        inputModalities?: string[]
-        outputModalities?: string[]
-        supportsToolCalls?: boolean
-        cost?: { input: number; output: number }
-      }>(`/api/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}/info`),
+      get<ModelInfo>(`/api/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}/info`),
     loadSaved: () => Promise.resolve() // no-op in web — server loads on startup
   },
 

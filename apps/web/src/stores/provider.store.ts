@@ -1,7 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../api/client'
-import type { LLMProviderConfig, ModelListType } from '../api/types'
+import type { LLMProviderConfig, ModelListItem, ModelListType } from '../api/types'
 
 export type { LLMProviderConfig }
 
@@ -52,6 +52,10 @@ export const useProviderStore = defineStore('provider', () => {
     return api.provider.listModels(id, type)
   }
 
+  async function listModelItems(id: string, type?: ModelListType): Promise<ModelListItem[]> {
+    return api.provider.listModelItems(id, type)
+  }
+
   return {
     providers,
     lastUsedProviderId,
@@ -62,7 +66,8 @@ export const useProviderStore = defineStore('provider', () => {
     removeProvider,
     setLastUsed,
     testConnection,
-    listModels
+    listModels,
+    listModelItems
   }
 })
 

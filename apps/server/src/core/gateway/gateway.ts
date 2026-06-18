@@ -5,6 +5,7 @@ import {
   type CompletionResponse,
   type StreamChunk,
   type ModelInfo,
+  type ModelListItem,
   type ModelListType,
   type VideoGenerationContent,
   type VideoGenerationJob,
@@ -131,6 +132,14 @@ export class LLMGateway {
     return provider.listModels(type)
   }
 
+  async listModelItems(providerId?: string, type?: ModelListType): Promise<ModelListItem[]> {
+    const provider = providerId
+      ? this.providers.get(providerId)
+      : this.getLastUsedProvider()
+    if (!provider) throw new Error(`Provider not found`)
+    return provider.listModelItems(type)
+  }
+
   async listVideoModels(providerId?: string): Promise<VideoGenerationModelInfo[]> {
     const provider = providerId
       ? this.providers.get(providerId)
@@ -227,6 +236,13 @@ export class LLMGateway {
       const cost = getModelCost(providerType, modelId)
       if (cost) {
         info.cost = cost
+      }
+    }
+
+    if (!info.cost && info.pricing && (info.pricing.prompt != null || info.pricing.completion != null)) {
+      info.cost = {
+        input: (info.pricing.prompt ?? 0) * 1_000_000,
+        output: (info.pricing.completion ?? 0) * 1_000_000
       }
     }
 

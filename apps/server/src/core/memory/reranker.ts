@@ -24,12 +24,6 @@ const DEFAULT_CONFIG: MemoryRerankerConfig = {
   candidateCount: 30
 }
 
-const ALLOWED_MODELS = new Set([
-  'cohere/rerank-v3.5',
-  'cohere/rerank-4-fast',
-  'cohere/rerank-4-pro'
-])
-
 function normalizeConfig(config: Partial<MemoryRerankerConfig> | undefined): MemoryRerankerConfig {
   const candidateCount = Number.isFinite(config?.candidateCount)
     ? Math.round(config!.candidateCount as number)
@@ -38,7 +32,7 @@ function normalizeConfig(config: Partial<MemoryRerankerConfig> | undefined): Mem
   return {
     enabled: !!config?.enabled,
     providerId: config?.providerId?.trim() || undefined,
-    model: config?.model && ALLOWED_MODELS.has(config.model) ? config.model : DEFAULT_CONFIG.model,
+    model: config?.model?.trim() || DEFAULT_CONFIG.model,
     candidateCount: Math.min(50, Math.max(3, candidateCount))
   }
 }

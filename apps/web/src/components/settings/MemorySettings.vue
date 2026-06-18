@@ -67,12 +67,6 @@ const entityExtractionProviderId = ref('')
 const entityExtractionModel = ref('')
 const entityExtractionSaving = ref(false)
 
-const RERANK_MODEL_OPTIONS = [
-  { value: 'cohere/rerank-4-fast', label: 'Cohere Rerank 4 Fast', hint: 'cohere/rerank-4-fast' },
-  { value: 'cohere/rerank-4-pro', label: 'Cohere Rerank 4 Pro', hint: 'cohere/rerank-4-pro' },
-  { value: 'cohere/rerank-v3.5', label: 'Cohere Rerank v3.5', hint: 'cohere/rerank-v3.5' },
-]
-
 const OCR_LANGUAGE_OPTIONS = [
   { value: 'eng', label: 'English', hint: 'eng' },
   { value: 'deu', label: 'German', hint: 'deu' },
@@ -117,16 +111,6 @@ const embModelGroups = computed(() => [
     options: embModels.value.map((m) => ({
       value: m,
       label: m,
-    })),
-  },
-])
-
-const rerankModelGroups = computed(() => [
-  {
-    options: RERANK_MODEL_OPTIONS.map((m) => ({
-      value: m.value,
-      label: m.label,
-      tag: m.hint,
     })),
   },
 ])
@@ -299,6 +283,11 @@ async function saveReranker() {
     rerankCandidateCount.value = res.candidateCount
   } catch { /* error handling */ }
   rerankSaving.value = false
+}
+
+function updateRerankerSelection(selection: { providerId: string; model: string }) {
+  rerankProviderId.value = selection.providerId
+  rerankModel.value = selection.model
 }
 
 async function fetchEmbModels(providerId: string) {
@@ -577,12 +566,17 @@ async function manualClearGraph() {
       </div>
 
       <div class="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label class="block text-xs text-theme-400 mb-1">OpenRouter Provider</label>
-          <ProviderSelect
-            v-model="rerankProviderId"
+        <div class="sm:col-span-2">
+          <label class="block text-xs text-theme-400 mb-1">OpenRouter Provider / Model</label>
+          <ProviderModelSelect
+            :provider-id="rerankProviderId"
+            :model-value="rerankModel"
             :providers="openRouterProviders"
-            placeholder="Select OpenRouter provider"
+            model-type="reranker"
+            placeholder="Select OpenRouter rerank model"
+            dropdown-width="min-w-full"
+            max-height="max-h-72"
+            @change="updateRerankerSelection"
           />
           <p
             v-if="openRouterProviders.length === 0"
@@ -590,16 +584,6 @@ async function manualClearGraph() {
           >
             Add an OpenRouter provider before enabling reranking.
           </p>
-        </div>
-
-        <div>
-          <label class="block text-xs text-theme-400 mb-1">Model</label>
-          <CustomSelect
-            v-model="rerankModel"
-            :groups="rerankModelGroups"
-            placeholder="Select rerank model"
-            dropdown-width="min-w-full"
-          />
         </div>
 
         <div>

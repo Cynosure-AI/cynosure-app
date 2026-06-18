@@ -86,6 +86,37 @@ const formattedModelCost = computed(() => {
   return `${fmt(cost.input)} / ${fmt(cost.output)}`;
 });
 
+function formatSmallMoney(n: number): string {
+  if (n === 0) return "$0";
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  if (n < 1) return `$${n.toFixed(2)}`;
+  return `$${n.toFixed(2)}`;
+}
+
+function humanizeSku(key: string): string {
+  return key
+    .replace(/^cents_per_/, "cents ")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+const formattedImageCost = computed(() => {
+  const imageCost = chatStore.modelPricing?.image;
+  return imageCost == null ? null : `${formatSmallMoney(imageCost)} per image`;
+});
+
+const formattedVideoCosts = computed(() => {
+  const skus = chatStore.modelPricing?.skus;
+  if (!skus) return [];
+  return Object.entries(skus)
+    .filter(([, value]) => Number.isFinite(value))
+    .slice(0, 4)
+    .map(([key, value]) => ({
+      label: humanizeSku(key),
+      value: formatSmallMoney(key.startsWith("cents_per_") ? value / 100 : value),
+    }));
+});
+
 function formatModalityName(modality: string): string {
   return modality
     .split(/[-_\s]+/)
@@ -325,6 +356,28 @@ async function toggleMic(): Promise<void> {
                 Input / Output cost per 1M tokens
               </p>
               <span class="tabular-nums">{{ formattedModelCost }}</span>
+            </div>
+
+            <div v-if="formattedImageCost">
+              <p class="text-xs text-theme-300 whitespace-nowrap">
+                Image cost
+              </p>
+              <span class="tabular-nums">{{ formattedImageCost }}</span>
+            </div>
+
+            <div v-if="formattedVideoCosts.length">
+              <p class="text-xs text-theme-300 whitespace-nowrap">
+                Video cost estimates
+              </p>
+              <div class="mt-1 grid grid-cols-[auto,1fr] gap-x-2 gap-y-1 text-xs">
+                <template
+                  v-for="sku in formattedVideoCosts"
+                  :key="sku.label"
+                >
+                  <span class="text-theme-500">{{ sku.label }}</span>
+                  <span class="text-theme-200 tabular-nums">{{ sku.value }}</span>
+                </template>
+              </div>
             </div>
           </div>
         </template>
