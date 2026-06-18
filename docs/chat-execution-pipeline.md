@@ -240,7 +240,7 @@ resolveExecutionTools(input)
   │   ├─ memory_semantic_search
   │   ├─ memory_create / memory_update
   │   ├─ memory_forget
-  │   ├─ entity_graph_search / entity_graph_assert / entity_graph_delete
+  │   ├─ relationship_graph_search / relationship_graph_assert / relationship_graph_delete
   │
   ├─ Inject sub-agent delegation tools (if sub-agents configured):
   │   └─ spawn_subagent tool
@@ -356,8 +356,8 @@ During execution, the agent can interact with memory via built-in tools:
 - `memory_semantic_search` — Query by semantic similarity
 - `memory_create` / `memory_update` — Add or modify memory
 - `memory_forget` — Delete memories
-- `entity_graph_search` — Find related entities via graph traversal
-- `entity_graph_assert` / `entity_graph_delete` — Manage relationships
+- `relationship_graph_search` — Find related relationships via graph traversal
+- `relationship_graph_assert` / `relationship_graph_delete` — Manage relationships
 
 ---
 

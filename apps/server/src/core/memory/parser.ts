@@ -195,8 +195,15 @@ export class MemoryParser {
       console.warn('[memory-reranker] Rerank failed, using hybrid ranking:', err)
       return results.slice(0, topK)
     })
+    const minMatchThreshold = reranker.getMinMatchThreshold()
+    const filtered = ranked.filter((r) => {
+      const score = typeof r.rerankerScore === 'number' && Number.isFinite(r.rerankerScore)
+        ? r.rerankerScore
+        : r.score
+      return typeof score === 'number' && Number.isFinite(score) && score >= minMatchThreshold
+    })
 
-    return ranked.map((r) => ({
+    return filtered.map((r) => ({
       id: r.id,
       text: r.text,
       source: r.source,

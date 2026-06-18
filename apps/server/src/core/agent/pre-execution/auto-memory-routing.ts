@@ -7,8 +7,6 @@ import type { RetrievedChunk } from '../../memory/parser.js'
 const AUTO_MEMORY_RETRIEVAL_COUNT = 12
 const MAX_SELECTED_MEMORIES = 5
 const TURN_CHAR_LIMIT = 200
-const MIN_AUTO_MEMORY_VECTOR_SCORE = 0.22
-const MIN_AUTO_MEMORY_RERANKER_SCORE = 0.1
 
 export interface ApplyAutoMemoryRoutingInput {
     enabled: boolean
@@ -108,21 +106,10 @@ function messageContentForRouter(content: string | ContentPart[]): string {
 }
 
 function filterAutoMemoryCandidates(memory: AggregatedMemory, query: string): AggregatedMemory {
-    const relevant = memory.permanent.filter((chunk) => isRelevantAutoMemory(chunk))
     return {
-        permanent: relevant,
-        graph: relevant.length > 0 || graphSeedMatchesQuery(memory.graph, query) ? memory.graph : undefined,
+        permanent: memory.permanent,
+        graph: memory.permanent.length > 0 || graphSeedMatchesQuery(memory.graph, query) ? memory.graph : undefined,
     }
-}
-
-function isRelevantAutoMemory(chunk: RetrievedChunk): boolean {
-    if (typeof chunk.rerankerScore === 'number' && Number.isFinite(chunk.rerankerScore)) {
-        return chunk.rerankerScore >= MIN_AUTO_MEMORY_RERANKER_SCORE
-    }
-    if (typeof chunk.score === 'number' && Number.isFinite(chunk.score) && chunk.score >= MIN_AUTO_MEMORY_VECTOR_SCORE) {
-        return true
-    }
-    return false
 }
 
 function graphSeedMatchesQuery(graph: AggregatedMemory['graph'], query: string): boolean {

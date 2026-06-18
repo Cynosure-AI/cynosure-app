@@ -1,7 +1,7 @@
 import { prepareAgentExecution } from '../prepare-execution.js'
 import { presetFromAgent, presetFromAgentless } from '../execution-preset.js'
 import { toExecutionPlanInput } from './execution-input.js'
-import { isBuiltInEntityGraphToolKey, isBuiltInMemoryToolKey } from '../../tools/built-in-tools.js'
+import { isBuiltInMemoryToolKey, isBuiltInRelationshipGraphToolKey } from '../../tools/built-in-tools.js'
 import {
     buildOrchestrationStateContext,
     getLatestOrchestrationState,
@@ -65,7 +65,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
     const allRegisteredToolKeys = toolRegistry.listRegisteredTools()
         .map((tool) => tool.key)
         .filter((key) => !isBuiltInMemoryToolKey(key))
-        .filter((key) => !isBuiltInEntityGraphToolKey(key))
+        .filter((key) => !isBuiltInRelationshipGraphToolKey(key))
     const effectiveAutoToolRouting = autoToolRouting ?? resolvedAgent?.autoToolRouting ?? false
     const configuredTools = hasExplicitToolAllowlist
         ? selectedToolKeys

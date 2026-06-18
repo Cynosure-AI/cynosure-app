@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid'
 import { getEventBus } from '../../telemetry/event-bus.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
-import { routeTools, shouldRouteTools } from './../tool-router.js'
+import { routeTools, shouldRouteTools, type RoutedToolDefinition } from './../tool-router.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../../tools/tool-registry.js'
 
@@ -68,7 +68,7 @@ function emitToolRoutingStatus(conversationId: string, taskId: string, status: s
     })
 }
 
-function emitToolRoutingSelection(conversationId: string, taskId: string, tools: ToolDefinition[], eventMeta?: Record<string, unknown>): void {
+function emitToolRoutingSelection(conversationId: string, taskId: string, tools: Array<ToolDefinition | RoutedToolDefinition>, eventMeta?: Record<string, unknown>): void {
     getEventBus().emit('step:tools-chosen', {
         conversationId,
         taskId,
@@ -76,6 +76,11 @@ function emitToolRoutingSelection(conversationId: string, taskId: string, tools:
         ...eventMeta,
         toolCalls: tools
             .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
-            .map((tool) => ({ name: tool.name, arguments: '{}' })),
+            .map((tool) => ({
+                name: tool.name,
+                arguments: typeof (tool as RoutedToolDefinition).routerScore === 'number'
+                    ? JSON.stringify({ type: 'tool-router', routerScore: (tool as RoutedToolDefinition).routerScore })
+                    : '{}'
+            })),
     })
 }

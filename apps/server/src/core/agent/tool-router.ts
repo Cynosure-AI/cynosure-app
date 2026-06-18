@@ -28,6 +28,8 @@ interface McpToolGroup {
     tools: RegistryAwareToolDefinition[]
 }
 
+export type RoutedToolDefinition = ToolDefinition & { routerScore?: number }
+
 export interface RouteToolsInput {
     userQuery: string
     recentMessages?: ChatMessage[]
@@ -126,7 +128,7 @@ export async function embeddingPreFilter(
     }
 }
 
-export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition[]> {
+export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefinition[]> {
     const {
         userQuery,
         recentMessages = [],
@@ -171,7 +173,7 @@ export async function routeTools(input: RouteToolsInput): Promise<ToolDefinition
     const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, maxTools, protectedNames)
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
-    let routedTools: ToolDefinition[] = []
+    let routedTools: RoutedToolDefinition[] = []
     const searchTool = makeSearchAvailableMcpToolsTool({
         allTools,
         getLoadedToolNames: () => new Set(routedTools.map(({ name }) => name)),
@@ -187,9 +189,8 @@ async function rankCandidateTools(
     tools: ToolDefinition[],
     limit: number,
     protectedNames: Set<string>,
-): Promise<ToolDefinition[]> {
+): Promise<RoutedToolDefinition[]> {
     const rankable = tools.filter(({ name }) => !protectedNames.has(name))
-    if (rankable.length <= limit) return rankable
 
     try {
         const embedder = getEmbeddingProvider()
@@ -231,7 +232,7 @@ async function rankCandidateTools(
         const nearMatches = scored.filter(({ score }) => score >= minScore)
         const selected = nearMatches.length ? nearMatches : scored
 
-        return selected.slice(0, limit).map(({ tool }) => tool)
+        return selected.slice(0, limit).map(({ tool, score }) => ({ ...tool, routerScore: score }))
     } catch (err) {
         console.warn('[tool-router] Tool ranking failed, using lexical fallback:', err)
         return lexicalToolRank(query, rankable, limit)
