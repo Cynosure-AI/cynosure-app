@@ -6,7 +6,7 @@ import { nanoid } from 'nanoid'
 import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
 import { basename, join } from 'path'
 import { cleanupConversationArtifacts, extractFilePathFromFileUrl, getConversationArtifactsDir, materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
-import { deleteConversationAttachmentIndex, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
+import { deleteConversationAttachmentIndexes, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import { getAssignedOrDefaultSpaces } from '../core/memory/memory-space-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
@@ -38,8 +38,8 @@ async function cleanupConversationArtifactsAndIndexes(conversationIds: string[])
         }
 
         cleanupConversationArtifacts(convId)
-        await deleteConversationAttachmentIndex(convId)
     }
+    await deleteConversationAttachmentIndexes(conversationIds)
 }
 
 function cloneAttachmentFile(sourcePath: string | null, conversationId: string, suffix = ''): string | null {
