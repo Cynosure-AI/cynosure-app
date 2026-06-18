@@ -6,6 +6,10 @@ import TurndownService from "turndown";
 import { EditorContent, useEditor } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
+import { Table } from "@tiptap/extension-table";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { TableHeader } from "@tiptap/extension-table-header";
+import { TableRow } from "@tiptap/extension-table-row";
 import { api } from "../../api/client";
 
 const props = defineProps<{
@@ -35,6 +39,28 @@ turndown.addRule("strikethrough", {
   replacement: (content) => `~~${content}~~`,
 });
 
+function tableCellMarkdown(cell: Element): string {
+  const text = turndown.turndown(cell.innerHTML).replace(/\n+/g, " ").replace(/\|/g, "\\|").trim();
+  return ` ${text} `;
+}
+
+turndown.addRule("table", {
+  filter: "table",
+  replacement: (_content, node) => {
+    const table = node as HTMLTableElement;
+    const rows = Array.from(table.querySelectorAll("tr"));
+    if (!rows.length) return "";
+
+    const markdownRows = rows.map(row =>
+      `|${Array.from(row.children).map(tableCellMarkdown).join("|")}|`
+    );
+    const columnCount = rows[0]?.children.length || 1;
+    const separator = `|${Array.from({ length: columnCount }, () => " --- ").join("|")}|`;
+
+    return `\n\n${[markdownRows[0], separator, ...markdownRows.slice(1)].join("\n")}\n\n`;
+  },
+});
+
 const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
@@ -54,6 +80,12 @@ const editor = useEditor({
         target: "_blank",
       },
     }),
+    Table.configure({
+      resizable: true,
+    }),
+    TableRow,
+    TableHeader,
+    TableCell,
   ],
   content: "",
   editorProps: {
@@ -375,5 +407,67 @@ onBeforeUnmount(() => {
   color: var(--color-accent-300);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+:deep(.memory-editor-content table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.85rem;
+  border: 1px solid var(--color-theme-700);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+:deep(.memory-editor-content thead) {
+  background: var(--color-theme-700);
+}
+
+:deep(.memory-editor-content th) {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-theme-100);
+  border-bottom: 2px solid var(--color-theme-600);
+  border-right: 1px solid var(--color-theme-600);
+  white-space: nowrap;
+}
+
+:deep(.memory-editor-content th:last-child) {
+  border-right: none;
+}
+
+:deep(.memory-editor-content td) {
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--color-theme-700);
+  border-right: 1px solid var(--color-theme-700);
+  color: var(--color-theme-300);
+  vertical-align: top;
+}
+
+:deep(.memory-editor-content td:last-child) {
+  border-right: none;
+}
+
+:deep(.memory-editor-content tr:last-child td) {
+  border-bottom: none;
+}
+
+:deep(.memory-editor-content tbody tr:nth-child(even)) {
+  background: var(--color-theme-800);
+}
+
+:deep(.memory-editor-content tbody tr:nth-child(odd)) {
+  background: color-mix(in srgb, var(--color-theme-800) 40%, var(--color-theme-900));
+}
+
+:deep(.memory-editor-content .column-resize-handle) {
+  bottom: -2px;
+  pointer-events: none;
+  position: absolute;
+  right: -2px;
+  top: 0;
+  width: 4px;
+  background-color: var(--color-accent-500);
 }
 </style>

@@ -104,6 +104,15 @@ function getDisplayName(srv: McpRegistryServer['server']): string {
   return srv.title || srv.name.split('/').pop() || srv.name
 }
 
+function stripPackageVersion(identifier: string): string {
+  const versionAtIndex = identifier.indexOf('@', identifier.startsWith('@') ? 1 : 0)
+  return versionAtIndex === -1 ? identifier : identifier.slice(0, versionAtIndex)
+}
+
+function packageIdentifiersMatch(a: string, b: string): boolean {
+  return a === b || stripPackageVersion(a) === stripPackageVersion(b)
+}
+
 function headerEnvName(header: string): string {
   return `MCP_HEADER_${header.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'VALUE'}`
 }
@@ -250,7 +259,8 @@ function isInstalled(srv: McpRegistryServer['server']): boolean {
   if (!install) return false
   const urlIdx = install.args.indexOf('--url')
   const identifier = urlIdx >= 0 ? install.args[urlIdx + 1] : install.args[install.args.length - 1]
-  return servers.value.some(s => s.args.some(a => a === identifier))
+  if (urlIdx >= 0) return servers.value.some(s => s.args.some(a => a === identifier))
+  return servers.value.some(s => s.args.some(a => packageIdentifiersMatch(a, identifier)))
 }
 
 function registryRowClass(item: RegistryRow): string | undefined {
