@@ -8,6 +8,7 @@ import { getAgent } from '../../agents/agent-store.js'
 import { getToolRegistry } from '../../tools/tool-registry.js'
 import { getEventBus } from '../../telemetry/event-bus.js'
 import { getAssignedOrDefaultSpaces } from '../../memory/memory-space-scope.js'
+import { buildInitialExecutionConfig } from '../../chat/run-config.js'
 import type { ChatMessage, ContentPart } from '../../gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 import type { DiscordCtx } from './discord.types.js'
@@ -459,9 +460,12 @@ export function getOrCreateConversation(ctx: DiscordCtx, discordChannelId: strin
     const id = nanoid()
     const now = Date.now()
     const metadataJson = JSON.stringify({ channelKey })
+    const agent = getAgent(resolvedAgentId)
+    const memorySpaceIds = getAssignedOrDefaultSpaces(resolvedAgentId).map((space) => space.id)
+    const executionConfig = buildInitialExecutionConfig({ agent, memorySpaceIds })
     db.prepare(
-        'INSERT INTO conversations (id, title, agent_id, origin, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, senderName, resolvedAgentId, 'channel', metadataJson, now, now)
+        'INSERT INTO conversations (id, title, agent_id, origin, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, senderName, resolvedAgentId, 'channel', JSON.stringify(executionConfig), metadataJson, now, now)
 
     return id
 }

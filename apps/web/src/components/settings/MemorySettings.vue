@@ -488,53 +488,6 @@ async function manualClearGraph() {
       </button>
     </BaseCard>
 
-    <!-- Entity Extraction Model -->
-    <BaseCard
-      v-if="showSection('entity-graph-extraction')"
-      class="p-5 space-y-4"
-    >
-      <div class="flex items-start gap-3">
-        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
-          <Icon
-            icon="lucide:network"
-            class="w-5 h-5 text-theme-400"
-          />
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-theme-200">
-            Entity Extraction Model
-          </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
-            Provider and model used when explicit document entity indexing extracts entities and relationships for the local entity graph.
-          </p>
-        </div>
-      </div>
-
-      <div class="pt-1 border-t border-theme-700">
-        <div class="flex items-center justify-between gap-3 mb-1.5">
-          <label class="block text-xs text-theme-400">Provider / Model</label>
-          <span
-            v-if="entityExtractionSaving"
-            class="text-[11px] text-theme-500"
-          >
-            Saving...
-          </span>
-        </div>
-        <ProviderModelSelect
-          :provider-id="entityExtractionProviderId"
-          :model-value="entityExtractionModel"
-          :providers="providerStore.providers"
-          include-default
-          default-label="Use active provider default"
-          placeholder="Use active provider default"
-          @change="saveEntityExtractionSelection"
-        />
-        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          This setting is used for explicit entity extraction calls. Leaving it on the default uses the server's active provider and that provider's default model.
-        </p>
-      </div>
-    </BaseCard>
-
     <!-- Reranking -->
     <BaseCard
       v-if="showSection('reranker')"
@@ -613,6 +566,53 @@ async function manualClearGraph() {
       </button>
     </BaseCard>
 
+    <!-- Entity Extraction Model -->
+    <BaseCard
+      v-if="showSection('entity-graph-extraction')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
+          <Icon
+            icon="lucide:network"
+            class="w-5 h-5 text-theme-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Entity Extraction Model
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Provider and model used when explicit document entity indexing extracts entities and relationships for the local entity graph.
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-1 border-t border-theme-700">
+        <div class="flex items-center justify-between gap-3 mb-1.5">
+          <label class="block text-xs text-theme-400">Provider / Model</label>
+          <span
+            v-if="entityExtractionSaving"
+            class="text-[11px] text-theme-500"
+          >
+            Saving...
+          </span>
+        </div>
+        <ProviderModelSelect
+          :provider-id="entityExtractionProviderId"
+          :model-value="entityExtractionModel"
+          :providers="providerStore.providers"
+          include-default
+          default-label="Use active provider default"
+          placeholder="Use active provider default"
+          @change="saveEntityExtractionSelection"
+        />
+        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
+          This setting is used for explicit entity extraction calls. Leaving it on the default uses the server's active provider and that provider's default model.
+        </p>
+      </div>
+    </BaseCard>
+    
     <SettingsSubheading
       v-if="showAnySection(['chunking', 'ocr'])"
       label="Document Processing"

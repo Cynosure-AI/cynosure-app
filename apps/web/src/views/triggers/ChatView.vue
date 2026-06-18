@@ -4,15 +4,19 @@ import ChatHeaderBar from '../../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import InputBar from '../../components/chat/InputBar.vue'
 import OrchestratorTaskList from '../../components/chat/OrchestratorTaskList.vue'
-import { onUnmounted, ref } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useChatSidebar } from '../../composables/useSidebar'
 import { useChatStore } from '../../stores/chat.store'
 
 const { chatSidebarOpen, toggle } = useChatSidebar()
 const chatStore = useChatStore()
+const route = useRoute()
+const router = useRouter()
 const inputBarRef = ref<InstanceType<typeof InputBar> | null>(null)
 const isDragOver = ref(false)
 let dragCounter = 0
+let syncingFromRoute = false
 
 function onDragEnter(e: DragEvent) {
   e.preventDefault()
@@ -47,6 +51,37 @@ onUnmounted(() => {
   const conversationId = chatStore.activeConversationId
   if (conversationId) chatStore.markConversationRead(conversationId)
 })
+
+watch(
+  () => route.params.conversationId,
+  async (param) => {
+    const conversationId = Array.isArray(param) ? param[0] : param
+    if (!conversationId || chatStore.activeConversationId === conversationId) return
+    syncingFromRoute = true
+    try {
+      await chatStore.selectConversation(conversationId)
+    } catch (error) {
+      console.error('[chat] Failed to open conversation from route:', error)
+      router.replace({ name: 'triggers-chat' })
+    } finally {
+      syncingFromRoute = false
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  [() => chatStore.activeConversationId, () => route.name],
+  ([conversationId]) => {
+    if (syncingFromRoute || (route.name !== 'triggers-chat' && route.name !== 'conversation')) return
+    const routeConversationId = typeof route.params.conversationId === 'string' ? route.params.conversationId : null
+    if (conversationId && routeConversationId !== conversationId) {
+      router.replace({ name: 'conversation', params: { conversationId } })
+    } else if (!conversationId && route.name === 'conversation') {
+      router.replace({ name: 'triggers-chat' })
+    }
+  }
+)
 </script>
 
 <template>

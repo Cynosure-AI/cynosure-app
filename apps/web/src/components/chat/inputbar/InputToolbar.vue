@@ -189,8 +189,8 @@ const showCancelButton = computed(() => chatStore.isConversationLocked);
 
 function onCancelClick(): void {
   if (
-    chatStore.isStreaming ||
-    agentStore.isExecuting ||
+    chatStore.activeConversationIsStreaming ||
+    agentStore.activeConversationIsExecuting ||
     hasPendingHITLForActiveConversation.value
   ) {
     chatStore.cancelStream();

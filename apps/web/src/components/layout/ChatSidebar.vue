@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
@@ -10,6 +11,7 @@ import ModalDialog from '../shared/ModalDialog.vue'
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
+const router = useRouter()
 const showClearConfirm = ref(false)
 const searchQuery = ref('')
 const showAllConversations = ref(false)
@@ -46,6 +48,7 @@ const clearLabel = computed(() => {
 async function selectChat(conv: Conversation): Promise<void> {
   await chatStore.selectConversation(conv.id, conv.agentId ?? null)
   conv.lastReadAt = Math.max(Date.now(), conv.updatedAt, conv.lastReadAt || 0)
+  router.push({ name: 'conversation', params: { conversationId: conv.id } })
 }
 
 async function deleteChat(id: string, event: Event): Promise<void> {

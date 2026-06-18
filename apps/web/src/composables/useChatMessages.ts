@@ -13,7 +13,7 @@ export interface ChatMessagesApi {
     retryFromMessage(messageId: string): Promise<void>
     editMessage(messageId: string, newContent: string): Promise<void>
     cancelStream(): void
-    cancelPostActions(): void
+    cancelPostActions(convId?: string): void
 }
 
 export function useChatMessages(
@@ -205,10 +205,10 @@ export function useChatMessages(
         }
     }
 
-    function cancelPostActions(): void {
-        const convId = activeConversationId.value
-        if (!convId) return
-        api.chat.cancelPostActions(convId).catch(() => { })
+    function cancelPostActions(convId?: string): void {
+        const id = convId || activeConversationId.value
+        if (!id) return
+        api.chat.cancelPostActions(id).catch(() => { })
     }
 
     return {

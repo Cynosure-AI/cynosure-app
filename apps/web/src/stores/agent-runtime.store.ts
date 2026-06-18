@@ -97,6 +97,10 @@ export const useAgentStore = defineStore('agent', () => {
 
   const hasSteps = computed(() => executionSteps.value.length > 0)
   const hasOrchestrationTasks = computed(() => Boolean(orchestrationState.value?.items.length))
+  const activeConversationIsExecuting = computed(() => {
+    const conversationId = activeViewConversationId.value
+    return Boolean(conversationId && executingConversationIds.value.has(conversationId))
+  })
 
   async function loadToolApprovals(): Promise<void> {
     toolApprovals.value = await api.agent.getToolApprovals()
@@ -452,6 +456,10 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  function isConversationExecuting(conversationId: string | null | undefined): boolean {
+    return Boolean(conversationId && executingConversationIds.value.has(conversationId))
+  }
+
   async function restoreForConversation(conversationId: string): Promise<void> {
     const savedSteps = stepsPerConversation.get(conversationId)
     if (orchestrationPerConversation.has(conversationId)) {
@@ -550,6 +558,7 @@ export const useAgentStore = defineStore('agent', () => {
     selectedToolNames,
     hasSteps,
     hasOrchestrationTasks,
+    activeConversationIsExecuting,
     loadToolApprovals,
     loadTools,
     toggleTool,
@@ -569,6 +578,7 @@ export const useAgentStore = defineStore('agent', () => {
     clearExecutionState,
     clearOrchestrationState,
     setConversationExecutionState,
+    isConversationExecuting,
     restoreForConversation,
     setActiveViewConversation,
   }
