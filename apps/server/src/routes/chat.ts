@@ -7,6 +7,8 @@ import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../core/agent/agent-executor.js'
 import { planExecution } from '../core/agent/pre-execution/execution-planner.js'
 import { closeOrchestrationRun } from '../core/agent/orchestration-state.js'
+import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
+import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens } from '../core/agent/context-trimmer.js'
@@ -27,9 +29,47 @@ import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
 import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageArtifactsSystemHint } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemorySpaceOverrides, resolveToolSelection } from '../core/chat/run-config.js'
-import type { ChatSendRequest } from '@shared/types'
+import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
+
+function usedToolKeysFromNames(
+  tools: RegistryAwareToolDefinition[],
+  usedToolNames: Set<string>,
+  toolRegistry: ReturnType<typeof getToolRegistry>,
+): string[] {
+  return Array.from(
+    new Set(
+      tools
+        .filter((tool) => usedToolNames.has(tool.name))
+        .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
+        .map((tool) => tool.registryKey)
+        .filter((key): key is string => typeof key === 'string' && key.length > 0)
+        .filter((key) => toolRegistry.hasKey(key))
+        .filter((key) => !isBuiltInMemoryToolKey(key))
+    )
+  )
+}
+
+function persistStickyUsedTools(
+  db: ReturnType<typeof getDb>,
+  conversationId: string,
+  executionConfig: ConversationExecutionConfig,
+  tools: RegistryAwareToolDefinition[],
+  usedToolNames: Set<string>,
+  toolRegistry: ReturnType<typeof getToolRegistry>,
+): void {
+  const stickyTools = usedToolKeysFromNames(tools, usedToolNames, toolRegistry)
+  if (!stickyTools.length) return
+
+  const allowedTools = Array.from(new Set([...executionConfig.allowedTools, ...stickyTools]))
+  if (allowedTools.length === executionConfig.allowedTools.length) return
+
+  db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(
+    JSON.stringify({ ...executionConfig, allowedTools }),
+    conversationId
+  )
+}
 
 function clearPendingHITLForConversation(conversationId: string): void {
   getEventBus().emit('hitl:clear-conversation', { conversationId })
@@ -313,6 +353,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         return { streamId }
       }
       const tools: RegistryAwareToolDefinition[] = plannedTools
+      let executionConfig: ConversationExecutionConfig | null = null
       try {
         messages = planned.messages
 
@@ -325,7 +366,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
         // Persist the full session config with RESOLVED model/provider so it can
         // be restored correctly when navigating back to this conversation.
-        const executionConfig = buildPersistedChatConfig({
+        executionConfig = buildPersistedChatConfig({
           selectedToolKeys,
           requestedSubAgents: reqSubAgents,
           requestedMemorySpaceIds: reqMemorySpaceIds,
@@ -479,6 +520,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         })
 
         const result = await executor.run(messages)
+        if (reqAutoToolRouting === true && executionConfig) {
+          persistStickyUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
+        }
         if (orchestrationRunId) {
           closeOrchestrationRun(orchestrationRunId, 'completed', { summary: result.content.slice(0, 500) })
         }
@@ -531,6 +575,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
+          if (reqAutoToolRouting === true && executionConfig) {
+            persistStickyUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
+          }
           if (orchestrationRunId) {
             closeOrchestrationRun(orchestrationRunId, 'cancelled', { error: 'Cancelled' })
           }
@@ -540,6 +587,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
         if (orchestrationRunId) {
           closeOrchestrationRun(orchestrationRunId, 'error', { error: (err as Error).message })
+        }
+        if (reqAutoToolRouting === true && executionConfig) {
+          persistStickyUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
         }
         getEventBus().emit('task:error', { conversationId, error: (err as Error).message })
         broadcast('chat:stream-error', { streamId, conversationId, error: (err as Error).message })
