@@ -139,12 +139,14 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
 
                 // Save sub-agent's final response as an assistant message
                 // (intermediate rounds are saved by the executor via saveMessages: true)
-                if (result.content) {
+                if (result.content || result.images.length) {
                     const db = getDb()
                     db.prepare(
-                        'INSERT INTO messages (id, conversation_id, role, content, thinking, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                        'INSERT INTO messages (id, conversation_id, role, content, thinking, image_urls_json, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
                     ).run(
-                        nanoid(), conversationId, 'assistant', result.content, result.thinking || null, agentData.id,
+                        nanoid(), conversationId, 'assistant', result.content, result.thinking || null,
+                        result.images.length ? JSON.stringify(result.images) : null,
+                        agentData.id,
                         result.provider || prepared.providerId || null,
                         result.model || prepared.model || null,
                         result.usage?.promptTokens ?? null,
@@ -154,24 +156,9 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     )
                 }
 
-                // Separate file-path URLs (for UI display) from base64 data-URLs
-                // (for LLM vision context in the parent) so the parent executor
-                // can inject them into the conversation correctly.
-                const fileImages: string[] = []
-                const dataImages: string[] = []
-                for (const img of result.images) {
-                    if (img.startsWith('data:')) {
-                        dataImages.push(img)
-                    } else {
-                        fileImages.push(img)
-                    }
-                }
-
                 return {
                     success: true,
                     output: result.content || '(no output)',
-                    images: fileImages.length ? fileImages : undefined,
-                    imageDataUrls: dataImages.length ? dataImages : undefined,
                 }
             } catch (err) {
                 return {

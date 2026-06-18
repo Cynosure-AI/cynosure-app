@@ -6,7 +6,7 @@ import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from '../memory/l
 import { readFileAttachmentText, type FileAttachmentArtifact } from './file-artifacts.js'
 import { getDb } from '../../db/database.js'
 
-const TABLE_NAME = 'conversation_attachments'
+export const CONVERSATION_ATTACHMENTS_TABLE = 'conversation_attachments'
 
 export function conversationAttachmentSpaceId(conversationId: string): string {
     return `conversation:${conversationId}`
@@ -26,15 +26,63 @@ export async function indexConversationAttachment(
     if (!text?.trim()) return 0
 
     try {
-        return await getMemoryParser().ingest(TABLE_NAME, text, {
+        const chunkCount = await getMemoryParser().ingest(CONVERSATION_ATTACHMENTS_TABLE, text, {
             source: 'conversation_attachment',
             sourceFile: attachment.id,
             spaceId: conversationAttachmentSpaceId(conversationId),
         })
+        updateConversationAttachmentChunkCount(attachment.id, chunkCount)
+        return chunkCount
     } catch (err) {
         console.warn('[attachment-rag] Failed to index attachment:', err instanceof Error ? err.message : err)
         return 0
     }
+}
+
+function updateConversationAttachmentChunkCount(attachmentId: string, chunkCount: number): void {
+    try {
+        getDb().prepare('UPDATE message_attachments SET chunk_count = ? WHERE id = ?').run(chunkCount, attachmentId)
+    } catch {
+        // Best-effort; the caller still receives the current count.
+    }
+}
+
+function isVectorDimensionError(err: unknown): boolean {
+    const message = err instanceof Error ? err.message : String(err)
+    return message.includes('No vector column found to match with the query vector dimension')
+}
+
+async function ensureConversationAttachmentsIndexed(
+    conversationId: string,
+    attachments: FileAttachmentArtifact[],
+    attachmentIds?: string[],
+): Promise<FileAttachmentArtifact[]> {
+    const wanted = attachmentIds?.length ? new Set(attachmentIds) : null
+    const candidates = wanted ? attachments.filter((attachment) => wanted.has(attachment.id)) : attachments
+    const indexed: FileAttachmentArtifact[] = []
+
+    for (const attachment of candidates) {
+        let chunkCount = await countConversationAttachmentChunks(conversationId, attachment.id)
+        if (chunkCount <= 0) {
+            chunkCount = await indexConversationAttachment(conversationId, attachment)
+        }
+        if (chunkCount > 0) {
+            attachment.chunkCount = chunkCount
+            indexed.push(attachment)
+        }
+    }
+
+    return indexed
+}
+
+export async function rebuildConversationAttachmentIndex(conversationId: string, attachmentIds?: string[]): Promise<number> {
+    const attachments = listConversationFileAttachments(getDb(), conversationId)
+    const indexed = await ensureConversationAttachmentsIndexed(conversationId, attachments, attachmentIds)
+    return indexed.reduce((total, attachment) => total + (attachment.chunkCount || 0), 0)
+}
+
+export async function dropConversationAttachmentIndex(): Promise<void> {
+    await getRAGStore().deleteTable(CONVERSATION_ATTACHMENTS_TABLE)
 }
 
 export async function searchConversationAttachments(
@@ -44,9 +92,21 @@ export async function searchConversationAttachments(
     attachmentIds?: string[],
 ): Promise<RetrievedChunk[]> {
     const filter = buildAttachmentFilter(conversationId, attachmentIds)
+    const attachments = listConversationFileAttachments(getDb(), conversationId)
+    await ensureConversationAttachmentsIndexed(conversationId, attachments, attachmentIds)
+
     try {
-        return await getMemoryParser().retrieve(TABLE_NAME, query, Math.max(1, Math.min(topK, 20)), filter)
+        return await getMemoryParser().retrieve(CONVERSATION_ATTACHMENTS_TABLE, query, Math.max(1, Math.min(topK, 20)), filter)
     } catch (err) {
+        if (isVectorDimensionError(err)) {
+            try {
+                await dropConversationAttachmentIndex()
+                await ensureConversationAttachmentsIndexed(conversationId, attachments, attachmentIds)
+                return await getMemoryParser().retrieve(CONVERSATION_ATTACHMENTS_TABLE, query, Math.max(1, Math.min(topK, 20)), filter)
+            } catch (retryErr) {
+                console.warn('[attachment-rag] Attachment search retry failed:', retryErr instanceof Error ? retryErr.message : retryErr)
+            }
+        }
         console.warn('[attachment-rag] Attachment search failed:', err instanceof Error ? err.message : err)
         return []
     }
@@ -58,18 +118,20 @@ export async function getConversationAttachmentChunks(
     minIndex: number,
     maxIndex: number,
 ): Promise<{ text: string; chunkIndex: number; sourceFile: string; spaceId?: string }[]> {
+    const attachments = listConversationFileAttachments(getDb(), conversationId)
+    await ensureConversationAttachmentsIndexed(conversationId, attachments, [attachmentId])
     const filter = buildAttachmentFilter(conversationId)
-    return getRAGStore().getChunksByRange(TABLE_NAME, attachmentId, minIndex, maxIndex, filter)
+    return getRAGStore().getChunksByRange(CONVERSATION_ATTACHMENTS_TABLE, attachmentId, minIndex, maxIndex, filter)
 }
 
 export async function countConversationAttachmentChunks(conversationId: string, attachmentId: string): Promise<number> {
-    return getRAGStore().countBySource(TABLE_NAME, attachmentId, buildAttachmentFilter(conversationId))
+    return getRAGStore().countBySource(CONVERSATION_ATTACHMENTS_TABLE, attachmentId, buildAttachmentFilter(conversationId))
 }
 
 export async function deleteConversationAttachmentIndex(conversationId: string): Promise<void> {
     const filter = buildAttachmentFilter(conversationId)
     if (!filter) return
-    await getRAGStore().deleteByFilter(TABLE_NAME, filter)
+    await getRAGStore().deleteByFilter(CONVERSATION_ATTACHMENTS_TABLE, filter)
 }
 
 export function persistMessageFileAttachments(
@@ -291,7 +353,7 @@ export async function buildAttachmentContext(conversationId: string, query: stri
     const attachments = listConversationFileAttachments(db, conversationId)
     if (!attachments.length) return null
 
-    const indexed = attachments.filter((attachment) => attachment.chunkCount && attachment.chunkCount > 0)
+    const indexed = await ensureConversationAttachmentsIndexed(conversationId, attachments)
     if (!indexed.length) return null
 
     const chunkCounts = await enrichChunkCounts(conversationId, indexed)
