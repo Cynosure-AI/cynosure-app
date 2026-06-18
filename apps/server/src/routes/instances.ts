@@ -16,7 +16,7 @@ const INSTANCE_ID_PREFIXES = {
     channel: 'channel-',
 } as const satisfies Record<InstanceType, string>
 
-interface ActiveInstance {
+export interface ActiveInstance {
     id: string
     type: InstanceType
     agentId: string
@@ -46,64 +46,68 @@ function clearPendingHITLForConversation(conversationId: string): void {
     getEventBus().emit('hitl:clear-conversation', { conversationId })
 }
 
+export function listActiveInstances(): ActiveInstance[] {
+    const pendingHITLConversations = getHITLGate().getPendingConversationIds()
+    const instances: ActiveInstance[] = []
+
+    // Active chat executions (user-initiated agent conversations)
+    for (const exec of listActiveChatExecutions()) {
+        const agent = exec.agentId ? getAgent(exec.agentId) : null
+        instances.push({
+            id: instanceId('chat', exec.id),
+            type: 'chat',
+            agentId: exec.agentId || '',
+            agentName: agent?.name || 'Default Agent',
+            agentIconUrl: agent?.iconUrl || null,
+            model: exec.model || agent?.model || null,
+            conversationId: exec.conversationId,
+            startedAt: exec.startedAt,
+            intervalMinutes: 0,
+            status: pendingHITLConversations.has(exec.conversationId) ? 'awaiting-approval' : 'running'
+        })
+    }
+
+    // Active cron runs
+    for (const run of getActiveCronRuns()) {
+        const agent = getAgent(run.agentId)
+        instances.push({
+            id: instanceId('cron', run.jobId),
+            type: 'cron',
+            agentId: run.agentId,
+            agentName: agent?.name || 'Unknown',
+            agentIconUrl: agent?.iconUrl || null,
+            model: agent?.model || null,
+            conversationId: run.conversationId,
+            startedAt: run.startedAt,
+            intervalMinutes: 0,
+            status: pendingHITLConversations.has(run.conversationId) ? 'awaiting-approval' : 'running'
+        })
+    }
+
+    // Active channel executions (Telegram, etc.)
+    for (const exec of getChannelManager().getActiveExecutions()) {
+        const agent = getAgent(exec.agentId)
+        instances.push({
+            id: instanceId('channel', exec.id),
+            type: 'channel',
+            agentId: exec.agentId,
+            agentName: agent?.name || 'Unknown',
+            agentIconUrl: agent?.iconUrl || null,
+            model: agent?.model || null,
+            conversationId: exec.conversationId,
+            startedAt: exec.startedAt,
+            intervalMinutes: 0,
+            status: pendingHITLConversations.has(exec.conversationId) ? 'awaiting-approval' : 'running'
+        })
+    }
+
+    return instances
+}
+
 export async function registerInstanceRoutes(app: FastifyInstance): Promise<void> {
     // GET /api/instances — list all actively running agent instances
     app.get('/', async () => {
-        const pendingHITLConversations = getHITLGate().getPendingConversationIds()
-        const instances: ActiveInstance[] = []
-
-        // Active chat executions (user-initiated agent conversations)
-        for (const exec of listActiveChatExecutions()) {
-            const agent = exec.agentId ? getAgent(exec.agentId) : null
-            instances.push({
-                id: instanceId('chat', exec.id),
-                type: 'chat',
-                agentId: exec.agentId || '',
-                agentName: agent?.name || 'Default Agent',
-                agentIconUrl: agent?.iconUrl || null,
-                model: exec.model || agent?.model || null,
-                conversationId: exec.conversationId,
-                startedAt: exec.startedAt,
-                intervalMinutes: 0,
-                status: pendingHITLConversations.has(exec.conversationId) ? 'awaiting-approval' : 'running'
-            })
-        }
-
-        // Active cron runs
-        for (const run of getActiveCronRuns()) {
-            const agent = getAgent(run.agentId)
-            instances.push({
-                id: instanceId('cron', run.jobId),
-                type: 'cron',
-                agentId: run.agentId,
-                agentName: agent?.name || 'Unknown',
-                agentIconUrl: agent?.iconUrl || null,
-                model: agent?.model || null,
-                conversationId: run.conversationId,
-                startedAt: run.startedAt,
-                intervalMinutes: 0,
-                status: pendingHITLConversations.has(run.conversationId) ? 'awaiting-approval' : 'running'
-            })
-        }
-
-        // Active channel executions (Telegram, etc.)
-        for (const exec of getChannelManager().getActiveExecutions()) {
-            const agent = getAgent(exec.agentId)
-            instances.push({
-                id: instanceId('channel', exec.id),
-                type: 'channel',
-                agentId: exec.agentId,
-                agentName: agent?.name || 'Unknown',
-                agentIconUrl: agent?.iconUrl || null,
-                model: agent?.model || null,
-                conversationId: exec.conversationId,
-                startedAt: exec.startedAt,
-                intervalMinutes: 0,
-                status: pendingHITLConversations.has(exec.conversationId) ? 'awaiting-approval' : 'running'
-            })
-        }
-
-        return instances
+        return listActiveInstances()
     })
 
     // POST /api/instances/:id/stop — cancel a running instance
