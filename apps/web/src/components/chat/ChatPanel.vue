@@ -390,25 +390,40 @@ watch(() => chatStore.loadingMessages, (isLoading) => {
 
 // ─── Time-based greeting ────────────────────────────────────
 
-const GREETINGS: Record<string, string[]> = {
-  night:     ['Still up?', 'Burning the midnight oil?', 'Working late?'],
-  morning:   ['Good morning.', 'Morning!', 'What are we building today?'],
-  lunch:     ['Lunchtime.', 'Taking a lunch break?', 'Midday check-in.'],
-  afternoon: ['Good afternoon.', 'Afternoon!', 'What\'s on your mind?'],
-  evening:   ['Good evening.', 'Evening!', 'How can I help?'],
+const HOURLY_GREETINGS: Record<number, string[]> = {
+  0:  ['Midnight mode.', 'Still building?', 'Late-night runtime online.'],
+  1:  ['Quiet hours.', 'Deep work or debugging?', 'Burning the midnight oil?'],
+  2:  ['Night shift active.', 'Still up?', 'Everything is quieter at 2 AM.'],
+  3:  ['Graveyard session.', 'Late-night ideas?', 'The system is still awake.'],
+  4:  ['Almost morning.', 'Early start or late finish?', 'Pre-dawn focus.'],
+  5:  ['Early start.', 'Good morning.', 'Fresh run, fresh context.'],
+  6:  ['Morning boot-up.', 'Ready when you are.', 'Good morning.'],
+  7:  ['Good morning.', 'What are we building today?', 'New day, clean slate.'],
+  8:  ['Morning focus.', 'Let’s get started.', 'What should we tackle first?'],
+  9:  ['Work mode online.', 'Good morning.', 'Ready for the first task.'],
+  10: ['Mid-morning check-in.', 'What needs attention?', 'Let’s make progress.'],
+  11: ['Almost lunch.', 'What are we solving next?', 'Still in the flow.'],
+  12: ['Lunchtime.', 'Midday check-in.', 'Taking a break or pushing on?'],
+  13: ['Back from lunch?', 'Early afternoon mode.', 'What’s next on the list?'],
+  14: ['Afternoon focus.', 'Let’s keep momentum.', 'What are we improving?'],
+  15: ['Mid-afternoon run.', 'Still going strong.', 'Time to refine things.'],
+  16: ['Late-afternoon focus.', 'What should we finish today?', 'Let’s close some loops.'],
+  17: ['Wrapping up or diving in?', 'End-of-day push.', 'What still needs doing?'],
+  18: ['Good evening.', 'Evening session?', 'What are we working on tonight?'],
+  19: ['Evening mode.', 'Ready for a calmer session.', 'What’s on your mind?'],
+  20: ['Night work?', 'Evening focus.', 'Let’s build something useful.'],
+  21: ['Late-evening session.', 'Ideas after hours?', 'What should we explore?'],
+  22: ['Night mode.', 'Still productive?', 'Quiet time, sharp thoughts.'],
+  23: ['Almost midnight.', 'Final task before shutdown?', 'Late-night thoughts?'],
 }
 
-const greeting = computed(() => {
+function getRandomHourlyGreeting(): string {
   const hour = new Date().getHours()
-  const slot =
-    hour < 5  ? 'night'     :
-    hour < 12 ? 'morning'   :
-    hour < 14 ? 'lunch'     :
-    hour < 18 ? 'afternoon' : 'evening'
-  const options = GREETINGS[slot]
-  // Stable within the hour — rotates each new hour
-  return options[hour % options.length]
-})
+  const options = HOURLY_GREETINGS[hour] ?? ['How can I help?']
+  return options[Math.floor(Math.random() * options.length)]
+}
+
+const greeting = ref(getRandomHourlyGreeting())
 
 // Scroll to bottom when mounting into an already-loaded conversation
 // (e.g. navigating here from InstancesView after selectConversation was called)
