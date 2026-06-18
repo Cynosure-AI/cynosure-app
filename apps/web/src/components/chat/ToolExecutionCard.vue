@@ -4,6 +4,7 @@ import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
+import { isInternalToolName } from '../../utils/internal-tools'
 
 export interface ToolExecStep {
   iteration: number
@@ -113,6 +114,7 @@ function subAgentCodenameFromArgs(args: string): string | null {
 }
 
 function toolChipClass(name: string): string {
+  if (isInternalToolName(name)) return 'bg-purple-500/10 text-purple-600 ring-1 ring-purple-400/25 dark:text-purple-300 dark:ring-purple-500/20'
   if (name === 'Task context') return 'bg-cyan-200/40 text-cyan-700 ring-1 ring-cyan-400/25 dark:bg-cyan-500/10 dark:text-cyan-300 dark:ring-cyan-500/15'
   return isSubAgentSpawnCall(name)
     ? 'bg-indigo-200/40 text-indigo-700 ring-1 ring-indigo-400/30 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-500/20'
@@ -130,6 +132,34 @@ function toolCallIcon(call: { name: string; arguments: string }): string {
 function toolCallIconClass(name: string, args = ''): string {
   if (isTaskContextCall({ name, arguments: args })) return 'text-cyan-600 dark:text-cyan-300'
   return isSubAgentSpawnCall(name) ? 'text-indigo-500 dark:text-indigo-400' : 'text-accent-500 dark:text-accent-400'
+}
+
+function isInternalExecution(execution: { call: ToolCall | null; result?: ToolResult }): boolean {
+  return isInternalToolName(execution.call?.name || execution.result?.name)
+}
+
+function toolExecutionCardClass(execution: { call: ToolCall | null; result?: ToolResult }): string {
+  if (isInternalExecution(execution)) {
+    if (execution.result?.success === false) return 'bg-red-50/80 border-red-300/30 dark:bg-red-500/5 dark:border-red-500/15'
+    return 'bg-purple-50/80 border-purple-300/30 dark:bg-purple-500/5 dark:border-purple-500/20'
+  }
+  if (execution.call && isSubAgentSpawnCall(execution.call.name)) {
+    return 'bg-indigo-500/10 border-indigo-500/20 dark:bg-indigo-950/15 dark:border-indigo-500/25'
+  }
+  if (execution.result?.success === false) {
+    return 'bg-red-50/80 border-red-300/30 dark:bg-red-500/5 dark:border-red-500/15'
+  }
+  return execution.result
+    ? 'bg-emerald-50/80 border-emerald-300/30 dark:bg-emerald-500/5 dark:border-emerald-500/15'
+    : 'bg-theme-950 border-theme-700 dark:bg-theme-900/60 dark:border-theme-700/30'
+}
+
+function toolExecutionNameClass(execution: { call: ToolCall | null; result?: ToolResult }): string {
+  if (execution.result?.success === false) return 'text-red-600 dark:text-red-300'
+  if (isInternalExecution(execution)) return 'text-purple-600 dark:text-purple-300'
+  return execution.call && isSubAgentSpawnCall(execution.call.name)
+    ? 'text-indigo-600 dark:text-indigo-300'
+    : 'text-accent-500 dark:text-accent-300'
 }
 
 /** Current phase — the last meaningful status in this iteration */
@@ -160,18 +190,28 @@ const isSubAgentSpawnIteration = computed(() => toolNames.value.some(isSubAgentS
 /** Latest results from this iteration */
 const results = computed(() => {
   for (const step of [...props.steps].reverse()) {
-    if (step.results?.length) return step.results
+    if (step.results?.length) {
+      const visibleResults = prefs.showInternalToolCalls
+          ? step.results
+          : step.results.filter((result) => !isInternalToolName(result.name))
+      if (visibleResults.length) return visibleResults
+    }
   }
   return []
 })
 
 /** Tool call arguments from this iteration */
-const toolCallArgs = computed(() => {
+const rawToolCallArgs = computed(() => {
   for (const step of props.steps) {
     if (step.toolCalls?.length) return step.toolCalls
   }
   return []
 })
+
+const toolCallArgs = computed(() => prefs.showInternalToolCalls
+  ? rawToolCallArgs.value
+  : rawToolCallArgs.value.filter((call) => isTaskContextCall(call) || !isInternalToolName(call.name))
+)
 
 const toolExecutions = computed(() => {
   const remainingResults = [...results.value]
@@ -189,7 +229,7 @@ const toolExecutions = computed(() => {
 })
 
 const taskContext = computed(() => {
-  const call = toolCallArgs.value.find(isTaskContextCall)
+  const call = rawToolCallArgs.value.find(isTaskContextCall)
   if (!call) return null
   try {
     const parsed = JSON.parse(call.arguments || '{}') as {
@@ -256,6 +296,13 @@ const streamingText = computed(() => {
   return null
 })
 
+const hasDisplayableActivity = computed(() =>
+  isTaskContext.value ||
+  toolCallArgs.value.length > 0 ||
+  results.value.length > 0 ||
+  Boolean(streamingText.value && props.isActive)
+)
+
 /** MA context */
 const maContext = computed(() => {
   for (const step of props.steps) {
@@ -267,7 +314,10 @@ const maContext = computed(() => {
 </script>
 
 <template>
-  <div class="px-4 py-1.5">
+  <div
+    v-if="hasDisplayableActivity"
+    class="px-4 py-1.5"
+  >
     <div class="max-w-[80%] ml-3 md:ml-12">
       <CollapsibleSection v-model="expanded">
         <template #trigger="{ expanded: isExpanded, toggle, triggerAttrs }">
@@ -440,16 +490,11 @@ const maContext = computed(() => {
               v-for="(execution, i) in toolExecutions"
               :key="i"
               class="rounded-lg border px-3 py-2"
-              :class="execution.call && isSubAgentSpawnCall(execution.call.name)
-                ? 'bg-indigo-500/10 border-indigo-500/20 dark:bg-indigo-950/15 dark:border-indigo-500/25'
-                : execution.result?.success === false
-                  ? 'bg-red-50/80 border-red-300/30 dark:bg-red-500/5 dark:border-red-500/15'
-                  : execution.result
-                    ? 'bg-emerald-50/80 border-emerald-300/30 dark:bg-emerald-500/5 dark:border-emerald-500/15'
-                    : 'bg-theme-950 border-theme-700 dark:bg-theme-900/60 dark:border-theme-700/30'"
+              :class="toolExecutionCardClass(execution)"
             >
               <div class="flex items-center gap-1.5 mb-1">
                 <Icon
+                  v-if="!isInternalExecution(execution)"
                   :icon="execution.result ? (execution.result.success ? 'lucide:check' : 'lucide:x') : execution.call ? toolCallIcon(execution.call) : 'lucide:terminal'"
                   class="w-3 h-3"
                   :class="execution.result
@@ -458,9 +503,7 @@ const maContext = computed(() => {
                 />
                 <span
                   class="text-[11px] font-medium"
-                  :class="execution.result?.success === false
-                    ? 'text-red-600 dark:text-red-300'
-                    : execution.call && isSubAgentSpawnCall(execution.call.name) ? 'text-indigo-600 dark:text-indigo-300' : 'text-accent-500 dark:text-accent-300'"
+                  :class="toolExecutionNameClass(execution)"
                 >{{ toolDisplayName(execution.call?.name || execution.result?.name || 'Tool') }}</span>
                 <span
                   v-if="execution.call && isMemoryCall(execution.call) && formatRerankerScore(execution.call)"
@@ -517,7 +560,6 @@ const maContext = computed(() => {
               </p>
             </div>
           </div>
-
         </div>
       </CollapsibleSection>
     </div>
