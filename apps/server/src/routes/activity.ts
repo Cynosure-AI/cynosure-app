@@ -4,7 +4,7 @@ import { getAgent } from '../core/agents/agent-store.js'
 import { listMemoryIndexJobs } from '../core/memory/memory-index-jobs.js'
 import { listActiveInstances } from './instances.js'
 
-type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat'
+type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat' | 'channels'
 
 interface ActivityArtifact {
     href: string
@@ -88,7 +88,8 @@ function parseTypeFilter(value: string | undefined): Set<ActivityKind> | null {
             part === 'notification' ||
             part === 'cron' ||
             part === 'memory' ||
-            part === 'chat'
+            part === 'chat' ||
+            part === 'channels'
         )
     return kinds.length ? new Set(kinds) : null
 }
@@ -313,6 +314,45 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                     status: 'completed',
                     sourceId: row.id,
                     sourceLabel: 'Chat',
+                })
+            }
+        }
+
+        if (includes('channels')) {
+            const rows = db.prepare(
+                `SELECT c.id, c.title, c.agent_id, c.created_at, c.updated_at,
+                        (SELECT SUBSTR(m.content, 1, 220)
+                         FROM messages m
+                         WHERE m.conversation_id = c.id AND m.role = 'user'
+                         ORDER BY m.created_at DESC
+                         LIMIT 1) AS last_user_message
+                 FROM conversations c
+                 WHERE c.origin = 'channel'
+                 ORDER BY c.updated_at DESC
+                 LIMIT ?`
+            ).all(limit) as {
+                id: string
+                title: string | null
+                agent_id: string | null
+                created_at: number
+                updated_at: number
+                last_user_message: string | null
+            }[]
+
+            for (const row of rows) {
+                const title = row.title && row.title !== 'New Chat' ? row.title : 'Channel message'
+                items.push({
+                    id: `channels:${row.id}`,
+                    kind: 'channels',
+                    title,
+                    description: row.last_user_message || 'Channel conversation',
+                    createdAt: row.updated_at || row.created_at,
+                    agentId: row.agent_id,
+                    ...agentInfo(row.agent_id),
+                    conversationId: row.id,
+                    status: 'completed',
+                    sourceId: row.id,
+                    sourceLabel: 'Channel',
                 })
             }
         }
