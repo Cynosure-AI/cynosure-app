@@ -1,0 +1,118 @@
+export type ChatRole = 'user' | 'assistant' | 'system' | 'tool'
+
+export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
+
+export interface SubAgentAssignmentDto {
+  agentId: string
+}
+
+export interface ChatRunConfig {
+  model?: string
+  providerOverride?: string
+  allowedTools?: string[]
+  systemPrompt?: string
+  generateTitle?: boolean
+  subAgents?: SubAgentAssignmentDto[]
+  memorySpaceIds?: string[]
+  thinkingEnabled?: boolean
+  contextStrategy?: ContextStrategy
+  titleProviderId?: string
+  titleModel?: string
+  autoToolRouting?: boolean
+  selectedSkillIds?: string[]
+  autoSkillRouting?: boolean
+  autoMemory?: boolean
+  autoRouterProviderId?: string
+  autoRouterModel?: string
+  compactProviderId?: string
+  compactModel?: string
+  inlineAttachmentTextLimit?: number
+}
+
+export interface ChatAttachmentInput {
+  name: string
+  content: string
+}
+
+export interface ChatSendRequest {
+  content: string
+  messageId?: string
+  imageDataUrls?: string[]
+  audioDataUrls?: string[]
+  files?: ChatAttachmentInput[]
+  run: ChatRunConfig
+}
+
+export interface ConversationExecutionConfig {
+  allowedTools: string[]
+  subAgents: SubAgentAssignmentDto[]
+  memorySpaceIds: string[]
+  systemPrompt: string
+  model: string
+  providerId: string
+  thinkingEnabled: boolean
+  autoToolRouting: boolean
+  autoMemory: boolean
+  selectedSkillIds: string[]
+  autoSkillRouting: boolean
+}
+
+export interface ConversationMetadata {
+  channelKey?: string
+  archived?: number | boolean | string
+  titleGenerated?: boolean | number
+}
+
+export interface ConversationDto {
+  id: string
+  title: string
+  agentId: string | null
+  maWorkspaceId: string | null
+  origin: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface ConversationListItemDto {
+  id: string
+  title: string
+  agent_id: string | null
+  ma_workspace_id: string | null
+  origin: string
+  pinned: number
+  last_read_at: number | null
+  created_at: number
+  updated_at: number
+  last_user_message: string | null
+}
+
+export interface StoredMessageDto {
+  id: string
+  conversationId: string
+  role: ChatRole | string
+  content: string
+  thinking?: string
+  toolCalls?: unknown[]
+  toolCallId?: string
+  imageDataUrls?: string[]
+  videoDataUrls?: string[]
+  audioDataUrls?: string[]
+  fileAttachments?: { name: string }[]
+  agentId?: string
+  agentName?: string
+  agentIconUrl?: string | null
+  provider?: string | null
+  model?: string | null
+  promptTokens?: number | null
+  completionTokens?: number | null
+  contextTokens?: number | null
+  latencyMs?: number | null
+  createdAt: number
+}
+
+export interface ConversationMessagesResponse {
+  conversationAgentId: string | null
+  messages: StoredMessageDto[]
+  lastContextTokens: number | null
+  executionConfig: ConversationExecutionConfig
+}

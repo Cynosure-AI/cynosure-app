@@ -64,7 +64,8 @@ function createTables(db: Database.Database): void {
       pinned INTEGER NOT NULL DEFAULT 0,
       last_read_at INTEGER,
       last_context_tokens INTEGER,
-      config_json TEXT,
+      execution_config_json TEXT NOT NULL DEFAULT '{}',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );

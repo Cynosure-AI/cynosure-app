@@ -157,7 +157,7 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
     /**
      * GET /api/channels/:id/targets
      * Returns the distinct chat/channel targets that have ever sent messages through this
-     * channel, derived from conversations whose config_json.channelKey starts with
+     * channel, derived from conversations whose metadata_json.channelKey starts with
      * "{type}:{channelId}:".  Each entry has:
      *   - target: the raw platform identifier (chatId for Telegram, channelId for Discord/Slack)
      *   - label: the conversation title (sender name or group name)
@@ -171,11 +171,11 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
         const prefix = `${ch.type}:${ch.id}:`
 
         const rows = db.prepare(
-            `SELECT DISTINCT json_extract(config_json, '$.channelKey') AS channel_key, title
+            `SELECT DISTINCT json_extract(metadata_json, '$.channelKey') AS channel_key, title
              FROM conversations
              WHERE origin = 'channel'
-               AND json_extract(config_json, '$.channelKey') LIKE ?
-               AND json_extract(config_json, '$.archived') IS NULL
+               AND json_extract(metadata_json, '$.channelKey') LIKE ?
+               AND json_extract(metadata_json, '$.archived') IS NULL
              ORDER BY updated_at DESC`
         ).all(`${prefix}%`) as { channel_key: string; title: string }[]
 

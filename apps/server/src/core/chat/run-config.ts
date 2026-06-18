@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ToolRegistry } from '../tools/tool-registry.js'
+import type { ConversationExecutionConfig } from '@cynosure/contracts'
 
 export interface ToolSelectionConfig {
     selectedToolKeys: string[]
@@ -70,7 +71,7 @@ export function resolveMemorySpaceOverrides(
         .filter((row): row is { id: string; name: string } => Boolean(row))
 }
 
-export function buildPersistedChatConfig(input: PersistedChatConfigInput): Record<string, unknown> {
+export function buildPersistedChatConfig(input: PersistedChatConfigInput): ConversationExecutionConfig {
     return {
         allowedTools: input.autoToolRouting ? input.routedToolKeys : input.selectedToolKeys,
         subAgents: input.requestedSubAgents ?? [],
@@ -83,5 +84,47 @@ export function buildPersistedChatConfig(input: PersistedChatConfigInput): Recor
         autoMemory: input.autoMemory,
         selectedSkillIds: input.selectedSkillIds,
         autoSkillRouting: input.autoSkillRouting,
+    }
+}
+
+export function buildInitialExecutionConfig(input: {
+    agent?: AgentData | null
+    memorySpaceIds?: string[]
+} = {}): ConversationExecutionConfig {
+    const agent = input.agent ?? null
+    return {
+        allowedTools: agent?.tools ? [...agent.tools] : [],
+        subAgents: agent?.subAgents ? [...agent.subAgents] : [],
+        memorySpaceIds: input.memorySpaceIds ?? [],
+        systemPrompt: agent?.systemPrompt ?? '',
+        model: agent?.model ?? '',
+        providerId: agent?.providerId ?? '',
+        thinkingEnabled: agent?.thinkingEnabled !== false,
+        autoToolRouting: agent?.autoToolRouting === true,
+        autoMemory: agent?.autoMemory === true,
+        selectedSkillIds: agent?.skills ? [...agent.skills] : [],
+        autoSkillRouting: agent?.autoSkillRouting !== false,
+    }
+}
+
+export function parseExecutionConfig(raw: string | null | undefined): ConversationExecutionConfig {
+    if (!raw) return buildInitialExecutionConfig()
+    const parsed = JSON.parse(raw) as Partial<ConversationExecutionConfig>
+    return {
+        allowedTools: Array.isArray(parsed.allowedTools) ? parsed.allowedTools.filter((value): value is string => typeof value === 'string') : [],
+        subAgents: Array.isArray(parsed.subAgents)
+            ? parsed.subAgents.filter((value): value is SubAgentAssignment => (
+                Boolean(value) && typeof value === 'object' && typeof value.agentId === 'string'
+            ))
+            : [],
+        memorySpaceIds: Array.isArray(parsed.memorySpaceIds) ? parsed.memorySpaceIds.filter((value): value is string => typeof value === 'string') : [],
+        systemPrompt: typeof parsed.systemPrompt === 'string' ? parsed.systemPrompt : '',
+        model: typeof parsed.model === 'string' ? parsed.model : '',
+        providerId: typeof parsed.providerId === 'string' ? parsed.providerId : '',
+        thinkingEnabled: parsed.thinkingEnabled !== false,
+        autoToolRouting: parsed.autoToolRouting === true,
+        autoMemory: parsed.autoMemory === true,
+        selectedSkillIds: Array.isArray(parsed.selectedSkillIds) ? parsed.selectedSkillIds.filter((value): value is string => typeof value === 'string') : [],
+        autoSkillRouting: parsed.autoSkillRouting !== false,
     }
 }

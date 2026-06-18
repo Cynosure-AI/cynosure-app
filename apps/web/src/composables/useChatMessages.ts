@@ -6,6 +6,7 @@ import { usePreferencesStore } from '../stores/preferences.store'
 import type { SubAgentAssignment } from '../api/types'
 import type { DisplayMessage } from '../stores/chat.store'
 import type { ChatStreamingState } from './useChatStreaming'
+import type { ChatSendRequest } from '@cynosure/contracts'
 
 export interface ChatMessagesApi {
     sendMessage(content: string, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void>
@@ -29,6 +30,7 @@ export function useChatMessages(
         sessionAutoToolRouting: Ref<boolean>
         sessionAutoMemory: Ref<boolean>
         sessionAutoSkillRouting: Ref<boolean>
+        selectedToolNames: Ref<string[]>
         freeChatSubAgentIds: Ref<string[]>
         freeChatMemorySpaceIds: Ref<string[]>
         freeChatMemorySelectionInitialized: Ref<boolean>
@@ -96,7 +98,7 @@ export function useChatMessages(
             isStreaming: true
         })
 
-        const tools = agentStore.selectedToolNames
+        const tools = agentConfig.selectedToolNames.value
         const baseSystemPrompt = activeAgent?.systemPrompt || undefined
         const executionRun = {
             model: agentConfig.sessionModelOverride.value || undefined,
@@ -113,34 +115,37 @@ export function useChatMessages(
 
         const prefs = usePreferencesStore()
 
-        await api.chat.send(
-            conversationId,
+        const request: ChatSendRequest = {
             content,
-            executionRun.model,
-            executionRun.providerOverride,
+            messageId: msgId,
             imageDataUrls,
-            tools,
-            files,
-            executionRun.systemPrompt,
-            prefs.generateTitle,
-            msgId,
             audioDataUrls,
-            executionRun.subAgents,
-            executionRun.memorySpaceIds,
-            executionRun.thinkingEnabled,
-            prefs.contextStrategy,
-            prefs.titleProviderId || undefined,
-            prefs.titleModel || undefined,
-            executionRun.autoToolRouting,
-            executionRun.selectedSkillIds,
-            executionRun.autoSkillRouting,
-            executionRun.autoMemory,
-            activeAgent?.autoRouterProviderId || prefs.autoRouterProviderId || undefined,
-            activeAgent?.autoRouterModel || prefs.autoRouterModel || undefined,
-            prefs.compactProviderId || undefined,
-            prefs.compactModel || undefined,
-            prefs.inlineAttachmentTextLimit
-        )
+            files,
+            run: {
+                model: executionRun.model,
+                providerOverride: executionRun.providerOverride,
+                allowedTools: tools,
+                systemPrompt: executionRun.systemPrompt,
+                generateTitle: prefs.generateTitle,
+                subAgents: executionRun.subAgents,
+                memorySpaceIds: executionRun.memorySpaceIds,
+                thinkingEnabled: executionRun.thinkingEnabled,
+                contextStrategy: prefs.contextStrategy,
+                titleProviderId: prefs.titleProviderId || undefined,
+                titleModel: prefs.titleModel || undefined,
+                autoToolRouting: executionRun.autoToolRouting,
+                selectedSkillIds: executionRun.selectedSkillIds,
+                autoSkillRouting: executionRun.autoSkillRouting,
+                autoMemory: executionRun.autoMemory,
+                autoRouterProviderId: activeAgent?.autoRouterProviderId || prefs.autoRouterProviderId || undefined,
+                autoRouterModel: activeAgent?.autoRouterModel || prefs.autoRouterModel || undefined,
+                compactProviderId: prefs.compactProviderId || undefined,
+                compactModel: prefs.compactModel || undefined,
+                inlineAttachmentTextLimit: prefs.inlineAttachmentTextLimit,
+            },
+        }
+
+        await api.chat.send(conversationId, request)
     }
 
     async function retryFromMessage(messageId: string): Promise<void> {

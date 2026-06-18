@@ -101,14 +101,6 @@ function isExecutionUpdatePayload(data: unknown): data is { event: string; data:
 onMounted(async () => {
   loadAllStores()
 
-  // Sync tool selection if an agent was persisted
-  if (chatStore.activeAgentId) {
-    const agent = agentDefs.get(chatStore.activeAgentId)
-    if (agent?.tools?.length) {
-      agentStore.selectedToolNames = [...agent.tools]
-    }
-  }
-
   // Set up WebSocket event listeners
   cleanups.push(
     api.chat.onStreamStart((data) => chatStore.handleStreamStart(data)),

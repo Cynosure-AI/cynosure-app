@@ -1,7 +1,8 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
-import type { MemorySpace, ModelPricing, StoredMessage } from '../api/types'
+import type { MemorySpace, ModelPricing } from '../api/types'
+import type { StoredMessageDto } from '@cynosure/contracts'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -179,7 +180,7 @@ export const useChatStore = defineStore('chat', () => {
       const rows = response.messages
       const lastContextTokens = response.lastContextTokens
       const COMPACT_EVENT_PREFIX = '[CONTEXT_COMPACT_EVENT] '
-      messages.value = rows.map((r: StoredMessage) => {
+      messages.value = rows.map((r: StoredMessageDto) => {
         const base: DisplayMessage = {
           id: r.id,
           role: r.role as DisplayMessage['role'],
@@ -272,35 +273,26 @@ export const useChatStore = defineStore('chat', () => {
         // Non-critical; live websocket events will still update state.
       }
 
-      // Restore the full session config snapshot.
-      // Legacy conversations without config_json fall back to agent defaults.
-      const cfg = response.chatConfig
-      if (cfg) {
-        const activeAgent = agentDefs.get(agentConfig.activeAgentId.value || '')
-        agentStore.selectedToolNames = cfg.allowedTools?.length ? [...cfg.allowedTools] : []
-        agentConfig.freeChatSubAgentIds.value = cfg.subAgents?.length
-          ? cfg.subAgents.map((s: { agentId: string }) => s.agentId)
-          : []
-        const hasMemorySpaceSnapshot = Object.prototype.hasOwnProperty.call(cfg, 'memorySpaceIds')
-        agentConfig.freeChatMemorySpaceIds.value = Array.isArray(cfg.memorySpaceIds) ? [...cfg.memorySpaceIds] : []
-        agentConfig.freeChatMemorySelectionInitialized.value = hasMemorySpaceSnapshot
-        agentConfig.freeChatSkillIds.value = cfg.selectedSkillIds?.length ? [...cfg.selectedSkillIds] : []
-        agentConfig.sessionSystemPrompt.value = cfg.systemPrompt ?? ''
-        agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled ?? true
-        const restoredModel = cfg.model || null
-        const restoredProviderId = cfg.providerId || null
-        const matchesAgentModel = Boolean(activeAgent) &&
-          (restoredModel === (activeAgent?.model || null)) &&
-          (restoredProviderId === (activeAgent?.providerId || null))
-        agentConfig.sessionModelOverride.value = matchesAgentModel ? null : restoredModel
-        agentConfig.sessionProviderOverride.value = matchesAgentModel ? null : restoredProviderId
-        agentConfig.sessionAutoToolRouting.value = cfg.autoToolRouting ?? !agentConfig.activeAgentId.value
-        agentConfig.sessionAutoMemory.value = cfg.autoMemory ?? (activeAgent?.autoMemory === true)
-        agentConfig.sessionAutoSkillRouting.value = cfg.autoSkillRouting ?? (activeAgent?.autoSkillRouting !== false)
-        if (!agentConfig.activeAgentId.value) agentConfig.captureFreeChatPreset()
-      } else {
-        agentConfig.syncAgentBaseline()
-      }
+      const cfg = response.executionConfig
+      const activeAgent = agentDefs.get(agentConfig.activeAgentId.value || '')
+      agentConfig.setSelectedToolNames(cfg.allowedTools)
+      agentConfig.freeChatSubAgentIds.value = cfg.subAgents.map((s: { agentId: string }) => s.agentId)
+      agentConfig.freeChatMemorySpaceIds.value = [...cfg.memorySpaceIds]
+      agentConfig.freeChatMemorySelectionInitialized.value = true
+      agentConfig.freeChatSkillIds.value = [...cfg.selectedSkillIds]
+      agentConfig.sessionSystemPrompt.value = cfg.systemPrompt
+      agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled
+      const restoredModel = cfg.model || null
+      const restoredProviderId = cfg.providerId || null
+      const matchesAgentModel = Boolean(activeAgent) &&
+        (restoredModel === (activeAgent?.model || null)) &&
+        (restoredProviderId === (activeAgent?.providerId || null))
+      agentConfig.sessionModelOverride.value = matchesAgentModel ? null : restoredModel
+      agentConfig.sessionProviderOverride.value = matchesAgentModel ? null : restoredProviderId
+      agentConfig.sessionAutoToolRouting.value = cfg.autoToolRouting
+      agentConfig.sessionAutoMemory.value = cfg.autoMemory
+      agentConfig.sessionAutoSkillRouting.value = cfg.autoSkillRouting
+      if (!agentConfig.activeAgentId.value) agentConfig.captureFreeChatPreset()
     } finally {
       if (activeConversationId.value === id) markConversationRead(id)
       if (activeConversationId.value === id) {
@@ -642,6 +634,7 @@ export const useChatStore = defineStore('chat', () => {
     sessionAutoToolRouting: agentConfig.sessionAutoToolRouting,
     sessionAutoMemory: agentConfig.sessionAutoMemory,
     sessionAutoSkillRouting: agentConfig.sessionAutoSkillRouting,
+    selectedToolNames: agentConfig.selectedToolNames,
     agentOriginalSystemPrompt: agentConfig.agentOriginalSystemPrompt,
     freeChatSubAgentIds: agentConfig.freeChatSubAgentIds,
     freeChatMemorySpaceIds: agentConfig.freeChatMemorySpaceIds,
@@ -654,6 +647,7 @@ export const useChatStore = defineStore('chat', () => {
     hasAgentOverrides: agentConfig.hasAgentOverrides,
     hasFreeChatOverrides: agentConfig.hasFreeChatOverrides,
     markOverridesModified: agentConfig.markOverridesModified,
+    setSelectedToolNames: agentConfig.setSelectedToolNames,
     resetAgentOverrides: agentConfig.resetAgentOverrides,
     resetToDefaults: agentConfig.resetToDefaults,
     applyOverridesToAgent: agentConfig.applyOverridesToAgent,

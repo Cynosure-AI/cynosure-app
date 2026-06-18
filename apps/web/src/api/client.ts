@@ -1,7 +1,7 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
-  LLMProviderConfig, StoredMessage, McpServerInfo, McpRegistryResponse,
-  AgentDefinition, SubAgentAssignment, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob,
+  LLMProviderConfig, McpServerInfo, McpRegistryResponse,
+  AgentDefinition, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob,
   AgentInstance, ActivityItem, ActivityKind, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
   MetricsSummary, OrchestrationState,
   SkillDefinition,
@@ -13,6 +13,7 @@ import type {
   VideoGenerationRequest,
 } from './types'
 import type { WsHandler } from './http'
+import type { ChatSendRequest, ConversationDto, ConversationMessagesResponse } from '@cynosure/contracts'
 
 // ---- API object (same shape as window.api from preload) ----
 
@@ -48,7 +49,7 @@ export const api = {
 
   chat: {
     createConversation: (title?: string, agentId?: string, maWorkspaceId?: string) =>
-      post<{ id: string; title: string; agentId: string | null; maWorkspaceId: string | null; origin: string; createdAt: number; updatedAt: number }>(
+      post<ConversationDto>(
         '/api/chat/conversations',
         { title, agentId, maWorkspaceId }
       ),
@@ -73,24 +74,7 @@ export const api = {
       )
     },
     getMessages: (conversationId: string) =>
-      get<{
-        conversationAgentId: string | null
-        messages: StoredMessage[]
-        lastContextTokens: number | null
-        chatConfig?: {
-          allowedTools?: string[]
-          subAgents?: { agentId: string }[]
-          memorySpaceIds?: string[]
-          systemPrompt?: string
-          model?: string
-          providerId?: string
-          thinkingEnabled?: boolean
-          autoToolRouting?: boolean
-          autoMemory?: boolean
-          selectedSkillIds?: string[]
-          autoSkillRouting?: boolean
-        }
-      }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
+      get<ConversationMessagesResponse>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
     getExecutionSteps: (conversationId: string) =>
       get<ExecutionStepRecord[]>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/steps`),
     getPendingHITL: (conversationId: string) =>
@@ -115,61 +99,8 @@ export const api = {
       patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/pin`, { pinned }),
     markConversationRead: (conversationId: string) =>
       patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/read`),
-    send: (
-      conversationId: string,
-      content: string,
-      model?: string,
-      providerOverride?: string,
-      imageDataUrls?: string[],
-      allowedTools?: string[],
-      files?: { name: string; content: string }[],
-      systemPrompt?: string,
-      generateTitle?: boolean,
-      messageId?: string,
-      audioDataUrls?: string[],
-      subAgents?: SubAgentAssignment[],
-      memorySpaceIds?: string[],
-      thinkingEnabled?: boolean,
-      contextStrategy?: string,
-      titleProviderId?: string,
-      titleModel?: string,
-      autoToolRouting?: boolean,
-      selectedSkillIds?: string[],
-      autoSkillRouting?: boolean,
-      autoMemory?: boolean,
-      autoRouterProviderId?: string,
-      autoRouterModel?: string,
-      compactProviderId?: string,
-      compactModel?: string,
-      inlineAttachmentTextLimit?: number
-    ) =>
-      post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, {
-        content,
-        messageId,
-        model,
-        providerOverride,
-        imageDataUrls,
-        audioDataUrls,
-        allowedTools,
-        files,
-        systemPrompt,
-        generateTitle,
-        subAgents,
-        memorySpaceIds,
-        thinkingEnabled,
-        contextStrategy,
-        autoToolRouting,
-        autoMemory,
-        autoRouterProviderId: autoRouterProviderId || undefined,
-        autoRouterModel: autoRouterModel || undefined,
-        compactProviderId: compactProviderId || undefined,
-        compactModel: compactModel || undefined,
-        titleProviderId: titleProviderId || undefined,
-        titleModel: titleModel || undefined,
-        selectedSkillIds,
-        autoSkillRouting,
-        inlineAttachmentTextLimit
-      }),
+    send: (conversationId: string, request: ChatSendRequest) =>
+      post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, request),
     getAttachmentConfig: () =>
       get<{ inlineAttachmentTextLimit: number }>('/api/chat/attachment-config'),
     updateAttachmentConfig: (inlineAttachmentTextLimit: number) =>

@@ -2,14 +2,12 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../../../stores/chat.store'
-import { useAgentStore } from '../../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
 import { useProviderStore } from '../../../stores/provider.store'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../../shared/ModalDialog.vue'
 
 const chatStore = useChatStore()
-const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const providerStore = useProviderStore()
 const router = useRouter()
@@ -23,7 +21,7 @@ const savingAgent = ref(false)
 
 const canSaveAsAgent = computed(() => {
   return (
-    agentStore.selectedToolNames.length > 0 ||
+    chatStore.selectedToolNames.length > 0 ||
     chatStore.freeChatSubAgentIds.length > 0 ||
     chatStore.hasFreeChatOverrides ||
     chatStore.freeChatSkillIds.length > 0 ||
@@ -63,7 +61,7 @@ async function saveAsNewAgent() {
       providerId,
       model,
       systemPrompt: chatStore.sessionSystemPrompt,
-      tools: [...agentStore.selectedToolNames],
+      tools: [...chatStore.selectedToolNames],
       subAgents,
       memorySpaces: [...chatStore.freeChatMemorySpaceIds],
     })
@@ -177,14 +175,14 @@ async function saveAsNewAgent() {
           Configuration
         </p>
         <div
-          v-if="agentStore.selectedToolNames.length"
+          v-if="chatStore.selectedToolNames.length"
           class="flex items-center gap-1.5 text-xs text-theme-400"
         >
           <Icon
             icon="mdi:tools"
             class="w-3 h-3 text-accent-400"
           />
-          {{ agentStore.selectedToolNames.length }} tool{{ agentStore.selectedToolNames.length !== 1 ? 's' : '' }}
+          {{ chatStore.selectedToolNames.length }} tool{{ chatStore.selectedToolNames.length !== 1 ? 's' : '' }}
         </div>
         <div
           v-if="chatStore.freeChatSubAgentIds.length"
