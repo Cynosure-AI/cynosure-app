@@ -459,38 +459,6 @@ const settingsItems: NavItem[] = [
         :disabled="!sidebarCollapsed"
       >
         <RouterLink
-          to="/instances"
-          class="nav-item"
-          :class="{ active: isActive('/instances') }"
-        >
-          <Icon
-            icon="lucide:activity"
-            class="w-4.5 h-4.5"
-          />
-          <span>Instances</span>
-          <span
-            v-if="hasAwaitingApproval"
-            class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse ml-1 shrink-0"
-          />
-          <div
-            v-if="instances.length"
-            class="rounded-full flex justify-center items-center bg-accent-400 text-xs text-white w-5 h-5 ml-2"
-          >
-            <span v-if="instances.length > 9">9+</span>
-            <span v-else>{{ instances.length }}</span>
-          </div>
-        </RouterLink>
-        <template #content>
-          Instances
-        </template>
-      </HoverTooltip>
-      
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
           to="/activity"
           class="nav-item"
           :class="{ active: isActive('/activity') }"
