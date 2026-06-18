@@ -262,6 +262,34 @@ export interface AppNotification {
     createdAt: number
 }
 
+// ── Activity ────────────────────────────────────────────────────────────────
+
+export type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory'
+
+export interface ActivityArtifact {
+    href: string
+    label: string
+    kind: 'file' | 'image' | 'video'
+    ext: string
+}
+
+export interface ActivityItem {
+    id: string
+    kind: ActivityKind
+    title: string
+    description: string
+    createdAt: number
+    agentId: string | null
+    agentName: string | null
+    agentIconUrl: string | null
+    conversationId: string | null
+    status?: string
+    severity?: string
+    sourceId?: string
+    sourceLabel?: string
+    artifacts?: ActivityArtifact[]
+}
+
 // ── Memory ──────────────────────────────────────────────────────────────────
 
 export interface MemorySpace {
