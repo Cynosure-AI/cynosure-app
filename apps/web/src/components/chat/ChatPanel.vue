@@ -110,6 +110,15 @@ const unifiedTimeline = computed(() => {
   const entries: TimelineEntry[] = []
   const hasExecSteps = agentStore.executionSteps.length > 0
   const mainAgentId = chatStore.activeAgentId
+  // Build a display-name -> codename map up front so free-chat runs (where
+  // there is no main agentId to compare against) can still group sub-agent
+  // stream messages with their execution cards.
+  const agentNameToCodename = new Map<string, string>()
+  for (const step of agentStore.executionSteps) {
+    if (step.maCodename && step.maAgentName) {
+      agentNameToCodename.set(step.maAgentName, step.maCodename)
+    }
+  }
 
   for (const msg of chatStore.messages) {
     // Compact event markers — rendered as divider cards, not regular messages
@@ -132,8 +141,13 @@ const unifiedTimeline = computed(() => {
       !msg.isError
     ) continue
 
-    // A message is from a sub-agent if it has a different agentId than the orchestrator
-    const isSubAgent = Boolean(msg.agentId && mainAgentId && msg.agentId !== mainAgentId)
+    // A message is from a sub-agent if it has a different agentId than the
+    // orchestrator, or if execution metadata identifies its agentName as a
+    // delegated sub-agent (important for free-chat orchestration).
+    const isSubAgent = Boolean(
+      (msg.agentId && mainAgentId && msg.agentId !== mainAgentId) ||
+      (msg.agentName && agentNameToCodename.has(msg.agentName))
+    )
 
     if (msg.role === 'tool') {
       // No exec steps available — render tool messages as compact fallback cards
@@ -171,15 +185,6 @@ const unifiedTimeline = computed(() => {
   entries.sort((a, b) => a.ts - b.ts)
 
   // ── Group sub-agent entries by codename ─────────────────────────────────
-  // Build a display-name → codename map from execution step metadata so we
-  // can bucket sub-agent *messages* (which only carry agentName) together
-  // with their corresponding tool-group cards.
-  const agentNameToCodename = new Map<string, string>()
-  for (const step of agentStore.executionSteps) {
-    if (step.maCodename && step.maAgentName) {
-      agentNameToCodename.set(step.maAgentName, step.maCodename)
-    }
-  }
 
   function codenameOf(entry: TimelineEntry): string | null {
     if (!entry.isSubAgent) return null

@@ -9,6 +9,7 @@ import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
 import { getEntityGraphStore, type EntityType } from '../core/memory/entity-graph.js'
 import { getMemoryEntityExtractionConfig, saveMemoryEntityExtractionConfig, type MemoryEntityExtractionConfig } from '../core/memory/memory-entity-indexer.js'
+import { dropConversationAttachmentIndex } from '../core/artifacts/attachment-rag.js'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import OpenAI from 'openai'
@@ -242,6 +243,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
 
       // Drop old table (incompatible dimensions)
       await rag.deleteTable('permanent_memory')
+      await dropConversationAttachmentIndex()
 
       if (chunksToReembed.length > 0) {
         // Re-embed in batches
@@ -288,6 +290,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     if (embeddingChanged) {
       const rag = getRAGStore()
       await rag.deleteTable('permanent_memory')
+      await dropConversationAttachmentIndex()
     }
 
     return { success: true, vectorsDropped: embeddingChanged, reembedded: false, reembeddedCount: 0, dimensions: newDimensions }
@@ -303,6 +306,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   app.post('/embeddings/drop', async () => {
     const rag = getRAGStore()
     await rag.deleteTable('permanent_memory')
+    await dropConversationAttachmentIndex()
     getDb().prepare('DELETE FROM memory_file_index').run()
     return { success: true }
   })
