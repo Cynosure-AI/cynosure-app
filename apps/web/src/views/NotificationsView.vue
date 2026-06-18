@@ -484,7 +484,7 @@ function severityClass(severity: string): string {
   margin: 0 0 0.5rem;
   line-height: 1.4;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }

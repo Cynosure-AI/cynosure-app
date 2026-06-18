@@ -370,22 +370,22 @@ export class AgentMemory {
         const docs = await ragStore.listDocuments(TABLE_NAME, filter)
         const indexedFiles = this.getIndexedFilePairs()
 
-        const map = new Map<string, { count: number; earliest: number }>()
+        const map = new Map<string, { count: number; latest: number }>()
         for (const doc of docs) {
             if (doc.spaceId && !indexedFiles.has(`${doc.spaceId}\0${doc.sourceFile || ''}`)) continue
             const sf = doc.sourceFile || '(untitled)'
             const existing = map.get(sf)
             if (existing) {
                 existing.count++
-                if (doc.createdAt < existing.earliest) existing.earliest = doc.createdAt
+                if (doc.createdAt > existing.latest) existing.latest = doc.createdAt
             } else {
-                map.set(sf, { count: 1, earliest: doc.createdAt })
+                map.set(sf, { count: 1, latest: doc.createdAt })
             }
         }
 
         return Array.from(map.entries())
-            .map(([sourceFile, { count, earliest }]) => ({ sourceFile, chunkCount: count, createdAt: earliest }))
-            .sort((a, b) => a.sourceFile.localeCompare(b.sourceFile))
+            .map(([sourceFile, { count, latest }]) => ({ sourceFile, chunkCount: count, createdAt: latest }))
+            .sort((a, b) => b.createdAt - a.createdAt || a.sourceFile.localeCompare(b.sourceFile))
     }
 
     private getIndexedFilePairs(): Set<string> {

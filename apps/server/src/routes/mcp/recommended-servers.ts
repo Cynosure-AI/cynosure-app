@@ -16,6 +16,11 @@ const CYNOSURE_MCP_REPOSITORY = {
     source: 'github',
 }
 
+function withLatestTag(identifier: string): string {
+    const versionAtIndex = identifier.indexOf('@', identifier.startsWith('@') ? 1 : 0)
+    return versionAtIndex === -1 ? `${identifier}@latest` : identifier
+}
+
 function npmServer(
     identifier: string,
     title: string,
@@ -36,7 +41,7 @@ function npmServer(
             version: 'latest',
             packages: [{
                 registryType: 'npm',
-                identifier: options.packageIdentifier || identifier,
+                identifier: withLatestTag(options.packageIdentifier || identifier),
                 version: 'latest',
                 transport: { type: 'stdio' },
                 ...(options.environmentVariables ? { environmentVariables: options.environmentVariables } : {}),
