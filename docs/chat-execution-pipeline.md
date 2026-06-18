@@ -62,23 +62,23 @@ This document details the complete end-to-end flow from when a user sends a chat
 
 The primary entry point for user messages. Accepts:
 
-| Field | Type | Purpose |
-|-------|------|---------|
-| `content` | `string` | The user's text message |
-| `imageDataUrls` | `string[]` | Base64-encoded images |
-| `audioDataUrls` | `string[]` | Base64-encoded audio |
-| `files` | `{ name, content }[]` | File attachments |
-| `allowedTools` | `string[]` | Manual tool selection override |
-| `model` / `providerOverride` | `string` | Model/provider override |
-| `systemPrompt` | `string` | Custom system prompt |
-| `subAgents` | `{ agentId }[]` | Sub-agent delegation config |
-| `memorySpaceIds` | `string[]` | Memory scope override |
-| `autoToolRouting` | `boolean` | Enable smart tool routing |
-| `autoMemory` | `boolean` | Enable auto-memory retrieval |
-| `autoSkillRouting` | `boolean` | Enable auto-skill selection |
-| `selectedSkillIds` | `string[]` | Manual skill selection |
-| `thinkingEnabled` | `boolean` | Enable thinking/reasoning tokens |
-| `contextStrategy` | `string` | `"sliding-window"` or `"compact"` |
+| Field                        | Type                  | Purpose                           |
+| ---------------------------- | --------------------- | --------------------------------- |
+| `content`                    | `string`              | The user's text message           |
+| `imageDataUrls`              | `string[]`            | Base64-encoded images             |
+| `audioDataUrls`              | `string[]`            | Base64-encoded audio              |
+| `files`                      | `{ name, content }[]` | File attachments                  |
+| `allowedTools`               | `string[]`            | Manual tool selection override    |
+| `model` / `providerOverride` | `string`              | Model/provider override           |
+| `systemPrompt`               | `string`              | Custom system prompt              |
+| `subAgents`                  | `{ agentId }[]`       | Sub-agent delegation config       |
+| `memorySpaceIds`             | `string[]`            | Memory scope override             |
+| `autoToolRouting`            | `boolean`             | Enable smart tool routing         |
+| `autoMemory`                 | `boolean`             | Enable auto-memory retrieval      |
+| `autoSkillRouting`           | `boolean`             | Enable auto-skill selection       |
+| `selectedSkillIds`           | `string[]`            | Manual skill selection            |
+| `thinkingEnabled`            | `boolean`             | Enable thinking/reasoning tokens  |
+| `contextStrategy`            | `string`              | `"sliding-window"` or `"compact"` |
 
 **Flow within the handler:**
 
@@ -101,6 +101,7 @@ Real-time streaming is handled via WebSocket. The `broadcast` function emits eve
 **File:** `triggers/trigger-runner.ts`
 
 Cron jobs and event-driven automations bypass the HTTP route and use `runTriggerExecution()`. This function:
+
 1. Creates a new conversation in the database
 2. Calls the same `planExecution()` → `AgentExecutor.run()` pipeline
 3. Returns the execution result to the caller
@@ -208,6 +209,7 @@ prepareAgentExecution(input)
 **File:** `core/tools/tool-registry.ts`
 
 Tools are stored with composite keys: `namespaceId::toolName`. The registry:
+
 - Handles same-named tools from different MCP servers
 - Generates disambiguated execution names on collisions
 - Provides `resolveForExecution(toolKeys)` to hydrate tool definitions
@@ -237,7 +239,7 @@ resolveExecutionTools(input)
   │   ├─ memory_retrieve_chunks
   │   ├─ memory_semantic_search
   │   ├─ memory_create / memory_update
-  │   ├─ forget_memory
+  │   ├─ memory_forget
   │   ├─ entity_graph_search / entity_graph_assert / entity_graph_delete
   │
   ├─ Inject sub-agent delegation tools (if sub-agents configured):
@@ -263,6 +265,7 @@ When `autoToolRouting` is enabled, the system intelligently selects which tools 
 3. **Fallback** — If routing fails, local (non-MCP) tools are used
 
 **Key constants:**
+
 - `MCP_CANDIDATE_COUNT = 8` — Top K MCP groups by embedding similarity
 - `MAX_ROUTED_TOOLS = 16` — Upper bound for selected tools
 - `MIN_RELATIVE_TOOL_SCORE = 0.72` — Near-match threshold
@@ -311,17 +314,19 @@ applyAutoMemoryRouting(input)
 
 The `MemoryAggregator` combines results from two memory stores:
 
-| Store | Technology | Purpose |
-|-------|-----------|---------|
+| Store            | Technology       | Purpose                                      |
+| ---------------- | ---------------- | -------------------------------------------- |
 | Permanent Memory | LanceDB (vector) | Semantic search over stored knowledge chunks |
-| Entity Graph | In-memory graph | Named entities and their relationships |
+| Entity Graph     | In-memory graph  | Named entities and their relationships       |
 
 **Fallback logic:**
+
 1. If explicit space IDs provided → query only those spaces
 2. If agent has explicit memory space assignments → query only those spaces
 3. If agent has NO assignments or no scope → query all memory folders
 
 **Scoring & deduplication:**
+
 - Results are deduplicated by text similarity (first 100 chars)
 - Each chunk is enriched with `totalChunks` for the same source file
 
@@ -330,6 +335,7 @@ The `MemoryAggregator` combines results from two memory stores:
 **File:** `core/memory/memory-entity-indexer.ts`
 
 A background indexing pipeline that:
+
 - Watches memory folders for changes
 - Extracts named entities from file content via LLM
 - Updates the entity graph with new edges and relationships
@@ -344,11 +350,12 @@ Memory spaces are the isolation boundaries. Each agent can be assigned to specif
 ### 4.5 Runtime Memory Tools
 
 During execution, the agent can interact with memory via built-in tools:
+
 - `memory_list_documents` — List files in memory spaces
 - `memory_retrieve_chunks` — Get specific chunks by file reference
 - `memory_semantic_search` — Query by semantic similarity
 - `memory_create` / `memory_update` — Add or modify memory
-- `forget_memory` — Delete memories
+- `memory_forget` — Delete memories
 - `entity_graph_search` — Find related entities via graph traversal
 - `entity_graph_assert` / `entity_graph_delete` — Manage relationships
 
@@ -394,6 +401,7 @@ resolveSkillSystemPrompt(input)
 **File:** `core/agent/pre-execution/auto-skill-routing.ts`
 
 When `autoSkillRouting` is enabled, the router LLM:
+
 1. Receives all available skills with names and descriptions
 2. Selects the most relevant skills for the current user query
 3. Returns merged list (manual skills + auto-selected skills)
@@ -406,14 +414,14 @@ When `autoSkillRouting` is enabled, the router LLM:
 
 Before execution begins, if any auto-routing mode is enabled, a lightweight "task context" LLM call builds a compact context summary. This LLM call uses a `set_task_context` tool to produce:
 
-| Field | Purpose |
-|-------|---------|
-| `routerQuery` | Best general semantic query for routing |
-| `toolQuery` | Action/capability terms for tool selection |
-| `skillQuery` | Instruction/workflow terms for skill selection |
-| `memoryQuery` | Knowledge/entity terms for memory retrieval |
+| Field           | Purpose                                                       |
+| --------------- | ------------------------------------------------------------- |
+| `routerQuery`   | Best general semantic query for routing                       |
+| `toolQuery`     | Action/capability terms for tool selection                    |
+| `skillQuery`    | Instruction/workflow terms for skill selection                |
+| `memoryQuery`   | Knowledge/entity terms for memory retrieval                   |
 | `systemContext` | Concise facts, constraints, and intent for the main assistant |
-| `focusAreas` | Short labels for likely needed information/capabilities |
+| `focusAreas`    | Short labels for likely needed information/capabilities       |
 
 Each auto-routing layer (tools, skills, memory) uses its dedicated query string for more precise selection. The `systemContext` is appended as a system message to the main executor.
 
@@ -427,18 +435,18 @@ The `AgentExecutor` class implements the core tool-calling loop. It is used by c
 
 ### 7.1 Configuration
 
-| Property | Default | Description |
-|----------|---------|-------------|
-| `gateway` | required | LLM gateway instance |
-| `tools` | required | Tool definitions available to the agent |
-| `hitl` | `false` | Require human approval for tool calls |
-| `maxRounds` | `50` (main) / `30` (sub-agent) | Maximum tool-calling rounds |
-| `thinkingEnabled` | `true` | Enable reasoning tokens |
-| `saveMessages` | `true` | Persist messages to DB |
-| `streamMode` | `'single'` | `'single'` (one streamId) or `'per-round'` (new per round) |
-| `emitEvents` | `true` | Emit EventBus execution step events |
-| `contextStrategy` | `'sliding-window'` | Context window management strategy |
-| `isPrimaryExecutor` | `false` | True for top-level executor that owns conversation progress |
+| Property            | Default                        | Description                                                 |
+| ------------------- | ------------------------------ | ----------------------------------------------------------- |
+| `gateway`           | required                       | LLM gateway instance                                        |
+| `tools`             | required                       | Tool definitions available to the agent                     |
+| `hitl`              | `false`                        | Require human approval for tool calls                       |
+| `maxRounds`         | `50` (main) / `30` (sub-agent) | Maximum tool-calling rounds                                 |
+| `thinkingEnabled`   | `true`                         | Enable reasoning tokens                                     |
+| `saveMessages`      | `true`                         | Persist messages to DB                                      |
+| `streamMode`        | `'single'`                     | `'single'` (one streamId) or `'per-round'` (new per round)  |
+| `emitEvents`        | `true`                         | Emit EventBus execution step events                         |
+| `contextStrategy`   | `'sliding-window'`             | Context window management strategy                          |
+| `isPrimaryExecutor` | `false`                        | True for top-level executor that owns conversation progress |
 
 ### 7.2 Execution Loop
 
@@ -511,28 +519,28 @@ AgentExecutor.run(messages)
 
 Two strategies:
 
-| Strategy | Behavior |
-|----------|----------|
-| `sliding-window` | Drops oldest messages when approaching context limit |
-| `compact` | Uses an LLM call to summarize/compress older messages while preserving key information |
+| Strategy         | Behavior                                                                               |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| `sliding-window` | Drops oldest messages when approaching context limit                                   |
+| `compact`        | Uses an LLM call to summarize/compress older messages while preserving key information |
 
 ### 7.4 Stream Events
 
 Throughout execution, real-time events are broadcast to UI clients:
 
-| Event | Payload | When |
-|-------|---------|------|
-| `chat:stream-start` | `{ streamId, conversationId, agentId, agentName, agentIconUrl }` | Before first LLM call |
-| `chat:stream-chunk` | Delta content/thinking | During LLM streaming |
-| `chat:stream-end` | `{ usage, model, contextTokens, images, contextWindow }` | End of each stream round |
-| `chat:stream-error` | `{ error }` | On execution error |
-| `step:status` | `{ taskId, conversationId, iteration, status, message }` | Routing, executing steps |
-| `step:tools-chosen` | Tool call names + arguments | When tools are selected |
-| `step:executed` | Tool results (output, images, success) | After tool execution |
-| `task:started` | `{ taskId, conversationId }` | When tool-calling loop begins |
-| `task:completed` | `{ taskId, conversationId }` | When tool-calling loop ends |
-| `task:error` | `{ conversationId, error }` | On execution error |
-| `chat:post-action` | `{ conversationId, action, status }` | During post-execution actions |
+| Event               | Payload                                                          | When                          |
+| ------------------- | ---------------------------------------------------------------- | ----------------------------- |
+| `chat:stream-start` | `{ streamId, conversationId, agentId, agentName, agentIconUrl }` | Before first LLM call         |
+| `chat:stream-chunk` | Delta content/thinking                                           | During LLM streaming          |
+| `chat:stream-end`   | `{ usage, model, contextTokens, images, contextWindow }`         | End of each stream round      |
+| `chat:stream-error` | `{ error }`                                                      | On execution error            |
+| `step:status`       | `{ taskId, conversationId, iteration, status, message }`         | Routing, executing steps      |
+| `step:tools-chosen` | Tool call names + arguments                                      | When tools are selected       |
+| `step:executed`     | Tool results (output, images, success)                           | After tool execution          |
+| `task:started`      | `{ taskId, conversationId }`                                     | When tool-calling loop begins |
+| `task:completed`    | `{ taskId, conversationId }`                                     | When tool-calling loop ends   |
+| `task:error`        | `{ conversationId, error }`                                      | On execution error            |
+| `chat:post-action`  | `{ conversationId, action, status }`                             | During post-execution actions |
 
 ---
 
@@ -546,17 +554,18 @@ When the model supports tool calls AND has visible execution tools, orchestratio
 
 ```typescript
 interface OrchestrationState {
-  runId: string
-  conversationId: string
-  status: 'running' | 'completed' | 'cancelled' | 'error'
-  objective: string
-  items: OrchestrationTaskItem[]  // { id, title, status, note, updatedAt }
-  currentTaskId?: string
-  result?: { summary?, error? }
+  runId: string;
+  conversationId: string;
+  status: "running" | "completed" | "cancelled" | "error";
+  objective: string;
+  items: OrchestrationTaskItem[]; // { id, title, status, note, updatedAt }
+  currentTaskId?: string;
+  result?: { summary?; error? };
 }
 ```
 
 **Orchestration tools injected into the agent:**
+
 - `orchestrator_set_tasks` — Create/replace visible task list
 - `orchestrator_update_task` — Update task status + note
 - `orchestrator_complete` — Mark orchestration complete
@@ -568,6 +577,7 @@ interface OrchestrationState {
 ### 8.2 Auto-Router & Task Context Integration
 
 The task context system (`task-context.ts`) calls a router LLM to produce focused queries for each auto mode. The auto-router results feed into:
+
 - Tool routing (specific action terms for tool selection)
 - Skill routing (instruction/workflow terms for skill selection)
 - Memory routing (knowledge/entity terms for memory retrieval)
@@ -591,6 +601,7 @@ Sub-agents are spawned via a `spawn_subagent` tool injected into the orchestrato
 - **Timeout** — 5 minutes per delegation
 
 **Key behavior:**
+
 - Sub-agents have **no conversation history** — everything must be passed in the `context` parameter
 - Sub-agent execution creates `chat:subagent-stream-*` events (separate from the primary stream)
 - Sub-agents do NOT emit EventBus timeline events by default (avoid pollution of parent timeline)
@@ -599,8 +610,9 @@ Sub-agents are spawned via a `spawn_subagent` tool injected into the orchestrato
 ### 9.2 Sub-Agent Configuration
 
 From `AgentConfig`:
+
 ```typescript
-subAgents: [{ agentId: string }]
+subAgents: [{ agentId: string }];
 ```
 
 The agent store resolves `agentId` to full `AgentData`, and the internal name is used as the routing key for `spawn_subagent`.
@@ -692,6 +704,7 @@ The Channel Manager runs Discord, Slack, and Telegram providers in the same proc
 **File:** `core/triggers/trigger-runner.ts`
 
 Cron jobs use `runTriggerExecution()` which:
+
 1. Creates a conversation (no HTTP request needed)
 2. Calls `planExecution()` with the trigger's agent config
 3. Runs `AgentExecutor.run()` with the trigger message
@@ -852,59 +865,59 @@ Cron jobs use `runTriggerExecution()` which:
 
 ## 15. Key Design Patterns
 
-| Pattern | Location | Purpose |
-|---------|----------|---------|
-| **Unidirectional Dependencies** | All modules | Routes import core modules; core modules don't import routes |
-| **Broadcast Function** | All streaming | Real-time WebSocket events to all connected UI clients |
-| **Conversation Locks** | `chat/conversation-locks.ts` | Prevents concurrent execution on the same conversation |
-| **Composite Tool Keys** | `tools/tool-registry.ts` | `namespaceId::toolName` enables same-name tools from different sources |
-| **Pre-Execution Separation** | `agent/pre-execution/` | Tools, memory, skills, prompts resolved independently |
-| **Orchestration Run ID** | `agent/orchestration-state.ts` | Persistent task tracking across tool-calling rounds and page reloads |
-| **Sub-agent Isolation** | `agent/sub-agent-tools.ts` | Each sub-agent has own tools, model, memory scope, and execution loop |
-| **Context Window Management** | `agent/context-trimmer.ts` | Sliding-window dropping or LLM-based compaction |
-| **Router Embedding Cache** | `agent/router-embedding-cache.ts` | Cached embeddings for MCP tool groups to avoid re-embedding |
-| **HITL Gate** | `agent/hitl-gate.ts` | Human-in-the-loop approval for tool calls |
-| **Post-Action Registry** | `agent/post-execution.ts` | Track/cancel async follow-up LLM calls (title gen, etc.) |
+| Pattern                         | Location                          | Purpose                                                                |
+| ------------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
+| **Unidirectional Dependencies** | All modules                       | Routes import core modules; core modules don't import routes           |
+| **Broadcast Function**          | All streaming                     | Real-time WebSocket events to all connected UI clients                 |
+| **Conversation Locks**          | `chat/conversation-locks.ts`      | Prevents concurrent execution on the same conversation                 |
+| **Composite Tool Keys**         | `tools/tool-registry.ts`          | `namespaceId::toolName` enables same-name tools from different sources |
+| **Pre-Execution Separation**    | `agent/pre-execution/`            | Tools, memory, skills, prompts resolved independently                  |
+| **Orchestration Run ID**        | `agent/orchestration-state.ts`    | Persistent task tracking across tool-calling rounds and page reloads   |
+| **Sub-agent Isolation**         | `agent/sub-agent-tools.ts`        | Each sub-agent has own tools, model, memory scope, and execution loop  |
+| **Context Window Management**   | `agent/context-trimmer.ts`        | Sliding-window dropping or LLM-based compaction                        |
+| **Router Embedding Cache**      | `agent/router-embedding-cache.ts` | Cached embeddings for MCP tool groups to avoid re-embedding            |
+| **HITL Gate**                   | `agent/hitl-gate.ts`              | Human-in-the-loop approval for tool calls                              |
+| **Post-Action Registry**        | `agent/post-execution.ts`         | Track/cancel async follow-up LLM calls (title gen, etc.)               |
 
 ---
 
 ## 16. Relevant Source Files
 
-| File | Purpose |
-|------|---------|
-| `routes/chat.ts` | HTTP route handler for chat messages |
-| `core/chat/message-history.ts` | Builds conversation history from DB |
-| `core/chat/run-config.ts` | Normalizes run flags and config |
-| `core/chat/conversation-locks.ts` | Prevents concurrent execution |
-| `core/chat/attachment-settings.ts` | Attachment text limits |
-| `core/agent/pre-execution/execution-planner.ts` | Central pre-execution orchestration |
-| `core/agent/pre-execution/execution-tools.ts` | Tool resolution and auto-routing |
-| `core/agent/pre-execution/auto-tool-routing.ts` | Auto-routing for tools |
-| `core/agent/tool-router.ts` | Embedding-based tool pre-filter + LLM selection |
-| `core/agent/pre-execution/execution-memory.ts` | Memory resolution |
-| `core/agent/pre-execution/auto-memory-routing.ts` | Auto-routing for memory |
-| `core/agent/pre-execution/execution-skills.ts` | Skill resolution |
-| `core/agent/pre-execution/auto-skill-routing.ts` | Auto-routing for skills |
-| `core/agent/pre-execution/execution-prompts.ts` | System prompt assembly |
-| `core/agent/pre-execution/execution-resolvers.ts` | Provider/model resolution |
-| `core/agent/pre-execution/task-context.ts` | Unified task context builder |
-| `core/agent/prepare-execution.ts` | Thin assembler for all pre-execution layers |
-| `core/agent/agent-executor.ts` | Core tool-calling execution loop |
-| `core/agent/sub-agent-tools.ts` | Sub-agent delegation |
-| `core/agent/orchestration-state.ts` | Orchestration task management |
-| `core/agent/post-execution.ts` | Post-execution actions (title gen) |
-| `core/agent/hitl-gate.ts` | Human-in-the-loop approval |
-| `core/agent/context-trimmer.ts` | Sliding-window context trimming |
-| `core/agent/context-compactor.ts` | LLM-based context compaction |
-| `core/gateway/gateway.ts` | LLM provider gateway |
-| `core/memory/memory-aggregator.ts` | Aggregated memory retrieval |
-| `core/memory/memory-entity-indexer.ts` | Entity graph indexing pipeline |
-| `core/tools/tool-registry.ts` | Tool registration and resolution |
-| `core/tools/builtin/orchestration-tools.ts` | Orchestration built-in tools |
-| `core/skills/skill-store.ts` | Skill storage and retrieval |
-| `core/skills/skill-router.ts` | Skill selection logic |
-| `core/artifacts/image-artifacts.ts` | Image artifact materialization |
-| `core/artifacts/file-artifacts.ts` | File artifact materialization |
-| `core/artifacts/attachment-rag.ts` | Attachment search and retrieval |
-| `core/triggers/trigger-runner.ts` | Cron/trigger execution |
-| `core/channels/channel-manager.ts` | Discord/Slack/Telegram integration |
+| File                                              | Purpose                                         |
+| ------------------------------------------------- | ----------------------------------------------- |
+| `routes/chat.ts`                                  | HTTP route handler for chat messages            |
+| `core/chat/message-history.ts`                    | Builds conversation history from DB             |
+| `core/chat/run-config.ts`                         | Normalizes run flags and config                 |
+| `core/chat/conversation-locks.ts`                 | Prevents concurrent execution                   |
+| `core/chat/attachment-settings.ts`                | Attachment text limits                          |
+| `core/agent/pre-execution/execution-planner.ts`   | Central pre-execution orchestration             |
+| `core/agent/pre-execution/execution-tools.ts`     | Tool resolution and auto-routing                |
+| `core/agent/pre-execution/auto-tool-routing.ts`   | Auto-routing for tools                          |
+| `core/agent/tool-router.ts`                       | Embedding-based tool pre-filter + LLM selection |
+| `core/agent/pre-execution/execution-memory.ts`    | Memory resolution                               |
+| `core/agent/pre-execution/auto-memory-routing.ts` | Auto-routing for memory                         |
+| `core/agent/pre-execution/execution-skills.ts`    | Skill resolution                                |
+| `core/agent/pre-execution/auto-skill-routing.ts`  | Auto-routing for skills                         |
+| `core/agent/pre-execution/execution-prompts.ts`   | System prompt assembly                          |
+| `core/agent/pre-execution/execution-resolvers.ts` | Provider/model resolution                       |
+| `core/agent/pre-execution/task-context.ts`        | Unified task context builder                    |
+| `core/agent/prepare-execution.ts`                 | Thin assembler for all pre-execution layers     |
+| `core/agent/agent-executor.ts`                    | Core tool-calling execution loop                |
+| `core/agent/sub-agent-tools.ts`                   | Sub-agent delegation                            |
+| `core/agent/orchestration-state.ts`               | Orchestration task management                   |
+| `core/agent/post-execution.ts`                    | Post-execution actions (title gen)              |
+| `core/agent/hitl-gate.ts`                         | Human-in-the-loop approval                      |
+| `core/agent/context-trimmer.ts`                   | Sliding-window context trimming                 |
+| `core/agent/context-compactor.ts`                 | LLM-based context compaction                    |
+| `core/gateway/gateway.ts`                         | LLM provider gateway                            |
+| `core/memory/memory-aggregator.ts`                | Aggregated memory retrieval                     |
+| `core/memory/memory-entity-indexer.ts`            | Entity graph indexing pipeline                  |
+| `core/tools/tool-registry.ts`                     | Tool registration and resolution                |
+| `core/tools/builtin/orchestration-tools.ts`       | Orchestration built-in tools                    |
+| `core/skills/skill-store.ts`                      | Skill storage and retrieval                     |
+| `core/skills/skill-router.ts`                     | Skill selection logic                           |
+| `core/artifacts/image-artifacts.ts`               | Image artifact materialization                  |
+| `core/artifacts/file-artifacts.ts`                | File artifact materialization                   |
+| `core/artifacts/attachment-rag.ts`                | Attachment search and retrieval                 |
+| `core/triggers/trigger-runner.ts`                 | Cron/trigger execution                          |
+| `core/channels/channel-manager.ts`                | Discord/Slack/Telegram integration              |
