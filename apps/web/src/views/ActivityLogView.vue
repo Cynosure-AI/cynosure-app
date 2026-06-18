@@ -15,6 +15,7 @@ const items = ref<ActivityItem[]>([]);
 const loading = ref(true);
 const selectedKind = ref<ActivityKind | "all">("all");
 const now = ref(Date.now());
+const stoppingInstanceIds = ref<Set<string>>(new Set());
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
 let unsubNotification: (() => void) | undefined;
@@ -138,6 +139,25 @@ async function openItem(item: ActivityItem) {
   }
 }
 
+function canStopItem(item: ActivityItem): boolean {
+  return item.kind === "instance" && Boolean(item.sourceId);
+}
+
+async function stopInstance(item: ActivityItem, event: Event) {
+  event.stopPropagation();
+  if (!item.sourceId || stoppingInstanceIds.value.has(item.sourceId)) return;
+
+  stoppingInstanceIds.value.add(item.sourceId);
+  try {
+    await api.instances.stop(item.sourceId);
+    await loadActivity();
+  } catch {
+    await loadActivity();
+  } finally {
+    stoppingInstanceIds.value.delete(item.sourceId);
+  }
+}
+
 onMounted(() => {
   void loadActivity();
   refreshTimer = setInterval(() => void loadActivity(), 15_000);
@@ -227,42 +247,79 @@ onUnmounted(() => {
 
     <div
       v-else
-      class="timeline"
+      class="activity-feed"
     >
       <section
         v-for="group in groupedItems"
         :key="group.label"
-        class="timeline-group"
+        class="feed-group"
       >
-        <div class="group-label">
+        <div class="feed-group-header">
           <span>{{ group.label }}</span>
-          <span>{{ group.items.length }}</span>
+          <span>{{ group.items.length }} events</span>
         </div>
 
-        <div class="timeline-list">
+        <div class="feed-list">
           <article
             v-for="item in group.items"
             :key="item.id"
-            class="timeline-item"
+            class="feed-item"
             :class="[kindClass(item), { clickable: item.conversationId || item.agentId }]"
             @click="openItem(item)"
           >
-            <div class="timeline-marker">
+            <div class="feed-time">
+              <span>{{ formatClock(item.createdAt) }}</span>
+              <small>{{ formatTimeAgo(item.createdAt) }}</small>
+            </div>
+
+            <div class="feed-marker">
               <Icon
                 :icon="kindIcon(item.kind)"
                 class="w-4 h-4"
               />
             </div>
 
-            <div class="timeline-body">
-              <div class="timeline-topline">
-                <h2>{{ item.title }}</h2>
-                <span>{{ formatTimeAgo(item.createdAt) }}</span>
+            <div class="feed-card">
+              <div class="feed-card-top">
+                <div class="feed-title-block">
+                  <div class="feed-kicker">
+                    <span class="kind-pill">
+                      {{ item.kind }}
+                    </span>
+                    <span v-if="item.sourceLabel">
+                      {{ item.sourceLabel }}
+                    </span>
+                  </div>
+
+                  <h2>{{ item.title }}</h2>
+                </div>
+
+                <span
+                  v-if="item.status"
+                  class="status-pill"
+                >
+                  {{ item.status }}
+                </span>
+
+                <button
+                  v-if="canStopItem(item)"
+                  class="stop-button"
+                  :disabled="stoppingInstanceIds.has(item.sourceId!)"
+                  title="Stop instance"
+                  @click="stopInstance(item, $event)"
+                >
+                  <Icon
+                    :icon="stoppingInstanceIds.has(item.sourceId!) ? 'lucide:loader-2' : 'lucide:square'"
+                    class="w-3 h-3"
+                    :class="{ 'animate-spin': stoppingInstanceIds.has(item.sourceId!) }"
+                  />
+                  Stop
+                </button>
               </div>
 
               <p
                 v-if="item.description"
-                class="timeline-description"
+                class="feed-description"
               >
                 {{ item.description }}
               </p>
@@ -289,7 +346,7 @@ onUnmounted(() => {
                 </a>
               </div>
 
-              <div class="timeline-meta">
+              <div class="feed-meta">
                 <span>
                   <Icon
                     icon="lucide:user-round"
@@ -297,21 +354,13 @@ onUnmounted(() => {
                   />
                   {{ agentLabel(item) }}
                 </span>
-                <span>
+
+                <span v-if="item.conversationId || item.agentId">
                   <Icon
-                    icon="lucide:clock"
+                    icon="lucide:external-link"
                     class="w-3 h-3"
                   />
-                  {{ formatClock(item.createdAt) }}
-                </span>
-                <span v-if="item.sourceLabel">
-                  {{ item.sourceLabel }}
-                </span>
-                <span
-                  v-if="item.status"
-                  class="status-pill"
-                >
-                  {{ item.status }}
+                  Open
                 </span>
               </div>
             </div>
@@ -322,11 +371,10 @@ onUnmounted(() => {
   </div>
 </template>
 
-<style scoped>
-.activity-view {
+<style scoped>.activity-view {
   height: 100%;
   overflow-y: auto;
-  padding: 1.5rem 2rem;
+  padding: 1.5rem 2rem 3rem;
 }
 
 .activity-header {
@@ -335,18 +383,21 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1rem;
+  max-width: 72rem;
 }
 
 .activity-title {
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: 1.45rem;
+  font-weight: 750;
   color: var(--color-theme-100);
+  letter-spacing: 0.02em;
 }
 
 .activity-subtitle {
-  margin-top: 0.25rem;
+  margin-top: 0.3rem;
   color: var(--color-theme-500);
   font-size: 0.875rem;
+  max-width: 46rem;
 }
 
 .refresh-button,
@@ -355,115 +406,129 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.45rem;
   border: 1px solid var(--color-theme-800);
-  background: var(--color-theme-900);
+  background: color-mix(in srgb, var(--color-theme-900) 82%, transparent);
   color: var(--color-theme-400);
-  border-radius: 0.5rem;
+  border-radius: 0.65rem;
   transition: 150ms ease;
 }
 
 .refresh-button {
-  padding: 0.45rem 0.75rem;
+  padding: 0.48rem 0.75rem;
   font-size: 0.8125rem;
 }
 
 .refresh-button:hover,
 .filter-chip:hover {
   color: var(--color-theme-100);
-  background: var(--color-theme-800);
+  border-color: var(--color-theme-700);
+  background: var(--color-theme-850, var(--color-theme-900));
 }
 
 .filter-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  gap: 0.55rem;
+  margin-bottom: 1.35rem;
+  max-width: 72rem;
 }
 
 .filter-chip {
-  padding: 0.45rem 0.65rem;
+  padding: 0.48rem 0.68rem;
   font-size: 0.8125rem;
+  position: relative;
+}
+
+.filter-chip::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.85;
 }
 
 .filter-chip.active {
   color: var(--color-accent-300);
-  border-color: color-mix(in srgb, var(--color-accent-500) 45%, transparent);
-  background: color-mix(in srgb, var(--color-accent-500) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-500) 50%, transparent);
+  background: color-mix(in srgb, var(--color-accent-500) 13%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-500) 12%, transparent) inset;
 }
 
 .filter-count {
-  min-width: 1.25rem;
-  padding: 0.05rem 0.35rem;
+  min-width: 1.3rem;
+  padding: 0.08rem 0.38rem;
   border-radius: 999px;
-  background: var(--color-theme-800);
-  color: var(--color-theme-400);
+  background: color-mix(in srgb, var(--color-theme-700) 55%, transparent);
+  color: var(--color-theme-300);
   font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
 }
 
-.empty-state {
-  min-height: 20rem;
+.activity-feed {
+  max-width: 72rem;
+}
+
+.feed-group {
+  margin-bottom: 1.4rem;
+}
+
+.feed-group-header {
+  position: sticky;
+  top: -1.5rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 1rem 0rem;
+  color: var(--color-theme-500);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.065em;
+  background: var(--color-theme-900)
+}
+
+.feed-group-header span:last-child {
+  color: var(--color-theme-650, var(--color-theme-600));
+  font-weight: 600;
+}
+
+.feed-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  color: var(--color-theme-500);
-  font-size: 0.875rem;
+  gap: 0.55rem;
 }
 
-.timeline {
-  max-width: 58rem;
-}
-
-.timeline-group {
-  margin-bottom: 1.5rem;
-}
-
-.group-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--color-theme-500);
-  font-size: 0.75rem;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: 0 0 0.65rem 2.1rem;
-}
-
-.group-label span:last-child {
-  color: var(--color-theme-600);
-}
-
-.timeline-list {
-  position: relative;
-}
-
-.timeline-list::before {
-  content: "";
-  position: absolute;
-  left: 0.95rem;
-  top: 0.5rem;
-  bottom: 0.5rem;
-  width: 1px;
-  background: var(--color-theme-800);
-}
-
-.timeline-item {
-  position: relative;
+.feed-item {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
-  gap: 0.85rem;
-  padding: 0.2rem 0 0.9rem;
+  grid-template-columns: 4.2rem 2rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: stretch;
 }
 
-.timeline-item.clickable {
+.feed-item.clickable {
   cursor: pointer;
 }
 
-.timeline-marker {
-  z-index: 1;
+.feed-time {
+  padding-top: 0.85rem;
+  text-align: right;
+  color: var(--color-theme-500);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.feed-time small {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--color-theme-700);
+  font-size: 0.67rem;
+}
+
+.feed-marker {
   width: 2rem;
   height: 2rem;
+  margin-top: 0.62rem;
   border-radius: 999px;
   display: flex;
   align-items: center;
@@ -471,54 +536,135 @@ onUnmounted(() => {
   color: var(--activity-color);
   background: var(--activity-bg);
   border: 1px solid var(--activity-border);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--activity-color) 5%, transparent);
 }
 
-.timeline-body {
+.feed-card {
   min-width: 0;
-  border: 1px solid var(--color-theme-800);
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--color-theme-900) 78%, transparent);
-  padding: 0.85rem 0.95rem;
-  transition: 150ms ease;
+  position: relative;
+  border: 1px solid var(--color-theme-850, var(--color-theme-800));
+  border-left: 3px solid var(--activity-color);
+  border-radius: 0.7rem;
+  background: var(--color-theme-950);
+  padding: 0.78rem 0.9rem 0.72rem;
+  transition: 140ms ease;
 }
 
-.timeline-item.clickable:hover .timeline-body {
-  border-color: var(--color-theme-700);
-  background: var(--color-theme-900);
+.feed-item.clickable:hover .feed-card {
+  transform: translateX(2px);
+  border-color: color-mix(in srgb, var(--activity-color) 35%, var(--color-theme-800));
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--activity-color) 10%, transparent),
+      transparent 36%
+    ),
+    var(--color-theme-900);
 }
 
-.timeline-topline {
+.feed-card-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.9rem;
 }
 
-.timeline-topline h2 {
-  color: var(--color-theme-100);
-  font-size: 0.9375rem;
-  font-weight: 650;
-  line-height: 1.35;
+.feed-title-block {
+  min-width: 0;
 }
 
-.timeline-topline span {
-  flex-shrink: 0;
+.feed-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.28rem;
   color: var(--color-theme-600);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
 }
 
-.timeline-description {
-  margin-top: 0.25rem;
+.kind-pill {
+  color: var(--activity-color);
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+}
+
+.feed-card h2 {
+  color: var(--color-theme-100);
+  font-size: 0.94rem;
+  font-weight: 720;
+  line-height: 1.3;
+}
+
+.status-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.16rem 0.45rem;
+  border-radius: 999px;
+  color: var(--activity-color);
+  background: color-mix(in srgb, var(--activity-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--activity-color) 28%, transparent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
+.stop-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  color: #f87171;
+  background: color-mix(in srgb, #f87171 9%, transparent);
+  border: 1px solid color-mix(in srgb, #f87171 24%, transparent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  transition: 140ms ease;
+}
+
+.stop-button:hover:not(:disabled) {
+  color: #fecaca;
+  background: color-mix(in srgb, #f87171 16%, transparent);
+  border-color: color-mix(in srgb, #f87171 42%, transparent);
+}
+
+.stop-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.feed-description {
+  margin-top: 0.35rem;
   color: var(--color-theme-400);
-  font-size: 0.8125rem;
+  font-size: 0.81rem;
   line-height: 1.45;
+}
+
+.feed-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.8rem;
+  align-items: center;
+  margin-top: 0.65rem;
+  color: var(--color-theme-650, var(--color-theme-500));
+  font-size: 0.72rem;
+}
+
+.feed-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .artifact-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-  margin-top: 0.75rem;
+  margin-top: 0.7rem;
 }
 
 .artifact-link {
@@ -526,11 +672,12 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.35rem;
   max-width: 18rem;
-  padding: 0.3rem 0.45rem;
-  border-radius: 0.375rem;
-  background: var(--color-theme-800);
+  padding: 0.32rem 0.48rem;
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--activity-color) 9%, var(--color-theme-850, var(--color-theme-800)));
+  border: 1px solid color-mix(in srgb, var(--activity-color) 18%, transparent);
   color: var(--color-theme-200);
-  font-size: 0.75rem;
+  font-size: 0.74rem;
 }
 
 .artifact-link span:nth-child(2) {
@@ -541,27 +688,8 @@ onUnmounted(() => {
 
 .artifact-link span:last-child {
   color: var(--color-theme-500);
-  font-size: 0.625rem;
-}
-
-.timeline-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem 0.75rem;
-  align-items: center;
-  margin-top: 0.75rem;
-  color: var(--color-theme-600);
-  font-size: 0.75rem;
-}
-
-.timeline-meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.status-pill {
-  color: var(--activity-color);
+  font-size: 0.62rem;
+  text-transform: uppercase;
 }
 
 .activity-info,
@@ -575,13 +703,13 @@ onUnmounted(() => {
   --activity-border: color-mix(in srgb, var(--color-accent-500) 35%, var(--color-theme-800));
 }
 
-.activity-artifact {
+.activity-cron {
   --activity-color: #38bdf8;
   --activity-bg: color-mix(in srgb, #38bdf8 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #38bdf8 35%, var(--color-theme-800));
 }
 
-.activity-cron {
+.activity-artifact {
   --activity-color: #22c55e;
   --activity-bg: color-mix(in srgb, #22c55e 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #22c55e 35%, var(--color-theme-800));
@@ -605,6 +733,17 @@ onUnmounted(() => {
   --activity-border: color-mix(in srgb, #f87171 38%, var(--color-theme-800));
 }
 
+.empty-state {
+  min-height: 20rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--color-theme-500);
+  font-size: 0.875rem;
+}
+
 @media (max-width: 720px) {
   .activity-view {
     padding: 1rem;
@@ -617,6 +756,18 @@ onUnmounted(() => {
   .refresh-button {
     width: 100%;
     justify-content: center;
+  }
+
+  .feed-item {
+    grid-template-columns: 2rem minmax(0, 1fr);
+  }
+
+  .feed-time {
+    display: none;
+  }
+
+  .feed-group-header {
+    margin-left: 0;
   }
 }
 </style>
