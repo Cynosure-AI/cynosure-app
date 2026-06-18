@@ -7,7 +7,7 @@ const INTERNAL_TOOL_PREFIXES = [
 
 const INTERNAL_TOOL_NAMES = new Set([
   'expand_available_toolset',
-  'forget_memory',
+  'memory_forget',
   'spawn_subagent',
 ])
 

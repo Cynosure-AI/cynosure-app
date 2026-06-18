@@ -93,7 +93,7 @@ const BUILTIN_TOOL_HYDRATORS = {
     memory_update: (ctx: BuiltInHydrationContext) => makeMemoryUpdateTool({
         assignedSpaces: ctx.assignedSpaces,
     }),
-    forget_memory: (ctx: BuiltInHydrationContext) => makeForgetMemoryTool({
+    memory_forget: (ctx: BuiltInHydrationContext) => makeForgetMemoryTool({
         assignedSpaces: ctx.assignedSpaces,
     }),
     entity_graph_search: () => makeEntityGraphSearchTool(),
