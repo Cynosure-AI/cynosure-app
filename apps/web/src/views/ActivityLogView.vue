@@ -14,7 +14,7 @@ const agentDefs = useAgentDefinitionsStore();
 
 const items = ref<ActivityItem[]>([]);
 const loading = ref(true);
-const selectedKinds = ref<ActivityKind[]>(["instance", "artifact", "notification", "cron", "memory"]);
+const selectedKinds = ref<ActivityKind[]>(["instance", "artifact", "notification", "cron", "memory", "channels"]);
 const searchQuery = ref("");
 const now = ref(Date.now());
 const stoppingInstanceIds = ref<Set<string>>(new Set());
@@ -27,6 +27,7 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "instance", label: "Running", icon: "lucide:activity" },
   { value: "artifact", label: "Artifacts", icon: "lucide:file-output" },
   { value: "chat", label: "Chats", icon: "lucide:message-circle" },
+  { value: "channels", label: "Channels", icon: "lucide:radio" },
   { value: "notification", label: "Notifications", icon: "lucide:bell" },
   { value: "cron", label: "Cron", icon: "lucide:clock" },
   { value: "memory", label: "Memory", icon: "lucide:brain" },
@@ -50,6 +51,7 @@ const totalByKind = computed(() => {
     cron: 0,
     memory: 0,
     chat: 0,
+    channels: 0,
   };
   for (const item of items.value) totals[item.kind] += 1;
   return totals;
@@ -166,6 +168,8 @@ function kindIcon(kind: ActivityKind): string {
       return "lucide:brain";
     case "chat":
       return "lucide:message-circle";
+    case "channels":
+      return "lucide:radio";
     default:
       return "lucide:activity";
   }
@@ -178,6 +182,7 @@ function kindClass(item: ActivityItem): string {
   if (item.kind === "cron") return "activity-cron";
   if (item.kind === "memory") return "activity-memory";
   if (item.kind === "chat") return "activity-chat";
+  if (item.kind === "channels") return "activity-channels";
   return "activity-info";
 }
 
@@ -257,7 +262,7 @@ onUnmounted(() => {
           Activity Log
         </h1>
         <p class="mt-1 max-w-3xl text-sm text-theme-500">
-          Running instances, generated artifacts, chats, notifications, cron runs, and memory indexing in one timeline.
+          Running instances, generated artifacts, chats, channel messages, notifications, cron runs, and memory indexing in one timeline.
         </p>
       </div>
       <button
@@ -613,6 +618,7 @@ article.cursor-pointer:hover .activity-card {
 .activity-notification,
 .activity-cron,
 .activity-chat,
+.activity-channels,
 .activity-memory,
 .activity-warning,
 .activity-critical {
@@ -655,5 +661,11 @@ article.cursor-pointer:hover .activity-card {
   --activity-color: #60a5fa;
   --activity-bg: color-mix(in srgb, #60a5fa 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #60a5fa 35%, var(--color-theme-800));
+}
+
+.activity-channels {
+  --activity-color: #2dd4bf;
+  --activity-bg: color-mix(in srgb, #2dd4bf 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #2dd4bf 35%, var(--color-theme-800));
 }
 </style>
