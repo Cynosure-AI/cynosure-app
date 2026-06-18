@@ -29,7 +29,7 @@ import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
 import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageArtifactsSystemHint } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemorySpaceOverrides, resolveToolSelection } from '../core/chat/run-config.js'
-import type { ChatSendRequest, ConversationExecutionConfig } from '@cynosure/contracts'
+import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
 

@@ -12,8 +12,8 @@
         "resolveJsonModule": true,
         "baseUrl": ".",
         "paths": {
-            "@cynosure/contracts": [
-                "../../packages/contracts/index.d.ts"
+            "@shared/types": [
+                "../../shared/index.d.ts"
             ]
         },
         "declaration": true,

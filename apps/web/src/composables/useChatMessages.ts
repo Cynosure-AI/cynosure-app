@@ -6,7 +6,7 @@ import { usePreferencesStore } from '../stores/preferences.store'
 import type { SubAgentAssignment } from '../api/types'
 import type { DisplayMessage } from '../stores/chat.store'
 import type { ChatStreamingState } from './useChatStreaming'
-import type { ChatSendRequest } from '@cynosure/contracts'
+import type { ChatSendRequest } from '@shared/types'
 
 export interface ChatMessagesApi {
     sendMessage(content: string, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void>

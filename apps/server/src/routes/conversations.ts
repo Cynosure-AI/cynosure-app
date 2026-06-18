@@ -10,7 +10,7 @@ import { deleteConversationAttachmentIndexes, indexConversationAttachment } from
 import { getAssignedOrDefaultSpaces } from '../core/memory/memory-space-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
-import type { ConversationExecutionConfig } from '@cynosure/contracts'
+import type { ConversationExecutionConfig } from '@shared/types'
 
 function escapeSqlLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
