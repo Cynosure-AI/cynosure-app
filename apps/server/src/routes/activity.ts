@@ -31,6 +31,17 @@ interface ActivityItem {
 }
 
 const ARTIFACT_EXTENSIONS = [
+    'png',
+    'jpg',
+    'jpeg',
+    'webp',
+    'gif',
+    'bmp',
+    'svg',
+    'avif',
+    'mp4',
+    'webm',
+    'mov',
     'pdf',
     'doc',
     'docx',
@@ -47,6 +58,9 @@ const ARTIFACT_EXTENSIONS = [
     'zip',
     'json',
 ]
+
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg', 'avif'])
+const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'mov'])
 
 const artifactExtensionPattern = ARTIFACT_EXTENSIONS
     .map((ext) => ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
@@ -113,6 +127,13 @@ function artifactFromUrl(url: string, kind: ActivityArtifact['kind']): ActivityA
     return { href: url, label, kind, ext }
 }
 
+function artifactKindFromPath(path: string): ActivityArtifact['kind'] {
+    const ext = (path.split('.').pop() || '').toLowerCase()
+    if (IMAGE_EXTENSIONS.has(ext)) return 'image'
+    if (VIDEO_EXTENSIONS.has(ext)) return 'video'
+    return 'file'
+}
+
 function fileArtifactsFromText(text: string): ActivityArtifact[] {
     const artifacts: ActivityArtifact[] = []
     const seen = new Set<string>()
@@ -123,7 +144,7 @@ function fileArtifactsFromText(text: string): ActivityArtifact[] {
         const encodedPath = match[1]
         const rawPath = encodedPath ? decodeURIComponent(encodedPath) : match[2]
         if (!rawPath) continue
-        const artifact = artifactFromPath(rawPath, 'file')
+        const artifact = artifactFromPath(rawPath, artifactKindFromPath(rawPath))
         if (seen.has(artifact.href)) continue
         seen.add(artifact.href)
         artifacts.push(artifact)
@@ -199,20 +220,30 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         if (includes('cron')) {
+            const activeCronRunsByConversation = new Map(
+                listActiveInstances()
+                    .filter((instance) => instance.type === 'cron' && instance.conversationId)
+                    .map((instance) => [instance.conversationId!, instance])
+            )
             const rows = db.prepare(
-                "SELECT id, title, agent_id, updated_at FROM conversations WHERE origin = 'cron' ORDER BY updated_at DESC LIMIT ?"
-            ).all(limit) as { id: string; title: string | null; agent_id: string | null; updated_at: number }[]
+                "SELECT id, title, agent_id, created_at, updated_at FROM conversations WHERE origin = 'cron' ORDER BY updated_at DESC LIMIT ?"
+            ).all(limit) as { id: string; title: string | null; agent_id: string | null; created_at: number; updated_at: number }[]
             for (const row of rows) {
+                const activeRun = activeCronRunsByConversation.get(row.id)
+                const isRunning = Boolean(activeRun)
+                const title = row.title && row.title !== 'New Chat'
+                    ? row.title
+                    : (isRunning ? 'Scheduled cron run' : 'Cron job finished')
                 items.push({
                     id: `cron:${row.id}`,
                     kind: 'cron',
-                    title: row.title || 'Cron job finished',
-                    description: 'Scheduled run completed',
-                    createdAt: row.updated_at,
+                    title,
+                    description: isRunning ? 'Scheduled run is running' : 'Scheduled run completed',
+                    createdAt: isRunning ? (activeRun?.startedAt || row.created_at) : row.updated_at,
                     agentId: row.agent_id,
                     ...agentInfo(row.agent_id),
                     conversationId: row.id,
-                    status: 'completed',
+                    status: isRunning ? activeRun?.status || 'running' : 'completed',
                     sourceId: row.id,
                     sourceLabel: 'Cron',
                 })
@@ -352,7 +383,15 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         const sorted = items
-            .sort((a, b) => b.createdAt - a.createdAt)
+            .sort((a, b) => {
+                const aActive = a.status === 'running' || a.status === 'awaiting-approval'
+                const bActive = b.status === 'running' || b.status === 'awaiting-approval'
+                const aActiveInstance = a.kind === 'instance' && aActive
+                const bActiveInstance = b.kind === 'instance' && bActive
+                if (aActiveInstance !== bActiveInstance) return aActiveInstance ? -1 : 1
+                if (aActive !== bActive) return aActive ? -1 : 1
+                return b.createdAt - a.createdAt
+            })
             .slice(0, limit)
 
         return { items: sorted }
