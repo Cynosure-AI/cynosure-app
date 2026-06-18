@@ -81,7 +81,6 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     // Persist session config so the chat view can restore the correct model/provider
     const executionConfig = buildPersistedChatConfig({
         selectedToolKeys: agent.tools,
-        routedToolKeys: [],
         requestedSubAgents: agent.subAgents,
         requestedMemorySpaceIds: memorySpaces.map((space) => space.id),
         systemPrompt: planned.messages.find((message) => message.role === 'system')?.content.toString(),

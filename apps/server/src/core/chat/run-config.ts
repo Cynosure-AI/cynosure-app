@@ -15,7 +15,6 @@ export interface EffectiveChatRunFlags {
 
 export interface PersistedChatConfigInput {
     selectedToolKeys: string[]
-    routedToolKeys: string[]
     requestedSubAgents?: SubAgentAssignment[]
     requestedMemorySpaceIds?: string[]
     systemPrompt?: string
@@ -73,7 +72,7 @@ export function resolveMemorySpaceOverrides(
 
 export function buildPersistedChatConfig(input: PersistedChatConfigInput): ConversationExecutionConfig {
     return {
-        allowedTools: input.autoToolRouting ? input.routedToolKeys : input.selectedToolKeys,
+        allowedTools: input.selectedToolKeys,
         subAgents: input.requestedSubAgents ?? [],
         memorySpaceIds: input.requestedMemorySpaceIds ?? [],
         systemPrompt: input.systemPrompt || '',
