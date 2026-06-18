@@ -20,6 +20,11 @@ export interface ModelPricing {
     completion?: number
     request?: number
     image?: number
+    audio?: number
+    webSearch?: number
+    internalReasoning?: number
+    inputCacheRead?: number
+    inputCacheWrite?: number
     skus?: Record<string, number>
 }
 
