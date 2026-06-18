@@ -14,6 +14,7 @@ const agentDefs = useAgentDefinitionsStore();
 const items = ref<ActivityItem[]>([]);
 const loading = ref(true);
 const selectedKinds = ref<ActivityKind[]>(["instance", "artifact", "notification", "cron", "memory"]);
+const searchQuery = ref("");
 const now = ref(Date.now());
 const stoppingInstanceIds = ref<Set<string>>(new Set());
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
@@ -32,7 +33,12 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
 
 const filteredItems = computed(() => {
   const kinds = new Set(selectedKinds.value);
-  return items.value.filter((item) => kinds.has(item.kind));
+  const query = searchQuery.value.trim().toLowerCase();
+  return items.value.filter((item) => {
+    if (!kinds.has(item.kind)) return false;
+    if (!query) return true;
+    return activitySearchText(item).includes(query);
+  });
 });
 
 const totalByKind = computed(() => {
@@ -60,6 +66,32 @@ function toggleAllKinds(): void {
   selectedKinds.value = allKindsSelected.value
     ? []
     : filterOptions.map((option) => option.value);
+}
+
+function activitySearchText(item: ActivityItem): string {
+  return [
+    item.kind,
+    item.title,
+    item.description,
+    item.agentName,
+    item.agentId,
+    item.status,
+    item.severity,
+    item.sourceLabel,
+    item.sourceId,
+    ...(item.artifacts?.flatMap((artifact) => [
+      artifact.label,
+      artifact.ext,
+      artifact.kind,
+    ]) || []),
+  ]
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join(" ")
+    .toLowerCase();
+}
+
+function clearSearch(): void {
+  searchQuery.value = "";
 }
 
 async function loadActivity() {
@@ -232,6 +264,32 @@ onUnmounted(() => {
       </button>
     </header>
 
+    <div class="mb-3 mx-auto max-w-6xl">
+      <div class="relative">
+        <Icon
+          icon="lucide:search"
+          class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-600"
+        />
+        <input
+          v-model="searchQuery"
+          type="search"
+          class="w-full rounded-lg border border-theme-800 bg-theme-900/80 py-2 pl-9 pr-10 text-[13px] text-theme-100 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:bg-theme-900"
+          placeholder="Search activity..."
+        >
+        <button
+          v-if="searchQuery"
+          class="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
+          title="Clear search"
+          @click="clearSearch"
+        >
+          <Icon
+            icon="lucide:x"
+            class="h-3.5 w-3.5"
+          />
+        </button>
+      </div>
+    </div>
+
     <div class="mb-5 flex max-w-6xl flex-wrap gap-2 mx-auto">
       <button
         class="filter-chip inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
@@ -282,7 +340,7 @@ onUnmounted(() => {
         icon="lucide:inbox"
         class="w-9 h-9 text-theme-600"
       />
-      <p>No activity for this filter yet.</p>
+      <p>{{ searchQuery.trim() ? "No activity matches your search." : "No activity for this filter yet." }}</p>
     </div>
 
     <div
