@@ -73,8 +73,18 @@ const fileArtifactPattern = new RegExp(
 
 function clampLimit(value: string | undefined): number {
     const parsed = Number.parseInt(value || '', 10)
-    if (!Number.isFinite(parsed)) return 100
-    return Math.min(200, Math.max(20, parsed))
+    if (!Number.isFinite(parsed)) return 30
+    return Math.min(100, Math.max(1, parsed))
+}
+
+function clampOffset(value: string | undefined): number {
+    const parsed = Number.parseInt(value || '', 10)
+    if (!Number.isFinite(parsed)) return 0
+    return Math.max(0, parsed)
+}
+
+function cleanSearchQuery(value: string | undefined): string {
+    return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().toLowerCase() : ''
 }
 
 function parseTypeFilter(value: string | undefined): Set<ActivityKind> | null {
@@ -124,8 +134,12 @@ function artifactFromUrl(url: string, kind: ActivityArtifact['kind']): ActivityA
         // Fall through to a plain link.
     }
 
-    const label = url.split('/').pop()?.split('?')[0] || kind
-    const ext = (label.split('.').pop() || kind).toUpperCase()
+    let label = url.split('/').pop()?.split('?')[0] || kind
+    let ext = (label.split('.').pop() || kind).toUpperCase()
+    if (kind === 'video' && !VIDEO_EXTENSIONS.has(ext.toLowerCase())) {
+        label = 'Generated video'
+        ext = 'VIDEO'
+    }
     return { href: url, label, kind, ext }
 }
 
@@ -190,16 +204,42 @@ function agentInfo(agentId: string | null): Pick<ActivityItem, 'agentName' | 'ag
     }
 }
 
+function activitySearchText(item: ActivityItem): string {
+    return [
+        item.kind,
+        item.title,
+        item.description,
+        item.agentName,
+        item.agentId,
+        item.status,
+        item.severity,
+        item.sourceLabel,
+        item.sourceId,
+        ...(item.artifacts?.flatMap((artifact) => [
+            artifact.label,
+            artifact.ext,
+            artifact.kind,
+        ]) || []),
+    ]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .join(' ')
+        .toLowerCase()
+}
+
 export async function registerActivityRoutes(app: FastifyInstance): Promise<void> {
-    app.get<{ Querystring: { limit?: string; types?: string } }>('/', async (req) => {
+    app.get<{ Querystring: { limit?: string; offset?: string; types?: string; search?: string } }>('/', async (req) => {
         const db = getDb()
         const limit = clampLimit(req.query.limit)
+        const offset = clampOffset(req.query.offset)
+        const searchQuery = cleanSearchQuery(req.query.search)
+        const queryLimit = searchQuery ? -1 : Math.max(limit + offset, limit)
         const typeFilter = parseTypeFilter(req.query.types)
         const includes = (kind: ActivityKind) => !typeFilter || typeFilter.has(kind)
         const items: ActivityItem[] = []
+        const activeInstances = listActiveInstances()
 
         if (includes('instance')) {
-            for (const instance of listActiveInstances()) {
+            for (const instance of activeInstances) {
                 items.push({
                     id: `instance:${instance.id}`,
                     kind: 'instance',
@@ -220,7 +260,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         if (includes('notification')) {
-            const rows = db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?').all(limit) as {
+            const rows = db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?').all(queryLimit) as {
                 id: string
                 agent_id: string
                 conversation_id: string | null
@@ -250,13 +290,13 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
 
         if (includes('cron')) {
             const activeCronRunsByConversation = new Map(
-                listActiveInstances()
+                activeInstances
                     .filter((instance) => instance.type === 'cron' && instance.conversationId)
                     .map((instance) => [instance.conversationId!, instance])
             )
             const rows = db.prepare(
                 "SELECT id, title, agent_id, created_at, updated_at FROM conversations WHERE origin = 'cron' ORDER BY updated_at DESC LIMIT ?"
-            ).all(limit) as { id: string; title: string | null; agent_id: string | null; created_at: number; updated_at: number }[]
+            ).all(queryLimit) as { id: string; title: string | null; agent_id: string | null; created_at: number; updated_at: number }[]
             for (const row of rows) {
                 const activeRun = activeCronRunsByConversation.get(row.id)
                 const isRunning = Boolean(activeRun)
@@ -280,6 +320,11 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         if (includes('chat')) {
+            const activeChatConversationIds = new Set(
+                activeInstances
+                    .filter((instance) => instance.conversationId)
+                    .map((instance) => instance.conversationId!)
+            )
             const rows = db.prepare(
                 `SELECT c.id, c.title, c.agent_id, c.created_at, c.updated_at,
                         (SELECT SUBSTR(m.content, 1, 220)
@@ -291,7 +336,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                  WHERE c.origin = 'chat'
                  ORDER BY c.updated_at DESC
                  LIMIT ?`
-            ).all(limit) as {
+            ).all(queryLimit) as {
                 id: string
                 title: string | null
                 agent_id: string | null
@@ -301,6 +346,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             }[]
 
             for (const row of rows) {
+                if (activeChatConversationIds.has(row.id)) continue
                 const title = row.title && row.title !== 'New Chat' ? row.title : 'Chat message'
                 items.push({
                     id: `chat:${row.id}`,
@@ -330,7 +376,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                  WHERE c.origin = 'channel'
                  ORDER BY c.updated_at DESC
                  LIMIT ?`
-            ).all(limit) as {
+            ).all(queryLimit) as {
                 id: string
                 title: string | null
                 agent_id: string | null
@@ -366,7 +412,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                  WHERE m.role = 'assistant'
                  ORDER BY m.created_at DESC
                  LIMIT ?`
-            ).all(Math.max(limit * 3, 100)) as {
+            ).all(searchQuery ? -1 : Math.max(queryLimit * 3, 100)) as {
                 id: string
                 conversation_id: string
                 content: string
@@ -414,7 +460,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                  WHERE s.results_json IS NOT NULL AND s.results_json != ''
                  ORDER BY s.created_at DESC
                  LIMIT ?`
-            ).all(Math.max(limit * 2, 100)) as {
+            ).all(searchQuery ? -1 : Math.max(queryLimit * 2, 100)) as {
                 id: string
                 conversation_id: string
                 results_json: string
@@ -475,7 +521,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                  LEFT JOIN memory_spaces ms ON ms.id = mfi.space_id
                  ORDER BY MAX(mfi.last_indexed_at, mfi.entity_indexed_at, mfi.created_at) DESC
                  LIMIT ?`
-            ).all(limit) as {
+            ).all(queryLimit) as {
                 space_id: string
                 file_name: string
                 chunk_count: number
@@ -507,6 +553,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         const sorted = items
+            .filter((item) => !searchQuery || activitySearchText(item).includes(searchQuery))
             .sort((a, b) => {
                 const aActive = a.status === 'running' || a.status === 'awaiting-approval'
                 const bActive = b.status === 'running' || b.status === 'awaiting-approval'
@@ -516,8 +563,8 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 if (aActive !== bActive) return aActive ? -1 : 1
                 return b.createdAt - a.createdAt
             })
-            .slice(0, limit)
+        const page = sorted.slice(offset, offset + limit)
 
-        return { items: sorted }
+        return { items: page, hasMore: offset + limit < sorted.length, total: sorted.length }
     })
 }

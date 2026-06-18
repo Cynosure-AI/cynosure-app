@@ -454,12 +454,14 @@ export const api = {
   },
 
   activity: {
-    list: (opts?: { limit?: number; types?: ActivityKind[] }) => {
+    list: (opts?: { limit?: number; offset?: number; types?: ActivityKind[]; search?: string }) => {
       const params = new URLSearchParams()
       if (opts?.limit) params.set('limit', String(opts.limit))
+      if (opts?.offset) params.set('offset', String(opts.offset))
       if (opts?.types?.length) params.set('types', opts.types.join(','))
+      if (opts?.search?.trim()) params.set('search', opts.search.trim())
       const qs = params.toString()
-      return get<{ items: ActivityItem[] }>(`/api/activity${qs ? `?${qs}` : ''}`).then((r) => r.items)
+      return get<{ items: ActivityItem[]; hasMore?: boolean; total?: number }>(`/api/activity${qs ? `?${qs}` : ''}`)
     },
   },
 
