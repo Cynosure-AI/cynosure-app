@@ -953,31 +953,44 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
         description:
             'Update an existing memory file. Auto-matches the title to find the file; if multiple folders contain the same title, folder parameter is required. ' +
             'If exactly one memory folder is selected, omit "folder" to update there when the title is not found elsewhere in the selected scope. ' +
-            'By default, replaces all content and re-indexes the file. ' +
-            'For partial updates, first inspect the relevant chunks with memory_retrieve_chunks, then provide chunkStartIndex and chunkEndIndex. Outside of the max range gets appended.' +
+            'operation is required: "set" replaces content (the whole file, or just the chunkStartIndex/chunkEndIndex range when given); "append" adds content to the end without touching existing text. ' +
+            'For partial updates, first inspect the relevant chunks with memory_retrieve_chunks, then call with operation="set" and chunkStartIndex/chunkEndIndex. ' +
             'The replacement content should contain the complete desired text for that chunk range.',
         parameters: {
             type: 'object',
             properties: {
                 title: { type: 'string', description: 'The title (file name without .md) of the memory entry to update.' },
-                content: { type: 'string', description: 'The new text content. Replaces all content by default, or the selected chunk range when chunkStartIndex/chunkEndIndex are provided.' },
+                operation: {
+                    type: 'string',
+                    enum: ['set', 'append'],
+                    description: '"set" replaces content — the whole file by default, or only the chunkStartIndex/chunkEndIndex range when provided. "append" adds content to the end of the file, leaving existing content untouched.',
+                },
+                content: { type: 'string', description: 'For "set": the replacement text (whole file or the targeted chunk range). For "append": the text to add at the end.' },
                 folder: { type: 'string', description: 'Memory folder name, relative path (e.g. "projects/acme"), or ID. Required only when the title exists in multiple folders; otherwise auto-selected, including the only selected folder.' },
-                chunkStartIndex: { type: 'number', description: 'Optional zero-based first chunk index to replace. Use the chunk index shown by memory_retrieve_chunks or semantic search.' },
-                chunkEndIndex: { type: 'number', description: 'Optional zero-based last chunk index to replace, inclusive. Required when chunkStartIndex is provided.' },
+                chunkStartIndex: { type: 'number', description: 'Only valid with operation="set". Zero-based first chunk index to replace. Use the chunk index shown by memory_retrieve_chunks or semantic search.' },
+                chunkEndIndex: { type: 'number', description: 'Only valid with operation="set". Zero-based last chunk index to replace, inclusive. Required when chunkStartIndex is provided.' },
             },
-            required: ['title', 'content']
+            required: ['title', 'operation', 'content']
         },
         timeout: 30_000,
         execute: async (params: unknown) => {
-            const { title, content, folder, chunkStartIndex, chunkEndIndex, sectionHeading } = params as {
-                title: string; content: string; folder?: string; chunkStartIndex?: number; chunkEndIndex?: number; sectionHeading?: string
+            const { title, operation, content, folder, chunkStartIndex, chunkEndIndex, sectionHeading } = params as {
+                title: string; operation?: string; content: string; folder?: string; chunkStartIndex?: number; chunkEndIndex?: number; sectionHeading?: string
             }
 
             if (sectionHeading?.trim()) {
                 return {
                     success: false,
-                    output: 'Section-heading updates are no longer supported because memories may come from non-Markdown documents. Use memory_retrieve_chunks, then retry memory_update with chunkStartIndex and chunkEndIndex.',
+                    output: 'Section-heading updates are no longer supported because memories may come from non-Markdown documents. Use memory_retrieve_chunks, then retry memory_update with operation="set" and chunkStartIndex/chunkEndIndex.',
                 }
+            }
+
+            if (operation !== 'set' && operation !== 'append') {
+                return { success: false, output: 'operation is required and must be "set" or "append".' }
+            }
+
+            if (operation === 'append' && (chunkStartIndex !== undefined || chunkEndIndex !== undefined)) {
+                return { success: false, output: 'chunkStartIndex/chunkEndIndex only apply to operation="set". Omit them for operation="append".' }
             }
 
             const resolved = await resolveTargetSpace(assignedSpaces, folder, title, getKnownSpaces)
@@ -985,10 +998,9 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 
             const mem = getAgentMemory()
             const targetFilter = buildScopeFilter([{ id: resolved.spaceId }])
-            const existingCount = await mem.countChunks(title.endsWith('.md') ? title : `${title}.md`, targetFilter)
             const fileName = title.endsWith('.md') ? title : `${title}.md`
+            const existingCount = await mem.countChunks(fileName, targetFilter)
 
-            // Every memory must correlate to a file on disk
             const folderPath = getMemorySpaceFolderPath(resolved.spaceId)
             if (!folderPath) {
                 return { success: false, output: `Memory folder "${resolved.spaceName}" has no folder configured. Cannot update memory.` }
@@ -999,17 +1011,9 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 return { success: false, output: `No memory entry found with title "${title}" in "${resolved.spaceName}". Use memory_create to create a new entry.` }
             }
 
-            const hasChunkRange = chunkStartIndex !== undefined || chunkEndIndex !== undefined
-            if (hasChunkRange) {
-                if (!Number.isInteger(chunkStartIndex) || !Number.isInteger(chunkEndIndex)) {
-                    return { success: false, output: 'Partial memory updates require integer chunkStartIndex and chunkEndIndex values.' }
-                }
-                if (chunkStartIndex! < 0 || chunkEndIndex! < chunkStartIndex!) {
-                    return { success: false, output: 'Invalid chunk range. chunkEndIndex must be greater than or equal to chunkStartIndex.' }
-                }
-
+            if (operation === 'append') {
                 if (!existsOnDisk) {
-                    return { success: false, output: `Chunk replacement requires the file "${fileName}" to exist on disk. Use full content replacement instead.` }
+                    return { success: false, output: `Cannot append: file "${fileName}" was not found on disk.` }
                 }
 
                 let fileContent: string
@@ -1019,55 +1023,67 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                     return { success: false, output: `Could not read file "${fileName}" from memory folder.` }
                 }
 
-                const chunks = await mem.getChunksByRange(fileName, chunkStartIndex!, chunkEndIndex!, targetFilter)
-
-                // Case: start index is beyond all existing chunks — append to end
-                if (chunks.length === 0 && chunkStartIndex! > 0) {
-                    backupToRevisions(folderPath, fileName)
-                    const appended = fileContent.trimEnd() + '\n\n' + content.trim() + '\n'
-                    writeTextFile(folderPath, fileName, appended)
-                    clearMemoryGraphSource(resolved.spaceId, fileName)
-
-                    scheduleMemoryReindexJob(resolved.spaceId, fileName)
-
-                    return {
-                        success: true,
-                        output: `Content appended to "${fileName}" in "${resolved.spaceName}". Memory indexing is running in the background.`
-                    }
-                }
-
-                if (chunks.length === 0) {
-                    return {
-                        success: false,
-                        output: `No chunks found for "${fileName}" in range ${chunkStartIndex}-${chunkEndIndex}. Retrieve the current chunks and retry with a valid range.`,
-                    }
-                }
-
-                const replaced = replaceChunkRangeInText(fileContent, chunks, content)
-                if ('error' in replaced) return { success: false, output: replaced.error }
-
                 backupToRevisions(folderPath, fileName)
-                writeTextFile(folderPath, fileName, replaced.content)
+                writeTextFile(folderPath, fileName, fileContent.trimEnd() + '\n\n' + content.trim() + '\n')
                 clearMemoryGraphSource(resolved.spaceId, fileName)
-
                 scheduleMemoryReindexJob(resolved.spaceId, fileName)
 
                 return {
                     success: true,
-                    output: `Chunks ${replaced.startIndex}-${replaced.endIndex} in "${fileName}" updated in "${resolved.spaceName}". Memory indexing is running in the background.`
+                    output: `Content appended to "${fileName}" in "${resolved.spaceName}". Memory indexing is running in the background.`
                 }
-            } else {
-                // Full replacement — backup original (if it exists on disk) then write directly
+            }
+
+            // operation === 'set'
+            const hasChunkRange = chunkStartIndex !== undefined || chunkEndIndex !== undefined
+            if (!hasChunkRange) {
                 if (existsOnDisk) backupToRevisions(folderPath, fileName)
                 writeTextFile(folderPath, fileName, content)
                 clearMemoryGraphSource(resolved.spaceId, fileName)
-
                 scheduleMemoryReindexJob(resolved.spaceId, fileName)
 
                 return {
                     success: true,
-                    output: `Memory "${fileName}" fully updated in "${resolved.spaceName}". Memory indexing is running in the background.`
+                    output: `Memory "${fileName}" fully replaced in "${resolved.spaceName}". Memory indexing is running in the background.`
                 }
+            }
+
+            if (!Number.isInteger(chunkStartIndex) || !Number.isInteger(chunkEndIndex)) {
+                return { success: false, output: 'Partial memory updates require integer chunkStartIndex and chunkEndIndex values.' }
+            }
+            if (chunkStartIndex! < 0 || chunkEndIndex! < chunkStartIndex!) {
+                return { success: false, output: 'Invalid chunk range. chunkEndIndex must be greater than or equal to chunkStartIndex.' }
+            }
+            if (!existsOnDisk) {
+                return { success: false, output: `Chunk replacement requires the file "${fileName}" to exist on disk. Use operation="set" without a chunk range instead.` }
+            }
+
+            let fileContent: string
+            try {
+                fileContent = readTextFile(folderPath, fileName)
+            } catch {
+                return { success: false, output: `Could not read file "${fileName}" from memory folder.` }
+            }
+
+            const chunks = await mem.getChunksByRange(fileName, chunkStartIndex!, chunkEndIndex!, targetFilter)
+            if (chunks.length === 0) {
+                return {
+                    success: false,
+                    output: `No chunks found for "${fileName}" in range ${chunkStartIndex}-${chunkEndIndex}. Retrieve the current chunks and retry with a valid range, or use operation="append" to add new content at the end.`,
+                }
+            }
+
+            const replaced = replaceChunkRangeInText(fileContent, chunks, content)
+            if ('error' in replaced) return { success: false, output: replaced.error }
+
+            backupToRevisions(folderPath, fileName)
+            writeTextFile(folderPath, fileName, replaced.content)
+            clearMemoryGraphSource(resolved.spaceId, fileName)
+            scheduleMemoryReindexJob(resolved.spaceId, fileName)
+
+            return {
+                success: true,
+                output: `Chunks ${replaced.startIndex}-${replaced.endIndex} in "${fileName}" updated in "${resolved.spaceName}". Memory indexing is running in the background.`
             }
         }
     }
