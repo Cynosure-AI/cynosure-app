@@ -102,6 +102,20 @@ function formatRerankerScore(call: ToolCall): string | null {
   return `${Math.round(Math.max(0, Math.min(1, normalized)) * 100)}%`
 }
 
+function formatToolRouterScore(call: ToolCall): string | null {
+  const parsed = parseToolCallArgs(call.arguments)
+  if (parsed?.type !== 'tool-router') return null
+  const score = parsed.routerScore
+  if (typeof score !== 'number' || !Number.isFinite(score)) return null
+  const normalized = score > 1 ? score / 100 : score
+  return `${Math.round(Math.max(0, Math.min(1, normalized)) * 100)}%`
+}
+
+function isToolRouterScoreCall(call?: ToolCall | null): boolean {
+  if (!call) return false
+  return parseToolCallArgs(call.arguments)?.type === 'tool-router'
+}
+
 function memoryCallContent(call: ToolCall | null): string | null {
   if (!call || !isMemoryCall(call)) return null
   const content = parseToolCallArgs(call.arguments)?.content
@@ -144,6 +158,7 @@ function toolCallIcon(call: { name: string; arguments: string }): string {
 
 function toolCallIconClass(name: string, args = ''): string {
   if (isTaskContextCall({ name, arguments: args })) return 'text-cyan-600 dark:text-cyan-300'
+  if (isInternalToolName(name)) return 'text-purple-500 dark:text-purple-300'
   return isSubAgentSpawnCall(name) ? 'text-indigo-500 dark:text-indigo-400' : 'text-accent-500 dark:text-accent-400'
 }
 
@@ -507,7 +522,6 @@ const maContext = computed(() => {
             >
               <div class="flex items-center gap-1.5 mb-1">
                 <Icon
-                  v-if="!isInternalExecution(execution)"
                   :icon="execution.result ? (execution.result.success ? 'lucide:check' : 'lucide:x') : execution.call ? toolCallIcon(execution.call) : 'lucide:terminal'"
                   class="w-3 h-3"
                   :class="execution.result
@@ -530,6 +544,17 @@ const maContext = computed(() => {
                   {{ formatRerankerScore(execution.call) }}
                 </span>
                 <span
+                  v-if="execution.call && formatToolRouterScore(execution.call)"
+                  class="ml-auto inline-flex items-center gap-1 rounded-md bg-accent-100/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-700 ring-1 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-200 dark:ring-accent-500/20"
+                  title="Auto-tool routing match score"
+                >
+                  <Icon
+                    icon="lucide:percent"
+                    class="w-3 h-3"
+                  />
+                  {{ formatToolRouterScore(execution.call) }}
+                </span>
+                <span
                   v-if="execution.call && subAgentCodenameFromArgs(execution.call.arguments)"
                   class="ml-1 inline-flex rounded bg-indigo-200/40 px-1.5 py-0.5 text-[10px] text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"
                 >{{ subAgentCodenameFromArgs(execution.call.arguments) }}</span>
@@ -543,7 +568,7 @@ const maContext = computed(() => {
                 class="mt-1.5 text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
               >{{ memoryCallMetadata(execution.call) }}</pre>
               <pre
-                v-else-if="execution.call?.arguments && execution.call.arguments !== '{}'"
+                v-else-if="execution.call?.arguments && execution.call.arguments !== '{}' && !isToolRouterScoreCall(execution.call)"
                 class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
               >{{ prettifyJson(execution.call.arguments) }}</pre>
               <pre

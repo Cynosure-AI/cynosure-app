@@ -2,7 +2,7 @@ const INTERNAL_TOOL_PREFIXES = [
   'orchestrator_',
   'attachment_',
   'memory_',
-  'entity_graph_',
+  'relationship_graph_',
 ]
 
 const INTERNAL_TOOL_NAMES = new Set([

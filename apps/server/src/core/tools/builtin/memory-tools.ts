@@ -52,16 +52,16 @@ export const MEMORY_TOOL_NAMES = [
     ...MEMORY_WRITE_TOOL_NAMES,
 ] as const
 
-export const ENTITY_GRAPH_TOOL_NAMES = [
-    'entity_graph_search',
-    'entity_graph_assert',
-    'entity_graph_delete',
+export const RELATIONSHIP_GRAPH_TOOL_NAMES = [
+    'relationship_graph_search',
+    'relationship_graph_assert',
+    'relationship_graph_delete',
 ] as const
 
 export type MemoryReadToolName = (typeof MEMORY_READ_TOOL_NAMES)[number]
 export type MemoryWriteToolName = (typeof MEMORY_WRITE_TOOL_NAMES)[number]
 export type MemoryToolName = (typeof MEMORY_TOOL_NAMES)[number]
-export type EntityGraphToolName = (typeof ENTITY_GRAPH_TOOL_NAMES)[number]
+export type RelationshipGraphToolName = (typeof RELATIONSHIP_GRAPH_TOOL_NAMES)[number]
 
 export function isMemoryToolName(toolName: string): toolName is MemoryToolName {
     return (MEMORY_TOOL_NAMES as readonly string[]).includes(toolName)
@@ -71,8 +71,8 @@ export function isMemoryReadToolName(toolName: string): toolName is MemoryReadTo
     return (MEMORY_READ_TOOL_NAMES as readonly string[]).includes(toolName)
 }
 
-export function isEntityGraphToolName(toolName: string): toolName is EntityGraphToolName {
-    return (ENTITY_GRAPH_TOOL_NAMES as readonly string[]).includes(toolName)
+export function isRelationshipGraphToolName(toolName: string): toolName is RelationshipGraphToolName {
+    return (RELATIONSHIP_GRAPH_TOOL_NAMES as readonly string[]).includes(toolName)
 }
 
 export interface MemoryToolOptions {
@@ -683,14 +683,14 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
 }
 
 /**
- * Create an `entity_graph_search` tool that lets the LLM inspect known entities
- * and their nearby relationships.
+ * Create a `relationship_graph_search` tool that lets the LLM inspect known
+ * relationships and their connected entities.
  */
-export function makeEntityGraphSearchTool(): ToolDefinition {
+export function makeRelationshipGraphSearchTool(): ToolDefinition {
     return {
-        name: 'entity_graph_search',
+        name: 'relationship_graph_search',
         description:
-            'Search and inspect the durable entity graph extracted from conversations and memory use. ' +
+            'Search and inspect the durable relationship graph extracted from conversations and memory use. ' +
             'Use this to look up known people, organizations, projects, technologies, concepts, or relationships. ' +
             'Provide a query to find matching entities and walk nearby relationships, or omit query to list recent graph entries.',
         parameters: {
@@ -711,7 +711,7 @@ export function makeEntityGraphSearchTool(): ToolDefinition {
             if (query) {
                 const seedNodes = graph.findSeedNodes(query, [], Math.min(cappedLimit, 12))
                 if (seedNodes.length === 0) {
-                    return { success: false, output: `No entity graph nodes matched "${query}".` }
+                    return { success: false, output: `No relationship graph nodes matched "${query}".` }
                 }
 
                 const walkDepth = Math.floor(clampToolNumber(depth, 2, 1, 3))
@@ -728,7 +728,7 @@ export function makeEntityGraphSearchTool(): ToolDefinition {
 
             const snapshot = graph.list(cappedLimit)
             if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {
-                return { success: false, output: 'The entity graph is empty.' }
+                return { success: false, output: 'The relationship graph is empty.' }
             }
 
             const nodeLines = snapshot.nodes.map(formatEntityNode)
@@ -736,7 +736,7 @@ export function makeEntityGraphSearchTool(): ToolDefinition {
             return {
                 success: true,
                 output: [
-                    `Recent entity graph entries (limit ${cappedLimit}):`,
+                    `Recent relationship graph entries (limit ${cappedLimit}):`,
                     nodeLines.length ? `Nodes:\n${nodeLines.join('\n')}` : '',
                     edgeLines.length ? `Relationships:\n${edgeLines.join('\n')}` : '',
                 ].filter(Boolean).join('\n\n'),
@@ -746,14 +746,14 @@ export function makeEntityGraphSearchTool(): ToolDefinition {
 }
 
 /**
- * Create an `entity_graph_assert` tool that lets the LLM actively record or
- * correct a relationship in the entity graph.
+ * Create a `relationship_graph_assert` tool that lets the LLM actively record
+ * or correct a relationship in the relationship graph.
  */
-export function makeEntityGraphAssertTool(): ToolDefinition {
+export function makeRelationshipGraphAssertTool(): ToolDefinition {
     return {
-        name: 'entity_graph_assert',
+        name: 'relationship_graph_assert',
         description:
-            'Assert or update a durable relationship in the entity graph. ' +
+            'Assert or update a durable relationship in the relationship graph. ' +
             'Use this for stable facts the user explicitly wants remembered as connected entities. ' +
             'This creates missing entities, merges repeated relationships, and may replace older functional relationships such as works_at or lives_in.',
         parameters: {
@@ -809,7 +809,7 @@ export function makeEntityGraphAssertTool(): ToolDefinition {
                 confidence: clampToolNumber(confidence, 0.9, 0.1, 1),
                 importance: Math.round(clampToolNumber(importance, 1, 0, 3)) as 0 | 1 | 2 | 3,
                 evidence: typeof evidence === 'string' ? evidence.replace(/\s+/g, ' ').trim().slice(0, 280) : '',
-            }, 'tool', 'entity_graph_assert')
+            }, 'tool', 'relationship_graph_assert')
 
             if (!edge) return { success: false, output: 'No relationship was created.' }
             return { success: true, output: `Relationship asserted:\n${formatEntityEdge(edge)}` }
@@ -818,19 +818,19 @@ export function makeEntityGraphAssertTool(): ToolDefinition {
 }
 
 /**
- * Create an `entity_graph_delete` tool that lets the LLM remove an incorrect
- * relationship by ID or by exact relationship triple.
+ * Create a `relationship_graph_delete` tool that lets the LLM remove an
+ * incorrect relationship by ID or by exact relationship triple.
  */
-export function makeEntityGraphDeleteTool(): ToolDefinition {
+export function makeRelationshipGraphDeleteTool(): ToolDefinition {
     return {
-        name: 'entity_graph_delete',
+        name: 'relationship_graph_delete',
         description:
-            'Delete an incorrect relationship from the entity graph. ' +
-            'Prefer edgeId from entity_graph_search. If edgeId is unknown, provide from, relation, and to to delete an exact relationship triple.',
+            'Delete an incorrect relationship from the relationship graph. ' +
+            'Prefer edgeId from relationship_graph_search. If edgeId is unknown, provide from, relation, and to to delete an exact relationship triple.',
         parameters: {
             type: 'object',
             properties: {
-                edgeId: { type: 'string', description: 'Relationship edge ID to delete. The short e:xxxxxxxx ID from entity_graph_search is accepted.' },
+                edgeId: { type: 'string', description: 'Relationship edge ID to delete. The short e:xxxxxxxx ID from relationship_graph_search is accepted.' },
                 from: {
                     type: 'object',
                     description: 'Source entity for exact triple deletion when edgeId is not available.',
@@ -861,7 +861,7 @@ export function makeEntityGraphDeleteTool(): ToolDefinition {
                 const resolvedEdgeId = resolveEntityGraphEdgeId(edgeId)
                 const result = graph.deleteEdge(resolvedEdgeId)
                 return result.edgeDeleted
-                    ? { success: true, output: formatEntityGraphDeleteOutput(`Deleted entity graph relationship ${edgeId.trim()}.`, result.orphanedNodeIds.length) }
+                    ? { success: true, output: formatRelationshipGraphDeleteOutput(`Deleted relationship graph edge ${edgeId.trim()}.`, result.orphanedNodeIds.length) }
                     : { success: false, output: `No relationship found with id ${edgeId.trim()}.` }
             }
 
@@ -879,13 +879,13 @@ export function makeEntityGraphDeleteTool(): ToolDefinition {
                 to: toEntity,
             })
             return result.edgeDeleted
-                ? { success: true, output: formatEntityGraphDeleteOutput('Deleted 1 matching entity graph relationship.', result.orphanedNodeIds.length) }
-                : { success: false, output: 'No matching entity graph relationship was found.' }
+                ? { success: true, output: formatRelationshipGraphDeleteOutput('Deleted 1 matching relationship graph edge.', result.orphanedNodeIds.length) }
+                : { success: false, output: 'No matching relationship graph edge was found.' }
         },
     }
 }
 
-function formatEntityGraphDeleteOutput(message: string, orphanedNodeCount: number): string {
+function formatRelationshipGraphDeleteOutput(message: string, orphanedNodeCount: number): string {
     if (orphanedNodeCount === 0) return message
     return `${message} Removed ${orphanedNodeCount} orphaned entit${orphanedNodeCount === 1 ? 'y' : 'ies'}.`
 }

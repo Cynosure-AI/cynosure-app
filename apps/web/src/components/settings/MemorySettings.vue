@@ -60,6 +60,7 @@ const rerankEnabled = ref(false)
 const rerankProviderId = ref('')
 const rerankModel = ref('')
 const rerankCandidateCount = ref(12)
+const minMatchThresholdPercent = ref(30)
 const rerankSaving = ref(false)
 
 // Entity extraction state
@@ -211,6 +212,7 @@ async function loadRerankerConfig() {
     rerankProviderId.value = config.providerId || openRouterProviders.value[0]?.id || ''
     rerankModel.value = config.model
     rerankCandidateCount.value = config.candidateCount
+    minMatchThresholdPercent.value = Math.round((config.minMatchThreshold ?? 0.3) * 100)
   } catch {
     rerankProviderId.value = openRouterProviders.value[0]?.id || ''
   }
@@ -275,12 +277,14 @@ async function saveReranker() {
       enabled: rerankEnabled.value,
       providerId: rerankProviderId.value || undefined,
       model: rerankModel.value,
-      candidateCount: rerankCandidateCount.value
+      candidateCount: rerankCandidateCount.value,
+      minMatchThreshold: minMatchThresholdPercent.value / 100
     })
     rerankEnabled.value = res.enabled
     rerankProviderId.value = res.providerId || rerankProviderId.value
     rerankModel.value = res.model
     rerankCandidateCount.value = res.candidateCount
+    minMatchThresholdPercent.value = Math.round(res.minMatchThreshold * 100)
   } catch { /* error handling */ }
   rerankSaving.value = false
 }
@@ -552,6 +556,24 @@ async function manualClearGraph() {
           >
           <p class="text-xs text-theme-500 mt-1">
             More candidates can improve recall but increase rerank latency.
+          </p>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between gap-3 mb-1">
+            <label class="block text-xs text-theme-400">Minimum Match</label>
+            <span class="text-[11px] text-theme-500 whitespace-nowrap">{{ minMatchThresholdPercent }}%</span>
+          </div>
+          <input
+            v-model.number="minMatchThresholdPercent"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            class="w-full accent-accent-500"
+          >
+          <p class="text-xs text-theme-500 mt-1">
+            Semantic search and auto-memory results below this score are ignored.
           </p>
         </div>
       </div>

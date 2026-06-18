@@ -100,7 +100,7 @@ const autoApprovedCount = computed(() =>
 
 function isInternalTool(tool: ToolInfo): boolean {
   const name = tool.name
-  return name.startsWith('orchestrator_') || name.startsWith('attachment_') || name.startsWith('memory_') || name.startsWith('entity_graph_') || name === 'memory_forget' || name === 'expand_available_toolset' || name === 'spawn_subagent'
+  return name.startsWith('orchestrator_') || name.startsWith('attachment_') || name.startsWith('memory_') || name.startsWith('relationship_graph_') || name === 'memory_forget' || name === 'expand_available_toolset' || name === 'spawn_subagent'
 }
 
 function normalizeNamespace(namespace: ToolNamespace, tool?: ToolInfo): ToolNamespace {
@@ -179,7 +179,7 @@ function toolCategory(tool: ToolInfo): string {
   const name = tool.name
   if (tool.namespace.id.startsWith('mcp:')) return 'MCP'
   if (name.startsWith('memory_') || name === 'memory_forget') return 'Memory'
-  if (name.startsWith('entity_graph_')) return 'Entity'
+  if (name.startsWith('relationship_graph_')) return 'Relationships'
   if (name.startsWith('orchestrator_')) return 'Orchestration'
   if (name.startsWith('attachment_')) return 'Attachment'
   return 'Built-In'

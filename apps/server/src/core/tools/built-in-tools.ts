@@ -14,11 +14,11 @@ import {
     makeMemoryCreateTool,
     makeMemoryUpdateTool,
     makeForgetMemoryTool,
-    makeEntityGraphSearchTool,
-    makeEntityGraphAssertTool,
-    makeEntityGraphDeleteTool,
+    makeRelationshipGraphSearchTool,
+    makeRelationshipGraphAssertTool,
+    makeRelationshipGraphDeleteTool,
     MEMORY_TOOL_NAMES,
-    ENTITY_GRAPH_TOOL_NAMES,
+    RELATIONSHIP_GRAPH_TOOL_NAMES,
 } from "./builtin/memory-tools.js";
 export {
     makeNotificationTool,
@@ -28,17 +28,17 @@ export {
     makeMemoryCreateTool,
     makeMemoryUpdateTool,
     makeForgetMemoryTool,
-    makeEntityGraphSearchTool,
-    makeEntityGraphAssertTool,
-    makeEntityGraphDeleteTool,
+    makeRelationshipGraphSearchTool,
+    makeRelationshipGraphAssertTool,
+    makeRelationshipGraphDeleteTool,
     MEMORY_TOOL_NAMES,
-    ENTITY_GRAPH_TOOL_NAMES,
+    RELATIONSHIP_GRAPH_TOOL_NAMES,
 };
 export type { NotificationToolOptions } from "./builtin/notification.js";
 export {
     MEMORY_READ_TOOL_NAMES,
     MEMORY_WRITE_TOOL_NAMES,
-    isEntityGraphToolName,
+    isRelationshipGraphToolName,
     isMemoryToolName,
     isMemoryReadToolName,
     type MemoryToolOptions,
@@ -96,9 +96,9 @@ const BUILTIN_TOOL_HYDRATORS = {
     memory_forget: (ctx: BuiltInHydrationContext) => makeForgetMemoryTool({
         assignedSpaces: ctx.assignedSpaces,
     }),
-    entity_graph_search: () => makeEntityGraphSearchTool(),
-    entity_graph_assert: () => makeEntityGraphAssertTool(),
-    entity_graph_delete: () => makeEntityGraphDeleteTool(),
+    relationship_graph_search: () => makeRelationshipGraphSearchTool(),
+    relationship_graph_assert: () => makeRelationshipGraphAssertTool(),
+    relationship_graph_delete: () => makeRelationshipGraphDeleteTool(),
 } as const satisfies Record<string, (ctx: BuiltInHydrationContext) => ToolDefinition>;
 
 export const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_HYDRATORS);
@@ -124,15 +124,15 @@ function getBuiltInToolSpecs(): BuiltInToolSpec[] {
 }
 
 export function isBuiltInMemoryToolKey(toolKey: string): boolean {
-    return [...MEMORY_TOOL_NAMES, ...ENTITY_GRAPH_TOOL_NAMES].some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+    return [...MEMORY_TOOL_NAMES, ...RELATIONSHIP_GRAPH_TOOL_NAMES].some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
 }
 
 export function getBuiltInMemoryToolKeys(): string[] {
-    return [...MEMORY_TOOL_NAMES, ...ENTITY_GRAPH_TOOL_NAMES].map((toolName) => `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+    return [...MEMORY_TOOL_NAMES, ...RELATIONSHIP_GRAPH_TOOL_NAMES].map((toolName) => `${BUILTIN_NAMESPACE_ID}::${toolName}`);
 }
 
-export function isBuiltInEntityGraphToolKey(toolKey: string): boolean {
-    return ENTITY_GRAPH_TOOL_NAMES.some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+export function isBuiltInRelationshipGraphToolKey(toolKey: string): boolean {
+    return RELATIONSHIP_GRAPH_TOOL_NAMES.some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
 }
 
 /**

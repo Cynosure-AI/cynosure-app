@@ -347,7 +347,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             }
         })
 
-        return result
+        return result.sort((a, b) => b.modifiedAt - a.modifiedAt || a.fileName.localeCompare(b.fileName))
     })
 
     // POST /api/memory-spaces/:id/files/:fileName/reindex — re-index a specific file
