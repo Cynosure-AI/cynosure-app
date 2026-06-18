@@ -134,6 +134,13 @@ export async function deleteConversationAttachmentIndex(conversationId: string):
     await getRAGStore().deleteByFilter(CONVERSATION_ATTACHMENTS_TABLE, filter)
 }
 
+export async function deleteConversationAttachmentIndexes(conversationIds: string[]): Promise<void> {
+    const spaceIds = Array.from(new Set(conversationIds.map(conversationAttachmentSpaceId)))
+    const filter = lanceDbInFilter('spaceId', spaceIds)
+    if (!filter) return
+    await getRAGStore().deleteByFilter(CONVERSATION_ATTACHMENTS_TABLE, filter)
+}
+
 export function persistMessageFileAttachments(
     db: Database,
     messageId: string,

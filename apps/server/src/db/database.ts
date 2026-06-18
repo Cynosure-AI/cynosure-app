@@ -439,6 +439,8 @@ function createTables(db: Database.Database): void {
 
   // Conversation unread tracking
   addColumnIfMissing('conversations', 'last_read_at', 'INTEGER')
+  addColumnIfMissing('conversations', 'execution_config_json', "TEXT NOT NULL DEFAULT '{}'")
+  addColumnIfMissing('conversations', 'metadata_json', "TEXT NOT NULL DEFAULT '{}'")
 }
 
 export function closeDb(): void {
