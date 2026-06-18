@@ -36,6 +36,7 @@ export interface ChatStreamingState {
     primaryStreamAgent: Ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>
     streamBuffers: Map<string, StreamBuffer>
     subAgentStreamBuffers: Map<string, StreamBuffer>
+    clearConversationStreamState(conversationId: string): void
     findStreamingMsg(): DisplayMessage | undefined
     restoreSubAgentStreams(conversationId: string): void
     finalizeCurrentStreaming(conversationId: string): void
@@ -114,6 +115,26 @@ export function useChatStreaming(
         })
         if (next.length) {
             msg.videoDataUrls = [...(msg.videoDataUrls || []), ...next]
+        }
+    }
+
+    function clearConversationStreamState(conversationId: string): void {
+        const buf = streamBuffers.get(conversationId)
+        streamBuffers.delete(conversationId)
+
+        if (buf?.streamId && buf.streamId === primaryStreamId.value) {
+            primaryStreamId.value = null
+            primaryStreamAgent.value = {}
+        }
+
+        if (conversationId === activeConversationId.value) {
+            isStreaming.value = false
+            currentStreamId.value = null
+            streamingContent.value = ''
+            streamingThinking.value = ''
+            for (const message of messages.value) {
+                if (message.isStreaming) message.isStreaming = false
+            }
         }
     }
 
@@ -656,6 +677,7 @@ export function useChatStreaming(
         primaryStreamAgent,
         streamBuffers,
         subAgentStreamBuffers,
+        clearConversationStreamState,
         findStreamingMsg,
         restoreSubAgentStreams,
         finalizeCurrentStreaming,

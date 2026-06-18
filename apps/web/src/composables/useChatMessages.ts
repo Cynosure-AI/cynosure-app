@@ -57,6 +57,11 @@ export function useChatMessages(
         }))
     }
 
+    function activeConversationIsRunning(): boolean {
+        const conversationId = activeConversationId.value
+        return Boolean(conversationId && agentStore.isConversationExecuting(conversationId))
+    }
+
     async function sendMessage(
         content: string,
         imageDataUrls?: string[],
@@ -81,6 +86,7 @@ export function useChatMessages(
         })
 
         agentStore.clearExecutionState()
+        agentStore.setConversationExecutionState(conversationId, true)
 
         streaming.streamingContent.value = ''
         streaming.streamingThinking.value = ''
@@ -145,11 +151,18 @@ export function useChatMessages(
             },
         }
 
-        await api.chat.send(conversationId, request)
+        try {
+            await api.chat.send(conversationId, request)
+            agentStore.setConversationExecutionState(conversationId, false)
+        } catch (err) {
+            agentStore.setConversationExecutionState(conversationId, false)
+            streaming.clearConversationStreamState(conversationId)
+            throw err
+        }
     }
 
     async function retryFromMessage(messageId: string): Promise<void> {
-        if (!activeConversationId.value || streaming.isStreaming.value) return
+        if (!activeConversationId.value || activeConversationIsRunning()) return
         const idx = messages.value.findIndex(m => m.id === messageId)
         if (idx === -1) return
         const msg = messages.value[idx]
@@ -161,7 +174,7 @@ export function useChatMessages(
     }
 
     async function editMessage(messageId: string, newContent: string): Promise<void> {
-        if (!activeConversationId.value || streaming.isStreaming.value) return
+        if (!activeConversationId.value || activeConversationIsRunning()) return
         const idx = messages.value.findIndex(m => m.id === messageId)
         if (idx === -1) return
         const msg = messages.value[idx]

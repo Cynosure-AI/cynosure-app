@@ -83,12 +83,26 @@ export const useChatStore = defineStore('chat', () => {
     if (streaming.streamBuffers.get(convId)?.active) return true
     return streaming.isStreaming.value && messages.value.some((message) => message.isStreaming)
   })
-  const isConversationLocked = computed(() => {
+  const activeConversationHasRunningInstance = computed(() => {
     const convId = activeConversationId.value
-    return activeConversationIsStreaming.value ||
-      activePostActions.value.size > 0 ||
-      (Boolean(convId) && (agentStore.isConversationExecuting(convId) || agentStore.awaitingHITLConvIds.has(convId!)))
+    return Boolean(convId && (agentStore.isConversationExecuting(convId) || agentStore.awaitingHITLConvIds.has(convId)))
   })
+  const isConversationLocked = computed(() => activeConversationHasRunningInstance.value)
+
+  async function syncConversationRunState(conversationId: string): Promise<void> {
+    try {
+      const instances = await api.instances.list()
+      if (activeConversationId.value !== conversationId) return
+      const activeInstance = instances.find((instance) => instance.conversationId === conversationId)
+      const isRunning = Boolean(activeInstance)
+      agentStore.setConversationExecutionState(conversationId, isRunning)
+      if (!isRunning) {
+        streaming.clearConversationStreamState(conversationId)
+      }
+    } catch {
+      // Non-critical; live websocket events and optimistic local state still keep the UI usable.
+    }
+  }
 
   async function loadConversations(): Promise<void> {
     const agentId = agentConfig.activeAgentId.value
@@ -273,16 +287,9 @@ export const useChatStore = defineStore('chat', () => {
       await agentStore.restoreForConversation(id)
       if (activeConversationId.value !== id) return
 
-      // If we navigated into a conversation after its websocket start events
-      // already fired, hydrate the lock state from the server-side instance list.
-      try {
-        const instances = await api.instances.list()
-        if (activeConversationId.value !== id) return
-        const activeInstance = instances.find((instance) => instance.conversationId === id)
-        agentStore.setConversationExecutionState(id, Boolean(activeInstance))
-      } catch {
-        // Non-critical; live websocket events will still update state.
-      }
+      // If we navigated into a conversation after its websocket events already
+      // fired, hydrate the run lock from the server-side instance list.
+      await syncConversationRunState(id)
     } finally {
       if (activeConversationId.value === id) markConversationRead(id)
       if (activeConversationId.value === id) {
@@ -570,6 +577,7 @@ export const useChatStore = defineStore('chat', () => {
     activeConversation,
     activePostActions,
     activeConversationIsStreaming,
+    activeConversationHasRunningInstance,
     isConversationLocked,
 
     // Unread helpers
@@ -587,7 +595,10 @@ export const useChatStore = defineStore('chat', () => {
     modelCost,
     modelPricing,
     modelModalities,
-    handleStreamStart: streaming.handleStreamStart,
+    handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void {
+      streaming.handleStreamStart(data)
+      agentStore.setConversationExecutionState(data.conversationId, true)
+    },
     handleStreamChunk: streaming.handleStreamChunk,
     handleStreamThinking: streaming.handleStreamThinking,
     handleStreamImages: streaming.handleStreamImages,
