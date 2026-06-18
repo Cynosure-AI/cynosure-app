@@ -219,7 +219,7 @@ const sections: SettingsSection[] = [
     categoryId: 'appearance',
     label: 'Theme',
     description: 'Choose your visual style.',
-    terms: ['theme', 'themes', 'visual style', 'dark', 'light', 'arasaka', 'midnight', 'cyberpunk', 'palette', 'appearance']
+    terms: ['theme', 'themes', 'visual style', 'dark', 'light', 'arasaka', 'galaxy', 'cyberpunk', 'palette', 'appearance']
   },
   {
     id: 'auto-expand-thinking',

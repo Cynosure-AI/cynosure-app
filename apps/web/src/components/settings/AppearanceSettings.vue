@@ -34,7 +34,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#141417', surface: '#202024', accent: '#3b82f6', text: '#f4f4f5' } },
   { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#eef2f7', surface: '#ffffff', accent: '#3b82f6', text: '#0f172a' } },
   { id: 'arasaka', label: 'Arasaka', icon: 'lucide:zap', colors: { bg: '#13090e', surface: '#1c1218', accent: '#00dce8', text: '#f0dce2' } },
-  { id: 'midnight-purple', label: 'Midnight', icon: 'lucide:sparkles', colors: { bg: '#070915', surface: '#171a32', accent: '#a855f7', text: '#f1edff' } },
+  { id: 'galaxy', label: 'Galaxy', icon: 'lucide:sparkles', colors: { bg: '#070915', surface: '#171a32', accent: '#a855f7', text: '#f1edff' } },
   { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#111114', surface: '#181819', accent: '#f9f002', text: '#e8e8f0' } },
   { id: 'matrix', label: 'Matrix', icon: 'lucide:terminal', colors: { bg: '#030705', surface: '#0a120e', accent: '#00ff41', text: '#d8eed8' } },
   { id: 'sakura', label: 'Sakura', icon: 'lucide:flower-2', colors: { bg: '#170e1a', surface: '#241426', accent: '#f43f8f', text: '#ffe8f3' } },
