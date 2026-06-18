@@ -203,23 +203,12 @@ function onModelProviderOverride(selection: {
   providerId: string;
   model: string;
 }): void {
-  chatStore.sessionModelOverride = selection.model || null;
+  chatStore.setSessionModel(selection.model || null, selection.providerId || null);
 
-  if (chatStore.activeAgentId) {
-    chatStore.sessionProviderOverride =
-      selection.providerId &&
-      selection.providerId !== selectedAgent.value?.providerId
-        ? selection.providerId
-        : null;
-  } else {
-    chatStore.sessionProviderOverride = selection.providerId;
+  if (!chatStore.activeAgentId) {
     if (selection.providerId) {
       providerStore.setLastUsed(selection.providerId);
     }
-  }
-
-  if (chatStore.activeAgentId) {
-    chatStore.markOverridesModified();
   }
 }
 

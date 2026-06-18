@@ -2,7 +2,7 @@ import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import type { Conversation, DisplayMessage } from '../stores/chat.store'
-import { SK_ACTIVE_AGENT } from '../utils/storage-keys'
+import { SK_ACTIVE_AGENT, SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
 
 interface ChatPreset {
     tools: string[]
@@ -84,6 +84,38 @@ function presetsEqual(a: ChatPreset, b: ChatPreset): boolean {
         a.providerOverride === b.providerOverride
 }
 
+function presetsEqualWithoutProviderModel(a: ChatPreset, b: ChatPreset): boolean {
+    return arraysEqual(a.tools, b.tools) &&
+        arraysEqual(a.subAgentIds, b.subAgentIds) &&
+        arraysEqual(a.memorySpaceIds, b.memorySpaceIds) &&
+        arraysEqual(a.skillIds, b.skillIds) &&
+        a.systemPrompt === b.systemPrompt &&
+        a.thinkingEnabled === b.thinkingEnabled &&
+        a.autoToolRouting === b.autoToolRouting &&
+        a.autoMemory === b.autoMemory &&
+        a.autoSkillRouting === b.autoSkillRouting
+}
+
+function loadStoredValue(key: string): string | null {
+    try {
+        return localStorage.getItem(key) || null
+    } catch {
+        return null
+    }
+}
+
+function persistStoredValue(key: string, value: string | null): void {
+    try {
+        if (value) {
+            localStorage.setItem(key, value)
+        } else {
+            localStorage.removeItem(key)
+        }
+    } catch {
+        // Storage can be unavailable in hardened browser contexts.
+    }
+}
+
 export function useChatAgentConfig(
     activeConversationId: Ref<string | null>,
     messages: Ref<DisplayMessage[]>,
@@ -95,8 +127,10 @@ export function useChatAgentConfig(
     const activeAgentId = ref<string | null>(
         sessionStorage.getItem(SK_ACTIVE_AGENT) || null
     )
-    const sessionModelOverride = ref<string | null>(null)
-    const sessionProviderOverride = ref<string | null>(null)
+    const freeChatModelOverride = ref<string | null>(loadStoredValue(SK_FREE_CHAT_MODEL))
+    const freeChatProviderOverride = ref<string | null>(loadStoredValue(SK_FREE_CHAT_PROVIDER))
+    const sessionModelOverride = ref<string | null>(activeAgentId.value ? null : freeChatModelOverride.value)
+    const sessionProviderOverride = ref<string | null>(activeAgentId.value ? null : freeChatProviderOverride.value)
     const sessionSystemPrompt = ref<string>('')
     const sessionThinkingEnabled = ref<boolean>(true)
     const sessionAutoToolRouting = ref<boolean>(!activeAgentId.value)
@@ -175,6 +209,11 @@ export function useChatAgentConfig(
         sessionAutoSkillRouting.value = preset.autoSkillRouting
         sessionModelOverride.value = preset.modelOverride
         sessionProviderOverride.value = preset.providerOverride
+    }
+
+    function restoreFreeChatModelSelection(): void {
+        sessionModelOverride.value = freeChatModelOverride.value
+        sessionProviderOverride.value = freeChatProviderOverride.value
     }
 
     function setAgentBaseline(preset: ChatPreset, model: string | null, providerId: string | null): void {
@@ -270,7 +309,7 @@ export function useChatAgentConfig(
 
     const hasFreeChatOverrides = computed(() => {
         if (activeAgentId.value) return false
-        return !presetsEqual(currentPreset(), regularFreeChatPreset())
+        return !presetsEqualWithoutProviderModel(currentPreset(), regularFreeChatPreset())
     })
 
     function markOverridesModified(): void {
@@ -298,9 +337,13 @@ export function useChatAgentConfig(
             resetAgentOverrides()
             return
         }
+        const modelOverride = sessionModelOverride.value
+        const providerOverride = sessionProviderOverride.value
         const preset = regularFreeChatPreset()
         freeChatPreset.value = clonePreset(preset)
         applyPreset(preset)
+        sessionModelOverride.value = modelOverride
+        sessionProviderOverride.value = providerOverride
     }
 
     async function applyOverridesToAgent(): Promise<void> {
@@ -353,6 +396,7 @@ export function useChatAgentConfig(
             sessionStorage.removeItem(SK_ACTIVE_AGENT)
             ensureFreeChatPreset()
             applyPreset(freeChatPreset.value || regularFreeChatPreset())
+            restoreFreeChatModelSelection()
             setAgentBaseline(regularFreeChatPreset(), null, null)
         }
     }
@@ -373,13 +417,25 @@ export function useChatAgentConfig(
 
     function setSessionModel(model: string | null, providerId?: string | null): void {
         sessionModelOverride.value = model || null
-        sessionProviderOverride.value = (model ? providerId : null) || null
-        captureFreeChatPreset()
+        if (activeAgentId.value) {
+            const agentDefs = useAgentDefinitionsStore()
+            const activeAgent = agentDefs.get(activeAgentId.value)
+            sessionProviderOverride.value = providerId && providerId !== activeAgent?.providerId ? providerId : null
+            markOverridesModified()
+            return
+        }
+
+        sessionProviderOverride.value = providerId || null
+        freeChatModelOverride.value = sessionModelOverride.value
+        freeChatProviderOverride.value = sessionProviderOverride.value
+        persistStoredValue(SK_FREE_CHAT_MODEL, freeChatModelOverride.value)
+        persistStoredValue(SK_FREE_CHAT_PROVIDER, freeChatProviderOverride.value)
     }
 
     function syncAgentBaseline(): void {
         if (!activeAgentId.value) {
             ensureFreeChatPreset()
+            restoreFreeChatModelSelection()
             return
         }
         const { preset, model, providerId } = agentPreset(activeAgentId.value)
