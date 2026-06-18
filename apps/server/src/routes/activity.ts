@@ -128,6 +128,33 @@ function artifactFromUrl(url: string, kind: ActivityArtifact['kind']): ActivityA
     return { href: url, label, kind, ext }
 }
 
+function artifactKey(artifact: ActivityArtifact): string {
+    try {
+        const parsed = new URL(artifact.href, 'http://local')
+        const path = parsed.searchParams.get('path')
+        if (path) return `path:${path}`
+    } catch {
+        // Fall through to href-based matching.
+    }
+    return `href:${artifact.href}`
+}
+
+function dedupeArtifacts(artifacts: ActivityArtifact[]): ActivityArtifact[] {
+    const seen = new Set<string>()
+    const unique: ActivityArtifact[] = []
+    for (const artifact of artifacts) {
+        const key = artifactKey(artifact)
+        if (seen.has(key)) continue
+        seen.add(key)
+        unique.push(artifact)
+    }
+    return unique
+}
+
+function isMediaArtifact(artifact: ActivityArtifact): boolean {
+    return artifact.kind === 'image' || artifact.kind === 'video'
+}
+
 function artifactKindFromPath(path: string): ActivityArtifact['kind'] {
     const ext = (path.split('.').pop() || '').toLowerCase()
     if (IMAGE_EXTENSIONS.has(ext)) return 'image'
@@ -291,6 +318,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         if (includes('artifact')) {
+            const messageArtifactKeysByConversation = new Map<string, Set<string>>()
             const messageRows = db.prepare(
                 `SELECT m.id, m.conversation_id, m.content, m.image_urls_json, m.video_urls_json, m.created_at, c.title, c.agent_id
                  FROM messages m
@@ -310,12 +338,20 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             }[]
 
             for (const row of messageRows) {
-                const artifacts = [
+                const artifacts = dedupeArtifacts([
                     ...parseJsonStringArray(row.image_urls_json).map((url) => artifactFromUrl(url, 'image')),
                     ...parseJsonStringArray(row.video_urls_json).map((url) => artifactFromUrl(url, 'video')),
                     ...fileArtifactsFromText(row.content),
-                ]
+                ])
                 if (!artifacts.length) continue
+                let conversationKeys = messageArtifactKeysByConversation.get(row.conversation_id)
+                if (!conversationKeys) {
+                    conversationKeys = new Set<string>()
+                    messageArtifactKeysByConversation.set(row.conversation_id, conversationKeys)
+                }
+                for (const artifact of artifacts) {
+                    conversationKeys.add(artifactKey(artifact))
+                }
                 items.push({
                     id: `artifact:${row.id}`,
                     kind: 'artifact',
@@ -348,12 +384,20 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             }[]
 
             for (const row of stepRows) {
-                const artifacts = fileArtifactsFromText(row.results_json)
+                const artifacts = dedupeArtifacts(fileArtifactsFromText(row.results_json))
                 if (!artifacts.length) continue
+                const messageArtifactKeys = messageArtifactKeysByConversation.get(row.conversation_id)
+                const overlapsAssistantArtifact = messageArtifactKeys
+                    ? artifacts.some((artifact) => messageArtifactKeys.has(artifactKey(artifact)))
+                    : false
+                const visibleArtifacts = overlapsAssistantArtifact
+                    ? artifacts.filter((artifact) => !isMediaArtifact(artifact))
+                    : artifacts
+                if (!visibleArtifacts.length) continue
                 items.push({
                     id: `artifact-step:${row.id}`,
                     kind: 'artifact',
-                    title: artifacts.length === 1 ? `Generated ${artifacts[0].label}` : `Generated ${artifacts.length} artifacts`,
+                    title: visibleArtifacts.length === 1 ? `Generated ${visibleArtifacts[0].label}` : `Generated ${visibleArtifacts.length} artifacts`,
                     description: row.title || 'Tool output',
                     createdAt: row.created_at,
                     agentId: row.agent_id,
@@ -361,7 +405,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                     conversationId: row.conversation_id,
                     sourceId: row.id,
                     sourceLabel: 'Tool artifact',
-                    artifacts,
+                    artifacts: visibleArtifacts,
                 })
             }
         }
