@@ -482,6 +482,7 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
         description:
             'List memorised documents (source files) stored in your knowledge base. ' +
             'Returns document names, chunk counts, and ingestion dates. Paginated — max 100 per page. ' +
+            'By default results are newest first; pass "query" to filter document names before paging. ' +
             'Use this to discover what documents are available before using memory_retrieve_chunks or memory_semantic_search. ' +
             'Selected memory folders are treated as one unified knowledge base for reading — use the optional "folder" parameter to filter to a specific folder. ' +
             makeScopeSummary(assignedSpaces),
@@ -489,19 +490,28 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
             type: 'object',
             properties: {
                 pageIndex: { type: 'number', description: 'Zero-based page index (default: 0). Each page returns up to 100 documents.' },
+                query: { type: 'string', description: 'Optional search query to filter document names before paging.' },
                 folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the listing. Without this, searches all selected folders.' },
             },
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { pageIndex, folder } = (params || {}) as { pageIndex?: number; folder?: string }
+            const { pageIndex, folder, query } = (params || {}) as { pageIndex?: number; folder?: string; query?: string }
             const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder, getKnownSpaces)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
-            const allFiles = await mem.listSourceFiles(undefined, resolvedScope.filter)
+            const searchQuery = cleanToolString(query)
+            const allFiles = (await mem.listSourceFiles(undefined, resolvedScope.filter))
+                .filter((file) => !searchQuery || file.sourceFile.toLowerCase().includes(searchQuery.toLowerCase()))
 
             if (allFiles.length === 0) {
-                return { success: false, output: `No documents stored in ${resolvedScope.space ? `"${resolvedScope.space.name}"` : 'memory'} yet.` }
+                const location = resolvedScope.space ? `"${resolvedScope.space.name}"` : 'memory'
+                return {
+                    success: false,
+                    output: searchQuery
+                        ? `No documents matching "${searchQuery}" found in ${location}.`
+                        : `No documents stored in ${location} yet.`
+                }
             }
 
             const PAGE_SIZE = 100
@@ -519,9 +529,10 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
             )
 
             const scope = resolvedScope.space ? ` in "${resolvedScope.space.name}"` : ''
+            const queryLabel = searchQuery ? ` matching "${searchQuery}"` : ''
             const header = allFiles.length <= PAGE_SIZE
-                ? `${allFiles.length} document${allFiles.length !== 1 ? 's' : ''}${scope}:`
-                : `Page ${page + 1}/${totalPages}${scope} (showing ${pageFiles.length} of ${allFiles.length} documents):`
+                ? `${allFiles.length} document${allFiles.length !== 1 ? 's' : ''}${scope}${queryLabel}:`
+                : `Page ${page + 1}/${totalPages}${scope}${queryLabel} (showing ${pageFiles.length} of ${allFiles.length} documents):`
 
             return {
                 success: true,

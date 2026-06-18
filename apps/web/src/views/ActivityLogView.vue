@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { api } from "../api/client";
@@ -14,12 +14,17 @@ const agentDefs = useAgentDefinitionsStore();
 
 const items = ref<ActivityItem[]>([]);
 const loading = ref(true);
+const loadingMore = ref(false);
+const hasMore = ref(false);
+const totalItems = ref(0);
 const selectedKinds = ref<ActivityKind[]>(["instance", "artifact", "notification", "cron", "memory", "channels"]);
 const searchQuery = ref("");
 const now = ref(Date.now());
 const stoppingInstanceIds = ref<Set<string>>(new Set());
+const PAGE_SIZE = 30;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let unsubNotification: (() => void) | undefined;
 let unsubExecutionUpdate: (() => void) | undefined;
 
@@ -34,13 +39,7 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
 ];
 
 const filteredItems = computed(() => {
-  const kinds = new Set(selectedKinds.value);
-  const query = searchQuery.value.trim().toLowerCase();
-  return items.value.filter((item) => {
-    if (!kinds.has(item.kind)) return false;
-    if (!query) return true;
-    return activitySearchText(item).includes(query);
-  });
+  return items.value;
 });
 
 const totalByKind = computed(() => {
@@ -80,38 +79,56 @@ function toggleAllKinds(): void {
     : filterOptions.map((option) => option.value);
 }
 
-function activitySearchText(item: ActivityItem): string {
-  return [
-    item.kind,
-    item.title,
-    item.description,
-    item.agentName,
-    item.agentId,
-    item.status,
-    item.severity,
-    item.sourceLabel,
-    item.sourceId,
-    ...(item.artifacts?.flatMap((artifact) => [
-      artifact.label,
-      artifact.ext,
-      artifact.kind,
-    ]) || []),
-  ]
-    .filter((value): value is string => typeof value === "string" && value.length > 0)
-    .join(" ")
-    .toLowerCase();
-}
-
 function clearSearch(): void {
   searchQuery.value = "";
 }
 
+function activityRequestOptions(offset = 0) {
+  return {
+    limit: PAGE_SIZE,
+    offset,
+    types: selectedKinds.value,
+    search: searchQuery.value,
+  };
+}
+
 async function loadActivity() {
+  if (selectedKinds.value.length === 0) {
+    items.value = [];
+    hasMore.value = false;
+    totalItems.value = 0;
+    loading.value = false;
+    return;
+  }
   try {
-    items.value = await api.activity.list({ limit: 120 });
+    loading.value = true;
+    const response = await api.activity.list(activityRequestOptions(0));
+    items.value = response.items;
+    hasMore.value = Boolean(response.hasMore);
+    totalItems.value = response.total ?? response.items.length;
   } finally {
     loading.value = false;
   }
+}
+
+async function loadMoreActivity() {
+  if (selectedKinds.value.length === 0 || loading.value || loadingMore.value || !hasMore.value) return;
+  loadingMore.value = true;
+  try {
+    const response = await api.activity.list(activityRequestOptions(items.value.length));
+    items.value = [...items.value, ...response.items];
+    hasMore.value = Boolean(response.hasMore);
+    totalItems.value = response.total ?? items.value.length;
+  } finally {
+    loadingMore.value = false;
+  }
+}
+
+function handleScroll(event: Event): void {
+  const el = event.currentTarget as HTMLElement | null;
+  if (!el) return;
+  const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+  if (distanceToBottom < 360) void loadMoreActivity();
 }
 
 function formatTimeAgo(ts: number): string {
@@ -212,6 +229,12 @@ function artifactIcon(kind: string): string {
   return "lucide:file";
 }
 
+function artifactTypeLabel(kind: string): string {
+  if (kind === "video") return "Video";
+  if (kind === "image") return "Image";
+  return "File";
+}
+
 function isImageArtifact(kind: string): boolean {
   return kind === "image";
 }
@@ -249,13 +272,26 @@ onMounted(() => {
 onUnmounted(() => {
   clearInterval(refreshTimer);
   clearInterval(tickTimer);
+  clearTimeout(searchTimer);
   unsubNotification?.();
   unsubExecutionUpdate?.();
+});
+
+watch(selectedKinds, () => {
+  void loadActivity();
+});
+
+watch(searchQuery, () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => void loadActivity(), 250);
 });
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto px-4 py-4 pb-12 sm:px-8 sm:py-6">
+  <div
+    class="h-full overflow-y-auto px-4 py-4 pb-12 sm:px-8 sm:py-6"
+    @scroll.passive="handleScroll"
+  >
     <header class="mb-4 mx-auto flex max-w-6xl flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <h1 class="text-[1.45rem] font-bold tracking-[0.02em] text-theme-100">
@@ -338,9 +374,9 @@ onUnmounted(() => {
                   icon="lucide:list-filter"
                   class="h-3.5 w-3.5"
                 />
-                All activity
+                Loaded activity
               </span>
-              <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ items.length }}</span>
+              <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ totalItems }}</span>
             </button>
 
             <div class="my-1 h-px bg-theme-800" />
@@ -533,6 +569,7 @@ onUnmounted(() => {
                     :icon="artifactIcon(artifact.kind)"
                     class="h-3.5 w-3.5 shrink-0"
                   />
+                  <span class="shrink-0 text-[10px] uppercase text-theme-500">{{ artifactTypeLabel(artifact.kind) }}</span>
                   <span class="min-w-0 truncate">{{ artifact.label }}</span>
                   <span class="shrink-0 text-[10px] uppercase text-theme-500">{{ artifact.ext }}</span>
                 </a>
@@ -562,6 +599,34 @@ onUnmounted(() => {
           </article>
         </div>
       </section>
+
+      <div
+        v-if="loadingMore"
+        class="flex items-center justify-center gap-2 py-6 text-sm text-theme-500"
+      >
+        <Icon
+          icon="lucide:loader-2"
+          class="h-4 w-4 animate-spin"
+        />
+        Loading more activity...
+      </div>
+
+      <div
+        v-else-if="hasMore"
+        class="flex justify-center py-6"
+      >
+        <button
+          type="button"
+          class="inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
+          @click="loadMoreActivity"
+        >
+          <Icon
+            icon="lucide:chevrons-down"
+            class="h-4 w-4"
+          />
+          Load more
+        </button>
+      </div>
     </div>
   </div>
 </template>
