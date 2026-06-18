@@ -77,11 +77,17 @@ export const useChatStore = defineStore('chat', () => {
   // ── Composables ──
 
   const streaming = useChatStreaming(activeConversationId, messages, conversations, contextWindow)
+  const activeConversationIsStreaming = computed(() => {
+    const convId = activeConversationId.value
+    if (!convId) return false
+    if (streaming.streamBuffers.get(convId)?.active) return true
+    return streaming.isStreaming.value && messages.value.some((message) => message.isStreaming)
+  })
   const isConversationLocked = computed(() => {
     const convId = activeConversationId.value
-    return streaming.isStreaming.value ||
+    return activeConversationIsStreaming.value ||
       activePostActions.value.size > 0 ||
-      (Boolean(convId) && (agentStore.isExecuting || agentStore.awaitingHITLConvIds.has(convId!)))
+      (Boolean(convId) && (agentStore.isConversationExecuting(convId) || agentStore.awaitingHITLConvIds.has(convId!)))
   })
 
   async function loadConversations(): Promise<void> {
@@ -170,13 +176,18 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId.value = id
     agentStore.setActiveViewConversation(id)
     markConversationRead(id)
-    if (agentIdHint !== undefined) {
-      agentConfig.setConversationAgent(agentIdHint)
-    }
     loadingMessages.value = true
     try {
       const response = await api.chat.getMessages(id)
       if (activeConversationId.value !== id) return
+      agentConfig.setConversationAgent(agentIdHint !== undefined ? agentIdHint : response.conversationAgentId)
+
+      // Apply conversation-specific execution config immediately after setting
+      // the agent, before any async work that could trigger a Vue render tick.
+      // This prevents a flash where the agent defaults are briefly shown.
+      const cfg = response.executionConfig
+      agentConfig.restoreConversationConfig(cfg)
+
       const rows = response.messages
       const lastContextTokens = response.lastContextTokens
       const COMPACT_EVENT_PREFIX = '[CONTEXT_COMPACT_EVENT] '
@@ -272,27 +283,6 @@ export const useChatStore = defineStore('chat', () => {
       } catch {
         // Non-critical; live websocket events will still update state.
       }
-
-      const cfg = response.executionConfig
-      const activeAgent = agentDefs.get(agentConfig.activeAgentId.value || '')
-      agentConfig.setSelectedToolNames(cfg.allowedTools)
-      agentConfig.freeChatSubAgentIds.value = cfg.subAgents.map((s: { agentId: string }) => s.agentId)
-      agentConfig.freeChatMemorySpaceIds.value = [...cfg.memorySpaceIds]
-      agentConfig.freeChatMemorySelectionInitialized.value = true
-      agentConfig.freeChatSkillIds.value = [...cfg.selectedSkillIds]
-      agentConfig.sessionSystemPrompt.value = cfg.systemPrompt
-      agentConfig.sessionThinkingEnabled.value = cfg.thinkingEnabled
-      const restoredModel = cfg.model || null
-      const restoredProviderId = cfg.providerId || null
-      const matchesAgentModel = Boolean(activeAgent) &&
-        (restoredModel === (activeAgent?.model || null)) &&
-        (restoredProviderId === (activeAgent?.providerId || null))
-      agentConfig.sessionModelOverride.value = matchesAgentModel ? null : restoredModel
-      agentConfig.sessionProviderOverride.value = matchesAgentModel ? null : restoredProviderId
-      agentConfig.sessionAutoToolRouting.value = cfg.autoToolRouting
-      agentConfig.sessionAutoMemory.value = cfg.autoMemory
-      agentConfig.sessionAutoSkillRouting.value = cfg.autoSkillRouting
-      if (!agentConfig.activeAgentId.value) agentConfig.captureFreeChatPreset()
     } finally {
       if (activeConversationId.value === id) markConversationRead(id)
       if (activeConversationId.value === id) {
@@ -350,9 +340,9 @@ export const useChatStore = defineStore('chat', () => {
         modelPricing.value = info.pricing ?? null
         modelModalities.value = (info.inputModalities?.length || info.outputModalities?.length)
           ? {
-              input: info.inputModalities ?? [],
-              output: info.outputModalities ?? []
-            }
+            input: info.inputModalities ?? [],
+            output: info.outputModalities ?? []
+          }
           : null
       })
       .catch(() => {
@@ -579,6 +569,7 @@ export const useChatStore = defineStore('chat', () => {
     memorySpaces,
     activeConversation,
     activePostActions,
+    activeConversationIsStreaming,
     isConversationLocked,
 
     // Unread helpers
@@ -604,8 +595,16 @@ export const useChatStore = defineStore('chat', () => {
     handleStreamReset: streaming.handleStreamReset,
     handleStreamUsage: streaming.handleStreamUsage,
     finalizeCurrentStreaming: streaming.finalizeCurrentStreaming,
-    handleStreamEnd: streaming.handleStreamEnd,
-    handleStreamError: streaming.handleStreamError,
+    handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number; images?: string[] }): void {
+      streaming.handleStreamEnd(data)
+      // Clear execution state when the stream ends — the task:completed WS event
+      // may arrive later or not at all, so ensure the conversation unlocks promptly.
+      agentStore.setConversationExecutionState(data.conversationId, false)
+    },
+    handleStreamError(data: { streamId: string; conversationId: string; error: string }): void {
+      streaming.handleStreamError(data)
+      agentStore.setConversationExecutionState(data.conversationId, false)
+    },
     handleSubAgentStreamStart: streaming.handleSubAgentStreamStart,
     handleSubAgentStreamChunk: streaming.handleSubAgentStreamChunk,
     handleSubAgentStreamThinking: streaming.handleSubAgentStreamThinking,
@@ -622,8 +621,23 @@ export const useChatStore = defineStore('chat', () => {
     retryFromMessage: chatMessages.retryFromMessage,
     editMessage: chatMessages.editMessage,
     forkConversationFromMessage,
-    cancelStream: chatMessages.cancelStream,
-    cancelPostActions: chatMessages.cancelPostActions,
+    cancelStream(): void {
+      chatMessages.cancelStream()
+      // Ensure post-actions are cleared locally so the conversation unlocks.
+      const id = activeConversationId.value
+      if (id) {
+        postActionsMap.delete(id)
+        postActionsTrigger.value++
+      }
+    },
+    cancelPostActions(convId?: string): void {
+      const id = convId || activeConversationId.value
+      if (id) {
+        postActionsMap.delete(id)
+        postActionsTrigger.value++
+      }
+      chatMessages.cancelPostActions(id || undefined)
+    },
 
     // Agent config (delegated)
     activeAgentId: agentConfig.activeAgentId,

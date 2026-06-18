@@ -2,6 +2,7 @@ import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import type { Conversation, DisplayMessage } from '../stores/chat.store'
+import type { ConversationExecutionConfig } from '@shared/types'
 import { SK_ACTIVE_AGENT, SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
 
 interface ChatPreset {
@@ -46,6 +47,7 @@ export interface ChatAgentConfigApi {
     applyOverridesToAgent(): Promise<void>
     setActiveAgent(id: string | null): Promise<void>
     setConversationAgent(id: string | null): void
+    restoreConversationConfig(config: ConversationExecutionConfig): void
     setSessionModel(model: string | null, providerId?: string | null): void
     syncAgentBaseline(): void
     setFreeChatDefaultMemorySpaceIds(ids: string[]): void
@@ -142,8 +144,8 @@ export function useChatAgentConfig(
     const agentOriginalAutoSkillRouting = ref<boolean>(true)
     const agentOriginalThinkingEnabled = ref<boolean>(true)
     const agentOriginalSystemPrompt = ref<string>('')
-    const agentOriginalModel = ref<string | null>(null)
-    const agentOriginalProviderId = ref<string | null>(null)
+    const agentOriginalModelOverride = ref<string | null>(null)
+    const agentOriginalProviderOverride = ref<string | null>(null)
     const freeChatSubAgentIds = ref<string[]>([])
     const freeChatMemorySpaceIds = ref<string[]>([])
     const freeChatMemorySelectionInitialized = ref<boolean>(false)
@@ -158,6 +160,9 @@ export function useChatAgentConfig(
     watch(() => agentStore.availableTools, (tools) => {
         const availableKeys = new Set(tools.map((tool) => tool.key))
         const filtered = selectedToolNames.value.filter((name) => availableKeys.has(name))
+        if (activeAgentId.value) {
+            agentOriginalTools.value = agentOriginalTools.value.filter((name) => availableKeys.has(name))
+        }
         if (!arraysEqual(filtered, selectedToolNames.value)) {
             selectedToolNames.value = filtered
             captureFreeChatPreset()
@@ -216,7 +221,7 @@ export function useChatAgentConfig(
         sessionProviderOverride.value = freeChatProviderOverride.value
     }
 
-    function setAgentBaseline(preset: ChatPreset, model: string | null, providerId: string | null): void {
+    function setAgentBaseline(preset: ChatPreset): void {
         agentOriginalTools.value = [...preset.tools]
         agentOriginalSubAgentIds.value = [...preset.subAgentIds]
         agentOriginalMemorySpaceIds.value = [...preset.memorySpaceIds]
@@ -226,8 +231,8 @@ export function useChatAgentConfig(
         agentOriginalAutoToolRouting.value = preset.autoToolRouting
         agentOriginalAutoMemory.value = preset.autoMemory
         agentOriginalAutoSkillRouting.value = preset.autoSkillRouting
-        agentOriginalModel.value = model
-        agentOriginalProviderId.value = providerId
+        agentOriginalModelOverride.value = preset.modelOverride
+        agentOriginalProviderOverride.value = preset.providerOverride
     }
 
     function agentPreset(id: string): { preset: ChatPreset; model: string | null; providerId: string | null } {
@@ -302,8 +307,8 @@ export function useChatAgentConfig(
             sessionAutoToolRouting.value !== agentOriginalAutoToolRouting.value ||
             sessionAutoMemory.value !== agentOriginalAutoMemory.value ||
             sessionAutoSkillRouting.value !== agentOriginalAutoSkillRouting.value ||
-            sessionProviderOverride.value !== null ||
-            (sessionModelOverride.value !== null && sessionModelOverride.value !== agentOriginalModel.value)
+            sessionProviderOverride.value !== agentOriginalProviderOverride.value ||
+            sessionModelOverride.value !== agentOriginalModelOverride.value
         )
     })
 
@@ -327,8 +332,8 @@ export function useChatAgentConfig(
             autoToolRouting: agentOriginalAutoToolRouting.value,
             autoMemory: agentOriginalAutoMemory.value,
             autoSkillRouting: agentOriginalAutoSkillRouting.value,
-            modelOverride: null,
-            providerOverride: null,
+            modelOverride: agentOriginalModelOverride.value,
+            providerOverride: agentOriginalProviderOverride.value,
         })
     }
 
@@ -350,38 +355,38 @@ export function useChatAgentConfig(
         if (!activeAgentId.value) return
         const agentDefs = useAgentDefinitionsStore()
         const updates: Record<string, unknown> = {}
+        const { preset: actualPreset, model: actualModel, providerId: actualProviderId } = agentPreset(activeAgentId.value)
 
-        if (!arraysEqual(selectedToolNames.value, agentOriginalTools.value)) {
+        if (!arraysEqual(selectedToolNames.value, actualPreset.tools)) {
             updates.tools = [...selectedToolNames.value]
         }
-        if (!arraysEqual(freeChatSubAgentIds.value, agentOriginalSubAgentIds.value)) {
+        if (!arraysEqual(freeChatSubAgentIds.value, actualPreset.subAgentIds)) {
             updates.subAgents = freeChatSubAgentIds.value.map(id => ({ agentId: id }))
         }
-        if (!arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value)) {
+        if (!arraysEqual(freeChatMemorySpaceIds.value, actualPreset.memorySpaceIds)) {
             updates.memorySpaces = [...freeChatMemorySpaceIds.value]
         }
-        if (!arraysEqual(freeChatSkillIds.value, agentOriginalSkillIds.value)) {
+        if (!arraysEqual(freeChatSkillIds.value, actualPreset.skillIds)) {
             updates.skills = [...freeChatSkillIds.value]
         }
-        if (sessionSystemPrompt.value !== agentOriginalSystemPrompt.value) updates.systemPrompt = sessionSystemPrompt.value
-        if (sessionThinkingEnabled.value !== agentOriginalThinkingEnabled.value) updates.thinkingEnabled = sessionThinkingEnabled.value
-        if (sessionAutoToolRouting.value !== agentOriginalAutoToolRouting.value) updates.autoToolRouting = sessionAutoToolRouting.value
-        if (sessionAutoMemory.value !== agentOriginalAutoMemory.value) updates.autoMemory = sessionAutoMemory.value
-        if (sessionAutoSkillRouting.value !== agentOriginalAutoSkillRouting.value) updates.autoSkillRouting = sessionAutoSkillRouting.value
+        if (sessionSystemPrompt.value !== actualPreset.systemPrompt) updates.systemPrompt = sessionSystemPrompt.value
+        if (sessionThinkingEnabled.value !== actualPreset.thinkingEnabled) updates.thinkingEnabled = sessionThinkingEnabled.value
+        if (sessionAutoToolRouting.value !== actualPreset.autoToolRouting) updates.autoToolRouting = sessionAutoToolRouting.value
+        if (sessionAutoMemory.value !== actualPreset.autoMemory) updates.autoMemory = sessionAutoMemory.value
+        if (sessionAutoSkillRouting.value !== actualPreset.autoSkillRouting) updates.autoSkillRouting = sessionAutoSkillRouting.value
 
-        if (sessionProviderOverride.value !== null) {
-            updates.providerId = sessionProviderOverride.value
-            updates.model = sessionModelOverride.value ?? null
-        } else if (sessionModelOverride.value !== null && sessionModelOverride.value !== agentOriginalModel.value) {
-            updates.model = sessionModelOverride.value
+        const nextProviderId = sessionProviderOverride.value ?? actualProviderId
+        const nextModel = sessionModelOverride.value ?? actualModel
+        if (nextProviderId !== actualProviderId) {
+            updates.providerId = nextProviderId
+            updates.model = nextModel
+        } else if (nextModel !== actualModel) {
+            updates.model = nextModel
         }
 
         if (Object.keys(updates).length === 0) return
         await agentDefs.update(activeAgentId.value, updates)
-
-        setAgentBaseline(currentPreset(), 'model' in updates ? updates.model as string | null : agentOriginalModel.value, 'providerId' in updates ? updates.providerId as string | null : agentOriginalProviderId.value)
-        sessionModelOverride.value = null
-        sessionProviderOverride.value = null
+        applyAgentSelection(activeAgentId.value)
     }
 
     function applyAgentSelection(id: string | null): void {
@@ -389,15 +394,15 @@ export function useChatAgentConfig(
         activeAgentId.value = id
         if (id) {
             sessionStorage.setItem(SK_ACTIVE_AGENT, id)
-            const { preset, model, providerId } = agentPreset(id)
+            const { preset } = agentPreset(id)
             applyPreset(preset)
-            setAgentBaseline(preset, model, providerId)
+            setAgentBaseline(preset)
         } else {
             sessionStorage.removeItem(SK_ACTIVE_AGENT)
             ensureFreeChatPreset()
             applyPreset(freeChatPreset.value || regularFreeChatPreset())
             restoreFreeChatModelSelection()
-            setAgentBaseline(regularFreeChatPreset(), null, null)
+            setAgentBaseline(regularFreeChatPreset())
         }
     }
 
@@ -413,6 +418,79 @@ export function useChatAgentConfig(
 
     function setConversationAgent(id: string | null): void {
         applyAgentSelection(id)
+    }
+
+    function normalizeToolKeys(names: string[]): string[] {
+        const tools = agentStore.availableTools
+        const byKey = new Set(tools.map((tool) => tool.key))
+        const byName = new Map<string, string[]>()
+        for (const tool of tools) {
+            for (const name of [tool.name, tool.executionName]) {
+                const keys = byName.get(name) ?? []
+                keys.push(tool.key)
+                byName.set(name, keys)
+            }
+        }
+
+        const seen = new Set<string>()
+        const normalized: string[] = []
+        for (const name of names) {
+            const key = byKey.has(name)
+                ? name
+                : ((byName.get(name)?.length === 1) ? byName.get(name)![0] : null)
+            if (!key || seen.has(key)) continue
+            seen.add(key)
+            normalized.push(key)
+        }
+        return normalized
+    }
+
+    function isEmptyLegacyExecutionConfig(config: ConversationExecutionConfig): boolean {
+        return !config.allowedTools.length &&
+            !config.subAgents.length &&
+            !config.memorySpaceIds.length &&
+            !config.selectedSkillIds.length &&
+            !config.systemPrompt &&
+            !config.model &&
+            !config.providerId &&
+            config.autoToolRouting === false &&
+            config.autoMemory === false
+    }
+
+    function restoreConversationConfig(config: ConversationExecutionConfig): void {
+        if (activeAgentId.value && isEmptyLegacyExecutionConfig(config)) {
+            const { preset } = agentPreset(activeAgentId.value)
+            applyPreset(preset)
+            setAgentBaseline(preset)
+            return
+        }
+
+        const activeAgent = activeAgentId.value ? useAgentDefinitionsStore().get(activeAgentId.value) : null
+        const restoredModel = config.model || null
+        const restoredProviderId = config.providerId || null
+        const matchesAgentModel = Boolean(activeAgent) &&
+            restoredModel === (activeAgent?.model || null) &&
+            restoredProviderId === (activeAgent?.providerId || null)
+        const preset: ChatPreset = {
+            tools: normalizeToolKeys(config.allowedTools),
+            subAgentIds: config.subAgents.map((subAgent) => subAgent.agentId),
+            memorySpaceIds: [...config.memorySpaceIds],
+            skillIds: [...config.selectedSkillIds],
+            systemPrompt: config.systemPrompt,
+            thinkingEnabled: config.thinkingEnabled,
+            autoToolRouting: config.autoToolRouting,
+            autoMemory: config.autoMemory,
+            autoSkillRouting: config.autoSkillRouting,
+            modelOverride: activeAgent && matchesAgentModel ? null : restoredModel,
+            providerOverride: activeAgent && matchesAgentModel ? null : restoredProviderId,
+        }
+
+        applyPreset(preset)
+        if (activeAgentId.value) {
+            setAgentBaseline(agentPreset(activeAgentId.value).preset)
+        } else {
+            captureFreeChatPreset()
+        }
     }
 
     function setSessionModel(model: string | null, providerId?: string | null): void {
@@ -438,9 +516,9 @@ export function useChatAgentConfig(
             restoreFreeChatModelSelection()
             return
         }
-        const { preset, model, providerId } = agentPreset(activeAgentId.value)
+        const { preset } = agentPreset(activeAgentId.value)
         applyPreset(preset)
-        setAgentBaseline(preset, model, providerId)
+        setAgentBaseline(preset)
     }
 
     return {
@@ -471,6 +549,7 @@ export function useChatAgentConfig(
         applyOverridesToAgent,
         setActiveAgent,
         setConversationAgent,
+        restoreConversationConfig,
         setSessionModel,
         syncAgentBaseline,
         setFreeChatDefaultMemorySpaceIds,

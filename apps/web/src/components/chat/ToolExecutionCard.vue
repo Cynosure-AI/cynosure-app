@@ -102,6 +102,19 @@ function formatRerankerScore(call: ToolCall): string | null {
   return `${Math.round(Math.max(0, Math.min(1, normalized)) * 100)}%`
 }
 
+function memoryCallContent(call: ToolCall | null): string | null {
+  if (!call || !isMemoryCall(call)) return null
+  const content = parseToolCallArgs(call.arguments)?.content
+  return typeof content === 'string' && content.trim() ? content.trim() : null
+}
+
+function memoryCallMetadata(call: ToolCall): string {
+  const parsed = parseToolCallArgs(call.arguments)
+  if (!parsed) return call.arguments
+  const { content: _content, ...metadata } = parsed
+  return Object.keys(metadata).length ? JSON.stringify(metadata, null, 2) : ''
+}
+
 function subAgentCodenameFromArgs(args: string): string | null {
   try {
     const parsed = JSON.parse(args || '{}')
@@ -522,7 +535,15 @@ const maContext = computed(() => {
                 >{{ subAgentCodenameFromArgs(execution.call.arguments) }}</span>
               </div>
               <pre
-                v-if="execution.call?.arguments && execution.call.arguments !== '{}'"
+                v-if="execution.call && isMemoryCall(execution.call) && memoryCallContent(execution.call)"
+                class="text-[11px] leading-relaxed text-theme-300 whitespace-pre-wrap rounded px-2 py-1.5 max-h-64 overflow-y-auto bg-theme-900/70 dark:bg-theme-950/50"
+              >{{ memoryCallContent(execution.call) }}</pre>
+              <pre
+                v-if="execution.call && isMemoryCall(execution.call) && memoryCallMetadata(execution.call)"
+                class="mt-1.5 text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
+              >{{ memoryCallMetadata(execution.call) }}</pre>
+              <pre
+                v-else-if="execution.call?.arguments && execution.call.arguments !== '{}'"
                 class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
               >{{ prettifyJson(execution.call.arguments) }}</pre>
               <pre

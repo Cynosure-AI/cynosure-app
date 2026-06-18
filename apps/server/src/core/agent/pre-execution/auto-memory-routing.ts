@@ -176,6 +176,7 @@ function emitMemoryRoutingSelection(conversationId: string, taskId: string, memo
                 sourceFile: memory.sourceFile,
                 folderPath: memory.spaceName,
                 chunkIndex: memory.chunkIndex,
+                content: memory.text,
                 rerankerScore: memory.rerankerScore,
             }),
         })),

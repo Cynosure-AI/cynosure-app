@@ -54,7 +54,7 @@ function insertSmartTag(tag: string): void {
     title="System Prompt"
     icon="lucide:scroll-text"
     icon-color="accent"
-    max-width="max-w-xl"
+    max-width="max-w-3xl"
     @close="close"
   >
     <div class="flex items-start justify-between gap-3 mb-3">

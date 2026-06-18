@@ -23,6 +23,11 @@ const router = createRouter({
       component: () => import('@/views/triggers/ChatView.vue')
     },
     {
+      path: '/triggers/chat/:conversationId',
+      name: 'conversation',
+      component: () => import('@/views/triggers/ChatView.vue')
+    },
+    {
       path: '/triggers/cron',
       name: 'triggers-cron',
       component: () => import('@/views/triggers/CronView.vue')

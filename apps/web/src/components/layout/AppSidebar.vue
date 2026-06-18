@@ -62,7 +62,7 @@ async function navigateToInstance(instance: AgentInstance) {
   if (instance.conversationId) {
     await chatStore.selectConversation(instance.conversationId);
   }
-  router.push("/triggers/chat");
+  router.push(instance.conversationId ? `/triggers/chat/${instance.conversationId}` : "/triggers/chat");
 }
 
 onMounted(() => {
@@ -108,7 +108,7 @@ async function navigateToNotification(notif: {
   if (notif.conversationId) {
     await chatStore.setActiveAgent(notif.agentId || null);
     await chatStore.selectConversation(notif.conversationId);
-    router.push("/triggers/chat");
+    router.push(`/triggers/chat/${notif.conversationId}`);
   } else if (notif.agentId) {
     router.push(`/agents/${notif.agentId}`);
   }
@@ -136,6 +136,12 @@ const settingsItems: NavItem[] = [
   { to: "/settings/mcp", icon: "lucide:plug", label: "MCP Servers" },
   { to: "/usage", icon: "lucide:bar-chart-3", label: "Usage" },
 ];
+
+const chatRoute = computed(() =>
+  chatStore.activeConversationId
+    ? `/triggers/chat/${chatStore.activeConversationId}`
+    : "/chat",
+);
 </script>
 
 <template>
@@ -316,7 +322,7 @@ const settingsItems: NavItem[] = [
         :disabled="!sidebarCollapsed"
       >
         <RouterLink
-          to="/chat"
+          :to="chatRoute"
           class="nav-item"
           :class="{ active: isActive('/triggers/chat') }"
         >

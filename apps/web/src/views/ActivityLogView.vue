@@ -196,7 +196,7 @@ async function openItem(item: ActivityItem) {
   if (item.conversationId) {
     await chatStore.setActiveAgent(item.agentId || null);
     await chatStore.selectConversation(item.conversationId);
-    router.push("/triggers/chat");
+    router.push(`/triggers/chat/${item.conversationId}`);
   } else if (item.agentId) {
     router.push(`/agents/${item.agentId}`);
   }
