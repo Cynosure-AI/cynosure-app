@@ -16,6 +16,9 @@
         "paths": {
             "@/*": [
                 "./src/*"
+            ],
+            "@cynosure/contracts": [
+                "../../packages/contracts/index.d.ts"
             ]
         },
         "types": [

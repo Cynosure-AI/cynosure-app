@@ -29,5 +29,5 @@ export function isSystemAutoApprovedTool(toolName: string): boolean {
 }
 
 export function isVisibleExecutionTool(toolName: string): boolean {
-  return !isOrchestrationToolName(toolName) && !isAttachmentToolName(toolName)
+  return Boolean(toolName)
 }

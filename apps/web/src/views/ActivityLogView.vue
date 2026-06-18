@@ -13,7 +13,8 @@ const agentDefs = useAgentDefinitionsStore();
 
 const items = ref<ActivityItem[]>([]);
 const loading = ref(true);
-const selectedKind = ref<ActivityKind | "all">("all");
+const selectedKinds = ref<ActivityKind[]>(["instance", "artifact", "notification", "cron", "memory"]);
+const searchQuery = ref("");
 const now = ref(Date.now());
 const stoppingInstanceIds = ref<Set<string>>(new Set());
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
@@ -21,32 +22,77 @@ let tickTimer: ReturnType<typeof setInterval> | undefined;
 let unsubNotification: (() => void) | undefined;
 let unsubExecutionUpdate: (() => void) | undefined;
 
-const filterOptions: { value: ActivityKind | "all"; label: string; icon: string }[] = [
-  { value: "all", label: "All", icon: "lucide:list-filter" },
+const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "instance", label: "Running", icon: "lucide:activity" },
   { value: "artifact", label: "Artifacts", icon: "lucide:file-output" },
+  { value: "chat", label: "Chats", icon: "lucide:message-circle" },
   { value: "notification", label: "Notifications", icon: "lucide:bell" },
   { value: "cron", label: "Cron", icon: "lucide:clock" },
   { value: "memory", label: "Memory", icon: "lucide:brain" },
 ];
 
 const filteredItems = computed(() => {
-  if (selectedKind.value === "all") return items.value;
-  return items.value.filter((item) => item.kind === selectedKind.value);
+  const kinds = new Set(selectedKinds.value);
+  const query = searchQuery.value.trim().toLowerCase();
+  return items.value.filter((item) => {
+    if (!kinds.has(item.kind)) return false;
+    if (!query) return true;
+    return activitySearchText(item).includes(query);
+  });
 });
 
 const totalByKind = computed(() => {
-  const totals: Record<ActivityKind | "all", number> = {
-    all: items.value.length,
+  const totals: Record<ActivityKind, number> = {
     instance: 0,
     artifact: 0,
     notification: 0,
     cron: 0,
     memory: 0,
+    chat: 0,
   };
   for (const item of items.value) totals[item.kind] += 1;
   return totals;
 });
+
+const allKindsSelected = computed(() => selectedKinds.value.length === filterOptions.length);
+
+function toggleKind(kind: ActivityKind): void {
+  selectedKinds.value = selectedKinds.value.includes(kind)
+    ? selectedKinds.value.filter((selected) => selected !== kind)
+    : [...selectedKinds.value, kind];
+}
+
+function toggleAllKinds(): void {
+  selectedKinds.value = allKindsSelected.value
+    ? []
+    : filterOptions.map((option) => option.value);
+}
+
+function activitySearchText(item: ActivityItem): string {
+  return [
+    item.kind,
+    item.title,
+    item.description,
+    item.agentName,
+    item.agentId,
+    item.status,
+    item.severity,
+    item.sourceLabel,
+    item.sourceId,
+    ...(item.artifacts?.flatMap((artifact) => [
+      artifact.label,
+      artifact.ext,
+      artifact.kind,
+    ]) || []),
+  ]
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join(" ")
+    .toLowerCase();
+}
+
+function clearSearch(): void {
+  searchQuery.value = "";
+}
 
 async function loadActivity() {
   try {
@@ -108,18 +154,20 @@ function kindIcon(kind: ActivityKind): string {
       return "lucide:clock-check";
     case "memory":
       return "lucide:brain";
+    case "chat":
+      return "lucide:message-circle";
     default:
       return "lucide:activity";
   }
 }
 
 function kindClass(item: ActivityItem): string {
-  if (item.kind === "notification" && item.severity === "critical") return "activity-critical";
-  if (item.kind === "notification" && item.severity === "warning") return "activity-warning";
-  if (item.kind === "instance" && item.status === "awaiting-approval") return "activity-warning";
+  if (item.kind === "instance") return "activity-instance";
+  if (item.kind === "notification") return "activity-notification";
   if (item.kind === "artifact") return "activity-artifact";
   if (item.kind === "cron") return "activity-cron";
   if (item.kind === "memory") return "activity-memory";
+  if (item.kind === "chat") return "activity-chat";
   return "activity-info";
 }
 
@@ -141,6 +189,16 @@ async function openItem(item: ActivityItem) {
 
 function canStopItem(item: ActivityItem): boolean {
   return item.kind === "instance" && Boolean(item.sourceId);
+}
+
+function artifactIcon(kind: string): string {
+  if (kind === "image") return "lucide:image";
+  if (kind === "video") return "lucide:film";
+  return "lucide:file";
+}
+
+function isImageArtifact(kind: string): boolean {
+  return kind === "image";
 }
 
 async function stopInstance(item: ActivityItem, event: Event) {
@@ -182,18 +240,18 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="activity-view">
-    <header class="activity-header">
+  <div class="h-full overflow-y-auto px-4 py-4 pb-12 sm:px-8 sm:py-6">
+    <header class="mb-4 mx-auto flex max-w-6xl flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
-        <h1 class="activity-title">
+        <h1 class="text-[1.45rem] font-bold tracking-[0.02em] text-theme-100">
           Activity Log
         </h1>
-        <p class="activity-subtitle">
-          Running instances, generated artifacts, notifications, cron runs, and memory indexing in one timeline.
+        <p class="mt-1 max-w-3xl text-sm text-theme-500">
+          Running instances, generated artifacts, chats, notifications, cron runs, and memory indexing in one timeline.
         </p>
       </div>
       <button
-        class="refresh-button"
+        class="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 disabled:cursor-wait disabled:opacity-70 sm:w-auto"
         :disabled="loading"
         @click="loadActivity"
       >
@@ -206,26 +264,66 @@ onUnmounted(() => {
       </button>
     </header>
 
-    <div class="filter-row">
+    <div class="mb-3 mx-auto max-w-6xl">
+      <div class="relative">
+        <Icon
+          icon="lucide:search"
+          class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-600"
+        />
+        <input
+          v-model="searchQuery"
+          type="search"
+          class="w-full rounded-lg border border-theme-800 bg-theme-900/80 py-2 pl-9 pr-10 text-[13px] text-theme-100 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:bg-theme-900"
+          placeholder="Search activity..."
+        >
+        <button
+          v-if="searchQuery"
+          class="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
+          title="Clear search"
+          @click="clearSearch"
+        >
+          <Icon
+            icon="lucide:x"
+            class="h-3.5 w-3.5"
+          />
+        </button>
+      </div>
+    </div>
+
+    <div class="mb-5 flex max-w-6xl flex-wrap gap-2 mx-auto">
+      <button
+        class="filter-chip inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
+        :class="{ 'filter-chip-active': allKindsSelected }"
+        @click="toggleAllKinds"
+      >
+        <span class="h-1.5 w-1.5 rounded-full bg-current opacity-85" />
+        <Icon
+          icon="lucide:list-filter"
+          class="w-3.5 h-3.5"
+        />
+        <span>All</span>
+        <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-300">{{ items.length }}</span>
+      </button>
       <button
         v-for="option in filterOptions"
         :key="option.value"
-        class="filter-chip"
-        :class="{ active: selectedKind === option.value }"
-        @click="selectedKind = option.value"
+        class="filter-chip inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
+        :class="{ 'filter-chip-active': selectedKinds.includes(option.value) }"
+        @click="toggleKind(option.value)"
       >
+        <span class="h-1.5 w-1.5 rounded-full bg-current opacity-85" />
         <Icon
           :icon="option.icon"
           class="w-3.5 h-3.5"
         />
         <span>{{ option.label }}</span>
-        <span class="filter-count">{{ totalByKind[option.value] }}</span>
+        <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-300">{{ totalByKind[option.value] }}</span>
       </button>
     </div>
 
     <div
       v-if="loading && items.length === 0"
-      class="empty-state"
+      class="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-theme-500"
     >
       <Icon
         icon="lucide:loader-2"
@@ -236,54 +334,54 @@ onUnmounted(() => {
 
     <div
       v-else-if="filteredItems.length === 0"
-      class="empty-state"
+      class="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-theme-500"
     >
       <Icon
         icon="lucide:inbox"
         class="w-9 h-9 text-theme-600"
       />
-      <p>No activity for this filter yet.</p>
+      <p>{{ searchQuery.trim() ? "No activity matches your search." : "No activity for this filter yet." }}</p>
     </div>
 
     <div
       v-else
-      class="activity-feed"
+      class="mx-auto max-w-6xl "
     >
       <section
         v-for="group in groupedItems"
         :key="group.label"
-        class="feed-group"
+        class="mb-6"
       >
-        <div class="feed-group-header">
-          <span>{{ group.label }}</span>
-          <span>{{ group.items.length }} events</span>
+        <div class="sticky -top-6 z-[5]   flex items-center gap-3 bg-theme-900 py-4 text-[11px] font-bold uppercase tracking-[0.065em] text-theme-500">
+          <span class="text-lg">{{ group.label }}</span>
+          <span class="font-semibold text-theme-600">{{ group.items.length }} events</span>
         </div>
 
-        <div class="feed-list">
+        <div class="flex flex-col gap-2">
           <article
             v-for="item in group.items"
             :key="item.id"
-            class="feed-item"
-            :class="[kindClass(item), { clickable: item.conversationId || item.agentId }]"
+            class="grid grid-cols-[2rem_minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-[4.2rem_2rem_minmax(0,1fr)]"
+            :class="[kindClass(item), { 'cursor-pointer': item.conversationId || item.agentId }]"
             @click="openItem(item)"
           >
-            <div class="feed-time">
+            <div class="hidden pt-3.5 text-right text-xs tabular-nums text-theme-500 sm:block">
               <span>{{ formatClock(item.createdAt) }}</span>
-              <small>{{ formatTimeAgo(item.createdAt) }}</small>
+              <small class="mt-0.5 block text-[10px] text-theme-700">{{ formatTimeAgo(item.createdAt) }}</small>
             </div>
 
-            <div class="feed-marker">
+            <div class="mt-2.5 flex h-8 w-8 items-center justify-center rounded-full border text-[var(--activity-color)] activity-marker">
               <Icon
                 :icon="kindIcon(item.kind)"
                 class="w-4 h-4"
               />
             </div>
 
-            <div class="feed-card">
-              <div class="feed-card-top">
-                <div class="feed-title-block">
-                  <div class="feed-kicker">
-                    <span class="kind-pill">
+            <div class="activity-card min-w-0 rounded-xl border border-theme-800 bg-theme-950 px-4 py-3 transition">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] text-theme-600">
+                    <span class="font-bold uppercase tracking-[0.055em] text-[var(--activity-color)]">
                       {{ item.kind }}
                     </span>
                     <span v-if="item.sourceLabel">
@@ -291,42 +389,46 @@ onUnmounted(() => {
                     </span>
                   </div>
 
-                  <h2>{{ item.title }}</h2>
+                  <h2 class="text-[15px] font-bold leading-snug text-theme-100">
+                    {{ item.title }}
+                  </h2>
                 </div>
 
-                <span
-                  v-if="item.status"
-                  class="status-pill"
-                >
-                  {{ item.status }}
-                </span>
+                <div class="flex gap-2">
+                  <span
+                    v-if="item.status"
+                    class="status-pill shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
+                  >
+                    {{ item.status }}
+                  </span>
 
-                <button
-                  v-if="canStopItem(item)"
-                  class="stop-button"
-                  :disabled="stoppingInstanceIds.has(item.sourceId!)"
-                  title="Stop instance"
-                  @click="stopInstance(item, $event)"
-                >
-                  <Icon
-                    :icon="stoppingInstanceIds.has(item.sourceId!) ? 'lucide:loader-2' : 'lucide:square'"
-                    class="w-3 h-3"
-                    :class="{ 'animate-spin': stoppingInstanceIds.has(item.sourceId!) }"
-                  />
-                  Stop
-                </button>
+                  <button
+                    v-if="canStopItem(item)"
+                    class="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-400/25 bg-red-400/10 px-2 py-0.5 text-[11px] font-bold text-red-400 transition hover:border-red-300/40 hover:bg-red-400/15 hover:text-red-200 disabled:cursor-wait disabled:opacity-70"
+                    :disabled="stoppingInstanceIds.has(item.sourceId!)"
+                    title="Stop instance"
+                    @click="stopInstance(item, $event)"
+                  >
+                    <Icon
+                      :icon="stoppingInstanceIds.has(item.sourceId!) ? 'lucide:loader-2' : 'lucide:square'"
+                      class="w-3 h-3"
+                      :class="{ 'animate-spin': stoppingInstanceIds.has(item.sourceId!) }"
+                    />
+                    Stop
+                  </button>
+                </div>
               </div>
 
               <p
                 v-if="item.description"
-                class="feed-description"
+                class="mt-1.5 text-[13px] leading-relaxed text-theme-400"
               >
                 {{ item.description }}
               </p>
 
               <div
                 v-if="item.artifacts?.length"
-                class="artifact-row"
+                class="mt-3 flex flex-wrap gap-2"
               >
                 <a
                   v-for="artifact in item.artifacts"
@@ -334,20 +436,29 @@ onUnmounted(() => {
                   :href="artifact.href"
                   target="_blank"
                   rel="noreferrer"
-                  class="artifact-link"
+                  class="artifact-link inline-flex max-w-72 items-center gap-2 overflow-hidden rounded-md border px-2 py-1.5 text-xs text-theme-200"
+                  :class="{ 'min-h-16 pr-3': isImageArtifact(artifact.kind) }"
                   @click.stop
                 >
+                  <img
+                    v-if="isImageArtifact(artifact.kind)"
+                    :src="artifact.href"
+                    :alt="artifact.label"
+                    loading="lazy"
+                    class="h-12 w-16 shrink-0 rounded object-cover"
+                  >
                   <Icon
-                    :icon="artifact.kind === 'image' ? 'lucide:image' : artifact.kind === 'video' ? 'lucide:film' : 'lucide:file'"
-                    class="w-3.5 h-3.5"
+                    v-else
+                    :icon="artifactIcon(artifact.kind)"
+                    class="h-3.5 w-3.5 shrink-0"
                   />
-                  <span>{{ artifact.label }}</span>
-                  <span>{{ artifact.ext }}</span>
+                  <span class="min-w-0 truncate">{{ artifact.label }}</span>
+                  <span class="shrink-0 text-[10px] uppercase text-theme-500">{{ artifact.ext }}</span>
                 </a>
               </div>
 
-              <div class="feed-meta">
-                <span>
+              <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-theme-500">
+                <span class="inline-flex items-center gap-1">
                   <Icon
                     icon="lucide:user-round"
                     class="w-3 h-3"
@@ -355,7 +466,10 @@ onUnmounted(() => {
                   {{ agentLabel(item) }}
                 </span>
 
-                <span v-if="item.conversationId || item.agentId">
+                <span
+                  v-if="item.conversationId || item.agentId"
+                  class="inline-flex items-center gap-1"
+                >
                   <Icon
                     icon="lucide:external-link"
                     class="w-3 h-3"
@@ -371,186 +485,25 @@ onUnmounted(() => {
   </div>
 </template>
 
-<style scoped>.activity-view {
-  height: 100%;
-  overflow-y: auto;
-  padding: 1.5rem 2rem 3rem;
-}
-
-.activity-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  max-width: 72rem;
-}
-
-.activity-title {
-  font-size: 1.45rem;
-  font-weight: 750;
-  color: var(--color-theme-100);
-  letter-spacing: 0.02em;
-}
-
-.activity-subtitle {
-  margin-top: 0.3rem;
-  color: var(--color-theme-500);
-  font-size: 0.875rem;
-  max-width: 46rem;
-}
-
-.refresh-button,
-.filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  border: 1px solid var(--color-theme-800);
-  background: color-mix(in srgb, var(--color-theme-900) 82%, transparent);
-  color: var(--color-theme-400);
-  border-radius: 0.65rem;
-  transition: 150ms ease;
-}
-
-.refresh-button {
-  padding: 0.48rem 0.75rem;
-  font-size: 0.8125rem;
-}
-
-.refresh-button:hover,
-.filter-chip:hover {
-  color: var(--color-theme-100);
-  border-color: var(--color-theme-700);
-  background: var(--color-theme-850, var(--color-theme-900));
-}
-
-.filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  margin-bottom: 1.35rem;
-  max-width: 72rem;
-}
-
-.filter-chip {
-  padding: 0.48rem 0.68rem;
-  font-size: 0.8125rem;
-  position: relative;
-}
-
-.filter-chip::before {
-  content: "";
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 999px;
-  background: currentColor;
-  opacity: 0.85;
-}
-
-.filter-chip.active {
+<style scoped>
+.filter-chip-active {
   color: var(--color-accent-300);
   border-color: color-mix(in srgb, var(--color-accent-500) 50%, transparent);
   background: color-mix(in srgb, var(--color-accent-500) 13%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-500) 12%, transparent) inset;
 }
 
-.filter-count {
-  min-width: 1.3rem;
-  padding: 0.08rem 0.38rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-theme-700) 55%, transparent);
-  color: var(--color-theme-300);
-  font-size: 0.6875rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.activity-feed {
-  max-width: 72rem;
-}
-
-.feed-group {
-  margin-bottom: 1.4rem;
-}
-
-.feed-group-header {
-  position: sticky;
-  top: -1.5rem;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 1rem 0rem;
-  color: var(--color-theme-500);
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.065em;
-  background: var(--color-theme-900)
-}
-
-.feed-group-header span:last-child {
-  color: var(--color-theme-650, var(--color-theme-600));
-  font-weight: 600;
-}
-
-.feed-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.feed-item {
-  display: grid;
-  grid-template-columns: 4.2rem 2rem minmax(0, 1fr);
-  gap: 0.75rem;
-  align-items: stretch;
-}
-
-.feed-item.clickable {
-  cursor: pointer;
-}
-
-.feed-time {
-  padding-top: 0.85rem;
-  text-align: right;
-  color: var(--color-theme-500);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.feed-time small {
-  display: block;
-  margin-top: 0.18rem;
-  color: var(--color-theme-700);
-  font-size: 0.67rem;
-}
-
-.feed-marker {
-  width: 2rem;
-  height: 2rem;
-  margin-top: 0.62rem;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--activity-color);
+.activity-marker {
   background: var(--activity-bg);
   border: 1px solid var(--activity-border);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--activity-color) 5%, transparent);
 }
 
-.feed-card {
-  min-width: 0;
-  position: relative;
-  border: 1px solid var(--color-theme-850, var(--color-theme-800));
+.activity-card {
   border-left: 3px solid var(--activity-color);
-  border-radius: 0.7rem;
-  background: var(--color-theme-950);
-  padding: 0.78rem 0.9rem 0.72rem;
-  transition: 140ms ease;
 }
 
-.feed-item.clickable:hover .feed-card {
+article.cursor-pointer:hover .activity-card {
   transform: translateX(2px);
   border-color: color-mix(in srgb, var(--activity-color) 35%, var(--color-theme-800));
   background:
@@ -562,139 +515,23 @@ onUnmounted(() => {
     var(--color-theme-900);
 }
 
-.feed-card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.9rem;
-}
-
-.feed-title-block {
-  min-width: 0;
-}
-
-.feed-kicker {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.28rem;
-  color: var(--color-theme-600);
-  font-size: 0.7rem;
-}
-
-.kind-pill {
-  color: var(--activity-color);
-  font-weight: 750;
-  text-transform: uppercase;
-  letter-spacing: 0.055em;
-}
-
-.feed-card h2 {
-  color: var(--color-theme-100);
-  font-size: 0.94rem;
-  font-weight: 720;
-  line-height: 1.3;
-}
-
 .status-pill {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  padding: 0.16rem 0.45rem;
-  border-radius: 999px;
   color: var(--activity-color);
   background: color-mix(in srgb, var(--activity-color) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--activity-color) 28%, transparent);
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: lowercase;
-}
-
-.stop-button {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.32rem;
-  padding: 0.16rem 0.5rem;
-  border-radius: 999px;
-  color: #f87171;
-  background: color-mix(in srgb, #f87171 9%, transparent);
-  border: 1px solid color-mix(in srgb, #f87171 24%, transparent);
-  font-size: 0.68rem;
-  font-weight: 700;
-  transition: 140ms ease;
-}
-
-.stop-button:hover:not(:disabled) {
-  color: #fecaca;
-  background: color-mix(in srgb, #f87171 16%, transparent);
-  border-color: color-mix(in srgb, #f87171 42%, transparent);
-}
-
-.stop-button:disabled {
-  cursor: wait;
-  opacity: 0.72;
-}
-
-.feed-description {
-  margin-top: 0.35rem;
-  color: var(--color-theme-400);
-  font-size: 0.81rem;
-  line-height: 1.45;
-}
-
-.feed-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem 0.8rem;
-  align-items: center;
-  margin-top: 0.65rem;
-  color: var(--color-theme-650, var(--color-theme-500));
-  font-size: 0.72rem;
-}
-
-.feed-meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.artifact-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.7rem;
 }
 
 .artifact-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  max-width: 18rem;
-  padding: 0.32rem 0.48rem;
-  border-radius: 0.45rem;
   background: color-mix(in srgb, var(--activity-color) 9%, var(--color-theme-850, var(--color-theme-800)));
   border: 1px solid color-mix(in srgb, var(--activity-color) 18%, transparent);
-  color: var(--color-theme-200);
-  font-size: 0.74rem;
-}
-
-.artifact-link span:nth-child(2) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.artifact-link span:last-child {
-  color: var(--color-theme-500);
-  font-size: 0.62rem;
-  text-transform: uppercase;
 }
 
 .activity-info,
+.activity-instance,
 .activity-artifact,
+.activity-notification,
 .activity-cron,
+.activity-chat,
 .activity-memory,
 .activity-warning,
 .activity-critical {
@@ -709,10 +546,22 @@ onUnmounted(() => {
   --activity-border: color-mix(in srgb, #38bdf8 35%, var(--color-theme-800));
 }
 
+.activity-instance {
+  --activity-color: #f87171;
+  --activity-bg: color-mix(in srgb, #f87171 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #f87171 38%, var(--color-theme-800));
+}
+
 .activity-artifact {
   --activity-color: #22c55e;
   --activity-bg: color-mix(in srgb, #22c55e 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #22c55e 35%, var(--color-theme-800));
+}
+
+.activity-notification {
+  --activity-color: #f59e0b;
+  --activity-bg: color-mix(in srgb, #f59e0b 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #f59e0b 38%, var(--color-theme-800));
 }
 
 .activity-memory {
@@ -721,53 +570,9 @@ onUnmounted(() => {
   --activity-border: color-mix(in srgb, #a78bfa 35%, var(--color-theme-800));
 }
 
-.activity-warning {
-  --activity-color: #f59e0b;
-  --activity-bg: color-mix(in srgb, #f59e0b 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #f59e0b 38%, var(--color-theme-800));
-}
-
-.activity-critical {
-  --activity-color: #f87171;
-  --activity-bg: color-mix(in srgb, #f87171 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #f87171 38%, var(--color-theme-800));
-}
-
-.empty-state {
-  min-height: 20rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  color: var(--color-theme-500);
-  font-size: 0.875rem;
-}
-
-@media (max-width: 720px) {
-  .activity-view {
-    padding: 1rem;
-  }
-
-  .activity-header {
-    flex-direction: column;
-  }
-
-  .refresh-button {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .feed-item {
-    grid-template-columns: 2rem minmax(0, 1fr);
-  }
-
-  .feed-time {
-    display: none;
-  }
-
-  .feed-group-header {
-    margin-left: 0;
-  }
+.activity-chat {
+  --activity-color: #60a5fa;
+  --activity-bg: color-mix(in srgb, #60a5fa 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #60a5fa 35%, var(--color-theme-800));
 }
 </style>

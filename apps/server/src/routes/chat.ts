@@ -11,7 +11,7 @@ import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-to
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
-import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from '../core/agent/context-trimmer.js'
+import { trimMessagesToContextLimit, estimateTotalTokens } from '../core/agent/context-trimmer.js'
 import type { ChatMessage, ContentPart, RegistryAwareToolDefinition, VideoGenerationJob } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
@@ -29,6 +29,7 @@ import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
 import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageArtifactsSystemHint } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemorySpaceOverrides, resolveToolSelection } from '../core/chat/run-config.js'
+import type { ChatSendRequest, ConversationExecutionConfig } from '@cynosure/contracts'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -53,14 +54,14 @@ function usedToolKeysFromNames(
 function persistAutoRoutedUsedTools(
   db: ReturnType<typeof getDb>,
   conversationId: string,
-  chatConfig: Record<string, unknown>,
+  executionConfig: ConversationExecutionConfig,
   tools: RegistryAwareToolDefinition[],
   usedToolNames: Set<string>,
   toolRegistry: ReturnType<typeof getToolRegistry>,
 ): void {
   const allowedTools = usedToolKeysFromNames(tools, usedToolNames, toolRegistry)
-  db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
-    JSON.stringify({ ...chatConfig, allowedTools }),
+  db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(
+    JSON.stringify({ ...executionConfig, allowedTools }),
     conversationId
   )
 }
@@ -133,40 +134,34 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   // POST /api/chat/conversations/:id/send — send message + stream response
   app.post<{
     Params: { id: string }
-    Body: {
-      content: string
-      messageId?: string
-      model?: string
-      providerOverride?: string
-      imageDataUrls?: string[]
-      audioDataUrls?: string[]
-      allowedTools?: string[]
-      files?: { name: string; content: string }[]
-      systemPrompt?: string
-      generateTitle?: boolean
-      subAgents?: { agentId: string }[]
-      memorySpaceIds?: string[]
-      thinkingEnabled?: boolean
-      contextStrategy?: ContextStrategy
-      autoToolRouting?: boolean
-      selectedSkillIds?: string[]
-      autoSkillRouting?: boolean
-      autoMemory?: boolean
-      autoRouterProviderId?: string
-      autoRouterModel?: string
-      compactProviderId?: string
-      compactModel?: string
-      titleProviderId?: string
-      titleModel?: string
-      inlineAttachmentTextLimit?: number
-    }
+    Body: ChatSendRequest
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
-      const { content, messageId: providedMsgId, model, providerOverride, imageDataUrls, audioDataUrls, allowedTools, files, systemPrompt, generateTitle: generateTitlePref, subAgents: reqSubAgents, memorySpaceIds: reqMemorySpaceIds, thinkingEnabled: reqThinkingEnabled, contextStrategy: reqContextStrategy, autoToolRouting: reqAutoToolRouting, selectedSkillIds: reqSelectedSkillIds, autoSkillRouting: reqAutoSkillRouting, autoMemory: reqAutoMemory, autoRouterProviderId: reqAutoRouterProviderId, autoRouterModel: reqAutoRouterModel, compactProviderId: reqCompactProviderId, compactModel: reqCompactModel, titleProviderId: titleProviderIdPref, titleModel: titleModelPref, inlineAttachmentTextLimit: reqInlineAttachmentTextLimit } = req.body
-      const legacyBody = req.body as Record<string, unknown>
-      const legacyAutoRouterProviderId = typeof legacyBody['skillRouterProviderId'] === 'string' ? legacyBody['skillRouterProviderId'] : ''
-      const legacyAutoRouterModel = typeof legacyBody['skillRouterModel'] === 'string' ? legacyBody['skillRouterModel'] : ''
+      const { content, messageId: providedMsgId, imageDataUrls, audioDataUrls, files } = req.body
+      const run = req.body.run
+      const {
+        model,
+        providerOverride,
+        allowedTools,
+        systemPrompt,
+        generateTitle: generateTitlePref,
+        subAgents: reqSubAgents,
+        memorySpaceIds: reqMemorySpaceIds,
+        thinkingEnabled: reqThinkingEnabled,
+        contextStrategy: reqContextStrategy,
+        autoToolRouting: reqAutoToolRouting,
+        selectedSkillIds: reqSelectedSkillIds,
+        autoSkillRouting: reqAutoSkillRouting,
+        autoMemory: reqAutoMemory,
+        autoRouterProviderId: reqAutoRouterProviderId,
+        autoRouterModel: reqAutoRouterModel,
+        compactProviderId: reqCompactProviderId,
+        compactModel: reqCompactModel,
+        titleProviderId: titleProviderIdPref,
+        titleModel: titleModelPref,
+        inlineAttachmentTextLimit: reqInlineAttachmentTextLimit,
+      } = run
       const db = getDb()
       const inlineAttachmentTextLimit = reqInlineAttachmentTextLimit !== undefined
         ? normalizeInlineAttachmentTextLimit(reqInlineAttachmentTextLimit)
@@ -313,8 +308,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             memorySpaceOverrides,
             autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : undefined,
             autoMemory: effectiveRunFlags.autoMemory,
-            autoRouterProviderId: reqAutoRouterProviderId || legacyAutoRouterProviderId || undefined,
-            autoRouterModel: reqAutoRouterModel || legacyAutoRouterModel || undefined,
+            autoRouterProviderId: reqAutoRouterProviderId || undefined,
+            autoRouterModel: reqAutoRouterModel || undefined,
             selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
             hasExplicitToolAllowlist,
             usedToolNames,
@@ -353,7 +348,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         return { streamId }
       }
       const tools: RegistryAwareToolDefinition[] = plannedTools
-      let chatConfig: Record<string, unknown> | null = null
+      let executionConfig: ConversationExecutionConfig | null = null
       try {
         messages = planned.messages
 
@@ -366,7 +361,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
         // Persist the full session config with RESOLVED model/provider so it can
         // be restored correctly when navigating back to this conversation.
-        chatConfig = buildPersistedChatConfig({
+        executionConfig = buildPersistedChatConfig({
           selectedToolKeys,
           routedToolKeys: [],
           requestedSubAgents: reqSubAgents,
@@ -380,8 +375,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
           autoSkillRouting: effectiveRunFlags.autoSkillRouting,
         })
-        db.prepare('UPDATE conversations SET config_json = ? WHERE id = ?').run(
-          JSON.stringify(chatConfig),
+        db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(
+          JSON.stringify(executionConfig),
           conversationId
         )
 
@@ -521,8 +516,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         })
 
         const result = await executor.run(messages)
-        if (reqAutoToolRouting === true && chatConfig) {
-          persistAutoRoutedUsedTools(db, conversationId, chatConfig, tools, usedToolNames, toolRegistry)
+        if (reqAutoToolRouting === true && executionConfig) {
+          persistAutoRoutedUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
         }
         if (orchestrationRunId) {
           closeOrchestrationRun(orchestrationRunId, 'completed', { summary: result.content.slice(0, 500) })
@@ -576,8 +571,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
-          if (reqAutoToolRouting === true && chatConfig) {
-            persistAutoRoutedUsedTools(db, conversationId, chatConfig, tools, usedToolNames, toolRegistry)
+          if (reqAutoToolRouting === true && executionConfig) {
+            persistAutoRoutedUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
           }
           if (orchestrationRunId) {
             closeOrchestrationRun(orchestrationRunId, 'cancelled', { error: 'Cancelled' })
@@ -589,8 +584,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if (orchestrationRunId) {
           closeOrchestrationRun(orchestrationRunId, 'error', { error: (err as Error).message })
         }
-        if (reqAutoToolRouting === true && chatConfig) {
-          persistAutoRoutedUsedTools(db, conversationId, chatConfig, tools, usedToolNames, toolRegistry)
+        if (reqAutoToolRouting === true && executionConfig) {
+          persistAutoRoutedUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
         }
         getEventBus().emit('task:error', { conversationId, error: (err as Error).message })
         broadcast('chat:stream-error', { streamId, conversationId, error: (err as Error).message })
