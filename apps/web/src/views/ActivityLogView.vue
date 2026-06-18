@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import type { ActivityItem, ActivityKind } from "../api/types";
 import { useChatStore } from "../stores/chat.store";
 import { useAgentDefinitionsStore } from "../stores/agent-definitions.store";
+import HoverMenu from "../components/shared/HoverMenu.vue";
 
 const router = useRouter();
 const chatStore = useChatStore();
@@ -55,6 +56,15 @@ const totalByKind = computed(() => {
 });
 
 const allKindsSelected = computed(() => selectedKinds.value.length === filterOptions.length);
+
+const selectedKindSummary = computed(() => {
+  if (allKindsSelected.value) return "All activity";
+  if (selectedKinds.value.length === 0) return "No filters";
+  if (selectedKinds.value.length === 1) {
+    return filterOptions.find((option) => option.value === selectedKinds.value[0])?.label || "1 filter";
+  }
+  return `${selectedKinds.value.length} filters`;
+});
 
 function toggleKind(kind: ActivityKind): void {
   selectedKinds.value = selectedKinds.value.includes(kind)
@@ -264,8 +274,105 @@ onUnmounted(() => {
       </button>
     </header>
 
-    <div class="mb-3 mx-auto max-w-6xl">
-      <div class="relative">
+    <div class="mb-5 mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center">
+      <HoverMenu
+        placement="below"
+        :max-width="292"
+        :close-delay="180"
+      >
+        <template #trigger="{ open, toggle }">
+          <button
+            type="button"
+            class="inline-flex w-full items-center justify-between gap-3 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-300 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 sm:w-48"
+            :class="{ 'filter-chip-active': selectedKinds.length > 0 }"
+            aria-haspopup="menu"
+            :aria-expanded="open"
+            @click.stop="toggle"
+          >
+            <span class="inline-flex min-w-0 items-center gap-2">
+              <Icon
+                icon="lucide:list-filter"
+                class="h-4 w-4 shrink-0"
+              />
+              <span class="truncate">{{ selectedKindSummary }}</span>
+            </span>
+            <span class="inline-flex shrink-0 items-center gap-1.5">
+              <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-300">
+                {{ selectedKinds.length }}/{{ filterOptions.length }}
+              </span>
+              <Icon
+                icon="lucide:chevron-down"
+                class="h-3.5 w-3.5 text-theme-500 transition"
+                :class="{ 'rotate-180': open }"
+              />
+            </span>
+          </button>
+        </template>
+
+        <template #content>
+          <div
+            class="w-72"
+            role="menu"
+            @click.stop
+          >
+            <button
+              type="button"
+              class="mb-1 flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-[13px] text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
+              :class="{ 'filter-menu-active': allKindsSelected }"
+              @click="toggleAllKinds"
+            >
+              <span class="inline-flex items-center gap-2">
+                <span class="flex h-4 w-4 items-center justify-center rounded border border-theme-600">
+                  <Icon
+                    v-if="allKindsSelected"
+                    icon="lucide:check"
+                    class="h-3 w-3"
+                  />
+                </span>
+                <Icon
+                  icon="lucide:list-filter"
+                  class="h-3.5 w-3.5"
+                />
+                All activity
+              </span>
+              <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ items.length }}</span>
+            </button>
+
+            <div class="my-1 h-px bg-theme-800" />
+
+            <label
+              v-for="option in filterOptions"
+              :key="option.value"
+              class="flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-[13px] text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
+              :class="{ 'filter-menu-active': selectedKinds.includes(option.value) }"
+            >
+              <span class="inline-flex min-w-0 items-center gap-2">
+                <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-theme-600">
+                  <Icon
+                    v-if="selectedKinds.includes(option.value)"
+                    icon="lucide:check"
+                    class="h-3 w-3"
+                  />
+                </span>
+                <Icon
+                  :icon="option.icon"
+                  class="h-3.5 w-3.5 shrink-0"
+                />
+                <span class="truncate">{{ option.label }}</span>
+              </span>
+              <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ totalByKind[option.value] }}</span>
+              <input
+                type="checkbox"
+                class="sr-only"
+                :checked="selectedKinds.includes(option.value)"
+                @change="toggleKind(option.value)"
+              >
+            </label>
+          </div>
+        </template>
+      </HoverMenu>
+
+      <div class="relative min-w-0 flex-1">
         <Icon
           icon="lucide:search"
           class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-600"
@@ -288,37 +395,6 @@ onUnmounted(() => {
           />
         </button>
       </div>
-    </div>
-
-    <div class="mb-5 flex max-w-6xl flex-wrap gap-2 mx-auto">
-      <button
-        class="filter-chip inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
-        :class="{ 'filter-chip-active': allKindsSelected }"
-        @click="toggleAllKinds"
-      >
-        <span class="h-1.5 w-1.5 rounded-full bg-current opacity-85" />
-        <Icon
-          icon="lucide:list-filter"
-          class="w-3.5 h-3.5"
-        />
-        <span>All</span>
-        <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-300">{{ items.length }}</span>
-      </button>
-      <button
-        v-for="option in filterOptions"
-        :key="option.value"
-        class="filter-chip inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
-        :class="{ 'filter-chip-active': selectedKinds.includes(option.value) }"
-        @click="toggleKind(option.value)"
-      >
-        <span class="h-1.5 w-1.5 rounded-full bg-current opacity-85" />
-        <Icon
-          :icon="option.icon"
-          class="w-3.5 h-3.5"
-        />
-        <span>{{ option.label }}</span>
-        <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-300">{{ totalByKind[option.value] }}</span>
-      </button>
     </div>
 
     <div
@@ -491,6 +567,11 @@ onUnmounted(() => {
   border-color: color-mix(in srgb, var(--color-accent-500) 50%, transparent);
   background: color-mix(in srgb, var(--color-accent-500) 13%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-500) 12%, transparent) inset;
+}
+
+.filter-menu-active {
+  color: var(--color-accent-300);
+  background: color-mix(in srgb, var(--color-accent-500) 10%, transparent);
 }
 
 .activity-marker {
