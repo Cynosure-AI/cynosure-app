@@ -105,6 +105,31 @@ const formattedImageCost = computed(() => {
   return imageCost == null ? null : `${formatSmallMoney(imageCost)} per image`;
 });
 
+const formattedExtraCosts = computed(() => {
+  const pricing = chatStore.modelPricing;
+  if (!pricing) return [];
+  const rows: { label: string; value: string }[] = [];
+  if (pricing.request != null && pricing.request > 0) {
+    rows.push({ label: "Request", value: `${formatSmallMoney(pricing.request)} each` });
+  }
+  if (pricing.audio != null && pricing.audio > 0) {
+    rows.push({ label: "Audio", value: formatSmallMoney(pricing.audio) });
+  }
+  if (pricing.webSearch != null && pricing.webSearch > 0) {
+    rows.push({ label: "Web search", value: `${formatSmallMoney(pricing.webSearch)} each` });
+  }
+  if (pricing.internalReasoning != null && pricing.internalReasoning > 0) {
+    rows.push({ label: "Reasoning", value: `${formatSmallMoney(pricing.internalReasoning * 1_000_000)} / 1M tokens` });
+  }
+  if (pricing.inputCacheRead != null && pricing.inputCacheRead > 0) {
+    rows.push({ label: "Cache read", value: `${formatSmallMoney(pricing.inputCacheRead * 1_000_000)} / 1M tokens` });
+  }
+  if (pricing.inputCacheWrite != null && pricing.inputCacheWrite > 0) {
+    rows.push({ label: "Cache write", value: `${formatSmallMoney(pricing.inputCacheWrite * 1_000_000)} / 1M tokens` });
+  }
+  return rows;
+});
+
 const formattedVideoCosts = computed(() => {
   const skus = chatStore.modelPricing?.skus;
   if (!skus) return [];
@@ -363,6 +388,21 @@ async function toggleMic(): Promise<void> {
                 Image cost
               </p>
               <span class="tabular-nums">{{ formattedImageCost }}</span>
+            </div>
+
+            <div v-if="formattedExtraCosts.length">
+              <p class="text-xs text-theme-300 whitespace-nowrap">
+                Extra cost estimates
+              </p>
+              <div class="mt-1 grid grid-cols-[auto,1fr] gap-x-2 gap-y-1 text-xs">
+                <template
+                  v-for="cost in formattedExtraCosts"
+                  :key="cost.label"
+                >
+                  <span class="text-theme-500">{{ cost.label }}</span>
+                  <span class="text-theme-200 tabular-nums">{{ cost.value }}</span>
+                </template>
+              </div>
             </div>
 
             <div v-if="formattedVideoCosts.length">

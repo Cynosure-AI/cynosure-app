@@ -58,7 +58,7 @@ const ocrSaving = ref(false)
 // Reranker state
 const rerankEnabled = ref(false)
 const rerankProviderId = ref('')
-const rerankModel = ref('cohere/rerank-4-fast')
+const rerankModel = ref('')
 const rerankCandidateCount = ref(12)
 const rerankSaving = ref(false)
 
@@ -576,6 +576,7 @@ async function manualClearGraph() {
             placeholder="Select OpenRouter rerank model"
             dropdown-width="min-w-full"
             max-height="max-h-72"
+            only-show-available-models
             @change="updateRerankerSelection"
           />
           <p
@@ -603,7 +604,7 @@ async function manualClearGraph() {
       </div>
 
       <button
-        :disabled="rerankSaving || (rerankEnabled && !rerankProviderId)"
+        :disabled="rerankSaving || (rerankEnabled && (!rerankProviderId || !rerankModel))"
         class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
         @click="saveReranker"
       >

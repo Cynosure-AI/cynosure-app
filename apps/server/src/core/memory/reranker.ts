@@ -20,7 +20,7 @@ interface OpenRouterRerankResponse {
 const SETTINGS_KEY = 'memoryReranker'
 const DEFAULT_CONFIG: MemoryRerankerConfig = {
   enabled: false,
-  model: 'cohere/rerank-4-fast',
+  model: '',
   candidateCount: 30
 }
 
@@ -32,7 +32,7 @@ function normalizeConfig(config: Partial<MemoryRerankerConfig> | undefined): Mem
   return {
     enabled: !!config?.enabled,
     providerId: config?.providerId?.trim() || undefined,
-    model: config?.model?.trim() || DEFAULT_CONFIG.model,
+    model: config?.model?.trim() || '',
     candidateCount: Math.min(50, Math.max(3, candidateCount))
   }
 }
@@ -64,6 +64,7 @@ export class MemoryReranker {
   async rerank(query: string, results: SearchResult[], topK: number): Promise<SearchResult[]> {
     const config = this.getConfig()
     if (!config.enabled || results.length <= 1) return results.slice(0, topK)
+    if (!config.model) return results.slice(0, topK)
 
     const provider = this.resolveOpenRouterProvider(config.providerId)
     if (!provider) return results.slice(0, topK)

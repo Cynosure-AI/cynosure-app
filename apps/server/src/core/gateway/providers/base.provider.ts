@@ -84,6 +84,16 @@ export interface ModelPricing {
   request?: number
   /** Cost in $ per image input/output unit, depending on the model endpoint. */
   image?: number
+  /** Cost in $ per audio unit, depending on the model endpoint. */
+  audio?: number
+  /** Cost in $ per web search operation. */
+  webSearch?: number
+  /** Cost in $ per internal reasoning token. */
+  internalReasoning?: number
+  /** Cost in $ per cached input token read. */
+  inputCacheRead?: number
+  /** Cost in $ per cached input token write. */
+  inputCacheWrite?: number
   /** Provider-specific video or media pricing SKUs. Values are in USD unless the key says cents. */
   skus?: Record<string, number>
 }

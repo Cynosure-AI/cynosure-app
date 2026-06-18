@@ -43,6 +43,7 @@ const props = withDefaults(
     align?: "left" | "center" | "right";
     dropdownWidth?: string;
     size?: SelectSize;
+    onlyShowAvailableModels?: boolean;
   }>(),
   {
     modelType: "llm",
@@ -59,6 +60,7 @@ const props = withDefaults(
     align: "left",
     dropdownWidth: "w-full",
     size: "sm",
+    onlyShowAvailableModels: false,
   },
 );
 
@@ -172,8 +174,23 @@ function pricingTooltip(model: ModelListItem): string | undefined {
   if (model.pricing?.image !== undefined) {
     lines.push(`Image: ${formatMoney(model.pricing.image)} per image`);
   }
+  if (model.pricing?.audio !== undefined) {
+    lines.push(`Audio: ${formatMoney(model.pricing.audio)}`);
+  }
   if (model.pricing?.request !== undefined && model.pricing.request > 0) {
     lines.push(`Request: ${formatMoney(model.pricing.request)} per request`);
+  }
+  if (model.pricing?.webSearch !== undefined && model.pricing.webSearch > 0) {
+    lines.push(`Web search: ${formatMoney(model.pricing.webSearch)} per operation`);
+  }
+  if (model.pricing?.internalReasoning !== undefined && model.pricing.internalReasoning > 0) {
+    lines.push(`Reasoning: ${formatMoney(dollarsPerMillion(model.pricing.internalReasoning) ?? 0)} per 1M tokens`);
+  }
+  if (model.pricing?.inputCacheRead !== undefined && model.pricing.inputCacheRead > 0) {
+    lines.push(`Cache read: ${formatMoney(dollarsPerMillion(model.pricing.inputCacheRead) ?? 0)} per 1M tokens`);
+  }
+  if (model.pricing?.inputCacheWrite !== undefined && model.pricing.inputCacheWrite > 0) {
+    lines.push(`Cache write: ${formatMoney(dollarsPerMillion(model.pricing.inputCacheWrite) ?? 0)} per 1M tokens`);
   }
 
   const skus = Object.entries(model.pricing?.skus ?? {}).slice(0, 4);
@@ -365,7 +382,9 @@ const groups = computed((): SelectOptionGroup[] => {
     .filter(
       (favorite) =>
         providerById.has(favorite.providerId) &&
-        (favorite.modelType || "llm") === props.modelType,
+        (favorite.modelType || "llm") === props.modelType &&
+        (!props.onlyShowAvailableModels ||
+          (providerModels.value[favorite.providerId] || []).some((model) => model.id === favorite.model)),
     )
     .map((favorite) => {
       const provider = providerById.get(favorite.providerId);
@@ -423,6 +442,7 @@ const groups = computed((): SelectOptionGroup[] => {
         if (
           props.providerId === provider.id &&
           props.modelValue &&
+          !props.onlyShowAvailableModels &&
           !modelIds.includes(props.modelValue)
         ) {
           options.unshift({

@@ -87,7 +87,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
 
         const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
-        const res = await fetch(`${baseUrl}/models`, {
+        const res = await fetch(`${baseUrl}/models?output_modalities=all`, {
             headers: this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}
         })
         if (!res.ok) return []
@@ -133,10 +133,20 @@ export class OpenRouterProvider extends BaseLLMProvider {
         const completion = this.parsePrice(pricing.completion)
         const request = this.parsePrice(pricing.request)
         const image = this.parsePrice(pricing.image)
+        const audio = this.parsePrice(pricing.audio)
+        const webSearch = this.parsePrice(pricing.web_search)
+        const internalReasoning = this.parsePrice(pricing.internal_reasoning)
+        const inputCacheRead = this.parsePrice(pricing.input_cache_read)
+        const inputCacheWrite = this.parsePrice(pricing.input_cache_write)
         if (prompt !== undefined) result.prompt = prompt
         if (completion !== undefined) result.completion = completion
         if (request !== undefined) result.request = request
         if (image !== undefined) result.image = image
+        if (audio !== undefined) result.audio = audio
+        if (webSearch !== undefined) result.webSearch = webSearch
+        if (internalReasoning !== undefined) result.internalReasoning = internalReasoning
+        if (inputCacheRead !== undefined) result.inputCacheRead = inputCacheRead
+        if (inputCacheWrite !== undefined) result.inputCacheWrite = inputCacheWrite
         return Object.keys(result).length ? result : undefined
     }
 
