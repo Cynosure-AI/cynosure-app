@@ -43,11 +43,10 @@ const router = createRouter({
         params: { id: to.params.id }
       })
     },
-    // Instances
+    // Legacy instances URL now lands on the unified activity timeline.
     {
       path: '/instances',
-      name: 'instances',
-      component: () => import('@/views/InstancesView.vue')
+      redirect: '/activity'
     },
     // Activity
     {

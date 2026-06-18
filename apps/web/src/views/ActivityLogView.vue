@@ -13,7 +13,7 @@ const agentDefs = useAgentDefinitionsStore();
 
 const items = ref<ActivityItem[]>([]);
 const loading = ref(true);
-const selectedKind = ref<ActivityKind | "all">("all");
+const selectedKinds = ref<ActivityKind[]>(["instance", "artifact", "notification", "cron", "memory"]);
 const now = ref(Date.now());
 const stoppingInstanceIds = ref<Set<string>>(new Set());
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
@@ -21,32 +21,46 @@ let tickTimer: ReturnType<typeof setInterval> | undefined;
 let unsubNotification: (() => void) | undefined;
 let unsubExecutionUpdate: (() => void) | undefined;
 
-const filterOptions: { value: ActivityKind | "all"; label: string; icon: string }[] = [
-  { value: "all", label: "All", icon: "lucide:list-filter" },
+const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "instance", label: "Running", icon: "lucide:activity" },
   { value: "artifact", label: "Artifacts", icon: "lucide:file-output" },
+  { value: "chat", label: "Chats", icon: "lucide:message-circle" },
   { value: "notification", label: "Notifications", icon: "lucide:bell" },
   { value: "cron", label: "Cron", icon: "lucide:clock" },
   { value: "memory", label: "Memory", icon: "lucide:brain" },
 ];
 
 const filteredItems = computed(() => {
-  if (selectedKind.value === "all") return items.value;
-  return items.value.filter((item) => item.kind === selectedKind.value);
+  const kinds = new Set(selectedKinds.value);
+  return items.value.filter((item) => kinds.has(item.kind));
 });
 
 const totalByKind = computed(() => {
-  const totals: Record<ActivityKind | "all", number> = {
-    all: items.value.length,
+  const totals: Record<ActivityKind, number> = {
     instance: 0,
     artifact: 0,
     notification: 0,
     cron: 0,
     memory: 0,
+    chat: 0,
   };
   for (const item of items.value) totals[item.kind] += 1;
   return totals;
 });
+
+const allKindsSelected = computed(() => selectedKinds.value.length === filterOptions.length);
+
+function toggleKind(kind: ActivityKind): void {
+  selectedKinds.value = selectedKinds.value.includes(kind)
+    ? selectedKinds.value.filter((selected) => selected !== kind)
+    : [...selectedKinds.value, kind];
+}
+
+function toggleAllKinds(): void {
+  selectedKinds.value = allKindsSelected.value
+    ? []
+    : filterOptions.map((option) => option.value);
+}
 
 async function loadActivity() {
   try {
@@ -108,6 +122,8 @@ function kindIcon(kind: ActivityKind): string {
       return "lucide:clock-check";
     case "memory":
       return "lucide:brain";
+    case "chat":
+      return "lucide:message-circle";
     default:
       return "lucide:activity";
   }
@@ -119,6 +135,7 @@ function kindClass(item: ActivityItem): string {
   if (item.kind === "artifact") return "activity-artifact";
   if (item.kind === "cron") return "activity-cron";
   if (item.kind === "memory") return "activity-memory";
+  if (item.kind === "chat") return "activity-chat";
   return "activity-info";
 }
 
@@ -198,7 +215,7 @@ onUnmounted(() => {
           Activity Log
         </h1>
         <p class="mt-1 max-w-3xl text-sm text-theme-500">
-          Running instances, generated artifacts, notifications, cron runs, and memory indexing in one timeline.
+          Running instances, generated artifacts, chats, notifications, cron runs, and memory indexing in one timeline.
         </p>
       </div>
       <button
@@ -217,11 +234,24 @@ onUnmounted(() => {
 
     <div class="mb-5 flex max-w-6xl flex-wrap gap-2 mx-auto">
       <button
+        class="filter-chip inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
+        :class="{ 'filter-chip-active': allKindsSelected }"
+        @click="toggleAllKinds"
+      >
+        <span class="h-1.5 w-1.5 rounded-full bg-current opacity-85" />
+        <Icon
+          icon="lucide:list-filter"
+          class="w-3.5 h-3.5"
+        />
+        <span>All</span>
+        <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-300">{{ items.length }}</span>
+      </button>
+      <button
         v-for="option in filterOptions"
         :key="option.value"
         class="filter-chip inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
-        :class="{ 'filter-chip-active': selectedKind === option.value }"
-        @click="selectedKind = option.value"
+        :class="{ 'filter-chip-active': selectedKinds.includes(option.value) }"
+        @click="toggleKind(option.value)"
       >
         <span class="h-1.5 w-1.5 rounded-full bg-current opacity-85" />
         <Icon
@@ -443,6 +473,7 @@ article.cursor-pointer:hover .activity-card {
 .activity-artifact,
 .activity-notification,
 .activity-cron,
+.activity-chat,
 .activity-memory,
 .activity-warning,
 .activity-critical {
@@ -479,5 +510,11 @@ article.cursor-pointer:hover .activity-card {
   --activity-color: #a78bfa;
   --activity-bg: color-mix(in srgb, #a78bfa 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #a78bfa 35%, var(--color-theme-800));
+}
+
+.activity-chat {
+  --activity-color: #60a5fa;
+  --activity-bg: color-mix(in srgb, #60a5fa 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #60a5fa 35%, var(--color-theme-800));
 }
 </style>

@@ -426,7 +426,7 @@ function getRandomHourlyGreeting(): string {
 const greeting = ref(getRandomHourlyGreeting())
 
 // Scroll to bottom when mounting into an already-loaded conversation
-// (e.g. navigating here from InstancesView after selectConversation was called)
+// (e.g. navigating here after selectConversation was called elsewhere)
 onMounted(() => {
   scrollMainToBottom()
   collapseVisibleSubAgentGroups()
