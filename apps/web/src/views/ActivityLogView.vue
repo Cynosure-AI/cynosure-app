@@ -4,12 +4,10 @@ import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { api } from "../api/client";
 import type { ActivityItem, ActivityKind } from "../api/types";
-import { useChatStore } from "../stores/chat.store";
 import { useAgentDefinitionsStore } from "../stores/agent-definitions.store";
 import HoverMenu from "../components/shared/HoverMenu.vue";
 
 const router = useRouter();
-const chatStore = useChatStore();
 const agentDefs = useAgentDefinitionsStore();
 
 const items = ref<ActivityItem[]>([]);
@@ -17,21 +15,17 @@ const loading = ref(true);
 const loadingMore = ref(false);
 const hasMore = ref(false);
 const totalItems = ref(0);
-const selectedKinds = ref<ActivityKind[]>(["instance", "artifact", "notification", "cron", "memory", "channels"]);
+const selectedKinds = ref<ActivityKind[]>(["memory"]);
 const searchQuery = ref("");
 const now = ref(Date.now());
-const stoppingInstanceIds = ref<Set<string>>(new Set());
-const cancellingMemoryJobIds = ref<Set<string>>(new Set());
 const PAGE_SIZE = 30;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let unsubNotification: (() => void) | undefined;
-let unsubExecutionUpdate: (() => void) | undefined;
 let unsubMemoryJobUpdate: (() => void) | undefined;
 
 const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
-  { value: "instance", label: "Running", icon: "lucide:activity" },
   { value: "artifact", label: "Artifacts", icon: "lucide:file-output" },
   { value: "chat", label: "Chats", icon: "lucide:message-circle" },
   { value: "channels", label: "Channels", icon: "lucide:radio" },
@@ -194,13 +188,7 @@ function kindIcon(kind: ActivityKind): string {
   }
 }
 
-function requiresAttention(item: ActivityItem): boolean {
-  return item.kind === "instance" && item.status === "awaiting-approval";
-}
-
 function kindClass(item: ActivityItem): string {
-  if (requiresAttention(item)) return "activity-attention";
-  if (item.kind === "instance") return "activity-instance";
   if (item.kind === "notification") return "activity-notification";
   if (item.kind === "artifact") return "activity-artifact";
   if (item.kind === "cron") return "activity-cron";
@@ -218,40 +206,10 @@ function agentLabel(item: ActivityItem): string {
 
 async function openItem(item: ActivityItem) {
   if (item.conversationId) {
-    await chatStore.setActiveAgent(item.agentId || null);
-    await chatStore.selectConversation(item.conversationId);
     router.push(`/triggers/chat/${item.conversationId}`);
   } else if (item.agentId) {
     router.push(`/agents/${item.agentId}`);
   }
-}
-
-function canStopItem(item: ActivityItem): boolean {
-  return item.kind === "instance" && Boolean(item.sourceId);
-}
-
-function canCancelMemoryJob(item: ActivityItem): boolean {
-  return item.kind === "memory" && item.status === "running" && Boolean(item.sourceId);
-}
-
-function isItemActionPending(item: ActivityItem): boolean {
-  if (!item.sourceId) return false;
-  if (item.kind === "instance") return stoppingInstanceIds.value.has(item.sourceId);
-  if (item.kind === "memory") return cancellingMemoryJobIds.value.has(item.sourceId);
-  return false;
-}
-
-function itemActionIcon(item: ActivityItem): string {
-  if (isItemActionPending(item)) return "lucide:loader-2";
-  return item.kind === "instance" ? "lucide:square" : "lucide:x";
-}
-
-function itemActionLabel(item: ActivityItem): string {
-  return item.kind === "instance" ? "Stop" : "Cancel";
-}
-
-function itemActionTitle(item: ActivityItem): string {
-  return item.kind === "instance" ? "Stop instance" : "Cancel memory job";
 }
 
 function artifactIcon(kind: string): string {
@@ -270,44 +228,6 @@ function isImageArtifact(kind: string): boolean {
   return kind === "image";
 }
 
-async function stopInstance(item: ActivityItem, event: Event) {
-  event.stopPropagation();
-  if (!item.sourceId || stoppingInstanceIds.value.has(item.sourceId)) return;
-
-  stoppingInstanceIds.value.add(item.sourceId);
-  try {
-    await api.instances.stop(item.sourceId);
-    await loadActivity();
-  } catch {
-    await loadActivity();
-  } finally {
-    stoppingInstanceIds.value.delete(item.sourceId);
-  }
-}
-
-async function cancelMemoryJob(item: ActivityItem, event: Event) {
-  event.stopPropagation();
-  if (!item.sourceId || cancellingMemoryJobIds.value.has(item.sourceId)) return;
-
-  cancellingMemoryJobIds.value.add(item.sourceId);
-  try {
-    await api.memorySpaces.cancelJob(item.sourceId);
-    await loadActivity();
-  } catch {
-    await loadActivity();
-  } finally {
-    cancellingMemoryJobIds.value.delete(item.sourceId);
-  }
-}
-
-function runItemAction(item: ActivityItem, event: Event): void {
-  if (item.kind === "instance") {
-    void stopInstance(item, event);
-  } else if (item.kind === "memory") {
-    void cancelMemoryJob(item, event);
-  }
-}
-
 onMounted(() => {
   void loadActivity();
   refreshTimer = setInterval(() => void loadActivity(), 15_000);
@@ -315,12 +235,6 @@ onMounted(() => {
     now.value = Date.now();
   }, 30_000);
   unsubNotification = api.notifications.onCreated(() => void loadActivity());
-  unsubExecutionUpdate = api.agent.onExecutionUpdate((data: unknown) => {
-    const d = data as { event?: string };
-    if (d.event === "step:status" || d.event === "task:completed" || d.event === "step:executed") {
-      void loadActivity();
-    }
-  });
   unsubMemoryJobUpdate = api.memorySpaces.onJobUpdated(() => void loadActivity());
 });
 
@@ -329,7 +243,6 @@ onUnmounted(() => {
   clearInterval(tickTimer);
   clearTimeout(searchTimer);
   unsubNotification?.();
-  unsubExecutionUpdate?.();
   unsubMemoryJobUpdate?.();
 });
 
@@ -354,7 +267,7 @@ watch(searchQuery, () => {
           Activity Log
         </h1>
         <p class="mt-1 max-w-3xl text-sm text-theme-500">
-          Running instances, generated artifacts, chats, channel messages, notifications, cron runs, and memory indexing in one timeline.
+          A timeline for memory indexing, with optional passive history for artifacts, chats, channel messages, notifications, and cron runs.
         </p>
       </div>
       <button
@@ -537,7 +450,6 @@ watch(searchQuery, () => {
             class="grid grid-cols-[2rem_minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-[4.2rem_2rem_minmax(0,1fr)]"
             :class="[kindClass(item), {
               'cursor-pointer': item.conversationId || item.agentId,
-              'activity-requires-attention': requiresAttention(item),
             }]"
             @click="openItem(item)"
           >
@@ -547,12 +459,8 @@ watch(searchQuery, () => {
             </div>
 
             <div class="relative mt-2.5 flex h-8 w-8 items-center justify-center rounded-full border text-[var(--activity-color)] activity-marker">
-              <span
-                v-if="requiresAttention(item)"
-                class="absolute inset-0 rounded-full bg-red-400/35 animate-ping"
-              />
               <Icon
-                :icon="requiresAttention(item) ? 'lucide:circle-alert' : kindIcon(item.kind)"
+                :icon="kindIcon(item.kind)"
                 class="relative w-4 h-4"
               />
             </div>
@@ -576,33 +484,11 @@ watch(searchQuery, () => {
 
                 <div class="flex gap-2">
                   <span
-                    v-if="requiresAttention(item)"
-                    class="attention-pill shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
-                  >
-                    needs approval
-                  </span>
-
-                  <span
-                    v-if="item.status && !requiresAttention(item)"
+                    v-if="item.status"
                     class="status-pill shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
                   >
                     {{ item.status }}
                   </span>
-
-                  <button
-                    v-if="canStopItem(item) || canCancelMemoryJob(item)"
-                    class="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-400/25 bg-red-400/10 px-2 py-0.5 text-[11px] font-bold text-red-400 transition hover:border-red-300/40 hover:bg-red-400/15 hover:text-red-200 disabled:cursor-wait disabled:opacity-70"
-                    :disabled="isItemActionPending(item)"
-                    :title="itemActionTitle(item)"
-                    @click="runItemAction(item, $event)"
-                  >
-                    <Icon
-                      :icon="itemActionIcon(item)"
-                      class="w-3 h-3"
-                      :class="{ 'animate-spin': isItemActionPending(item) }"
-                    />
-                    {{ itemActionLabel(item) }}
-                  </button>
                 </div>
               </div>
 
@@ -768,7 +654,6 @@ article.cursor-pointer:hover .activity-card {
 }
 
 .activity-info,
-.activity-instance,
 .activity-artifact,
 .activity-notification,
 .activity-cron,
@@ -786,18 +671,6 @@ article.cursor-pointer:hover .activity-card {
   --activity-color: #38bdf8;
   --activity-bg: color-mix(in srgb, #38bdf8 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #38bdf8 35%, var(--color-theme-800));
-}
-
-.activity-instance {
-  --activity-color: #f87171;
-  --activity-bg: color-mix(in srgb, #f87171 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #f87171 38%, var(--color-theme-800));
-}
-
-.activity-attention {
-  --activity-color: #f87171;
-  --activity-bg: color-mix(in srgb, #f87171 18%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #f87171 52%, var(--color-theme-800));
 }
 
 .activity-artifact {

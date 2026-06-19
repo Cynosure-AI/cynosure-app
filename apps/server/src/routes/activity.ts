@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getAgent } from '../core/agents/agent-store.js'
-import { listMemoryIndexJobs } from '../core/memory/memory-index-jobs.js'
 import { listActiveInstances } from './instances.js'
 
 type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat' | 'channels'
@@ -237,27 +236,6 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         const includes = (kind: ActivityKind) => !typeFilter || typeFilter.has(kind)
         const items: ActivityItem[] = []
         const activeInstances = listActiveInstances()
-
-        if (includes('instance')) {
-            for (const instance of activeInstances) {
-                items.push({
-                    id: `instance:${instance.id}`,
-                    kind: 'instance',
-                    title: instance.status === 'awaiting-approval'
-                        ? `${instance.agentName} needs approval`
-                        : `${instance.agentName} is running`,
-                    description: instance.model || instance.type,
-                    createdAt: instance.startedAt,
-                    agentId: instance.agentId || null,
-                    agentName: instance.agentName,
-                    agentIconUrl: instance.agentIconUrl,
-                    conversationId: instance.conversationId,
-                    status: instance.status,
-                    sourceId: instance.id,
-                    sourceLabel: instance.type,
-                })
-            }
-        }
 
         if (includes('notification')) {
             const rows = db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?').all(queryLimit) as {
@@ -500,28 +478,6 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         if (includes('memory')) {
-            for (const job of listMemoryIndexJobs()) {
-                if (job.status === 'completed' || job.status === 'cancelled') continue
-                const isEntityIndex = job.kind === 'entity-index'
-                const isRunning = job.status === 'running'
-                items.push({
-                    id: `memory-job:${job.id}`,
-                    kind: 'memory',
-                    title: isRunning
-                        ? (isEntityIndex ? `Extracting entities from ${job.fileName}` : `Indexing ${job.fileName}`)
-                        : (isEntityIndex ? `Extracted entities from ${job.fileName}` : `Indexed ${job.fileName}`),
-                    description: job.error || (isRunning ? 'Memory job running' : `Memory job ${job.status}`),
-                    createdAt: isRunning ? job.createdAt : job.updatedAt,
-                    agentId: null,
-                    agentName: null,
-                    agentIconUrl: null,
-                    conversationId: null,
-                    status: job.status,
-                    sourceId: job.id,
-                    sourceLabel: job.kind,
-                })
-            }
-
             const rows = db.prepare(
                 `SELECT mfi.space_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, mfi.entity_indexed_at, ms.name AS space_name
                  FROM memory_file_index mfi

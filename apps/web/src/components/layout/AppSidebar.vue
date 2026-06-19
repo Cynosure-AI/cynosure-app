@@ -464,15 +464,15 @@ const chatRoute = computed(() =>
         :disabled="!sidebarCollapsed"
       >
         <RouterLink
-          to="/activity"
+          to="/instances"
           class="nav-item"
-          :class="{ active: isActive('/activity') }"
+          :class="{ active: isActive('/instances') }"
         >
           <Icon
             icon="lucide:activity"
             class="w-4.5 h-4.5"
           />
-          <span>Activity Log</span>
+          <span>Instances</span>
           <span
             v-if="hasAwaitingApproval"
             class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse ml-1 shrink-0"
@@ -484,6 +484,27 @@ const chatRoute = computed(() =>
             <span v-if="instances.length > 9">9+</span>
             <span v-else>{{ instances.length }}</span>
           </div>
+        </RouterLink>
+        <template #content>
+          Instances
+        </template>
+      </HoverTooltip>
+
+      <HoverTooltip
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
+      >
+        <RouterLink
+          to="/activity"
+          class="nav-item"
+          :class="{ active: isActive('/activity') }"
+        >
+          <Icon
+            icon="lucide:list-tree"
+            class="w-4.5 h-4.5"
+          />
+          <span>Activity Log</span>
         </RouterLink>
         <template #content>
           Activity Log
