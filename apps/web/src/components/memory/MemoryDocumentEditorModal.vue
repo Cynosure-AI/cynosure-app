@@ -65,7 +65,7 @@ const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
 const loadedMarkdown = ref("");
-const editableFileName = ref("");
+const editableTitle = ref("");
 const currentFileName = ref("");
 const editorTick = ref(0);
 
@@ -106,8 +106,29 @@ const hasChanges = computed(() => {
   return normalizeMarkdown(current) !== normalizeMarkdown(loadedMarkdown.value);
 });
 
-const hasNameChange = computed(() => editableFileName.value.trim() !== currentFileName.value);
-const canSave = computed(() => Boolean(editableFileName.value.trim()) && (hasChanges.value || hasNameChange.value));
+const hasNameChange = computed(() => titleToFileName(editableTitle.value) !== currentFileName.value);
+const canSave = computed(() => Boolean(titleToFileName(editableTitle.value)) && (hasChanges.value || hasNameChange.value));
+
+function splitFileName(fileName: string): { stem: string; ext: string } {
+  const dotIndex = fileName.lastIndexOf(".");
+  if (dotIndex <= 0) return { stem: fileName, ext: ".md" };
+  return {
+    stem: fileName.slice(0, dotIndex),
+    ext: fileName.slice(dotIndex),
+  };
+}
+
+function titleToFileName(title: string): string {
+  const { ext } = splitFileName(currentFileName.value || props.sourceFile);
+  let stem = title.trim();
+  for (const knownExt of [".md", ".markdown", ".txt"]) {
+    if (stem.toLowerCase().endsWith(knownExt)) {
+      stem = stem.slice(0, -knownExt.length).trim();
+      break;
+    }
+  }
+  return stem ? `${stem}${ext}` : "";
+}
 
 function normalizeMarkdown(value: string): string {
   return value.replace(/\r\n/g, "\n").trim();
@@ -127,7 +148,7 @@ async function loadContent() {
   loading.value = true;
   error.value = "";
   currentFileName.value = props.sourceFile;
-  editableFileName.value = props.sourceFile;
+  editableTitle.value = splitFileName(props.sourceFile).stem;
   try {
     const res = await api.memorySpaces.getFileContent(props.spaceId, props.sourceFile);
     loadedMarkdown.value = res.content;
@@ -142,11 +163,11 @@ async function loadContent() {
 }
 
 async function applyRename() {
-  const nextFileName = editableFileName.value.trim();
+  const nextFileName = titleToFileName(editableTitle.value);
   if (!nextFileName || nextFileName === currentFileName.value) return currentFileName.value;
   const res = await api.memorySpaces.renameFile(props.spaceId, currentFileName.value, nextFileName);
   currentFileName.value = res.fileName;
-  editableFileName.value = res.fileName;
+  editableTitle.value = splitFileName(res.fileName).stem;
   return res.fileName;
 }
 
@@ -161,7 +182,7 @@ async function saveContent() {
       const res = await api.memorySpaces.updateFileContent(props.spaceId, fileName, markdown);
       loadedMarkdown.value = markdown;
       currentFileName.value = res.fileName;
-      editableFileName.value = res.fileName;
+      editableTitle.value = splitFileName(res.fileName).stem;
       emit("saved", { fileName: res.fileName, chunksStored: res.chunksStored });
     } else {
       emit("saved", { fileName, chunksStored: 0 });
@@ -220,7 +241,7 @@ onBeforeUnmount(() => {
             />
             <div class="min-w-0">
               <h3 class="text-sm font-medium text-theme-200 truncate">
-                {{ editableFileName || sourceFile }}
+                {{ titleToFileName(editableTitle) || sourceFile }}
               </h3>
               <p class="text-xs text-theme-500">
                 Markdown memory
@@ -254,13 +275,14 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="flex items-center gap-3 px-5 py-3 border-b border-theme-800 bg-theme-950/25 shrink-0">
-          <label class="text-xs text-theme-500 shrink-0">File name</label>
+          <label class="text-xs text-theme-500 shrink-0">Name</label>
           <input
-            v-model="editableFileName"
+            v-model="editableTitle"
             class="flex-1 min-w-0 bg-theme-950 border border-theme-700 rounded-lg px-3 py-1.5 text-sm text-theme-200 focus:outline-none focus:border-accent-500"
             :disabled="loading || saving"
             @keydown.enter.prevent="saveContent"
           >
+          <span class="text-sm text-theme-500 shrink-0">{{ splitFileName(currentFileName || sourceFile).ext }}</span>
         </div>
 
         <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
