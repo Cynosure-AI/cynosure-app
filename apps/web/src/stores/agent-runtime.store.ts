@@ -44,6 +44,8 @@ export interface ExecutionStep {
   maCodename?: string
   /** Sub-agent display name */
   maAgentName?: string
+  /** Unique id for one sub-agent spawn invocation. */
+  maInvocationId?: string
   /** Orchestrator-level phase (planning, synthesizing, etc.) */
   maPhase?: string
 }
@@ -229,6 +231,7 @@ export const useAgentStore = defineStore('agent', () => {
       taskId: taskId || undefined,
       maCodename: (eventData.maCodename as string) || undefined,
       maAgentName: (eventData.maAgentName as string) || undefined,
+      maInvocationId: (eventData.maInvocationId as string) || undefined,
     }
   }
 
@@ -522,6 +525,7 @@ export const useAgentStore = defineStore('agent', () => {
         taskId: r.taskId || undefined,
         maCodename: r.maCodename || undefined,
         maAgentName: r.maAgentName || undefined,
+        maInvocationId: r.maInvocationId || undefined,
         maPhase: r.maPhase || undefined,
         timestamp: r.createdAt,
       }))

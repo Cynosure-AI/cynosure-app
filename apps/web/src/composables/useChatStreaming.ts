@@ -22,6 +22,9 @@ interface StreamBuffer {
     agentId?: string
     agentName?: string
     agentIconUrl?: string | null
+    maCodename?: string
+    maAgentName?: string
+    maInvocationId?: string
     createdAt: number
 }
 
@@ -40,7 +43,7 @@ export interface ChatStreamingState {
     findStreamingMsg(): DisplayMessage | undefined
     restoreSubAgentStreams(conversationId: string): void
     finalizeCurrentStreaming(conversationId: string): void
-    handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void
+    handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void
     handleStreamChunk(data: { streamId: string; conversationId: string; content: string }): void
     handleStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void
     handleStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
@@ -49,7 +52,7 @@ export interface ChatStreamingState {
     handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number }): void
     handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number; images?: string[] }): void
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
-    handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void
+    handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void
     handleSubAgentStreamChunk(data: { streamId: string; conversationId: string; content: string }): void
     handleSubAgentStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void
     handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
@@ -154,6 +157,9 @@ export function useChatStreaming(
                 agentId: buf.agentId,
                 agentName: buf.agentName,
                 agentIconUrl: buf.agentIconUrl,
+                maCodename: buf.maCodename,
+                maAgentName: buf.maAgentName,
+                maInvocationId: buf.maInvocationId,
                 createdAt: buf.createdAt,
                 isStreaming: true
             }
@@ -170,7 +176,7 @@ export function useChatStreaming(
         }
     }
 
-    function handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void {
+    function handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
         if (!primaryStreamId.value) {
             primaryStreamId.value = data.streamId
             primaryStreamAgent.value = { agentId: data.agentId, agentName: data.agentName, agentIconUrl: data.agentIconUrl }
@@ -187,6 +193,9 @@ export function useChatStreaming(
             agentId: data.agentId,
             agentName: data.agentName,
             agentIconUrl: data.agentIconUrl,
+            maCodename: data.maCodename,
+            maAgentName: data.maAgentName,
+            maInvocationId: data.maInvocationId,
             createdAt: Date.now()
         })
 
@@ -214,6 +223,9 @@ export function useChatStreaming(
                 agentId: data.agentId,
                 agentName: data.agentName,
                 agentIconUrl: data.agentIconUrl,
+                maCodename: data.maCodename,
+                maAgentName: data.maAgentName,
+                maInvocationId: data.maInvocationId,
                 createdAt: Date.now(),
                 isStreaming: true
             })
@@ -448,7 +460,7 @@ export function useChatStreaming(
         }
     }
 
-    function handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void {
+    function handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
         subAgentStreamBuffers.set(data.streamId, {
             streamId: data.streamId,
             conversationId: data.conversationId,
@@ -460,6 +472,9 @@ export function useChatStreaming(
             agentId: data.agentId,
             agentName: data.agentName,
             agentIconUrl: data.agentIconUrl,
+            maCodename: data.maCodename,
+            maAgentName: data.maAgentName,
+            maInvocationId: data.maInvocationId,
             createdAt: Date.now()
         })
 
@@ -482,6 +497,9 @@ export function useChatStreaming(
             agentId: data.agentId,
             agentName: data.agentName,
             agentIconUrl: data.agentIconUrl,
+            maCodename: data.maCodename,
+            maAgentName: data.maAgentName,
+            maInvocationId: data.maInvocationId,
             createdAt: Date.now(),
             isStreaming: true
         }

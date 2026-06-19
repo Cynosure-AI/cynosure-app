@@ -543,8 +543,8 @@ type EventBusType = ReturnType<typeof getEventBus>
 function setupExecutionStepPersistence(eventBus: EventBusType): Array<() => void> {
   const db = getDb()
   const insertStep = db.prepare(
-    `INSERT INTO execution_steps (id, conversation_id, task_id, iteration, status, message, plan, tool_calls_json, results_json, evaluation_json, ma_codename, ma_agent_name, ma_phase, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO execution_steps (id, conversation_id, task_id, iteration, status, message, plan, tool_calls_json, results_json, evaluation_json, ma_codename, ma_agent_name, ma_invocation_id, ma_phase, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
 
   // Track last step id per task for updates (keyed by taskId to avoid sub-agent collisions)
@@ -570,6 +570,7 @@ function setupExecutionStepPersistence(eventBus: EventBusType): Array<() => void
       extra.evaluation ? JSON.stringify(extra.evaluation) : null,
       (extra.maCodename as string) || null,
       (extra.maAgentName as string) || null,
+      (extra.maInvocationId as string) || null,
       (extra.maPhase as string) || null,
       Date.now()
     )
@@ -605,6 +606,7 @@ function setupExecutionStepPersistence(eventBus: EventBusType): Array<() => void
       taskId: d.taskId,
       maCodename: d.maCodename,
       maAgentName: d.maAgentName,
+      maInvocationId: d.maInvocationId,
     })
   }))
 

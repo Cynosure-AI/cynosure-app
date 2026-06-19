@@ -365,12 +365,16 @@ export class AgentExecutor {
     }
 
     private broadcastStreamStart(streamId: string): void {
+        const meta = this.config.eventMeta
         this.config.broadcast(`${this._sp}-start`, {
             streamId,
             conversationId: this.config.conversationId,
             agentId: this.config.agentId,
             agentName: this.config.agentName,
             agentIconUrl: this.config.agentIconUrl,
+            maCodename: meta?.maCodename,
+            maAgentName: meta?.maAgentName,
+            maInvocationId: meta?.maInvocationId,
         })
     }
 

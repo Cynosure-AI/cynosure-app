@@ -278,6 +278,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 evaluation_json: string | null
                 ma_codename: string | null
                 ma_agent_name: string | null
+                ma_invocation_id: string | null
                 ma_phase: string | null
                 created_at: number
             }[]
@@ -285,8 +286,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 INSERT INTO execution_steps (
                     id, conversation_id, task_id, iteration, status, message, plan,
                     tool_calls_json, results_json, evaluation_json,
-                    ma_codename, ma_agent_name, ma_phase, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ma_codename, ma_agent_name, ma_invocation_id, ma_phase, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `)
             for (const row of stepRows) {
                 insertStep.run(
@@ -302,6 +303,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     row.evaluation_json,
                     row.ma_codename,
                     row.ma_agent_name,
+                    row.ma_invocation_id,
                     row.ma_phase,
                     row.created_at,
                 )
@@ -478,6 +480,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 evaluation_json: string | null
                 ma_codename: string | null
                 ma_agent_name: string | null
+                ma_invocation_id: string | null
                 ma_phase: string | null
                 created_at: number
             }[]
@@ -495,6 +498,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             evaluation: row.evaluation_json ? JSON.parse(row.evaluation_json) : undefined,
             maCodename: row.ma_codename,
             maAgentName: row.ma_agent_name,
+            maInvocationId: row.ma_invocation_id,
             maPhase: row.ma_phase,
             createdAt: row.created_at,
         }))

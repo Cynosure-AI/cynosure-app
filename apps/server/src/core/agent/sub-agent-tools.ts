@@ -81,6 +81,12 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             }
 
             const { assignment, agentData } = selected
+            const invocationId = nanoid()
+            const eventMeta = {
+                maCodename: agentData.internalName,
+                maAgentName: agentData.name,
+                maInvocationId: invocationId,
+            }
 
             const userMessage = context
                 ? `## Context\n${context}\n\n## Task\n${instructions}`
@@ -97,7 +103,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 userQuery: userMessage,
                 autoMemory: agentData.autoMemory === true,
                 memorySpaceOverrides: getAssignedOrDefaultSpaces(agentData.id).map((space) => ({ id: space.id, name: space.name })),
-                eventMeta: { maCodename: agentData.internalName, maAgentName: agentData.name },
+                eventMeta,
             })
             const gateway = getGateway()
             const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id
@@ -125,7 +131,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 streamEventPrefix: 'chat:subagent-stream',
                 saveMessages: true,
                 emitEvents: true,
-                eventMeta: { maCodename: agentData.internalName, maAgentName: agentData.name },
+                eventMeta,
                 agentId: agentData.id,
                 agentName: agentData.name,
                 agentIconUrl: agentData.iconUrl || null,

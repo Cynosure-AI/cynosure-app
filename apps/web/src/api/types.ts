@@ -423,6 +423,7 @@ export interface ExecutionStepRecord {
     evaluation?: { taskComplete: boolean; success: boolean; reasoning: string }
     maCodename?: string
     maAgentName?: string
+    maInvocationId?: string
     maPhase?: string
     createdAt: number
 }

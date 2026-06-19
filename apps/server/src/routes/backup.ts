@@ -1074,8 +1074,8 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                     for (const s of steps) {
                         try {
                             db.prepare(
-                                `INSERT OR REPLACE INTO execution_steps (id, conversation_id, task_id, iteration, status, message, plan, tool_calls_json, results_json, evaluation_json, ma_codename, ma_agent_name, ma_phase, created_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                `INSERT OR REPLACE INTO execution_steps (id, conversation_id, task_id, iteration, status, message, plan, tool_calls_json, results_json, evaluation_json, ma_codename, ma_agent_name, ma_invocation_id, ma_phase, created_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 s.id, s.conversation_id, s.task_id || null, s.iteration ?? 0,
                                 s.status, s.message || null, s.plan || null,
@@ -1084,6 +1084,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 s.evaluation_json || null,
                                 s.ma_codename || null,
                                 s.ma_agent_name || null,
+                                s.ma_invocation_id || null,
                                 s.ma_phase || null,
                                 s.created_at || Date.now()
                             )

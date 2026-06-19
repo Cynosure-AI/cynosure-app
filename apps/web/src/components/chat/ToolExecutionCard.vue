@@ -17,6 +17,7 @@ export interface ToolExecStep {
   taskId?: string
   maCodename?: string
   maAgentName?: string
+  maInvocationId?: string
   maPhase?: string
 }
 
