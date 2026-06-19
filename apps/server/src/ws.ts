@@ -62,9 +62,10 @@ function canReceiveEvent(state: ClientState, event: string, data: unknown): bool
   const conversationId = getConversationId(data)
   if (!conversationId) return true
 
-  // Clients that have not sent a subscription yet keep legacy firehose behavior.
-  if (!state.hasConversationSubscription) return true
-
+  // Conversation-scoped events must not fall back to a global firehose. During
+  // startup or reconnects, a cron/channel run can emit before the UI sends its
+  // subscription; dropping that event is safer than leaking it into another chat.
+  if (!state.hasConversationSubscription) return false
   return state.conversationIds.has(conversationId)
 }
 
