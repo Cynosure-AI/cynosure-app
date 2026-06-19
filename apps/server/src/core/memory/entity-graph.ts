@@ -749,7 +749,7 @@ export class EntityGraphStore {
     merge()
   }
 
-  list(limit = 80): GraphSnapshot {
+  list(limit = 80, minImportance: ImportanceLevel = 0): GraphSnapshot {
     const db = getDb()
     const edgeLimit = limit
     const now = Date.now()
@@ -771,9 +771,10 @@ export class EntityGraphStore {
       JOIN entity_graph_nodes tn ON tn.id = e.to_node_id
       JOIN node_degrees fd ON fd.id = e.from_node_id
       JOIN node_degrees td ON td.id = e.to_node_id
+      WHERE e.importance >= ?
       ORDER BY overview_score DESC, e.last_seen_at DESC
       LIMIT ?
-    `).all(now, now - 24 * 60 * 60 * 1000, edgeLimit) as Record<string, unknown>[]
+    `).all(now, now - 24 * 60 * 60 * 1000, minImportance, edgeLimit) as Record<string, unknown>[]
     const edges = edgeRows.map(rowToEdge)
     const nodeIds = Array.from(new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId])))
 
@@ -920,7 +921,7 @@ export class EntityGraphStore {
     return rows.map(rowToNode)
   }
 
-  walk(seedNodeIds: string[], depth = 2, edgeLimit = 40): GraphWalkResult {
+  walk(seedNodeIds: string[], depth = 2, edgeLimit = 40, minImportance: ImportanceLevel = 0): GraphWalkResult {
     const seedIds = Array.from(new Set(seedNodeIds.filter(Boolean)))
     if (seedIds.length === 0) return { seedNodes: [], nodes: [], edges: [] }
 
@@ -942,10 +943,11 @@ export class EntityGraphStore {
         FROM entity_graph_edges e
         JOIN entity_graph_nodes fn ON fn.id = e.from_node_id
         JOIN entity_graph_nodes tn ON tn.id = e.to_node_id
-        WHERE e.from_node_id IN (${placeholders}) OR e.to_node_id IN (${placeholders})
+        WHERE (e.from_node_id IN (${placeholders}) OR e.to_node_id IN (${placeholders}))
+          AND e.importance >= ?
         ORDER BY e.confidence DESC, e.mention_count DESC, e.last_seen_at DESC
         LIMIT ?
-      `).all(...frontier, ...frontier, layerLimit) as Record<string, unknown>[]
+      `).all(...frontier, ...frontier, minImportance, layerLimit) as Record<string, unknown>[]
 
       const next = new Set<string>()
       for (const row of rows) {

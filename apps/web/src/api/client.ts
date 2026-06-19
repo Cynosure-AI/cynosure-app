@@ -282,12 +282,13 @@ export const api = {
       get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number; minMatchThreshold: number }>('/api/memory/reranker/config'),
     configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number; minMatchThreshold: number }) =>
       post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number; minMatchThreshold: number }>('/api/memory/reranker/configure', opts),
-    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual', nodeId?: string) => {
+    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual', nodeId?: string, minImportance?: number | null) => {
       const params = new URLSearchParams()
       if (query) params.set('query', query)
       if (nodeId) params.set('nodeId', nodeId)
       if (limit) params.set('limit', String(limit))
       if (view) params.set('view', view)
+      if (minImportance !== undefined && minImportance !== null) params.set('minImportance', String(minImportance))
       const qs = params.toString()
       return get<EntityGraphResponse>(`/api/memory/graph${qs ? `?${qs}` : ''}`)
     },
