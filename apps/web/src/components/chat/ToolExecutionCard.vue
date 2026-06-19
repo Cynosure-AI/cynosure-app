@@ -35,8 +35,10 @@ const expanded = ref(prefs.autoExpandToolCalls)
 const lightboxSrc = ref<string | null>(null)
 const statusMeta: Record<string, { label: string; icon: string; color: string }> = {
   'building-task-context': { label: 'Preparing Context', icon: 'lucide:compass', color: 'text-cyan-600 dark:text-cyan-300' },
-  'routing-tools': { label: 'Auto tool routing', icon: 'lucide:route', color: 'text-accent-500 dark:text-accent-300' },
-  'routing-memory': { label: 'Auto Memories', icon: 'lucide:brain-circuit', color: 'text-accent-500 dark:text-accent-300' },
+  'routing-tools': { label: 'Gathering Context', icon: 'lucide:route', color: 'text-accent-500 dark:text-accent-300' },
+  'routing-memory': { label: 'Gathering Context', icon: 'lucide:brain-circuit', color: 'text-accent-500 dark:text-accent-300' },
+  'curating-tools': { label: 'Refining Selection', icon: 'lucide:list-filter', color: 'text-accent-500 dark:text-accent-300' },
+  'curating-memory': { label: 'Refining Selection', icon: 'lucide:list-filter', color: 'text-accent-500 dark:text-accent-300' },
   'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-amber-500 dark:text-amber-400' },
   denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-red-500 dark:text-red-400' },
   executing: { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-500 dark:text-emerald-400' },
@@ -72,6 +74,16 @@ function isTaskContextCall(call: { name?: string; arguments: string }): boolean 
   } catch {
     return false
   }
+}
+
+function contextPhase(call?: { arguments: string } | null): string {
+  const phase = call ? parseToolCallArgs(call.arguments)?.contextPhase : undefined
+  return typeof phase === 'string' ? phase : ''
+}
+
+function isContextGatheringCall(call: { arguments: string }): boolean {
+  const parsed = parseToolCallArgs(call.arguments)
+  return parsed?.type === 'memory' || parsed?.type === 'tool-router'
 }
 
 function isSubAgentSpawnCall(name: string): boolean {
@@ -125,7 +137,7 @@ function memoryCallContent(call: ToolCall | null): string | null {
 function memoryCallMetadata(call: ToolCall): string {
   const parsed = parseToolCallArgs(call.arguments)
   if (!parsed) return call.arguments
-  const { content: _content, ...metadata } = parsed
+  const { content: _content, contextPhase: _contextPhase, ...metadata } = parsed
   return Object.keys(metadata).length ? JSON.stringify(metadata, null, 2) : ''
 }
 
@@ -198,13 +210,13 @@ const currentPhase = computed(() => {
 
 const currentStatus = computed(() => props.steps[props.steps.length - 1]?.status ?? 'executing')
 const isTaskContext = computed(() => props.steps.some(step => step.status === 'building-task-context' || step.toolCalls?.some(isTaskContextCall)))
-const isToolRouting = computed(() => currentStatus.value === 'routing-tools')
-const isMemoryRouting = computed(() => currentStatus.value === 'routing-memory')
+const isToolRouting = computed(() => currentStatus.value === 'routing-tools' || currentStatus.value === 'curating-tools')
+const isMemoryRouting = computed(() => currentStatus.value === 'routing-memory' || currentStatus.value === 'curating-memory')
 const isRoutingStatus = computed(() => isTaskContext.value || isToolRouting.value || isMemoryRouting.value)
 
 /** All tool names from this iteration */
 const toolNames = computed(() => {
-  for (const step of props.steps) {
+  for (const step of [...props.steps].reverse()) {
     if (step.toolCalls?.length) return step.toolCalls.map(tc => tc.name)
   }
   return []
@@ -227,7 +239,7 @@ const results = computed(() => {
 
 /** Tool call arguments from this iteration */
 const rawToolCallArgs = computed(() => {
-  for (const step of props.steps) {
+  for (const step of [...props.steps].reverse()) {
     if (step.toolCalls?.length) return step.toolCalls
   }
   return []
@@ -238,9 +250,15 @@ const toolCallArgs = computed(() => prefs.showInternalToolCalls
   : rawToolCallArgs.value.filter((call) => isTaskContextCall(call) || !isInternalToolName(call.name))
 )
 
-const toolExecutions = computed(() => {
-  const remainingResults = [...results.value]
-  const executions = toolCallArgs.value.map((call, index) => {
+function visibleToolCalls(calls: ToolCall[]): ToolCall[] {
+  return prefs.showInternalToolCalls
+    ? calls
+    : calls.filter((call) => isTaskContextCall(call) || !isInternalToolName(call.name))
+}
+
+function buildExecutions(calls: ToolCall[], availableResults: ToolResult[] = []): Array<{ call: ToolCall | null; result?: ToolResult }> {
+  const remainingResults = [...availableResults]
+  const executions = calls.map((call, index) => {
     let resultIndex = remainingResults.findIndex(result => result.name === call.name)
     if (resultIndex === -1 && remainingResults[index]) resultIndex = index
     const result = resultIndex === -1 ? undefined : remainingResults.splice(resultIndex, 1)[0]
@@ -251,7 +269,42 @@ const toolExecutions = computed(() => {
     ...executions,
     ...remainingResults.map(result => ({ call: null, result })),
   ] as Array<{ call: ToolCall | null; result?: ToolResult }>
+}
+
+const toolExecutions = computed(() => {
+  return buildExecutions(toolCallArgs.value, results.value)
 })
+
+const contextSections = computed(() => props.steps
+  .filter((step) => step.toolCalls?.length && !step.toolCalls.some(isTaskContextCall))
+  .map((step) => {
+    const calls = visibleToolCalls(step.toolCalls || [])
+    const firstCall = calls[0]
+    return {
+      status: step.status,
+      phase: contextPhase(firstCall),
+      calls,
+      executions: buildExecutions(calls),
+    }
+  })
+  .filter((section) => section.calls.some(isContextGatheringCall))
+)
+
+function contextSectionTitle(section: { status: string; phase: string }): string {
+  if (section.phase === 'gathered-results' || section.status === 'routing-tools' || section.status === 'routing-memory') return 'Gathered Results'
+  if (section.phase === 'gathered-context' || section.status === 'curating-tools' || section.status === 'curating-memory') return 'Gathered Context'
+  return meta(section.status).label
+}
+
+function contextSectionIcon(section: { status: string; phase: string }): string {
+  return contextSectionTitle(section) === 'Gathered Context' ? 'lucide:package-check' : 'lucide:database'
+}
+
+function contextSectionClass(section: { status: string; phase: string }): string {
+  return contextSectionTitle(section) === 'Gathered Context'
+    ? 'border-emerald-400/25 bg-emerald-500/5'
+    : 'border-accent-400/25 bg-accent-500/5'
+}
 
 const taskContext = computed(() => {
   const call = rawToolCallArgs.value.find(isTaskContextCall)
@@ -282,6 +335,13 @@ const taskContextQueries = computed(() => {
 })
 
 const taskContextQueryLabels = computed(() => taskContextQueries.value.map((query) => query.label))
+
+const headerLabel = computed(() => {
+  if (isTaskContext.value) return currentPhase.value.label
+  const latestSection = [...contextSections.value].reverse()[0]
+  if (latestSection && latestSection.phase === 'gathered-context') return 'Gathered Context'
+  return currentPhase.value.label
+})
 
 /** Whether all results succeeded */
 const allSuccess = computed(() => results.value.length > 0 && results.value.every(r => r.success))
@@ -391,7 +451,7 @@ const maContext = computed(() => {
             <!-- Tool / skill names -->
             <div class="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
               <template v-if="isTaskContext">
-                <span class="text-cyan-600 dark:text-cyan-300 shrink-0">{{ currentPhase.label }}</span>
+                <span class="text-cyan-600 dark:text-cyan-300 shrink-0">{{ headerLabel }}</span>
                 <template v-if="taskContextQueryLabels.length">
                   <span
                     v-for="label in taskContextQueryLabels.slice(0, 3)"
@@ -411,7 +471,7 @@ const maContext = computed(() => {
                   v-if="isRoutingStatus"
                   class="text-theme-400 shrink-0"
                   :class="currentPhase.color"
-                >{{ currentPhase.label }}</span>
+                >{{ headerLabel }}</span>
                 <span
                   v-for="name in toolNames.slice(0, 3)"
                   :key="name"
@@ -434,7 +494,7 @@ const maContext = computed(() => {
                 v-else
                 class="text-theme-400"
                 :class="currentPhase.color"
-              >{{ currentPhase.label }}</span>
+              >{{ headerLabel }}</span>
             </div>
 
             <!-- Result count / status -->
@@ -505,7 +565,90 @@ const maContext = computed(() => {
 
           <!-- Tool executions -->
           <div
-            v-if="toolExecutions.length && !isTaskContext"
+            v-if="contextSections.length && !isTaskContext"
+            class="space-y-2"
+          >
+            <div
+              v-for="(section, sectionIndex) in contextSections"
+              :key="`${section.status}-${section.phase}-${sectionIndex}`"
+              class="rounded-lg border px-2.5 py-2"
+              :class="contextSectionClass(section)"
+            >
+              <div class="mb-1.5 flex items-center gap-1.5">
+                <Icon
+                  :icon="contextSectionIcon(section)"
+                  class="h-3 w-3 text-accent-500 dark:text-accent-300"
+                />
+                <span class="text-[11px] font-semibold text-theme-300">{{ contextSectionTitle(section) }}</span>
+              </div>
+              <div
+                class="space-y-1.5"
+              >
+                <div
+                  v-for="(execution, i) in section.executions"
+                  :key="i"
+                  class="rounded-lg border px-3 py-2"
+                  :class="toolExecutionCardClass(execution)"
+                >
+                  <div class="flex items-center gap-1.5 mb-1">
+                    <Icon
+                      :icon="execution.result ? (execution.result.success ? 'lucide:check' : 'lucide:x') : execution.call ? toolCallIcon(execution.call) : 'lucide:terminal'"
+                      class="w-3 h-3"
+                      :class="execution.result
+                        ? execution.result.success ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'
+                        : execution.call ? toolCallIconClass(execution.call.name, execution.call.arguments) : 'text-theme-500'"
+                    />
+                    <span
+                      class="text-[11px] font-medium"
+                      :class="toolExecutionNameClass(execution)"
+                    >{{ toolDisplayName(execution.call?.name || execution.result?.name || 'Tool') }}</span>
+                    <span
+                      v-if="execution.call && isMemoryCall(execution.call) && formatRerankerScore(execution.call)"
+                      class="ml-auto inline-flex items-center gap-1 rounded-md bg-accent-100/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-700 ring-1 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-200 dark:ring-accent-500/20"
+                      title="Reranker match score"
+                    >
+                      <Icon
+                        icon="lucide:percent"
+                        class="w-3 h-3"
+                      />
+                      {{ formatRerankerScore(execution.call) }}
+                    </span>
+                    <span
+                      v-if="execution.call && formatToolRouterScore(execution.call)"
+                      class="ml-auto inline-flex items-center gap-1 rounded-md bg-accent-100/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-700 ring-1 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-200 dark:ring-accent-500/20"
+                      title="Tool match score"
+                    >
+                      <Icon
+                        icon="lucide:percent"
+                        class="w-3 h-3"
+                      />
+                      {{ formatToolRouterScore(execution.call) }}
+                    </span>
+                    <span
+                      v-if="execution.call && subAgentCodenameFromArgs(execution.call.arguments)"
+                      class="ml-1 inline-flex rounded bg-indigo-200/40 px-1.5 py-0.5 text-[10px] text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"
+                    >{{ subAgentCodenameFromArgs(execution.call.arguments) }}</span>
+                  </div>
+                  <pre
+                    v-if="execution.call && isMemoryCall(execution.call) && memoryCallContent(execution.call)"
+                    class="text-[11px] leading-relaxed text-theme-300 whitespace-pre-wrap rounded px-2 py-1.5 max-h-64 overflow-y-auto bg-theme-900/70 dark:bg-theme-950/50"
+                  >{{ memoryCallContent(execution.call) }}</pre>
+                  <pre
+                    v-if="execution.call && isMemoryCall(execution.call) && memoryCallMetadata(execution.call)"
+                    class="mt-1.5 text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
+                  >{{ memoryCallMetadata(execution.call) }}</pre>
+                  <pre
+                    v-else-if="execution.call?.arguments && execution.call.arguments !== '{}' && !isToolRouterScoreCall(execution.call)"
+                    class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
+                  >{{ prettifyJson(execution.call.arguments) }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tool executions -->
+          <div
+            v-else-if="toolExecutions.length && !isTaskContext"
             class="space-y-1.5"
           >
             <div
@@ -540,7 +683,7 @@ const maContext = computed(() => {
                 <span
                   v-if="execution.call && formatToolRouterScore(execution.call)"
                   class="ml-auto inline-flex items-center gap-1 rounded-md bg-accent-100/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-700 ring-1 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-200 dark:ring-accent-500/20"
-                  title="Auto-tool routing match score"
+                  title="Tool match score"
                 >
                   <Icon
                     icon="lucide:percent"

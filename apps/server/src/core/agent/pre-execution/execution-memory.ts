@@ -1,5 +1,6 @@
 import { applyAutoMemoryRouting } from './auto-memory-routing.js'
 import type { ExecutionPreset } from '../execution-preset.js'
+import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
 import type { MemorySpaceRef } from '../../memory/memory-space-scope.js'
 
@@ -8,6 +9,9 @@ export type ExecutionMemorySpaceRef = MemorySpaceRef
 export interface ResolveMemoryContextInput {
     preset: ExecutionPreset
     conversationId: string
+    gateway: LLMGateway
+    providerId?: string
+    model?: string
     autoMemory?: boolean
     memorySpaceOverrides?: ExecutionMemorySpaceRef[]
     userQuery?: string
@@ -41,6 +45,9 @@ export async function resolveMemorySystemMessages(input: ResolveMemoryContextInp
     const {
         preset,
         conversationId,
+        gateway,
+        providerId,
+        model,
         autoMemory,
         memorySpaceOverrides,
         userQuery,
@@ -56,6 +63,9 @@ export async function resolveMemorySystemMessages(input: ResolveMemoryContextInp
         conversationId,
         userQuery,
         recentMessages,
+        gateway,
+        providerId,
+        model,
         agentId: preset.id === '__agentless__' ? undefined : preset.id,
         memorySpaceIds: memorySpaceOverrides?.map((space) => space.id),
         eventMeta,
