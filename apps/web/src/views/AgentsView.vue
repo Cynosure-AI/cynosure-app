@@ -1,111 +1,94 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useProviderStore } from '../stores/provider.store'
-import { usePreferencesStore } from '../stores/preferences.store'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import BaseCard from '../components/shared/BaseCard.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import ProviderModelSelect from '../components/shared/ProviderModelSelect.vue'
-import CustomSelect, { type SelectOptionGroup } from '../components/shared/CustomSelect.vue'
 import { useProviderLogos } from '../composables/useProviderLogos'
 import type { AgentDefinition } from '../api/types'
 
 const agentDefs = useAgentDefinitionsStore()
 const agentStore = useAgentStore()
 const providerStore = useProviderStore()
-const prefs = usePreferencesStore()
 const router = useRouter()
 const { logoUrl } = useProviderLogos()
-const AGENT_IDS_MIME = 'application/x-cynosure-agent-ids'
-const AGENT_FOLDER_STATE_KEY = 'cy-agent-folder-collapsed'
+
 const TOOLTIP_MAX_TOOLS = 20
+type AgentViewFilter = 'all' | 'favorites'
 
 const showCreateDialog = ref(false)
 const newName = ref('')
 const newDescription = ref('')
-const pendingCreateCategory = ref('')
 
-// Delete confirmation
 const showDeleteConfirm = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 const pendingDeleteName = ref('')
 
 const searchQuery = ref('')
-const showNewCategoryInput = ref(false)
-const newCategoryName = ref('')
-const editingCategory = ref<string | null>(null)
-const editingCategoryName = ref('')
-const knownCategories = ref<Set<string>>(new Set(prefs.agentCategories))
-const collapsedCategories = ref<Set<string>>(readCollapsedCategories())
-const folderDropTarget = ref<string | null>(null)
+const selectedTags = ref<string[]>([])
+const activeView = ref<AgentViewFilter>('all')
 const bulkSelectionIds = ref<string[]>([])
-const bulkCategory = ref('')
 const bulkProviderId = ref('')
 const bulkModel = ref('')
 const hasBulkProviderModelSelection = ref(false)
 
-const hasUncategorized = computed(() =>
-  agentDefs.agents.some(a => !a.category || !prefs.agentCategories.includes(a.category))
-)
+const dragReorderId = ref<string | null>(null)
+const dropTargetId = ref<string | null>(null)
+const dropPosition = ref<'before' | 'after'>('before')
 
-function readCollapsedCategories(): Set<string> {
-  try {
-    const raw = sessionStorage.getItem(AGENT_FOLDER_STATE_KEY)
-    if (!raw) return new Set(prefs.agentCategories)
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return new Set(prefs.agentCategories)
-    return new Set(parsed.filter((category): category is string => typeof category === 'string'))
-  } catch {
-    return new Set(prefs.agentCategories)
+onMounted(() => agentDefs.load())
+
+const allTags = computed(() => {
+  const tagMap = new Map<string, string>()
+  for (const agent of agentDefs.agents) {
+    for (const tag of agent.tags || []) {
+      const key = tag.toLowerCase()
+      if (!tagMap.has(key)) tagMap.set(key, tag)
+    }
   }
-}
+  return [...tagMap.values()].sort((a, b) => a.localeCompare(b))
+})
 
-function writeCollapsedCategories(categories: Set<string>): void {
-  try {
-    sessionStorage.setItem(AGENT_FOLDER_STATE_KEY, JSON.stringify([...categories]))
-  } catch {
-    // Ignore storage errors; in-memory toggle state still works.
-  }
-}
+const favoriteCount = computed(() => agentDefs.agents.filter(agent => agent.favorite).length)
 
-function sortedAgents(agents: AgentDefinition[]): AgentDefinition[] {
-  return [...agents].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-}
-
-function isUncategorizedAgent(agent: AgentDefinition): boolean {
-  return !agent.category || !prefs.agentCategories.includes(agent.category)
+function agentSort(a: AgentDefinition, b: AgentDefinition): number {
+  if (a.favorite !== b.favorite) return a.favorite ? -1 : 1
+  return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)
 }
 
 function matchesSearch(agent: AgentDefinition): boolean {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return true
-  return agent.name.toLowerCase().includes(q) || (agent.description || '').toLowerCase().includes(q)
+  return [
+    agent.name,
+    agent.description || '',
+    agent.model || '',
+    getProviderName(agent),
+    ...(agent.tags || []),
+  ].some(value => value.toLowerCase().includes(q))
 }
 
-const uncategorizedAgents = computed(() =>
-  sortedAgents(agentDefs.agents.filter(a => isUncategorizedAgent(a) && matchesSearch(a)))
-)
+function matchesSelectedTags(agent: AgentDefinition): boolean {
+  if (!selectedTags.value.length) return true
+  const agentTags = new Set((agent.tags || []).map(tag => tag.toLowerCase()))
+  return selectedTags.value.every(tag => agentTags.has(tag.toLowerCase()))
+}
 
-const categoryFolders = computed(() =>
-  prefs.agentCategories.map(category => ({
-    category,
-    agents: sortedAgents(agentDefs.agents.filter(a => a.category === category && matchesSearch(a))),
-  }))
-)
-
-const visibleAgentCount = computed(() =>
-  uncategorizedAgents.value.length + categoryFolders.value.reduce((sum, folder) => sum + folder.agents.length, 0)
+const visibleAgents = computed(() =>
+  [...agentDefs.agents]
+    .filter(agent => activeView.value === 'all' || agent.favorite)
+    .filter(matchesSearch)
+    .filter(matchesSelectedTags)
+    .sort(agentSort)
 )
 
 const hasAnyAgents = computed(() => agentDefs.agents.length > 0)
-
-function categoryForAgent(agent: AgentDefinition): string {
-  return isUncategorizedAgent(agent) ? '' : agent.category
-}
+const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || selectedTags.value.length > 0 || activeView.value !== 'all')
 
 const agentsWithIssues = computed(() => {
   const availableKeys = new Set(agentStore.availableTools.map(t => t.key))
@@ -125,17 +108,6 @@ const agentsWithIssues = computed(() => {
 const isBulkMode = computed(() => bulkSelectionIds.value.length > 0)
 const selectedAgentCount = computed(() => bulkSelectionIds.value.length)
 
-const categoryGroups = computed<SelectOptionGroup[]>(() => [
-  {
-    options: [
-      ...(hasUncategorized.value
-        ? [{ value: '__uncategorized__', label: 'Uncategorized' }]
-        : []),
-      ...prefs.agentCategories.map(cat => ({ value: cat, label: cat })),
-    ],
-  },
-])
-
 function isAgentSelected(agentId: string): boolean {
   return bulkSelectionIds.value.includes(agentId)
 }
@@ -153,7 +125,6 @@ function getProviderLogoUrl(agent: AgentDefinition): string | null {
 
 function clearBulkSelection(): void {
   bulkSelectionIds.value = []
-  bulkCategory.value = ''
   bulkProviderId.value = ''
   bulkModel.value = ''
   hasBulkProviderModelSelection.value = false
@@ -165,25 +136,7 @@ function toggleAgentSelection(agentId: string, selected?: boolean): void {
   if (shouldSelect) current.add(agentId)
   else current.delete(agentId)
   bulkSelectionIds.value = [...current]
-  if (bulkSelectionIds.value.length === 0) {
-    clearBulkSelection()
-  }
-}
-
-function areAllAgentsSelected(agents: AgentDefinition[]): boolean {
-  return agents.length > 0 && agents.every(agent => isAgentSelected(agent.id))
-}
-
-function toggleAgentGroupSelection(agents: AgentDefinition[], selected: boolean): void {
-  const current = new Set(bulkSelectionIds.value)
-  for (const agent of agents) {
-    if (selected) current.add(agent.id)
-    else current.delete(agent.id)
-  }
-  bulkSelectionIds.value = [...current]
-  if (bulkSelectionIds.value.length === 0) {
-    clearBulkSelection()
-  }
+  if (bulkSelectionIds.value.length === 0) clearBulkSelection()
 }
 
 function onRowClick(agentId: string): void {
@@ -194,57 +147,31 @@ function onRowClick(agentId: string): void {
   router.push(`/agents/${agentId}`)
 }
 
-function draggedAgentIds(agentId: string): string[] {
-  if (isBulkMode.value && isAgentSelected(agentId)) {
-    return [...bulkSelectionIds.value]
-  }
-  return [agentId]
+function toggleTag(tag: string): void {
+  const key = tag.toLowerCase()
+  selectedTags.value = selectedTags.value.some(item => item.toLowerCase() === key)
+    ? selectedTags.value.filter(item => item.toLowerCase() !== key)
+    : [...selectedTags.value, tag]
+}
+
+function isTagSelected(tag: string): boolean {
+  return selectedTags.value.some(item => item.toLowerCase() === tag.toLowerCase())
+}
+
+function clearFilters(): void {
+  searchQuery.value = ''
+  selectedTags.value = []
+  activeView.value = 'all'
 }
 
 async function applyBulkChanges(): Promise<void> {
-  if (!isBulkMode.value) return
+  if (!isBulkMode.value || !hasBulkProviderModelSelection.value) return
   const ids = [...bulkSelectionIds.value]
-  const updates: Partial<Omit<typeof agentDefs.agents[0], 'id' | 'createdAt' | 'updatedAt'>> = {}
-  
-  if (bulkCategory.value) {
-    updates.category = bulkCategory.value === '__uncategorized__' ? '' : bulkCategory.value
-  }
-  if (hasBulkProviderModelSelection.value) {
-    updates.providerId = bulkProviderId.value
-    updates.model = bulkModel.value
-  }
-  
-  if (Object.keys(updates).length === 0) return
-  await Promise.all(ids.map(id => agentDefs.update(id, updates)))
+  await Promise.all(ids.map(id => agentDefs.update(id, {
+    providerId: bulkProviderId.value,
+    model: bulkModel.value,
+  })))
   clearBulkSelection()
-}
-
-onMounted(() => agentDefs.load())
-
-watch(
-  () => [...prefs.agentCategories],
-  categories => {
-    const known = new Set(knownCategories.value)
-    const nextCollapsed = new Set(
-      [...collapsedCategories.value].filter(category => categories.includes(category))
-    )
-
-    for (const category of categories) {
-      if (!known.has(category)) {
-        nextCollapsed.add(category)
-        known.add(category)
-      }
-    }
-
-    knownCategories.value = new Set([...known].filter(category => categories.includes(category)))
-    collapsedCategories.value = nextCollapsed
-    writeCollapsedCategories(nextCollapsed)
-  }
-)
-
-function openCreateDialog(category = ''): void {
-  pendingCreateCategory.value = category
-  showCreateDialog.value = true
 }
 
 async function createAgent() {
@@ -253,7 +180,9 @@ async function createAgent() {
     name: newName.value.trim(),
     internalName: '',
     description: newDescription.value.trim(),
-    category: pendingCreateCategory.value,
+    category: '',
+    tags: [],
+    favorite: false,
     iconUrl: null,
     providerId: providerStore.lastUsedProviderId || '',
     model: providerStore.lastUsedProvider?.defaultModel || '',
@@ -265,7 +194,6 @@ async function createAgent() {
     generateTitle: true
   })
   showCreateDialog.value = false
-  pendingCreateCategory.value = ''
   newName.value = ''
   newDescription.value = ''
   router.push(`/agents/${agent.id}`)
@@ -287,18 +215,15 @@ async function duplicateAgent(id: string) {
   await agentDefs.duplicate(id)
 }
 
-// ─── Drag-and-drop reorder ───────────────────────────────
-const dragReorderId = ref<string | null>(null)
-const dropTargetId = ref<string | null>(null)
-const dropPosition = ref<'before' | 'after'>('before')
+async function toggleFavorite(agent: AgentDefinition): Promise<void> {
+  await agentDefs.update(agent.id, { favorite: !agent.favorite })
+}
 
 function onReorderDragStart(e: DragEvent, agentId: string) {
   dragReorderId.value = agentId
-  const draggedIds = draggedAgentIds(agentId)
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', agentId)
-    e.dataTransfer.setData(AGENT_IDS_MIME, JSON.stringify(draggedIds))
   }
 }
 
@@ -310,16 +235,12 @@ function onReorderDragOver(e: DragEvent, targetId: string) {
     return
   }
 
-  // Determine drop position based on cursor position within the element
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  const midpoint = rect.top + rect.height / 2
-  const pos = e.clientY
-  dropPosition.value = pos < midpoint ? 'before' : 'after'
+  dropPosition.value = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
   dropTargetId.value = targetId
 }
 
 function onReorderDragLeave(e: DragEvent, targetId: string) {
-  // Only clear if truly leaving (not entering a child)
   const related = e.relatedTarget as HTMLElement | null
   const current = e.currentTarget as HTMLElement
   if (!related || !current.contains(related)) {
@@ -334,44 +255,19 @@ async function onReorderDrop(e: DragEvent, targetAgentId: string) {
   dropTargetId.value = null
   if (!draggedId || draggedId === targetAgentId) return
 
-  const targetAgent = agentDefs.get(targetAgentId)
-  if (!targetAgent) return
-
-  const draggedIds = draggedAgentIds(draggedId)
-  const targetCategory = categoryForAgent(targetAgent)
-  const categoryAgents = agentDefs.agents.filter(a => categoryForAgent(a) === targetCategory)
-  const draggedAgents = draggedIds
-    .map(id => agentDefs.get(id))
-    .filter((agent): agent is AgentDefinition => Boolean(agent))
-  const list = sortedAgents([
-    ...categoryAgents.filter(a => !draggedIds.includes(a.id)),
-    ...draggedAgents,
-  ]).filter(matchesSearch)
-  const fromIdx = list.findIndex(a => a.id === draggedId)
-  let toIdx = list.findIndex(a => a.id === targetAgentId)
+  const list = [...visibleAgents.value]
+  const fromIdx = list.findIndex(agent => agent.id === draggedId)
+  let toIdx = list.findIndex(agent => agent.id === targetAgentId)
   if (fromIdx === -1 || toIdx === -1) return
 
-  await Promise.all(
-    draggedIds
-      .filter(id => {
-        const agent = agentDefs.get(id)
-        return agent && categoryForAgent(agent) !== targetCategory
-      })
-      .map(id => agentDefs.update(id, { category: targetCategory }))
-  )
-
-  // Reorder locally
-  const reordered = [...list]
-  const [moved] = reordered.splice(fromIdx, 1)
-  // Adjust target index after removal
+  const [moved] = list.splice(fromIdx, 1)
   if (fromIdx < toIdx) toIdx--
   if (dropPosition.value === 'after') toIdx++
-  reordered.splice(toIdx, 0, moved)
+  list.splice(toIdx, 0, moved)
 
-  // Persist new sortOrder for all affected agents
-  for (let i = 0; i < reordered.length; i++) {
-    if (reordered[i].sortOrder !== i) {
-      await agentDefs.update(reordered[i].id, { sortOrder: i })
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].sortOrder !== i) {
+      await agentDefs.update(list[i].id, { sortOrder: i })
     }
   }
 }
@@ -381,90 +277,6 @@ function onReorderDragEnd() {
   dropTargetId.value = null
 }
 
-function isCategoryCollapsed(category: string): boolean {
-  return collapsedCategories.value.has(category)
-}
-
-function isFolderCollapsed(folder: { category: string; agents: AgentDefinition[] }): boolean {
-  const searching = searchQuery.value.trim().length > 0
-  if (searching && folder.agents.length > 0 && folder.agents.length < 5) return false
-  return isCategoryCollapsed(folder.category)
-}
-
-function toggleCategory(category: string): void {
-  const updated = new Set(collapsedCategories.value)
-  if (updated.has(category)) updated.delete(category)
-  else updated.add(category)
-  collapsedCategories.value = updated
-  writeCollapsedCategories(updated)
-}
-
-function addCategory() {
-  const name = newCategoryName.value.trim()
-  if (name) prefs.addAgentCategory(name)
-  newCategoryName.value = ''
-  showNewCategoryInput.value = false
-}
-
-function startRenameCategory(category: string) {
-  editingCategory.value = category
-  editingCategoryName.value = category
-}
-
-function commitRenameCategory(oldName: string) {
-  const newName = editingCategoryName.value.trim()
-  editingCategory.value = null
-  if (newName && newName !== oldName) {
-    handleRenameCategory({ oldName, newName })
-  }
-}
-
-function cancelRenameCategory() {
-  editingCategory.value = null
-  editingCategoryName.value = ''
-}
-
-function onFolderDragOver(e: DragEvent, category: string) {
-  e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  folderDropTarget.value = category
-}
-
-function onFolderDragLeave(e: DragEvent, category: string) {
-  const related = e.relatedTarget as HTMLElement | null
-  const current = e.currentTarget as HTMLElement
-  if (!related || !current.contains(related)) {
-    if (folderDropTarget.value === category) folderDropTarget.value = null
-  }
-}
-
-async function onFolderDrop(e: DragEvent, category: string) {
-  e.preventDefault()
-  folderDropTarget.value = null
-  await onCategoryDrop(readAgentDropPayload(e, category))
-}
-
-function readAgentDropPayload(e: DragEvent, category: string): { itemId?: string; itemIds?: string[]; category: string } {
-  const rawIds = e.dataTransfer?.getData(AGENT_IDS_MIME)
-  if (rawIds) {
-    try {
-      const itemIds = JSON.parse(rawIds) as unknown
-      if (Array.isArray(itemIds)) {
-        return {
-          category,
-          itemIds: itemIds.filter((id): id is string => typeof id === 'string' && id.length > 0),
-        }
-      }
-    } catch {
-      // Fall through to the single-item payload.
-    }
-  }
-  return {
-    category,
-    itemId: e.dataTransfer?.getData('text/plain') || undefined,
-  }
-}
-
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString([], {
     month: 'short',
@@ -472,56 +284,6 @@ function formatDate(ts: number): string {
     year: 'numeric'
   })
 }
-
-async function onCategoryDrop(payload: { itemId?: string; itemIds?: string[]; category: string }) {
-  const ids = payload.itemIds?.length
-    ? payload.itemIds
-    : payload.itemId
-      ? [payload.itemId]
-      : []
-  if (!ids.length) return
-  await Promise.all(ids.map(id => agentDefs.update(id, { category: payload.category })))
-}
-
-function handleRemoveCategory(name: string) {
-  prefs.removeAgentCategory(name)
-  const known = new Set(knownCategories.value)
-  const collapsed = new Set(collapsedCategories.value)
-  known.delete(name)
-  collapsed.delete(name)
-  knownCategories.value = known
-  collapsedCategories.value = collapsed
-  writeCollapsedCategories(collapsed)
-  // Move agents in removed category to uncategorized
-  for (const agent of agentDefs.agents) {
-    if (agent.category === name) {
-      agentDefs.update(agent.id, { category: '' })
-    }
-  }
-}
-
-function handleRenameCategory(payload: { oldName: string; newName: string }) {
-  const known = new Set(knownCategories.value)
-  const collapsed = new Set(collapsedCategories.value)
-  const wasKnown = known.has(payload.oldName)
-  const wasCollapsed = collapsed.has(payload.oldName)
-  known.delete(payload.oldName)
-  collapsed.delete(payload.oldName)
-  if (wasKnown) known.add(payload.newName)
-  if (wasCollapsed) collapsed.add(payload.newName)
-  knownCategories.value = known
-  collapsedCategories.value = collapsed
-  writeCollapsedCategories(collapsed)
-
-  prefs.renameAgentCategory(payload.oldName, payload.newName)
-  // Update agents in the renamed category
-  for (const agent of agentDefs.agents) {
-    if (agent.category === payload.oldName) {
-      agentDefs.update(agent.id, { category: payload.newName })
-    }
-  }
-}
-
 </script>
 
 <template>
@@ -533,12 +295,12 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
             Agents
           </h1>
           <p class="text-sm text-theme-500 mt-1">
-            Create and manage AI agents with custom configurations. Drag and drop the name column to reorder or organize into categories.
+            Create and manage AI agents with custom configurations, tags, and favorites.
           </p>
         </div>
         <button
           class="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors"
-          @click="openCreateDialog()"
+          @click="showCreateDialog = true"
         >
           <Icon
             icon="lucide:plus"
@@ -548,8 +310,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
         </button>
       </div>
 
-      <!-- Search Bar -->
-      <div class="flex flex-col gap-3 mb-5 md:flex-row md:items-center">
+      <div class="flex flex-col gap-3 mb-5 lg:flex-row lg:items-center">
         <div class="relative flex-1">
           <Icon
             icon="lucide:search"
@@ -558,7 +319,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="Search agents by name or description…"
+            placeholder="Search agents, tags, providers, or models..."
             class="w-full pl-10 pr-9 py-2 bg-theme-800/60 border border-theme-700/60 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500/60 focus:border-accent-500/40 transition-colors"
           >
           <button
@@ -572,62 +333,59 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
             />
           </button>
         </div>
-        <form
-          v-if="showNewCategoryInput"
-          class="flex items-center gap-2"
-          @submit.prevent="addCategory"
-        >
-          <input
-            v-model="newCategoryName"
-            type="text"
-            placeholder="Folder name"
-            class="w-full md:w-44 px-3 py-2 bg-theme-800/60 border border-theme-700/60 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500/60 focus:border-accent-500/40 transition-colors"
-            @keydown.esc="showNewCategoryInput = false"
-          >
+
+        <div class="inline-flex rounded-lg border border-theme-700/70 bg-theme-900/70 p-1">
           <button
-            class="p-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-white transition-colors"
-            title="Add folder"
-            type="submit"
+            class="px-3 py-1.5 rounded-md text-sm transition-colors"
+            :class="activeView === 'all' ? 'bg-accent-600 text-white' : 'text-theme-400 hover:text-theme-200 hover:bg-theme-800'"
+            @click="activeView = 'all'"
           >
-            <Icon
-              icon="lucide:check"
-              class="w-4 h-4"
-            />
+            All
           </button>
-        </form>
+          <button
+            class="px-3 py-1.5 rounded-md text-sm transition-colors"
+            :class="activeView === 'favorites' ? 'bg-accent-600 text-white' : 'text-theme-400 hover:text-theme-200 hover:bg-theme-800'"
+            @click="activeView = 'favorites'"
+          >
+            Favorites
+            <span class="ml-1 text-xs opacity-70">{{ favoriteCount }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div
+        v-if="allTags.length"
+        class="mb-5 flex flex-wrap items-center gap-2"
+      >
+        <span class="text-xs font-medium uppercase tracking-wider text-theme-500">Tags</span>
         <button
-          v-else
-          class="inline-flex items-center justify-center gap-2 px-3 py-2 bg-theme-800/70 hover:bg-theme-700 text-theme-300 rounded-lg text-sm font-medium transition-colors"
-          @click="showNewCategoryInput = true"
+          v-for="tag in allTags"
+          :key="tag"
+          class="rounded-full border px-2.5 py-1 text-xs transition-colors"
+          :class="isTagSelected(tag)
+            ? 'border-accent-500/70 bg-accent-500/15 text-accent-300'
+            : 'border-theme-700 bg-theme-900/60 text-theme-400 hover:border-theme-600 hover:text-theme-200'"
+          @click="toggleTag(tag)"
         >
-          <Icon
-            icon="lucide:folder-plus"
-            class="w-4 h-4"
-          />
-          New Folder
+          {{ tag }}
+        </button>
+        <button
+          v-if="selectedTags.length"
+          class="rounded-full px-2.5 py-1 text-xs text-theme-500 hover:bg-theme-800 hover:text-theme-300 transition-colors"
+          @click="selectedTags = []"
+        >
+          Clear tags
         </button>
       </div>
 
-      <!-- Bulk edit bar -->
       <div
         v-if="isBulkMode"
         class="mb-5 flex flex-col gap-3 rounded-xl border border-accent-500/30 bg-accent-500/8 px-4 py-3 md:flex-row md:items-center md:justify-between"
       >
-        <div
-          class="text-sm text-theme-200"
-        >
+        <div class="text-sm text-theme-200">
           {{ selectedAgentCount }} agent{{ selectedAgentCount === 1 ? '' : 's' }} selected
         </div>
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-end md:flex-1">
-          <div class="w-full md:w-56">
-            <CustomSelect
-              :model-value="bulkCategory"
-              :groups="categoryGroups"
-              placeholder="Set category…"
-              size="sm"
-              @update:model-value="bulkCategory = $event"
-            />
-          </div>
           <div class="min-w-0 md:min-w-80">
             <ProviderModelSelect
               :provider-id="bulkProviderId"
@@ -645,7 +403,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
           <div class="flex items-center gap-2">
             <button
               class="px-3 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
-              :disabled="!hasBulkProviderModelSelection && !bulkCategory"
+              :disabled="!hasBulkProviderModelSelection"
               @click="applyBulkChanges"
             >
               Apply
@@ -660,35 +418,27 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
         </div>
       </div>
 
-      <!-- Agents explorer -->
       <div
-        v-if="hasAnyAgents || prefs.agentCategories.length"
+        v-if="hasAnyAgents"
         class="flex flex-col rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45"
       >
         <div class="agent-grid bg-theme-900/70 border-b border-theme-800 px-5 py-3 text-[11px] tracking-wider uppercase text-theme-400">
           <div class="flex items-center" />
-          <div>
-            Name
-          </div>
-          <div class="hidden md:block">
-            Provider/Model
-          </div>
-          <div class="hidden lg:block">
-            Info
-          </div>
-          <div class="text-right">
-            Actions
-          </div>
+          <div>Name</div>
+          <div class="hidden md:block">Tags</div>
+          <div class="hidden lg:block">Provider/Model</div>
+          <div class="hidden xl:block">Info</div>
+          <div class="text-right">Actions</div>
         </div>
 
         <div
-          v-for="item in uncategorizedAgents"
+          v-for="item in visibleAgents"
           :key="item.id"
-          class="agent-grid group order-2 border-b border-theme-800/70 cursor-pointer hover:bg-theme-800/30 transition-colors px-5 py-4"
+          class="agent-grid group border-b border-theme-800/70 last:border-b-0 cursor-pointer hover:bg-theme-800/30 transition-colors px-5 py-4"
           @click="onRowClick(item.id)"
         >
           <div
-            class="flex items-center pt-1"
+            class="flex items-center gap-2 pt-1"
             @click.stop
           >
             <input
@@ -698,7 +448,19 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
               :checked="isAgentSelected(item.id)"
               @change="toggleAgentSelection(item.id, ($event.target as HTMLInputElement).checked)"
             >
+            <button
+              class="rounded-md p-1 transition-colors"
+              :class="item.favorite ? 'text-amber-400 hover:text-amber-300 [&>svg]:fill-current' : 'text-theme-600 hover:text-amber-400'"
+              :title="item.favorite ? 'Remove from favorites' : 'Add to favorites'"
+              @click="toggleFavorite(item)"
+            >
+              <Icon
+                icon="lucide:star"
+                class="h-4 w-4"
+              />
+            </button>
           </div>
+
           <div
             class="flex items-start gap-3 min-w-0 cursor-grab active:cursor-grabbing"
             :class="{
@@ -740,12 +502,40 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
               >
                 {{ item.description }}
               </div>
-              <div class="text-xs text-theme-500 truncate mt-1 md:hidden">
-                {{ item.model || 'No model selected' }}
+              <div class="mt-2 flex flex-wrap gap-1 md:hidden">
+                <button
+                  v-for="tag in item.tags"
+                  :key="tag"
+                  class="rounded-full border border-theme-700 bg-theme-900/70 px-2 py-0.5 text-[11px] text-theme-400"
+                  @click.stop="toggleTag(tag)"
+                >
+                  {{ tag }}
+                </button>
               </div>
             </div>
           </div>
-          <div class="hidden md:flex items-center gap-2 md:pt-1">
+
+          <div class="hidden md:flex flex-wrap items-center gap-1.5">
+            <button
+              v-for="tag in item.tags"
+              :key="tag"
+              class="rounded-full border px-2 py-0.5 text-xs transition-colors"
+              :class="isTagSelected(tag)
+                ? 'border-accent-500/70 bg-accent-500/15 text-accent-300'
+                : 'border-theme-700 bg-theme-900/70 text-theme-400 hover:border-theme-600 hover:text-theme-200'"
+              @click.stop="toggleTag(tag)"
+            >
+              {{ tag }}
+            </button>
+            <span
+              v-if="!item.tags.length"
+              class="text-xs text-theme-600"
+            >
+              No tags
+            </span>
+          </div>
+
+          <div class="hidden lg:flex items-center gap-2 md:pt-1">
             <img
               v-if="getProviderLogoUrl(item)"
               :src="getProviderLogoUrl(item) || ''"
@@ -757,11 +547,12 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
                 {{ getProviderName(item) }}
               </div>
               <div class="text-xs text-theme-500 truncate">
-                {{ item.model }}
+                {{ item.model || 'No model selected' }}
               </div>
             </div>
           </div>
-          <div class="hidden lg:flex items-center gap-3 text-xs text-theme-500">
+
+          <div class="hidden xl:flex items-center gap-3 text-xs text-theme-500">
             <HoverTooltip
               :disabled="item.tools.length === 0"
               placement="mouse"
@@ -796,38 +587,16 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
                 </div>
               </template>
             </HoverTooltip>
-            <HoverTooltip
+            <span
               v-if="item.subAgents?.length"
-              :disabled="item.subAgents.length === 0"
-              placement="mouse"
-              :max-width="220"
+              class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded"
             >
-              <span class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded cursor-default">
-                <Icon
-                  icon="lucide:users"
-                  class="w-3 h-3"
-                />
-                {{ item.subAgents.length }}
-              </span>
-              <template #content>
-                <div class="font-medium text-theme-300 mb-1.5">
-                  {{ item.subAgents.length }} sub-{{ item.subAgents.length === 1 ? 'agent' : 'agents' }}
-                </div>
-                <div
-                  v-for="sa in item.subAgents.slice(0, TOOLTIP_MAX_TOOLS)"
-                  :key="sa.agentId"
-                  class="font-mono text-[10px] text-theme-300 truncate py-0.5"
-                >
-                  {{ agentDefs.get(sa.agentId)?.name ?? sa.agentId }}
-                </div>
-                <div
-                  v-if="item.subAgents.length > TOOLTIP_MAX_TOOLS"
-                  class="text-theme-500 text-[10px] mt-1"
-                >
-                  +{{ item.subAgents.length - TOOLTIP_MAX_TOOLS }} more
-                </div>
-              </template>
-            </HoverTooltip>
+              <Icon
+                icon="lucide:users"
+                class="w-3 h-3"
+              />
+              {{ item.subAgents.length }}
+            </span>
             <span class="flex items-center gap-1 whitespace-nowrap">
               <Icon
                 icon="lucide:calendar"
@@ -836,6 +605,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
               {{ formatDate(item.createdAt) }}
             </span>
           </div>
+
           <div class="flex items-center justify-end gap-1">
             <button
               class="p-1.5 text-theme-500 hover:text-accent-400 rounded-md transition-all"
@@ -861,278 +631,32 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
         </div>
 
         <div
-          v-if="hasUncategorized && uncategorizedAgents.length === 0 && !searchQuery"
-          class="order-2 border-b border-theme-800/70 px-5 py-4 text-sm text-theme-500"
+          v-if="visibleAgents.length === 0"
+          class="px-5 py-8 text-center text-sm text-theme-500"
         >
-          Uncategorized agents are hidden by the current filters.
-        </div>
-
-        <div
-          v-for="folder in categoryFolders"
-          :key="folder.category"
-          class="order-1 border-b border-theme-800/70"
-        >
-          <div
-            class="group flex items-center gap-3 px-5 py-3 bg-theme-900/35 hover:bg-theme-800/35 transition-colors"
-            :class="{ 'ring-1 ring-accent-500/60 ring-inset bg-accent-500/10': folderDropTarget === folder.category }"
-            @dragover="onFolderDragOver($event, folder.category)"
-            @dragleave="onFolderDragLeave($event, folder.category)"
-            @drop="onFolderDrop($event, folder.category)"
-          >
-            <div
-              class="flex w-4 items-center"
-              @click.stop
-            >
-              <input
-                v-if="folder.agents.length"
-                type="checkbox"
-                class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                :class="{ 'opacity-100': isBulkMode || areAllAgentsSelected(folder.agents) }"
-                :checked="areAllAgentsSelected(folder.agents)"
-                @change="toggleAgentGroupSelection(folder.agents, ($event.target as HTMLInputElement).checked)"
-              >
-            </div>
-            <button
-              class="p-1 -ml-1 text-theme-500 hover:text-theme-200 transition-colors"
-              :aria-expanded="!isFolderCollapsed(folder)"
-              @click="toggleCategory(folder.category)"
-            >
-              <Icon
-                icon="lucide:chevron-down"
-                class="w-4 h-4 transition-transform"
-                :class="{ '-rotate-90': isFolderCollapsed(folder) }"
-              />
-            </button>
-            <Icon
-              :icon="isFolderCollapsed(folder) ? 'lucide:folder' : 'lucide:folder-open'"
-              class="w-5 h-5 text-amber-400"
-            />
-            <form
-              v-if="editingCategory === folder.category"
-              class="flex min-w-0 flex-1 items-center gap-2"
-              @submit.prevent="commitRenameCategory(folder.category)"
-            >
-              <input
-                v-model="editingCategoryName"
-                class="min-w-0 flex-1 px-2 py-1 bg-theme-800 border border-theme-700 rounded-md text-sm text-theme-100 focus:outline-none focus:ring-1 focus:ring-accent-500"
-                @keydown.esc="cancelRenameCategory"
-              >
-              <button
-                class="p-1.5 rounded-md text-theme-400 hover:text-accent-300 transition-colors"
-                type="submit"
-                title="Save folder name"
-              >
-                <Icon
-                  icon="lucide:check"
-                  class="w-4 h-4"
-                />
-              </button>
-            </form>
-            <button
-              v-else
-              class="min-w-0 flex-1 text-left"
-              @click="toggleCategory(folder.category)"
-            >
-              <span class="text-sm font-medium text-theme-100 truncate">{{ folder.category }}</span>
-              <span class="ml-2 text-xs text-theme-500">{{ folder.agents.length }}</span>
-            </button>
-            <button
-              class="p-1.5 text-theme-500 hover:text-accent-400 rounded-md transition-all"
-              title="New agent in folder"
-              @click.stop="openCreateDialog(folder.category)"
-            >
-              <Icon
-                icon="lucide:plus"
-                class="w-4 h-4"
-              />
-            </button>
-            <button
-              class="p-1.5 text-theme-500 hover:text-theme-200 rounded-md transition-all"
-              title="Rename folder"
-              @click.stop="startRenameCategory(folder.category)"
-            >
-              <Icon
-                icon="lucide:pencil"
-                class="w-4 h-4"
-              />
-            </button>
-            <button
-              class="p-1.5 text-theme-500 hover:text-red-400 rounded-md transition-all"
-              title="Delete folder"
-              @click.stop="handleRemoveCategory(folder.category)"
-            >
-              <Icon
-                icon="lucide:trash-2"
-                class="w-4 h-4"
-              />
-            </button>
-          </div>
-
-          <div v-if="!isFolderCollapsed(folder)">
-            <div
-              v-if="folder.agents.length === 0"
-              class="px-14 py-4 text-sm text-theme-500"
-            >
-              {{ searchQuery ? 'No matching agents in this folder.' : 'Drop agents here or create one in this folder.' }}
-            </div>
-            <div
-              v-for="item in folder.agents"
-              :key="item.id"
-              class="agent-grid folder-agent-row group border-t border-theme-800/70 cursor-pointer hover:bg-theme-800/30 transition-colors px-5 py-4"
-              @click="onRowClick(item.id)"
-            >
-              <div
-                class="flex items-center pt-1"
-                @click.stop
-              >
-                <input
-                  type="checkbox"
-                  class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                  :class="{ 'opacity-100': isBulkMode || isAgentSelected(item.id) }"
-                  :checked="isAgentSelected(item.id)"
-                  @change="toggleAgentSelection(item.id, ($event.target as HTMLInputElement).checked)"
-                >
-              </div>
-              <div
-                class="flex items-start gap-3 min-w-0 cursor-grab active:cursor-grabbing"
-                :class="{
-                  'opacity-60': dragReorderId === item.id,
-                  'ring-1 ring-accent-500/70 ring-inset rounded-lg': dropTargetId === item.id,
-                }"
-                draggable="true"
-                @dragstart="onReorderDragStart($event, item.id)"
-                @dragover="onReorderDragOver($event, item.id)"
-                @dragleave="onReorderDragLeave($event, item.id)"
-                @drop="onReorderDrop($event, item.id)"
-                @dragend="onReorderDragEnd"
-              >
-                <div class="w-9 h-9 shrink-0 rounded-lg bg-linear-to-br from-accent-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden">
-                  <img
-                    v-if="item.iconUrl"
-                    :src="item.iconUrl"
-                    alt=""
-                    class="w-full h-full object-cover"
-                  >
-                  <Icon
-                    v-else
-                    icon="lucide:bot"
-                    class="w-4 h-4 text-accent-400"
-                  />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="text-sm font-medium text-theme-100 truncate flex items-center gap-1">
-                    {{ item.name }}
-                    <Icon
-                      v-if="agentsWithIssues.has(item.id)"
-                      icon="lucide:alert-triangle"
-                      class="w-3.5 h-3.5 text-amber-400 shrink-0"
-                    />
-                  </div>
-                  <div
-                    v-if="item.description"
-                    class="text-xs text-theme-500 truncate"
-                  >
-                    {{ item.description }}
-                  </div>
-                  <div class="text-xs text-theme-500 truncate mt-1 md:hidden">
-                    {{ item.model || 'No model selected' }}
-                  </div>
-                </div>
-              </div>
-              <div class="hidden md:flex items-center gap-2 md:pt-1">
-                <img
-                  v-if="getProviderLogoUrl(item)"
-                  :src="getProviderLogoUrl(item) || ''"
-                  :alt="getProviderName(item)"
-                  class="w-5 h-5 rounded object-contain shrink-0"
-                >
-                <div class="flex flex-col gap-0.5 min-w-0">
-                  <div class="text-sm text-theme-200 font-medium">
-                    {{ getProviderName(item) }}
-                  </div>
-                  <div class="text-xs text-theme-500 truncate">
-                    {{ item.model }}
-                  </div>
-                </div>
-              </div>
-              <div class="hidden lg:flex items-center gap-3 text-xs text-theme-500">
-                <span class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded">
-                  <Icon
-                    icon="lucide:wrench"
-                    class="w-3 h-3"
-                  />
-                  {{ item.tools.length }}
-                </span>
-                <span
-                  v-if="item.subAgents?.length"
-                  class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded"
-                >
-                  <Icon
-                    icon="lucide:users"
-                    class="w-3 h-3"
-                  />
-                  {{ item.subAgents.length }}
-                </span>
-                <span class="flex items-center gap-1 whitespace-nowrap">
-                  <Icon
-                    icon="lucide:calendar"
-                    class="w-3 h-3"
-                  />
-                  {{ formatDate(item.createdAt) }}
-                </span>
-              </div>
-              <div class="flex items-center justify-end gap-1">
-                <button
-                  class="p-1.5 text-theme-500 hover:text-accent-400 rounded-md transition-all"
-                  title="Duplicate agent"
-                  @click.stop="duplicateAgent(item.id)"
-                >
-                  <Icon
-                    icon="lucide:copy"
-                    class="w-4 h-4"
-                  />
-                </button>
-                <button
-                  class="p-1.5 text-theme-500 hover:text-red-400 rounded-md transition-all"
-                  title="Delete agent"
-                  @click.stop="confirmDelete(item)"
-                >
-                  <Icon
-                    icon="lucide:trash-2"
-                    class="w-4 h-4"
-                  />
-                </button>
-              </div>
-            </div>
-          </div>
+          No agents match the current filters.
         </div>
       </div>
 
-      <!-- Empty State -->
       <BaseCard
-        v-if="!visibleAgentCount && (!prefs.agentCategories.length || searchQuery)"
+        v-if="!hasAnyAgents"
         class="p-12 text-center"
       >
-        <div
-          class="w-16 h-16 rounded-2xl bg-accent-500/10 flex items-center justify-center mx-auto mb-4"
-        >
+        <div class="w-16 h-16 rounded-2xl bg-accent-500/10 flex items-center justify-center mx-auto mb-4">
           <Icon
             icon="lucide:bot"
             class="w-8 h-8 text-accent-400"
           />
         </div>
         <h3 class="text-lg font-medium text-theme-200 mb-2">
-          {{ searchQuery ? 'No Matching Agents' : 'No Agents Yet' }}
+          No Agents Yet
         </h3>
         <p class="text-sm text-theme-500 max-w-md mx-auto mb-6">
-          {{ searchQuery
-            ? 'No agents match your search. Try a different term or clear the search.'
-            : 'Create your first agent to get started. Each agent can be configured with its own model, tools, and memory.'
-          }}
+          Create your first agent to get started. Each agent can be configured with its own model, tools, memory, and tags.
         </p>
         <button
           class="inline-flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors"
-          @click="openCreateDialog()"
+          @click="showCreateDialog = true"
         >
           <Icon
             icon="lucide:plus"
@@ -1142,7 +666,19 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
         </button>
       </BaseCard>
 
-      <!-- Create Dialog -->
+      <div
+        v-if="hasAnyAgents && hasFilters"
+        class="mt-4 flex items-center justify-between text-sm text-theme-500"
+      >
+        <span>Showing {{ visibleAgents.length }} of {{ agentDefs.agents.length }} agents</span>
+        <button
+          class="text-theme-400 hover:text-theme-200 transition-colors"
+          @click="clearFilters"
+        >
+          Clear filters
+        </button>
+      </div>
+
       <Teleport to="body">
         <div
           v-if="showCreateDialog"
@@ -1192,7 +728,6 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
         </div>
       </Teleport>
 
-      <!-- Delete Confirmation Modal -->
       <ModalDialog
         :show="showDeleteConfirm"
         title="Delete Agent"
@@ -1225,29 +760,27 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
 <style scoped>
 .agent-grid {
   display: grid;
-  grid-template-columns: 40px minmax(180px, 1.5fr) minmax(180px, 1fr) 200px 96px;
+  grid-template-columns: 68px minmax(180px, 1.4fr) minmax(150px, 0.9fr) minmax(180px, 0.9fr) 180px 96px;
   gap: 1rem;
   align-items: start;
 }
 
-.folder-agent-row {
-  padding-left: 4rem;
+@media (max-width: 1279px) {
+  .agent-grid {
+    grid-template-columns: 68px minmax(180px, 1.3fr) minmax(150px, 0.9fr) minmax(180px, 0.9fr) 96px;
+  }
 }
 
 @media (max-width: 1023px) {
   .agent-grid {
-    grid-template-columns: 40px minmax(180px, 1fr) minmax(140px, auto);
+    grid-template-columns: 68px minmax(180px, 1fr) minmax(150px, auto) 96px;
   }
 }
 
 @media (max-width: 767px) {
   .agent-grid {
-    grid-template-columns: 32px minmax(0, 1fr) auto;
+    grid-template-columns: 64px minmax(0, 1fr) auto;
     gap: 0.75rem;
-  }
-
-  .folder-agent-row {
-    padding-left: 2.5rem;
   }
 }
 </style>

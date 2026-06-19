@@ -227,6 +227,8 @@ export interface AgentDefinition {
     thinkingEnabled: boolean
     maxContextTokens: number | null
     sortOrder: number
+    tags: string[]
+    favorite: boolean
     memorySpaces: string[]
     createdAt: number
     updatedAt: number
