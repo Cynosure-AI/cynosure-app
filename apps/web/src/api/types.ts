@@ -427,23 +427,23 @@ export interface ExecutionStepRecord {
     createdAt: number
 }
 
-export type OrchestrationTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
-export type OrchestrationRunStatus = 'running' | 'completed' | 'cancelled' | 'error'
+export type PlanningTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
+export type PlanningRunStatus = 'running' | 'completed' | 'cancelled' | 'error'
 
-export interface OrchestrationTaskItem {
+export interface PlanningTaskItem {
     id: string
     title: string
-    status: OrchestrationTaskStatus
+    status: PlanningTaskStatus
     note?: string
     updatedAt: number
 }
 
-export interface OrchestrationState {
+export interface PlanningState {
     runId: string
     conversationId: string
-    status: OrchestrationRunStatus
+    status: PlanningRunStatus
     objective: string
-    items: OrchestrationTaskItem[]
+    items: PlanningTaskItem[]
     currentTaskId?: string
     result?: { summary?: string; error?: string }
     createdAt: number

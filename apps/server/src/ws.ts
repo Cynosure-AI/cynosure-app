@@ -17,7 +17,7 @@ const conversationScopedEventPrefixes = [
   'chat:post-action',
   'agent:execution-update',
   'agent:hitl-',
-  'orchestrator:state-updated',
+  'planning:state-updated',
 ]
 
 export function addClient(ws: WebSocket): void {

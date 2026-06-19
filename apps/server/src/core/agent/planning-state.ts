@@ -2,23 +2,23 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 
-export type OrchestrationTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
-export type OrchestrationRunStatus = 'running' | 'completed' | 'cancelled' | 'error'
+export type PlanningTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
+export type PlanningRunStatus = 'running' | 'completed' | 'cancelled' | 'error'
 
-export interface OrchestrationTaskItem {
+export interface PlanningTaskItem {
   id: string
   title: string
-  status: OrchestrationTaskStatus
+  status: PlanningTaskStatus
   note?: string
   updatedAt: number
 }
 
-export interface OrchestrationState {
+export interface PlanningState {
   runId: string
   conversationId: string
-  status: OrchestrationRunStatus
+  status: PlanningRunStatus
   objective: string
-  items: OrchestrationTaskItem[]
+  items: PlanningTaskItem[]
   currentTaskId?: string
   result?: { summary?: string; error?: string }
   createdAt: number
@@ -38,17 +38,18 @@ interface TaskRow {
   completed_at: number | null
 }
 
-const STATE_TYPE = 'orchestrator_state'
+const STATE_TYPE = 'planning_state'
+const LEGACY_STATE_TYPES = new Set(['orchestrator_state', 'todo_state'])
 const MAX_OBJECTIVE_LENGTH = 300
 const MAX_TASKS = 24
 const MAX_TASK_TITLE_LENGTH = 120
 const MAX_NOTE_LENGTH = 180
 
-export function createOrchestrationRun(conversationId: string, objective: string): OrchestrationState {
+export function createPlanningRun(conversationId: string, objective: string): PlanningState {
   const db = getDb()
   const now = Date.now()
   const runId = nanoid()
-  const state: OrchestrationState = {
+  const state: PlanningState = {
     runId,
     conversationId,
     status: 'running',
@@ -63,19 +64,18 @@ export function createOrchestrationRun(conversationId: string, objective: string
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(runId, conversationId, state.status, JSON.stringify(toDefinition(state)), null, 0, now, now, null)
 
-  emitState(state)
   return state
 }
 
-export function resumeOrCreateOrchestrationRun(conversationId: string, objective: string): OrchestrationState {
-  const latest = getLatestOrchestrationState(conversationId)
+export function resumeOrCreatePlanningRun(conversationId: string, objective: string): PlanningState {
+  const latest = getLatestPlanningState(conversationId)
   if (!latest || latest.status !== 'running' || latest.items.length === 0) {
-    return createOrchestrationRun(conversationId, objective)
+    return createPlanningRun(conversationId, objective)
   }
 
   const now = Date.now()
   const items = ensureResumedTask(latest.items, now)
-  const state: OrchestrationState = {
+  const state: PlanningState = {
     ...latest,
     status: 'running',
     objective: latest.objective || cleanObjective(objective),
@@ -90,21 +90,21 @@ export function resumeOrCreateOrchestrationRun(conversationId: string, objective
   return state
 }
 
-export function buildOrchestrationStateContext(state: OrchestrationState): string | null {
+export function buildPlanningStateContext(state: PlanningState): string | null {
   if (!state.items.length) return null
   const lines = state.items.map((item) => {
     const note = item.note ? `; note=${item.note}` : ''
     return `- id=${item.id}; status=${item.status}; title=${item.title}${note}`
   })
   return [
-    'Current visible orchestration state for this conversation:',
+    'Current visible planning todo list for this conversation:',
     `objective=${state.objective}`,
     ...lines,
     'Continue from this state. Prefer updating existing task ids over replacing the whole list unless the user changed the objective.',
   ].join('\n')
 }
 
-export function getLatestOrchestrationState(conversationId: string): OrchestrationState | null {
+export function getLatestPlanningState(conversationId: string): PlanningState | null {
   const rows = getDb().prepare(
     `SELECT id, conversation_id, status, definition_json, result_json, iterations, created_at, updated_at, completed_at
      FROM tasks
@@ -121,21 +121,21 @@ export function getLatestOrchestrationState(conversationId: string): Orchestrati
   return null
 }
 
-export function closeOrchestrationRun(
+export function closePlanningRun(
   runId: string,
-  status: Exclude<OrchestrationRunStatus, 'running'>,
+  status: Exclude<PlanningRunStatus, 'running'>,
   result?: { summary?: string; error?: string },
-): OrchestrationState | null {
-  const current = getOrchestrationState(runId)
+): PlanningState | null {
+  const current = getPlanningState(runId)
   if (!current || current.status !== 'running') return current
   if (!current.items.length) {
-    deleteOrchestrationRun(runId)
+    deletePlanningRun(runId)
     return null
   }
 
   const now = Date.now()
   const items = reconcileItemsForClose(current.items, status, result?.error, now)
-  const state: OrchestrationState = {
+  const state: PlanningState = {
     ...current,
     status,
     items,
@@ -149,10 +149,10 @@ export function closeOrchestrationRun(
   return state
 }
 
-export function setOrchestrationTasks(runId: string, params: unknown): { success: boolean; output: string } {
+export function writeTodoList(runId: string, params: unknown): { success: boolean; output: string } {
   const payload = params as { objective?: string; tasks?: Array<{ title?: string; status?: string; note?: string }> }
-  const current = getOrchestrationState(runId)
-  if (!current) return { success: false, output: 'Orchestration run not found.' }
+  const current = getPlanningState(runId)
+  if (!current) return { success: false, output: 'Planning run not found.' }
 
   const now = Date.now()
   const items = (payload.tasks || [])
@@ -169,7 +169,7 @@ export function setOrchestrationTasks(runId: string, params: unknown): { success
   if (!items.length) return { success: false, output: 'At least one task with a title is required.' }
   const normalizedItems = ensureActiveTask(items, now)
 
-  const state: OrchestrationState = {
+  const state: PlanningState = {
     ...current,
     objective: cleanObjective(payload.objective || current.objective),
     items: normalizedItems,
@@ -181,17 +181,17 @@ export function setOrchestrationTasks(runId: string, params: unknown): { success
   return { success: true, output: JSON.stringify({ runId, tasks: normalizedItems.map(({ id, title, status }) => ({ id, title, status })) }) }
 }
 
-export function updateOrchestrationTask(runId: string, params: unknown): { success: boolean; output: string } {
+export function updateTodoItem(runId: string, params: unknown): { success: boolean; output: string } {
   const payload = params as { taskId?: string; title?: string; status?: string; note?: string }
-  const current = getOrchestrationState(runId)
-  if (!current) return { success: false, output: 'Orchestration run not found.' }
-  if (!current.items.length) return { success: false, output: 'No orchestration tasks have been set.' }
+  const current = getPlanningState(runId)
+  if (!current) return { success: false, output: 'Planning run not found.' }
+  if (!current.items.length) return { success: false, output: 'No planning tasks have been set.' }
 
   const idx = current.items.findIndex((item) => (
     (payload.taskId && item.id === payload.taskId) ||
     (payload.title && item.title.toLowerCase() === payload.title.trim().toLowerCase())
   ))
-  if (idx === -1) return { success: false, output: 'Task not found. Use taskId from orchestrator_set_tasks or the exact title.' }
+  if (idx === -1) return { success: false, output: 'Task not found. Use taskId from todo_write or the exact title.' }
 
   const now = Date.now()
   const status = normalizeTaskStatus(payload.status)
@@ -210,7 +210,7 @@ export function updateOrchestrationTask(runId: string, params: unknown): { succe
   })
 
   const normalizedItems = advanceActiveTask(items, idx, status, now)
-  const state: OrchestrationState = {
+  const state: PlanningState = {
     ...current,
     items: normalizedItems,
     currentTaskId: normalizedItems.find((item) => item.status === 'in_progress')?.id,
@@ -221,25 +221,18 @@ export function updateOrchestrationTask(runId: string, params: unknown): { succe
   return { success: true, output: JSON.stringify({ task: normalizedItems[idx] }) }
 }
 
-export function completeOrchestrationRunFromTool(runId: string, params: unknown): { success: boolean; output: string } {
-  const payload = params as { summary?: string }
-  const state = closeOrchestrationRun(runId, 'completed', { summary: cleanNote(payload.summary) })
-  if (!state) return { success: false, output: 'Orchestration run not found.' }
-  return { success: true, output: 'Orchestration completed.' }
-}
-
-export function reconcileOrchestrationAfterToolBatch(
+export function reconcilePlanningAfterToolBatch(
   runId: string,
   result: { success: boolean; note?: string },
-): OrchestrationState | null {
-  const current = getOrchestrationState(runId)
+): PlanningState | null {
+  const current = getPlanningState(runId)
   if (!current || current.status !== 'running') return current
 
   const activeIndex = current.items.findIndex((item) => item.status === 'in_progress')
   if (activeIndex === -1) return current
 
   const now = Date.now()
-  const activeStatus: OrchestrationTaskStatus = result.success ? 'completed' : 'blocked'
+  const activeStatus: PlanningTaskStatus = result.success ? 'completed' : 'blocked'
   const items = current.items.map((item, index) => (
     index === activeIndex
       ? { ...item, status: activeStatus, note: cleanNote(result.note) ?? item.note, updatedAt: now }
@@ -247,7 +240,7 @@ export function reconcileOrchestrationAfterToolBatch(
   ))
   const normalizedItems = advanceActiveTask(items, activeIndex, activeStatus, now)
 
-  const state: OrchestrationState = {
+  const state: PlanningState = {
     ...current,
     items: normalizedItems,
     currentTaskId: normalizedItems.find((item) => item.status === 'in_progress')?.id,
@@ -258,7 +251,7 @@ export function reconcileOrchestrationAfterToolBatch(
   return state
 }
 
-function getOrchestrationState(runId: string): OrchestrationState | null {
+function getPlanningState(runId: string): PlanningState | null {
   const row = getDb().prepare(
     `SELECT id, conversation_id, status, definition_json, result_json, iterations, created_at, updated_at, completed_at
      FROM tasks WHERE id = ?`
@@ -266,11 +259,11 @@ function getOrchestrationState(runId: string): OrchestrationState | null {
   return row ? fromRow(row) : null
 }
 
-function deleteOrchestrationRun(runId: string): void {
+function deletePlanningRun(runId: string): void {
   getDb().prepare('DELETE FROM tasks WHERE id = ?').run(runId)
 }
 
-function persistState(state: OrchestrationState, completed = false): void {
+function persistState(state: PlanningState, completed = false): void {
   getDb().prepare(
     `UPDATE tasks
      SET status = ?, definition_json = ?, result_json = ?, iterations = ?, updated_at = ?, completed_at = ?
@@ -286,21 +279,21 @@ function persistState(state: OrchestrationState, completed = false): void {
   )
 }
 
-function emitState(state: OrchestrationState): void {
-  getEventBus().emit('orchestrator:state-updated', serializeState(state))
+function emitState(state: PlanningState): void {
+  getEventBus().emit('planning:state-updated', serializeState(state))
 }
 
-function fromRow(row: TaskRow): OrchestrationState | null {
+function fromRow(row: TaskRow): PlanningState | null {
   try {
     const definition = JSON.parse(row.definition_json) as {
       type?: string
       objective?: string
-      items?: OrchestrationTaskItem[]
+      items?: PlanningTaskItem[]
       currentTaskId?: string
     }
-    if (definition.type !== STATE_TYPE) return null
+    if (definition.type !== STATE_TYPE && !LEGACY_STATE_TYPES.has(definition.type || '')) return null
 
-    const result = row.result_json ? JSON.parse(row.result_json) as OrchestrationState['result'] : undefined
+    const result = row.result_json ? JSON.parse(row.result_json) as PlanningState['result'] : undefined
     return {
       runId: row.id,
       conversationId: row.conversation_id,
@@ -318,7 +311,7 @@ function fromRow(row: TaskRow): OrchestrationState | null {
   }
 }
 
-function toDefinition(state: OrchestrationState): Record<string, unknown> {
+function toDefinition(state: PlanningState): Record<string, unknown> {
   return {
     type: STATE_TYPE,
     objective: state.objective,
@@ -327,7 +320,7 @@ function toDefinition(state: OrchestrationState): Record<string, unknown> {
   }
 }
 
-function serializeState(state: OrchestrationState): OrchestrationState {
+function serializeState(state: PlanningState): PlanningState {
   return {
     ...state,
     items: state.items.map((item) => ({ ...item })),
@@ -335,17 +328,17 @@ function serializeState(state: OrchestrationState): OrchestrationState {
   }
 }
 
-function normalizeTaskStatus(status: string | undefined): OrchestrationTaskStatus {
+function normalizeTaskStatus(status: string | undefined): PlanningTaskStatus {
   if (status === 'in_progress' || status === 'completed' || status === 'blocked' || status === 'cancelled') return status
   return 'pending'
 }
 
-function normalizeRunStatus(status: string): OrchestrationRunStatus {
+function normalizeRunStatus(status: string): PlanningRunStatus {
   if (status === 'completed' || status === 'cancelled' || status === 'error') return status
   return 'running'
 }
 
-function ensureResumedTask(items: OrchestrationTaskItem[], now: number): OrchestrationTaskItem[] {
+function ensureResumedTask(items: PlanningTaskItem[], now: number): PlanningTaskItem[] {
   if (items.some((item) => item.status === 'in_progress')) return items
   const firstOpen = items.findIndex((item) => item.status !== 'completed')
   if (firstOpen === -1) return items
@@ -356,7 +349,7 @@ function ensureResumedTask(items: OrchestrationTaskItem[], now: number): Orchest
   ))
 }
 
-function ensureActiveTask(items: OrchestrationTaskItem[], now: number): OrchestrationTaskItem[] {
+function ensureActiveTask(items: PlanningTaskItem[], now: number): PlanningTaskItem[] {
   const activeIndex = items.findIndex((item) => item.status === 'in_progress')
   if (activeIndex !== -1) {
     return items.map((item, index) => (
@@ -374,11 +367,11 @@ function ensureActiveTask(items: OrchestrationTaskItem[], now: number): Orchestr
 }
 
 function advanceActiveTask(
-  items: OrchestrationTaskItem[],
+  items: PlanningTaskItem[],
   updatedIndex: number,
-  status: OrchestrationTaskStatus,
+  status: PlanningTaskStatus,
   now: number,
-): OrchestrationTaskItem[] {
+): PlanningTaskItem[] {
   if (status === 'in_progress') return items
   if (status !== 'completed' && status !== 'blocked' && status !== 'cancelled') return items
   if (items.some((item) => item.status === 'in_progress')) return items
@@ -391,11 +384,11 @@ function advanceActiveTask(
 }
 
 function reconcileItemsForClose(
-  items: OrchestrationTaskItem[],
-  status: Exclude<OrchestrationRunStatus, 'running'>,
+  items: PlanningTaskItem[],
+  status: Exclude<PlanningRunStatus, 'running'>,
   error: string | undefined,
   now: number,
-): OrchestrationTaskItem[] {
+): PlanningTaskItem[] {
   if (status === 'completed') {
     return items.map((item) => (
       item.status === 'in_progress'

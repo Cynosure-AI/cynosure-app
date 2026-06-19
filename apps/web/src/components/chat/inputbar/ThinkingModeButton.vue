@@ -29,13 +29,13 @@ const chatStore = useChatStore()
         {{ chatStore.sessionThinkingEnabled ? 'Enabled' : 'Disabled' }}
       </div>
       <div class="text-theme-600 text-[10px] mt-1.5 border-t border-theme-800 pt-1.5">
-        Click to toggle extended reasoning and orchestration tools
+        Click to toggle extended reasoning and planning tools
       </div>
       <div
         v-if="!chatStore.sessionThinkingEnabled"
         class="text-theme-600 text-[10px] mt-1"
       >
-        Disabled: no orchestration layer is injected
+        Disabled: no planning layer is injected
       </div>
     </template>
   </HoverTooltip>

@@ -1,5 +1,5 @@
 const INTERNAL_TOOL_PREFIXES = [
-  'orchestrator_',
+  'todo_',
   'attachment_',
   'memory_',
   'relationship_graph_',

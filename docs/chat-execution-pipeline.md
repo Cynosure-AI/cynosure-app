@@ -133,14 +133,14 @@ planExecution(request)
   ├─ Check if model supports tool calls
   │   └─ gateway.modelSupportsToolCalls()
   │
-  ├─ Apply orchestration if model supports tools + has visible tools
-  │   └─ Creates/resumes orchestration run, injects orchestration tools
+  ├─ Apply planning if model supports tools + has visible tools
+  │   └─ Creates/resumes planning run, injects planning todo tools
   │
   └─ Return PlannedExecution:
-      ├─ tools: ToolDefinition[] (with orchestration tools if applicable)
+      ├─ tools: ToolDefinition[] (with planning tools if applicable)
       ├─ messages: ChatMessage[] (system prompts + conversation history)
       ├─ providerId, responseProvider, responseModel
-      ├─ orchestrationRunId (if orchestration enabled)
+      ├─ planningRunId (if planning enabled)
       └─ chatAgentName, chatAgentIconUrl
 ```
 
@@ -423,7 +423,7 @@ AgentExecutor.run(messages)
        ├─ Emit: step:status ('executing')
        │
        ├─ Execute tool calls in parallel
-       │   ├─ Built-in tools: memory, notifications, orchestration
+       │   ├─ Built-in tools: memory, notifications, planning
        │   ├─ MCP tools (via tool registry)
        │   ├─ Sub-agent delegation (spawns inner AgentExecutor)
        │   └─ Attachment tools (search indexed files)
@@ -485,35 +485,34 @@ Throughout execution, real-time events are broadcast to UI clients:
 
 ---
 
-## 8. Orchestration Layer
+## 8. Planning Layer
 
-### 8.1 Orchestration State
+### 8.1 Planning State
 
-**File:** `core/agent/orchestration-state.ts`
+**File:** `core/agent/planning-state.ts`
 
-When the model supports tool calls AND has visible execution tools, orchestration is automatically enabled. The orchestrator provides a task management layer.
+When the model supports tool calls AND has visible execution tools, planning is automatically enabled. The planning layer provides a visible todo list for multi-step work.
 
 ```typescript
-interface OrchestrationState {
+interface PlanningState {
   runId: string;
   conversationId: string;
   status: "running" | "completed" | "cancelled" | "error";
   objective: string;
-  items: OrchestrationTaskItem[]; // { id, title, status, note, updatedAt }
+  items: PlanningTaskItem[]; // { id, title, status, note, updatedAt }
   currentTaskId?: string;
   result?: { summary?; error? };
 }
 ```
 
-**Orchestration tools injected into the agent:**
+**Planning tools injected into the agent:**
 
-- `orchestrator_set_tasks` — Create/replace visible task list
-- `orchestrator_update_task` — Update task status + note
-- `orchestrator_complete` — Mark orchestration complete
+- `todo_write` — Create/replace visible todo list
+- `todo_update` — Update one todo item by id or exact title
 
-**Persistence:** Orchestration state survives conversation switches and page reloads via the `tasks` database table.
+**Persistence:** Planning state survives conversation switches and page reloads via the `tasks` database table.
 
-**Resume logic:** If an existing orchestration run exists with items and status `running`, the system resumes it rather than creating a new one. The previous run's task context is prepended to the new run.
+**Resume logic:** If an existing planning run exists with items and status `running`, the system resumes it rather than creating a new one. The previous run's task context is prepended to the new run.
 
 ### 8.2 Auto-Router & Task Context Integration
 
@@ -726,10 +725,10 @@ Cron jobs use `runTriggerExecution()` which:
 │  EXECUTION PLANNER (continued)                                     │
 │                                                                     │
 │  ├─ Check: modelSupportsToolCalls()                                │
-│  ├─ Apply orchestration if tool-capable:                           │
-│  │   ├─ resumeOrCreateOrchestrationRun()                           │
-│  │   ├─ Inject orchestrator tools (set_tasks, update, complete)    │
-│  │   └─ Append ORCHESTRATOR_SYSTEM_PROMPT                          │
+│  ├─ Apply planning if tool-capable:                                │
+│  │   ├─ resumeOrCreatePlanningRun()                                │
+│  │   ├─ Inject planning tools (todo_write, todo_update)            │
+│  │   └─ Append PLANNING_SYSTEM_PROMPT                              │
 │  └─ Return PlannedExecution                                        │
 └───────────────────────────┬─────────────────────────────────────────┘
                             │
@@ -783,7 +782,7 @@ Cron jobs use `runTriggerExecution()` which:
 │  ROUTE HANDLER (post-execution)                                    │
 │                                                                     │
 │  ├─ persistAutoRoutedUsedTools()  (if auto tool routing)          │
-│  ├─ closeOrchestrationRun()  (if orchestration active)            │
+│  ├─ closePlanningRun()  (if planning active)                      │
 │  ├─ Save final assistant message to DB with metadata:             │
 │  │   ├─ content, thinking, image_urls_json, agent_id              │
 │  │   ├─ provider, model, prompt_tokens, completion_tokens         │
@@ -809,7 +808,7 @@ Cron jobs use `runTriggerExecution()` which:
 | **Conversation Locks**          | `chat/conversation-locks.ts`      | Prevents concurrent execution on the same conversation                 |
 | **Composite Tool Keys**         | `tools/tool-registry.ts`          | `namespaceId::toolName` enables same-name tools from different sources |
 | **Pre-Execution Separation**    | `agent/pre-execution/`            | Tools, memory, and prompts resolved independently                      |
-| **Orchestration Run ID**        | `agent/orchestration-state.ts`    | Persistent task tracking across tool-calling rounds and page reloads   |
+| **Planning Run ID**             | `agent/planning-state.ts`         | Persistent task tracking across tool-calling rounds and page reloads   |
 | **Sub-agent Isolation**         | `agent/sub-agent-tools.ts`        | Each sub-agent has own tools, model, memory scope, and execution loop  |
 | **Context Window Management**   | `agent/context-trimmer.ts`        | Sliding-window dropping or LLM-based compaction                        |
 | **Router Embedding Cache**      | `agent/router-embedding-cache.ts` | Cached embeddings for MCP tool groups to avoid re-embedding            |
@@ -827,7 +826,7 @@ Cron jobs use `runTriggerExecution()` which:
 | `core/chat/run-config.ts`                         | Normalizes run flags and config                 |
 | `core/chat/conversation-locks.ts`                 | Prevents concurrent execution                   |
 | `core/chat/attachment-settings.ts`                | Attachment text limits                          |
-| `core/agent/pre-execution/execution-planner.ts`   | Central pre-execution orchestration             |
+| `core/agent/pre-execution/execution-planner.ts`   | Central pre-execution planning                  |
 | `core/agent/pre-execution/execution-tools.ts`     | Tool resolution and auto-routing                |
 | `core/agent/pre-execution/auto-tool-routing.ts`   | Auto-routing for tools                          |
 | `core/agent/tool-router.ts`                       | Embedding-based tool pre-filter + LLM selection |
@@ -839,7 +838,7 @@ Cron jobs use `runTriggerExecution()` which:
 | `core/agent/prepare-execution.ts`                 | Thin assembler for all pre-execution layers     |
 | `core/agent/agent-executor.ts`                    | Core tool-calling execution loop                |
 | `core/agent/sub-agent-tools.ts`                   | Sub-agent delegation                            |
-| `core/agent/orchestration-state.ts`               | Orchestration task management                   |
+| `core/agent/planning-state.ts`                    | Planning todo management                        |
 | `core/agent/post-execution.ts`                    | Post-execution actions (title gen)              |
 | `core/agent/hitl-gate.ts`                         | Human-in-the-loop approval                      |
 | `core/agent/context-trimmer.ts`                   | Sliding-window context trimming                 |
@@ -848,7 +847,7 @@ Cron jobs use `runTriggerExecution()` which:
 | `core/memory/memory-aggregator.ts`                | Aggregated memory retrieval                     |
 | `core/memory/memory-entity-indexer.ts`            | Entity graph indexing pipeline                  |
 | `core/tools/tool-registry.ts`                     | Tool registration and resolution                |
-| `core/tools/builtin/orchestration-tools.ts`       | Orchestration built-in tools                    |
+| `core/tools/builtin/planning-tools.ts`            | Planning todo built-in tools                    |
 | `core/artifacts/image-artifacts.ts`               | Image artifact materialization                  |
 | `core/artifacts/file-artifacts.ts`                | File artifact materialization                   |
 | `core/artifacts/attachment-rag.ts`                | Attachment search and retrieval                 |

@@ -3,15 +3,15 @@ import { presetFromAgent, presetFromAgentless } from '../execution-preset.js'
 import { toExecutionPlanInput } from './execution-input.js'
 import { isBuiltInMemoryToolKey, isBuiltInRelationshipGraphToolKey } from '../../tools/built-in-tools.js'
 import {
-    buildOrchestrationStateContext,
-    getLatestOrchestrationState,
-    resumeOrCreateOrchestrationRun,
-    type OrchestrationState,
-} from '../orchestration-state.js'
+    buildPlanningStateContext,
+    getLatestPlanningState,
+    resumeOrCreatePlanningRun,
+    type PlanningState,
+} from '../planning-state.js'
 import {
-    makeOrchestrationTools,
-    ORCHESTRATOR_SYSTEM_PROMPT,
-} from '../../tools/builtin/orchestration-tools.js'
+    makePlanningTools,
+    PLANNING_SYSTEM_PROMPT,
+} from '../../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../../tools/tool-policy.js'
 import type { ExecutionPlanInput, ExecutionRequest } from './execution-input.js'
 import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
@@ -23,7 +23,7 @@ export interface PlannedExecution {
     responseProvider: string
     responseModel: string
     hasSubAgents: boolean
-    orchestrationRunId?: string
+    planningRunId?: string
     chatAgentName?: string
     chatAgentIconUrl?: string | null
 }
@@ -116,7 +116,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
     const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(prepared.model, responseProvider)
     const responseTools = responseSupportsToolCalls ? prepared.tools : []
     const effectiveThinkingEnabled = thinkingEnabled ?? (resolvedAgent?.thinkingEnabled !== false)
-    const orchestration = applyOrchestrationIfToolCapable(
+    const planning = applyPlanningIfToolCapable(
         conversationId,
         userText,
         responseTools,
@@ -125,13 +125,13 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
     )
 
     return {
-        tools: orchestration.tools,
-        messages: [...orchestration.systemMessages, ...messages],
+        tools: planning.tools,
+        messages: [...planning.systemMessages, ...messages],
         providerId: prepared.providerId,
         responseProvider,
         responseModel: prepared.model,
         hasSubAgents: prepared.hasSubAgents,
-        orchestrationRunId: orchestration.runId,
+        planningRunId: planning.runId,
         chatAgentName: resolvedAgent?.name,
         chatAgentIconUrl: resolvedAgent?.iconUrl || null,
     }
@@ -141,7 +141,7 @@ function stripRuntimeMemoryToolKeys(toolKeys: string[]): string[] {
     return toolKeys.filter((key) => !isBuiltInMemoryToolKey(key))
 }
 
-function applyOrchestrationIfToolCapable(
+function applyPlanningIfToolCapable(
     conversationId: string,
     objective: string,
     tools: ToolDefinition[],
@@ -157,26 +157,26 @@ function applyOrchestrationIfToolCapable(
         return { tools, systemMessages }
     }
 
-    const previousOrchestration = getLatestOrchestrationState(conversationId)
-    const orchestration = resumeOrCreateOrchestrationRun(conversationId, objective)
-    const orchestrationContext = buildOrchestrationTurnContext(orchestration, previousOrchestration)
+    const previousPlanning = getLatestPlanningState(conversationId)
+    const planning = resumeOrCreatePlanningRun(conversationId, objective)
+    const planningContext = buildPlanningTurnContext(planning, previousPlanning)
     const mergedSystemMessages = appendSystemContext(
-        appendSystemContext(systemMessages, ORCHESTRATOR_SYSTEM_PROMPT),
-        orchestrationContext,
+        appendSystemContext(systemMessages, PLANNING_SYSTEM_PROMPT),
+        planningContext,
     )
 
     return {
-        tools: [...tools, ...makeOrchestrationTools(orchestration.runId)],
+        tools: [...tools, ...makePlanningTools(planning.runId)],
         systemMessages: mergedSystemMessages,
-        runId: orchestration.runId,
+        runId: planning.runId,
     }
 }
 
-function buildOrchestrationTurnContext(
-    current: OrchestrationState,
-    previous: OrchestrationState | null,
+function buildPlanningTurnContext(
+    current: PlanningState,
+    previous: PlanningState | null,
 ): string | null {
-    const currentContext = buildOrchestrationStateContext(current)
+    const currentContext = buildPlanningStateContext(current)
     if (currentContext) return currentContext
     if (!previous || previous.runId === current.runId || !previous.items.length) return null
 
@@ -186,11 +186,11 @@ function buildOrchestrationTurnContext(
     })
 
     return [
-        'Previous visible orchestration state for this conversation:',
+        'Previous visible planning todo list for this conversation:',
         `objective=${previous.objective}`,
         ...lines,
-        'A new empty orchestration run is active for the current user message.',
-        'If the current message continues, expands, or changes this work and you will use visible execution tools, call orchestrator_set_tasks with the task list that should now be visible before using non-orchestration tools.',
+        'A new empty planning run is active for the current user message.',
+        'If the current message continues, expands, or changes this work and you will use visible execution tools, call todo_write with the task list that should now be visible before using non-planning tools.',
         'If the previous list is still genuinely in progress after an interruption, use the prior task content as context and recreate the needed visible list for this run.',
     ].join('\n')
 }

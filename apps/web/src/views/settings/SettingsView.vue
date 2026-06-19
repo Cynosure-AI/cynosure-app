@@ -239,8 +239,8 @@ const sections: SettingsSection[] = [
     id: 'show-internal-tool-calls',
     categoryId: 'appearance',
     label: 'Show Internal Tool Calls',
-    description: 'Show orchestration, attachment retrieval, routing, memory, and other system-managed tool calls in chat.',
-    terms: ['internal tools', 'show internal tool calls', 'orchestration tools', 'attachment tools', 'routing tools', 'memory tools', 'chat display', 'transparency']
+    description: 'Show planning, attachment retrieval, routing, memory, and other system-managed tool calls in chat.',
+    terms: ['internal tools', 'show internal tool calls', 'planning tools', 'todo tools', 'attachment tools', 'routing tools', 'memory tools', 'chat display', 'transparency']
   },
   {
     id: 'setup-guide',

@@ -3,7 +3,7 @@ import type {
   LLMProviderConfig, McpServerInfo, McpRegistryResponse,
   AgentDefinition, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob,
   AgentInstance, ActivityItem, ActivityKind, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
-  MetricsSummary, OrchestrationState,
+  MetricsSummary, PlanningState,
   ModelListType,
   ModelInfo,
   ModelListItem,
@@ -80,9 +80,9 @@ export const api = {
       get<{ taskId: string; toolCalls: { name: string; arguments: string }[] }[]>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/hitl`
       ),
-    getOrchestrationState: (conversationId: string) =>
-      get<OrchestrationState | null>(
-        `/api/chat/conversations/${encodeURIComponent(conversationId)}/orchestration-state`
+    getPlanningState: (conversationId: string) =>
+      get<PlanningState | null>(
+        `/api/chat/conversations/${encodeURIComponent(conversationId)}/planning-state`
       ),
     deleteConversation: (conversationId: string) =>
       del<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}`),
@@ -214,8 +214,8 @@ export const api = {
       get<{ key: string; name: string; executionName: string; description: string; parameters: Record<string, unknown>; autoApprove: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools?includePolicyBuiltIns=true'),
     onExecutionUpdate: (cb: (data: unknown) => void) =>
       onWsEvent('agent:execution-update', cb),
-    onOrchestrationStateUpdated: (cb: (data: unknown) => void) =>
-      onWsEvent('orchestrator:state-updated', cb)
+    onPlanningStateUpdated: (cb: (data: unknown) => void) =>
+      onWsEvent('planning:state-updated', cb)
   },
 
   agents: {

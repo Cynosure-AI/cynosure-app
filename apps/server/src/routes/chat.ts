@@ -6,7 +6,7 @@ import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../core/agent/agent-executor.js'
 import { planExecution } from '../core/agent/pre-execution/execution-planner.js'
-import { closeOrchestrationRun } from '../core/agent/orchestration-state.js'
+import { closePlanningRun } from '../core/agent/planning-state.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
@@ -262,7 +262,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
       }
 
-      // Resolve agent for this conversation (used by both MA orchestration and normal chat)
+      // Resolve agent for this conversation (used by both MA planning and normal chat)
       const convCheck = db.prepare('SELECT agent_id, ma_workspace_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null; ma_workspace_id: string | null } | undefined
       const agentId: string | null = convCheck?.agent_id || null
       const resolvedAgent = agentId ? getAgent(agentId) : null
@@ -333,15 +333,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         providerId,
         responseProvider,
         responseModel,
-        orchestrationRunId,
+        planningRunId,
         chatAgentName,
         chatAgentIconUrl,
       } = planned
-      updateActiveChatExecution(executionId, { model: responseModel, orchestrationRunId })
+      updateActiveChatExecution(executionId, { model: responseModel, planningRunId })
       if (abortController.signal.aborted) {
         unregisterActiveChatExecution(executionId)
-        if (orchestrationRunId) {
-          closeOrchestrationRun(orchestrationRunId, 'cancelled', { error: 'Cancelled' })
+        if (planningRunId) {
+          closePlanningRun(planningRunId, 'cancelled', { error: 'Cancelled' })
         }
         getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
         broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
@@ -507,7 +507,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           contextWindow,
           initialContextEstimate,
           contextStrategy,
-          orchestrationRunId,
+          planningRunId,
           isPrimaryExecutor: true,
           usedToolNames,
         })
@@ -516,8 +516,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if (reqAutoToolRouting === true && executionConfig) {
           persistStickyUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
         }
-        if (orchestrationRunId) {
-          closeOrchestrationRun(orchestrationRunId, 'completed', { summary: result.content.slice(0, 500) })
+        if (planningRunId) {
+          closePlanningRun(planningRunId, 'completed', { summary: result.content.slice(0, 500) })
         }
 
         // Save final assistant message with metadata
@@ -571,15 +571,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           if (reqAutoToolRouting === true && executionConfig) {
             persistStickyUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
           }
-          if (orchestrationRunId) {
-            closeOrchestrationRun(orchestrationRunId, 'cancelled', { error: 'Cancelled' })
+          if (planningRunId) {
+            closePlanningRun(planningRunId, 'cancelled', { error: 'Cancelled' })
           }
           getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
           broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
           return { streamId }
         }
-        if (orchestrationRunId) {
-          closeOrchestrationRun(orchestrationRunId, 'error', { error: (err as Error).message })
+        if (planningRunId) {
+          closePlanningRun(planningRunId, 'error', { error: (err as Error).message })
         }
         if (reqAutoToolRouting === true && executionConfig) {
           persistStickyUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)

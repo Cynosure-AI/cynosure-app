@@ -1,11 +1,11 @@
-import { closeOrchestrationRun } from '../agent/orchestration-state.js'
+import { closePlanningRun } from '../agent/planning-state.js'
 
 export interface ActiveChatExecution {
     id: string
     conversationId: string
     agentId: string | null
     model: string | null
-    orchestrationRunId?: string
+    planningRunId?: string
     startedAt: number
 }
 
@@ -26,7 +26,7 @@ export function unregisterActiveChatExecution(executionId: string): void {
     activeChatExecutions.delete(executionId)
 }
 
-export function updateActiveChatExecution(executionId: string, patch: Partial<Pick<ActiveChatExecution, 'model' | 'orchestrationRunId'>>): void {
+export function updateActiveChatExecution(executionId: string, patch: Partial<Pick<ActiveChatExecution, 'model' | 'planningRunId'>>): void {
     const execution = activeChatExecutions.get(executionId)
     if (!execution) return
     activeChatExecutions.set(executionId, { ...execution, ...patch })
@@ -37,8 +37,8 @@ export function cancelChatExecution(executionId: string): boolean {
     if (!controller) return false
 
     const execution = activeChatExecutions.get(executionId)
-    if (execution?.orchestrationRunId) {
-        closeOrchestrationRun(execution.orchestrationRunId, 'cancelled', { error: 'Cancelled' })
+    if (execution?.planningRunId) {
+        closePlanningRun(execution.planningRunId, 'cancelled', { error: 'Cancelled' })
     }
     controller.abort()
     activeAbortControllers.delete(executionId)

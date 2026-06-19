@@ -100,7 +100,7 @@ const autoApprovedCount = computed(() =>
 
 function isInternalTool(tool: ToolInfo): boolean {
   const name = tool.name
-  return name.startsWith('orchestrator_') || name.startsWith('attachment_') || name.startsWith('memory_') || name.startsWith('relationship_graph_') || name === 'memory_forget' || name === 'expand_available_toolset' || name === 'spawn_subagent'
+  return name.startsWith('todo_') || name.startsWith('attachment_') || name.startsWith('memory_') || name.startsWith('relationship_graph_') || name === 'memory_forget' || name === 'expand_available_toolset' || name === 'spawn_subagent'
 }
 
 function normalizeNamespace(namespace: ToolNamespace, tool?: ToolInfo): ToolNamespace {
@@ -113,7 +113,7 @@ function normalizeNamespace(namespace: ToolNamespace, tool?: ToolInfo): ToolName
 
 function namespaceDescription(namespace: ToolNamespace, firstTool: ToolInfo): string {
   if (namespace.id === 'builtin:internal') {
-    return 'Orchestration, attachments, tool routing, sub-agent delegation, memory, and other system-managed tools. These are always auto-approved.'
+    return 'Planning, attachments, tool routing, sub-agent delegation, memory, and other system-managed tools. These are always auto-approved.'
   }
   if (namespace.id === 'builtin') {
     return 'All built-in on-demand tools bundled with Cynosure.'
@@ -180,7 +180,7 @@ function toolCategory(tool: ToolInfo): string {
   if (tool.namespace.id.startsWith('mcp:')) return 'MCP'
   if (name.startsWith('memory_') || name === 'memory_forget') return 'Memory'
   if (name.startsWith('relationship_graph_')) return 'Relationships'
-  if (name.startsWith('orchestrator_')) return 'Orchestration'
+  if (name.startsWith('todo_')) return 'Planning'
   if (name.startsWith('attachment_')) return 'Attachment'
   return 'Built-In'
 }
