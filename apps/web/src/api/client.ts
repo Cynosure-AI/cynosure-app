@@ -118,7 +118,7 @@ export const api = {
     subscribeLiveConversations: (conversationIds: string[]) => subscribeWsConversations(conversationIds),
 
     // Stream event listeners — via WebSocket
-    onStreamStart: (cb: (data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }) => void) =>
+    onStreamStart: (cb: (data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }) => void) =>
       onWsEvent('chat:stream-start', cb as WsHandler),
     onStreamChunk: (
       cb: (data: { streamId: string; conversationId: string; content: string }) => void
@@ -154,7 +154,7 @@ export const api = {
 
     // Sub-agent stream events — dedicated handlers so the UI can manage
     // sub-agent streaming separately from the primary orchestrator stream.
-    onSubAgentStreamStart: (cb: (data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }) => void) =>
+    onSubAgentStreamStart: (cb: (data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }) => void) =>
       onWsEvent('chat:subagent-stream-start', cb as WsHandler),
     onSubAgentStreamChunk: (
       cb: (data: { streamId: string; conversationId: string; content: string }) => void
@@ -166,7 +166,7 @@ export const api = {
       cb: (data: { streamId: string; conversationId: string; images: string[] }) => void
     ) => onWsEvent('chat:subagent-stream-images', cb as WsHandler),
     onSubAgentStreamEnd: (
-      cb: (data: { streamId: string; conversationId: string; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }) => void
+      cb: (data: { streamId: string; conversationId: string; cancelled?: boolean; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }) => void
     ) => onWsEvent('chat:subagent-stream-end', cb as WsHandler),
 
     onTitleUpdated: (

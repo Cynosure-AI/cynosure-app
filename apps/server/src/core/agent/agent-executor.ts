@@ -597,7 +597,12 @@ export class AgentExecutor {
         const result = await this.consumeStream(this.createStream(messages), streamId)
 
         if (result.error) {
-            if (this.config.signal?.aborted) throw result.error
+            if (this.config.signal?.aborted) {
+                if (this.config.streamMode === 'per-round') {
+                    this.broadcastStreamEnd(streamId, { cancelled: true })
+                }
+                throw result.error
+            }
             // Transient stream failure — return partial content so the loop exits gracefully
             if (!result.content) result.content = `[Stream interrupted: ${result.error.message}]`
         }
