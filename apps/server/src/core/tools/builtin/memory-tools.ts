@@ -84,27 +84,39 @@ export interface MemoryToolOptions {
 
 const ENTITY_TYPES = ['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'] as const
 const ENTITY_GRAPH_SHORT_ID_LENGTH = 8
+const IMPORTANCE_LABELS = ['temporary', 'minor', 'useful', 'core'] as const
+type ImportanceLabel = (typeof IMPORTANCE_LABELS)[number]
+const IMPORTANCE_MAP: Record<ImportanceLabel, 0 | 1 | 2 | 3> = {
+    temporary: 0,
+    minor: 1,
+    useful: 2,
+    core: 3,
+}
 
 function shortEntityGraphId(prefix: 'n' | 'e', id: string): string {
     return `${prefix}:${id.slice(0, ENTITY_GRAPH_SHORT_ID_LENGTH)}`
 }
 
-function resolveEntityGraphEdgeId(value: string): string {
+function resolveEntityGraphEdgeId(value: string): { id: string } | { error: string } {
     const trimmed = value.trim()
     const shortId = trimmed.startsWith('e:') ? trimmed.slice(2) : trimmed
-    if (!trimmed.startsWith('e:') || shortId.length === 0) return trimmed
+    if (!trimmed.startsWith('e:') || shortId.length === 0) return { id: trimmed }
     const rows = getDb().prepare('SELECT id FROM entity_graph_edges WHERE id LIKE ? ORDER BY last_seen_at DESC LIMIT 2').all(`${shortId}%`) as { id: string }[]
-    return rows.length === 1 ? rows[0].id : trimmed
+    if (rows.length === 1) return { id: rows[0].id }
+    if (rows.length > 1) {
+        return { error: `Multiple relationship graph edges match id prefix ${trimmed}. Use relationship_graph_search to get the full id, then retry.` }
+    }
+    return { id: trimmed }
 }
 
 function formatEntityNode(node: EntityNode): string {
     const aliases = node.aliases.length ? ` aliases=${node.aliases.join(', ')}` : ''
-    const importanceLabel = ['temporary', 'minor', 'useful', 'core'][node.importance] ?? 'minor'
+    const importanceLabel = IMPORTANCE_LABELS[node.importance] ?? 'minor'
     return `- [${importanceLabel}] ${node.name} (${node.type}, id=${shortEntityGraphId('n', node.id)}, mentions=${node.mentionCount}${aliases})`
 }
 
 function formatEntityEdge(edge: EntityEdge): string {
-    const importanceLabel = ['temporary', 'minor', 'useful', 'core'][edge.importance] ?? 'minor'
+    const importanceLabel = IMPORTANCE_LABELS[edge.importance] ?? 'minor'
     const evidence = edge.evidence ? ` Evidence: ${edge.evidence}` : ''
     return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${shortEntityGraphId('e', edge.id)}, confidence=${edge.confidence.toFixed(2)}, mentions=${edge.mentionCount}).${evidence}`
 }
@@ -136,6 +148,20 @@ function cleanEntityName(value: unknown): string {
 function clampToolNumber(value: unknown, fallback: number, min: number, max: number): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
     return Math.max(min, Math.min(max, value))
+}
+
+function toPartIndex(value: unknown): number | undefined {
+    return Number.isInteger(value) ? (value as number) - 1 : undefined
+}
+
+function toImportanceValue(value: unknown): 0 | 1 | 2 | 3 {
+    if (typeof value === 'string' && (IMPORTANCE_LABELS as readonly string[]).includes(value)) {
+        return IMPORTANCE_MAP[value as ImportanceLabel]
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return Math.round(clampToolNumber(value, 1, 0, 3)) as 0 | 1 | 2 | 3
+    }
+    return 1
 }
 
 function cleanToolString(value: unknown): string {
@@ -544,7 +570,7 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
 
 /**
  * Create a `memory_retrieve_chunks` tool that lets the LLM fetch
- * additional chunks from a document by source file name and index range.
+ * additional chunks from a document by source file name and Part range.
  */
 export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefinition {
     const { spaceFilter, assignedSpaces = [] } = opts
@@ -552,33 +578,45 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
     return {
         name: 'memory_retrieve_chunks',
         description:
-            'Retrieve additional chunks from a stored document by source file and chunk index range. ' +
-            'Very useful to gather more detail of a section(e.g. "Part 4 - 6" when Chunk 5 matches) ' +
+            'Retrieve additional chunks from a stored document by source file and part number range. ' +
+            'Very useful to gather more detail of a section (e.g. "Part 4 - 6" when Part 5 matches). ' +
             'Returns the text of each chunk in order. ' +
             makeScopeSummary(assignedSpaces),
         parameters: {
             type: 'object',
             properties: {
                 sourceFile: { type: 'string', description: 'The source file name exactly as shown in the memory context (e.g. "report.pdf", "notes.md").' },
-                minIndex: { type: 'number', description: 'Minimum chunk index (0-based). Use the Part number minus 1.' },
-                maxIndex: { type: 'number', description: 'Maximum chunk index (0-based, inclusive). Use the Part number minus 1.' },
+                minPart: { type: 'number', description: 'Minimum Part number to retrieve, matching the 1-based Part number shown in memory search results.' },
+                maxPart: { type: 'number', description: 'Maximum Part number to retrieve, inclusive, matching the 1-based Part number shown in memory search results.' },
                 folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Use this when the same source file exists in more than one folder.' }
             },
-            required: ['sourceFile', 'minIndex', 'maxIndex']
+            required: ['sourceFile', 'minPart', 'maxPart']
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { sourceFile, minIndex, maxIndex, folder } = params as { sourceFile: string; minIndex: number; maxIndex: number; folder?: string }
+            const { sourceFile, minPart, maxPart, minIndex: legacyMinIndex, maxIndex: legacyMaxIndex, folder } = params as {
+                sourceFile: string; minPart?: number; maxPart?: number; minIndex?: number; maxIndex?: number; folder?: string
+            }
             const requestedFolder = folder
             const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, requestedFolder, getKnownSpaces)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
 
-            const cappedMax = Math.min(maxIndex, minIndex + 19) // cap at 20 chunks per call
-            const chunks = await mem.getChunksByRange(sourceFile, minIndex, cappedMax, resolvedScope.filter)
+            const minIndex = minPart !== undefined ? toPartIndex(minPart) : legacyMinIndex
+            const maxIndex = maxPart !== undefined ? toPartIndex(maxPart) : legacyMaxIndex
+            if (!Number.isInteger(minIndex) || !Number.isInteger(maxIndex)) {
+                return { success: false, output: 'memory_retrieve_chunks requires integer minPart and maxPart values.' }
+            }
+            if (minIndex! < 0 || maxIndex! < minIndex!) {
+                return { success: false, output: 'Invalid part range. maxPart must be greater than or equal to minPart, and Part numbers start at 1.' }
+            }
+            const requestedMinIndex = minIndex!
+            const requestedMaxIndex = maxIndex!
+            const cappedMax = Math.min(requestedMaxIndex, requestedMinIndex + 19) // cap at 20 chunks per call
+            const chunks = await mem.getChunksByRange(sourceFile, requestedMinIndex, cappedMax, resolvedScope.filter)
 
             if (chunks.length === 0) {
-                return { success: false, output: `No chunks found for "${sourceFile}" in range ${minIndex}-${cappedMax}.` }
+                return { success: false, output: `No chunks found for "${sourceFile}" in Part range ${requestedMinIndex + 1}-${cappedMax + 1}.` }
             }
 
             const distinctSpaces = [...new Set(chunks.map(c => c.spaceId).filter((id): id is string => Boolean(id)))]
@@ -599,7 +637,11 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
                     : `[Part ${c.chunkIndex + 1}/${total}]`
                 return `${location}\n${c.text}`
             }).join('\n\n---\n\n')
-            return { success: true, output: formatted }
+            const wasCapped = cappedMax < requestedMaxIndex
+            const capNote = wasCapped
+                ? `\n\n(Showing Parts ${requestedMinIndex + 1}-${cappedMax + 1} of requested Parts ${requestedMinIndex + 1}-${requestedMaxIndex + 1}; capped at 20 chunks per call. Call again with a later range to continue.)`
+                : ''
+            return { success: true, output: formatted + capNote }
         }
     }
 }
@@ -623,7 +665,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             type: 'object',
             properties: {
                 query: { type: 'string', description: 'A descriptive search query to find relevant memories.' },
-                topK: { type: 'number', description: 'Maximum number of results to return (default: 5, max: 20).' },
+                limit: { type: 'number', description: 'Maximum number of results to return (default: 5, max: 20).' },
                 folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the search. Without this, searches all selected folders.' }
             },
             required: ['query']
@@ -634,19 +676,19 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             if (!query) {
                 return { success: false, output: 'A non-empty "query" string is required for memory_semantic_search.' }
             }
-            const { topK, folder } = (params || {}) as { topK?: number; folder?: string }
+            const { limit, topK, folder } = (params || {}) as { limit?: number; topK?: number; folder?: string }
             const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder, getKnownSpaces)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
 
-            const k = Math.min(topK ?? 5, 20)
+            const k = Math.min(limit ?? topK ?? 5, 20)
             const results = await mem.recall(query, k, resolvedScope.filter)
 
             if (results.length === 0) {
                 return { success: false, output: `No relevant memories found for this query${resolvedScope.space ? ` in "${resolvedScope.space.name}"` : ''}.` }
             }
 
-            console.log(`[memory_semantic_search] Found ${results.length} results for query "${query.slice(0, 60)}" (topK=${k})`)
+            console.log(`[memory_semantic_search] Found ${results.length} results for query "${query.slice(0, 60)}" (limit=${k})`)
 
             // Enrich with total chunks per source
             const uniqueSourceKeys = [...new Set(
@@ -792,7 +834,7 @@ export function makeRelationshipGraphAssertTool(): ToolDefinition {
                     required: ['name'],
                 },
                 confidence: { type: 'number', description: 'Confidence from 0.1 to 1.0 (default: 0.9 for explicit user-provided facts).' },
-                importance: { type: 'number', enum: [0, 1, 2, 3], description: 'Importance level: 0 temporary, 1 minor, 2 useful durable fact, 3 core fact.' },
+                importance: { type: 'string', enum: IMPORTANCE_LABELS, description: 'Importance: temporary, minor, useful (durable fact), or core.' },
                 evidence: { type: 'string', description: 'Short evidence phrase explaining why this relationship is true.' },
             },
             required: ['from', 'relation', 'to'],
@@ -818,7 +860,7 @@ export function makeRelationshipGraphAssertTool(): ToolDefinition {
                 relation: rel,
                 to: toEntity,
                 confidence: clampToolNumber(confidence, 0.9, 0.1, 1),
-                importance: Math.round(clampToolNumber(importance, 1, 0, 3)) as 0 | 1 | 2 | 3,
+                importance: toImportanceValue(importance),
                 evidence: typeof evidence === 'string' ? evidence.replace(/\s+/g, ' ').trim().slice(0, 280) : '',
             }, 'tool', 'relationship_graph_assert')
 
@@ -870,7 +912,8 @@ export function makeRelationshipGraphDeleteTool(): ToolDefinition {
 
             if (edgeId?.trim()) {
                 const resolvedEdgeId = resolveEntityGraphEdgeId(edgeId)
-                const result = graph.deleteEdge(resolvedEdgeId)
+                if ('error' in resolvedEdgeId) return { success: false, output: resolvedEdgeId.error }
+                const result = graph.deleteEdge(resolvedEdgeId.id)
                 return result.edgeDeleted
                     ? { success: true, output: formatRelationshipGraphDeleteOutput(`Deleted relationship graph edge ${edgeId.trim()}.`, result.orphanedNodeIds.length) }
                     : { success: false, output: `No relationship found with id ${edgeId.trim()}.` }
@@ -964,44 +1007,48 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
         description:
             'Update an existing memory file. Auto-matches the title to find the file; if multiple folders contain the same title, folder parameter is required. ' +
             'If exactly one memory folder is selected, omit "folder" to update there when the title is not found elsewhere in the selected scope. ' +
-            'operation is required: "set" replaces content (the whole file, or just the chunkStartIndex/chunkEndIndex range when given); "append" adds content to the end without touching existing text. ' +
-            'For partial updates, first inspect the relevant chunks with memory_retrieve_chunks, then call with operation="set" and chunkStartIndex/chunkEndIndex. ' +
-            'The replacement content should contain the complete desired text for that chunk range.',
+            'mode is required: "replace_all" replaces the whole file, "replace_range" replaces a Part range, and "append" adds content to the end without touching existing text. ' +
+            'For partial updates, first inspect the relevant parts with memory_retrieve_chunks, then call with mode="replace_range" and partStart/partEnd. ' +
+            'The replacement content should contain the complete desired text for that Part range.',
         parameters: {
             type: 'object',
             properties: {
                 title: { type: 'string', description: 'The title (file name without .md) of the memory entry to update.' },
-                operation: {
+                mode: {
                     type: 'string',
-                    enum: ['set', 'append'],
-                    description: '"set" replaces content — the whole file by default, or only the chunkStartIndex/chunkEndIndex range when provided. "append" adds content to the end of the file, leaving existing content untouched.',
+                    enum: ['replace_all', 'replace_range', 'append'],
+                    description: '"replace_all" replaces the full file, "replace_range" replaces partStart through partEnd, and "append" adds content to the end of the file.',
                 },
-                content: { type: 'string', description: 'For "set": the replacement text (whole file or the targeted chunk range). For "append": the text to add at the end.' },
+                content: { type: 'string', description: 'For replace_all: the full replacement text. For replace_range: the full replacement text for that Part range. For append: the text to add at the end.' },
                 folder: { type: 'string', description: 'Memory folder name, relative path (e.g. "projects/acme"), or ID. Required only when the title exists in multiple folders; otherwise auto-selected, including the only selected folder.' },
-                chunkStartIndex: { type: 'number', description: 'Only valid with operation="set". Zero-based first chunk index to replace. Use the chunk index shown by memory_retrieve_chunks or semantic search.' },
-                chunkEndIndex: { type: 'number', description: 'Only valid with operation="set". Zero-based last chunk index to replace, inclusive. Required when chunkStartIndex is provided.' },
+                partStart: { type: 'number', description: 'Required only with mode="replace_range". First 1-based Part number to replace, as shown by memory_retrieve_chunks or semantic search.' },
+                partEnd: { type: 'number', description: 'Required only with mode="replace_range". Last 1-based Part number to replace, inclusive.' },
             },
-            required: ['title', 'operation', 'content']
+            required: ['title', 'mode', 'content']
         },
         timeout: 30_000,
         execute: async (params: unknown) => {
-            const { title, operation, content, folder, chunkStartIndex, chunkEndIndex, sectionHeading } = params as {
-                title: string; operation?: string; content: string; folder?: string; chunkStartIndex?: number; chunkEndIndex?: number; sectionHeading?: string
+            const { title, mode: rawMode, operation, content, folder, partStart, partEnd, chunkStartIndex: legacyChunkStartIndex, chunkEndIndex: legacyChunkEndIndex, sectionHeading } = params as {
+                title: string; mode?: string; operation?: string; content: string; folder?: string; partStart?: number; partEnd?: number; chunkStartIndex?: number; chunkEndIndex?: number; sectionHeading?: string
             }
 
             if (sectionHeading?.trim()) {
                 return {
                     success: false,
-                    output: 'Section-heading updates are no longer supported because memories may come from non-Markdown documents. Use memory_retrieve_chunks, then retry memory_update with operation="set" and chunkStartIndex/chunkEndIndex.',
+                    output: 'Section-heading updates are no longer supported because memories may come from non-Markdown documents. Use memory_retrieve_chunks, then retry memory_update with mode="replace_range" and partStart/partEnd.',
                 }
             }
 
-            if (operation !== 'set' && operation !== 'append') {
-                return { success: false, output: 'operation is required and must be "set" or "append".' }
+            const mode = rawMode ?? (operation === 'append' ? 'append' : operation === 'set' && (legacyChunkStartIndex !== undefined || legacyChunkEndIndex !== undefined) ? 'replace_range' : operation === 'set' ? 'replace_all' : undefined)
+            if (mode !== 'replace_all' && mode !== 'replace_range' && mode !== 'append') {
+                return { success: false, output: 'mode is required and must be "replace_all", "replace_range", or "append".' }
             }
 
-            if (operation === 'append' && (chunkStartIndex !== undefined || chunkEndIndex !== undefined)) {
-                return { success: false, output: 'chunkStartIndex/chunkEndIndex only apply to operation="set". Omit them for operation="append".' }
+            if (mode === 'append' && (partStart !== undefined || partEnd !== undefined || legacyChunkStartIndex !== undefined || legacyChunkEndIndex !== undefined)) {
+                return { success: false, output: 'partStart/partEnd only apply to mode="replace_range". Omit them for mode="append".' }
+            }
+            if (mode === 'replace_all' && (partStart !== undefined || partEnd !== undefined || legacyChunkStartIndex !== undefined || legacyChunkEndIndex !== undefined)) {
+                return { success: false, output: 'partStart/partEnd only apply to mode="replace_range". Omit them for mode="replace_all".' }
             }
 
             const resolved = await resolveTargetSpace(assignedSpaces, folder, title, getKnownSpaces)
@@ -1022,7 +1069,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 return { success: false, output: `No memory entry found with title "${title}" in "${resolved.spaceName}". Use memory_create to create a new entry.` }
             }
 
-            if (operation === 'append') {
+            if (mode === 'append') {
                 if (!existsOnDisk) {
                     return { success: false, output: `Cannot append: file "${fileName}" was not found on disk.` }
                 }
@@ -1045,9 +1092,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 }
             }
 
-            // operation === 'set'
-            const hasChunkRange = chunkStartIndex !== undefined || chunkEndIndex !== undefined
-            if (!hasChunkRange) {
+            if (mode === 'replace_all') {
                 if (existsOnDisk) backupToRevisions(folderPath, fileName)
                 writeTextFile(folderPath, fileName, content)
                 clearMemoryGraphSource(resolved.spaceId, fileName)
@@ -1059,14 +1104,16 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 }
             }
 
+            const chunkStartIndex = partStart !== undefined ? toPartIndex(partStart) : legacyChunkStartIndex
+            const chunkEndIndex = partEnd !== undefined ? toPartIndex(partEnd) : legacyChunkEndIndex
             if (!Number.isInteger(chunkStartIndex) || !Number.isInteger(chunkEndIndex)) {
-                return { success: false, output: 'Partial memory updates require integer chunkStartIndex and chunkEndIndex values.' }
+                return { success: false, output: 'mode="replace_range" requires integer partStart and partEnd values.' }
             }
             if (chunkStartIndex! < 0 || chunkEndIndex! < chunkStartIndex!) {
-                return { success: false, output: 'Invalid chunk range. chunkEndIndex must be greater than or equal to chunkStartIndex.' }
+                return { success: false, output: 'Invalid Part range. partEnd must be greater than or equal to partStart, and Part numbers start at 1.' }
             }
             if (!existsOnDisk) {
-                return { success: false, output: `Chunk replacement requires the file "${fileName}" to exist on disk. Use operation="set" without a chunk range instead.` }
+                return { success: false, output: `Part replacement requires the file "${fileName}" to exist on disk. Use mode="replace_all" instead.` }
             }
 
             let fileContent: string
@@ -1080,7 +1127,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
             if (chunks.length === 0) {
                 return {
                     success: false,
-                    output: `No chunks found for "${fileName}" in range ${chunkStartIndex}-${chunkEndIndex}. Retrieve the current chunks and retry with a valid range, or use operation="append" to add new content at the end.`,
+                    output: `No parts found for "${fileName}" in Part range ${chunkStartIndex! + 1}-${chunkEndIndex! + 1}. Retrieve the current parts and retry with a valid range, or use mode="append" to add new content at the end.`,
                 }
             }
 
@@ -1094,7 +1141,7 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 
             return {
                 success: true,
-                output: `Chunks ${replaced.startIndex}-${replaced.endIndex} in "${fileName}" updated in "${resolved.spaceName}". Memory indexing is running in the background.`
+                output: `Parts ${replaced.startIndex + 1}-${replaced.endIndex + 1} in "${fileName}" updated in "${resolved.spaceName}". Memory indexing is running in the background.`
             }
         }
     }
@@ -1112,22 +1159,22 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
         description:
             'Remove an obsolete or incorrect memory entry. Auto-matches the title to find the file; if multiple folders contain the same title, folder parameter is required. ' +
             'By default, forgets the whole memory by moving the source file to revisions and deleting its indexed chunks. ' +
-            'To forget only part of a memory, first inspect the relevant chunks with memory_retrieve_chunks, then provide chunkStartIndex and chunkEndIndex. ' +
+            'To forget only part of a memory, first inspect the relevant parts with memory_retrieve_chunks, then provide partStart and partEnd. ' +
             'Use this only when information is no longer relevant, should no longer be remembered, or conflicts with newer information.',
         parameters: {
             type: 'object',
             properties: {
                 title: { type: 'string', description: 'The title (file name without .md) of the memory entry to remove.' },
                 folder: { type: 'string', description: 'Memory folder name, relative path (e.g. "projects/acme"), or ID. Required only when the title exists in multiple folders.' },
-                chunkStartIndex: { type: 'number', description: 'Optional zero-based first chunk index to forget. Use the chunk index shown by memory_retrieve_chunks or semantic search.' },
-                chunkEndIndex: { type: 'number', description: 'Optional zero-based last chunk index to forget, inclusive. Required when chunkStartIndex is provided.' },
+                partStart: { type: 'number', description: 'Optional first 1-based Part number to forget, as shown by memory_retrieve_chunks or semantic search.' },
+                partEnd: { type: 'number', description: 'Optional last 1-based Part number to forget, inclusive. Required when partStart is provided.' },
             },
             required: ['title']
         },
         timeout: 30_000,
         execute: async (params: unknown) => {
-            const { title, folder, chunkStartIndex, chunkEndIndex } = params as {
-                title: string; folder?: string; chunkStartIndex?: number; chunkEndIndex?: number
+            const { title, folder, partStart, partEnd, chunkStartIndex: legacyChunkStartIndex, chunkEndIndex: legacyChunkEndIndex } = params as {
+                title: string; folder?: string; partStart?: number; partEnd?: number; chunkStartIndex?: number; chunkEndIndex?: number
             }
             if (!title?.trim()) return { success: false, output: 'Title is required.' }
 
@@ -1135,17 +1182,19 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
             if ('error' in resolved) return { success: false, output: resolved.error }
 
             const mem = getAgentMemory()
+            const chunkStartIndex = partStart !== undefined ? toPartIndex(partStart) : legacyChunkStartIndex
+            const chunkEndIndex = partEnd !== undefined ? toPartIndex(partEnd) : legacyChunkEndIndex
             const hasChunkRange = chunkStartIndex !== undefined || chunkEndIndex !== undefined
 
             if (hasChunkRange) {
                 if (!Number.isInteger(chunkStartIndex) || !Number.isInteger(chunkEndIndex)) {
-                    return { success: false, output: 'Partial memory removal requires integer chunkStartIndex and chunkEndIndex values.' }
+                    return { success: false, output: 'Partial memory removal requires integer partStart and partEnd values.' }
                 }
                 if (chunkStartIndex! < 0 || chunkEndIndex! < chunkStartIndex!) {
-                    return { success: false, output: 'Invalid chunk range. chunkEndIndex must be greater than or equal to chunkStartIndex.' }
+                    return { success: false, output: 'Invalid Part range. partEnd must be greater than or equal to partStart, and Part numbers start at 1.' }
                 }
                 if (!resolved.folderPath || !resolved.existsOnDisk) {
-                    return { success: false, output: `Chunk removal requires the file "${resolved.fileName}" to exist on disk.` }
+                    return { success: false, output: `Part removal requires the file "${resolved.fileName}" to exist on disk.` }
                 }
 
                 let fileContent: string
@@ -1161,7 +1210,7 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
                 if (chunks.length !== expectedCount) {
                     return {
                         success: false,
-                        output: `Found ${chunks.length}/${expectedCount} chunks for "${resolved.fileName}" in range ${chunkStartIndex}-${chunkEndIndex}. Retrieve the current chunks and retry with a valid range.`,
+                        output: `Found ${chunks.length}/${expectedCount} parts for "${resolved.fileName}" in Part range ${chunkStartIndex! + 1}-${chunkEndIndex! + 1}. Retrieve the current parts and retry with a valid range.`,
                     }
                 }
 
@@ -1177,7 +1226,7 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
                     const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
                     return {
                         success: true,
-                        output: `Chunks ${removed.startIndex}-${removed.endIndex} removed; "${resolved.fileName}" is now empty and was forgotten from "${resolved.spaceName}" (${deleted} indexed chunk${deleted !== 1 ? 's' : ''} deleted, ${edgesDeleted} graph edge${edgesDeleted !== 1 ? 's' : ''} removed).`
+                        output: `Parts ${removed.startIndex + 1}-${removed.endIndex + 1} removed; "${resolved.fileName}" is now empty and was forgotten from "${resolved.spaceName}" (${deleted} indexed chunk${deleted !== 1 ? 's' : ''} deleted, ${edgesDeleted} graph edge${edgesDeleted !== 1 ? 's' : ''} removed).`
                     }
                 }
 
@@ -1188,7 +1237,7 @@ export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
 
                 return {
                     success: true,
-                    output: `Chunks ${removed.startIndex}-${removed.endIndex} removed from "${resolved.fileName}" in "${resolved.spaceName}". Memory indexing is running in the background.`
+                    output: `Parts ${removed.startIndex + 1}-${removed.endIndex + 1} removed from "${resolved.fileName}" in "${resolved.spaceName}". Memory indexing is running in the background.`
                 }
             }
 
