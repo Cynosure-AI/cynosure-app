@@ -9,6 +9,11 @@ import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
 
+interface DocumentDragPayload {
+  sourceSpaceId: string;
+  sourceFiles: string[];
+}
+
 const props = defineProps<{
   spaceId: string;
   spaces: MemorySpace[];
@@ -366,7 +371,10 @@ function startDocumentDrag(event: DragEvent, fileName: string) {
   const fileNames = selectedFiles.value.size > 0 ? Array.from(selectedFiles.value) : [fileName];
   if (!event.dataTransfer) return;
   event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData(DOCUMENT_DRAG_MIME, JSON.stringify({ sourceFiles: fileNames }));
+  event.dataTransfer.setData(
+    DOCUMENT_DRAG_MIME,
+    JSON.stringify({ sourceSpaceId: props.spaceId, sourceFiles: fileNames } satisfies DocumentDragPayload),
+  );
 }
 
 // --- Helpers ---

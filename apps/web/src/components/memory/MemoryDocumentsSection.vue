@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import { Icon } from "@iconify/vue";
+import { api } from "../../api/client";
 import type { MemorySpace } from "../../api/types";
 import MemoryDocumentList from "./MemoryDocumentList.vue";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
 const COLLAPSED_KEY = "cy-memory-folder-collapsed";
+
+interface DocumentDragPayload {
+  sourceSpaceId?: string;
+  sourceFiles?: unknown;
+}
 
 const props = defineProps<{
   spaces: MemorySpace[];
@@ -120,11 +126,18 @@ async function onFolderDrop(e: DragEvent, targetSpaceId: string) {
   const documentPayload = e.dataTransfer?.getData(DOCUMENT_DRAG_MIME);
   if (documentPayload) {
     try {
-      const parsed = JSON.parse(documentPayload) as { sourceFiles?: unknown };
+      const parsed = JSON.parse(documentPayload) as DocumentDragPayload;
+      const sourceSpaceId = typeof parsed.sourceSpaceId === "string" ? parsed.sourceSpaceId : props.selectedSpaceId;
       const sourceFiles = Array.isArray(parsed.sourceFiles)
         ? parsed.sourceFiles.filter((value): value is string => typeof value === "string")
         : [];
-      if (sourceFiles.length) await docList.value?.moveGroupsToSpace(targetSpaceId, sourceFiles);
+      if (!sourceSpaceId || sourceSpaceId === targetSpaceId || sourceFiles.length === 0) return;
+      if (sourceSpaceId === props.selectedSpaceId) {
+        await docList.value?.moveGroupsToSpace(targetSpaceId, sourceFiles);
+      } else {
+        await api.memorySpaces.moveGroups(sourceSpaceId, sourceFiles, targetSpaceId);
+        emit("refresh-spaces");
+      }
     } catch {
       /* ignore malformed drag payload */
     }

@@ -614,6 +614,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         for (const sf of sourceFiles) {
             const uniqueName = await mem.resolveUniqueSourceFile(sf, target.id)
             if (uniqueName !== sf) renamedCount++
+            const existingIndex = db.prepare('SELECT content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
+                .get(source.id, sf) as { content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number; created_at: number } | undefined
 
             // Move physical file if both spaces have folders
             if (source.folder_path && target.folder_path) {
@@ -641,22 +643,21 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             await rag.updateSpaceId('permanent_memory', filter, target.id)
 
             // Move file index entry
-            const existingIndex = db.prepare('SELECT content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
-                .get(source.id, sf) as { content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number; created_at: number } | undefined
-            db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?').run(source.id, sf)
-            const now = Date.now()
-            db.prepare(`
-                INSERT OR REPLACE INTO memory_file_index (space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            `).run(
-                target.id,
-                uniqueName,
-                existingIndex?.content_hash || '',
-                existingIndex?.chunk_count || 0,
-                existingIndex?.last_indexed_at || 0,
-                existingIndex?.entity_indexed_at || 0,
-                existingIndex?.created_at || now,
-            )
+            if (existingIndex) {
+                db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?').run(source.id, sf)
+                db.prepare(`
+                    INSERT OR REPLACE INTO memory_file_index (space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                `).run(
+                    target.id,
+                    uniqueName,
+                    existingIndex.content_hash,
+                    existingIndex.chunk_count,
+                    existingIndex.last_indexed_at,
+                    existingIndex.entity_indexed_at,
+                    existingIndex.created_at,
+                )
+            }
             moveMemoryGraphSource(source.id, sf, target.id, uniqueName)
         }
 
