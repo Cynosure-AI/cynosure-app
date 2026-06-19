@@ -22,7 +22,7 @@ const scrollContainer = ref<HTMLDivElement | null>(null)
 const expandedFallback = ref<Set<string>>(new Set())
 const collapsedSubAgentGroups = reactive(new Set<string>())
 const fullHeightSubAgentGroups = reactive(new Set<string>())
-const SCROLL_BOTTOM_THRESHOLD = 120
+const SCROLL_BOTTOM_THRESHOLD = 72
 
 const activeAgentIconUrl = computed(() => {
   if (!chatStore.activeAgentId) return null
