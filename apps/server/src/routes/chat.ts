@@ -156,8 +156,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         thinkingEnabled: reqThinkingEnabled,
         contextStrategy: reqContextStrategy,
         autoToolRouting: reqAutoToolRouting,
-        selectedSkillIds: reqSelectedSkillIds,
-        autoSkillRouting: reqAutoSkillRouting,
         autoMemory: reqAutoMemory,
         autoRouterProviderId: reqAutoRouterProviderId,
         autoRouterModel: reqAutoRouterModel,
@@ -271,7 +269,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const effectiveRunFlags = resolveChatRunFlags({
         resolvedAgent,
         autoMemory: reqAutoMemory,
-        autoSkillRouting: reqAutoSkillRouting,
       })
 
       // Resolve memory space overrides (request body ids -> { id, name } objects)
@@ -318,8 +315,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
             hasExplicitToolAllowlist,
             usedToolNames,
-            selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
-            autoSkillRouting: effectiveRunFlags.autoSkillRouting,
             thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
           },
         })
@@ -376,8 +371,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           thinkingEnabled: reqThinkingEnabled ?? true,
           autoToolRouting: reqAutoToolRouting === true,
           autoMemory: effectiveRunFlags.autoMemory,
-          selectedSkillIds: Array.isArray(reqSelectedSkillIds) ? reqSelectedSkillIds : [],
-          autoSkillRouting: effectiveRunFlags.autoSkillRouting,
         })
         db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(
           JSON.stringify(executionConfig),

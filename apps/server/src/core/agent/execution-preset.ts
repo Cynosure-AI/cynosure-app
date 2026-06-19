@@ -8,11 +8,9 @@ export interface ExecutionPreset {
     model?: string
     systemPrompt?: string
     tools: string[]
-    skills?: string[]
     subAgents: SubAgentAssignment[]
     autoToolRouting?: boolean
     autoMemory?: boolean
-    autoSkillRouting?: boolean
     autoRouterProviderId?: string
     autoRouterModel?: string
     toolRoutingEnabled?: boolean
@@ -34,11 +32,9 @@ export function presetFromAgent(
         model: agent.model,
         systemPrompt: agent.systemPrompt,
         tools: overrides.tools ?? agent.tools,
-        skills: agent.skills,
         subAgents: overrides.subAgents ?? agent.subAgents,
         autoToolRouting: agent.autoToolRouting,
         autoMemory: agent.autoMemory,
-        autoSkillRouting: agent.autoSkillRouting,
         autoRouterProviderId: agent.autoRouterProviderId,
         autoRouterModel: agent.autoRouterModel,
     }
@@ -46,11 +42,9 @@ export function presetFromAgent(
 
 export function presetFromAgentless(options: {
     tools: string[]
-    skills?: string[]
     subAgents?: SubAgentAssignment[]
     autoToolRouting: boolean
     autoMemory?: boolean
-    autoSkillRouting?: boolean
     autoRouterProviderId?: string
     autoRouterModel?: string
 }): ExecutionPreset {
@@ -59,11 +53,9 @@ export function presetFromAgentless(options: {
         name: 'Free Chat',
         internalName: 'free_chat',
         tools: options.tools,
-        skills: options.skills ?? [],
         subAgents: options.subAgents ?? [],
         autoToolRouting: options.autoToolRouting,
         autoMemory: options.autoMemory,
-        autoSkillRouting: options.autoSkillRouting,
         autoRouterProviderId: options.autoRouterProviderId,
         autoRouterModel: options.autoRouterModel,
     }

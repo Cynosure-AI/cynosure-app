@@ -3,7 +3,7 @@ import multipart from '@fastify/multipart'
 import archiver from 'archiver'
 import AdmZip from 'adm-zip'
 import { ensureDefaultMemorySpace, getDb } from '../db/database.js'
-import { getAppDataDir, getDefaultMemorySpaceDir, getMemorySpacesRootDir, getSkillsDir } from '../core/data-dir.js'
+import { getAppDataDir, getDefaultMemorySpaceDir, getMemorySpacesRootDir } from '../core/data-dir.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import { loadSavedProviders } from './providers.js'
 import { loadSavedMcpServers } from './mcp/index.js'
@@ -24,7 +24,6 @@ import type { LLMProviderConfig } from '../core/gateway/providers/base.provider.
 import { ensureFolder, listFilesInFolder } from '../core/memory/memory-file-manager.js'
 import { stopAllMemorySpaceWatchers, watchMemorySpace } from '../core/memory/memory-space-watcher.js'
 import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
-import { listSkillMarkdownFiles, restoreSkillMarkdownFile } from '../core/skills/skill-store.js'
 import { indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
 
@@ -147,7 +146,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
     app.get<{ Querystring: { modules?: string } }>(
         '/export',
         async (req, reply) => {
-            const requested = (req.query.modules || 'agents,skills,providers,mcp,settings,channels,memory,entityGraph,conversations,usage')
+            const requested = (req.query.modules || 'agents,providers,mcp,settings,channels,memory,entityGraph,conversations,usage')
                 .split(',')
                 .map((m) => m.trim())
 
@@ -171,10 +170,10 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 const db = getDb()
                 const agentRows = db.prepare(
                     `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
-                     category, sub_agents_json, skills_json, auto_approve_tools, thinking_enabled,
+                     category, sub_agents_json, auto_approve_tools, thinking_enabled,
                      max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                      auto_memory, memory_router_provider_id, memory_router_model,
-                     auto_skill_routing, auto_router_provider_id, auto_router_model,
+                     auto_router_provider_id, auto_router_model,
                      sort_order, cron_prompt, icon_mime, created_at, updated_at
                      FROM agents ORDER BY created_at`
                 ).all() as Record<string, unknown>[]
@@ -193,15 +192,6 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                     archive.append(JSON.stringify(agentIcons, null, 2), { name: 'agents/_db_agent_icons.json' })
                 }
                 manifest.modules.agents = { count: agentRows.length }
-            }
-
-            // --- Skills ---
-            if (requested.includes('skills')) {
-                const skills = listSkillMarkdownFiles()
-                for (const skill of skills) {
-                    archive.append(skill.content, { name: `skills/${skill.name}` })
-                }
-                manifest.modules.skills = { count: skills.length }
             }
 
             // --- Providers ---
@@ -408,13 +398,13 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
 
                             db.prepare(
                                 `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json,
-                                   skills_json, icon_url, internal_name, category, sub_agents_json, auto_approve_tools,
+                                   icon_url, internal_name, category, sub_agents_json, auto_approve_tools,
                                  thinking_enabled, max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                                  auto_memory, memory_router_provider_id, memory_router_model,
-                                 auto_skill_routing, auto_router_provider_id, auto_router_model,
+                                 auto_router_provider_id, auto_router_model,
                                  sort_order, cron_prompt, icon_data, icon_mime,
                                  created_at, updated_at)
-                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 row.id,
                                 row.name || '',
@@ -423,7 +413,6 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 row.model || '',
                                 row.system_prompt || '',
                                 row.tools_json || '[]',
-                                row.skills_json || '[]',
                                 row.icon_url || null,
                                 row.internal_name || row.codename || '',
                                 row.category || '',
@@ -437,9 +426,8 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                                 row.auto_memory ?? 0,
                                 row.memory_router_provider_id || '',
                                 row.memory_router_model || '',
-                                row.auto_skill_routing ?? 1,
-                                row.auto_router_provider_id || row.skill_router_provider_id || '',
-                                row.auto_router_model || row.skill_router_model || '',
+                                row.auto_router_provider_id || '',
+                                row.auto_router_model || '',
                                 row.sort_order ?? 0,
                                 row.cron_prompt || '',
                                 iconData,
@@ -457,27 +445,6 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 res.errors.push((e as Error).message)
             }
             results.agents = res
-        }
-
-        // --- Restore Skills ---
-        if (requestedModules.includes('skills') && manifest.modules.skills) {
-            const res = { restored: 0, errors: [] as string[] }
-            try {
-                const skillEntries = zip.getEntries()
-                    .filter((entry) => entry.entryName.startsWith('skills/') && entry.entryName.toLowerCase().endsWith('.md'))
-
-                for (const entry of skillEntries) {
-                    try {
-                        restoreSkillMarkdownFile(basename(entry.entryName), entry.getData().toString('utf-8'))
-                        res.restored++
-                    } catch (e) {
-                        res.errors.push(`Skill ${entry.entryName}: ${(e as Error).message}`)
-                    }
-                }
-            } catch (e) {
-                res.errors.push((e as Error).message)
-            }
-            results.skills = res
         }
 
         // --- Restore Providers ---
@@ -1180,7 +1147,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             'cron_jobs', 'channels',
             'entity_graph_edges', 'entity_graph_nodes',
             'memory_file_index', 'memory_spaces', 'agent_memory_spaces',
-            'mcp_servers', 'providers', 'agents', 'skills', 'skill_embeddings',
+            'mcp_servers', 'providers', 'agents',
             'settings', 'tool_router_embeddings', 'tool_router_tool_embeddings'
         ]
         for (const table of tables) {
@@ -1214,11 +1181,6 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
         }
         ensureDefaultMemorySpace(db)
         watchMemorySpace('default', getDefaultMemorySpaceDir())
-
-        const skillsDir = getSkillsDir()
-        if (existsSync(skillsDir)) {
-            rmSync(skillsDir, { recursive: true, force: true })
-        }
 
         // Reload in-memory state
         try {

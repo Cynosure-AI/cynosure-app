@@ -81,11 +81,6 @@ const router = createRouter({
       component: () => import('@/views/MemorySpacesView.vue')
     },
     {
-      path: '/skills',
-      name: 'skills',
-      component: () => import('@/views/SkillsView.vue')
-    },
-    {
       path: '/tools-policy',
       name: 'tools-policy',
       component: () => import('@/views/ToolsPolicyView.vue')

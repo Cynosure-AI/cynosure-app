@@ -9,9 +9,8 @@ import AgentToolsTab from '../components/agent/AgentToolsTab.vue'
 import AgentMemoryTab from '../components/agent/AgentMemoryTab.vue'
 import AgentSubAgentsTab from '../components/agent/AgentSubAgentsTab.vue'
 import AgentAdvancedTab from '../components/agent/AgentAdvancedTab.vue'
-import AgentSkillsTab from '../components/agent/AgentSkillsTab.vue'
 
-type AgentSectionId = 'general' | 'tools' | 'skills' | 'sub-agents' | 'memory' | 'advanced'
+type AgentSectionId = 'general' | 'tools' | 'sub-agents' | 'memory' | 'advanced'
 
 interface AgentSection {
   id: AgentSectionId
@@ -58,13 +57,6 @@ const sections: AgentSection[] = [
     description: 'Choose which tools this agent can use during conversations.',
     icon: 'lucide:wrench',
     component: AgentToolsTab
-  },
-  {
-    id: 'skills',
-    label: 'Skills',
-    description: 'Attach reusable knowledge and instruction presets to this agent.',
-    icon: 'lucide:book-open-check',
-    component: AgentSkillsTab
   },
   {
     id: 'sub-agents',

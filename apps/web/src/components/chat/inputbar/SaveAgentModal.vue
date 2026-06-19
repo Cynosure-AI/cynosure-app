@@ -24,7 +24,6 @@ const canSaveAsAgent = computed(() => {
     chatStore.selectedToolNames.length > 0 ||
     chatStore.freeChatSubAgentIds.length > 0 ||
     chatStore.hasFreeChatOverrides ||
-    chatStore.freeChatSkillIds.length > 0 ||
     chatStore.sessionSystemPrompt.trim().length > 0
   )
 })

@@ -6,7 +6,6 @@ export interface ResolveSystemPromptInput {
     basePrompt?: string
     overridePrompt?: string
     suffix?: string
-    skillsPrompt?: string | null
     subAgents?: SubAgentAssignment[]
     smartTagContext?: PromptSmartTagContext
 }
@@ -16,7 +15,6 @@ export async function resolveSystemPromptMessages(input: ResolveSystemPromptInpu
         basePrompt,
         overridePrompt,
         suffix,
-        skillsPrompt,
         subAgents,
         smartTagContext,
     } = input
@@ -30,10 +28,6 @@ export async function resolveSystemPromptMessages(input: ResolveSystemPromptInpu
 
     if (suffix) {
         effectiveSystemPrompt = appendPrompt(effectiveSystemPrompt, suffix, '\n')
-    }
-
-    if (skillsPrompt) {
-        effectiveSystemPrompt = appendPrompt(effectiveSystemPrompt, skillsPrompt, '\n\n')
     }
 
     effectiveSystemPrompt = resolvePromptSmartTags(effectiveSystemPrompt, smartTagContext ?? {})

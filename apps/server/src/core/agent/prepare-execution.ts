@@ -2,7 +2,7 @@
  * Shared pre-action builder for agent execution.
  *
  * This module is intentionally a thin assembler. The individual execution
- * layers live under pre-execution/ so tools, memory, skills, prompts, and
+ * layers live under pre-execution/ so tools, memory, prompts, and
  * model resolution can evolve independently while callers keep one stable
  * preparation entry point.
  */
@@ -11,7 +11,6 @@ import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
 import { resolveExecutionTools } from './pre-execution/execution-tools.js'
-import { resolveSkillSystemPrompt } from './pre-execution/execution-skills.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemorySystemMessages } from './pre-execution/execution-memory.js'
 import { buildTaskContext } from './pre-execution/task-context.js'
@@ -62,11 +61,6 @@ export interface PrepareExecutionInput {
     autoRouterProviderId?: string
     /** Optional model override for the auto router pass. */
     autoRouterModel?: string
-    /** Explicit/manual skill ids selected for this execution. */
-    selectedSkillIds?: string[]
-    /** Enable automatic skill selection for this execution. */
-    autoSkillRouting?: boolean
-
     // ── Sub-agents ──
 
     /** Whether to include sub-agent delegation tools (default: true) */
@@ -134,7 +128,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     })
     const autoModes = {
         tools: isToolRoutingEnabled(preset, input.autoToolRouting),
-        skills: isSkillRoutingEnabled(preset, input.autoSkillRouting),
         memories: isAutoMemoryEnabled(preset, input.autoMemory, memorySpaceOverrides),
     }
     const taskContextRouter = resolveTaskContextRouter({
@@ -156,7 +149,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         eventMeta: input.eventMeta,
     })
     const toolRoutingQuery = taskContext?.toolQuery || input.userQuery
-    const skillRoutingQuery = taskContext?.skillQuery || input.userQuery
     const memoryRoutingQuery = taskContext?.memoryQuery || input.userQuery
     const routingMessages = taskContext ? [] : input.recentMessages
 
@@ -182,26 +174,10 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         eventMeta: input.eventMeta,
     })
 
-    const skillsPrompt = await resolveSkillSystemPrompt({
-        preset,
-        gateway,
-        conversationId,
-        providerId: providerModel.providerId,
-        model: providerModel.model,
-        userQuery: skillRoutingQuery,
-        recentMessages: routingMessages,
-        selectedSkillIds: input.selectedSkillIds,
-        autoSkillRouting: input.autoSkillRouting,
-        autoRouterProviderId: input.autoRouterProviderId,
-        autoRouterModel: input.autoRouterModel,
-        eventMeta: input.eventMeta,
-    })
-
     const promptMessages = await resolveSystemPromptMessages({
         basePrompt: preset.systemPrompt,
         overridePrompt: systemPromptOverride,
         suffix: systemPromptSuffix,
-        skillsPrompt,
         subAgents: toolLayer.effectiveSubAgents,
         smartTagContext: {
             agentId: preset.id,
@@ -276,12 +252,6 @@ function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean)
     if (sessionEnabled === true) return true
     if (sessionEnabled === false) return false
     return preset.autoToolRouting === true || preset.toolRoutingEnabled === true
-}
-
-function isSkillRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
-    if (sessionEnabled === true) return true
-    if (sessionEnabled === false) return false
-    return preset.autoSkillRouting === true
 }
 
 function isAutoMemoryEnabled(

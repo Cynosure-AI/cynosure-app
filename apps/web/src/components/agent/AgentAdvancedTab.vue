@@ -124,7 +124,7 @@ function onMaxCtxBlur() {
       </div>
       <p class="text-xs text-theme-500 leading-relaxed">
         Override the provider and model this agent uses to prepare task context
-        for automatic tools, skills, and memories. Leave blank to use the global auto router settings
+        for automatic tools and memories. Leave blank to use the global auto router settings
         from Preferences.
       </p>
 

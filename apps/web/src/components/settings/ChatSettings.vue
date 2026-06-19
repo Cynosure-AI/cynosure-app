@@ -135,7 +135,7 @@ onMounted(async () => {
             Auto Router
           </h3>
           <p class="text-xs text-theme-500 mt-0.5">
-            Provider and model used to prepare task context for automatic tools, skills, and memories
+            Provider and model used to prepare task context for automatic tools and memories
           </p>
         </div>
       </div>

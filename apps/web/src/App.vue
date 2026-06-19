@@ -4,7 +4,6 @@ import { useProviderStore } from './stores/provider.store'
 import { useChatStore } from './stores/chat.store'
 import { useAgentStore, type HITLRequest } from './stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from './stores/agent-definitions.store'
-import { useSkillDefinitionsStore } from './stores/skill-definitions.store'
 import { usePreferencesStore } from './stores/preferences.store'
 import { useNotificationStore } from './stores/notification.store'
 import { api } from './api/client'
@@ -20,7 +19,6 @@ const providerStore = useProviderStore()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
-const skillDefs = useSkillDefinitionsStore()
 const notificationStore = useNotificationStore()
 
 // Initialize preferences early so theme is applied before first render
@@ -42,7 +40,6 @@ const cleanups: (() => void)[] = []
 async function loadAllStores() {
   await providerStore.loadProviders()
   await agentDefs.load()
-  await skillDefs.load().catch(() => { })
   await chatStore.loadConversations()
   chatStore.syncAgentBaseline()
   await agentStore.loadTools()

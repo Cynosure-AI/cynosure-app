@@ -9,12 +9,10 @@ interface ChatPreset {
     tools: string[]
     subAgentIds: string[]
     memorySpaceIds: string[]
-    skillIds: string[]
     systemPrompt: string
     thinkingEnabled: boolean
     autoToolRouting: boolean
     autoMemory: boolean
-    autoSkillRouting: boolean
     modelOverride: string | null
     providerOverride: string | null
 }
@@ -27,17 +25,14 @@ export interface ChatAgentConfigApi {
     sessionThinkingEnabled: Ref<boolean>
     sessionAutoToolRouting: Ref<boolean>
     sessionAutoMemory: Ref<boolean>
-    sessionAutoSkillRouting: Ref<boolean>
     selectedToolNames: Ref<string[]>
     agentOriginalSystemPrompt: Ref<string>
     freeChatSubAgentIds: Ref<string[]>
     freeChatMemorySpaceIds: Ref<string[]>
-    freeChatSkillIds: Ref<string[]>
     agentOriginalTools: Ref<string[]>
     agentOriginalSubAgentIds: Ref<string[]>
     agentOriginalMemorySpaceIds: Ref<string[]>
     freeChatMemorySelectionInitialized: Ref<boolean>
-    agentOriginalSkillIds: Ref<string[]>
     hasAgentOverrides: ComputedRef<boolean>
     hasFreeChatOverrides: ComputedRef<boolean>
     markOverridesModified(): void
@@ -68,34 +63,33 @@ function clonePreset(preset: ChatPreset): ChatPreset {
         tools: [...preset.tools],
         subAgentIds: [...preset.subAgentIds],
         memorySpaceIds: [...preset.memorySpaceIds],
-        skillIds: [...preset.skillIds],
     }
 }
 
 function presetsEqual(a: ChatPreset, b: ChatPreset): boolean {
-    return arraysEqual(a.tools, b.tools) &&
+    return (
+        arraysEqual(a.tools, b.tools) &&
         arraysEqual(a.subAgentIds, b.subAgentIds) &&
         arraysEqual(a.memorySpaceIds, b.memorySpaceIds) &&
-        arraysEqual(a.skillIds, b.skillIds) &&
         a.systemPrompt === b.systemPrompt &&
         a.thinkingEnabled === b.thinkingEnabled &&
         a.autoToolRouting === b.autoToolRouting &&
         a.autoMemory === b.autoMemory &&
-        a.autoSkillRouting === b.autoSkillRouting &&
         a.modelOverride === b.modelOverride &&
         a.providerOverride === b.providerOverride
+    )
 }
 
 function presetsEqualWithoutProviderModel(a: ChatPreset, b: ChatPreset): boolean {
-    return arraysEqual(a.tools, b.tools) &&
+    return (
+        arraysEqual(a.tools, b.tools) &&
         arraysEqual(a.subAgentIds, b.subAgentIds) &&
         arraysEqual(a.memorySpaceIds, b.memorySpaceIds) &&
-        arraysEqual(a.skillIds, b.skillIds) &&
         a.systemPrompt === b.systemPrompt &&
         a.thinkingEnabled === b.thinkingEnabled &&
         a.autoToolRouting === b.autoToolRouting &&
-        a.autoMemory === b.autoMemory &&
-        a.autoSkillRouting === b.autoSkillRouting
+        a.autoMemory === b.autoMemory
+    )
 }
 
 function loadStoredValue(key: string): string | null {
@@ -137,11 +131,9 @@ export function useChatAgentConfig(
     const sessionThinkingEnabled = ref<boolean>(true)
     const sessionAutoToolRouting = ref<boolean>(!activeAgentId.value)
     const sessionAutoMemory = ref<boolean>(true)
-    const sessionAutoSkillRouting = ref<boolean>(true)
     const selectedToolNames = ref<string[]>([])
     const agentOriginalAutoToolRouting = ref<boolean>(false)
     const agentOriginalAutoMemory = ref<boolean>(true)
-    const agentOriginalAutoSkillRouting = ref<boolean>(true)
     const agentOriginalThinkingEnabled = ref<boolean>(true)
     const agentOriginalSystemPrompt = ref<string>('')
     const agentOriginalModelOverride = ref<string | null>(null)
@@ -149,11 +141,9 @@ export function useChatAgentConfig(
     const freeChatSubAgentIds = ref<string[]>([])
     const freeChatMemorySpaceIds = ref<string[]>([])
     const freeChatMemorySelectionInitialized = ref<boolean>(false)
-    const freeChatSkillIds = ref<string[]>([])
     const agentOriginalTools = ref<string[]>([])
     const agentOriginalSubAgentIds = ref<string[]>([])
     const agentOriginalMemorySpaceIds = ref<string[]>([])
-    const agentOriginalSkillIds = ref<string[]>([])
     const freeChatDefaultMemorySpaceIds = ref<string[]>([])
     const freeChatPreset = ref<ChatPreset | null>(null)
 
@@ -174,12 +164,10 @@ export function useChatAgentConfig(
             tools: [],
             subAgentIds: [],
             memorySpaceIds: [...freeChatDefaultMemorySpaceIds.value],
-            skillIds: [],
             systemPrompt: '',
             thinkingEnabled: true,
             autoToolRouting: true,
             autoMemory: true,
-            autoSkillRouting: true,
             modelOverride: null,
             providerOverride: null,
         }
@@ -190,12 +178,10 @@ export function useChatAgentConfig(
             tools: [...selectedToolNames.value],
             subAgentIds: [...freeChatSubAgentIds.value],
             memorySpaceIds: [...freeChatMemorySpaceIds.value],
-            skillIds: [...freeChatSkillIds.value],
             systemPrompt: sessionSystemPrompt.value,
             thinkingEnabled: sessionThinkingEnabled.value,
             autoToolRouting: sessionAutoToolRouting.value,
             autoMemory: sessionAutoMemory.value,
-            autoSkillRouting: sessionAutoSkillRouting.value,
             modelOverride: sessionModelOverride.value,
             providerOverride: sessionProviderOverride.value,
         }
@@ -206,12 +192,10 @@ export function useChatAgentConfig(
         freeChatSubAgentIds.value = [...preset.subAgentIds]
         freeChatMemorySpaceIds.value = [...preset.memorySpaceIds]
         freeChatMemorySelectionInitialized.value = true
-        freeChatSkillIds.value = [...preset.skillIds]
         sessionSystemPrompt.value = preset.systemPrompt
         sessionThinkingEnabled.value = preset.thinkingEnabled
         sessionAutoToolRouting.value = preset.autoToolRouting
         sessionAutoMemory.value = preset.autoMemory
-        sessionAutoSkillRouting.value = preset.autoSkillRouting
         sessionModelOverride.value = preset.modelOverride
         sessionProviderOverride.value = preset.providerOverride
     }
@@ -225,12 +209,10 @@ export function useChatAgentConfig(
         agentOriginalTools.value = [...preset.tools]
         agentOriginalSubAgentIds.value = [...preset.subAgentIds]
         agentOriginalMemorySpaceIds.value = [...preset.memorySpaceIds]
-        agentOriginalSkillIds.value = [...preset.skillIds]
         agentOriginalSystemPrompt.value = preset.systemPrompt
         agentOriginalThinkingEnabled.value = preset.thinkingEnabled
         agentOriginalAutoToolRouting.value = preset.autoToolRouting
         agentOriginalAutoMemory.value = preset.autoMemory
-        agentOriginalAutoSkillRouting.value = preset.autoSkillRouting
         agentOriginalModelOverride.value = preset.modelOverride
         agentOriginalProviderOverride.value = preset.providerOverride
     }
@@ -243,12 +225,10 @@ export function useChatAgentConfig(
                 tools: agent?.tools?.length ? [...agent.tools] : [],
                 subAgentIds: agent?.subAgents?.map(s => s.agentId) ?? [],
                 memorySpaceIds: agent?.memorySpaces?.length ? [...agent.memorySpaces] : [],
-                skillIds: agent?.skills?.length ? [...agent.skills] : [],
                 systemPrompt: agent?.systemPrompt || '',
                 thinkingEnabled: agent?.thinkingEnabled !== false,
                 autoToolRouting: agent?.autoToolRouting === true,
                 autoMemory: agent?.autoMemory === true,
-                autoSkillRouting: agent?.autoSkillRouting !== false,
                 modelOverride: null,
                 providerOverride: null,
             },
@@ -301,12 +281,10 @@ export function useChatAgentConfig(
             !arraysEqual(selectedToolNames.value, agentOriginalTools.value) ||
             !arraysEqual(freeChatSubAgentIds.value, agentOriginalSubAgentIds.value) ||
             !arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value) ||
-            !arraysEqual(freeChatSkillIds.value, agentOriginalSkillIds.value) ||
             sessionSystemPrompt.value !== agentOriginalSystemPrompt.value ||
             sessionThinkingEnabled.value !== agentOriginalThinkingEnabled.value ||
             sessionAutoToolRouting.value !== agentOriginalAutoToolRouting.value ||
             sessionAutoMemory.value !== agentOriginalAutoMemory.value ||
-            sessionAutoSkillRouting.value !== agentOriginalAutoSkillRouting.value ||
             sessionProviderOverride.value !== agentOriginalProviderOverride.value ||
             sessionModelOverride.value !== agentOriginalModelOverride.value
         )
@@ -326,12 +304,10 @@ export function useChatAgentConfig(
             tools: [...agentOriginalTools.value],
             subAgentIds: [...agentOriginalSubAgentIds.value],
             memorySpaceIds: [...agentOriginalMemorySpaceIds.value],
-            skillIds: [...agentOriginalSkillIds.value],
             systemPrompt: agentOriginalSystemPrompt.value,
             thinkingEnabled: agentOriginalThinkingEnabled.value,
             autoToolRouting: agentOriginalAutoToolRouting.value,
             autoMemory: agentOriginalAutoMemory.value,
-            autoSkillRouting: agentOriginalAutoSkillRouting.value,
             modelOverride: agentOriginalModelOverride.value,
             providerOverride: agentOriginalProviderOverride.value,
         })
@@ -366,14 +342,10 @@ export function useChatAgentConfig(
         if (!arraysEqual(freeChatMemorySpaceIds.value, actualPreset.memorySpaceIds)) {
             updates.memorySpaces = [...freeChatMemorySpaceIds.value]
         }
-        if (!arraysEqual(freeChatSkillIds.value, actualPreset.skillIds)) {
-            updates.skills = [...freeChatSkillIds.value]
-        }
         if (sessionSystemPrompt.value !== actualPreset.systemPrompt) updates.systemPrompt = sessionSystemPrompt.value
         if (sessionThinkingEnabled.value !== actualPreset.thinkingEnabled) updates.thinkingEnabled = sessionThinkingEnabled.value
         if (sessionAutoToolRouting.value !== actualPreset.autoToolRouting) updates.autoToolRouting = sessionAutoToolRouting.value
         if (sessionAutoMemory.value !== actualPreset.autoMemory) updates.autoMemory = sessionAutoMemory.value
-        if (sessionAutoSkillRouting.value !== actualPreset.autoSkillRouting) updates.autoSkillRouting = sessionAutoSkillRouting.value
 
         const nextProviderId = sessionProviderOverride.value ?? actualProviderId
         const nextModel = sessionModelOverride.value ?? actualModel
@@ -449,7 +421,6 @@ export function useChatAgentConfig(
         return !config.allowedTools.length &&
             !config.subAgents.length &&
             !config.memorySpaceIds.length &&
-            !config.selectedSkillIds.length &&
             !config.systemPrompt &&
             !config.model &&
             !config.providerId &&
@@ -475,12 +446,10 @@ export function useChatAgentConfig(
             tools: normalizeToolKeys(config.allowedTools),
             subAgentIds: config.subAgents.map((subAgent) => subAgent.agentId),
             memorySpaceIds: [...config.memorySpaceIds],
-            skillIds: [...config.selectedSkillIds],
             systemPrompt: config.systemPrompt,
             thinkingEnabled: config.thinkingEnabled,
             autoToolRouting: config.autoToolRouting,
             autoMemory: config.autoMemory,
-            autoSkillRouting: config.autoSkillRouting,
             modelOverride: activeAgent && matchesAgentModel ? null : restoredModel,
             providerOverride: activeAgent && matchesAgentModel ? null : restoredProviderId,
         }
@@ -529,17 +498,14 @@ export function useChatAgentConfig(
         sessionThinkingEnabled,
         sessionAutoToolRouting,
         sessionAutoMemory,
-        sessionAutoSkillRouting,
         selectedToolNames,
         agentOriginalSystemPrompt,
         freeChatSubAgentIds,
         freeChatMemorySpaceIds,
         freeChatMemorySelectionInitialized,
-        freeChatSkillIds,
         agentOriginalTools,
         agentOriginalSubAgentIds,
         agentOriginalMemorySpaceIds,
-        agentOriginalSkillIds,
         hasAgentOverrides,
         hasFreeChatOverrides,
         markOverridesModified,

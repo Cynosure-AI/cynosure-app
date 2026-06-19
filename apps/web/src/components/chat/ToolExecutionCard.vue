@@ -36,7 +36,6 @@ const statusMeta: Record<string, { label: string; icon: string; color: string }>
   'building-task-context': { label: 'Preparing Context', icon: 'lucide:compass', color: 'text-cyan-600 dark:text-cyan-300' },
   'routing-tools': { label: 'Auto tool routing', icon: 'lucide:route', color: 'text-accent-500 dark:text-accent-300' },
   'routing-memory': { label: 'Auto Memories', icon: 'lucide:brain-circuit', color: 'text-accent-500 dark:text-accent-300' },
-  'routing-skills': { label: 'Auto Skill Routing', icon: 'lucide:book-open-check', color: 'text-accent-500 dark:text-accent-300' },
   'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-amber-500 dark:text-amber-400' },
   denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-red-500 dark:text-red-400' },
   executing: { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-500 dark:text-emerald-400' },
@@ -151,7 +150,6 @@ function toolChipClass(name: string): string {
 function toolCallIcon(call: { name: string; arguments: string }): string {
   if (isTaskContextCall(call)) return 'lucide:compass'
   if (isSubAgentSpawnCall(call.name)) return 'lucide:bot'
-  if (isSkillRouting.value) return 'lucide:book-open-check'
   if (isMemoryCall(call)) return 'lucide:brain'
   return 'lucide:terminal'
 }
@@ -201,8 +199,7 @@ const currentStatus = computed(() => props.steps[props.steps.length - 1]?.status
 const isTaskContext = computed(() => props.steps.some(step => step.status === 'building-task-context' || step.toolCalls?.some(isTaskContextCall)))
 const isToolRouting = computed(() => currentStatus.value === 'routing-tools')
 const isMemoryRouting = computed(() => currentStatus.value === 'routing-memory')
-const isSkillRoutingCurrent = computed(() => currentStatus.value === 'routing-skills')
-const isRoutingStatus = computed(() => isTaskContext.value || isToolRouting.value || isMemoryRouting.value || isSkillRoutingCurrent.value)
+const isRoutingStatus = computed(() => isTaskContext.value || isToolRouting.value || isMemoryRouting.value)
 
 /** All tool names from this iteration */
 const toolNames = computed(() => {
@@ -212,7 +209,6 @@ const toolNames = computed(() => {
   return []
 })
 
-const isSkillRouting = computed(() => props.steps.some(step => step.status === 'routing-skills'))
 const isSubAgentSpawnIteration = computed(() => toolNames.value.some(isSubAgentSpawnCall))
 
 /** Latest results from this iteration */
@@ -262,12 +258,10 @@ const taskContext = computed(() => {
   try {
     const parsed = JSON.parse(call.arguments || '{}') as {
       toolQuery?: unknown
-      skillQuery?: unknown
       memoryQuery?: unknown
     }
     return {
       toolQuery: typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : '',
-      skillQuery: typeof parsed.skillQuery === 'string' ? parsed.skillQuery.trim() : '',
       memoryQuery: typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : '',
     }
   } catch {
@@ -279,7 +273,6 @@ const taskContextQueries = computed(() => {
   if (!taskContext.value) return []
   const queries = [
     { label: 'Tools', value: taskContext.value.toolQuery },
-    { label: 'Skills', value: taskContext.value.skillQuery },
     { label: 'Memory', value: taskContext.value.memoryQuery },
   ]
     .map((query) => ({ ...query, value: query.value.trim() }))
@@ -318,7 +311,7 @@ function prettifyJson(text: string): string {
 const streamingText = computed(() => {
   for (const step of [...props.steps].reverse()) {
     if (step.streamingChoosing && !step.toolCalls?.length) {
-      return { label: isSkillRouting.value ? 'Choosing skills…' : 'Choosing tools…', text: step.streamingChoosing }
+      return { label: 'Choosing tools…', text: step.streamingChoosing }
     }
   }
   return null

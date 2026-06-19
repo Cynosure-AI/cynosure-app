@@ -89,8 +89,6 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         thinkingEnabled: agent.thinkingEnabled !== false,
         autoToolRouting: agent.autoToolRouting === true,
         autoMemory: agent.autoMemory === true,
-        selectedSkillIds: agent.skills,
-        autoSkillRouting: agent.autoSkillRouting !== false,
     })
     db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(JSON.stringify(executionConfig), conversationId)
 

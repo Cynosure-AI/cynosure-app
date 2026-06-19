@@ -29,12 +29,10 @@ export function useChatMessages(
         sessionThinkingEnabled: Ref<boolean>
         sessionAutoToolRouting: Ref<boolean>
         sessionAutoMemory: Ref<boolean>
-        sessionAutoSkillRouting: Ref<boolean>
         selectedToolNames: Ref<string[]>
         freeChatSubAgentIds: Ref<string[]>
         freeChatMemorySpaceIds: Ref<string[]>
         freeChatMemorySelectionInitialized: Ref<boolean>
-        freeChatSkillIds: Ref<string[]>
     },
 ): ChatMessagesApi {
     const agentStore = useAgentStore()
@@ -112,11 +110,9 @@ export function useChatMessages(
             systemPrompt: agentConfig.sessionSystemPrompt.value || baseSystemPrompt,
             subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.freeChatSubAgentIds.value]),
             memorySpaceIds: agentConfig.freeChatMemorySelectionInitialized.value ? [...agentConfig.freeChatMemorySpaceIds.value] : undefined,
-            selectedSkillIds: [...agentConfig.freeChatSkillIds.value],
             thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
             autoToolRouting: agentConfig.sessionAutoToolRouting.value,
             autoMemory: agentConfig.sessionAutoMemory.value,
-            autoSkillRouting: agentConfig.sessionAutoSkillRouting.value,
         }
 
         const prefs = usePreferencesStore()
@@ -140,8 +136,6 @@ export function useChatMessages(
                 titleProviderId: prefs.titleProviderId || undefined,
                 titleModel: prefs.titleModel || undefined,
                 autoToolRouting: executionRun.autoToolRouting,
-                selectedSkillIds: executionRun.selectedSkillIds,
-                autoSkillRouting: executionRun.autoSkillRouting,
                 autoMemory: executionRun.autoMemory,
                 autoRouterProviderId: activeAgent?.autoRouterProviderId || prefs.autoRouterProviderId || undefined,
                 autoRouterModel: activeAgent?.autoRouterModel || prefs.autoRouterModel || undefined,

@@ -54,8 +54,6 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         autoRouterModel,
         hasExplicitToolAllowlist = false,
         usedToolNames,
-        selectedSkillIds = [],
-        autoSkillRouting = false,
         thinkingEnabled,
         eventMeta,
     } = input
@@ -84,11 +82,9 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         })
         : presetFromAgentless({
             tools: configuredTools,
-            skills: selectedSkillIds,
             subAgents: effectiveSubAgents,
             autoToolRouting: autoToolRouting === true,
             autoMemory,
-            autoSkillRouting,
             autoRouterProviderId,
             autoRouterModel,
         })
@@ -110,8 +106,6 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         autoRouterModel,
         preferredToolKeys: fixedToolKeys,
         usedToolNames,
-        selectedSkillIds,
-        autoSkillRouting,
         recentMessages: messages,
         userQuery: userText,
         memorySpaceOverrides,
