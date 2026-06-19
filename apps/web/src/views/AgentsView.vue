@@ -9,6 +9,7 @@ import BaseCard from '../components/shared/BaseCard.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import ProviderModelSelect from '../components/shared/ProviderModelSelect.vue'
+import TagInput from '../components/shared/TagInput.vue'
 import { useProviderLogos } from '../composables/useProviderLogos'
 import type { AgentDefinition } from '../api/types'
 
@@ -35,7 +36,9 @@ const activeView = ref<AgentViewFilter>('all')
 const bulkSelectionIds = ref<string[]>([])
 const bulkProviderId = ref('')
 const bulkModel = ref('')
+const bulkTags = ref<string[]>([])
 const hasBulkProviderModelSelection = ref(false)
+const hasBulkTagsSelection = ref(false)
 
 const dragReorderId = ref<string | null>(null)
 const dropTargetId = ref<string | null>(null)
@@ -127,7 +130,9 @@ function clearBulkSelection(): void {
   bulkSelectionIds.value = []
   bulkProviderId.value = ''
   bulkModel.value = ''
+  bulkTags.value = []
   hasBulkProviderModelSelection.value = false
+  hasBulkTagsSelection.value = false
 }
 
 function toggleAgentSelection(agentId: string, selected?: boolean): void {
@@ -165,13 +170,25 @@ function clearFilters(): void {
 }
 
 async function applyBulkChanges(): Promise<void> {
-  if (!isBulkMode.value || !hasBulkProviderModelSelection.value) return
+  if (!isBulkMode.value || (!hasBulkProviderModelSelection.value && !hasBulkTagsSelection.value)) return
   const ids = [...bulkSelectionIds.value]
-  await Promise.all(ids.map(id => agentDefs.update(id, {
-    providerId: bulkProviderId.value,
-    model: bulkModel.value,
-  })))
+  await Promise.all(ids.map(id => {
+    const updates: Partial<Omit<AgentDefinition, 'id' | 'createdAt' | 'updatedAt'>> = {}
+    if (hasBulkProviderModelSelection.value) {
+      updates.providerId = bulkProviderId.value
+      updates.model = bulkModel.value
+    }
+    if (hasBulkTagsSelection.value) {
+      updates.tags = [...bulkTags.value]
+    }
+    return agentDefs.update(id, updates)
+  }))
   clearBulkSelection()
+}
+
+function updateBulkTags(tags: string[]): void {
+  bulkTags.value = tags
+  hasBulkTagsSelection.value = true
 }
 
 async function createAgent() {
@@ -386,6 +403,15 @@ function formatDate(ts: number): string {
           {{ selectedAgentCount }} agent{{ selectedAgentCount === 1 ? '' : 's' }} selected
         </div>
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-end md:flex-1">
+          <div class="min-w-0 md:min-w-72">
+            <TagInput
+              :model-value="bulkTags"
+              :suggestions="allTags"
+              placeholder="Set tags for selected agents"
+              input-class="py-1.5"
+              @update:model-value="updateBulkTags"
+            />
+          </div>
           <div class="min-w-0 md:min-w-80">
             <ProviderModelSelect
               :provider-id="bulkProviderId"
@@ -403,7 +429,7 @@ function formatDate(ts: number): string {
           <div class="flex items-center gap-2">
             <button
               class="px-3 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
-              :disabled="!hasBulkProviderModelSelection"
+              :disabled="!hasBulkProviderModelSelection && !hasBulkTagsSelection"
               @click="applyBulkChanges"
             >
               Apply

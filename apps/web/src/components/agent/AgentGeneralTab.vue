@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from "vue";
+import { ref, computed, onMounted, nextTick } from "vue";
 import { useProviderStore } from "../../stores/provider.store";
+import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import type { AgentDefinition } from "../../api/types";
 import IconUpload from "../shared/IconUpload.vue";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import BaseCard from "../shared/BaseCard.vue";
 import PromptSmartTagPicker from "../shared/PromptSmartTagPicker.vue";
+import TagInput from "../shared/TagInput.vue";
 
 const props = defineProps<{ agent: AgentDefinition }>();
 const emit = defineEmits<{ update: [field: string, value: unknown] }>();
 
 const providerStore = useProviderStore();
+const agentDefs = useAgentDefinitionsStore();
 const systemPromptRef = ref<HTMLTextAreaElement | null>(null);
-const tagInput = ref("");
 
 function autoResize(e: Event) {
   const el = e.target as HTMLTextAreaElement;
@@ -20,30 +22,16 @@ function autoResize(e: Event) {
   el.style.height = el.scrollHeight + "px";
 }
 
-function normalizeTag(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
-}
-
-function addTag(): void {
-  const tag = normalizeTag(tagInput.value);
-  if (!tag) return;
-
-  const exists = props.agent.tags.some(
-    (item) => item.toLowerCase() === tag.toLowerCase(),
-  );
-  if (!exists) {
-    emit("update", "tags", [...props.agent.tags, tag]);
+const tagSuggestions = computed(() => {
+  const tagMap = new Map<string, string>();
+  for (const agent of agentDefs.agents) {
+    for (const tag of agent.tags || []) {
+      const key = tag.toLowerCase();
+      if (!tagMap.has(key)) tagMap.set(key, tag);
+    }
   }
-  tagInput.value = "";
-}
-
-function removeTag(tag: string): void {
-  emit(
-    "update",
-    "tags",
-    props.agent.tags.filter((item) => item !== tag),
-  );
-}
+  return [...tagMap.values()].sort((a, b) => a.localeCompare(b));
+});
 
 function insertSystemPromptTag(tag: string): void {
   const el = systemPromptRef.value;
@@ -137,33 +125,11 @@ onMounted(() =>
 
       <div>
         <label class="block text-sm text-theme-400 mb-1.5">Tags</label>
-        <input
-          v-model="tagInput"
-          type="text"
-          placeholder="Type a tag and press Enter"
-          class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
-          @keydown.enter.prevent="addTag"
-        >
-        <div
-          v-if="agent.tags.length"
-          class="mt-2 flex flex-wrap gap-2"
-        >
-          <span
-            v-for="tag in agent.tags"
-            :key="tag"
-            class="inline-flex items-center gap-1.5 rounded-full border border-theme-700 bg-theme-900/70 px-2.5 py-1 text-xs text-theme-300"
-          >
-            {{ tag }}
-            <button
-              type="button"
-              class="rounded-full p-0.5 text-theme-500 transition-colors hover:bg-theme-700 hover:text-theme-200"
-              :aria-label="`Remove ${tag} tag`"
-              @click="removeTag(tag)"
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          </span>
-        </div>
+        <TagInput
+          :model-value="agent.tags"
+          :suggestions="tagSuggestions"
+          @update:model-value="emit('update', 'tags', $event)"
+        />
       </div>
 
       <label class="flex items-center gap-3 rounded-lg border border-theme-800 bg-theme-900/50 px-3 py-2 text-sm text-theme-300">
