@@ -14,6 +14,10 @@ import type {
 import type { WsHandler } from './http'
 import type { ChatSendRequest, ConversationDto, ConversationMessagesResponse } from '@shared/types'
 
+function memorySpacePathId(id: string): string {
+  return encodeURIComponent(encodeURIComponent(id))
+}
+
 // ---- API object (same shape as window.api from preload) ----
 
 export const api = {
@@ -313,18 +317,18 @@ export const api = {
     create: (name: string, description?: string, parentRelativePath?: string) =>
       post<MemorySpace>('/api/memory-spaces', { name, description, parentRelativePath }),
     update: (id: string, data: { name?: string; description?: string; relativePath?: string }) =>
-      put<MemorySpace>(`/api/memory-spaces/${encodeURIComponent(id)}`, data),
+      put<MemorySpace>(`/api/memory-spaces/${memorySpacePathId(id)}`, data),
     remove: (id: string) =>
-      del<{ success: boolean }>(`/api/memory-spaces/${encodeURIComponent(id)}`),
+      del<{ success: boolean }>(`/api/memory-spaces/${memorySpacePathId(id)}`),
     reorder: (ids: string[]) =>
       put<{ success: boolean }>('/api/memory-spaces/reorder', { ids }),
     listAllJobs: () =>
       get<MemoryIndexJob[]>('/api/memory-spaces/jobs'),
     /** List files in the space folder with their index status. Hash computation is async server-side. */
     listFiles: (spaceId: string) =>
-      get<MemoryFileStatus[]>(`/api/memory-spaces/${encodeURIComponent(spaceId)}/files`),
+      get<MemoryFileStatus[]>(`/api/memory-spaces/${memorySpacePathId(spaceId)}/files`),
     listJobs: (spaceId: string) =>
-      get<MemoryIndexJob[]>(`/api/memory-spaces/${encodeURIComponent(spaceId)}/jobs`),
+      get<MemoryIndexJob[]>(`/api/memory-spaces/${memorySpacePathId(spaceId)}/jobs`),
     getJob: (jobId: string) =>
       get<MemoryIndexJob>(`/api/memory-spaces/jobs/${encodeURIComponent(jobId)}`),
     cancelJob: (jobId: string) =>
@@ -333,65 +337,65 @@ export const api = {
       onWsEvent('memory:job-updated', cb as WsHandler),
     reindexFile: (spaceId: string, fileName: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string }>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/reingest-file`,
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/reingest-file`,
         { fileName }
       ),
     startReindexFile: (spaceId: string, fileName: string) =>
       post<MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }>>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}/reindex-job`,
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/reindex-job`,
         {}
       ),
     entityIndexFile: (spaceId: string, fileName: string) =>
       post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; entityIndexedAt: number }>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}/entity-index`,
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/entity-index`,
         {}
       ),
     startEntityIndexFile: (spaceId: string, fileName: string) =>
       post<MemoryIndexJob<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; entityIndexedAt: number }>>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}/entity-index-job`,
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/entity-index-job`,
         {}
       ),
     deleteFile: (spaceId: string, fileName: string) =>
       del<{ success: boolean }>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}`
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}`
       ),
     getFileContent: (spaceId: string, fileName: string) =>
       get<{ fileName: string; content: string }>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}/content`
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/content`
       ),
     updateFileContent: (spaceId: string, fileName: string, content: string) =>
       put<{ success: boolean; chunksStored: number; fileName: string }>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(fileName)}/content`,
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/content`,
         { content }
       ),
     /** Legacy: list indexed source files from LanceDB (no disk status). */
     listGroups: (spaceId: string) =>
       get<{ sourceFile: string; chunkCount: number; createdAt: number }[]>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/groups`
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/groups`
       ),
     listEntries: (spaceId: string, sourceFile?: string) => {
       const params = new URLSearchParams()
       if (sourceFile) params.set('sourceFile', sourceFile)
       const qs = params.toString()
       return get<{ id: string; text: string; source: string; sourceFile?: string; chunkIndex?: number; createdAt: number }[]>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/entries${qs ? `?${qs}` : ''}`
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/entries${qs ? `?${qs}` : ''}`
       )
     },
     ingestFile: (spaceId: string, fileName: string, content: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string }>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/ingest-file`, { fileName, content }
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/ingest-file`, { fileName, content }
       ),
     reingestFile: (spaceId: string, fileName: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string }>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/reingest-file`, { fileName }
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/reingest-file`, { fileName }
       ),
     deleteGroups: (spaceId: string, sourceFiles: string[]) =>
       post<{ success: boolean }>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/delete-groups`, { sourceFiles }
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/delete-groups`, { sourceFiles }
       ),
     moveGroups: (spaceId: string, sourceFiles: string[], targetSpaceId: string) =>
       post<{ success: boolean; moved: number }>(
-        `/api/memory-spaces/${encodeURIComponent(spaceId)}/move-groups`, { sourceFiles, targetSpaceId }
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/move-groups`, { sourceFiles, targetSpaceId }
       ),
   },
 
