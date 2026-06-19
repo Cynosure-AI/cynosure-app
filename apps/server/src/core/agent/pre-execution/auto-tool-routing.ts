@@ -63,7 +63,14 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             preferredToolNames,
             usedToolNames,
         })
-        emitToolRoutingSelection(conversationId, taskId, routedTools, 'gathered-results', eventMeta)
+        emitToolRoutingSelection(
+            conversationId,
+            taskId,
+            routedTools,
+            'gathered-results',
+            eventMeta,
+            routedTools.length ? undefined : 'none-found',
+        )
         emitToolRoutingStatus(conversationId, taskId, 'curating-tools', 'Curating tool context...', eventMeta)
         const curatedTools = await curateRoutedTools({
             gateway,
@@ -75,12 +82,26 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             preferredToolNames,
             usedToolNames,
         })
-        emitToolRoutingSelection(conversationId, taskId, curatedTools, 'gathered-context', eventMeta)
+        emitToolRoutingSelection(
+            conversationId,
+            taskId,
+            curatedTools,
+            'gathered-context',
+            eventMeta,
+            curatedTools.length ? undefined : 'none-relevant',
+        )
         return curatedTools
     } catch (err) {
         console.warn('[tool-router] Routing failed, using local tool list:', err)
         const fallbackTools = tools.filter((tool) => !tool.namespaceId?.startsWith('mcp:'))
-        emitToolRoutingSelection(conversationId, taskId, fallbackTools, 'gathered-context', eventMeta)
+        emitToolRoutingSelection(
+            conversationId,
+            taskId,
+            fallbackTools,
+            'gathered-context',
+            eventMeta,
+            fallbackTools.length ? undefined : 'routing-failed',
+        )
         return fallbackTools
     }
 }
@@ -275,19 +296,36 @@ function emitToolRoutingSelection(
     tools: Array<ToolDefinition | RoutedToolDefinition>,
     contextPhase: 'gathered-results' | 'gathered-context' = 'gathered-context',
     eventMeta?: Record<string, unknown>,
+    emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed',
 ): void {
+    const visibleTools = tools.filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
     getEventBus().emit('step:tools-chosen', {
         conversationId,
         taskId,
         iteration: 0,
         ...eventMeta,
-        toolCalls: tools
-            .filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
+        toolCalls: visibleTools.length ? visibleTools
             .map((tool) => ({
                 name: tool.name,
                 arguments: typeof (tool as RoutedToolDefinition).routerScore === 'number'
                     ? JSON.stringify({ type: 'tool-router', contextPhase, routerScore: (tool as RoutedToolDefinition).routerScore })
                     : JSON.stringify({ type: 'tool-router', contextPhase })
-            })),
+            })) : [{
+                name: toolEmptyLabel(emptyReason),
+                arguments: JSON.stringify({
+                    type: 'tool-router',
+                    contextPhase,
+                    emptyReason: emptyReason || 'none-selected',
+                }),
+            }],
     })
+}
+
+function toolEmptyLabel(reason?: string): string {
+    switch (reason) {
+        case 'none-found': return 'No tools found'
+        case 'none-relevant': return 'No tools selected'
+        case 'routing-failed': return 'Tool routing skipped'
+        default: return 'No tools selected'
+    }
 }

@@ -30,6 +30,7 @@ export interface ExecutionRequest {
         hasExplicitToolAllowlist?: boolean
         usedToolNames?: Set<string>
         thinkingEnabled?: boolean
+        inlineAttachmentTextLimit?: number
     }
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
@@ -59,6 +60,7 @@ export interface ExecutionPlanInput {
     usedToolNames?: Set<string>
     thinkingEnabled?: boolean
     eventMeta?: Record<string, unknown>
+    inlineAttachmentTextLimit?: number
 }
 
 export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanInput {
@@ -87,5 +89,6 @@ export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanIn
         usedToolNames: run.usedToolNames,
         thinkingEnabled: run.thinkingEnabled,
         eventMeta: request.eventMeta,
+        inlineAttachmentTextLimit: run.inlineAttachmentTextLimit,
     }
 }
