@@ -451,10 +451,18 @@ function formatDate(ts: number): string {
         <div class="agent-grid bg-theme-900/70 border-b border-theme-800 px-5 py-3 text-[11px] tracking-wider uppercase text-theme-400">
           <div class="flex items-center" />
           <div>Name</div>
-          <div class="hidden md:block">Tags</div>
-          <div class="hidden lg:block">Provider/Model</div>
-          <div class="hidden xl:block">Info</div>
-          <div class="text-right">Actions</div>
+          <div class="hidden md:block">
+            Tags
+          </div>
+          <div class="hidden lg:block">
+            Provider/Model
+          </div>
+          <div class="hidden xl:block">
+            Info
+          </div>
+          <div class="text-right">
+            Actions
+          </div>
         </div>
 
         <div
@@ -613,16 +621,40 @@ function formatDate(ts: number): string {
                 </div>
               </template>
             </HoverTooltip>
-            <span
-              v-if="item.subAgents?.length"
-              class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded"
+            <HoverTooltip
+              :disabled="!item.subAgents?.length"
+              placement="mouse"
+              :max-width="220"
             >
-              <Icon
-                icon="lucide:users"
-                class="w-3 h-3"
-              />
-              {{ item.subAgents.length }}
-            </span>
+              <span
+                class="flex items-center gap-1 bg-theme-700/50 px-1.5 py-0.5 rounded"
+                :class="item.subAgents?.length ? 'cursor-default' : ''"
+              >
+                <Icon
+                  icon="lucide:users"
+                  class="w-3 h-3"
+                />
+                {{ item.subAgents?.length || 0 }}
+              </span>
+              <template #content>
+                <div class="font-medium text-theme-300 mb-1.5">
+                  {{ item.subAgents?.length }} {{ item.subAgents?.length === 1 ? 'sub-agent' : 'sub-agents' }}
+                </div>
+                <div
+                  v-for="sa in item.subAgents?.slice(0, TOOLTIP_MAX_TOOLS)"
+                  :key="sa.agentId"
+                  class="text-[10px] text-theme-300 truncate py-0.5"
+                >
+                  {{ agentDefs.get(sa.agentId)?.name ?? sa.agentId }}
+                </div>
+                <div
+                  v-if="(item.subAgents?.length || 0) > TOOLTIP_MAX_TOOLS"
+                  class="text-theme-500 text-[10px] mt-1"
+                >
+                  +{{ (item.subAgents?.length || 0) - TOOLTIP_MAX_TOOLS }} more
+                </div>
+              </template>
+            </HoverTooltip>
             <span class="flex items-center gap-1 whitespace-nowrap">
               <Icon
                 icon="lucide:calendar"
