@@ -498,13 +498,17 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
 
         if (includes('memory')) {
             for (const job of listMemoryIndexJobs()) {
-                if (job.status === 'running') continue
+                if (job.status === 'completed' || job.status === 'cancelled') continue
+                const isEntityIndex = job.kind === 'entity-index'
+                const isRunning = job.status === 'running'
                 items.push({
                     id: `memory-job:${job.id}`,
                     kind: 'memory',
-                    title: job.kind === 'entity-index' ? `Extracted entities from ${job.fileName}` : `Indexed ${job.fileName}`,
-                    description: job.error || (job.status === 'completed' ? 'Memory job completed' : `Memory job ${job.status}`),
-                    createdAt: job.updatedAt,
+                    title: isRunning
+                        ? (isEntityIndex ? `Extracting entities from ${job.fileName}` : `Indexing ${job.fileName}`)
+                        : (isEntityIndex ? `Extracted entities from ${job.fileName}` : `Indexed ${job.fileName}`),
+                    description: job.error || (isRunning ? 'Memory job running' : `Memory job ${job.status}`),
+                    createdAt: isRunning ? job.createdAt : job.updatedAt,
                     agentId: null,
                     agentName: null,
                     agentIconUrl: null,
