@@ -69,11 +69,11 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
 
         const contextCall = result.toolCalls?.find((call) => call.function.name === TASK_CONTEXT_TOOL_NAME)
         const parsed = contextCall ? parseTaskContextArguments(contextCall.function.arguments, input.enabledModes) : null
-        emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta)
+        emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta, parsed ? undefined : 'none-generated')
         return parsed
     } catch (err) {
         console.warn('[auto-router] Task context build failed, using original request in downstream routers:', err)
-        emitTaskContextSelection(input.conversationId, taskId, null, input.eventMeta)
+        emitTaskContextSelection(input.conversationId, taskId, null, input.eventMeta, 'routing-failed')
         return null
     }
 }
@@ -184,21 +184,36 @@ function emitTaskContextStatus(conversationId: string, taskId: string, eventMeta
     })
 }
 
-function emitTaskContextSelection(conversationId: string, taskId: string, context: TaskContext | null, eventMeta?: Record<string, unknown>): void {
+function emitTaskContextSelection(
+    conversationId: string,
+    taskId: string,
+    context: TaskContext | null,
+    eventMeta?: Record<string, unknown>,
+    emptyReason?: 'none-generated' | 'routing-failed',
+): void {
     getEventBus().emit('step:tools-chosen', {
         conversationId,
         taskId,
         iteration: 0,
         ...eventMeta,
-        toolCalls: context ? [{
+        toolCalls: [{
             name: 'Task context',
             arguments: JSON.stringify(stripUndefined({
                 type: 'task-context',
-                toolQuery: context.toolQuery,
-                memoryQuery: context.memoryQuery,
+                toolQuery: context?.toolQuery,
+                memoryQuery: context?.memoryQuery,
+                emptyReason,
+                content: emptyReason ? taskContextEmptyContent(emptyReason) : undefined,
             })),
-        }] : [],
+        }],
     })
+}
+
+function taskContextEmptyContent(reason: 'none-generated' | 'routing-failed'): string {
+    if (reason === 'routing-failed') {
+        return 'Preparing context failed; auto routing continued with the original user request.'
+    }
+    return 'Preparing context returned no valid routing queries; auto routing continued with the original user request.'
 }
 
 function stripUndefined(value: Record<string, unknown>): Record<string, unknown> {

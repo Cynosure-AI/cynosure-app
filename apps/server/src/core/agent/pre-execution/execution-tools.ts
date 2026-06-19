@@ -1,5 +1,5 @@
 import { getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
-import { applyAutoToolRouting } from './auto-tool-routing.js'
+import { applyAutoToolRouting, emitAutoToolRoutingSkipped } from './auto-tool-routing.js'
 import { isRuntimeMemoryEnabled, type ExecutionMemorySpaceRef } from './execution-memory.js'
 import type { ExecutionPreset } from '../execution-preset.js'
 import type { SubAgentAssignment } from '../../agents/agent-store.js'
@@ -93,6 +93,8 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             usedToolNames,
             eventMeta,
         }) as RegistryAwareToolDefinition[]
+    } else {
+        emitAutoToolRoutingSkipped(conversationId, 'disabled', eventMeta)
     }
 
     if (isRuntimeMemoryEnabled(preset, autoMemory, memorySpaceOverrides)) {

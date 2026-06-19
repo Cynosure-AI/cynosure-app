@@ -49,6 +49,11 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
     } = input
 
     if (!shouldRouteTools(tools, userQuery, { enabled })) {
+        emitAutoToolRoutingSkipped(
+            conversationId,
+            !tools.length ? 'no-tools' : !userQuery?.trim() ? 'no-query' : 'disabled',
+            eventMeta,
+        )
         return tools
     }
 
@@ -104,6 +109,16 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         )
         return fallbackTools
     }
+}
+
+export function emitAutoToolRoutingSkipped(
+    conversationId: string,
+    reason: 'disabled' | 'no-query' | 'no-tools',
+    eventMeta?: Record<string, unknown>,
+): void {
+    const taskId = `router_skipped_${nanoid()}`
+    emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Checking automatic tools...', eventMeta)
+    emitToolRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, reason)
 }
 
 async function curateRoutedTools(input: {
@@ -296,7 +311,7 @@ function emitToolRoutingSelection(
     tools: Array<ToolDefinition | RoutedToolDefinition>,
     contextPhase: 'gathered-results' | 'gathered-context' = 'gathered-context',
     eventMeta?: Record<string, unknown>,
-    emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed',
+    emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed' | 'disabled' | 'no-query' | 'no-tools',
 ): void {
     const visibleTools = tools.filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
     getEventBus().emit('step:tools-chosen', {
@@ -316,9 +331,29 @@ function emitToolRoutingSelection(
                     type: 'tool-router',
                     contextPhase,
                     emptyReason: emptyReason || 'none-selected',
+                    content: toolEmptyContent(emptyReason),
                 }),
             }],
     })
+}
+
+function toolEmptyContent(reason?: string): string {
+    switch (reason) {
+        case 'none-found':
+            return 'Auto tool routing ran, but no tools matched this turn.'
+        case 'none-relevant':
+            return 'Auto tool routing found candidates, but the curation step selected none as useful for this turn.'
+        case 'routing-failed':
+            return 'Auto tool routing failed; the turn continued with the local fallback tool list.'
+        case 'disabled':
+            return 'Auto tool routing is disabled for this turn.'
+        case 'no-query':
+            return 'Auto tool routing did not run because there was no text query to route.'
+        case 'no-tools':
+            return 'Auto tool routing did not run because no tools are available.'
+        default:
+            return 'Auto tool routing did not select any tools for this turn.'
+    }
 }
 
 function toolEmptyLabel(reason?: string): string {
@@ -326,6 +361,9 @@ function toolEmptyLabel(reason?: string): string {
         case 'none-found': return 'No tools found'
         case 'none-relevant': return 'No tools selected'
         case 'routing-failed': return 'Tool routing skipped'
+        case 'disabled': return 'Auto tools disabled'
+        case 'no-query': return 'No tool query'
+        case 'no-tools': return 'No tools available'
         default: return 'No tools selected'
     }
 }
