@@ -409,6 +409,8 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('agents', 'thinking_enabled', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('agents', 'max_context_tokens', 'INTEGER')
   addColumnIfMissing('agents', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('agents', 'tags_json', "TEXT NOT NULL DEFAULT '[]'")
+  addColumnIfMissing('agents', 'favorite', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('agents', 'cron_prompt', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'icon_data', 'BLOB')
   addColumnIfMissing('agents', 'icon_mime', 'TEXT')

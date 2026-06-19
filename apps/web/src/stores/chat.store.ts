@@ -253,38 +253,7 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       // Restore streaming state if this conversation has an active stream
-      const buf = streaming.streamBuffers.get(id)
-      if (buf?.active) {
-        streaming.isStreaming.value = true
-        streaming.currentStreamId.value = buf.streamId
-        streaming.primaryStreamId.value = buf.streamId
-        streaming.streamingContent.value = buf.content
-        streaming.streamingThinking.value = buf.thinking
-        messages.value.push({
-          id: `streaming_${Date.now()}`,
-          role: 'assistant',
-          content: buf.content,
-          streamId: buf.streamId,
-          thinking: buf.thinking || undefined,
-          imageDataUrls: buf.images.length ? buf.images : undefined,
-          videoDataUrls: buf.videos.length ? buf.videos : undefined,
-          agentId: buf.agentId,
-          agentName: buf.agentName,
-          agentIconUrl: buf.agentIconUrl,
-          maCodename: buf.maCodename,
-          maAgentName: buf.maAgentName,
-          maInvocationId: buf.maInvocationId,
-          createdAt: buf.createdAt,
-          isStreaming: true
-        })
-      } else {
-        streaming.isStreaming.value = false
-        streaming.currentStreamId.value = null
-        streaming.primaryStreamId.value = null
-        streaming.streamingContent.value = ''
-        streaming.streamingThinking.value = ''
-      }
-
+      streaming.restorePrimaryStream(id)
       streaming.restoreSubAgentStreams(id)
 
       // Restore context usage from DB-persisted last_context_tokens (updated mid-execution),

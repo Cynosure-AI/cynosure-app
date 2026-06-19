@@ -201,10 +201,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const parts: ContentPart[] = [{ type: 'text', text: content }]
         if (storedFileAttachments.length) {
           for (const file of storedFileAttachments) {
-            if (file.textBytes > inlineAttachmentTextLimit && file.chunkCount && file.chunkCount > 0) {
+            if (file.textBytes > inlineAttachmentTextLimit) {
+              const status = file.chunkCount && file.chunkCount > 0
+                ? `This attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}).`
+                : `This attachment is larger than the inline context limit and will be indexed for retrieval (attachmentId: ${file.id}).`
               parts.push({
                 type: 'text',
-                text: `[Attached file: ${file.name}]\nThis attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}). Relevant excerpts will be provided as context; use attachment_search/attachment_retrieve_chunks for more detail.`
+                text: `[Attached file: ${file.name}]\n${status} Relevant excerpts will be provided as context; use attachment_search/attachment_retrieve_chunks for more detail.`
               })
               continue
             }
@@ -313,6 +316,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             hasExplicitToolAllowlist,
             usedToolNames,
             thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
+            inlineAttachmentTextLimit,
           },
         })
       } catch (err) {
