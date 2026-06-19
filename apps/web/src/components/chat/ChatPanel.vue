@@ -194,11 +194,62 @@ const unifiedTimeline = computed(() => {
     }
   }
 
-  // Pure chronological sort. Streaming messages naturally have the latest
-  // createdAt (set via Date.now() at stream-start/reset) so they already
-  // sort last without special-casing. This ensures tool-group cards always
-  // appear BELOW the agent message that triggered them.
+  function isPreExecutionToolGroup(entry: TimelineEntry): boolean {
+    if (entry.type !== 'tool-group') return false
+    return entry.group.iteration === 0
+  }
+
+  function reorderToolGroupsAfterPromptMessages(source: TimelineEntry[]): TimelineEntry[] {
+    const result: TimelineEntry[] = []
+    let turnEntries: TimelineEntry[] = []
+
+    const flushTurn = () => {
+      if (!turnEntries.length) return
+      const firstAssistantIndex = turnEntries.findIndex((entry) =>
+        entry.type === 'message' &&
+        entry.msg.role === 'assistant' &&
+        !entry.msg.isStreaming
+      )
+      if (firstAssistantIndex <= 0) {
+        result.push(...turnEntries)
+        turnEntries = []
+        return
+      }
+
+      const beforeAssistant = turnEntries.slice(0, firstAssistantIndex)
+      const assistantAndAfter = turnEntries.slice(firstAssistantIndex)
+      const leadingToolGroups = beforeAssistant.filter((entry) =>
+        entry.type === 'tool-group' &&
+        !isPreExecutionToolGroup(entry)
+      )
+      if (!leadingToolGroups.length) {
+        result.push(...turnEntries)
+        turnEntries = []
+        return
+      }
+
+      result.push(
+        ...beforeAssistant.filter((entry) => !leadingToolGroups.includes(entry)),
+        assistantAndAfter[0],
+        ...leadingToolGroups,
+        ...assistantAndAfter.slice(1),
+      )
+      turnEntries = []
+    }
+
+    for (const entry of source) {
+      if (entry.type === 'message' && entry.msg.role === 'user') {
+        flushTurn()
+      }
+      turnEntries.push(entry)
+    }
+    flushTurn()
+
+    return result
+  }
+
   entries.sort((a, b) => a.ts - b.ts)
+  const orderedEntries = reorderToolGroupsAfterPromptMessages(entries)
 
   // ── Group sub-agent entries by invocation ───────────────────────────────
 
@@ -279,7 +330,7 @@ const unifiedTimeline = computed(() => {
     subBatch = []
   }
 
-  for (const entry of entries) {
+  for (const entry of orderedEntries) {
     if (entry.isSubAgent) {
       subBatch.push(entry)
     } else {

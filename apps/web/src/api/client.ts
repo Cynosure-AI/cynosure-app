@@ -369,6 +369,11 @@ export const api = {
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/content`,
         { content }
       ),
+    renameFile: (spaceId: string, fileName: string, nextFileName: string) =>
+      put<{ success: boolean; fileName: string }>(
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/name`,
+        { fileName: nextFileName }
+      ),
     /** Legacy: list indexed source files from LanceDB (no disk status). */
     listGroups: (spaceId: string) =>
       get<{ sourceFile: string; chunkCount: number; createdAt: number }[]>(

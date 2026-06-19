@@ -65,6 +65,8 @@ const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
 const loadedMarkdown = ref("");
+const editableFileName = ref("");
+const currentFileName = ref("");
 const editorTick = ref(0);
 
 const editor = useEditor({
@@ -104,6 +106,9 @@ const hasChanges = computed(() => {
   return normalizeMarkdown(current) !== normalizeMarkdown(loadedMarkdown.value);
 });
 
+const hasNameChange = computed(() => editableFileName.value.trim() !== currentFileName.value);
+const canSave = computed(() => Boolean(editableFileName.value.trim()) && (hasChanges.value || hasNameChange.value));
+
 function normalizeMarkdown(value: string): string {
   return value.replace(/\r\n/g, "\n").trim();
 }
@@ -121,6 +126,8 @@ async function loadContent() {
   if (!props.show || !props.spaceId || !props.sourceFile || !editor.value) return;
   loading.value = true;
   error.value = "";
+  currentFileName.value = props.sourceFile;
+  editableFileName.value = props.sourceFile;
   try {
     const res = await api.memorySpaces.getFileContent(props.spaceId, props.sourceFile);
     loadedMarkdown.value = res.content;
@@ -134,15 +141,31 @@ async function loadContent() {
   }
 }
 
+async function applyRename() {
+  const nextFileName = editableFileName.value.trim();
+  if (!nextFileName || nextFileName === currentFileName.value) return currentFileName.value;
+  const res = await api.memorySpaces.renameFile(props.spaceId, currentFileName.value, nextFileName);
+  currentFileName.value = res.fileName;
+  editableFileName.value = res.fileName;
+  return res.fileName;
+}
+
 async function saveContent() {
-  if (!editor.value || saving.value) return;
+  if (!editor.value || saving.value || !canSave.value) return;
   saving.value = true;
   error.value = "";
   try {
+    const fileName = await applyRename();
     const markdown = editorToMarkdown();
-    const res = await api.memorySpaces.updateFileContent(props.spaceId, props.sourceFile, markdown);
-    loadedMarkdown.value = markdown;
-    emit("saved", { fileName: res.fileName, chunksStored: res.chunksStored });
+    if (hasChanges.value) {
+      const res = await api.memorySpaces.updateFileContent(props.spaceId, fileName, markdown);
+      loadedMarkdown.value = markdown;
+      currentFileName.value = res.fileName;
+      editableFileName.value = res.fileName;
+      emit("saved", { fileName: res.fileName, chunksStored: res.chunksStored });
+    } else {
+      emit("saved", { fileName, chunksStored: 0 });
+    }
   } catch (err) {
     error.value = (err as Error).message || "Failed to save memory";
   } finally {
@@ -197,7 +220,7 @@ onBeforeUnmount(() => {
             />
             <div class="min-w-0">
               <h3 class="text-sm font-medium text-theme-200 truncate">
-                {{ sourceFile }}
+                {{ editableFileName || sourceFile }}
               </h3>
               <p class="text-xs text-theme-500">
                 Markdown memory
@@ -206,7 +229,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="flex items-center gap-2">
             <button
-              :disabled="loading || saving || !hasChanges"
+              :disabled="loading || saving || !canSave"
               class="px-3 py-1.5 bg-accent-500/15 hover:bg-accent-500/25 text-accent-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               @click="saveContent"
             >
@@ -228,6 +251,16 @@ onBeforeUnmount(() => {
               />
             </button>
           </div>
+        </div>
+
+        <div class="flex items-center gap-3 px-5 py-3 border-b border-theme-800 bg-theme-950/25 shrink-0">
+          <label class="text-xs text-theme-500 shrink-0">File name</label>
+          <input
+            v-model="editableFileName"
+            class="flex-1 min-w-0 bg-theme-950 border border-theme-700 rounded-lg px-3 py-1.5 text-sm text-theme-200 focus:outline-none focus:border-accent-500"
+            :disabled="loading || saving"
+            @keydown.enter.prevent="saveContent"
+          >
         </div>
 
         <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
