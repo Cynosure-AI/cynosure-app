@@ -55,6 +55,18 @@ const statusMeta: Record<string, { label: string; icon: string; color: string }>
 
 type ToolCall = { name: string; arguments: string }
 type ToolResult = { name: string; success: boolean; output: string; error?: string; images?: string[] }
+type ContextSectionKind = 'tool' | 'memory'
+type ContextRowState = 'selected' | 'candidate'
+type ToolExecution = { call: ToolCall | null; result?: ToolResult }
+type ContextRow = ToolExecution & { state: ContextRowState }
+type ContextSection = {
+  status: string
+  phase: string
+  kind: ContextSectionKind | null
+  calls: ToolCall[]
+  executions: ToolExecution[]
+}
+type MergedContextSection = ContextSection & { rows: ContextRow[] }
 
 function meta(s: string) {
   return statusMeta[s] ?? { label: s, icon: 'lucide:circle', color: 'text-theme-400' }
@@ -198,7 +210,14 @@ function isInternalExecution(execution: { call: ToolCall | null; result?: ToolRe
   return isInternalToolName(execution.call?.name || execution.result?.name)
 }
 
-function toolExecutionCardClass(execution: { call: ToolCall | null; result?: ToolResult }): string {
+function isCandidateContextRow(execution: ToolExecution | ContextRow): boolean {
+  return 'state' in execution && execution.state === 'candidate'
+}
+
+function toolExecutionCardClass(execution: ToolExecution | ContextRow): string {
+  if (isCandidateContextRow(execution)) {
+    return 'bg-theme-900/45 border-theme-700/35 opacity-70'
+  }
   if (isInternalExecution(execution)) {
     if (execution.result?.success === false) return 'bg-red-50/80 border-red-300/30 dark:bg-red-500/5 dark:border-red-500/15'
     return 'bg-purple-50/80 border-purple-300/30 dark:bg-purple-500/5 dark:border-purple-500/20'
@@ -214,7 +233,8 @@ function toolExecutionCardClass(execution: { call: ToolCall | null; result?: Too
     : 'bg-theme-950 border-theme-700 dark:bg-theme-900/60 dark:border-theme-700/30'
 }
 
-function toolExecutionNameClass(execution: { call: ToolCall | null; result?: ToolResult }): string {
+function toolExecutionNameClass(execution: ToolExecution | ContextRow): string {
+  if (isCandidateContextRow(execution)) return 'text-theme-500 line-through decoration-theme-500/70'
   if (execution.result?.success === false) return 'text-red-600 dark:text-red-300'
   if (isInternalExecution(execution)) return 'text-purple-600 dark:text-purple-300'
   return execution.call && isSubAgentSpawnCall(execution.call.name)
@@ -278,7 +298,7 @@ function visibleToolCalls(calls: ToolCall[]): ToolCall[] {
     : calls.filter((call) => !isDisabledContextCall(call) && (isTaskContextCall(call) || !isInternalToolName(call.name)))
 }
 
-function buildExecutions(calls: ToolCall[], availableResults: ToolResult[] = []): Array<{ call: ToolCall | null; result?: ToolResult }> {
+function buildExecutions(calls: ToolCall[], availableResults: ToolResult[] = []): ToolExecution[] {
   const remainingResults = [...availableResults]
   const executions = calls.map((call, index) => {
     let resultIndex = remainingResults.findIndex(result => result.name === call.name)
@@ -290,7 +310,7 @@ function buildExecutions(calls: ToolCall[], availableResults: ToolResult[] = [])
   return [
     ...executions,
     ...remainingResults.map(result => ({ call: null, result })),
-  ] as Array<{ call: ToolCall | null; result?: ToolResult }>
+  ] as ToolExecution[]
 }
 
 const toolExecutions = computed(() => {
@@ -305,6 +325,7 @@ const contextSections = computed(() => props.steps
     return {
       status: step.status,
       phase: contextPhase(firstCall),
+      kind: contextSectionKind({ status: step.status }),
       calls,
       executions: buildExecutions(calls),
     }
@@ -312,14 +333,75 @@ const contextSections = computed(() => props.steps
   .filter((section) => section.calls.some(isContextGatheringCall))
 )
 
-function contextSectionKind(section: { status: string }): 'tool' | 'memory' | null {
+function contextSectionKind(section: { status: string }): ContextSectionKind | null {
   if (section.status.endsWith('-tools')) return 'tool'
   if (section.status.endsWith('-memory')) return 'memory'
   return null
 }
 
-function contextSectionTitle(section: { status: string; phase: string }): string {
-  const kind = contextSectionKind(section)
+function contextCallKey(call: ToolCall): string {
+  const parsed = parseToolCallArgs(call.arguments)
+  if (parsed?.type === 'memory') {
+    return [
+      'memory',
+      call.name,
+      parsed.sourceFile,
+      parsed.folderPath,
+      parsed.chunkIndex,
+      parsed.content,
+    ].map((value) => String(value ?? '')).join('|')
+  }
+  return `${String(parsed?.type ?? '')}|${call.name}`
+}
+
+function mergeContextSections(sections: ContextSection[]): MergedContextSection[] {
+  const merged: MergedContextSection[] = []
+  const consumed = new Set<number>()
+
+  sections.forEach((section, index) => {
+    if (consumed.has(index)) return
+
+    const finalIndex = sections.findIndex((candidate, candidateIndex) =>
+      candidateIndex > index &&
+      !consumed.has(candidateIndex) &&
+      candidate.kind === section.kind &&
+      candidate.phase === 'gathered-context'
+    )
+
+    if (section.phase === 'gathered-results' && finalIndex !== -1) {
+      const finalSection = sections[finalIndex]
+      const selectedKeys = new Set(finalSection.calls.map(contextCallKey))
+      const selectedRows = finalSection.executions.map((execution) => ({ ...execution, state: 'selected' as const }))
+      const candidateRows = section.executions
+        .filter((execution) => execution.call && !selectedKeys.has(contextCallKey(execution.call)))
+        .map((execution) => ({ ...execution, state: 'candidate' as const }))
+
+      merged.push({
+        ...finalSection,
+        rows: [...selectedRows, ...candidateRows],
+      })
+      consumed.add(index)
+      consumed.add(finalIndex)
+      return
+    }
+
+    merged.push({
+      ...section,
+      rows: section.executions.map((execution) => ({
+        ...execution,
+        state: section.phase === 'gathered-results' ? 'candidate' : 'selected',
+      })),
+    })
+    consumed.add(index)
+  })
+
+  return merged
+}
+
+const mergedContextSections = computed(() => mergeContextSections(contextSections.value))
+
+function contextSectionTitle(section: { status: string; phase: string; kind?: ContextSectionKind | null }): string {
+  const kind = section.kind ?? contextSectionKind(section)
   const prefix = kind === 'tool' ? 'Tool' : kind === 'memory' ? 'Memory' : ''
   if (section.phase === 'gathered-results' || section.status === 'routing-tools' || section.status === 'routing-memory') {
     return prefix ? `Gathered ${prefix} Results` : 'Gathered Results'
@@ -339,8 +421,20 @@ function contextSectionIcon(section: { status: string; phase: string }): string 
 
 function contextSectionClass(section: { status: string; phase: string }): string {
   return section.phase === 'gathered-context' || section.status === 'curating-tools' || section.status === 'curating-memory'
-    ? 'border-emerald-400/25 bg-emerald-500/5'
-    : 'border-accent-400/25 bg-accent-500/5'
+    ? 'border-teal-400/30 bg-teal-500/5 dark:border-teal-500/25 dark:bg-teal-500/5'
+    : 'border-sky-400/25 bg-sky-500/5 dark:border-sky-500/20 dark:bg-sky-500/5'
+}
+
+function contextSectionIconClass(section: { status: string; phase: string }): string {
+  return section.phase === 'gathered-context' || section.status === 'curating-tools' || section.status === 'curating-memory'
+    ? 'text-teal-600 dark:text-teal-300'
+    : 'text-sky-600 dark:text-sky-300'
+}
+
+function scoreBadgeClass(execution: ToolExecution | ContextRow): string {
+  return isCandidateContextRow(execution)
+    ? 'bg-theme-800/70 text-theme-500 ring-theme-700/60 dark:bg-theme-800/50 dark:text-theme-500 dark:ring-theme-700/50'
+    : 'bg-accent-100/70 text-accent-700 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-200 dark:ring-accent-500/20'
 }
 
 const taskContext = computed(() => {
@@ -380,7 +474,7 @@ const taskContextQueryLabels = computed(() => taskContextQueries.value.map((quer
 const headerLabel = computed(() => {
   if (isTaskContext.value) return currentPhase.value.label
   if (isAttachmentIndexing.value) return currentPhase.value.label
-  const latestSection = [...contextSections.value].reverse()[0]
+  const latestSection = [...mergedContextSections.value].reverse()[0]
   if (latestSection && latestSection.phase === 'gathered-context') return contextSectionTitle(latestSection)
   return currentPhase.value.label
 })
@@ -613,11 +707,11 @@ const maContext = computed(() => {
 
           <!-- Tool executions -->
           <div
-            v-if="contextSections.length && !isTaskContext"
+            v-if="mergedContextSections.length && !isTaskContext"
             class="space-y-2"
           >
             <div
-              v-for="(section, sectionIndex) in contextSections"
+              v-for="(section, sectionIndex) in mergedContextSections"
               :key="`${section.status}-${section.phase}-${sectionIndex}`"
               class="rounded-lg border px-2.5 py-2"
               :class="contextSectionClass(section)"
@@ -625,7 +719,8 @@ const maContext = computed(() => {
               <div class="mb-1.5 flex items-center gap-1.5">
                 <Icon
                   :icon="contextSectionIcon(section)"
-                  class="h-3 w-3 text-accent-500 dark:text-accent-300"
+                  class="h-3 w-3"
+                  :class="contextSectionIconClass(section)"
                 />
                 <span class="text-[11px] font-semibold text-theme-300">{{ contextSectionTitle(section) }}</span>
               </div>
@@ -633,7 +728,7 @@ const maContext = computed(() => {
                 class="space-y-1.5"
               >
                 <div
-                  v-for="(execution, i) in section.executions"
+                  v-for="(execution, i) in section.rows"
                   :key="i"
                   class="rounded-lg border px-3 py-2"
                   :class="toolExecutionCardClass(execution)"
@@ -652,7 +747,8 @@ const maContext = computed(() => {
                     >{{ toolDisplayName(execution.call?.name || execution.result?.name || 'Tool') }}</span>
                     <span
                       v-if="execution.call && isMemoryCall(execution.call) && formatRerankerScore(execution.call)"
-                      class="ml-auto inline-flex items-center gap-1 rounded-md bg-accent-100/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-700 ring-1 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-200 dark:ring-accent-500/20"
+                      class="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1"
+                      :class="scoreBadgeClass(execution)"
                       title="Reranker match score"
                     >
                       <Icon
@@ -663,7 +759,8 @@ const maContext = computed(() => {
                     </span>
                     <span
                       v-if="execution.call && formatToolRouterScore(execution.call)"
-                      class="ml-auto inline-flex items-center gap-1 rounded-md bg-accent-100/70 px-1.5 py-0.5 text-[10px] font-medium text-accent-700 ring-1 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-200 dark:ring-accent-500/20"
+                      class="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1"
+                      :class="scoreBadgeClass(execution)"
                       title="Tool match score"
                     >
                       <Icon
@@ -685,14 +782,6 @@ const maContext = computed(() => {
                     v-else-if="toolRouterCallContent(execution.call)"
                     class="text-[11px] leading-relaxed text-theme-300 whitespace-pre-wrap rounded px-2 py-1.5 max-h-64 overflow-y-auto bg-theme-900/70 dark:bg-theme-950/50"
                   >{{ toolRouterCallContent(execution.call) }}</pre>
-                  <pre
-                    v-if="execution.call && isMemoryCall(execution.call) && memoryCallMetadata(execution.call)"
-                    class="mt-1.5 text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
-                  >{{ memoryCallMetadata(execution.call) }}</pre>
-                  <pre
-                    v-else-if="execution.call?.arguments && execution.call.arguments !== '{}' && !isToolRouterScoreCall(execution.call)"
-                    class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
-                  >{{ prettifyJson(execution.call.arguments) }}</pre>
                 </div>
               </div>
             </div>
