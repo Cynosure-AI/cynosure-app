@@ -24,6 +24,8 @@ import type { EntityGraphEdge, EntityGraphNode, EntityGraphResponse } from "../.
 import type { FlowEdgeData, FlowNodeData, GraphEdgePathType } from "./memory-graph-types";
 import EntityGraphSearchBox from "./EntityGraphSearchBox.vue";
 
+type FactLevelFilter = 0 | 1 | 2 | 3;
+
 const props = defineProps<{
   flowId: string;
   graph: EntityGraphResponse | null;
@@ -35,6 +37,7 @@ const props = defineProps<{
   nodeSpacing: number;
   edgeLabelsVisible: boolean;
   edgePathType: GraphEdgePathType;
+  factLevel: FactLevelFilter;
 }>();
 
 const edgePathModes: { id: GraphEdgePathType; label: string; icon: string }[] = [
@@ -43,11 +46,19 @@ const edgePathModes: { id: GraphEdgePathType; label: string; icon: string }[] = 
   { id: "straight", label: "Line", icon: "lucide:slash" },
 ];
 
+const factLevelOptions: { value: FactLevelFilter; label: string }[] = [
+  { value: 0, label: "All levels" },
+  { value: 1, label: "Minor+" },
+  { value: 2, label: "Useful+" },
+  { value: 3, label: "Core" },
+];
+
 const emit = defineEmits<{
   "update:graphQuery": [value: string];
   "update:nodeSpacing": [value: number];
   "update:edgeLabelsVisible": [value: boolean];
   "update:edgePathType": [value: GraphEdgePathType];
+  "update:factLevel": [value: FactLevelFilter];
   "load-graph": [query?: string];
   "clear-walk": [];
   "select-suggestion": [node: EntityGraphNode];
@@ -173,6 +184,12 @@ function importanceName(level: number): string {
 
 function relationSortName(edge: EntityGraphEdge): string {
   return `${edge.fromName} ${edge.toName}`;
+}
+
+function changeFactLevel(event: Event): void {
+  const nextLevel = Number((event.target as HTMLSelectElement).value) as FactLevelFilter;
+  emit("update:factLevel", nextLevel);
+  emit("load-graph", props.graphQuery);
 }
 
 function selectGraphNode(event: { node: Node<FlowNodeData> }): void {
@@ -326,6 +343,28 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
         class="memory-graph-panel relative h-[calc(100vh-255px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
       >
         <div class="absolute top-2 right-2 z-10 flex flex-wrap items-center justify-end gap-2 bg-theme-900/80 backdrop-blur-sm border border-theme-700/60 rounded-lg px-3 py-1.5">
+          <label class="flex items-center gap-2">
+            <Icon
+              icon="lucide:filter"
+              class="w-3.5 h-3.5 text-theme-500 shrink-0"
+            />
+            <span class="text-xs text-theme-500 shrink-0">Fact level</span>
+            <select
+              :value="factLevel"
+              class="h-7 rounded-md border border-theme-700/60 bg-theme-950/70 px-2 text-xs text-theme-200 outline-none transition-colors focus:border-accent-500"
+              title="Minimum fact level"
+              @change="changeFactLevel"
+            >
+              <option
+                v-for="option in factLevelOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+          <div class="h-5 w-px bg-theme-700/70" />
           <label class="flex items-center gap-2">
             <Icon
               icon="lucide:move"

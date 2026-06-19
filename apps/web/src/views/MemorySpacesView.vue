@@ -15,11 +15,12 @@ import { syncPrefsToElectron } from "../utils/electron-prefs";
 import { SK_MEMORY_GRAPH_EDGE_LABELS, SK_MEMORY_GRAPH_EDGE_PATH_TYPE, SK_MEMORY_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
 const ENTITY_FLOW_ID = "memory-entity-graph";
-const VISUAL_GRAPH_LIMIT = 200;
+const VISUAL_GRAPH_LIMIT = 100;
 const RELATIONSHIPS_GRAPH_LIMIT = 5000;
 
 type MemoryPanel = "documents" | "relationships" | "visual";
 type GraphViewMode = "relationships" | "visual";
+type FactLevelFilter = 0 | 1 | 2 | 3;
 type FlowPoint = {
   x: number;
   y: number;
@@ -83,6 +84,7 @@ const graphQuery = ref("");
 const graphSuggestions = ref<EntityGraphNode[]>([]);
 const graphLimit = ref<number | null>(null);
 const graphView = ref<GraphViewMode | null>(null);
+const graphFactLevel = ref<FactLevelFilter>(0);
 const editingNode = ref<EntityGraphNode | null>(null);
 const editingEdge = ref<EntityGraphEdge | null>(null);
 const pendingDeleteNode = ref<EntityGraphNode | null>(null);
@@ -533,14 +535,15 @@ async function loadGraph(query = graphQuery.value, nodeId?: string) {
   const trimmedQuery = query.trim();
   const limit = activePanel.value === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_LIMIT;
   const view = activeGraphView.value || "visual";
-  const requestKey = `${view}:${trimmedQuery}:${nodeId || ""}:${limit}`;
+  const minImportance = view === "visual" ? graphFactLevel.value : null;
+  const requestKey = `${view}:${trimmedQuery}:${nodeId || ""}:${limit}:${minImportance ?? "all"}`;
   if (graphLoading.value && inFlightGraphKey === requestKey) return;
   const requestId = ++graphRequest;
   inFlightGraphKey = requestKey;
   graphLoading.value = true;
   graphSuggestions.value = [];
   try {
-    const nextGraph = await api.memory.getGraph(trimmedQuery || undefined, limit, view, nodeId);
+    const nextGraph = await api.memory.getGraph(trimmedQuery || undefined, limit, view, nodeId, minImportance);
     if (requestId !== graphRequest) return;
     focusedGraphNodeId.value = null;
     graph.value = nextGraph;
@@ -798,6 +801,7 @@ onMounted(() => loadSpaces());
           v-model:node-spacing="nodeSpacing"
           v-model:edge-labels-visible="showGraphEdgeLabels"
           v-model:edge-path-type="graphEdgePathType"
+          v-model:fact-level="graphFactLevel"
           :flow-id="ENTITY_FLOW_ID"
           :graph="activeGraph"
           :graph-loading="graphLoading"

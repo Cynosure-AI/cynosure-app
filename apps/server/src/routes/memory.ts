@@ -7,7 +7,7 @@ import { getMemoryParser } from '../core/memory/parser.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
-import { getEntityGraphStore, type EntityType } from '../core/memory/entity-graph.js'
+import { getEntityGraphStore, type EntityType, type ImportanceLevel } from '../core/memory/entity-graph.js'
 import { getMemoryEntityExtractionConfig, saveMemoryEntityExtractionConfig, type MemoryEntityExtractionConfig } from '../core/memory/memory-entity-indexer.js'
 import { dropConversationAttachmentIndex } from '../core/artifacts/attachment-rag.js'
 import { getDb } from '../db/database.js'
@@ -88,13 +88,14 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   })
 
   // GET /api/memory/graph — inspect the lightweight entity graph
-  app.get<{ Querystring: { query?: string; nodeId?: string; limit?: string; view?: string } }>('/graph', async (req) => {
+  app.get<{ Querystring: { query?: string; nodeId?: string; limit?: string; view?: string; minImportance?: string } }>('/graph', async (req) => {
     const graph = getEntityGraphStore()
     const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 5000)
+    const minImportance = Math.min(Math.max(Number(req.query.minImportance) || 0, 0), 3) as ImportanceLevel
     const nodeId = req.query.nodeId?.trim()
     if (nodeId) {
       const seed = graph.getNode(nodeId)
-      const walk = graph.walk(seed ? [seed.id] : [], 2, limit)
+      const walk = graph.walk(seed ? [seed.id] : [], 2, limit, minImportance)
       return {
         stats: graph.stats(),
         seedNodes: walk.seedNodes,
@@ -105,7 +106,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const query = req.query.query?.trim()
     if (query) {
       const seeds = graph.findSeedNodes(query, [], 12)
-      const walk = graph.walk(seeds.map((node) => node.id), 2, limit)
+      const walk = graph.walk(seeds.map((node) => node.id), 2, limit, minImportance)
       return {
         stats: graph.stats(),
         seedNodes: walk.seedNodes,
@@ -123,7 +124,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     return {
       stats: graph.stats(),
       seedNodes: [],
-      ...graph.list(limit)
+      ...graph.list(limit, minImportance)
     }
   })
 
