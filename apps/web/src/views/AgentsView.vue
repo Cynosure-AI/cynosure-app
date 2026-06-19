@@ -385,6 +385,12 @@ function isCategoryCollapsed(category: string): boolean {
   return collapsedCategories.value.has(category)
 }
 
+function isFolderCollapsed(folder: { category: string; agents: AgentDefinition[] }): boolean {
+  const searching = searchQuery.value.trim().length > 0
+  if (searching && folder.agents.length > 0 && folder.agents.length < 5) return false
+  return isCategoryCollapsed(folder.category)
+}
+
 function toggleCategory(category: string): void {
   const updated = new Set(collapsedCategories.value)
   if (updated.has(category)) updated.delete(category)
@@ -888,17 +894,17 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
             </div>
             <button
               class="p-1 -ml-1 text-theme-500 hover:text-theme-200 transition-colors"
-              :aria-expanded="!isCategoryCollapsed(folder.category)"
+              :aria-expanded="!isFolderCollapsed(folder)"
               @click="toggleCategory(folder.category)"
             >
               <Icon
                 icon="lucide:chevron-down"
                 class="w-4 h-4 transition-transform"
-                :class="{ '-rotate-90': isCategoryCollapsed(folder.category) }"
+                :class="{ '-rotate-90': isFolderCollapsed(folder) }"
               />
             </button>
             <Icon
-              :icon="isCategoryCollapsed(folder.category) ? 'lucide:folder' : 'lucide:folder-open'"
+              :icon="isFolderCollapsed(folder) ? 'lucide:folder' : 'lucide:folder-open'"
               class="w-5 h-5 text-amber-400"
             />
             <form
@@ -962,7 +968,7 @@ function handleRenameCategory(payload: { oldName: string; newName: string }) {
             </button>
           </div>
 
-          <div v-if="!isCategoryCollapsed(folder.category)">
+          <div v-if="!isFolderCollapsed(folder)">
             <div
               v-if="folder.agents.length === 0"
               class="px-14 py-4 text-sm text-theme-500"

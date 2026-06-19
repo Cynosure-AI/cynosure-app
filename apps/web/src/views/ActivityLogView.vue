@@ -194,7 +194,12 @@ function kindIcon(kind: ActivityKind): string {
   }
 }
 
+function requiresAttention(item: ActivityItem): boolean {
+  return item.kind === "instance" && item.status === "awaiting-approval";
+}
+
 function kindClass(item: ActivityItem): string {
+  if (requiresAttention(item)) return "activity-attention";
   if (item.kind === "instance") return "activity-instance";
   if (item.kind === "notification") return "activity-notification";
   if (item.kind === "artifact") return "activity-artifact";
@@ -530,7 +535,10 @@ watch(searchQuery, () => {
             v-for="item in group.items"
             :key="item.id"
             class="grid grid-cols-[2rem_minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-[4.2rem_2rem_minmax(0,1fr)]"
-            :class="[kindClass(item), { 'cursor-pointer': item.conversationId || item.agentId }]"
+            :class="[kindClass(item), {
+              'cursor-pointer': item.conversationId || item.agentId,
+              'activity-requires-attention': requiresAttention(item),
+            }]"
             @click="openItem(item)"
           >
             <div class="hidden pt-3.5 text-right text-xs tabular-nums text-theme-500 sm:block">
@@ -538,10 +546,14 @@ watch(searchQuery, () => {
               <small class="mt-0.5 block text-[10px] text-theme-700">{{ formatTimeAgo(item.createdAt) }}</small>
             </div>
 
-            <div class="mt-2.5 flex h-8 w-8 items-center justify-center rounded-full border text-[var(--activity-color)] activity-marker">
+            <div class="relative mt-2.5 flex h-8 w-8 items-center justify-center rounded-full border text-[var(--activity-color)] activity-marker">
+              <span
+                v-if="requiresAttention(item)"
+                class="absolute inset-0 rounded-full bg-amber-400/35 animate-ping"
+              />
               <Icon
-                :icon="kindIcon(item.kind)"
-                class="w-4 h-4"
+                :icon="requiresAttention(item) ? 'lucide:circle-alert' : kindIcon(item.kind)"
+                class="relative w-4 h-4"
               />
             </div>
 
@@ -563,6 +575,13 @@ watch(searchQuery, () => {
                 </div>
 
                 <div class="flex gap-2">
+                  <span
+                    v-if="requiresAttention(item)"
+                    class="attention-pill shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
+                  >
+                    needs approval
+                  </span>
+
                   <span
                     v-if="item.status"
                     class="status-pill shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
@@ -705,6 +724,20 @@ watch(searchQuery, () => {
   border-left: 3px solid var(--activity-color);
 }
 
+.activity-requires-attention .activity-card {
+  border-color: color-mix(in srgb, var(--activity-color) 44%, var(--color-theme-800));
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--activity-color) 14%, transparent),
+      transparent 42%
+    ),
+    var(--color-theme-950);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--activity-color) 22%, transparent),
+    0 14px 32px color-mix(in srgb, var(--activity-color) 9%, transparent);
+}
+
 article.cursor-pointer:hover .activity-card {
   transform: translateX(2px);
   border-color: color-mix(in srgb, var(--activity-color) 35%, var(--color-theme-800));
@@ -721,6 +754,12 @@ article.cursor-pointer:hover .activity-card {
   color: var(--activity-color);
   background: color-mix(in srgb, var(--activity-color) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--activity-color) 28%, transparent);
+}
+
+.attention-pill {
+  color: #fef3c7;
+  background: color-mix(in srgb, #f59e0b 22%, transparent);
+  border: 1px solid color-mix(in srgb, #f59e0b 42%, transparent);
 }
 
 .artifact-link {
@@ -753,6 +792,12 @@ article.cursor-pointer:hover .activity-card {
   --activity-color: #f87171;
   --activity-bg: color-mix(in srgb, #f87171 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #f87171 38%, var(--color-theme-800));
+}
+
+.activity-attention {
+  --activity-color: #f59e0b;
+  --activity-bg: color-mix(in srgb, #f59e0b 18%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #f59e0b 52%, var(--color-theme-800));
 }
 
 .activity-artifact {
