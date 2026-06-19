@@ -2,6 +2,8 @@ import type Database from 'better-sqlite3'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ToolRegistry } from '../tools/tool-registry.js'
 import type { ConversationExecutionConfig } from '@shared/types'
+import { relativePathForFolder } from '../memory/memory-space-folders.js'
+import type { MemorySpaceRef } from '../memory/memory-space-scope.js'
 
 export interface ToolSelectionConfig {
     selectedToolKeys: string[]
@@ -54,13 +56,18 @@ export function resolveChatRunFlags(input: {
 export function resolveMemorySpaceOverrides(
     db: Database.Database,
     requestedSpaceIds?: string[],
-): { id: string; name: string }[] | undefined {
+): MemorySpaceRef[] | undefined {
     if (!Array.isArray(requestedSpaceIds)) return undefined
 
     const uniqueSpaceIds = Array.from(new Set(requestedSpaceIds.map((sid) => sid.trim()).filter(Boolean)))
     return uniqueSpaceIds
-        .map((sid) => db.prepare('SELECT id, name FROM memory_spaces WHERE id = ?').get(sid) as { id: string; name: string } | undefined)
-        .filter((row): row is { id: string; name: string } => Boolean(row))
+        .map((sid) => db.prepare('SELECT id, name, folder_path, is_default FROM memory_spaces WHERE id = ?').get(sid) as { id: string; name: string; folder_path: string; is_default: number } | undefined)
+        .filter((row): row is { id: string; name: string; folder_path: string; is_default: number } => Boolean(row))
+        .map((row) => ({
+            id: row.id,
+            name: row.name,
+            relativePath: row.is_default === 1 ? '' : relativePathForFolder(row.folder_path),
+        }))
 }
 
 export function buildPersistedChatConfig(input: PersistedChatConfigInput): ConversationExecutionConfig {

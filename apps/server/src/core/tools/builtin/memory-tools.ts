@@ -228,7 +228,7 @@ function findSpaceByIdOrName(spaces: MemorySpaceRef[], wanted: string): MemorySp
         s.id === wanted ||
         s.name.toLowerCase() === wanted.toLowerCase() ||
         (s.relativePath || '').toLowerCase() === normalized ||
-        (!s.relativePath && normalized === 'default')
+        (s.relativePath === '' && normalized === 'default')
     )
 }
 

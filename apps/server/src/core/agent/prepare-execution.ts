@@ -14,7 +14,7 @@ import { resolveExecutionTools } from './pre-execution/execution-tools.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemorySystemMessages } from './pre-execution/execution-memory.js'
 import { buildTaskContext } from './pre-execution/task-context.js'
-import { getAssignedOrDefaultSpaces } from '../memory/memory-space-scope.js'
+import { getAssignedOrDefaultSpaces, type MemorySpaceRef } from '../memory/memory-space-scope.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
 import type { LLMGateway } from '../gateway/gateway.js'
@@ -73,7 +73,7 @@ export interface PrepareExecutionInput {
     // ── Agentless overrides ──
 
     /** Memory space overrides for agentless chat (bypasses agent's assigned spaces) */
-    memorySpaceOverrides?: { id: string; name: string }[]
+    memorySpaceOverrides?: MemorySpaceRef[]
     /** Agent id used during built-in tool hydration. Defaults to agent.id. */
     hydrationAgentId?: string
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
@@ -214,7 +214,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
 function resolveSelectedMemoryFolderNames(
     agentId: string,
-    memorySpaceOverrides: { id: string; name: string }[] | undefined,
+    memorySpaceOverrides: MemorySpaceRef[] | undefined,
 ): string[] {
     if (Array.isArray(memorySpaceOverrides)) {
         return memorySpaceOverrides.map((space) => space.name)
@@ -257,7 +257,7 @@ function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean)
 function isAutoMemoryEnabled(
     preset: ExecutionPreset,
     sessionEnabled: boolean | undefined,
-    memorySpaceOverrides: { id: string; name: string }[] | undefined,
+    memorySpaceOverrides: MemorySpaceRef[] | undefined,
 ): boolean {
     if (Array.isArray(memorySpaceOverrides) && memorySpaceOverrides.length === 0) return false
     if (sessionEnabled === true) return true

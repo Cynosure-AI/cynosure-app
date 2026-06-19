@@ -158,7 +158,7 @@ export function registerBuiltInTools(): void {
 /**
  * Get the default memory space when no agent context is available.
  */
-function getDefaultMemorySpaces(): { id: string; name: string }[] {
+function getDefaultMemorySpaces(): MemorySpaceRef[] {
     const defaultSpace = getDefaultMemorySpace();
     return defaultSpace ? [defaultSpace] : [];
 }
@@ -173,7 +173,7 @@ export function hydrateBuiltInTools(
         agentId?: string;
         conversationId: string;
         broadcast: BroadcastFn;
-        memorySpaceOverrides?: { id: string; name: string }[];
+        memorySpaceOverrides?: MemorySpaceRef[];
     },
 ): RegistryAwareToolDefinition[] {
     const assignedSpaces =

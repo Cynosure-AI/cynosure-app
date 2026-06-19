@@ -172,7 +172,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         messages,
         userText,
         run: {
-            memorySpaceOverrides: getAssignedOrDefaultSpaces(resolvedAgent.id).map((space) => ({ id: space.id, name: space.name })),
+            memorySpaceOverrides: getAssignedOrDefaultSpaces(resolvedAgent.id),
             autoMemory: resolvedAgent.autoMemory === true,
             thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
         },

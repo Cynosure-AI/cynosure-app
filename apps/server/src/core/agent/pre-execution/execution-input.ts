@@ -1,6 +1,7 @@
 import type { AgentData, SubAgentAssignment } from '../../agents/agent-store.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
+import type { MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import type { ToolRegistry } from '../../tools/tool-registry.js'
 
 export type BroadcastFn = (event: string, data: unknown) => void
@@ -20,7 +21,7 @@ export interface ExecutionRequest {
         systemPrompt?: string
         systemPromptSuffix?: string
         requestedSubAgents?: SubAgentAssignment[]
-        memorySpaceOverrides?: { id: string; name: string }[]
+        memorySpaceOverrides?: MemorySpaceRef[]
         autoToolRouting?: boolean
         autoMemory?: boolean
         autoRouterProviderId?: string
@@ -48,7 +49,7 @@ export interface ExecutionPlanInput {
     systemPrompt?: string
     systemPromptSuffix?: string
     requestedSubAgents?: SubAgentAssignment[]
-    memorySpaceOverrides?: { id: string; name: string }[]
+    memorySpaceOverrides?: MemorySpaceRef[]
     autoToolRouting?: boolean
     autoMemory?: boolean
     autoRouterProviderId?: string
