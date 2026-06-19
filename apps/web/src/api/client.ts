@@ -4,7 +4,6 @@ import type {
   AgentDefinition, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob,
   AgentInstance, ActivityItem, ActivityKind, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
   MetricsSummary, OrchestrationState,
-  SkillDefinition,
   ModelListType,
   ModelInfo,
   ModelListItem,
@@ -232,16 +231,6 @@ export const api = {
       del<{ success: boolean }>(`/api/agents/${encodeURIComponent(id)}`),
     duplicate: (id: string) =>
       post<AgentDefinition>(`/api/agents/${encodeURIComponent(id)}/duplicate`)
-  },
-
-  skills: {
-    list: () => get<SkillDefinition[]>('/api/skills'),
-    get: (id: string) => get<SkillDefinition>(`/api/skills/${encodeURIComponent(id)}`),
-    create: (data: Partial<Omit<SkillDefinition, 'id' | 'createdAt' | 'updatedAt'>>) =>
-      post<SkillDefinition>('/api/skills', data),
-    update: (id: string, data: Partial<Omit<SkillDefinition, 'id' | 'createdAt' | 'updatedAt'>>) =>
-      put<SkillDefinition>(`/api/skills/${encodeURIComponent(id)}`, data),
-    remove: (id: string) => del<{ success: boolean }>(`/api/skills/${encodeURIComponent(id)}`)
   },
 
   memory: {

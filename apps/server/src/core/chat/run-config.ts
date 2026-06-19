@@ -10,7 +10,6 @@ export interface ToolSelectionConfig {
 
 export interface EffectiveChatRunFlags {
     autoMemory: boolean
-    autoSkillRouting: boolean
 }
 
 export interface PersistedChatConfigInput {
@@ -23,8 +22,6 @@ export interface PersistedChatConfigInput {
     thinkingEnabled: boolean
     autoToolRouting: boolean
     autoMemory: boolean
-    selectedSkillIds: string[]
-    autoSkillRouting: boolean
 }
 
 export function resolveToolSelection(
@@ -45,16 +42,12 @@ export function resolveToolSelection(
 export function resolveChatRunFlags(input: {
     resolvedAgent: AgentData | null
     autoMemory?: boolean
-    autoSkillRouting?: boolean
 }): EffectiveChatRunFlags {
-    const { resolvedAgent, autoMemory, autoSkillRouting } = input
+    const { resolvedAgent, autoMemory } = input
     return {
         autoMemory: autoMemory !== undefined
             ? autoMemory === true
             : (resolvedAgent?.autoMemory === true),
-        autoSkillRouting: autoSkillRouting !== undefined
-            ? autoSkillRouting === true
-            : (resolvedAgent?.autoSkillRouting !== false),
     }
 }
 
@@ -81,8 +74,6 @@ export function buildPersistedChatConfig(input: PersistedChatConfigInput): Conve
         thinkingEnabled: input.thinkingEnabled,
         autoToolRouting: input.autoToolRouting,
         autoMemory: input.autoMemory,
-        selectedSkillIds: input.selectedSkillIds,
-        autoSkillRouting: input.autoSkillRouting,
     }
 }
 
@@ -101,8 +92,6 @@ export function buildInitialExecutionConfig(input: {
         thinkingEnabled: agent?.thinkingEnabled !== false,
         autoToolRouting: agent?.autoToolRouting === true,
         autoMemory: agent?.autoMemory === true,
-        selectedSkillIds: agent?.skills ? [...agent.skills] : [],
-        autoSkillRouting: agent?.autoSkillRouting !== false,
     }
 }
 
@@ -123,7 +112,5 @@ export function parseExecutionConfig(raw: string | null | undefined): Conversati
         thinkingEnabled: parsed.thinkingEnabled !== false,
         autoToolRouting: parsed.autoToolRouting === true,
         autoMemory: parsed.autoMemory === true,
-        selectedSkillIds: Array.isArray(parsed.selectedSkillIds) ? parsed.selectedSkillIds.filter((value): value is string => typeof value === 'string') : [],
-        autoSkillRouting: parsed.autoSkillRouting !== false,
     }
 }

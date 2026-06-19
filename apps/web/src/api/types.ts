@@ -217,12 +217,10 @@ export interface AgentDefinition {
     systemPrompt: string
     cronPrompt: string
     tools: string[]
-    skills: string[]
     subAgents?: SubAgentAssignment[]
     autoApproveTools: boolean
     autoToolRouting: boolean
     autoMemory: boolean
-    autoSkillRouting: boolean
     autoRouterProviderId: string
     autoRouterModel: string
     generateTitle: boolean
@@ -230,17 +228,6 @@ export interface AgentDefinition {
     maxContextTokens: number | null
     sortOrder: number
     memorySpaces: string[]
-    createdAt: number
-    updatedAt: number
-}
-
-export interface SkillDefinition {
-    id: string
-    name: string
-    description: string
-    category: string
-    content: string
-    enabled: boolean
     createdAt: number
     updatedAt: number
 }

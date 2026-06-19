@@ -9,7 +9,6 @@ const MAX_ROUTER_QUERY_LENGTH = 2_000
 
 export interface TaskContext {
     toolQuery?: string
-    skillQuery?: string
     memoryQuery?: string
 }
 
@@ -22,7 +21,6 @@ export interface BuildTaskContextInput {
     model?: string
     enabledModes: {
         tools: boolean
-        skills: boolean
         memories: boolean
     }
     eventMeta?: Record<string, unknown>
@@ -90,13 +88,6 @@ function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes'
         }
         required.push('toolQuery')
     }
-    if (enabledModes.skills) {
-        properties.skillQuery = {
-            type: 'string',
-            description: 'A compact semantic query optimized for selecting relevant reusable skills.',
-        }
-        required.push('skillQuery')
-    }
     if (enabledModes.memories) {
         properties.memoryQuery = {
             type: 'string',
@@ -121,21 +112,14 @@ function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes'
 
 function parseTaskContextArguments(raw: string, enabledModes: BuildTaskContextInput['enabledModes']): TaskContext | null {
     try {
-        const parsed = JSON.parse(raw) as {
-            toolQuery?: unknown
-            skillQuery?: unknown
-            memoryQuery?: unknown
-        }
+        const parsed = JSON.parse(raw) as { toolQuery?: unknown; memoryQuery?: unknown }
         const toolQuery = enabledModes.tools && typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : ''
-        const skillQuery = enabledModes.skills && typeof parsed.skillQuery === 'string' ? parsed.skillQuery.trim() : ''
         const memoryQuery = enabledModes.memories && typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : ''
 
         if (enabledModes.tools && !toolQuery) return null
-        if (enabledModes.skills && !skillQuery) return null
         if (enabledModes.memories && !memoryQuery) return null
         return {
             toolQuery: toolQuery ? toolQuery.slice(0, MAX_ROUTER_QUERY_LENGTH) : undefined,
-            skillQuery: skillQuery ? skillQuery.slice(0, MAX_ROUTER_QUERY_LENGTH) : undefined,
             memoryQuery: memoryQuery ? memoryQuery.slice(0, MAX_ROUTER_QUERY_LENGTH) : undefined,
         }
     } catch {
@@ -168,13 +152,12 @@ function messageContentForRouter(content: string | ContentPart[]): string {
 }
 
 function hasEnabledMode(modes: BuildTaskContextInput['enabledModes']): boolean {
-    return modes.tools || modes.skills || modes.memories
+    return modes.tools || modes.memories
 }
 
 function enabledModeLabels(modes: BuildTaskContextInput['enabledModes']): string[] {
     return [
         modes.tools ? 'tools' : '',
-        modes.skills ? 'skills' : '',
         modes.memories ? 'memories' : '',
     ].filter(Boolean)
 }
@@ -183,9 +166,6 @@ function enabledQueryInstructions(modes: BuildTaskContextInput['enabledModes']):
     return [
         modes.tools
             ? '- toolQuery: what capabilities, services, filesystems, APIs, or operations should be selected as tools for this task.'
-            : '',
-        modes.skills
-            ? '- skillQuery: what reusable workflow, procedure, domain method, or instruction pattern would help perform this task correctly.'
             : '',
         modes.memories
             ? '- memoryQuery: what remembered knowledge, entities, locations, user preferences, prior project facts, documents, or account-specific context should be retrieved.'
@@ -215,7 +195,6 @@ function emitTaskContextSelection(conversationId: string, taskId: string, contex
             arguments: JSON.stringify(stripUndefined({
                 type: 'task-context',
                 toolQuery: context.toolQuery,
-                skillQuery: context.skillQuery,
                 memoryQuery: context.memoryQuery,
             })),
         }] : [],

@@ -8,7 +8,6 @@ The execution stack is organized around a single direction of dependency:
 4. Pre-execution layers resolve the runtime pieces independently:
    - `execution-tools.ts` resolves configured tools, auto-routed MCP tools, runtime memory tools, sub-agent tools, and built-in hydration.
    - `execution-memory.ts` resolves automatic memory context and memory runtime enablement.
-   - `execution-skills.ts` resolves manual and auto-selected skills into a system prompt fragment.
    - `execution-prompts.ts` composes the final system prompt messages.
 5. `AgentExecutor` owns the provider stream/tool loop and persistence of execution-round messages.
 

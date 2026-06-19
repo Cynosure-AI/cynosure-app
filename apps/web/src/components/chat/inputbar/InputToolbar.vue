@@ -14,7 +14,6 @@ import SubAgentsButton from "./SubAgentsButton.vue";
 import MemorySpacesButton from "./MemorySpacesButton.vue";
 import SystemPromptButton from "./SystemPromptButton.vue";
 import ThinkingModeButton from "./ThinkingModeButton.vue";
-import SkillsButton from "./SkillsButton.vue";
 import ModelSelectorModal from "../modals/ModelSelectorModal.vue";
 
 defineProps<{
@@ -252,7 +251,6 @@ async function toggleMic(): Promise<void> {
       <ToolsButton />
       <SubAgentsButton />
       <MemorySpacesButton />
-      <SkillsButton />
       <SystemPromptButton />
       <ThinkingModeButton />
     </div>
@@ -300,7 +298,6 @@ async function toggleMic(): Promise<void> {
       <ToolsButton />
       <SubAgentsButton />
       <MemorySpacesButton />
-      <SkillsButton />
       <SystemPromptButton />
       <ThinkingModeButton />
     </span>

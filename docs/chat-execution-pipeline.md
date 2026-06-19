@@ -29,8 +29,8 @@ This document details the complete end-to-end flow from when a user sends a chat
           │  prepare     │ │  prepare   │ │   prepare      │
           │  AgentExec() │ │  AgentExec │ │   AgentExec()  │
           │              │ │            │ │                │
-          │  Tool        │ │  Memory    │ │  Skills/Prompts│
-          │  Resolution  │ │  Retrieval │ │  Assembly      │
+          │  Tool        │ │  Memory    │ │   Prompt       │
+          │  Resolution  │ │  Retrieval │ │   Assembly     │
           └───────┬──────┘ └─────┬──────┘ └───────┬────────┘
                   │               │                 │
                   └───────────────┼─────────────────┘
@@ -75,8 +75,6 @@ The primary entry point for user messages. Accepts:
 | `memorySpaceIds`             | `string[]`            | Memory scope override             |
 | `autoToolRouting`            | `boolean`             | Enable smart tool routing         |
 | `autoMemory`                 | `boolean`             | Enable auto-memory retrieval      |
-| `autoSkillRouting`           | `boolean`             | Enable auto-skill selection       |
-| `selectedSkillIds`           | `string[]`            | Manual skill selection            |
 | `thinkingEnabled`            | `boolean`             | Enable thinking/reasoning tokens  |
 | `contextStrategy`            | `string`              | `"sliding-window"` or `"compact"` |
 
@@ -86,7 +84,7 @@ The primary entry point for user messages. Accepts:
 2. **Message composition** — User content is built as text parts, image URLs, audio URLs, and file context
 3. **Conversation history** — Past messages are loaded from DB via `buildConversationHistory()`
 4. **Resolve agent config** — The conversation's bound agent is looked up
-5. **Resolve run flags** — Auto-memory/auto-skill flags are determined from agent config + request overrides
+5. **Resolve run flags** — Auto-memory flags are determined from agent config + request overrides
 6. **Plan execution** — Calls `planExecution()` which orchestrates all pre-execution preparation
 7. **Context window management** — Messages are trimmed or compacted to fit the model's context window
 8. **Agent execution** — An `AgentExecutor` is created and `executor.run(messages)` is called
@@ -164,7 +162,7 @@ prepareAgentExecution(input)
   │
   ├─ buildTaskContext()
   │   └─ Uses an LLM call to build a compact task context including:
-  │       ├─ routerQuery / toolQuery / skillQuery / memoryQuery
+  │       ├─ toolQuery / memoryQuery
   │       ├─ systemContext (concise facts & intent)
   │       └─ focusAreas (capability labels)
   │
@@ -174,19 +172,13 @@ prepareAgentExecution(input)
   │   ├─ Adds built-in memory tools (if runtime memory enabled)
   │   └─ Adds sub-agent delegation tools (if sub-agents configured)
   │
-  ├─ resolveSkillSystemPrompt()
-  │   ├─ Gathers manual skills from agent config + request
-  │   ├─ Applies auto-skill-routing (if enabled)
-  │   └─ Builds skill system prompt fragment
-  │
   ├─ appendTaskContextSystemMessage()
   │   └─ Injects task context as a system message
   │
   ├─ resolveSystemPromptMessages()
   │   ├─ Base system prompt (or override)
   │   ├─ Appends sub-agent prompt (if sub-agents present)
-  │   ├─ Appends system prompt suffix
-  │   └─ Appends skills prompt
+  │   └─ Appends system prompt suffix
   │
   └─ resolveMemorySystemMessages()
       └─ Applies auto-memory-routing (if enabled), returns memory context as system message
@@ -361,53 +353,6 @@ During execution, the agent can interact with memory via built-in tools:
 
 ---
 
-## 5. Skill System
-
-### 5.1 Skill Store
-
-**File:** `core/skills/skill-store.ts`
-
-Skills are YAML-frontmatter markdown documents:
-
-```yaml
----
-id: my-skill
-name: My Skill
-description: What this skill does
-category: automation
-enabled: true
----
-# Skill Content
-Instructions and guidelines for the skill...
-```
-
-### 5.2 Skill Resolution
-
-**File:** `core/agent/pre-execution/execution-skills.ts`
-
-```typescript
-resolveSkillSystemPrompt(input)
-  │
-  ├─ Gather manual skills: agent config skills + request selectedSkillIds
-  │
-  ├─ If autoSkillRouting enabled:
-  │   └─ applyAutoSkillRouting() → LLM selects applicable skills from all available
-  │
-  └─ Build system prompt fragment via buildSkillsSystemPrompt()
-```
-
-### 5.3 Auto Skill Routing
-
-**File:** `core/agent/pre-execution/auto-skill-routing.ts`
-
-When `autoSkillRouting` is enabled, the router LLM:
-
-1. Receives all available skills with names and descriptions
-2. Selects the most relevant skills for the current user query
-3. Returns merged list (manual skills + auto-selected skills)
-
----
-
 ## 6. Task Context System
 
 **File:** `core/agent/pre-execution/task-context.ts`
@@ -416,14 +361,10 @@ Before execution begins, if any auto-routing mode is enabled, a lightweight "tas
 
 | Field           | Purpose                                                       |
 | --------------- | ------------------------------------------------------------- |
-| `routerQuery`   | Best general semantic query for routing                       |
 | `toolQuery`     | Action/capability terms for tool selection                    |
-| `skillQuery`    | Instruction/workflow terms for skill selection                |
 | `memoryQuery`   | Knowledge/entity terms for memory retrieval                   |
-| `systemContext` | Concise facts, constraints, and intent for the main assistant |
-| `focusAreas`    | Short labels for likely needed information/capabilities       |
 
-Each auto-routing layer (tools, skills, memory) uses its dedicated query string for more precise selection. The `systemContext` is appended as a system message to the main executor.
+Each auto-routing layer (tools and memory) uses its dedicated query string for more precise selection.
 
 ---
 
@@ -579,9 +520,7 @@ interface OrchestrationState {
 The task context system (`task-context.ts`) calls a router LLM to produce focused queries for each auto mode. The auto-router results feed into:
 
 - Tool routing (specific action terms for tool selection)
-- Skill routing (instruction/workflow terms for skill selection)
 - Memory routing (knowledge/entity terms for memory retrieval)
-- System context (compact intent/facts passed to the main assistant)
 
 ---
 
@@ -763,20 +702,18 @@ Cron jobs use `runTriggerExecution()` which:
 │  │  │  ├─ Auto routing    │   └─────────────────────┘          │   │
 │  │  │  │  (embed→LLM)    │                                     │   │
 │  │  │  ├─ Memory tools    │   ┌─────────────────────┐          │   │
-│  │  │  └─ Sub-agent tools│   │  Skill Resolution   │          │   │
-│  │  └─────────────────────┘   │  (execution-        │          │   │
-│  │                            │   skills.ts)        │          │   │
-│  │  ┌─────────────────────┐   │  ├─ Manual: config  │          │   │
-│  │  │  Memory Retrieval   │   │  ├─ Auto routing    │          │   │
-│  │  │  (execution-        │   │  └─ Prompt fragment │          │   │
-│  │  │   memory.ts)        │   └─────────────────────┘          │   │
+│  │  │  └─ Sub-agent tools│                                     │   │
+│  │  └─────────────────────┘                                     │   │
+│  │  ┌─────────────────────┐                                     │   │
+│  │  │  Memory Retrieval   │                                     │   │
+│  │  │  (execution-        │                                     │   │
+│  │  │   memory.ts)        │                                     │   │
 │  │  │  ├─ MemoryAggregator│                                     │   │
 │  │  │  │  → LanceDB RAG   │   ┌─────────────────────┐          │   │
 │  │  │  │  → Entity Graph  │   │  Prompt Assembly    │          │   │
 │  │  │  └─ Format context  │   │  (execution-        │          │   │
 │  │  └─────────────────────┘   │   prompts.ts)       │          │   │
 │  │                            │  ├─ System prompt   │          │   │
-│  │                            │  ├─ Skills fragment │          │   │
 │  │                            │  ├─ Sub-agent info  │          │   │
 │  │                            │  ├─ Task context    │          │   │
 │  │                            │  └─ Memory context  │          │   │
@@ -871,7 +808,7 @@ Cron jobs use `runTriggerExecution()` which:
 | **Broadcast Function**          | All streaming                     | Real-time WebSocket events to all connected UI clients                 |
 | **Conversation Locks**          | `chat/conversation-locks.ts`      | Prevents concurrent execution on the same conversation                 |
 | **Composite Tool Keys**         | `tools/tool-registry.ts`          | `namespaceId::toolName` enables same-name tools from different sources |
-| **Pre-Execution Separation**    | `agent/pre-execution/`            | Tools, memory, skills, prompts resolved independently                  |
+| **Pre-Execution Separation**    | `agent/pre-execution/`            | Tools, memory, and prompts resolved independently                      |
 | **Orchestration Run ID**        | `agent/orchestration-state.ts`    | Persistent task tracking across tool-calling rounds and page reloads   |
 | **Sub-agent Isolation**         | `agent/sub-agent-tools.ts`        | Each sub-agent has own tools, model, memory scope, and execution loop  |
 | **Context Window Management**   | `agent/context-trimmer.ts`        | Sliding-window dropping or LLM-based compaction                        |
@@ -896,8 +833,6 @@ Cron jobs use `runTriggerExecution()` which:
 | `core/agent/tool-router.ts`                       | Embedding-based tool pre-filter + LLM selection |
 | `core/agent/pre-execution/execution-memory.ts`    | Memory resolution                               |
 | `core/agent/pre-execution/auto-memory-routing.ts` | Auto-routing for memory                         |
-| `core/agent/pre-execution/execution-skills.ts`    | Skill resolution                                |
-| `core/agent/pre-execution/auto-skill-routing.ts`  | Auto-routing for skills                         |
 | `core/agent/pre-execution/execution-prompts.ts`   | System prompt assembly                          |
 | `core/agent/pre-execution/execution-resolvers.ts` | Provider/model resolution                       |
 | `core/agent/pre-execution/task-context.ts`        | Unified task context builder                    |
@@ -914,8 +849,6 @@ Cron jobs use `runTriggerExecution()` which:
 | `core/memory/memory-entity-indexer.ts`            | Entity graph indexing pipeline                  |
 | `core/tools/tool-registry.ts`                     | Tool registration and resolution                |
 | `core/tools/builtin/orchestration-tools.ts`       | Orchestration built-in tools                    |
-| `core/skills/skill-store.ts`                      | Skill storage and retrieval                     |
-| `core/skills/skill-router.ts`                     | Skill selection logic                           |
 | `core/artifacts/image-artifacts.ts`               | Image artifact materialization                  |
 | `core/artifacts/file-artifacts.ts`                | File artifact materialization                   |
 | `core/artifacts/attachment-rag.ts`                | Attachment search and retrieval                 |

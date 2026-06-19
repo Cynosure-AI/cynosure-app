@@ -19,8 +19,6 @@ export interface ChatRunConfig {
   titleProviderId?: string
   titleModel?: string
   autoToolRouting?: boolean
-  selectedSkillIds?: string[]
-  autoSkillRouting?: boolean
   autoMemory?: boolean
   autoRouterProviderId?: string
   autoRouterModel?: string
@@ -53,8 +51,6 @@ export interface ConversationExecutionConfig {
   thinkingEnabled: boolean
   autoToolRouting: boolean
   autoMemory: boolean
-  selectedSkillIds: string[]
-  autoSkillRouting: boolean
 }
 
 export interface ConversationMetadata {

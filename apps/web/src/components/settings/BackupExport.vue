@@ -6,7 +6,6 @@ import BaseCard from '../shared/BaseCard.vue'
 
 const exportModules = reactive({
   agents: true,
-  skills: true,
   providers: true,
   mcp: true,
   settings: true,
@@ -21,7 +20,6 @@ const exportError = ref('')
 
 const moduleLabels: Record<string, { label: string; icon: string; description: string }> = {
   agents: { label: 'Agents', icon: 'lucide:bot', description: 'Agent definitions, system prompts, and configuration files' },
-  skills: { label: 'Skills', icon: 'lucide:book-open-check', description: 'Reusable skill instructions and categories' },
   providers: { label: 'LLM Providers', icon: 'lucide:cpu', description: 'Provider configs and API keys' },
   mcp: { label: 'MCP Servers', icon: 'lucide:plug', description: 'MCP server configurations and connection settings' },
   settings: { label: 'Settings', icon: 'lucide:sliders-horizontal', description: 'Tool approvals, cron jobs, and app settings' },

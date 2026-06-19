@@ -28,8 +28,6 @@ export interface ExecutionRequest {
         selectedToolKeys?: string[]
         hasExplicitToolAllowlist?: boolean
         usedToolNames?: Set<string>
-        selectedSkillIds?: string[]
-        autoSkillRouting?: boolean
         thinkingEnabled?: boolean
     }
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
@@ -58,8 +56,6 @@ export interface ExecutionPlanInput {
     selectedToolKeys?: string[]
     hasExplicitToolAllowlist?: boolean
     usedToolNames?: Set<string>
-    selectedSkillIds?: string[]
-    autoSkillRouting?: boolean
     thinkingEnabled?: boolean
     eventMeta?: Record<string, unknown>
 }
@@ -88,8 +84,6 @@ export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanIn
         selectedToolKeys: run.selectedToolKeys,
         hasExplicitToolAllowlist: run.hasExplicitToolAllowlist,
         usedToolNames: run.usedToolNames,
-        selectedSkillIds: run.selectedSkillIds,
-        autoSkillRouting: run.autoSkillRouting,
         thinkingEnabled: run.thinkingEnabled,
         eventMeta: request.eventMeta,
     }
