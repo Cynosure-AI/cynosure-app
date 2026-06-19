@@ -16,6 +16,7 @@ import {
     PLAIN_TEXT_EXTENSIONS,
 } from '../core/memory/memory-file-manager.js'
 import { basename, extname, join, sep } from 'path'
+import { existsSync, renameSync } from 'fs'
 import { watchMemorySpace, stopWatchingMemorySpace } from '../core/memory/memory-space-watcher.js'
 import {
     archiveMemorySpaceFolder,
@@ -39,6 +40,7 @@ import {
     getMemoryIndexJob,
     listMemoryIndexJobs,
     startMemoryIndexJob,
+    cancelMemoryIndexJobsForFile,
 } from '../core/memory/memory-index-jobs.js'
 
 // ---------------------------------------------------------------------------
@@ -502,6 +504,51 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             return { success: true, fileName: result.fileName, chunksStored: result.chunkCount }
         } catch (err) {
             return reply.status(500).send({ error: (err as Error).message || 'Failed to update file' })
+        }
+    })
+
+    // PUT /api/memory-spaces/:id/files/:fileName/name — rename an editable memory file
+    app.put<{ Params: { id: string; fileName: string }; Body: { fileName?: string } }>('/:id/files/:fileName/name', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
+
+        let currentFileName: string
+        let nextFileName: string
+        try {
+            currentFileName = validateEditableFileName(req.params.fileName)
+            nextFileName = validateEditableFileName(req.body.fileName || '')
+        } catch (err) {
+            return reply.status(400).send({ error: (err as Error).message })
+        }
+
+        if (currentFileName === nextFileName) {
+            return { success: true, fileName: nextFileName }
+        }
+
+        const sourcePath = join(row.folder_path, currentFileName)
+        const targetPath = join(row.folder_path, nextFileName)
+        if (!existsSync(sourcePath)) return reply.status(404).send({ error: 'File not found' })
+        if (existsSync(targetPath)) return reply.status(409).send({ error: 'A memory file with that name already exists' })
+
+        try {
+            renameSync(sourcePath, targetPath)
+            cancelMemoryIndexJobsForFile(row.id, currentFileName)
+
+            const rag = getRAGStore()
+            const filter = andLanceDbFilters(
+                lanceDbEqFilter('spaceId', row.id),
+                lanceDbEqFilter('sourceFile', currentFileName),
+            )
+            if (filter) await rag.updateSourceFile('permanent_memory', filter, nextFileName)
+
+            getDb().prepare('UPDATE memory_file_index SET file_name = ? WHERE space_id = ? AND file_name = ?')
+                .run(nextFileName, row.id, currentFileName)
+            moveMemoryGraphSource(row.id, currentFileName, row.id, nextFileName)
+
+            return { success: true, fileName: nextFileName }
+        } catch (err) {
+            return reply.status(500).send({ error: (err as Error).message || 'Failed to rename file' })
         }
     })
 
