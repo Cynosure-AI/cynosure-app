@@ -549,7 +549,7 @@ watch(searchQuery, () => {
             <div class="relative mt-2.5 flex h-8 w-8 items-center justify-center rounded-full border text-[var(--activity-color)] activity-marker">
               <span
                 v-if="requiresAttention(item)"
-                class="absolute inset-0 rounded-full bg-amber-400/35 animate-ping"
+                class="absolute inset-0 rounded-full bg-red-400/35 animate-ping"
               />
               <Icon
                 :icon="requiresAttention(item) ? 'lucide:circle-alert' : kindIcon(item.kind)"
@@ -583,7 +583,7 @@ watch(searchQuery, () => {
                   </span>
 
                   <span
-                    v-if="item.status"
+                    v-if="item.status && !requiresAttention(item)"
                     class="status-pill shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
                   >
                     {{ item.status }}
@@ -757,9 +757,9 @@ article.cursor-pointer:hover .activity-card {
 }
 
 .attention-pill {
-  color: #fef3c7;
-  background: color-mix(in srgb, #f59e0b 22%, transparent);
-  border: 1px solid color-mix(in srgb, #f59e0b 42%, transparent);
+  color: #fee2e2;
+  background: color-mix(in srgb, #f87171 22%, transparent);
+  border: 1px solid color-mix(in srgb, #f87171 42%, transparent);
 }
 
 .artifact-link {
@@ -795,9 +795,9 @@ article.cursor-pointer:hover .activity-card {
 }
 
 .activity-attention {
-  --activity-color: #f59e0b;
-  --activity-bg: color-mix(in srgb, #f59e0b 18%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #f59e0b 52%, var(--color-theme-800));
+  --activity-color: #f87171;
+  --activity-bg: color-mix(in srgb, #f87171 18%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #f87171 52%, var(--color-theme-800));
 }
 
 .activity-artifact {
