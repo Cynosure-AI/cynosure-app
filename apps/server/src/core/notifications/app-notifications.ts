@@ -116,6 +116,7 @@ export function createAppNotification(input: CreateAppNotificationInput): AppNot
 
     if (scheduledAt) {
         scheduleNotificationDelivery(id, scheduledAt, input.broadcast)
+        input.broadcast('notification:created', notification)
     } else {
         input.broadcast('notification:created', notification)
     }
