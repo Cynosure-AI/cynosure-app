@@ -21,12 +21,14 @@ const selectedKinds = ref<ActivityKind[]>(["instance", "artifact", "notification
 const searchQuery = ref("");
 const now = ref(Date.now());
 const stoppingInstanceIds = ref<Set<string>>(new Set());
+const cancellingMemoryJobIds = ref<Set<string>>(new Set());
 const PAGE_SIZE = 30;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let unsubNotification: (() => void) | undefined;
 let unsubExecutionUpdate: (() => void) | undefined;
+let unsubMemoryJobUpdate: (() => void) | undefined;
 
 const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "instance", label: "Running", icon: "lucide:activity" },
@@ -223,6 +225,30 @@ function canStopItem(item: ActivityItem): boolean {
   return item.kind === "instance" && Boolean(item.sourceId);
 }
 
+function canCancelMemoryJob(item: ActivityItem): boolean {
+  return item.kind === "memory" && item.status === "running" && Boolean(item.sourceId);
+}
+
+function isItemActionPending(item: ActivityItem): boolean {
+  if (!item.sourceId) return false;
+  if (item.kind === "instance") return stoppingInstanceIds.value.has(item.sourceId);
+  if (item.kind === "memory") return cancellingMemoryJobIds.value.has(item.sourceId);
+  return false;
+}
+
+function itemActionIcon(item: ActivityItem): string {
+  if (isItemActionPending(item)) return "lucide:loader-2";
+  return item.kind === "instance" ? "lucide:square" : "lucide:x";
+}
+
+function itemActionLabel(item: ActivityItem): string {
+  return item.kind === "instance" ? "Stop" : "Cancel";
+}
+
+function itemActionTitle(item: ActivityItem): string {
+  return item.kind === "instance" ? "Stop instance" : "Cancel memory job";
+}
+
 function artifactIcon(kind: string): string {
   if (kind === "image") return "lucide:image";
   if (kind === "video") return "lucide:film";
@@ -254,6 +280,29 @@ async function stopInstance(item: ActivityItem, event: Event) {
   }
 }
 
+async function cancelMemoryJob(item: ActivityItem, event: Event) {
+  event.stopPropagation();
+  if (!item.sourceId || cancellingMemoryJobIds.value.has(item.sourceId)) return;
+
+  cancellingMemoryJobIds.value.add(item.sourceId);
+  try {
+    await api.memorySpaces.cancelJob(item.sourceId);
+    await loadActivity();
+  } catch {
+    await loadActivity();
+  } finally {
+    cancellingMemoryJobIds.value.delete(item.sourceId);
+  }
+}
+
+function runItemAction(item: ActivityItem, event: Event): void {
+  if (item.kind === "instance") {
+    void stopInstance(item, event);
+  } else if (item.kind === "memory") {
+    void cancelMemoryJob(item, event);
+  }
+}
+
 onMounted(() => {
   void loadActivity();
   refreshTimer = setInterval(() => void loadActivity(), 15_000);
@@ -267,6 +316,7 @@ onMounted(() => {
       void loadActivity();
     }
   });
+  unsubMemoryJobUpdate = api.memorySpaces.onJobUpdated(() => void loadActivity());
 });
 
 onUnmounted(() => {
@@ -275,6 +325,7 @@ onUnmounted(() => {
   clearTimeout(searchTimer);
   unsubNotification?.();
   unsubExecutionUpdate?.();
+  unsubMemoryJobUpdate?.();
 });
 
 watch(selectedKinds, () => {
@@ -520,18 +571,18 @@ watch(searchQuery, () => {
                   </span>
 
                   <button
-                    v-if="canStopItem(item)"
+                    v-if="canStopItem(item) || canCancelMemoryJob(item)"
                     class="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-400/25 bg-red-400/10 px-2 py-0.5 text-[11px] font-bold text-red-400 transition hover:border-red-300/40 hover:bg-red-400/15 hover:text-red-200 disabled:cursor-wait disabled:opacity-70"
-                    :disabled="stoppingInstanceIds.has(item.sourceId!)"
-                    title="Stop instance"
-                    @click="stopInstance(item, $event)"
+                    :disabled="isItemActionPending(item)"
+                    :title="itemActionTitle(item)"
+                    @click="runItemAction(item, $event)"
                   >
                     <Icon
-                      :icon="stoppingInstanceIds.has(item.sourceId!) ? 'lucide:loader-2' : 'lucide:square'"
+                      :icon="itemActionIcon(item)"
                       class="w-3 h-3"
-                      :class="{ 'animate-spin': stoppingInstanceIds.has(item.sourceId!) }"
+                      :class="{ 'animate-spin': isItemActionPending(item) }"
                     />
-                    Stop
+                    {{ itemActionLabel(item) }}
                   </button>
                 </div>
               </div>

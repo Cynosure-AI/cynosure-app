@@ -446,6 +446,9 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const removeOrchestrationStateListener = eventBus.on('orchestrator:state-updated', (data: unknown) => {
     broadcast('orchestrator:state-updated', data)
   })
+  const removeMemoryJobUpdatedListener = eventBus.on('memory:job-updated', (data: unknown) => {
+    broadcast('memory:job-updated', data)
+  })
 
   // Persist execution steps to DB for reload survival
   const stepPersistenceCleanups = setupExecutionStepPersistence(eventBus)
@@ -520,6 +523,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
         cleanup()
       }
       removeOrchestrationStateListener()
+      removeMemoryJobUpdatedListener()
       for (const cleanup of stepPersistenceCleanups) {
         cleanup()
       }

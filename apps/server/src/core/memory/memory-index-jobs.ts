@@ -1,4 +1,5 @@
 import { nanoid } from 'nanoid'
+import { getEventBus } from '../telemetry/event-bus.js'
 
 export type MemoryIndexJobKind = 'reindex' | 'entity-index'
 export type MemoryIndexJobStatus = 'running' | 'completed' | 'cancelled' | 'error'
@@ -35,6 +36,10 @@ function snapshot<T>(job: MemoryIndexJob<T>): MemoryIndexJobSnapshot<T> {
         result: job.result,
         error: job.error,
     }
+}
+
+function emitJobUpdated(job: MemoryIndexJob): void {
+    getEventBus().emit('memory:job-updated', snapshot(job))
 }
 
 function isActive(job: MemoryIndexJobSnapshot): boolean {
@@ -85,6 +90,9 @@ export function startMemoryIndexJob<T>(opts: {
         promise: Promise.resolve(),
     }
 
+    jobs.set(job.id, job)
+    emitJobUpdated(job)
+
     job.promise = opts.run(controller.signal)
         .then((result) => {
             if (controller.signal.aborted) {
@@ -105,9 +113,9 @@ export function startMemoryIndexJob<T>(opts: {
         })
         .finally(() => {
             job.updatedAt = Date.now()
+            emitJobUpdated(job)
         })
 
-    jobs.set(job.id, job)
     return snapshot(job)
 }
 
@@ -118,6 +126,7 @@ export function cancelMemoryIndexJobsForFile(spaceId: string, fileName: string):
         job.controller.abort()
         job.status = 'cancelled'
         job.updatedAt = Date.now()
+        emitJobUpdated(job)
     }
 }
 
@@ -141,7 +150,9 @@ export function cancelMemoryIndexJob(id: string): MemoryIndexJobSnapshot | undef
     if (!job) return undefined
     if (job.status === 'running') {
         job.controller.abort()
+        job.status = 'cancelled'
         job.updatedAt = Date.now()
+        emitJobUpdated(job)
     }
     return snapshot(job)
 }
