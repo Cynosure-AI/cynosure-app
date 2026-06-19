@@ -301,6 +301,9 @@ export const useAgentStore = defineStore('agent', () => {
     const convId = eventData.conversationId as string | undefined
 
     const viewingConvId = activeViewConversationId.value
+    if (convId && viewingConvId && convId !== viewingConvId && !executingConversationIds.value.has(convId)) {
+      return
+    }
     // Only treat an event as "active view" when it targets the currently
     // open conversation. If no chat is open (viewingConvId = null), background
     // conversation events should not flip UI execution state.
