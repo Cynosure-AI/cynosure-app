@@ -13,6 +13,7 @@ import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execu
 import { resolveExecutionTools } from './pre-execution/execution-tools.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemorySystemMessages } from './pre-execution/execution-memory.js'
+import { ensureOversizedAttachmentsIndexed } from './pre-execution/execution-attachments.js'
 import { buildTaskContext } from './pre-execution/task-context.js'
 import { getAssignedOrDefaultSpaces, type MemorySpaceRef } from '../memory/memory-space-scope.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
@@ -78,6 +79,8 @@ export interface PrepareExecutionInput {
     hydrationAgentId?: string
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
+    /** Inline text threshold; larger conversation attachments are indexed before execution. */
+    inlineAttachmentTextLimit?: number
 }
 
 export interface PreparedExecution {
@@ -152,12 +155,22 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     const memoryRoutingQuery = taskContext?.memoryQuery || input.userQuery
     const routingMessages = taskContext ? [] : input.recentMessages
 
+    if (input.inlineAttachmentTextLimit !== undefined) {
+        await ensureOversizedAttachmentsIndexed({
+            conversationId,
+            inlineAttachmentTextLimit: input.inlineAttachmentTextLimit,
+            eventMeta: input.eventMeta,
+        })
+    }
+
     const toolLayer = await resolveExecutionTools({
         preset,
         conversationId,
         broadcast,
         toolRegistry,
+        gateway,
         resolvedProviderId: providerModel.providerId,
+        resolvedModel: providerModel.model,
         providerOverride,
         modelOverride,
         userQuery: toolRoutingQuery,
@@ -195,6 +208,9 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         ...await resolveMemorySystemMessages({
             preset,
             conversationId,
+            gateway,
+            providerId: providerModel.providerId,
+            model: providerModel.model,
             autoMemory: input.autoMemory,
             memorySpaceOverrides,
             userQuery: memoryRoutingQuery,

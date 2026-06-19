@@ -1,6 +1,6 @@
 {
     "name": "cynosure-desktop",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "description": "Cynosure Desktop — Electron wrapper for Cynosure server + web UI",
     "author": {
         "name": "Cynosure",

@@ -51,8 +51,13 @@ const emit = defineEmits<{
 const providerStore = useProviderStore()
 const { logoUrl } = useProviderLogos()
 
+function agentSort(a: AgentDefinition, b: AgentDefinition): number {
+  if (a.favorite !== b.favorite) return a.favorite ? -1 : 1
+  return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)
+}
+
 const groups = computed((): SelectOptionGroup[] => {
-  const sorted = [...props.agents].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+  const sorted = [...props.agents].sort(agentSort)
 
   const agentOptions = sorted.map((a) => {
     let imgSrc: string | null = a.iconUrl || null
@@ -65,7 +70,7 @@ const groups = computed((): SelectOptionGroup[] => {
       label: a.name,
       imgSrc,
       tooltip: a.description || undefined,
-      tag: a.subAgents?.length ? `+${a.subAgents.length}` : undefined,
+      tag: a.favorite ? 'Favorite' : (a.subAgents?.length ? `+${a.subAgents.length}` : undefined),
     }
   })
 

@@ -1,8 +1,9 @@
 import { getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
-import { applyAutoToolRouting } from './auto-tool-routing.js'
+import { applyAutoToolRouting, emitAutoToolRoutingSkipped } from './auto-tool-routing.js'
 import { isRuntimeMemoryEnabled, type ExecutionMemorySpaceRef } from './execution-memory.js'
 import type { ExecutionPreset } from '../execution-preset.js'
 import type { SubAgentAssignment } from '../../agents/agent-store.js'
+import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolRegistry } from '../../tools/tool-registry.js'
 
@@ -13,7 +14,9 @@ export interface ResolveExecutionToolsInput {
     conversationId: string
     broadcast: BroadcastFn
     toolRegistry: ToolRegistry
+    gateway: LLMGateway
     resolvedProviderId: string
+    resolvedModel: string
     providerOverride?: string
     modelOverride?: string
     userQuery?: string
@@ -43,7 +46,9 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         conversationId,
         broadcast,
         toolRegistry,
+        gateway,
         resolvedProviderId,
+        resolvedModel,
         providerOverride,
         modelOverride,
         userQuery,
@@ -79,12 +84,17 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             conversationId,
             userQuery,
             recentMessages,
+            gateway,
+            providerId: resolvedProviderId,
+            model: resolvedModel,
             tools,
             mcpMetadata: toolRegistry.getNamespaceMetadataForTools(tools),
             preferredToolNames: preferredToolNames.length ? new Set(preferredToolNames) : undefined,
             usedToolNames,
             eventMeta,
         }) as RegistryAwareToolDefinition[]
+    } else {
+        emitAutoToolRoutingSkipped(conversationId, 'disabled', eventMeta)
     }
 
     if (isRuntimeMemoryEnabled(preset, autoMemory, memorySpaceOverrides)) {

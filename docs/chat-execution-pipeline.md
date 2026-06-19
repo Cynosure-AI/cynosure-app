@@ -516,10 +516,22 @@ interface PlanningState {
 
 ### 8.2 Auto-Router & Task Context Integration
 
-The task context system (`task-context.ts`) calls a router LLM to produce focused queries for each auto mode. The auto-router results feed into:
+The task context system (`task-context.ts`) calls a router LLM to produce focused queries for each auto mode. The auto-router results feed into layered routing flows:
 
-- Tool routing (specific action terms for tool selection)
+- Tool routing (specific action terms for tool capability selection)
 - Memory routing (knowledge/entity terms for memory retrieval)
+
+Tool routing is layered:
+
+1. Use embeddings to pre-filter and rank available tool capabilities.
+2. Ask the resolved main execution model to select the useful candidate IDs.
+3. Expose only the curated tool set, while preserving explicitly selected, sticky, and search-expansion tools.
+
+Memory routing is layered:
+
+1. Retrieve and optionally rerank a wider candidate set.
+2. Ask the resolved main execution model to select the useful candidate IDs.
+3. Inject only the curated memory context into the assistant run.
 
 ---
 

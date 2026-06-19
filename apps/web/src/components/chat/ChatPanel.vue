@@ -122,6 +122,19 @@ const unifiedTimeline = computed(() => {
       agentNameToCodename.set(step.maAgentName, step.maCodename)
     }
   }
+  const subAgentStepsByIdentity = new Map<string, ExecutionStep[]>()
+  for (const step of agentStore.executionSteps) {
+    if (!step.maInvocationId) continue
+    const identities = [step.maAgentName, step.maCodename].filter((value): value is string => Boolean(value))
+    for (const identity of identities) {
+      const current = subAgentStepsByIdentity.get(identity) || []
+      current.push(step)
+      subAgentStepsByIdentity.set(identity, current)
+    }
+  }
+  for (const steps of subAgentStepsByIdentity.values()) {
+    steps.sort((a, b) => a.timestamp - b.timestamp)
+  }
 
   for (const msg of chatStore.messages) {
     // Compact event markers — rendered as divider cards, not regular messages
@@ -196,9 +209,34 @@ const unifiedTimeline = computed(() => {
       return firstStep?.maInvocationId ?? firstStep?.maCodename ?? null
     }
     if (entry.type === 'message' && entry.msg.agentName) {
-      return entry.msg.maInvocationId ?? agentNameToCodename.get(entry.msg.agentName) ?? entry.msg.agentName
+      return entry.msg.maInvocationId
+        ?? inferSubAgentInvocationId(entry.msg)
+        ?? agentNameToCodename.get(entry.msg.agentName)
+        ?? entry.msg.agentName
     }
     return null
+  }
+
+  function inferSubAgentInvocationId(msg: DisplayMessage): string | null {
+    const identities = [msg.agentName, msg.maCodename, msg.maAgentName].filter((value): value is string => Boolean(value))
+    let best: { id: string; distance: number; before: boolean } | null = null
+
+    for (const identity of identities) {
+      for (const step of subAgentStepsByIdentity.get(identity) || []) {
+        if (!step.maInvocationId) continue
+        const distance = Math.abs(msg.createdAt - step.timestamp)
+        const before = step.timestamp <= msg.createdAt
+        if (
+          !best ||
+          (before && !best.before) ||
+          (before === best.before && distance < best.distance)
+        ) {
+          best = { id: step.maInvocationId, distance, before }
+        }
+      }
+    }
+
+    return best?.id ?? null
   }
 
   // Collect consecutive runs of sub-agent entries and reorder them so all
