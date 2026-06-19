@@ -41,6 +41,7 @@ export interface ChatStreamingState {
     subAgentStreamBuffers: Map<string, StreamBuffer>
     clearConversationStreamState(conversationId: string): void
     findStreamingMsg(streamId?: string): DisplayMessage | undefined
+    restorePrimaryStream(conversationId: string): void
     restoreSubAgentStreams(conversationId: string): void
     finalizeCurrentStreaming(conversationId: string): void
     handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void
@@ -94,6 +95,53 @@ export function useChatStreaming(
             if (!streamId || messages.value[i].streamId === streamId) return messages.value[i]
         }
         return undefined
+    }
+
+    function hasVisibleContent(msg: DisplayMessage): boolean {
+        return Boolean(msg.content || msg.thinking || msg.imageDataUrls?.length || msg.videoDataUrls?.length)
+    }
+
+    function findReusableStreamingPlaceholder(): DisplayMessage | undefined {
+        for (let i = messages.value.length - 1; i >= 0; i--) {
+            const msg = messages.value[i]
+            if (msg.role === 'user') return undefined
+            if (msg.role !== 'assistant' || !msg.isStreaming || msg.streamId || hasVisibleContent(msg)) continue
+            return msg
+        }
+        return undefined
+    }
+
+    function sameOptionalIdentity(messageValue?: string | null, bufferValue?: string | null): boolean {
+        return !messageValue || !bufferValue || messageValue === bufferValue
+    }
+
+    function findPersistedMatchForBuffer(buf: StreamBuffer): DisplayMessage | undefined {
+        for (let i = messages.value.length - 1; i >= 0; i--) {
+            const msg = messages.value[i]
+            if (msg.role === 'user') break
+            if (msg.role !== 'assistant' || msg.streamId || msg.isStreaming) continue
+            if (msg.content !== buf.content) continue
+            if ((msg.thinking || '') !== (buf.thinking || '')) continue
+            if (!sameOptionalIdentity(msg.agentId, buf.agentId)) continue
+            if (!sameOptionalIdentity(msg.agentName, buf.agentName)) continue
+            return msg
+        }
+        return undefined
+    }
+
+    function hydrateMessageFromBuffer(msg: DisplayMessage, buf: StreamBuffer): void {
+        msg.streamId = buf.streamId
+        msg.content = buf.content
+        msg.thinking = buf.thinking || undefined
+        msg.agentId = buf.agentId
+        msg.agentName = buf.agentName
+        msg.agentIconUrl = buf.agentIconUrl
+        msg.maCodename = buf.maCodename
+        msg.maAgentName = buf.maAgentName
+        msg.maInvocationId = buf.maInvocationId
+        msg.isStreaming = true
+        if (buf.images.length) appendUniqueImages(msg, buf.images)
+        if (buf.videos.length) appendUniqueVideos(msg, buf.videos)
     }
 
     function appendUniqueImages(msg: DisplayMessage, images: string[]): void {
@@ -187,6 +235,57 @@ export function useChatStreaming(
         }
     }
 
+    function restorePrimaryStream(conversationId: string): void {
+        const buf = streamBuffers.get(conversationId)
+        if (!buf?.active) {
+            isStreaming.value = false
+            currentStreamId.value = null
+            primaryStreamId.value = null
+            streamingContent.value = ''
+            streamingThinking.value = ''
+            return
+        }
+
+        isStreaming.value = true
+        currentStreamId.value = buf.streamId
+        primaryStreamId.value = buf.streamId
+        streamingContent.value = buf.content
+        streamingThinking.value = buf.thinking
+
+        if (conversationId !== activeConversationId.value) return
+
+        const existingStreamMsg = findStreamingMsg(buf.streamId)
+        if (existingStreamMsg) {
+            hydrateMessageFromBuffer(existingStreamMsg, buf)
+            return
+        }
+
+        const persistedMatch = findPersistedMatchForBuffer(buf)
+        if (persistedMatch) {
+            hydrateMessageFromBuffer(persistedMatch, buf)
+            return
+        }
+
+        const msg: DisplayMessage = {
+            id: `streaming_${Date.now()}`,
+            role: 'assistant',
+            content: buf.content,
+            streamId: buf.streamId,
+            thinking: buf.thinking || undefined,
+            imageDataUrls: buf.images.length ? [...buf.images] : undefined,
+            videoDataUrls: buf.videos.length ? [...buf.videos] : undefined,
+            agentId: buf.agentId,
+            agentName: buf.agentName,
+            agentIconUrl: buf.agentIconUrl,
+            maCodename: buf.maCodename,
+            maAgentName: buf.maAgentName,
+            maInvocationId: buf.maInvocationId,
+            createdAt: buf.createdAt,
+            isStreaming: true
+        }
+        messages.value.push(msg)
+    }
+
     function finalizeCurrentStreaming(conversationId: string): void {
         if (conversationId !== activeConversationId.value) return
         const streamMsg = findStreamingMsg()
@@ -236,24 +335,37 @@ export function useChatStreaming(
 
             streamingContent.value = ''
             streamingThinking.value = ''
-            messages.value.push({
-                id: `streaming_${Date.now()}`,
-                role: 'assistant',
-                content: '',
-                streamId: data.streamId,
-                agentId: data.agentId,
-                agentName: data.agentName,
-                agentIconUrl: data.agentIconUrl,
-                maCodename: data.maCodename,
-                maAgentName: data.maAgentName,
-                maInvocationId: data.maInvocationId,
-                createdAt: Date.now(),
-                isStreaming: true
-            })
+            const reusableMsg = findReusableStreamingPlaceholder()
+            if (reusableMsg) {
+                reusableMsg.streamId = data.streamId
+                reusableMsg.agentId = data.agentId
+                reusableMsg.agentName = data.agentName
+                reusableMsg.agentIconUrl = data.agentIconUrl
+                reusableMsg.maCodename = data.maCodename
+                reusableMsg.maAgentName = data.maAgentName
+                reusableMsg.maInvocationId = data.maInvocationId
+                reusableMsg.createdAt = Date.now()
+                currentTurnMsgs.push(reusableMsg)
+            } else {
+                messages.value.push({
+                    id: `streaming_${Date.now()}`,
+                    role: 'assistant',
+                    content: '',
+                    streamId: data.streamId,
+                    agentId: data.agentId,
+                    agentName: data.agentName,
+                    agentIconUrl: data.agentIconUrl,
+                    maCodename: data.maCodename,
+                    maAgentName: data.maAgentName,
+                    maInvocationId: data.maInvocationId,
+                    createdAt: Date.now(),
+                    isStreaming: true
+                })
 
-            const streamingMsg = messages.value[messages.value.length - 1]
-            if (streamingMsg && streamingMsg.isStreaming) {
-                currentTurnMsgs.push(streamingMsg)
+                const streamingMsg = messages.value[messages.value.length - 1]
+                if (streamingMsg && streamingMsg.isStreaming) {
+                    currentTurnMsgs.push(streamingMsg)
+                }
             }
         }
     }
@@ -731,6 +843,7 @@ export function useChatStreaming(
         subAgentStreamBuffers,
         clearConversationStreamState,
         findStreamingMsg,
+        restorePrimaryStream,
         restoreSubAgentStreams,
         finalizeCurrentStreaming,
         handleStreamStart,
