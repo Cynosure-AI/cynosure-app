@@ -4,6 +4,7 @@ import { createServer } from 'net'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { existsSync } from 'fs'
+import { homedir } from 'os'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import ElectronStore from 'electron-store'
 import appIcon from '../../build/icon.png?asset'
@@ -12,6 +13,7 @@ import trayProgressIcon from '../../build/tray_progress.png?asset'
 // ── Configuration ──────────────────────────────────────────────────────────────
 
 const PREFERRED_PORT = 3099
+const CYNOSURE_DATA_DIR_NAME = 'cynosure'
 
 let serverPort = PREFERRED_PORT
 let serverProcess: ChildProcess | null = null
@@ -116,7 +118,20 @@ function resolveWebDist(): string {
 }
 
 function getDataDir(): string {
-    return app.getPath('userData')
+    if (process.env.CYNOSURE_DATA_DIR) {
+        return process.env.CYNOSURE_DATA_DIR
+    }
+
+    const home = homedir()
+
+    switch (process.platform) {
+        case 'darwin':
+            return join(home, 'Library', 'Application Support', CYNOSURE_DATA_DIR_NAME)
+        case 'win32':
+            return join(process.env.APPDATA || join(home, 'AppData', 'Roaming'), CYNOSURE_DATA_DIR_NAME)
+        default:
+            return join(process.env.XDG_CONFIG_HOME || join(home, '.config'), CYNOSURE_DATA_DIR_NAME)
+    }
 }
 
 function getAppDataDir(): string {
