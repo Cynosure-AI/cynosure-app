@@ -35,6 +35,7 @@ const expanded = ref(prefs.autoExpandToolCalls)
 const lightboxSrc = ref<string | null>(null)
 const statusMeta: Record<string, { label: string; icon: string; color: string }> = {
   'building-task-context': { label: 'Preparing Context', icon: 'lucide:compass', color: 'text-cyan-600 dark:text-cyan-300' },
+  'indexing-attachments': { label: 'Indexing Attachments', icon: 'lucide:paperclip', color: 'text-sky-600 dark:text-sky-300' },
   'routing-tools': { label: 'Gathering Context', icon: 'lucide:route', color: 'text-accent-500 dark:text-accent-300' },
   'routing-memory': { label: 'Gathering Context', icon: 'lucide:brain-circuit', color: 'text-accent-500 dark:text-accent-300' },
   'curating-tools': { label: 'Refining Selection', icon: 'lucide:list-filter', color: 'text-accent-500 dark:text-accent-300' },
@@ -74,6 +75,10 @@ function isTaskContextCall(call: { name?: string; arguments: string }): boolean 
   } catch {
     return false
   }
+}
+
+function isAttachmentIndexCall(call: { arguments: string }): boolean {
+  return parseToolCallArgs(call.arguments)?.type === 'attachment-index'
 }
 
 function contextPhase(call?: { arguments: string } | null): string {
@@ -161,6 +166,7 @@ function toolChipClass(name: string): string {
 }
 
 function toolCallIcon(call: { name: string; arguments: string }): string {
+  if (isAttachmentIndexCall(call)) return 'lucide:paperclip'
   if (isTaskContextCall(call)) return 'lucide:compass'
   if (isSubAgentSpawnCall(call.name)) return 'lucide:bot'
   if (isMemoryCall(call)) return 'lucide:brain'
@@ -168,6 +174,7 @@ function toolCallIcon(call: { name: string; arguments: string }): string {
 }
 
 function toolCallIconClass(name: string, args = ''): string {
+  if (isAttachmentIndexCall({ arguments: args })) return 'text-sky-600 dark:text-sky-300'
   if (isTaskContextCall({ name, arguments: args })) return 'text-cyan-600 dark:text-cyan-300'
   if (isInternalToolName(name)) return 'text-purple-500 dark:text-purple-300'
   return isSubAgentSpawnCall(name) ? 'text-indigo-500 dark:text-indigo-400' : 'text-accent-500 dark:text-accent-400'
@@ -210,9 +217,10 @@ const currentPhase = computed(() => {
 
 const currentStatus = computed(() => props.steps[props.steps.length - 1]?.status ?? 'executing')
 const isTaskContext = computed(() => props.steps.some(step => step.status === 'building-task-context' || step.toolCalls?.some(isTaskContextCall)))
+const isAttachmentIndexing = computed(() => props.steps.some(step => step.status === 'indexing-attachments' || step.toolCalls?.some(isAttachmentIndexCall)))
 const isToolRouting = computed(() => currentStatus.value === 'routing-tools' || currentStatus.value === 'curating-tools')
 const isMemoryRouting = computed(() => currentStatus.value === 'routing-memory' || currentStatus.value === 'curating-memory')
-const isRoutingStatus = computed(() => isTaskContext.value || isToolRouting.value || isMemoryRouting.value)
+const isRoutingStatus = computed(() => isTaskContext.value || isAttachmentIndexing.value || isToolRouting.value || isMemoryRouting.value)
 
 /** All tool names from this iteration */
 const toolNames = computed(() => {
@@ -338,6 +346,7 @@ const taskContextQueryLabels = computed(() => taskContextQueries.value.map((quer
 
 const headerLabel = computed(() => {
   if (isTaskContext.value) return currentPhase.value.label
+  if (isAttachmentIndexing.value) return currentPhase.value.label
   const latestSection = [...contextSections.value].reverse()[0]
   if (latestSection && latestSection.phase === 'gathered-context') return 'Gathered Context'
   return currentPhase.value.label

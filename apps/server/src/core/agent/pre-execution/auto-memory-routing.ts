@@ -67,12 +67,12 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         }
 
         if (!candidates.permanent.length && !candidates.graph?.edges.length) {
-            emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta)
+            emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'none-found')
             return null
         }
 
         if (!candidates.permanent.length && candidates.graph?.edges.length) {
-            emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta)
+            emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'graph-only')
             return aggregator.format({ permanent: [], graph: candidates.graph }) || null
         }
 
@@ -95,12 +95,19 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             graph: selection?.includeGraph === false ? undefined : candidates.graph,
         }
 
-        emitMemoryRoutingSelection(conversationId, taskId, selectedMemory.permanent, 'gathered-context', eventMeta)
+        emitMemoryRoutingSelection(
+            conversationId,
+            taskId,
+            selectedMemory.permanent,
+            'gathered-context',
+            eventMeta,
+            selectedMemory.permanent.length ? undefined : 'none-relevant',
+        )
         const formatted = aggregator.format(selectedMemory)
         return formatted || null
     } catch (err) {
         console.warn('[memory-router] Routing failed, continuing without auto-memory:', err)
-        emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta)
+        emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'routing-failed')
         return null
     }
 }
@@ -343,13 +350,14 @@ function emitMemoryRoutingSelection(
     memories: RetrievedChunk[],
     contextPhase: 'gathered-results' | 'gathered-context' = 'gathered-context',
     eventMeta?: Record<string, unknown>,
+    emptyReason?: 'none-found' | 'none-relevant' | 'graph-only' | 'routing-failed',
 ): void {
     getEventBus().emit('step:tools-chosen', {
         conversationId,
         taskId,
         iteration: 0,
         ...eventMeta,
-        toolCalls: memories.map((memory) => ({
+        toolCalls: memories.length ? memories.map((memory) => ({
             name: memoryLabel(memory),
             arguments: JSON.stringify({
                 type: 'memory',
@@ -360,6 +368,39 @@ function emitMemoryRoutingSelection(
                 content: memory.text,
                 rerankerScore: memory.rerankerScore,
             }),
-        })),
+        })) : [{
+            name: memoryEmptyLabel(emptyReason),
+            arguments: JSON.stringify({
+                type: 'memory',
+                contextPhase,
+                emptyReason: emptyReason || 'none-selected',
+                content: memoryEmptyContent(emptyReason),
+            }),
+        }],
     })
+}
+
+function memoryEmptyLabel(reason?: string): string {
+    switch (reason) {
+        case 'none-found': return 'No memories found'
+        case 'none-relevant': return 'No relevant memories'
+        case 'graph-only': return 'Memory graph matched'
+        case 'routing-failed': return 'Memory routing skipped'
+        default: return 'No memories selected'
+    }
+}
+
+function memoryEmptyContent(reason?: string): string {
+    switch (reason) {
+        case 'none-found':
+            return 'Auto memory ran, but no memory snippets or graph relationships matched this turn.'
+        case 'none-relevant':
+            return 'Auto memory found candidates, but the curation step selected none as useful for this turn.'
+        case 'graph-only':
+            return 'Auto memory found related graph context, but no permanent memory snippets matched.'
+        case 'routing-failed':
+            return 'Auto memory routing failed; the turn continued without injected memory.'
+        default:
+            return 'Auto memory did not select any snippets for this turn.'
+    }
 }
