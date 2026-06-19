@@ -153,6 +153,7 @@ function createTables(db: Database.Database): void {
       evaluation_json TEXT,
       ma_codename TEXT,
       ma_agent_name TEXT,
+      ma_invocation_id TEXT,
       ma_phase TEXT,
       created_at INTEGER NOT NULL
     );
@@ -373,6 +374,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('mcp_servers', 'original_name', 'TEXT')
   addColumnIfMissing('mcp_servers', 'custom_name', 'TEXT')
   addColumnIfMissing('messages', 'video_urls_json', 'TEXT')
+  addColumnIfMissing('execution_steps', 'ma_invocation_id', 'TEXT')
   db.prepare("UPDATE mcp_servers SET original_name = name WHERE original_name IS NULL OR original_name = ''").run()
 
   // Tasks table: reused for durable top-level planning state.

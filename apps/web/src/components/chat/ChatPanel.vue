@@ -187,13 +187,16 @@ const unifiedTimeline = computed(() => {
   // appear BELOW the agent message that triggered them.
   entries.sort((a, b) => a.ts - b.ts)
 
-  // ── Group sub-agent entries by codename ─────────────────────────────────
+  // ── Group sub-agent entries by invocation ───────────────────────────────
 
-  function codenameOf(entry: TimelineEntry): string | null {
+  function subAgentGroupIdOf(entry: TimelineEntry): string | null {
     if (!entry.isSubAgent) return null
-    if (entry.type === 'tool-group') return entry.group.steps[0]?.maCodename ?? null
+    if (entry.type === 'tool-group') {
+      const firstStep = entry.group.steps[0]
+      return firstStep?.maInvocationId ?? firstStep?.maCodename ?? null
+    }
     if (entry.type === 'message' && entry.msg.agentName) {
-      return agentNameToCodename.get(entry.msg.agentName) ?? entry.msg.agentName
+      return entry.msg.maInvocationId ?? agentNameToCodename.get(entry.msg.agentName) ?? entry.msg.agentName
     }
     return null
   }
@@ -208,28 +211,31 @@ const unifiedTimeline = computed(() => {
     const byCodename = new Map<string, TimelineEntry[]>()
     const order: string[] = []
     for (const e of subBatch) {
-      const key = codenameOf(e) ?? '__unknown__'
+      const key = subAgentGroupIdOf(e) ?? '__unknown__'
       if (!byCodename.has(key)) { byCodename.set(key, []); order.push(key) }
       byCodename.get(key)!.push(e)
     }
-    for (const codename of order) {
-      const innerEntries = byCodename.get(codename)!
+    for (const groupId of order) {
+      const innerEntries = byCodename.get(groupId)!
       let agentName: string | null = null
       let agentId: string | null = null
+      let codename: string | null = null
       for (const e of innerEntries) {
         if (e.type === 'message' && e.msg.agentName) agentName = agentName ?? e.msg.agentName
         if (e.type === 'message' && e.msg.agentId) agentId = agentId ?? e.msg.agentId
+        if (e.type === 'message' && e.msg.maCodename) codename = codename ?? e.msg.maCodename
         if (e.type === 'tool-group' && e.group.steps[0]?.maAgentName) agentName = agentName ?? e.group.steps[0].maAgentName
-        if (agentName && agentId) break
+        if (e.type === 'tool-group' && e.group.steps[0]?.maCodename) codename = codename ?? e.group.steps[0].maCodename
+        if (agentName && agentId && codename) break
       }
       result.push({
         type: 'sub-agent-group',
-        codename,
+        codename: codename ?? groupId,
         agentName,
         agentId,
         entries: innerEntries,
         ts: innerEntries[0].ts,
-        key: `sag-${codename}-${innerEntries[0].ts}`
+        key: `sag-${groupId}-${innerEntries[0].ts}`
       })
     }
     subBatch = []

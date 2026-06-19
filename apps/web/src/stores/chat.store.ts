@@ -33,6 +33,9 @@ export interface DisplayMessage {
   agentId?: string
   agentName?: string
   agentIconUrl?: string | null
+  maCodename?: string
+  maAgentName?: string
+  maInvocationId?: string
   provider?: string
   model?: string
   promptTokens?: number
@@ -266,6 +269,9 @@ export const useChatStore = defineStore('chat', () => {
           agentId: buf.agentId,
           agentName: buf.agentName,
           agentIconUrl: buf.agentIconUrl,
+          maCodename: buf.maCodename,
+          maAgentName: buf.maAgentName,
+          maInvocationId: buf.maInvocationId,
           createdAt: buf.createdAt,
           isStreaming: true
         })
@@ -595,7 +601,7 @@ export const useChatStore = defineStore('chat', () => {
     modelCost,
     modelPricing,
     modelModalities,
-    handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null }): void {
+    handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
       streaming.handleStreamStart(data)
       agentStore.setConversationExecutionState(data.conversationId, true)
     },
