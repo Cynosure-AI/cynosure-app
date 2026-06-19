@@ -272,10 +272,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       })
 
       // Resolve memory space overrides (request body ids -> { id, name } objects)
-      let memorySpaceOverrides = resolveMemorySpaceOverrides(db, reqMemorySpaceIds)
-      if (effectiveRunFlags.autoMemory && Array.isArray(memorySpaceOverrides) && memorySpaceOverrides.length === 0) {
-        memorySpaceOverrides = undefined
-      }
+      const memorySpaceOverrides = resolveMemorySpaceOverrides(db, reqMemorySpaceIds)
 
       // Create AbortController early so sub-agent tools can receive the signal
       const abortController = new AbortController()

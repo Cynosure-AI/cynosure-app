@@ -260,6 +260,8 @@ function createTables(db: Database.Database): void {
       body TEXT NOT NULL DEFAULT '',
       severity TEXT NOT NULL DEFAULT 'info',
       read INTEGER NOT NULL DEFAULT 0,
+      scheduled_at INTEGER,
+      delivered_at INTEGER,
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_notifications_agent ON notifications(agent_id);
@@ -375,6 +377,9 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('mcp_servers', 'custom_name', 'TEXT')
   addColumnIfMissing('messages', 'video_urls_json', 'TEXT')
   addColumnIfMissing('execution_steps', 'ma_invocation_id', 'TEXT')
+  addColumnIfMissing('notifications', 'scheduled_at', 'INTEGER')
+  addColumnIfMissing('notifications', 'delivered_at', 'INTEGER')
+  db.prepare('UPDATE notifications SET delivered_at = created_at WHERE delivered_at IS NULL AND scheduled_at IS NULL').run()
   db.prepare("UPDATE mcp_servers SET original_name = name WHERE original_name IS NULL OR original_name = ''").run()
 
   // Tasks table: reused for durable top-level planning state.

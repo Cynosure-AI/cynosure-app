@@ -269,21 +269,24 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 severity: string
                 read: number
                 created_at: number
+                scheduled_at: number | null
+                delivered_at: number | null
             }[]
             for (const row of rows) {
+                const isScheduled = row.scheduled_at !== null && row.delivered_at === null
                 items.push({
                     id: `notification:${row.id}`,
                     kind: 'notification',
                     title: row.title,
                     description: row.body,
-                    createdAt: row.created_at,
+                    createdAt: row.scheduled_at ?? row.delivered_at ?? row.created_at,
                     agentId: row.agent_id || null,
                     ...agentInfo(row.agent_id || null),
                     conversationId: row.conversation_id,
                     severity: row.severity,
-                    status: row.read === 1 ? 'read' : 'unread',
+                    status: isScheduled ? 'scheduled' : (row.read === 1 ? 'read' : 'unread'),
                     sourceId: row.id,
-                    sourceLabel: 'Notification',
+                    sourceLabel: isScheduled ? 'Scheduled Notification' : 'Notification',
                 })
             }
         }
