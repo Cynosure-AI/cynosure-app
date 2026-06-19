@@ -1,4 +1,4 @@
-import { applyAutoMemoryRouting } from './auto-memory-routing.js'
+import { applyAutoMemoryRouting, emitAutoMemoryRoutingSkipped } from './auto-memory-routing.js'
 import type { ExecutionPreset } from '../execution-preset.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
@@ -55,8 +55,14 @@ export async function resolveMemorySystemMessages(input: ResolveMemoryContextInp
         eventMeta,
     } = input
 
-    if (!isAutoMemoryEnabled(preset, autoMemory)) return []
-    if (hasExplicitEmptyMemoryScope(memorySpaceOverrides)) return []
+    if (!isAutoMemoryEnabled(preset, autoMemory)) {
+        emitAutoMemoryRoutingSkipped(conversationId, 'disabled', eventMeta)
+        return []
+    }
+    if (hasExplicitEmptyMemoryScope(memorySpaceOverrides)) {
+        emitAutoMemoryRoutingSkipped(conversationId, 'empty-scope', eventMeta)
+        return []
+    }
 
     const memoryContext = await applyAutoMemoryRouting({
         enabled: true,

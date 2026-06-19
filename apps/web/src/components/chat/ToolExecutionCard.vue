@@ -36,10 +36,10 @@ const lightboxSrc = ref<string | null>(null)
 const statusMeta: Record<string, { label: string; icon: string; color: string }> = {
   'building-task-context': { label: 'Preparing Context', icon: 'lucide:compass', color: 'text-cyan-600 dark:text-cyan-300' },
   'indexing-attachments': { label: 'Indexing Attachments', icon: 'lucide:paperclip', color: 'text-sky-600 dark:text-sky-300' },
-  'routing-tools': { label: 'Gathering Context', icon: 'lucide:route', color: 'text-accent-500 dark:text-accent-300' },
-  'routing-memory': { label: 'Gathering Context', icon: 'lucide:brain-circuit', color: 'text-accent-500 dark:text-accent-300' },
-  'curating-tools': { label: 'Refining Selection', icon: 'lucide:list-filter', color: 'text-accent-500 dark:text-accent-300' },
-  'curating-memory': { label: 'Refining Selection', icon: 'lucide:list-filter', color: 'text-accent-500 dark:text-accent-300' },
+  'routing-tools': { label: 'Gathering Tool Context', icon: 'lucide:route', color: 'text-accent-500 dark:text-accent-300' },
+  'routing-memory': { label: 'Gathering Memory Context', icon: 'lucide:brain-circuit', color: 'text-accent-500 dark:text-accent-300' },
+  'curating-tools': { label: 'Refining Tool Context', icon: 'lucide:list-filter', color: 'text-accent-500 dark:text-accent-300' },
+  'curating-memory': { label: 'Refining Memory Context', icon: 'lucide:list-filter', color: 'text-accent-500 dark:text-accent-300' },
   'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-amber-500 dark:text-amber-400' },
   denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-red-500 dark:text-red-400' },
   executing: { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-500 dark:text-emerald-400' },
@@ -130,7 +130,8 @@ function formatToolRouterScore(call: ToolCall): string | null {
 
 function isToolRouterScoreCall(call?: ToolCall | null): boolean {
   if (!call) return false
-  return parseToolCallArgs(call.arguments)?.type === 'tool-router'
+  const parsed = parseToolCallArgs(call.arguments)
+  return parsed?.type === 'tool-router' && typeof parsed.routerScore === 'number'
 }
 
 function memoryCallContent(call: ToolCall | null): string | null {
@@ -144,6 +145,14 @@ function memoryCallMetadata(call: ToolCall): string {
   if (!parsed) return call.arguments
   const { content: _content, contextPhase: _contextPhase, ...metadata } = parsed
   return Object.keys(metadata).length ? JSON.stringify(metadata, null, 2) : ''
+}
+
+function toolRouterCallContent(call: ToolCall | null): string | null {
+  if (!call) return null
+  const parsed = parseToolCallArgs(call.arguments)
+  if (parsed?.type !== 'tool-router') return null
+  const content = parsed.content
+  return typeof content === 'string' && content.trim() ? content.trim() : null
 }
 
 function subAgentCodenameFromArgs(args: string): string | null {
@@ -298,18 +307,33 @@ const contextSections = computed(() => props.steps
   .filter((section) => section.calls.some(isContextGatheringCall))
 )
 
+function contextSectionKind(section: { status: string }): 'tool' | 'memory' | null {
+  if (section.status.endsWith('-tools')) return 'tool'
+  if (section.status.endsWith('-memory')) return 'memory'
+  return null
+}
+
 function contextSectionTitle(section: { status: string; phase: string }): string {
-  if (section.phase === 'gathered-results' || section.status === 'routing-tools' || section.status === 'routing-memory') return 'Gathered Results'
-  if (section.phase === 'gathered-context' || section.status === 'curating-tools' || section.status === 'curating-memory') return 'Gathered Context'
+  const kind = contextSectionKind(section)
+  const prefix = kind === 'tool' ? 'Tool' : kind === 'memory' ? 'Memory' : ''
+  if (section.phase === 'gathered-results' || section.status === 'routing-tools' || section.status === 'routing-memory') {
+    return prefix ? `Gathered ${prefix} Results` : 'Gathered Results'
+  }
+  if (section.phase === 'gathered-context' || section.status === 'curating-tools' || section.status === 'curating-memory') {
+    return prefix ? `Gathered ${prefix} Context` : 'Gathered Context'
+  }
   return meta(section.status).label
 }
 
 function contextSectionIcon(section: { status: string; phase: string }): string {
-  return contextSectionTitle(section) === 'Gathered Context' ? 'lucide:package-check' : 'lucide:database'
+  if (section.phase === 'gathered-context' || section.status === 'curating-tools' || section.status === 'curating-memory') {
+    return contextSectionKind(section) === 'memory' ? 'lucide:brain' : 'lucide:package-check'
+  }
+  return contextSectionKind(section) === 'memory' ? 'lucide:brain-circuit' : 'lucide:database'
 }
 
 function contextSectionClass(section: { status: string; phase: string }): string {
-  return contextSectionTitle(section) === 'Gathered Context'
+  return section.phase === 'gathered-context' || section.status === 'curating-tools' || section.status === 'curating-memory'
     ? 'border-emerald-400/25 bg-emerald-500/5'
     : 'border-accent-400/25 bg-accent-500/5'
 }
@@ -321,10 +345,14 @@ const taskContext = computed(() => {
     const parsed = JSON.parse(call.arguments || '{}') as {
       toolQuery?: unknown
       memoryQuery?: unknown
+      content?: unknown
+      emptyReason?: unknown
     }
     return {
       toolQuery: typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : '',
       memoryQuery: typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : '',
+      content: typeof parsed.content === 'string' ? parsed.content.trim() : '',
+      emptyReason: typeof parsed.emptyReason === 'string' ? parsed.emptyReason.trim() : '',
     }
   } catch {
     return null
@@ -348,7 +376,7 @@ const headerLabel = computed(() => {
   if (isTaskContext.value) return currentPhase.value.label
   if (isAttachmentIndexing.value) return currentPhase.value.label
   const latestSection = [...contextSections.value].reverse()[0]
-  if (latestSection && latestSection.phase === 'gathered-context') return 'Gathered Context'
+  if (latestSection && latestSection.phase === 'gathered-context') return contextSectionTitle(latestSection)
   return currentPhase.value.label
 })
 
@@ -570,6 +598,12 @@ const maContext = computed(() => {
                 </p>
               </div>
             </div>
+            <p
+              v-else-if="taskContext.content"
+              class="rounded-md bg-cyan-50/50 px-2 py-1.5 text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap dark:bg-theme-950/35"
+            >
+              {{ taskContext.content }}
+            </p>
           </div>
 
           <!-- Tool executions -->
@@ -643,6 +677,10 @@ const maContext = computed(() => {
                     class="text-[11px] leading-relaxed text-theme-300 whitespace-pre-wrap rounded px-2 py-1.5 max-h-64 overflow-y-auto bg-theme-900/70 dark:bg-theme-950/50"
                   >{{ memoryCallContent(execution.call) }}</pre>
                   <pre
+                    v-else-if="toolRouterCallContent(execution.call)"
+                    class="text-[11px] leading-relaxed text-theme-300 whitespace-pre-wrap rounded px-2 py-1.5 max-h-64 overflow-y-auto bg-theme-900/70 dark:bg-theme-950/50"
+                  >{{ toolRouterCallContent(execution.call) }}</pre>
+                  <pre
                     v-if="execution.call && isMemoryCall(execution.call) && memoryCallMetadata(execution.call)"
                     class="mt-1.5 text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
                   >{{ memoryCallMetadata(execution.call) }}</pre>
@@ -709,6 +747,10 @@ const maContext = computed(() => {
                 v-if="execution.call && isMemoryCall(execution.call) && memoryCallContent(execution.call)"
                 class="text-[11px] leading-relaxed text-theme-300 whitespace-pre-wrap rounded px-2 py-1.5 max-h-64 overflow-y-auto bg-theme-900/70 dark:bg-theme-950/50"
               >{{ memoryCallContent(execution.call) }}</pre>
+              <pre
+                v-else-if="toolRouterCallContent(execution.call)"
+                class="text-[11px] leading-relaxed text-theme-300 whitespace-pre-wrap rounded px-2 py-1.5 max-h-64 overflow-y-auto bg-theme-900/70 dark:bg-theme-950/50"
+              >{{ toolRouterCallContent(execution.call) }}</pre>
               <pre
                 v-if="execution.call && isMemoryCall(execution.call) && memoryCallMetadata(execution.call)"
                 class="mt-1.5 text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"

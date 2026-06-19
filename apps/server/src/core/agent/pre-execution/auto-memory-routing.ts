@@ -44,7 +44,14 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         eventMeta,
     } = input
 
-    if (!shouldRouteMemory(userQuery, { enabled })) return null
+    if (!shouldRouteMemory(userQuery, { enabled })) {
+        emitAutoMemoryRoutingSkipped(
+            conversationId,
+            !userQuery?.trim() ? 'no-query' : 'disabled',
+            eventMeta,
+        )
+        return null
+    }
 
     const taskId = `memory_router_${nanoid()}`
     const aggregator = getMemoryAggregator()
@@ -110,6 +117,16 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'routing-failed')
         return null
     }
+}
+
+export function emitAutoMemoryRoutingSkipped(
+    conversationId: string,
+    reason: 'disabled' | 'empty-scope' | 'no-query',
+    eventMeta?: Record<string, unknown>,
+): void {
+    const taskId = `memory_router_skipped_${nanoid()}`
+    emitMemoryRoutingStatus(conversationId, taskId, eventMeta)
+    emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, reason)
 }
 
 function shouldRouteMemory(userQuery?: string, opts: { enabled?: boolean } = {}): boolean {
@@ -350,7 +367,7 @@ function emitMemoryRoutingSelection(
     memories: RetrievedChunk[],
     contextPhase: 'gathered-results' | 'gathered-context' = 'gathered-context',
     eventMeta?: Record<string, unknown>,
-    emptyReason?: 'none-found' | 'none-relevant' | 'graph-only' | 'routing-failed',
+    emptyReason?: 'none-found' | 'none-relevant' | 'graph-only' | 'routing-failed' | 'disabled' | 'empty-scope' | 'no-query',
 ): void {
     getEventBus().emit('step:tools-chosen', {
         conversationId,
@@ -386,6 +403,9 @@ function memoryEmptyLabel(reason?: string): string {
         case 'none-relevant': return 'No relevant memories'
         case 'graph-only': return 'Memory graph matched'
         case 'routing-failed': return 'Memory routing skipped'
+        case 'disabled': return 'Auto memory disabled'
+        case 'empty-scope': return 'No memory folders selected'
+        case 'no-query': return 'No memory query'
         default: return 'No memories selected'
     }
 }
@@ -400,6 +420,12 @@ function memoryEmptyContent(reason?: string): string {
             return 'Auto memory found related graph context, but no permanent memory snippets matched.'
         case 'routing-failed':
             return 'Auto memory routing failed; the turn continued without injected memory.'
+        case 'disabled':
+            return 'Auto memory is disabled for this turn.'
+        case 'empty-scope':
+            return 'Auto memory did not run because no memory folders are selected for this turn.'
+        case 'no-query':
+            return 'Auto memory did not run because there was no text query to search with.'
         default:
             return 'Auto memory did not select any snippets for this turn.'
     }
