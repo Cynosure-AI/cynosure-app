@@ -1,7 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../api/client'
-import type { ExecutionStepRecord, OrchestrationState } from '../api/types'
+import type { ExecutionStepRecord, PlanningState } from '../api/types'
 
 export interface ToolNamespace {
   id: string
@@ -61,7 +61,7 @@ export const useAgentStore = defineStore('agent', () => {
   /** The first pending HITL request for the currently viewed conversation. */
   const pendingHITL = computed<HITLRequest | null>(() => activeHITLQueue.value[0] ?? null)
   const executionSteps = ref<ExecutionStep[]>([])
-  const orchestrationState = ref<OrchestrationState | null>(null)
+  const planningState = ref<PlanningState | null>(null)
   const toolApprovals = ref<Record<string, boolean>>({})
 
   const availableTools = ref<ToolInfo[]>([])
@@ -73,7 +73,7 @@ export const useAgentStore = defineStore('agent', () => {
   /** The conversation the user is currently viewing — used to filter live events. */
   const activeViewConversationId = ref<string | null>(null)
   const stepsPerConversation = new Map<string, ExecutionStep[]>()
-  const orchestrationPerConversation = new Map<string, OrchestrationState | null>()
+  const planningPerConversation = new Map<string, PlanningState | null>()
 
   /** Set of conversation IDs currently blocking on a HITL tool-approval request. */
   const awaitingHITLConvIds = ref<Set<string>>(new Set())
@@ -88,15 +88,15 @@ export const useAgentStore = defineStore('agent', () => {
       if (oldest !== undefined) stepsPerConversation.delete(oldest)
       else break
     }
-    while (orchestrationPerConversation.size > MAX_CACHED_CONVERSATIONS) {
-      const oldest = orchestrationPerConversation.keys().next().value
-      if (oldest !== undefined) orchestrationPerConversation.delete(oldest)
+    while (planningPerConversation.size > MAX_CACHED_CONVERSATIONS) {
+      const oldest = planningPerConversation.keys().next().value
+      if (oldest !== undefined) planningPerConversation.delete(oldest)
       else break
     }
   }
 
   const hasSteps = computed(() => executionSteps.value.length > 0)
-  const hasOrchestrationTasks = computed(() => Boolean(orchestrationState.value?.items.length))
+  const hasPlanningTasks = computed(() => Boolean(planningState.value?.items.length))
   const activeConversationIsExecuting = computed(() => {
     const conversationId = activeViewConversationId.value
     return Boolean(conversationId && executingConversationIds.value.has(conversationId))
@@ -387,19 +387,19 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  function handleOrchestrationStateUpdated(data: unknown): void {
-    const state = data as OrchestrationState | null
+  function handlePlanningStateUpdated(data: unknown): void {
+    const state = data as PlanningState | null
     if (!state?.conversationId) return
-    orchestrationPerConversation.set(state.conversationId, state)
+    planningPerConversation.set(state.conversationId, state)
     pruneConversationCache()
     if (activeViewConversationId.value === state.conversationId) {
-      orchestrationState.value = state
+      planningState.value = state
     }
   }
 
   function clearExecution(): void {
     executionSteps.value = []
-    orchestrationState.value = null
+    planningState.value = null
     isExecuting.value = false
     activeTaskId.value = null
     executionConversationId.value = null
@@ -411,13 +411,13 @@ export const useAgentStore = defineStore('agent', () => {
     activeViewConversationId.value = conversationId
     if (!conversationId) {
       executionSteps.value = []
-      orchestrationState.value = null
+      planningState.value = null
       isExecuting.value = false
       activeTaskId.value = null
       return
     }
     executionSteps.value = [...(stepsPerConversation.get(conversationId) || [])]
-    orchestrationState.value = orchestrationPerConversation.get(conversationId) ?? null
+    planningState.value = planningPerConversation.get(conversationId) ?? null
     isExecuting.value = executingConversationIds.value.has(conversationId)
   }
 
@@ -430,8 +430,8 @@ export const useAgentStore = defineStore('agent', () => {
     executionConversationId.value = null
   }
 
-  function clearOrchestrationState(): void {
-    orchestrationState.value = null
+  function clearPlanningState(): void {
+    planningState.value = null
   }
 
   function setConversationExecutionState(conversationId: string, executing: boolean, taskId?: string | null): void {
@@ -462,10 +462,10 @@ export const useAgentStore = defineStore('agent', () => {
 
   async function restoreForConversation(conversationId: string): Promise<void> {
     const savedSteps = stepsPerConversation.get(conversationId)
-    if (orchestrationPerConversation.has(conversationId)) {
-      orchestrationState.value = orchestrationPerConversation.get(conversationId) ?? null
+    if (planningPerConversation.has(conversationId)) {
+      planningState.value = planningPerConversation.get(conversationId) ?? null
     } else {
-      orchestrationState.value = null
+      planningState.value = null
     }
 
     if (savedSteps?.length) {
@@ -484,7 +484,7 @@ export const useAgentStore = defineStore('agent', () => {
       await loadHITLFromApi(conversationId)
     }
 
-    await loadOrchestrationStateFromApi(conversationId)
+    await loadPlanningStateFromApi(conversationId)
   }
 
   async function loadHITLFromApi(conversationId: string): Promise<void> {
@@ -532,16 +532,16 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  async function loadOrchestrationStateFromApi(conversationId: string): Promise<void> {
+  async function loadPlanningStateFromApi(conversationId: string): Promise<void> {
     try {
-      const state = await api.chat.getOrchestrationState(conversationId)
-      orchestrationPerConversation.set(conversationId, state)
+      const state = await api.chat.getPlanningState(conversationId)
+      planningPerConversation.set(conversationId, state)
       if (activeViewConversationId.value === conversationId) {
-        orchestrationState.value = state
+        planningState.value = state
       }
       pruneConversationCache()
     } catch {
-      // API not available or no orchestration state — ignore
+      // API not available or no planning state — ignore
     }
   }
 
@@ -552,12 +552,12 @@ export const useAgentStore = defineStore('agent', () => {
     activeHITLQueue,
     pendingHITL,
     executionSteps,
-    orchestrationState,
+    planningState,
     toolApprovals,
     availableTools,
     selectedToolNames,
     hasSteps,
-    hasOrchestrationTasks,
+    hasPlanningTasks,
     activeConversationIsExecuting,
     loadToolApprovals,
     loadTools,
@@ -573,10 +573,10 @@ export const useAgentStore = defineStore('agent', () => {
     respondHITL,
     awaitingHITLConvIds,
     handleExecutionUpdate,
-    handleOrchestrationStateUpdated,
+    handlePlanningStateUpdated,
     clearExecution,
     clearExecutionState,
-    clearOrchestrationState,
+    clearPlanningState,
     setConversationExecutionState,
     isConversationExecuting,
     restoreForConversation,

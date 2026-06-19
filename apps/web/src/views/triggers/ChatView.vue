@@ -3,7 +3,7 @@ import ChatSidebar from '../../components/layout/ChatSidebar.vue'
 import ChatHeaderBar from '../../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import InputBar from '../../components/chat/InputBar.vue'
-import OrchestratorTaskList from '../../components/chat/OrchestratorTaskList.vue'
+import PlanningTaskList from '../../components/chat/PlanningTaskList.vue'
 import { onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatSidebar } from '../../composables/useSidebar'
@@ -138,7 +138,7 @@ watch(
           </div>
         </div>
 
-        <OrchestratorTaskList />
+        <PlanningTaskList />
 
         <!-- Input bar (full width of chat column) -->
         <InputBar ref="inputBarRef" />

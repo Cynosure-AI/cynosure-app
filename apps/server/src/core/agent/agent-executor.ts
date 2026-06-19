@@ -6,9 +6,9 @@ import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy }
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
-import { isOrchestrationToolName } from '../tools/builtin/orchestration-tools.js'
+import { isPlanningToolName } from '../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
-import { reconcileOrchestrationAfterToolBatch } from './orchestration-state.js'
+import { reconcilePlanningAfterToolBatch } from './planning-state.js'
 
 /** Maximum tool-use rounds for the main (orchestrator) agent per request. */
 export const MAIN_AGENT_MAX_ROUNDS = 50
@@ -73,8 +73,8 @@ export interface AgentExecutorConfig {
     contextStrategy?: ContextStrategy
     /** Mutable set populated with tool names invoked during this execution turn. */
     usedToolNames?: Set<string>
-    /** Durable orchestration run for the top-level chat executor. */
-    orchestrationRunId?: string
+    /** Durable planning run for the top-level chat executor. */
+    planningRunId?: string
     /** True only for the top-level chat executor that owns conversation-level progress persistence. */
     isPrimaryExecutor?: boolean
 }
@@ -235,7 +235,7 @@ export class AgentExecutor {
                 if (this.config.signal?.aborted) break
                 toolRounds = round + 1
                 const visibleToolCalls = pendingToolCalls.filter((tc) => isVisibleExecutionTool(tc.function.name))
-                const hasOrchestrationUpdate = pendingToolCalls.some((tc) => isOrchestrationToolName(tc.function.name))
+                const hasPlanningUpdate = pendingToolCalls.some((tc) => isPlanningToolName(tc.function.name))
 
                 if (visibleToolCalls.length) {
                     this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'choosing-tools', message: 'Selecting tools...' })
@@ -289,8 +289,8 @@ export class AgentExecutor {
                         taskId, conversationId, iteration: round + 1,
                         results: visibleToolResults.map(tr => ({ name: tr.name, success: tr.success, output: tr.output, images: tr.images, imageDataUrls: tr.imageDataUrls }))
                     })
-                    if (!hasOrchestrationUpdate) {
-                        this.reconcileOrchestrationProgress(visibleToolResults)
+                    if (!hasPlanningUpdate) {
+                        this.reconcilePlanningProgress(visibleToolResults)
                     }
                 }
 
@@ -655,7 +655,7 @@ export class AgentExecutor {
         }
 
         for (const [index, toolCall] of toolCalls.entries()) {
-            if (isOrchestrationToolName(toolCall.function.name)) {
+            if (isPlanningToolName(toolCall.function.name)) {
                 results[index] = await this.executeSingleToolCall(toolCall)
             } else {
                 concurrentToolCalls.push({ index, toolCall })
@@ -752,12 +752,12 @@ export class AgentExecutor {
         }
     }
 
-    private reconcileOrchestrationProgress(results: ToolCallResult[]): void {
-        const runId = this.config.orchestrationRunId
+    private reconcilePlanningProgress(results: ToolCallResult[]): void {
+        const runId = this.config.planningRunId
         if (!runId || !this.config.isPrimaryExecutor) return
         const success = results.every((result) => result.success)
         const failed = results.find((result) => !result.success)
-        reconcileOrchestrationAfterToolBatch(runId, {
+        reconcilePlanningAfterToolBatch(runId, {
             success,
             note: success ? undefined : failed?.output,
         })

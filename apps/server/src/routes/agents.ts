@@ -16,7 +16,7 @@ import { getChannelManager } from '../core/channels/channel-manager.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
-import { makeOrchestrationTools } from '../core/tools/builtin/orchestration-tools.js'
+import { makePlanningTools } from '../core/tools/builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
 import { getDefaultMemorySpace } from '../core/memory/memory-space-scope.js'
@@ -185,7 +185,7 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
 
         const policyBuiltIns = includePolicyBuiltIns
             ? [
-                ...makeOrchestrationTools('').map((tool) => ({
+                ...makePlanningTools('').map((tool) => ({
                     key: `builtin::${tool.name}`,
                     name: tool.name,
                     executionName: tool.name,

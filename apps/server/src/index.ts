@@ -442,8 +442,8 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
     }
     return eventBus.on(eventName, listener)
   })
-  const removeOrchestrationStateListener = eventBus.on('orchestrator:state-updated', (data: unknown) => {
-    broadcast('orchestrator:state-updated', data)
+  const removePlanningStateListener = eventBus.on('planning:state-updated', (data: unknown) => {
+    broadcast('planning:state-updated', data)
   })
   const removeMemoryJobUpdatedListener = eventBus.on('memory:job-updated', (data: unknown) => {
     broadcast('memory:job-updated', data)
@@ -520,7 +520,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       for (const cleanup of executionListenerCleanups) {
         cleanup()
       }
-      removeOrchestrationStateListener()
+      removePlanningStateListener()
       removeMemoryJobUpdatedListener()
       for (const cleanup of stepPersistenceCleanups) {
         cleanup()

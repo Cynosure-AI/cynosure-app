@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
-import { getLatestOrchestrationState } from '../core/agent/orchestration-state.js'
+import { getLatestPlanningState } from '../core/agent/planning-state.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { nanoid } from 'nanoid'
 import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
@@ -513,9 +513,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }))
     })
 
-    // GET /api/chat/conversations/:id/orchestration-state — latest visible orchestration task list
-    app.get<{ Params: { id: string } }>('/conversations/:id/orchestration-state', async (req) => {
-        return getLatestOrchestrationState(req.params.id)
+    // GET /api/chat/conversations/:id/planning-state — latest visible planning task list
+    app.get<{ Params: { id: string } }>('/conversations/:id/planning-state', async (req) => {
+        return getLatestPlanningState(req.params.id)
     })
 
     // PATCH /api/chat/conversations/:id/pin — toggle pinned state

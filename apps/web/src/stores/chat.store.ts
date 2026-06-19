@@ -448,7 +448,7 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
     agentStore.setActiveViewConversation(null)
     agentStore.clearExecutionState()
-    agentStore.clearOrchestrationState()
+    agentStore.clearPlanningState()
     resetStreaming()
   }
 

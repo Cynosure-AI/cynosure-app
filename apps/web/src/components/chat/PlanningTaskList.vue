@@ -2,18 +2,18 @@
 import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAgentStore } from '../../stores/agent-runtime.store'
-import type { OrchestrationTaskItem, OrchestrationTaskStatus } from '../../api/types'
+import type { PlanningTaskItem, PlanningTaskStatus } from '../../api/types'
 
 const agentStore = useAgentStore()
 const collapsed = ref(false)
 
-const state = computed(() => agentStore.orchestrationState)
+const state = computed(() => agentStore.planningState)
 const shouldShow = computed(() => Boolean(state.value?.items.length))
 const completedCount = computed(() => state.value?.items.filter((item) => item.status === 'completed').length ?? 0)
 const totalCount = computed(() => state.value?.items.length ?? 0)
 const activeTask = computed(() => state.value?.items.find((item) => item.status === 'in_progress') ?? null)
 
-const statusMeta: Record<OrchestrationTaskStatus, { icon: string; cls: string }> = {
+const statusMeta: Record<PlanningTaskStatus, { icon: string; cls: string }> = {
   pending: { icon: 'lucide:circle', cls: 'text-theme-500' },
   in_progress: { icon: 'svg-spinners:ring-resize', cls: 'text-accent-400' },
   completed: { icon: 'lucide:check-circle-2', cls: 'text-emerald-400' },
@@ -21,7 +21,7 @@ const statusMeta: Record<OrchestrationTaskStatus, { icon: string; cls: string }>
   cancelled: { icon: 'lucide:circle-x', cls: 'text-theme-500' },
 }
 
-function itemClass(item: OrchestrationTaskItem): string {
+function itemClass(item: PlanningTaskItem): string {
   if (item.status === 'completed') return 'text-theme-400'
   if (item.status === 'blocked') return 'text-amber-200'
   if (item.status === 'cancelled') return 'text-theme-500'

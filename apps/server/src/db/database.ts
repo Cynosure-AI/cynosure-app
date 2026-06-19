@@ -375,7 +375,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('messages', 'video_urls_json', 'TEXT')
   db.prepare("UPDATE mcp_servers SET original_name = name WHERE original_name IS NULL OR original_name = ''").run()
 
-  // Tasks table: reused for durable top-level orchestrator state.
+  // Tasks table: reused for durable top-level planning state.
   addColumnIfMissing('tasks', 'updated_at', 'INTEGER')
   db.prepare('UPDATE tasks SET updated_at = created_at WHERE updated_at IS NULL').run()
 

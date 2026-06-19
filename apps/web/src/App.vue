@@ -132,8 +132,8 @@ onMounted(async () => {
     api.agent.onExecutionUpdate((data) => {
       if (isExecutionUpdatePayload(data)) agentStore.handleExecutionUpdate(data)
     }),
-    api.agent.onOrchestrationStateUpdated((data) => {
-      agentStore.handleOrchestrationStateUpdated(data)
+    api.agent.onPlanningStateUpdated((data) => {
+      agentStore.handlePlanningStateUpdated(data)
     }),
     api.mcp.onAuthNeeded(handleMcpAuth),
     api.mcp.onAuthComplete(handleMcpAuthComplete),

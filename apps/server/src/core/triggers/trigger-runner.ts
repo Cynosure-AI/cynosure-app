@@ -4,7 +4,7 @@ import { getGateway } from '../gateway/gateway.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { AgentExecutor, type AgentExecutorResult } from '../agent/agent-executor.js'
 import { planExecution } from '../agent/pre-execution/execution-planner.js'
-import { closeOrchestrationRun } from '../agent/orchestration-state.js'
+import { closePlanningRun } from '../agent/planning-state.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import type { AgentData } from '../agents/agent-store.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
@@ -121,15 +121,15 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         agentName: agent.name,
         agentIconUrl: agent.iconUrl || null,
         signal,
-        orchestrationRunId: planned.orchestrationRunId,
+        planningRunId: planned.planningRunId,
     })
 
     const startMs = Date.now()
 
     try {
         const result = await executor.run(messages)
-        if (planned.orchestrationRunId) {
-            closeOrchestrationRun(planned.orchestrationRunId, 'completed', { summary: result.content.slice(0, 500) })
+        if (planned.planningRunId) {
+            closePlanningRun(planned.planningRunId, 'completed', { summary: result.content.slice(0, 500) })
         }
 
         // Save assistant message
@@ -143,9 +143,9 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
 
         return { conversationId, result }
     } catch (err) {
-        if (planned.orchestrationRunId) {
-            closeOrchestrationRun(
-                planned.orchestrationRunId,
+        if (planned.planningRunId) {
+            closePlanningRun(
+                planned.planningRunId,
                 (err as Error).name === 'AbortError' ? 'cancelled' : 'error',
                 { error: (err as Error).name === 'AbortError' ? 'Cancelled' : (err as Error).message }
             )

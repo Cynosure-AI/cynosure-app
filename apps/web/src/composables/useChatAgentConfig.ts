@@ -384,7 +384,7 @@ export function useChatAgentConfig(
         messages.value = []
         agentStore.setActiveViewConversation(null)
         agentStore.clearExecutionState()
-        agentStore.clearOrchestrationState()
+        agentStore.clearPlanningState()
         await loadConversations()
     }
 
