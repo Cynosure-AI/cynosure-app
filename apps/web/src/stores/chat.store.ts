@@ -45,6 +45,7 @@ export interface DisplayMessage {
   createdAt: number
   isStreaming?: boolean
   isError?: boolean
+  streamId?: string
   /** Set when this message is a compact event marker */
   compactEventData?: { summary: string; compactedMessageCount: number; model: string; createdAt: number }
 }
@@ -263,6 +264,7 @@ export const useChatStore = defineStore('chat', () => {
           id: `streaming_${Date.now()}`,
           role: 'assistant',
           content: buf.content,
+          streamId: buf.streamId,
           thinking: buf.thinking || undefined,
           imageDataUrls: buf.images.length ? buf.images : undefined,
           videoDataUrls: buf.videos.length ? buf.videos : undefined,

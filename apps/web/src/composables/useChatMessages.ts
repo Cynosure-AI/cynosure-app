@@ -186,21 +186,23 @@ export function useChatMessages(
             api.chat.cancelStream(id || '', convId || undefined)
         }
 
-        streaming.isStreaming.value = false
-        streaming.currentStreamId.value = null
-        streaming.primaryStreamId.value = null
-        streaming.primaryStreamAgent.value = {}
-        const streamMsg = streaming.findStreamingMsg()
-        if (streamMsg) {
-            streamMsg.isStreaming = false
-            if (!streamMsg.content && !streamMsg.thinking) {
-                messages.value.pop()
-            }
-        }
-        streaming.streamingContent.value = ''
-        streaming.streamingThinking.value = ''
         if (convId) {
-            streaming.streamBuffers.delete(convId)
+            streaming.clearConversationStreamState(convId)
+        } else {
+            streaming.isStreaming.value = false
+            streaming.currentStreamId.value = null
+            streaming.primaryStreamId.value = null
+            streaming.primaryStreamAgent.value = {}
+            const streamMsg = streaming.findStreamingMsg(id || undefined)
+            if (streamMsg) {
+                streamMsg.isStreaming = false
+                if (!streamMsg.content && !streamMsg.thinking) {
+                    const idx = messages.value.indexOf(streamMsg)
+                    if (idx !== -1) messages.value.splice(idx, 1)
+                }
+            }
+            streaming.streamingContent.value = ''
+            streaming.streamingThinking.value = ''
         }
         if (convId) {
             agentStore.setConversationExecutionState(convId, false)
