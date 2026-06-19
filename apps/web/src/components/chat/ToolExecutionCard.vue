@@ -91,6 +91,11 @@ function isContextGatheringCall(call: { arguments: string }): boolean {
   return parsed?.type === 'memory' || parsed?.type === 'tool-router'
 }
 
+function isDisabledContextCall(call: { arguments: string }): boolean {
+  const parsed = parseToolCallArgs(call.arguments)
+  return isContextGatheringCall(call) && parsed?.emptyReason === 'disabled'
+}
+
 function isSubAgentSpawnCall(name: string): boolean {
   return name === 'spawn_subagent'
 }
@@ -234,7 +239,7 @@ const isRoutingStatus = computed(() => isTaskContext.value || isAttachmentIndexi
 /** All tool names from this iteration */
 const toolNames = computed(() => {
   for (const step of [...props.steps].reverse()) {
-    if (step.toolCalls?.length) return step.toolCalls.map(tc => tc.name)
+    if (step.toolCalls?.length) return visibleToolCalls(step.toolCalls).map(tc => tc.name)
   }
   return []
 })
@@ -263,14 +268,14 @@ const rawToolCallArgs = computed(() => {
 })
 
 const toolCallArgs = computed(() => prefs.showInternalToolCalls
-  ? rawToolCallArgs.value
-  : rawToolCallArgs.value.filter((call) => isTaskContextCall(call) || !isInternalToolName(call.name))
+  ? rawToolCallArgs.value.filter((call) => !isDisabledContextCall(call))
+  : rawToolCallArgs.value.filter((call) => !isDisabledContextCall(call) && (isTaskContextCall(call) || !isInternalToolName(call.name)))
 )
 
 function visibleToolCalls(calls: ToolCall[]): ToolCall[] {
   return prefs.showInternalToolCalls
-    ? calls
-    : calls.filter((call) => isTaskContextCall(call) || !isInternalToolName(call.name))
+    ? calls.filter((call) => !isDisabledContextCall(call))
+    : calls.filter((call) => !isDisabledContextCall(call) && (isTaskContextCall(call) || !isInternalToolName(call.name)))
 }
 
 function buildExecutions(calls: ToolCall[], availableResults: ToolResult[] = []): Array<{ call: ToolCall | null; result?: ToolResult }> {
