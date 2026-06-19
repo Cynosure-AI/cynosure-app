@@ -11,7 +11,6 @@ import { getChannelManager } from '../core/channels/channel-manager.js'
 import { writeFileSync } from 'fs'
 import { getConversationArtifactsDir } from '../core/artifacts/image-artifacts.js'
 import { getRAGStore } from '../core/memory/rag.js'
-import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getMemoryParser } from '../core/memory/parser.js'
 import { getEmbeddingProvider } from '../core/memory/embedding.js'
 import { basename, join } from 'path'
@@ -22,6 +21,7 @@ import {
 } from 'fs'
 import type { LLMProviderConfig } from '../core/gateway/providers/base.provider.js'
 import { ensureFolder, listFilesInFolder } from '../core/memory/memory-file-manager.js'
+import { folderPathForRelative, relativePathForFolder, validateRelativePath } from '../core/memory/memory-space-folders.js'
 import { stopAllMemorySpaceWatchers, watchMemorySpace } from '../core/memory/memory-space-watcher.js'
 import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
@@ -41,6 +41,17 @@ interface MemoryFileBackup {
     spaceId: string
     fileName: string
     archiveName: string
+}
+
+interface MemorySpaceBackupRow extends Record<string, unknown> {
+    id?: unknown
+    name?: unknown
+    folder_path?: unknown
+    relative_path?: unknown
+    relativePath?: unknown
+    is_default?: unknown
+    sort_order?: unknown
+    created_at?: unknown
 }
 
 interface EntityGraphBackup {
@@ -133,6 +144,34 @@ function getEntityGraphBackup(zip: AdmZip): EntityGraphBackup | null {
         nodes: nodesEntry ? JSON.parse(nodesEntry.getData().toString('utf-8')) as Record<string, unknown>[] : [],
         edges: edgesEntry ? JSON.parse(edgesEntry.getData().toString('utf-8')) as Record<string, unknown>[] : []
     }
+}
+
+function normalizeBackupRelativePath(value: string): string {
+    let next = value
+    while (next.startsWith('folder:')) next = next.slice('folder:'.length)
+    return validateRelativePath(next)
+}
+
+function relativePathFromBackupSpace(space: MemorySpaceBackupRow): string {
+    const explicit = typeof space.relative_path === 'string'
+        ? space.relative_path
+        : typeof space.relativePath === 'string'
+            ? space.relativePath
+            : ''
+    if (explicit) return normalizeBackupRelativePath(explicit)
+
+    const id = typeof space.id === 'string' ? space.id : ''
+    if (id.startsWith('folder:')) {
+        const fromId = id.slice('folder:'.length)
+        if (fromId) return normalizeBackupRelativePath(fromId)
+    }
+
+    const name = typeof space.name === 'string' ? space.name : ''
+    return validateRelativePath(name || id || 'Imported')
+}
+
+function portableRelativePathForFolder(folderPath: string): string {
+    return normalizeBackupRelativePath(relativePathForFolder(folderPath))
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -244,7 +283,15 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             // --- Memory spaces ---
             if (requested.includes('memory')) {
                 const db = getDb()
-                const spaces = db.prepare('SELECT * FROM memory_spaces ORDER BY created_at').all() as Record<string, unknown>[]
+                const spaces: MemorySpaceBackupRow[] = (db.prepare('SELECT * FROM memory_spaces ORDER BY created_at').all() as MemorySpaceBackupRow[])
+                    .map((space) => {
+                        const folderPath = typeof space.folder_path === 'string' ? space.folder_path : ''
+                        const isDefault = space.is_default === 1 || space.is_default === true
+                        return {
+                            ...space,
+                            relative_path: isDefault || !folderPath ? '' : portableRelativePathForFolder(folderPath),
+                        }
+                    })
                 const assignments = db.prepare('SELECT * FROM agent_memory_spaces').all()
                 const files: MemoryFileBackup[] = []
 
@@ -620,7 +667,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             results.settings = res
 
             // Reload embedding provider & parser config from freshly restored settings
-            // so that memory ingestion below uses the correct embedding endpoint.
+            // so subsequent user-triggered indexing uses the restored configuration.
             getEmbeddingProvider().loadFromDb()
             getMemoryParser().refreshConfig()
         }
@@ -696,7 +743,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 const spaceIdMap = new Map<string, string>()
                 if (spacesEntry) {
                     const { spaces, assignments } = JSON.parse(spacesEntry.getData().toString('utf-8')) as {
-                        spaces: Record<string, unknown>[]
+                        spaces: MemorySpaceBackupRow[]
                         assignments: Record<string, unknown>[]
                     }
                     for (const sp of spaces) {
@@ -705,7 +752,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                         const isDefault = sp.is_default === 1 || sp.is_default === true || importedId === 'default'
                         const id = isDefault ? 'default' : importedId
                         spaceIdMap.set(importedId, id)
-                        const folderPath = id === 'default' ? getDefaultMemorySpaceDir() : join(memoryRoot, id)
+                        const folderPath = id === 'default' ? getDefaultMemorySpaceDir() : folderPathForRelative(relativePathFromBackupSpace(sp))
                         ensureFolder(folderPath)
                         db.prepare(`
                             INSERT OR REPLACE INTO memory_spaces
@@ -731,12 +778,12 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                     ensureDefaultMemorySpace(db)
                 }
 
-                // Restore source files first. Files are the source of truth for
-                // file-backed memory; LanceDB is rebuilt from them.
+                // Restore source files only. Files are the source of truth for
+                // file-backed memory; vectors should be rebuilt on the target
+                // machine by re-indexing with its local embedding configuration.
                 const filesEntry = zip.getEntry('memory/files.json')
                 if (filesEntry) {
                     const { files } = JSON.parse(filesEntry.getData().toString('utf-8')) as { files: MemoryFileBackup[] }
-                    const mem = getAgentMemory()
                     for (const file of files || []) {
                         try {
                             const safeFileName = basename(file.fileName)
@@ -754,7 +801,6 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
 
                             ensureFolder(space.folder_path)
                             writeFileSync(join(space.folder_path, safeFileName), entry.getData())
-                            await mem.reindexFile(space.folder_path, safeFileName, targetSpaceId)
                             res.restored++
                         } catch (e) {
                             res.errors.push(`File "${file.fileName}": ${(e as Error).message}`)

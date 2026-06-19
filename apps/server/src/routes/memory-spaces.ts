@@ -110,7 +110,7 @@ function rowToData(row: MemorySpaceRow, fileCount: number): MemorySpaceData {
 function loadSpaceRow(id: string): MemorySpaceRow | undefined {
     const db = getDb()
     syncMemorySpacesFromFolders(db)
-    return db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(id) as MemorySpaceRow | undefined
+    return db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(decodeSpaceIdParam(id)) as MemorySpaceRow | undefined
 }
 
 function validateEditableFileName(fileName: string): string {
@@ -123,6 +123,14 @@ function validateEditableFileName(fileName: string): string {
         throw new Error('Only plain-text memory files can be edited')
     }
     return cleanName
+}
+
+function decodeSpaceIdParam(id: string): string {
+    try {
+        return decodeURIComponent(id)
+    } catch {
+        return id
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +212,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     app.put<{ Params: { id: string }; Body: { name?: string; description?: string; relativePath?: string } }>('/:id', async (req, reply) => {
         const db = getDb()
         syncMemorySpacesFromFolders(db)
-        const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
+        const spaceId = decodeSpaceIdParam(req.params.id)
+        const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(spaceId) as MemorySpaceRow | undefined
         if (!row) return reply.status(404).send({ error: 'Space not found' })
 
         const name = req.body.name?.trim() || row.name
@@ -258,7 +267,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     app.delete<{ Params: { id: string } }>('/:id', async (req, reply) => {
         const db = getDb()
         syncMemorySpacesFromFolders(db)
-        const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
+        const spaceId = decodeSpaceIdParam(req.params.id)
+        const row = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(spaceId) as MemorySpaceRow | undefined
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         if (row.is_default) {
             return reply.status(400).send({ error: 'Cannot delete the default memory folder.' })
@@ -551,7 +561,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     app.get<{ Params: { id: string } }>('/:id/groups', async (req, reply) => {
         const db = getDb()
         syncMemorySpacesFromFolders(db)
-        const row = db.prepare('SELECT id FROM memory_spaces WHERE id = ?').get(req.params.id) as { id: string } | undefined
+        const spaceId = decodeSpaceIdParam(req.params.id)
+        const row = db.prepare('SELECT id FROM memory_spaces WHERE id = ?').get(spaceId) as { id: string } | undefined
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         const mem = getAgentMemory()
         return mem.listSourceFiles(row.id)
@@ -561,7 +572,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     app.get<{ Params: { id: string }; Querystring: { sourceFile?: string } }>('/:id/entries', async (req, reply) => {
         const db = getDb()
         syncMemorySpacesFromFolders(db)
-        const row = db.prepare('SELECT id FROM memory_spaces WHERE id = ?').get(req.params.id) as { id: string } | undefined
+        const spaceId = decodeSpaceIdParam(req.params.id)
+        const row = db.prepare('SELECT id FROM memory_spaces WHERE id = ?').get(spaceId) as { id: string } | undefined
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         const rag = getRAGStore()
         let filter = lanceDbEqFilter('spaceId', row.id)
@@ -597,7 +609,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     app.post<{ Params: { id: string }; Body: { sourceFiles: string[]; targetSpaceId: string } }>('/:id/move-groups', async (req, reply) => {
         const db = getDb()
         syncMemorySpacesFromFolders(db)
-        const source = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(req.params.id) as MemorySpaceRow | undefined
+        const spaceId = decodeSpaceIdParam(req.params.id)
+        const source = db.prepare('SELECT * FROM memory_spaces WHERE id = ?').get(spaceId) as MemorySpaceRow | undefined
         if (!source) return reply.status(404).send({ error: 'Source space not found' })
         const { sourceFiles, targetSpaceId } = req.body
         if (!sourceFiles?.length) return reply.status(400).send({ error: 'No sourceFiles provided' })
