@@ -59,7 +59,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
 
     // Notify caller of the conversationId before execution starts
     onConversationCreated?.(conversationId)
-    const memorySpaces = getAssignedOrDefaultSpaces(agent.id).map((space) => ({ id: space.id, name: space.name }))
+    const memorySpaces = getAssignedOrDefaultSpaces(agent.id)
 
     const planned = await planExecution({
         resolvedAgent: agent,

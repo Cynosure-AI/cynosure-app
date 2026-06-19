@@ -102,7 +102,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 includeSubAgents: false,
                 userQuery: userMessage,
                 autoMemory: agentData.autoMemory === true,
-                memorySpaceOverrides: getAssignedOrDefaultSpaces(agentData.id).map((space) => ({ id: space.id, name: space.name })),
+                memorySpaceOverrides: getAssignedOrDefaultSpaces(agentData.id),
                 eventMeta,
             })
             const gateway = getGateway()

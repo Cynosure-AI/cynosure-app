@@ -1,8 +1,9 @@
 import { applyAutoMemoryRouting } from './auto-memory-routing.js'
 import type { ExecutionPreset } from '../execution-preset.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
+import type { MemorySpaceRef } from '../../memory/memory-space-scope.js'
 
-export type ExecutionMemorySpaceRef = { id: string; name: string }
+export type ExecutionMemorySpaceRef = MemorySpaceRef
 
 export interface ResolveMemoryContextInput {
     preset: ExecutionPreset
