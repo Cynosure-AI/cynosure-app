@@ -88,20 +88,44 @@ onUnmounted(() => {
 
 function formatTimeAgo(ts: number): string {
   const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60_000);
+  const future = diff < 0;
+  const absDiff = Math.abs(diff);
+  const mins = Math.floor(absDiff / 60_000);
   if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return future ? `in ${mins}m` : `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return future ? `in ${hrs}h` : `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return future ? `in ${days}d` : `${days}d ago`;
+}
+
+function notificationTime(notif: { scheduledAt: number | null; deliveredAt: number | null; createdAt: number }): number {
+  return notif.scheduledAt ?? notif.deliveredAt ?? notif.createdAt;
+}
+
+function isScheduledNotification(notif: { scheduledAt: number | null; deliveredAt: number | null }): boolean {
+  return notif.scheduledAt !== null && notif.deliveredAt === null;
+}
+
+function notificationPriorityIcon(priority: string): string {
+  switch (priority) {
+    case "alert":
+      return "lucide:alert-triangle";
+    case "action":
+      return "lucide:circle-alert";
+    default:
+      return "lucide:info";
+  }
 }
 
 async function navigateToNotification(notif: {
   id: string;
   agentId: string;
   conversationId: string | null;
+  scheduledAt: number | null;
+  deliveredAt: number | null;
 }) {
+  if (isScheduledNotification(notif)) return;
   notificationStore.markRead(notif.id);
   showNotifications.value = false;
   closeSidebar();
@@ -224,9 +248,9 @@ const chatRoute = computed(() =>
                     Mark all read
                   </button>
                   <button
-                    v-if="notificationStore.notifications.length > 0"
+                    v-if="notificationStore.deliveredNotifications.length > 0"
                     class="text-[10px] text-theme-500 hover:text-theme-300 transition-colors px-1.5 py-0.5"
-                    @click.stop="notificationStore.removeAll()"
+                    @click.stop="notificationStore.removeDelivered()"
                   >
                     Clear all
                   </button>
@@ -236,13 +260,13 @@ const chatRoute = computed(() =>
               <!-- Notifications list -->
               <div class="max-h-72 overflow-y-auto">
                 <div
-                  v-if="notificationStore.notifications.length === 0"
+                  v-if="notificationStore.deliveredNotifications.length === 0"
                   class="px-3 py-6 text-center text-xs text-theme-500"
                 >
                   No notifications yet
                 </div>
                 <div
-                  v-for="notif in notificationStore.notifications"
+                  v-for="notif in notificationStore.deliveredNotifications"
                   :key="notif.id"
                   role="button"
                   tabindex="0"
@@ -250,20 +274,15 @@ const chatRoute = computed(() =>
                   :class="{ 'bg-theme-800/30': !notif.read }"
                   @click="navigateToNotification(notif)"
                 >
-                  <!-- Severity indicator -->
+                  <!-- Priority indicator -->
                   <div class="mt-1 shrink-0">
                     <Icon
-                      :icon="notif.severity === 'critical'
-                        ? 'lucide:alert-triangle'
-                        : notif.severity === 'warning'
-                          ? 'lucide:alert-circle'
-                          : 'lucide:info'
-                      "
+                      :icon="notificationPriorityIcon(notif.priority)"
                       class="w-3.5 h-3.5"
                       :class="{
-                        'text-red-400': notif.severity === 'critical',
-                        'text-amber-400': notif.severity === 'warning',
-                        'text-accent-400': notif.severity === 'info',
+                        'text-red-400': notif.priority === 'alert',
+                        'text-amber-400': notif.priority === 'action',
+                        'text-accent-400': notif.priority === 'notice',
                       }"
                     />
                   </div>
@@ -284,7 +303,7 @@ const chatRoute = computed(() =>
                       </span>
                       <span class="text-[10px] text-theme-600">·</span>
                       <span class="text-[10px] text-theme-600">{{
-                        formatTimeAgo(notif.createdAt)
+                        formatTimeAgo(notificationTime(notif))
                       }}</span>
                     </div>
                   </div>

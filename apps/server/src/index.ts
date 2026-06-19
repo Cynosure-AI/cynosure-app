@@ -43,6 +43,7 @@ import { getEmbeddingProvider } from './core/memory/embedding.js'
 import { startCronScheduler, stopCronScheduler } from './core/triggers/cron-scheduler.js'
 import { registerBuiltInTools } from './core/tools/built-in-tools.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
+import { schedulePendingNotifications } from './core/notifications/app-notifications.js'
 
 const APP_NAME = 'cynosure-server'
 const APP_VERSION = process.env.CYNOSURE_VERSION || '1.0.0'
@@ -498,6 +499,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   channelManager.setBroadcast(broadcast)
   await channelManager.loadAll()
 
+  schedulePendingNotifications(broadcast)
   startCronScheduler(broadcast)
 
   await app.listen({ port: options.port, host: options.host || '0.0.0.0' })

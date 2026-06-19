@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useNotificationStore } from "../stores/notification.store";
 import { useAgentDefinitionsStore } from "../stores/agent-definitions.store";
@@ -11,23 +11,24 @@ const notificationStore = useNotificationStore();
 const agentDefs = useAgentDefinitionsStore();
 const chatStore = useChatStore();
 
+const reminders = computed(() =>
+  [...notificationStore.reminderNotifications].sort((a, b) => notificationTime(a) - notificationTime(b)),
+);
+
 onMounted(() => {
   if (!notificationStore.loaded) {
     notificationStore.load();
   }
 });
 
-function formatTimeAgo(ts: number): string {
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
+
+
+function notificationTime(n: (typeof notificationStore.notifications)[0]): number {
+  return n.scheduledAt ?? n.deliveredAt ?? n.createdAt;
+}
+
+function isScheduled(n: (typeof notificationStore.notifications)[0]): boolean {
+  return n.scheduledAt !== null && n.deliveredAt === null;
 }
 
 function formatDate(ts: number): string {
@@ -46,22 +47,23 @@ function formatTime(ts: number): string {
   });
 }
 
-/** Group notifications by calendar day (descending) */
+/** Group delivered notifications by calendar day (descending) */
 function groupedNotifications() {
   const groups: { label: string; items: typeof notificationStore.notifications }[] = [];
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
-  for (const n of notificationStore.notifications) {
-    const date = new Date(n.createdAt);
+  for (const n of notificationStore.deliveredNotifications) {
+    const time = notificationTime(n);
+    const date = new Date(time);
     let label: string;
     if (date.toDateString() === today.toDateString()) {
       label = "Today";
     } else if (date.toDateString() === yesterday.toDateString()) {
       label = "Yesterday";
     } else {
-      label = formatDate(n.createdAt);
+      label = formatDate(time);
     }
     const last = groups[groups.length - 1];
     if (last && last.label === label) {
@@ -74,6 +76,7 @@ function groupedNotifications() {
 }
 
 async function openNotification(n: (typeof notificationStore.notifications)[0]) {
+  if (isScheduled(n)) return;
   if (!n.read) {
     await notificationStore.markRead(n.id);
   }
@@ -86,25 +89,25 @@ async function openNotification(n: (typeof notificationStore.notifications)[0]) 
   }
 }
 
-function severityIcon(severity: string): string {
-  switch (severity) {
-    case "critical":
+function priorityIcon(priority: string): string {
+  switch (priority) {
+    case "alert":
       return "lucide:alert-triangle";
-    case "warning":
-      return "lucide:alert-circle";
+    case "action":
+      return "lucide:circle-alert";
     default:
       return "lucide:info";
   }
 }
 
-function severityClass(severity: string): string {
-  switch (severity) {
-    case "critical":
-      return "severity-critical";
-    case "warning":
-      return "severity-warning";
+function priorityClass(priority: string): string {
+  switch (priority) {
+    case "alert":
+      return "priority-alert";
+    case "action":
+      return "priority-action";
     default:
-      return "severity-info";
+      return "priority-notice";
   }
 }
 </script>
@@ -134,18 +137,77 @@ function severityClass(severity: string): string {
           Mark all read
         </button>
         <button
-          v-if="notificationStore.notifications.length > 0"
+          v-if="notificationStore.deliveredNotifications.length > 0"
           class="btn btn-ghost btn-sm text-theme-500 hover:text-red-400"
-          @click="notificationStore.removeAll()"
+          @click="notificationStore.removeDelivered()"
         >
           <Icon
             icon="lucide:trash-2"
             class="w-4 h-4"
           />
-          Clear all
+          Clear notifications
         </button>
       </div>
     </header>
+
+    <!-- Reminders -->
+    <section
+      v-if="reminders.length > 0"
+      class="reminders-section"
+    >
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">
+            Reminders
+          </h2>
+          <p class="section-subtitle">
+            Scheduled notifications waiting for their time.
+          </p>
+        </div>
+        <span class="section-count">{{ reminders.length }}</span>
+      </div>
+      <div class="reminder-list">
+        <div
+          v-for="n in reminders"
+          :key="n.id"
+          class="reminder-row"
+        >
+          <div class="reminder-icon">
+            <Icon
+              icon="lucide:calendar-clock"
+              class="w-4 h-4"
+            />
+          </div>
+          <div class="reminder-body">
+            <div class="reminder-header">
+              <span class="reminder-title">{{ n.title }}</span>
+              <span class="reminder-due">
+                {{ formatDate(notificationTime(n)) }} · {{ formatTime(notificationTime(n)) }}
+              </span>
+            </div>
+            <p class="reminder-desc">
+              {{ n.body }}
+            </p>
+            <div class="card-meta">
+              <span class="meta-agent">
+                <Icon
+                  icon="lucide:bot"
+                  class="w-3 h-3"
+                />
+                {{ agentDefs.get(n.agentId)?.name || "Agent" }}
+              </span>
+            </div>
+          </div>
+          <button
+            class="reminder-cancel"
+            title="Cancel reminder"
+            @click="notificationStore.remove(n.id)"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </section>
 
     <!-- Empty state -->
     <div
@@ -179,16 +241,16 @@ function severityClass(severity: string): string {
           v-for="n in group.items"
           :key="n.id"
           class="notification-card"
-          :class="[severityClass(n.severity), { unread: !n.read }]"
+          :class="[priorityClass(n.priority), { unread: !n.read && !isScheduled(n), scheduled: isScheduled(n) }]"
           role="button"
           tabindex="0"
           @click="openNotification(n)"
           @keydown.enter="openNotification(n)"
         >
           <div class="card-left">
-            <div class="severity-icon">
+            <div class="priority-icon">
               <Icon
-                :icon="severityIcon(n.severity)"
+                :icon="priorityIcon(n.priority)"
                 class="w-4 h-4"
               />
             </div>
@@ -197,9 +259,15 @@ function severityClass(severity: string): string {
             <div class="card-header">
               <span class="card-title">{{ n.title }}</span>
               <span
-                v-if="!n.read"
+                v-if="!n.read && !isScheduled(n)"
                 class="unread-dot"
               />
+              <span
+                v-if="isScheduled(n)"
+                class="scheduled-badge"
+              >
+                Scheduled
+              </span>
             </div>
             <p class="card-desc">
               {{ n.body }}
@@ -214,10 +282,10 @@ function severityClass(severity: string): string {
               </span>
               <span class="meta-time">
                 <Icon
-                  icon="lucide:clock"
+                  :icon="isScheduled(n) ? 'lucide:calendar-clock' : 'lucide:clock'"
                   class="w-3 h-3"
                 />
-                {{ formatTime(n.createdAt) }}
+                {{ isScheduled(n) ? `Due ${formatDate(notificationTime(n))} ${formatTime(notificationTime(n))}` : formatTime(notificationTime(n)) }}
               </span>
               <span
                 v-if="n.conversationId"
@@ -233,7 +301,7 @@ function severityClass(severity: string): string {
           </div>
           <button
             class="card-dismiss"
-            title="Dismiss"
+            :title="isScheduled(n) ? 'Cancel scheduled notification' : 'Dismiss'"
             @click.stop="notificationStore.remove(n.id)"
           >
             <Icon
@@ -347,6 +415,121 @@ function severityClass(severity: string): string {
   margin: 0;
 }
 
+/* ── Reminders ── */
+.reminders-section {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-theme-800, #27272a);
+}
+
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.section-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-theme-200, #e4e4e7);
+  margin: 0;
+}
+
+.section-subtitle {
+  font-size: 0.75rem;
+  color: var(--color-theme-500, #71717a);
+  margin: 0.125rem 0 0;
+}
+
+.section-count {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--color-theme-500, #71717a);
+  background: var(--color-theme-800, #27272a);
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+}
+
+.reminder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.reminder-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--color-theme-800, #27272a);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-theme-900, #18181b) 82%, transparent);
+}
+
+.reminder-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-theme-400, #a1a1aa);
+  background: var(--color-theme-800, #27272a);
+  flex-shrink: 0;
+}
+
+.reminder-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.reminder-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.reminder-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-theme-200, #e4e4e7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reminder-due {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  color: var(--color-theme-500, #71717a);
+}
+
+.reminder-desc {
+  font-size: 0.8125rem;
+  color: var(--color-theme-400, #a1a1aa);
+  margin: 0 0 0.5rem;
+  line-height: 1.4;
+}
+
+.reminder-cancel {
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--color-theme-500, #71717a);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  transition: all 150ms ease;
+}
+
+.reminder-cancel:hover {
+  background: var(--color-theme-800, #27272a);
+  color: var(--color-theme-200, #e4e4e7);
+}
+
 /* ── Group ── */
 .notification-group {
   margin-bottom: 1.5rem;
@@ -411,19 +594,24 @@ function severityClass(severity: string): string {
   background: var(--color-theme-900, #18181b);
 }
 
-.notification-card.severity-critical {
+.notification-card.priority-alert {
   border-left-color: var(--color-red-500, #ef4444);
 }
 
-.notification-card.severity-warning {
+.notification-card.priority-action {
   border-left-color: var(--color-amber-500, #f59e0b);
+}
+
+.notification-card.scheduled {
+  border-left-color: var(--color-theme-600, #52525b);
+  opacity: 0.86;
 }
 
 .card-left {
   flex-shrink: 0;
 }
 
-.severity-icon {
+.priority-icon {
   width: 2rem;
   height: 2rem;
   border-radius: 0.5rem;
@@ -433,19 +621,24 @@ function severityClass(severity: string): string {
   background: var(--color-theme-800, #27272a);
 }
 
-.severity-critical .severity-icon {
+.priority-alert .priority-icon {
   color: var(--color-red-400, #f87171);
   background: color-mix(in srgb, var(--color-red-500, #ef4444) 12%, transparent);
 }
 
-.severity-warning .severity-icon {
+.priority-action .priority-icon {
   color: var(--color-amber-400, #fbbf24);
   background: color-mix(in srgb, var(--color-amber-500, #f59e0b) 12%, transparent);
 }
 
-.severity-info .severity-icon {
+.priority-notice .priority-icon {
   color: var(--color-accent-400, #60a5fa);
   background: color-mix(in srgb, var(--color-accent-500, #3b82f6) 12%, transparent);
+}
+
+.scheduled .priority-icon {
+  color: var(--color-theme-400, #a1a1aa);
+  background: var(--color-theme-800, #27272a);
 }
 
 /* ── Body ── */
@@ -476,6 +669,18 @@ function severityClass(severity: string): string {
   border-radius: 50%;
   background: var(--color-accent-500, #3b82f6);
   flex-shrink: 0;
+}
+
+.scheduled-badge {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 0.125rem 0.4375rem;
+  background: var(--color-theme-800, #27272a);
+  color: var(--color-theme-400, #a1a1aa);
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .card-desc {
@@ -551,6 +756,12 @@ function severityClass(severity: string): string {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.75rem;
+  }
+
+  .reminder-row,
+  .reminder-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .notification-grid {

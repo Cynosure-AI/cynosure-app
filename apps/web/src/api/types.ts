@@ -244,9 +244,11 @@ export interface AppNotification {
     conversationId: string | null
     title: string
     body: string
-    severity: 'info' | 'warning' | 'critical'
+    priority: 'notice' | 'action' | 'alert'
     read: boolean
     createdAt: number
+    scheduledAt: number | null
+    deliveredAt: number | null
 }
 
 // ── Activity ────────────────────────────────────────────────────────────────
