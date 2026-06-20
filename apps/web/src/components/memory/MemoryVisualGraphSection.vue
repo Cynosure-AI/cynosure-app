@@ -103,6 +103,8 @@ const sidebarTitle = computed(() => {
   return `${formatCount(selectedGraphNodes.value.length)} entities selected`;
 });
 
+const isWalkView = computed(() => Boolean(props.graphQuery.trim()));
+
 const selectedMentionCount = computed(() =>
   selectedGraphNodes.value.reduce((total, node) => total + node.mentionCount, 0),
 );
@@ -277,7 +279,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           />
         </button>
         <button
-          v-if="graphQuery.trim() || graph?.seedNodes.length"
+          v-if="isWalkView"
           type="button"
           class="p-2 text-theme-500 hover:text-theme-200 transition-colors"
           title="Show full graph"
@@ -314,7 +316,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
 
     <template v-else-if="graph">
       <div
-        v-if="graph.seedNodes.length"
+        v-if="isWalkView && graph.seedNodes.length"
         class="mb-4 flex flex-wrap gap-2"
       >
         <span

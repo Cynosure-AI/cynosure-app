@@ -121,10 +121,12 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
         ...graph.listRelationships(limit)
       }
     }
+    const overview = graph.listTopNodeOverview(limit, minImportance)
     return {
       stats: graph.stats(),
-      seedNodes: [],
-      ...graph.list(limit, minImportance)
+      seedNodes: overview.seedNodes,
+      nodes: overview.nodes,
+      edges: overview.edges
     }
   })
 
