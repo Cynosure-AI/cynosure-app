@@ -790,6 +790,70 @@ export class EntityGraphStore {
     return { nodes: hydrateNodeOrigins(applyEffectiveNodeImportance(nodes.map(rowToNode), edges)), edges }
   }
 
+  listTopNodeOverview(limit = 80, minImportance: ImportanceLevel = 0): GraphWalkResult {
+    const db = getDb()
+    const maxRow = db.prepare(`
+      SELECT MAX(importance) AS importance
+      FROM entity_graph_nodes
+      WHERE importance >= ?
+    `).get(minImportance) as { importance: number | null } | undefined
+    const topImportance = maxRow?.importance
+    if (topImportance == null) return { seedNodes: [], nodes: [], edges: [] }
+
+    const topNodeRows = db.prepare(`
+      SELECT *
+      FROM entity_graph_nodes
+      WHERE importance = ?
+      ORDER BY mention_count DESC, source_count DESC, last_seen_at DESC, name ASC
+    `).all(topImportance) as Record<string, unknown>[]
+    const seedIds = new Set(topNodeRows.map((row) => row.id as string))
+    if (seedIds.size === 0) return { seedNodes: [], nodes: [], edges: [] }
+
+    const edgeRows = db.prepare(`
+      WITH top_nodes AS (
+        SELECT id
+        FROM entity_graph_nodes
+        WHERE importance = ?
+      )
+      SELECT e.*, fn.name AS from_name, tn.name AS to_name,
+        CASE
+          WHEN e.from_node_id IN (SELECT id FROM top_nodes)
+           AND e.to_node_id IN (SELECT id FROM top_nodes)
+          THEN 1
+          ELSE 0
+        END AS connects_top_nodes
+      FROM entity_graph_edges e
+      JOIN entity_graph_nodes fn ON fn.id = e.from_node_id
+      JOIN entity_graph_nodes tn ON tn.id = e.to_node_id
+      WHERE (e.from_node_id IN (SELECT id FROM top_nodes) OR e.to_node_id IN (SELECT id FROM top_nodes))
+        AND e.importance >= ?
+      ORDER BY connects_top_nodes DESC, e.importance DESC, e.mention_count DESC, e.confidence DESC, e.last_seen_at DESC
+      LIMIT ?
+    `).all(topImportance, minImportance, limit) as Record<string, unknown>[]
+    const edges = edgeRows.map(rowToEdge)
+
+    const edgeIds = edges.map((edge) => edge.id)
+    const edgeNodeClause = edgeIds.length
+      ? `
+        OR id IN (
+          SELECT from_node_id FROM entity_graph_edges WHERE id IN (${edgeIds.map(() => '?').join(', ')})
+          UNION
+          SELECT to_node_id FROM entity_graph_edges WHERE id IN (${edgeIds.map(() => '?').join(', ')})
+        )
+      `
+      : ''
+    const nodeRows = db.prepare(`
+      SELECT *
+      FROM entity_graph_nodes
+      WHERE importance = ?
+      ${edgeNodeClause}
+    `).all(topImportance, ...edgeIds, ...edgeIds) as Record<string, unknown>[]
+
+    const nodes = hydrateNodeOrigins(applyEffectiveNodeImportance(nodeRows.map(rowToNode), edges))
+    const seedNodes = nodes.filter((node) => seedIds.has(node.id))
+    return { seedNodes, nodes, edges }
+  }
+
   listRelationships(limit = 5000): GraphSnapshot {
     const db = getDb()
     const edgeRows = db.prepare(`
