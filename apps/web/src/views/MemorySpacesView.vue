@@ -15,7 +15,8 @@ import { syncPrefsToElectron } from "../utils/electron-prefs";
 import { SK_MEMORY_GRAPH_EDGE_LABELS, SK_MEMORY_GRAPH_EDGE_PATH_TYPE, SK_MEMORY_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
 const ENTITY_FLOW_ID = "memory-entity-graph";
-const VISUAL_GRAPH_LIMIT = 100;
+const VISUAL_GRAPH_RELATION_LIMIT = 500;
+const VISUAL_GRAPH_ENTITY_LIMIT = 100;
 const RELATIONSHIPS_GRAPH_LIMIT = 5000;
 
 type MemoryPanel = "documents" | "relationships" | "visual";
@@ -531,9 +532,33 @@ function entityTypeClass(type: EntityGraphNodeType): string {
   return `entity-flow-node-type-${type}`;
 }
 
+function capVisualGraph(nextGraph: EntityGraphResponse, view: GraphViewMode): EntityGraphResponse {
+  if (view !== "visual" || nextGraph.nodes.length <= VISUAL_GRAPH_ENTITY_LIMIT) return nextGraph;
+
+  const seedIds = new Set(nextGraph.seedNodes.map((node) => node.id));
+  const visibleNodes = [...nextGraph.nodes]
+    .sort((a, b) => {
+      const seedDelta = Number(seedIds.has(b.id)) - Number(seedIds.has(a.id));
+      if (seedDelta !== 0) return seedDelta;
+      if (b.importance !== a.importance) return b.importance - a.importance;
+      if (b.mentionCount !== a.mentionCount) return b.mentionCount - a.mentionCount;
+      if (b.sourceCount !== a.sourceCount) return b.sourceCount - a.sourceCount;
+      return b.lastSeenAt - a.lastSeenAt;
+    })
+    .slice(0, VISUAL_GRAPH_ENTITY_LIMIT);
+  const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+
+  return {
+    ...nextGraph,
+    seedNodes: nextGraph.seedNodes.filter((node) => visibleNodeIds.has(node.id)),
+    nodes: visibleNodes,
+    edges: nextGraph.edges.filter((edge) => visibleNodeIds.has(edge.fromNodeId) && visibleNodeIds.has(edge.toNodeId)),
+  };
+}
+
 async function loadGraph(query = graphQuery.value, nodeId?: string) {
   const trimmedQuery = query.trim();
-  const limit = activePanel.value === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_LIMIT;
+  const limit = activePanel.value === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_RELATION_LIMIT;
   const view = activeGraphView.value || "visual";
   const minImportance = view === "visual" ? graphFactLevel.value : null;
   const requestKey = `${view}:${trimmedQuery}:${nodeId || ""}:${limit}:${minImportance ?? "all"}`;
@@ -546,7 +571,7 @@ async function loadGraph(query = graphQuery.value, nodeId?: string) {
     const nextGraph = await api.memory.getGraph(trimmedQuery || undefined, limit, view, nodeId, minImportance);
     if (requestId !== graphRequest) return;
     focusedGraphNodeId.value = null;
-    graph.value = nextGraph;
+    graph.value = capVisualGraph(nextGraph, view);
     graphLimit.value = limit;
     graphView.value = view;
   } catch {
@@ -680,7 +705,7 @@ watch(
     const enteringVisual = panel === "visual" && activePanel.value !== "visual";
     activePanel.value = panel;
     if (enteringVisual) fitGraphAfterLayout = true;
-    const expectedGraphLimit = panel === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_LIMIT;
+    const expectedGraphLimit = panel === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_RELATION_LIMIT;
     const expectedGraphView: GraphViewMode = panel === "relationships" ? "relationships" : "visual";
     if ((panel === "relationships" || panel === "visual") && (!graph.value || graphLimit.value !== expectedGraphLimit || graphView.value !== expectedGraphView)) await loadGraph();
   },
