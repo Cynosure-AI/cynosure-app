@@ -74,8 +74,15 @@ export const useChatStore = defineStore('chat', () => {
     return postActionsMap.get(activeConversationId.value) || new Set<string>()
   })
 
-  watch(activeConversationId, (conversationId) => {
-    api.chat.subscribeLiveConversations(conversationId ? [conversationId] : [])
+  const liveConversationSubscriptions = computed(() => {
+    const ids = new Set<string>()
+    if (activeConversationId.value) ids.add(activeConversationId.value)
+    for (const id of agentStore.liveExecutionConversationIds) ids.add(id)
+    return Array.from(ids)
+  })
+
+  watch(liveConversationSubscriptions, (conversationIds) => {
+    api.chat.subscribeLiveConversations(conversationIds)
   }, { immediate: true })
 
   // ── Composables ──
