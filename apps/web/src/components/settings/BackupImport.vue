@@ -12,8 +12,8 @@ const importResults = ref<Record<string, { restored: number; errors: string[] }>
 const previewData = ref<{ version: number; createdAt: string; modules: Record<string, { count: number }> } | null>(null)
 const importModules = reactive<Record<string, boolean>>({})
 const previewing = ref(false)
-const resetting = ref(false)
-const resetError = ref('')
+const restoreProgress = ref<{ module: string; status: 'started' | 'completed' | 'failed'; current: number; total: number } | null>(null)
+const restoreStatuses = reactive<Record<string, 'pending' | 'started' | 'completed' | 'failed'>>({})
 
 const moduleLabels: Record<string, { label: string; icon: string; description: string }> = {
   agents: { label: 'Agents', icon: 'lucide:bot', description: 'Agent definitions, system prompts, and configuration files' },
@@ -65,6 +65,9 @@ async function doImport(): Promise<void> {
   importing.value = true
   importError.value = ''
   importResults.value = null
+  restoreProgress.value = null
+  Object.keys(restoreStatuses).forEach(k => delete restoreStatuses[k])
+  selected.forEach((key) => { restoreStatuses[key] = 'pending' })
   try {
     const res = await api.backup.importBackup(importFile.value, selected)
     importResults.value = res.results
@@ -82,19 +85,8 @@ function clearImport(): void {
   importResults.value = null
   importError.value = ''
   Object.keys(importModules).forEach(k => delete importModules[k])
-}
-
-async function doReset(): Promise<void> {
-  resetting.value = true
-  resetError.value = ''
-  try {
-    await api.backup.resetApp()
-    window.location.reload()
-  } catch (e) {
-    resetError.value = (e as Error).message
-  } finally {
-    resetting.value = false
-  }
+  restoreProgress.value = null
+  Object.keys(restoreStatuses).forEach(k => delete restoreStatuses[k])
 }
 
 // Warn user before navigating away during import
@@ -114,8 +106,14 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
   }
 }
 window.addEventListener('beforeunload', onBeforeUnload)
+const unsubscribeRestoreProgress = api.backup.onRestoreProgress((data) => {
+  if (!importing.value) return
+  restoreProgress.value = data
+  restoreStatuses[data.module] = data.status
+})
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
+  unsubscribeRestoreProgress()
 })
 </script>
 
@@ -137,6 +135,51 @@ onBeforeUnmount(() => {
         <p class="text-xs text-amber-400/70 mt-0.5">
           Navigating away or closing the browser may interrupt the restore process.
         </p>
+      </div>
+    </div>
+
+    <div
+      v-if="importing && restoreProgress"
+      class="rounded-xl border border-theme-700 bg-theme-900 p-4 space-y-3"
+    >
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0">
+          <Icon
+            icon="lucide:loader-2"
+            class="w-4 h-4 text-accent-400 animate-spin shrink-0"
+          />
+          <span class="text-sm font-medium text-theme-200 truncate">
+            Restoring {{ moduleLabels[restoreProgress.module]?.label || restoreProgress.module }}
+          </span>
+        </div>
+        <span class="text-xs text-theme-500 whitespace-nowrap">
+          {{ restoreProgress.current }} / {{ restoreProgress.total }}
+        </span>
+      </div>
+
+      <div class="space-y-1.5">
+        <div
+          v-for="(status, key) in restoreStatuses"
+          :key="key"
+          class="flex items-center gap-2 text-xs"
+        >
+          <Icon
+            :icon="status === 'completed' ? 'lucide:check-circle' : status === 'failed' ? 'lucide:alert-circle' : status === 'started' ? 'lucide:loader-2' : 'lucide:circle'"
+            class="w-3.5 h-3.5 shrink-0"
+            :class="[
+              status === 'completed' ? 'text-green-400' : '',
+              status === 'failed' ? 'text-amber-400' : '',
+              status === 'started' ? 'text-accent-400 animate-spin' : '',
+              status === 'pending' ? 'text-theme-600' : ''
+            ]"
+          />
+          <span
+            class="truncate"
+            :class="status === 'pending' ? 'text-theme-500' : 'text-theme-300'"
+          >
+            {{ moduleLabels[key]?.label || key }}
+          </span>
+        </div>
       </div>
     </div>
 

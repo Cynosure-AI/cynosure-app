@@ -2,7 +2,6 @@
 import { Icon } from '@iconify/vue'
 import BackupExport from './BackupExport.vue'
 import BackupImport from './BackupImport.vue'
-import BackupReset from './BackupReset.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import SettingsSubheading from './SettingsSubheading.vue'
 
@@ -77,37 +76,6 @@ function showAnySection(ids: string[]): boolean {
       </div>
       <div class="pt-1 border-t border-theme-700">
         <BackupImport />
-      </div>
-    </BaseCard>
-
-    <SettingsSubheading
-      v-if="showAnySection(['backup-reset'])"
-      label="Danger Zone"
-    />
-
-    <!-- Reset -->
-    <BaseCard
-      v-if="showSection('backup-reset')"
-      class="p-5 space-y-4 border-red-500/20"
-    >
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center">
-          <Icon
-            icon="lucide:trash-2"
-            class="w-5 h-5 text-red-400"
-          />
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-theme-200">
-            Reset Application
-          </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
-            Wipe all data and return to a clean state
-          </p>
-        </div>
-      </div>
-      <div class="pt-1 border-t border-theme-700">
-        <BackupReset />
       </div>
     </BaseCard>
   </div>

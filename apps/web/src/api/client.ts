@@ -512,8 +512,10 @@ export const api = {
       if (!res.ok) throw new Error(`Preview failed: ${res.statusText}`)
       return res.json()
     },
-    resetApp: () =>
-      post<{ success: boolean }>('/api/backup/reset')
+    resetApp: (modules?: string[]) =>
+      post<{ success: boolean; results?: Record<string, { reset: boolean; errors: string[] }> }>('/api/backup/reset', modules ? { modules } : undefined),
+    onRestoreProgress: (cb: (data: { module: string; status: 'started' | 'completed' | 'failed'; current: number; total: number }) => void) =>
+      onWsEvent('backup:restore-progress', cb as WsHandler)
   },
 
   channels: {
