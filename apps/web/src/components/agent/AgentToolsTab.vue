@@ -20,7 +20,7 @@ const automaticToolStates = computed(() => ({
     active: props.agent.thinkingEnabled && hasSelectableExecutionTools.value,
     criteria: 'thinking mode and visible execution tools',
   },
-  todo_update: {
+  todo_upsert: {
     active: props.agent.thinkingEnabled && hasSelectableExecutionTools.value,
     criteria: 'thinking mode and visible execution tools',
   },
