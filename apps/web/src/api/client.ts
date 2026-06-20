@@ -392,7 +392,7 @@ export const api = {
       )
     },
     ingestFile: (spaceId: string, fileName: string, content: string) =>
-      post<{ success: boolean; chunksStored: number; fileName: string }>(
+      post<{ success: boolean; chunksStored: number; fileName: string; job?: MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }> }>(
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/ingest-file`, { fileName, content }
       ),
     reingestFile: (spaceId: string, fileName: string) =>
