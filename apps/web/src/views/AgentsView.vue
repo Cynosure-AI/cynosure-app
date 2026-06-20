@@ -20,7 +20,6 @@ const router = useRouter()
 const { logoUrl } = useProviderLogos()
 
 const TOOLTIP_MAX_TOOLS = 20
-type AgentViewFilter = 'all' | 'favorites'
 
 const showCreateDialog = ref(false)
 const newName = ref('')
@@ -32,7 +31,7 @@ const pendingDeleteName = ref('')
 
 const searchQuery = ref('')
 const selectedTags = ref<string[]>([])
-const activeView = ref<AgentViewFilter>('all')
+
 const bulkSelectionIds = ref<string[]>([])
 const bulkProviderId = ref('')
 const bulkModel = ref('')
@@ -56,8 +55,6 @@ const allTags = computed(() => {
   }
   return [...tagMap.values()].sort((a, b) => a.localeCompare(b))
 })
-
-const favoriteCount = computed(() => agentDefs.agents.filter(agent => agent.favorite).length)
 
 function agentSort(a: AgentDefinition, b: AgentDefinition): number {
   if (a.favorite !== b.favorite) return a.favorite ? -1 : 1
@@ -84,14 +81,13 @@ function matchesSelectedTags(agent: AgentDefinition): boolean {
 
 const visibleAgents = computed(() =>
   [...agentDefs.agents]
-    .filter(agent => activeView.value === 'all' || agent.favorite)
     .filter(matchesSearch)
     .filter(matchesSelectedTags)
     .sort(agentSort)
 )
 
 const hasAnyAgents = computed(() => agentDefs.agents.length > 0)
-const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || selectedTags.value.length > 0 || activeView.value !== 'all')
+const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || selectedTags.value.length > 0)
 
 const agentsWithIssues = computed(() => {
   const availableKeys = new Set(agentStore.availableTools.map(t => t.key))
@@ -166,7 +162,6 @@ function isTagSelected(tag: string): boolean {
 function clearFilters(): void {
   searchQuery.value = ''
   selectedTags.value = []
-  activeView.value = 'all'
 }
 
 async function applyBulkChanges(): Promise<void> {
@@ -348,24 +343,6 @@ function formatDate(ts: number): string {
               icon="lucide:x"
               class="w-4 h-4"
             />
-          </button>
-        </div>
-
-        <div class="inline-flex rounded-lg border border-theme-700/70 bg-theme-900/70 p-1">
-          <button
-            class="px-3 py-1.5 rounded-md text-sm transition-colors"
-            :class="activeView === 'all' ? 'bg-accent-600 text-white' : 'text-theme-400 hover:text-theme-200 hover:bg-theme-800'"
-            @click="activeView = 'all'"
-          >
-            All
-          </button>
-          <button
-            class="px-3 py-1.5 rounded-md text-sm transition-colors"
-            :class="activeView === 'favorites' ? 'bg-accent-600 text-white' : 'text-theme-400 hover:text-theme-200 hover:bg-theme-800'"
-            @click="activeView = 'favorites'"
-          >
-            Favorites
-            <span class="ml-1 text-xs opacity-70">{{ favoriteCount }}</span>
           </button>
         </div>
       </div>
