@@ -18,6 +18,8 @@ export interface SelectOption {
   disabled?: boolean;
   /** Small badge shown to the right of the label (e.g. "+3") */
   tag?: string;
+  /** Iconify icon name shown as a small badge instead of text */
+  tagIconName?: string;
   actionIconName?: string;
   actionActiveIconName?: string;
   actionActive?: boolean;
@@ -432,9 +434,21 @@ onBeforeUnmount(() =>
             <!-- Label -->
             <span class="flex-1 text-left truncate">{{ opt.label }}</span>
 
-            <!-- Optional tag badge -->
+            <!-- Optional tag icon badge -->
             <span
-              v-if="opt.tag"
+              v-if="opt.tagIconName"
+              class="shrink-0 inline-flex items-center justify-center text-amber-400"
+              :title="opt.tag"
+            >
+              <Icon
+                :icon="opt.tagIconName"
+                class="h-3.5 w-3.5"
+              />
+            </span>
+
+            <!-- Optional tag text badge -->
+            <span
+              v-else-if="opt.tag"
               class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-400"
             >
               {{ opt.tag }}
