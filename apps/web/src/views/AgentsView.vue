@@ -116,6 +116,12 @@ function getProviderName(agent: AgentDefinition): string {
   return provider ? provider.name : 'Unknown'
 }
 
+function getModelDisplayName(agent: AgentDefinition): string {
+  if (!agent.model) return 'No model selected'
+  const parts = agent.model.split('/').filter(Boolean)
+  return parts.at(-1) || agent.model
+}
+
 function getProviderLogoUrl(agent: AgentDefinition): string | null {
   const provider = providerStore.providers.find(p => p.id === agent.providerId)
   if (!provider) return null
@@ -432,7 +438,7 @@ function formatDate(ts: number): string {
             Tags
           </div>
           <div class="hidden lg:block">
-            Provider/Model
+            Model/Provider
           </div>
           <div class="hidden xl:block">
             Info
@@ -555,10 +561,10 @@ function formatDate(ts: number): string {
             >
             <div class="flex flex-col gap-0.5 min-w-0">
               <div class="text-sm text-theme-200 font-medium">
-                {{ getProviderName(item) }}
+                {{ getModelDisplayName(item) }}
               </div>
               <div class="text-xs text-theme-500 truncate">
-                {{ item.model || 'No model selected' }}
+                {{ getProviderName(item) }}
               </div>
             </div>
           </div>

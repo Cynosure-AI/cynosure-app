@@ -465,6 +465,8 @@ defineExpose({ loadServers })
       v-if="filteredServers.length"
       :items="filteredServers"
       :columns="tableColumns"
+      initial-sort-key="enable"
+      initial-sort-direction="desc"
       empty-message="No servers found"
     >
       <!-- Server column -->
