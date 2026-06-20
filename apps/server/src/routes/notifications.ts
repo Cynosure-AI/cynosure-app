@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
-import { cancelScheduledNotification, mapNotificationRow } from '../core/notifications/app-notifications.js'
+import { mapNotificationRow } from '../core/notifications/app-notifications.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -13,8 +13,8 @@ export async function registerNotificationRoutes(
         const db = getDb()
         const unreadOnly = req.query.unreadOnly === 'true'
         const query = unreadOnly
-            ? 'SELECT * FROM notifications WHERE read = 0 AND delivered_at IS NOT NULL ORDER BY delivered_at DESC'
-            : 'SELECT * FROM notifications ORDER BY COALESCE(scheduled_at, delivered_at, created_at) DESC LIMIT 100'
+            ? 'SELECT id, agent_id, conversation_id, title, body, severity, read, created_at FROM notifications WHERE read = 0 ORDER BY created_at DESC'
+            : 'SELECT id, agent_id, conversation_id, title, body, severity, read, created_at FROM notifications ORDER BY created_at DESC LIMIT 100'
         const rows = db.prepare(query).all() as {
             id: string
             agent_id: string
@@ -24,8 +24,6 @@ export async function registerNotificationRoutes(
             severity: string
             read: number
             created_at: number
-            scheduled_at: number | null
-            delivered_at: number | null
         }[]
 
         return rows.map(mapNotificationRow)
@@ -48,7 +46,6 @@ export async function registerNotificationRoutes(
     // DELETE /api/notifications/:id — delete one
     app.delete<{ Params: { id: string } }>('/:id', async (req) => {
         const db = getDb()
-        cancelScheduledNotification(req.params.id)
         db.prepare('DELETE FROM notifications WHERE id = ?').run(req.params.id)
         return { success: true }
     })
@@ -56,8 +53,6 @@ export async function registerNotificationRoutes(
     // DELETE /api/notifications — delete all
     app.delete('/', async () => {
         const db = getDb()
-        const rows = db.prepare('SELECT id FROM notifications WHERE scheduled_at IS NOT NULL AND delivered_at IS NULL').all() as { id: string }[]
-        for (const row of rows) cancelScheduledNotification(row.id)
         db.prepare('DELETE FROM notifications').run()
         return { success: true }
     })
@@ -65,7 +60,7 @@ export async function registerNotificationRoutes(
     // GET /api/notifications/unread-count — quick count of unread
     app.get('/unread-count', async () => {
         const db = getDb()
-        const row = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE read = 0 AND delivered_at IS NOT NULL').get() as { count: number }
+        const row = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE read = 0').get() as { count: number }
         return { count: row.count }
     })
 }

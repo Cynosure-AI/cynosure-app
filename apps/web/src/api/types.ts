@@ -249,8 +249,6 @@ export interface AppNotification {
     priority: 'notice' | 'action' | 'alert'
     read: boolean
     createdAt: number
-    scheduledAt: number | null
-    deliveredAt: number | null
 }
 
 // ── Activity ────────────────────────────────────────────────────────────────

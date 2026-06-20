@@ -18,7 +18,7 @@ export function makeNotificationTool(opts: NotificationToolOptions): ToolDefinit
     return {
         name: 'create_app_notification',
         description:
-            'Create an in-app notification for the user. Use this when you find something noteworthy, need the user to act, or want to schedule a reminder for a later time.',
+            'Create an immediate in-app notification for the user. Use this when you find something noteworthy, need the user to act, or need important/immediate awareness.',
         parameters: {
             type: 'object',
             properties: {
@@ -28,23 +28,17 @@ export function makeNotificationTool(opts: NotificationToolOptions): ToolDefinit
                     type: 'string',
                     enum: ['notice', 'action', 'alert'],
                     description: 'Intent-based priority: notice = passive information, action = user should do something, alert = important/immediate awareness.'
-                },
-                showAt: {
-                    type: 'string',
-                    description: 'Optional time to show the notification, as an ISO timestamp or epoch milliseconds. Omit to show immediately.'
                 }
             },
             required: ['title', 'body']
         },
         timeout: 5_000,
         execute: async (params: unknown) => {
-            const { title, body, priority, severity, showAt, scheduledAt } = params as {
+            const { title, body, priority, severity } = params as {
                 title: string
                 body: string
                 priority?: string
                 severity?: string
-                showAt?: string | number | null
-                scheduledAt?: string | number | null
             }
 
             const notification = createAppNotification({
@@ -53,15 +47,12 @@ export function makeNotificationTool(opts: NotificationToolOptions): ToolDefinit
                 title,
                 body,
                 priority: priority ?? severity,
-                showAt: showAt ?? scheduledAt,
                 broadcast,
             })
 
             return {
                 success: true,
-                output: notification.scheduledAt
-                    ? `Notification scheduled for ${new Date(notification.scheduledAt).toISOString()}: ${title}`
-                    : `Notification created: ${title}`
+                output: `Notification created: ${title}`
             }
         }
     }

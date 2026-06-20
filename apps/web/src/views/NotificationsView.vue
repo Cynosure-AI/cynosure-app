@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useNotificationStore } from "../stores/notification.store";
 import { useAgentDefinitionsStore } from "../stores/agent-definitions.store";
@@ -11,24 +11,14 @@ const notificationStore = useNotificationStore();
 const agentDefs = useAgentDefinitionsStore();
 const chatStore = useChatStore();
 
-const reminders = computed(() =>
-  [...notificationStore.reminderNotifications].sort((a, b) => notificationTime(a) - notificationTime(b)),
-);
-
 onMounted(() => {
   if (!notificationStore.loaded) {
     notificationStore.load();
   }
 });
 
-
-
 function notificationTime(n: (typeof notificationStore.notifications)[0]): number {
-  return n.scheduledAt ?? n.deliveredAt ?? n.createdAt;
-}
-
-function isScheduled(n: (typeof notificationStore.notifications)[0]): boolean {
-  return n.scheduledAt !== null && n.deliveredAt === null;
+  return n.createdAt;
 }
 
 function formatDate(ts: number): string {
@@ -47,14 +37,14 @@ function formatTime(ts: number): string {
   });
 }
 
-/** Group delivered notifications by calendar day (descending) */
+/** Group notifications by calendar day (descending) */
 function groupedNotifications() {
   const groups: { label: string; items: typeof notificationStore.notifications }[] = [];
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
-  for (const n of notificationStore.deliveredNotifications) {
+  for (const n of notificationStore.notifications) {
     const time = notificationTime(n);
     const date = new Date(time);
     let label: string;
@@ -76,7 +66,6 @@ function groupedNotifications() {
 }
 
 async function openNotification(n: (typeof notificationStore.notifications)[0]) {
-  if (isScheduled(n)) return;
   if (!n.read) {
     await notificationStore.markRead(n.id);
   }
@@ -137,9 +126,9 @@ function priorityClass(priority: string): string {
           Mark all read
         </button>
         <button
-          v-if="notificationStore.deliveredNotifications.length > 0"
+          v-if="notificationStore.notifications.length > 0"
           class="btn btn-ghost btn-sm text-theme-500 hover:text-red-400"
-          @click="notificationStore.removeDelivered()"
+          @click="notificationStore.removeAll()"
         >
           <Icon
             icon="lucide:trash-2"
@@ -149,65 +138,6 @@ function priorityClass(priority: string): string {
         </button>
       </div>
     </header>
-
-    <!-- Reminders -->
-    <section
-      v-if="reminders.length > 0"
-      class="reminders-section"
-    >
-      <div class="section-header">
-        <div>
-          <h2 class="section-title">
-            Reminders
-          </h2>
-          <p class="section-subtitle">
-            Scheduled notifications waiting for their time.
-          </p>
-        </div>
-        <span class="section-count">{{ reminders.length }}</span>
-      </div>
-      <div class="reminder-list">
-        <div
-          v-for="n in reminders"
-          :key="n.id"
-          class="reminder-row"
-        >
-          <div class="reminder-icon">
-            <Icon
-              icon="lucide:calendar-clock"
-              class="w-4 h-4"
-            />
-          </div>
-          <div class="reminder-body">
-            <div class="reminder-header">
-              <span class="reminder-title">{{ n.title }}</span>
-              <span class="reminder-due">
-                {{ formatDate(notificationTime(n)) }} · {{ formatTime(notificationTime(n)) }}
-              </span>
-            </div>
-            <p class="reminder-desc">
-              {{ n.body }}
-            </p>
-            <div class="card-meta">
-              <span class="meta-agent">
-                <Icon
-                  icon="lucide:bot"
-                  class="w-3 h-3"
-                />
-                {{ agentDefs.get(n.agentId)?.name || "Agent" }}
-              </span>
-            </div>
-          </div>
-          <button
-            class="reminder-cancel"
-            title="Cancel reminder"
-            @click="notificationStore.remove(n.id)"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </section>
 
     <!-- Empty state -->
     <div
@@ -241,7 +171,7 @@ function priorityClass(priority: string): string {
           v-for="n in group.items"
           :key="n.id"
           class="notification-card"
-          :class="[priorityClass(n.priority), { unread: !n.read && !isScheduled(n), scheduled: isScheduled(n) }]"
+          :class="[priorityClass(n.priority), { unread: !n.read }]"
           role="button"
           tabindex="0"
           @click="openNotification(n)"
@@ -259,15 +189,9 @@ function priorityClass(priority: string): string {
             <div class="card-header">
               <span class="card-title">{{ n.title }}</span>
               <span
-                v-if="!n.read && !isScheduled(n)"
+                v-if="!n.read"
                 class="unread-dot"
               />
-              <span
-                v-if="isScheduled(n)"
-                class="scheduled-badge"
-              >
-                Scheduled
-              </span>
             </div>
             <p class="card-desc">
               {{ n.body }}
@@ -282,10 +206,10 @@ function priorityClass(priority: string): string {
               </span>
               <span class="meta-time">
                 <Icon
-                  :icon="isScheduled(n) ? 'lucide:calendar-clock' : 'lucide:clock'"
+                  icon="lucide:clock"
                   class="w-3 h-3"
                 />
-                {{ isScheduled(n) ? `Due ${formatDate(notificationTime(n))} ${formatTime(notificationTime(n))}` : formatTime(notificationTime(n)) }}
+                {{ formatTime(notificationTime(n)) }}
               </span>
               <span
                 v-if="n.conversationId"
@@ -301,7 +225,7 @@ function priorityClass(priority: string): string {
           </div>
           <button
             class="card-dismiss"
-            :title="isScheduled(n) ? 'Cancel scheduled notification' : 'Dismiss'"
+            title="Dismiss"
             @click.stop="notificationStore.remove(n.id)"
           >
             <Icon
@@ -415,121 +339,6 @@ function priorityClass(priority: string): string {
   margin: 0;
 }
 
-/* ── Reminders ── */
-.reminders-section {
-  margin-bottom: 1.5rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid var(--color-theme-800, #27272a);
-}
-
-.section-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.75rem;
-}
-
-.section-title {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-theme-200, #e4e4e7);
-  margin: 0;
-}
-
-.section-subtitle {
-  font-size: 0.75rem;
-  color: var(--color-theme-500, #71717a);
-  margin: 0.125rem 0 0;
-}
-
-.section-count {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  color: var(--color-theme-500, #71717a);
-  background: var(--color-theme-800, #27272a);
-  border-radius: 999px;
-  padding: 0.125rem 0.5rem;
-}
-
-.reminder-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.reminder-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.875rem 1rem;
-  border: 1px solid var(--color-theme-800, #27272a);
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--color-theme-900, #18181b) 82%, transparent);
-}
-
-.reminder-icon {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-theme-400, #a1a1aa);
-  background: var(--color-theme-800, #27272a);
-  flex-shrink: 0;
-}
-
-.reminder-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.reminder-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.25rem;
-}
-
-.reminder-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-theme-200, #e4e4e7);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.reminder-due {
-  flex-shrink: 0;
-  font-size: 0.6875rem;
-  color: var(--color-theme-500, #71717a);
-}
-
-.reminder-desc {
-  font-size: 0.8125rem;
-  color: var(--color-theme-400, #a1a1aa);
-  margin: 0 0 0.5rem;
-  line-height: 1.4;
-}
-
-.reminder-cancel {
-  border: none;
-  border-radius: 0.375rem;
-  background: transparent;
-  color: var(--color-theme-500, #71717a);
-  cursor: pointer;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  transition: all 150ms ease;
-}
-
-.reminder-cancel:hover {
-  background: var(--color-theme-800, #27272a);
-  color: var(--color-theme-200, #e4e4e7);
-}
-
 /* ── Group ── */
 .notification-group {
   margin-bottom: 1.5rem;
@@ -602,11 +411,6 @@ function priorityClass(priority: string): string {
   border-left-color: var(--color-amber-500, #f59e0b);
 }
 
-.notification-card.scheduled {
-  border-left-color: var(--color-theme-600, #52525b);
-  opacity: 0.86;
-}
-
 .card-left {
   flex-shrink: 0;
 }
@@ -634,11 +438,6 @@ function priorityClass(priority: string): string {
 .priority-notice .priority-icon {
   color: var(--color-accent-400, #60a5fa);
   background: color-mix(in srgb, var(--color-accent-500, #3b82f6) 12%, transparent);
-}
-
-.scheduled .priority-icon {
-  color: var(--color-theme-400, #a1a1aa);
-  background: var(--color-theme-800, #27272a);
 }
 
 /* ── Body ── */
@@ -669,18 +468,6 @@ function priorityClass(priority: string): string {
   border-radius: 50%;
   background: var(--color-accent-500, #3b82f6);
   flex-shrink: 0;
-}
-
-.scheduled-badge {
-  flex-shrink: 0;
-  border-radius: 999px;
-  padding: 0.125rem 0.4375rem;
-  background: var(--color-theme-800, #27272a);
-  color: var(--color-theme-400, #a1a1aa);
-  font-size: 0.625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .card-desc {
@@ -756,12 +543,6 @@ function priorityClass(priority: string): string {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.75rem;
-  }
-
-  .reminder-row,
-  .reminder-header {
-    flex-direction: column;
-    align-items: flex-start;
   }
 
   .notification-grid {

@@ -4,7 +4,6 @@ import { api } from "../../api/client";
 import type { MemorySpace, MemoryFileStatus, MemoryIndexJob } from "../../api/types";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import { Icon } from "@iconify/vue";
-import MemoryDocumentModal from "./MemoryDocumentModal.vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
@@ -312,44 +311,8 @@ async function ingestFiles(fileList: File[]) {
   emit("spacesChanged");
 }
 
-// --- Document preview modal ---
-interface MemoryEntry {
-  id: string; text: string; source: string; tags?: string;
-  sourceFile?: string; chunkIndex?: number; createdAt: number;
-}
-
-const showDocumentModal = ref(false);
 const showEditorModal = ref(false);
-const modalFileName = ref("");
 const editorFileName = ref("");
-const fileChunks = ref<Map<string, MemoryEntry[]>>(new Map());
-const fileChunksLoading = ref<Set<string>>(new Set());
-
-async function loadFileChunks(fileName: string) {
-  if (fileChunks.value.has(fileName) || fileChunksLoading.value.has(fileName)) return;
-  const loading = new Set(fileChunksLoading.value);
-  loading.add(fileName);
-  fileChunksLoading.value = loading;
-  try {
-    const entries = await api.memorySpaces.listEntries(props.spaceId, fileName);
-    const newMap = new Map(fileChunks.value);
-    newMap.set(fileName, entries as MemoryEntry[]);
-    fileChunks.value = newMap;
-  } catch {
-    /* ignore */
-  } finally {
-    const l = new Set(fileChunksLoading.value);
-    l.delete(fileName);
-    fileChunksLoading.value = l;
-  }
-}
-
-function openDocumentModal(fileName: string) {
-  if (!files.value.find((f) => f.fileName === fileName)?.supported) return;
-  modalFileName.value = fileName;
-  showDocumentModal.value = true;
-  loadFileChunks(fileName);
-}
 
 function openEditorModal(fileName: string) {
   const file = files.value.find((f) => f.fileName === fileName);
@@ -360,7 +323,6 @@ function openEditorModal(fileName: string) {
 
 async function handleEditorSaved() {
   showEditorModal.value = false;
-  fileChunks.value = new Map();
   await loadFiles();
   await loadJobs();
   emit("spacesChanged");
@@ -417,12 +379,9 @@ watch(
   () => {
     files.value = [];
     selectedFiles.value = new Set();
-    fileChunks.value = new Map();
     jobs.value = [];
     handledTerminalJobIds.value = new Set();
-    showDocumentModal.value = false;
     showEditorModal.value = false;
-    modalFileName.value = "";
     editorFileName.value = "";
     searchQuery.value = "";
     page.value = 0;
@@ -707,8 +666,8 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         :key="file.fileName"
         draggable="true"
         class="group/row flex items-center gap-3 px-4 py-3 border-b border-theme-800/70 last:border-b-0 hover:bg-theme-800/30 transition-colors"
-        :class="{ 'opacity-50': !file.supported, 'cursor-pointer': file.supported }"
-        @click="openDocumentModal(file.fileName)"
+        :class="{ 'opacity-50': !file.supported, 'cursor-pointer': file.textDirect }"
+        @click="openEditorModal(file.fileName)"
         @dragstart.stop="startDocumentDrag($event, file.fileName)"
       >
         <input
@@ -861,17 +820,6 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         </button>
       </div>
     </div>
-
-    <!-- Document Viewer Modal -->
-    <MemoryDocumentModal
-      :show="showDocumentModal"
-      :space-id="spaceId"
-      :source-file="modalFileName"
-      :chunk-count="files.find((f) => f.fileName === modalFileName)?.chunkCount ?? 0"
-      :chunks="fileChunks.get(modalFileName) ?? []"
-      :loading="fileChunksLoading.has(modalFileName)"
-      @close="showDocumentModal = false"
-    />
 
     <MemoryDocumentEditorModal
       :show="showEditorModal"
