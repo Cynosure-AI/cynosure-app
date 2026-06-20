@@ -310,7 +310,7 @@ function contextSectionClass(section: ContextSection): string {
 }
 
 function contextSectionIconClass(section: ContextSection): string {
-  return isCuratedContext(section) ? 'text-teal-600 dark:text-teal-300' : 'text-sky-600 dark:text-sky-300'
+  return isCuratedContext(section) ? 'text-cyan-600 dark:text-cyan-300' : 'text-cyan-500 dark:text-cyan-400'
 }
 
 function toolChipClass(name: string): string {
@@ -388,6 +388,12 @@ function headerButtonClass(isExpanded: boolean): string {
     return isExpanded
       ? 'bg-indigo-100/60 border border-indigo-400/40 shadow-md shadow-indigo-500/5 dark:bg-indigo-950/20 dark:border-indigo-500/35 dark:shadow-indigo-950/20'
       : 'bg-indigo-50/80 hover:bg-indigo-100/60 hover:border-indigo-400/35 border border-indigo-300/30 dark:bg-indigo-950/10 dark:hover:bg-indigo-950/20 dark:hover:border-indigo-500/35 dark:border-indigo-500/20'
+  }
+
+  if (isToolRouting.value || isMemoryRouting.value) {
+    return isExpanded
+      ?'bg-green-100/60 border border-green-400/40 shadow-md shadow-green-500/5 dark:bg-green-950/20 dark:border-green-500/30 dark:shadow-green-950/10'
+      : 'bg-green-50/80 hover:bg-green-100/60 hover:border-green-400/35 border border-green-300/30 dark:bg-green-950/10 dark:hover:bg-green-950/20 dark:hover:border-green-500/25 dark:border-green-500/15'
   }
 
   return isExpanded
