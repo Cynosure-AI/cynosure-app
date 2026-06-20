@@ -236,100 +236,100 @@ onBeforeUnmount(() => {
     max-height="h-[88vh]"
     @close="close"
   >
-    <div class="flex h-full min-h-0 flex-col">
-        <div class="flex items-center gap-3 px-5 py-3 border-b border-theme-800 bg-theme-950/25 shrink-0">
-          <label class="text-xs text-theme-500 shrink-0">Name</label>
-          <input
-            v-model="editableTitle"
-            class="flex-1 min-w-0 bg-theme-950 border border-theme-700 rounded-lg px-3 py-1.5 text-sm text-theme-200 focus:outline-none focus:border-accent-500"
-            :disabled="loading || saving"
-            @keydown.enter.prevent="saveContent"
-          >
-          <span class="text-sm text-theme-500 shrink-0">{{ splitFileName(currentFileName || sourceFile).ext }}</span>
-        </div>
-
-        <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
-          <button
-            v-for="button in [
-              { icon: 'lucide:bold', title: 'Bold', action: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive('bold') },
-              { icon: 'lucide:italic', title: 'Italic', action: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive('italic') },
-              { icon: 'lucide:strikethrough', title: 'Strike', action: () => editor?.chain().focus().toggleStrike().run(), active: editor?.isActive('strike') },
-              { icon: 'lucide:code', title: 'Inline code', action: () => editor?.chain().focus().toggleCode().run(), active: editor?.isActive('code') },
-            ]"
-            :key="button.title"
-            :title="button.title"
-            :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
-            class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
-            :disabled="!editor || loading"
-            @click="button.action"
-          >
-            <Icon
-              :icon="button.icon"
-              class="w-4 h-4"
-            />
-          </button>
-
-          <div class="mx-1 h-5 w-px bg-theme-800 shrink-0" />
-
-          <button
-            v-for="level in headingLevels"
-            :key="level"
-            :title="`Heading ${level}`"
-            :class="editor?.isActive('heading', { level }) ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
-            class="px-2.5 py-2 rounded-lg transition-colors text-xs font-semibold shrink-0 disabled:opacity-40"
-            :disabled="!editor || loading"
-            @click="toggleHeading(level)"
-          >
-            H{{ level }}
-          </button>
-
-          <div class="mx-1 h-5 w-px bg-theme-800 shrink-0" />
-
-          <button
-            v-for="button in [
-              { icon: 'lucide:list', title: 'Bullet list', action: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive('bulletList') },
-              { icon: 'lucide:list-ordered', title: 'Numbered list', action: () => editor?.chain().focus().toggleOrderedList().run(), active: editor?.isActive('orderedList') },
-              { icon: 'lucide:quote', title: 'Quote', action: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive('blockquote') },
-              { icon: 'lucide:square-code', title: 'Code block', action: () => editor?.chain().focus().toggleCodeBlock().run(), active: editor?.isActive('codeBlock') },
-              { icon: 'lucide:link', title: 'Link', action: toggleLink, active: editor?.isActive('link') },
-            ]"
-            :key="button.title"
-            :title="button.title"
-            :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
-            class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
-            :disabled="!editor || loading"
-            @click="button.action"
-          >
-            <Icon
-              :icon="button.icon"
-              class="w-4 h-4"
-            />
-          </button>
-        </div>
-
-        <div
-          v-if="error"
-          class="px-5 py-2 bg-red-500/10 border-b border-red-500/20 text-xs text-red-300 shrink-0"
+    <div class="flex h-full min-h-0 flex-col rounded-2xl overflow-hidden">
+      <div class="flex items-center gap-3 px-5 py-3 border-b border-theme-800 bg-theme-950/25 shrink-0">
+        <label class="text-xs text-theme-500 shrink-0">Name</label>
+        <input
+          v-model="editableTitle"
+          class="flex-1 min-w-0 bg-theme-950 border border-theme-700 rounded-lg px-3 py-1.5 text-sm text-theme-200 focus:outline-none focus:border-accent-500"
+          :disabled="loading || saving"
+          @keydown.enter.prevent="saveContent"
         >
-          {{ error }}
-        </div>
+        <span class="text-sm text-theme-500 shrink-0">{{ splitFileName(currentFileName || sourceFile).ext }}</span>
+      </div>
 
-        <div class="relative flex-1 min-h-0 overflow-y-auto bg-theme-950/45">
-          <div
-            v-if="loading"
-            class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-theme-950/65 text-theme-500 text-sm"
-          >
-            <Icon
-              icon="lucide:loader-2"
-              class="w-4 h-4 animate-spin"
-            />
-            Loading…
-          </div>
-          <EditorContent
-            :editor="editor"
-            class="memory-editor-shell"
+      <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
+        <button
+          v-for="button in [
+            { icon: 'lucide:bold', title: 'Bold', action: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive('bold') },
+            { icon: 'lucide:italic', title: 'Italic', action: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive('italic') },
+            { icon: 'lucide:strikethrough', title: 'Strike', action: () => editor?.chain().focus().toggleStrike().run(), active: editor?.isActive('strike') },
+            { icon: 'lucide:code', title: 'Inline code', action: () => editor?.chain().focus().toggleCode().run(), active: editor?.isActive('code') },
+          ]"
+          :key="button.title"
+          :title="button.title"
+          :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
+          class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
+          :disabled="!editor || loading"
+          @click="button.action"
+        >
+          <Icon
+            :icon="button.icon"
+            class="w-4 h-4"
           />
+        </button>
+
+        <div class="mx-1 h-5 w-px bg-theme-800 shrink-0" />
+
+        <button
+          v-for="level in headingLevels"
+          :key="level"
+          :title="`Heading ${level}`"
+          :class="editor?.isActive('heading', { level }) ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
+          class="px-2.5 py-2 rounded-lg transition-colors text-xs font-semibold shrink-0 disabled:opacity-40"
+          :disabled="!editor || loading"
+          @click="toggleHeading(level)"
+        >
+          H{{ level }}
+        </button>
+
+        <div class="mx-1 h-5 w-px bg-theme-800 shrink-0" />
+
+        <button
+          v-for="button in [
+            { icon: 'lucide:list', title: 'Bullet list', action: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive('bulletList') },
+            { icon: 'lucide:list-ordered', title: 'Numbered list', action: () => editor?.chain().focus().toggleOrderedList().run(), active: editor?.isActive('orderedList') },
+            { icon: 'lucide:quote', title: 'Quote', action: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive('blockquote') },
+            { icon: 'lucide:square-code', title: 'Code block', action: () => editor?.chain().focus().toggleCodeBlock().run(), active: editor?.isActive('codeBlock') },
+            { icon: 'lucide:link', title: 'Link', action: toggleLink, active: editor?.isActive('link') },
+          ]"
+          :key="button.title"
+          :title="button.title"
+          :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
+          class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
+          :disabled="!editor || loading"
+          @click="button.action"
+        >
+          <Icon
+            :icon="button.icon"
+            class="w-4 h-4"
+          />
+        </button>
+      </div>
+
+      <div
+        v-if="error"
+        class="px-5 py-2 bg-red-500/10 border-b border-red-500/20 text-xs text-red-300 shrink-0"
+      >
+        {{ error }}
+      </div>
+
+      <div class="relative flex-1 min-h-0 overflow-y-auto bg-theme-950/45">
+        <div
+          v-if="loading"
+          class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-theme-950/65 text-theme-500 text-sm"
+        >
+          <Icon
+            icon="lucide:loader-2"
+            class="w-4 h-4 animate-spin"
+          />
+          Loading…
         </div>
+        <EditorContent
+          :editor="editor"
+          class="memory-editor-shell"
+        />
+      </div>
     </div>
 
     <template #actions>
