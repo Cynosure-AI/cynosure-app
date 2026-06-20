@@ -5,6 +5,7 @@ import { Icon } from "@iconify/vue";
 import { api } from "../api/client";
 import type { ActivityItem, ActivityKind, ActivityTotalsByKind } from "../api/types";
 import { useAgentDefinitionsStore } from "../stores/agent-definitions.store";
+import { SK_ACTIVITY_LOG_FILTERS } from "../utils/storage-keys";
 import HoverMenu from "../components/shared/HoverMenu.vue";
 
 const router = useRouter();
@@ -34,7 +35,31 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
 ];
 
 const defaultSelectedKinds: ActivityKind[] = ["artifact", "channels", "notification", "cron", "memory"];
-const selectedKinds = ref<ActivityKind[]>([...defaultSelectedKinds]);
+const selectableKinds = new Set<ActivityKind>(filterOptions.map((option) => option.value));
+const selectedKinds = ref<ActivityKind[]>(readSelectedKinds());
+
+function readSelectedKinds(): ActivityKind[] {
+  try {
+    const raw = sessionStorage.getItem(SK_ACTIVITY_LOG_FILTERS);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!Array.isArray(parsed)) return [...defaultSelectedKinds];
+
+    const validKinds = parsed.filter((value): value is ActivityKind =>
+      typeof value === "string" && selectableKinds.has(value as ActivityKind),
+    );
+    return [...new Set(validKinds)];
+  } catch {
+    return [...defaultSelectedKinds];
+  }
+}
+
+function writeSelectedKinds(): void {
+  try {
+    sessionStorage.setItem(SK_ACTIVITY_LOG_FILTERS, JSON.stringify(selectedKinds.value));
+  } catch {
+    /* ignore storage failures */
+  }
+}
 
 function emptyTotalsByKind(): ActivityTotalsByKind {
   return {
@@ -259,6 +284,7 @@ onUnmounted(() => {
 });
 
 watch(selectedKinds, () => {
+  writeSelectedKinds();
   void loadActivity();
 });
 
