@@ -4,14 +4,16 @@ import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../stores/a
 import { Icon } from '@iconify/vue'
 import CollapsibleSection from './CollapsibleSection.vue'
 import HoverTooltip from './HoverTooltip.vue'
+import { isAutoManagedBuiltInToolName } from '../../utils/internal-tools'
 
 const props = withDefaults(
   defineProps<{
     modelValue: string[]
     showApprovals?: boolean
     scrollable?: boolean
+    automaticToolStates?: Record<string, { active: boolean; criteria: string }>
   }>(),
-  { showApprovals: false, scrollable: true }
+  { showApprovals: false, scrollable: true, automaticToolStates: () => ({}) }
 )
 
 const emit = defineEmits<{
@@ -24,6 +26,7 @@ const toolFilterText = ref('')
 const expandedNamespaces = ref<Set<string>>(new Set())
 
 const selectedSet = computed(() => new Set(props.modelValue))
+const selectableToolCount = computed(() => selectableTools(agentStore.availableTools).length)
 
 /**
  * Composite key uniquely identifies a tool across namespaces.
@@ -34,10 +37,40 @@ function toolKey(tool: ToolInfo): string {
 }
 
 function isSelected(tool: ToolInfo): boolean {
+  if (isAutoManagedTool(tool)) return automaticToolState(tool).active
   return selectedSet.value.has(toolKey(tool))
 }
 
+function isAutoManagedTool(tool: ToolInfo): boolean {
+  if (tool.namespace.id !== 'builtin') return false
+  if (isAutoManagedBuiltInToolName(tool.name)) return true
+  return tool.name.startsWith('relationship_graph_') && automaticToolState(tool).active
+}
+
+function automaticToolState(tool: ToolInfo): { active: boolean; criteria: string } {
+  return props.automaticToolStates[tool.name] ?? { active: false, criteria: automaticToolCriteria(tool.name) }
+}
+
+function automaticToolCriteria(toolName: string): string {
+  if (toolName.startsWith('todo_')) return 'thinking mode and visible execution tools'
+  if (toolName.startsWith('memory_') || toolName === 'memory_forget') return 'memory folder selected'
+  if (toolName.startsWith('relationship_graph_')) return 'memory folder selected'
+  if (toolName.startsWith('attachment_')) return 'large indexed attachment available'
+  if (toolName === 'expand_available_toolset') return 'auto tool mode enabled'
+  if (toolName === 'spawn_subagent') return 'sub-agent selected'
+  return 'runtime criteria met'
+}
+
+function automaticToolBadge(tool: ToolInfo): string {
+  return `automatic: ${automaticToolState(tool).criteria}`
+}
+
+function selectableTools(tools: ToolInfo[]): ToolInfo[] {
+  return tools.filter((tool) => !isAutoManagedTool(tool))
+}
+
 function toggleTool(tool: ToolInfo): void {
+  if (isAutoManagedTool(tool)) return
   const key = toolKey(tool)
   if (isSelected(tool)) {
     emit('update:modelValue', props.modelValue.filter((n) => n !== key))
@@ -47,7 +80,7 @@ function toggleTool(tool: ToolInfo): void {
 }
 
 function selectAllTools(): void {
-  emit('update:modelValue', agentStore.availableTools.map((t) => toolKey(t)))
+  emit('update:modelValue', selectableTools(agentStore.availableTools).map((t) => toolKey(t)))
 }
 
 function clearAllTools(): void {
@@ -121,21 +154,36 @@ function toolParams(tool: ToolInfo): ToolParam[] {
 function toggleNamespace(group: NamespaceGroup): void {
   const allSelected = isNamespaceAllSelected(group)
   const current = new Set(props.modelValue)
+  const tools = selectableTools(group.tools)
   if (allSelected) {
-    for (const tool of group.tools) current.delete(toolKey(tool))
+    for (const tool of tools) current.delete(toolKey(tool))
   } else {
-    for (const tool of group.tools) current.add(toolKey(tool))
+    for (const tool of tools) current.add(toolKey(tool))
   }
   emit('update:modelValue', Array.from(current))
 }
 
 function isNamespaceAllSelected(group: NamespaceGroup): boolean {
-  return group.tools.length > 0 && group.tools.every((t) => isSelected(t))
+  const tools = selectableTools(group.tools)
+  return tools.length > 0 && tools.every((t) => isSelected(t))
 }
 
 function isNamespacePartiallySelected(group: NamespaceGroup): boolean {
-  const selectedCount = group.tools.filter((t) => isSelected(t)).length
-  return selectedCount > 0 && selectedCount < group.tools.length
+  const tools = selectableTools(group.tools)
+  const selectedCount = tools.filter((t) => isSelected(t)).length
+  return selectedCount > 0 && selectedCount < tools.length
+}
+
+function selectedCount(group: NamespaceGroup): number {
+  return selectableTools(group.tools).filter((t) => isSelected(t)).length
+}
+
+function selectableCount(group: NamespaceGroup): number {
+  return selectableTools(group.tools).length
+}
+
+function autoManagedCount(group: NamespaceGroup): number {
+  return group.tools.length - selectableCount(group)
 }
 
 function isNamespaceExpanded(namespaceId: string): boolean {
@@ -155,7 +203,7 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
   <div class="flex flex-col h-full rounded-xl border border-theme-700 bg-theme-800">
     <div class="flex items-center justify-between px-4 py-2.5 border-b border-theme-700 shrink-0">
       <span class="text-[10px] text-theme-500">
-        {{ modelValue.length }}/{{ agentStore.availableTools.length }} enabled
+        {{ modelValue.length }}/{{ selectableToolCount }} enabled
       </span>
       <div class="flex items-center gap-3">
         <button
@@ -215,7 +263,9 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
                           ? 'bg-accent-600 border-accent-600'
                           : isNamespacePartiallySelected(group)
                             ? 'bg-accent-600 border-accent-600'
-                            : 'border-theme-500 bg-transparent'
+                            : selectableCount(group)
+                              ? 'border-theme-500 bg-transparent'
+                              : 'border-theme-700 bg-theme-800'
                       ]"
                       @click="toggleNamespace(group)"
                     >
@@ -242,7 +292,8 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
                       {{ group.namespace.label }}
                     </p>
                     <p class="text-[10px] text-theme-600 mt-0.5">
-                      {{ group.tools.filter((t) => isSelected(t)).length }}/{{ group.tools.length }} selected
+                      {{ selectedCount(group) }}/{{ selectableCount(group) }} selected
+                      <span v-if="autoManagedCount(group)"> · {{ autoManagedCount(group) }} automatic</span>
                     </p>
                   </div>
                 </div>
@@ -252,13 +303,16 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
                 <label
                   v-for="tool in group.tools"
                   :key="toolKey(tool)"
-                  class="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-theme-800/70 cursor-pointer"
+                  class="flex items-center gap-2 rounded-lg px-2 py-2"
+                  :class="isAutoManagedTool(tool) ? 'cursor-not-allowed opacity-55' : 'hover:bg-theme-800/70 cursor-pointer'"
                 >
                   <div class="flex items-start gap-2 flex-1 min-w-0">
                     <input
                       type="checkbox"
                       class="mt-0.5 h-4 w-4 accent-accent-600 shrink-0"
                       :checked="isSelected(tool)"
+                      :disabled="isAutoManagedTool(tool)"
+                      :title="isAutoManagedTool(tool) ? automaticToolBadge(tool) : undefined"
                       @change="toggleTool(tool)"
                     >
                     <HoverTooltip
@@ -267,36 +321,28 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
                       :max-width="260"
                     >
                       <div class="min-w-0 flex-1">
-                        <p class="text-xs text-theme-200 font-medium">{{ displayToolName(tool) }}</p>
-                        <p class="text-[10px] text-theme-500 leading-snug wrap-break-word">
-                          {{ displayToolDescription(tool) }}
+                        <p class="text-xs text-theme-200 font-medium">
+                          {{ displayToolName(tool) }}
+                          <span
+                            v-if="isAutoManagedTool(tool)"
+                            class="ml-1 rounded bg-theme-700 px-1 py-0.5 text-[9px] font-normal uppercase tracking-wide text-theme-400"
+                            :class="automaticToolState(tool).active ? 'bg-emerald-500/10 text-emerald-300' : ''"
+                          >
+                            {{ automaticToolBadge(tool) }}
+                          </span>
                         </p>
                       </div>
                       <template #content>
-                        <template v-if="toolParams(tool).length">
-                          <div class="font-medium text-theme-300 mb-1.5">
-                            Parameters
-                          </div>
-                          <div
-                            v-for="param in toolParams(tool)"
-                            :key="param.name"
-                            class="mb-1 last:mb-0"
-                          >
-                            <div class="flex items-baseline gap-1 font-mono text-[10px]">
-                              <span class="text-theme-300">{{ param.name }}</span>
-                              <span class="text-theme-500">: {{ param.type }}{{ param.required ? '' : '?' }}</span>
-                            </div>
-                            <div
-                              v-if="param.description"
-                              class="text-[9px] text-theme-500 pl-2 leading-snug"
-                            >
-                              {{ param.description }}
-                            </div>
-                          </div>
-                        </template>
                         <div
-                          class="text-[10px] text-theme-400 leading-snug"
-                          :class="toolParams(tool).length ? 'mt-2 pt-1.5 border-t border-theme-800' : ''"
+                          v-if="isAutoManagedTool(tool)"
+                          class="mb-2 rounded border  bg-theme-900/70 px-2 py-1.5 text-[10px] leading-snug pt-1.5 border-t border-theme-800"
+                          :class="automaticToolState(tool).active ? 'text-emerald-300' : 'text-theme-400'"
+                        >
+                          {{ automaticToolState(tool).active ? 'Active' : 'Inactive' }} automatically when {{ automaticToolState(tool).criteria }}.
+                        </div>
+                        <div
+                          class=" text-theme-400 leading-snug"
+                          :class="toolParams(tool).length || isAutoManagedTool(tool) ? '' : ''"
                         >
                           {{ displayToolDescription(tool) }}
                         </div>

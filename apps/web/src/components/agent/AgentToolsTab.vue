@@ -5,14 +5,89 @@ import { useAgentStore } from '../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
 import ToolSelector from '../shared/ToolSelector.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
+import { isAutoManagedBuiltInToolName } from '../../utils/internal-tools'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 
 const agentStore = useAgentStore()
 
+const hasMemoryScope = computed(() => (props.agent.memorySpaces?.length ?? 0) > 0)
+const hasSelectableExecutionTools = computed(() => props.agent.tools.length > 0 || props.agent.autoToolRouting)
+
+const automaticToolStates = computed(() => ({
+  todo_write: {
+    active: props.agent.thinkingEnabled && hasSelectableExecutionTools.value,
+    criteria: 'thinking mode and visible execution tools',
+  },
+  todo_update: {
+    active: props.agent.thinkingEnabled && hasSelectableExecutionTools.value,
+    criteria: 'thinking mode and visible execution tools',
+  },
+  memory_list_documents: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  memory_retrieve_chunks: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  memory_semantic_search: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  memory_create: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  memory_update: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  memory_forget: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  relationship_graph_search: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  relationship_graph_assert: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  relationship_graph_delete: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  attachment_list_documents: {
+    active: false,
+    criteria: 'large indexed attachment available during chat',
+  },
+  attachment_search: {
+    active: false,
+    criteria: 'large indexed attachment available during chat',
+  },
+  attachment_retrieve_chunks: {
+    active: false,
+    criteria: 'large indexed attachment available during chat',
+  },
+  expand_available_toolset: {
+    active: props.agent.autoToolRouting,
+    criteria: 'auto tool mode enabled',
+  },
+  spawn_subagent: {
+    active: (props.agent.subAgents?.length ?? 0) > 0,
+    criteria: 'sub-agent selected',
+  },
+}))
+
 const missingTools = computed(() => {
-  const availableKeys = new Set(agentStore.availableTools.map(t => t.key))
+  const availableKeys = new Set(
+    agentStore.availableTools
+      .filter(t => !(t.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(t.name)))
+      .map(t => t.key)
+  )
   return props.agent.tools.filter(name => !availableKeys.has(name))
 })
 
@@ -97,6 +172,7 @@ function removeMissing() {
       class="flex-1 min-h-0"
       :model-value="agent.tools"
       :show-approvals="true"
+      :automatic-tool-states="automaticToolStates"
       @update:model-value="emit('update', 'tools', $event)"
     />
   </div>

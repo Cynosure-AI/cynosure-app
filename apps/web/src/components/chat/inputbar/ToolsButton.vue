@@ -5,6 +5,7 @@ import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
 import ToolSelectorModal from '../modals/ToolSelectorModal.vue'
+import { isAutoManagedBuiltInToolName } from '../../../utils/internal-tools'
 
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
@@ -17,8 +18,12 @@ const selectedToolsList = computed(() =>
   )
 )
 
+const selectableToolsList = computed(() =>
+  agentStore.availableTools.filter(t => !(t.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(t.name)))
+)
+
 const missingTools = computed(() => {
-  const availableKeys = new Set(agentStore.availableTools.map(t => t.key))
+  const availableKeys = new Set(selectableToolsList.value.map(t => t.key))
   return chatStore.selectedToolNames.filter(name => !availableKeys.has(name))
 })
 </script>
@@ -64,7 +69,7 @@ const missingTools = computed(() => {
     </button>
     <template #content>
       <div class="font-medium text-theme-300 mb-1.5">
-        Tools ({{ chatStore.selectedToolNames.length }}/{{ agentStore.availableTools.length }})
+        Tools ({{ chatStore.selectedToolNames.length }}/{{ selectableToolsList.length }})
       </div>
       <div
         v-if="chatStore.sessionAutoToolRouting"

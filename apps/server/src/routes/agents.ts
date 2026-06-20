@@ -15,7 +15,6 @@ import { getCronJobsForAgent, unscheduleCronJob } from '../core/triggers/cron-sc
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
-import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { makePlanningTools } from '../core/tools/builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
@@ -175,58 +174,53 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     )
 
     // GET /api/agents/tools — list registered tools
-    app.get<{ Querystring: { includePolicyBuiltIns?: string } }>('/tools', async (req) => {
+    app.get('/tools', async () => {
         const registry = getToolRegistry()
         const gate = getHITLGate()
         const approvals = gate.getAllApprovals()
-        const includePolicyBuiltIns = req.query.includePolicyBuiltIns === 'true'
         const items = registry.listRegisteredTools()
-            .filter((tool) => includePolicyBuiltIns || !isBuiltInMemoryToolKey(tool.key))
+        const dynamicBuiltIns = [
+            ...makePlanningTools('').map((tool) => ({
+                key: `builtin::${tool.name}`,
+                name: tool.name,
+                executionName: tool.name,
+                description: tool.description,
+                parameters: tool.parameters,
+                namespace: { id: 'builtin', label: 'Built-In' },
+                ambiguous: false,
+            })),
+            ...makeAttachmentTools('').map((tool) => ({
+                key: `builtin::${tool.name}`,
+                name: tool.name,
+                executionName: tool.name,
+                description: tool.description,
+                parameters: tool.parameters,
+                namespace: { id: 'builtin', label: 'Built-In' },
+                ambiguous: false,
+            })),
+            // These tools are dynamically created at execution time but should
+            // appear in tool views so users can understand and configure them.
+            {
+                key: `builtin::${TOOL_SEARCH_TOOL_NAME}`,
+                name: TOOL_SEARCH_TOOL_NAME,
+                executionName: TOOL_SEARCH_TOOL_NAME,
+                description: 'Search and load additional available tools when the current tools are insufficient. Used by the auto-tool mode.',
+                parameters: { type: 'object', properties: { requested_capability: { type: 'string' }, limit: { type: 'number' } }, required: ['requested_capability'] },
+                namespace: { id: 'builtin', label: 'Built-In' },
+                ambiguous: false,
+            },
+            {
+                key: 'builtin::spawn_subagent',
+                name: 'spawn_subagent',
+                executionName: 'spawn_subagent',
+                description: 'Spawn a configured sub-agent by internal name to delegate a task.',
+                parameters: { type: 'object', properties: { internalName: { type: 'string' }, instructions: { type: 'string' }, context: { type: 'string' } }, required: ['internalName', 'instructions'] },
+                namespace: { id: 'builtin', label: 'Built-In' },
+                ambiguous: false,
+            },
+        ]
 
-        const policyBuiltIns = includePolicyBuiltIns
-            ? [
-                ...makePlanningTools('').map((tool) => ({
-                    key: `builtin::${tool.name}`,
-                    name: tool.name,
-                    executionName: tool.name,
-                    description: tool.description,
-                    parameters: tool.parameters,
-                    namespace: { id: 'builtin', label: 'Built-In' },
-                    ambiguous: false,
-                })),
-                ...makeAttachmentTools('').map((tool) => ({
-                    key: `builtin::${tool.name}`,
-                    name: tool.name,
-                    executionName: tool.name,
-                    description: tool.description,
-                    parameters: tool.parameters,
-                    namespace: { id: 'builtin', label: 'Built-In' },
-                    ambiguous: false,
-                })),
-                // These tools are dynamically created at execution time but should
-                // appear in the policy view so users can configure their HITL behaviour.
-                {
-                    key: `builtin::${TOOL_SEARCH_TOOL_NAME}`,
-                    name: TOOL_SEARCH_TOOL_NAME,
-                    executionName: TOOL_SEARCH_TOOL_NAME,
-                    description: 'Search and load additional available tools when the current tools are insufficient. Used by the auto-tool mode.',
-                    parameters: { type: 'object', properties: { requested_capability: { type: 'string' }, limit: { type: 'number' } }, required: ['requested_capability'] },
-                    namespace: { id: 'builtin', label: 'Built-In' },
-                    ambiguous: false,
-                },
-                {
-                    key: 'builtin::spawn_subagent',
-                    name: 'spawn_subagent',
-                    executionName: 'spawn_subagent',
-                    description: 'Spawn a configured sub-agent by internal name to delegate a task.',
-                    parameters: { type: 'object', properties: { internalName: { type: 'string' }, instructions: { type: 'string' }, context: { type: 'string' } }, required: ['internalName', 'instructions'] },
-                    namespace: { id: 'builtin', label: 'Built-In' },
-                    ambiguous: false,
-                },
-            ]
-            : []
-
-        return [...items, ...policyBuiltIns].map((tool) => ({
+        return [...items, ...dynamicBuiltIns].map((tool) => ({
             key: tool.key,
             name: tool.name,
             executionName: tool.executionName,
