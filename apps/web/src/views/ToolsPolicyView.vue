@@ -382,60 +382,69 @@ onMounted(loadPolicyTools)
                 <div
                   v-for="tool in group.tools"
                   :key="tool.key"
-                  class="grid gap-3 rounded-lg border border-theme-800 bg-theme-900/55 p-3 md:grid-cols-[minmax(0,1fr)_auto]"
+                  class="flex items-center justify-between gap-3 rounded-lg border border-theme-800 bg-theme-900/55 p-3"
                 >
-                  <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span
-                        class="font-mono text-sm"
-                        :class="group.namespace.id === 'builtin' ? 'text-accent-400' : 'text-theme-200'"
-                      >{{ displayName(tool) }}</span>
-                      <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-theme-500">
-                        {{ toolCategory(tool) }}
-                      </span>
-                    </div>
-                    <p class="mt-1 text-xs leading-relaxed text-theme-500">
-                      {{ displayDescription(tool) }}
-                    </p>
-
-                    <div
-                      v-if="toolParams(tool).length"
-                      class="mt-3 flex flex-wrap gap-2"
-                    >
-                      <HoverTooltip
-                        v-for="param in toolParams(tool)"
-                        :key="param.name"
-                        :disabled="!paramDescription(param)"
-                        placement="above"
-                        :max-width="320"
-                      >
-                        <span class="inline-flex items-baseline gap-1 rounded border border-theme-800 bg-theme-950/70 px-2 py-1 font-mono text-[11px]">
-                          <span class="text-theme-300">{{ param.name }}</span>
-                          <span class="text-theme-500">: {{ param.type }}{{ param.required ? '' : '?' }}</span>
+                  <HoverTooltip
+                    :block="true"
+                    placement="mouse"
+                    :max-width="360"
+                  >
+                    <div class="min-w-0 flex-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span
+                          class="font-mono text-sm"
+                          :class="group.namespace.id === 'builtin' ? 'text-accent-400' : 'text-theme-200'"
+                        >{{ displayName(tool) }}</span>
+                        <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-theme-500">
+                          {{ toolCategory(tool) }}
                         </span>
-                        <template #content>
-                          <div class="whitespace-pre-line text-xs leading-relaxed text-theme-300">
-                            {{ paramDescription(param) }}
-                          </div>
-                        </template>
-                      </HoverTooltip>
+                      </div>
+                      <p class="mt-1 text-xs leading-relaxed text-theme-500">
+                        {{ displayDescription(tool) }}
+                      </p>
                     </div>
-                  </div>
+                    <template #content>
+                      <div
+                        v-if="toolParams(tool).length"
+                        class="space-y-1"
+                      >
+                        <p class="text-[10px] font-semibold uppercase tracking-wider text-theme-500 mb-1.5">
+                          Parameters
+                        </p>
+                        <div
+                          v-for="param in toolParams(tool)"
+                          :key="param.name"
+                          class="text-[11px] leading-snug text-theme-300"
+                        >
+                          <span class="font-mono text-theme-200">{{ param.name }}</span>
+                          <span class="text-theme-500">: {{ param.type }}{{ param.required ? '' : '?' }}</span>
+                          <span
+                            v-if="paramDescription(param)"
+                            class="block text-theme-400 mt-0.5"
+                          >{{ paramDescription(param) }}</span>
+                        </div>
+                      </div>
+                      <div
+                        v-else
+                        class="text-[11px] text-theme-400"
+                      >
+                        No parameters.
+                      </div>
+                    </template>
+                  </HoverTooltip>
 
-                  <div class="flex items-start justify-end">
-                    <button
-                      class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors"
-                      :class="isAutoApproved(approvalName(tool)) ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'"
-                      :title="isAutoApproved(approvalName(tool)) ? 'Auto-confirmed - click to require approval' : 'Requires approval - click to auto-confirm'"
-                      @click.stop="toggleApproval(approvalName(tool))"
-                    >
-                      <Icon
-                        :icon="isAutoApproved(approvalName(tool)) ? 'lucide:shield-check' : 'lucide:shield-alert'"
-                        class="h-3.5 w-3.5"
-                      />
-                      {{ isAutoApproved(approvalName(tool)) ? 'auto' : 'ask' }}
-                    </button>
-                  </div>
+                  <button
+                    class="shrink-0 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors"
+                    :class="isAutoApproved(approvalName(tool)) ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'"
+                    :title="isAutoApproved(approvalName(tool)) ? 'Auto-confirmed - click to require approval' : 'Requires approval - click to auto-confirm'"
+                    @click.stop="toggleApproval(approvalName(tool))"
+                  >
+                    <Icon
+                      :icon="isAutoApproved(approvalName(tool)) ? 'lucide:shield-check' : 'lucide:shield-alert'"
+                      class="h-3.5 w-3.5"
+                    />
+                    {{ isAutoApproved(approvalName(tool)) ? 'auto' : 'ask' }}
+                  </button>
                 </div>
               </div>
             </div>
