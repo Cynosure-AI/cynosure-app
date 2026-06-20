@@ -5,6 +5,7 @@ import type { MemorySpace, MemoryFileStatus, MemoryIndexJob } from "../../api/ty
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
+import DataTable, { type Column } from "../shared/DataTable.vue";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
 
@@ -12,6 +13,8 @@ interface DocumentDragPayload {
   sourceSpaceId: string;
   sourceFiles: string[];
 }
+
+type DocumentRow = MemoryFileStatus & { id: string };
 
 const props = defineProps<{
   spaceId: string;
@@ -58,12 +61,30 @@ const filteredFiles = computed(() => {
   return files.value.filter((f) => f.fileName.toLowerCase().includes(q));
 });
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredFiles.value.length / FILES_PAGE_SIZE)));
+const documentRows = computed<DocumentRow[]>(() => filteredFiles.value.map((file) => ({ ...file, id: file.fileName })));
 
-const pagedFiles = computed(() => {
+const totalPages = computed(() => Math.max(1, Math.ceil(documentRows.value.length / FILES_PAGE_SIZE)));
+
+const pagedFiles = computed<DocumentRow[]>(() => {
   const start = page.value * FILES_PAGE_SIZE;
-  return filteredFiles.value.slice(start, start + FILES_PAGE_SIZE);
+  return documentRows.value.slice(start, start + FILES_PAGE_SIZE);
 });
+
+const selectedFileIds = computed({
+  get: () => Array.from(selectedFiles.value),
+  set: (value: string[]) => {
+    selectedFiles.value = new Set(value);
+  },
+});
+
+const columns: Column<DocumentRow>[] = [
+  { key: "fileName", label: "File", width: "minmax(260px, 2fr)", sortable: true, sortValue: (file) => file.fileName },
+  { key: "modifiedAt", label: "Modified", width: "140px", sortable: true, sortValue: (file) => file.modifiedAt },
+  { key: "chunkCount", label: "Chunks", width: "96px", sortable: true, sortValue: (file) => file.chunkCount || 0 },
+  { key: "entityIndexed", label: "Graph", width: "88px", sortable: true, sortValue: (file) => file.entityIndexed },
+  { key: "status", label: "Status", width: "140px", sortable: true, sortValue: (file) => file.status },
+  { key: "actions", label: "", width: "190px" },
+];
 
 const allFilteredSelected = computed(
   () =>
@@ -148,14 +169,6 @@ function stopJobsPolling() {
   if (!jobsPollTimer) return;
   clearInterval(jobsPollTimer);
   jobsPollTimer = null;
-}
-
-// --- Selection ---
-function toggleSelectFile(fileName: string) {
-  const s = new Set(selectedFiles.value);
-  if (s.has(fileName)) s.delete(fileName);
-  else s.add(fileName);
-  selectedFiles.value = s;
 }
 
 function selectAllOnPage() {
@@ -390,6 +403,10 @@ watch(
   },
   { immediate: true },
 );
+
+watch(documentRows, () => {
+  if (page.value > totalPages.value - 1) page.value = totalPages.value - 1;
+});
 
 onUnmounted(() => {
   stopJobsPolling();
@@ -635,191 +652,160 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
     </div>
 
     <!-- File rows -->
-    <div
+    <DataTable
       v-else
-      class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45"
+      v-model:selected-ids="selectedFileIds"
+      v-model:page="page"
+      :items="documentRows"
+      :columns="columns"
+      :selectable="true"
+      :row-selectable="(file) => file.supported"
+      :row-draggable="true"
+      :row-class="(file) => !file.supported ? 'opacity-50' : file.textDirect ? 'cursor-pointer' : undefined"
+      :pagination="true"
+      :page-size="FILES_PAGE_SIZE"
+      pagination-position="both"
+      initial-sort-key="fileName"
+      :empty-message="searchQuery.trim() ? `No files matching '${searchQuery.trim()}'` : 'No files in this folder yet.'"
+      @row-click="(file) => openEditorModal(file.fileName)"
+      @row-dragstart="(file, event) => startDocumentDrag(event, file.fileName)"
     >
-      <!-- Top pagination -->
-      <div
-        v-if="totalPages > 1"
-        class="flex items-center justify-center gap-2 px-4 py-2 border-b border-theme-800/70 bg-theme-900/40"
-      >
-        <button
-          :disabled="page === 0"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
-          @click="page = Math.max(0, page - 1)"
-        >
-          Prev
-        </button>
-        <span class="text-xs text-theme-500">{{ page + 1 }} / {{ totalPages }}</span>
-        <button
-          :disabled="page >= totalPages - 1"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
-          @click="page = Math.min(totalPages - 1, page + 1)"
-        >
-          Next
-        </button>
-      </div>
-
-      <div
-        v-for="file in pagedFiles"
-        :key="file.fileName"
-        draggable="true"
-        class="group/row flex items-center gap-3 px-4 py-3 border-b border-theme-800/70 last:border-b-0 hover:bg-theme-800/30 transition-colors"
-        :class="{ 'opacity-50': !file.supported, 'cursor-pointer': file.textDirect }"
-        @click="openEditorModal(file.fileName)"
-        @dragstart.stop="startDocumentDrag($event, file.fileName)"
-      >
-        <input
-          v-if="file.supported"
-          type="checkbox"
-          class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 opacity-0 group-hover/row:opacity-100 transition-opacity"
-          :class="{ 'opacity-100': selectedFiles.size > 0 || selectedFiles.has(file.fileName) }"
-          :checked="selectedFiles.has(file.fileName)"
-          @click.stop
-          @change.stop.prevent="toggleSelectFile(file.fileName)"
-        >
-        <div
-          v-else
-          class="w-4 h-4 shrink-0"
-        />
-
-        <!-- File type icon -->
-        <Icon
-          :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
-          class="w-4 h-4 shrink-0"
-          :class="file.supported ? 'text-theme-400' : 'text-theme-600'"
-        />
-
-        <!-- Name + meta -->
-        <div class="flex-1 min-w-0">
-          <div
-            class="text-sm truncate"
-            :class="file.supported ? 'text-theme-200' : 'text-theme-500'"
-          >
-            {{ file.fileName }}
-          </div>
-          <div class="text-[11px] text-theme-600 flex items-center gap-2 mt-0.5">
-            <span>{{ formatFileSize(file.size) }}</span>
-            <span>·</span>
-            <span>{{ new Date(file.modifiedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) }}</span>
-            <template v-if="file.supported && file.status === 'indexed' && file.chunkCount">
-              <span>·</span>
-              <span>{{ file.chunkCount }} chunk{{ file.chunkCount !== 1 ? "s" : "" }}</span>
-            </template>
+      <template #col-fileName="{ item: file }">
+        <div class="flex min-w-0 items-center gap-3">
+          <Icon
+            :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
+            class="h-4 w-4 shrink-0"
+            :class="file.supported ? 'text-theme-400' : 'text-theme-600'"
+          />
+          <div class="min-w-0">
+            <div
+              class="truncate text-sm"
+              :class="file.supported ? 'text-theme-200' : 'text-theme-500'"
+            >
+              {{ file.fileName }}
+            </div>
+            <div class="mt-0.5 flex items-center gap-2 text-[11px] text-theme-600">
+              <span>{{ formatFileSize(file.size) }}</span>
+            </div>
           </div>
         </div>
+      </template>
 
-        <!-- Entity graph indicator -->
+      <template #col-modifiedAt="{ item: file }">
+        <span class="text-xs text-theme-500">
+          {{ new Date(file.modifiedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) }}
+        </span>
+      </template>
+
+      <template #col-chunkCount="{ item: file }">
+        <span
+          v-if="file.supported && file.status === 'indexed'"
+          class="text-xs text-theme-400"
+        >
+          {{ file.chunkCount || 0 }}
+        </span>
+        <span
+          v-else
+          class="text-xs text-theme-700"
+        >
+          —
+        </span>
+      </template>
+
+      <template #col-entityIndexed="{ item: file }">
         <div
           v-if="file.supported"
-          class="shrink-0"
+          class="flex items-center"
           :title="file.entityIndexed ? 'Entity indexed' : file.status === 'indexed' ? 'Not entity indexed' : 'Entity indexing requires regular indexing first'"
         >
           <Icon
             :icon="file.entityIndexed ? 'lucide:network' : 'lucide:network-x'"
-            class="w-3.5 h-3.5"
+            class="h-3.5 w-3.5"
             :class="file.entityIndexed ? 'text-emerald-400' : 'text-theme-700'"
           />
         </div>
+      </template>
 
-        <!-- Status indicator -->
+      <template #col-status="{ item: file }">
         <div
-          class="flex items-center gap-1.5 shrink-0"
+          class="flex items-center gap-1.5"
           :title="statusLabel(file.status)"
         >
           <Icon
             :icon="statusIcon(file.status)"
-            class="w-3.5 h-3.5"
+            class="h-3.5 w-3.5"
             :class="statusClass(file.status)"
           />
           <span
-            class="text-[11px] hidden sm:inline"
+            class="text-[11px]"
             :class="statusClass(file.status)"
           >
             {{ statusLabel(file.status) }}
           </span>
         </div>
+      </template>
 
-        <!-- File actions -->
-        <button
-          v-if="file.textDirect"
-          class="shrink-0 p-1.5 text-theme-500 hover:text-accent-300 rounded-lg hover:bg-theme-800/70 transition-colors opacity-0 group-hover/row:opacity-100 focus:opacity-100"
-          title="Edit memory"
-          @click.stop="openEditorModal(file.fileName)"
+      <template #col-actions="{ item: file }">
+        <div
+          class="flex items-center justify-end gap-1"
+          @click.stop
         >
-          <Icon
-            icon="lucide:pencil"
-            class="w-3.5 h-3.5"
-          />
-        </button>
+          <button
+            v-if="file.textDirect"
+            class="p-1.5 text-theme-500 hover:text-accent-300 rounded-lg hover:bg-theme-800/70 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+            title="Edit memory"
+            @click="openEditorModal(file.fileName)"
+          >
+            <Icon
+              icon="lucide:pencil"
+              class="h-3.5 w-3.5"
+            />
+          </button>
 
-        <button
-          v-if="file.supported && (file.status === 'needs_reindex' || file.status === 'not_indexed')"
-          class="shrink-0 flex items-center gap-1 px-2 py-1 text-xs bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded transition-colors disabled:opacity-50"
-          :title="isJobRunning('reindex', file.fileName) ? 'Cancel re-index' : 'Re-index this file'"
-          @click.stop="isJobRunning('reindex', file.fileName) ? cancelJob(runningJob('reindex', file.fileName)) : reindexFile(file.fileName)"
-        >
-          <Icon
-            :icon="isJobRunning('reindex', file.fileName) ? 'lucide:loader-2' : 'lucide:refresh-cw'"
-            class="w-3.5 h-3.5"
-            :class="{ 'animate-spin': isJobRunning('reindex', file.fileName) }"
-          />
-          {{ isJobRunning("reindex", file.fileName) ? "Cancel" : "Re-index" }}
-        </button>
+          <button
+            v-if="file.supported && (file.status === 'needs_reindex' || file.status === 'not_indexed')"
+            class="flex items-center gap-1 rounded px-2 py-1 text-xs bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors disabled:opacity-50"
+            :title="isJobRunning('reindex', file.fileName) ? 'Cancel re-index' : 'Re-index this file'"
+            @click="isJobRunning('reindex', file.fileName) ? cancelJob(runningJob('reindex', file.fileName)) : reindexFile(file.fileName)"
+          >
+            <Icon
+              :icon="isJobRunning('reindex', file.fileName) ? 'lucide:loader-2' : 'lucide:refresh-cw'"
+              class="h-3.5 w-3.5"
+              :class="{ 'animate-spin': isJobRunning('reindex', file.fileName) }"
+            />
+            {{ isJobRunning("reindex", file.fileName) ? "Cancel" : "Re-index" }}
+          </button>
 
-        <!-- Re-index complete icon (idle state for indexed) — only shown on hover -->
-        <button
-          v-else-if="file.supported && file.status === 'indexed'"
-          class="shrink-0 p-1 text-theme-600 hover:text-theme-400 transition-colors opacity-0 group-hover/row:opacity-100"
-          :class="{ 'opacity-100 text-orange-400 hover:text-orange-300': isJobRunning('reindex', file.fileName) }"
-          :title="isJobRunning('reindex', file.fileName) ? 'Cancel re-index' : 'Force re-index'"
-          @click.stop="isJobRunning('reindex', file.fileName) ? cancelJob(runningJob('reindex', file.fileName)) : reindexFile(file.fileName)"
-        >
-          <Icon
-            :icon="isJobRunning('reindex', file.fileName) ? 'lucide:loader-2' : 'lucide:refresh-cw'"
-            class="w-3.5 h-3.5"
-            :class="{ 'animate-spin': isJobRunning('reindex', file.fileName) }"
-          />
-        </button>
+          <button
+            v-else-if="file.supported && file.status === 'indexed'"
+            class="p-1 text-theme-600 hover:text-theme-400 transition-colors opacity-0 group-hover:opacity-100"
+            :class="{ 'opacity-100 text-orange-400 hover:text-orange-300': isJobRunning('reindex', file.fileName) }"
+            :title="isJobRunning('reindex', file.fileName) ? 'Cancel re-index' : 'Force re-index'"
+            @click="isJobRunning('reindex', file.fileName) ? cancelJob(runningJob('reindex', file.fileName)) : reindexFile(file.fileName)"
+          >
+            <Icon
+              :icon="isJobRunning('reindex', file.fileName) ? 'lucide:loader-2' : 'lucide:refresh-cw'"
+              class="h-3.5 w-3.5"
+              :class="{ 'animate-spin': isJobRunning('reindex', file.fileName) }"
+            />
+          </button>
 
-        <button
-          v-if="file.supported && file.status === 'indexed'"
-          class="shrink-0 p-1 text-theme-600 hover:text-emerald-400 transition-colors opacity-0 group-hover/row:opacity-100 disabled:opacity-50"
-          :class="{ 'opacity-100 text-emerald-400': isJobRunning('entity-index', file.fileName) }"
-          :title="isJobRunning('entity-index', file.fileName) ? 'Cancel entity indexing' : 'Entity index'"
-          @click.stop="isJobRunning('entity-index', file.fileName) ? cancelJob(runningJob('entity-index', file.fileName)) : entityIndexFile(file.fileName)"
-        >
-          <Icon
-            :icon="isJobRunning('entity-index', file.fileName) ? 'lucide:loader-2' : 'lucide:network'"
-            class="w-3.5 h-3.5"
-            :class="{ 'animate-spin': isJobRunning('entity-index', file.fileName) }"
-          />
-        </button>
-      </div>
-
-      <!-- Bottom pagination -->
-      <div
-        v-if="totalPages > 1"
-        class="flex items-center justify-center gap-2 px-4 py-2 border-t border-theme-800/70 bg-theme-900/40"
-      >
-        <button
-          :disabled="page === 0"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
-          @click="page = Math.max(0, page - 1)"
-        >
-          Prev
-        </button>
-        <span class="text-xs text-theme-500">{{ page + 1 }} / {{ totalPages }}</span>
-        <button
-          :disabled="page >= totalPages - 1"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
-          @click="page = Math.min(totalPages - 1, page + 1)"
-        >
-          Next
-        </button>
-      </div>
-    </div>
+          <button
+            v-if="file.supported && file.status === 'indexed'"
+            class="p-1 text-theme-600 hover:text-emerald-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+            :class="{ 'opacity-100 text-emerald-400': isJobRunning('entity-index', file.fileName) }"
+            :title="isJobRunning('entity-index', file.fileName) ? 'Cancel entity indexing' : 'Entity index'"
+            @click="isJobRunning('entity-index', file.fileName) ? cancelJob(runningJob('entity-index', file.fileName)) : entityIndexFile(file.fileName)"
+          >
+            <Icon
+              :icon="isJobRunning('entity-index', file.fileName) ? 'lucide:loader-2' : 'lucide:network'"
+              class="h-3.5 w-3.5"
+              :class="{ 'animate-spin': isJobRunning('entity-index', file.fileName) }"
+            />
+          </button>
+        </div>
+      </template>
+    </DataTable>
 
     <MemoryDocumentEditorModal
       :show="showEditorModal"

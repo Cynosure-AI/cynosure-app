@@ -138,6 +138,11 @@ function typeIcon(type: string): string {
   return "lucide:message-circle";
 }
 
+function instanceTypeClass(type: AgentInstance["type"]): string {
+  if (type === "cron") return "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
+  return "border-theme-700 bg-theme-900 text-theme-400";
+}
+
 function memoryJobTitle(job: MemoryIndexJob): string {
   return job.kind === "entity-index" ? `Extracting entities from ${job.fileName}` : `Indexing ${job.fileName}`;
 }
@@ -262,6 +267,7 @@ onUnmounted(() => {
                     class="h-4.5 w-4.5"
                     :class="{
                       'animate-pulse text-amber-300': entry.kind === 'instance' && entry.instance.status === 'awaiting-approval',
+                      'text-cyan-300': entry.kind === 'instance' && entry.instance.type === 'cron' && entry.instance.status !== 'awaiting-approval',
                       'animate-pulse text-accent-300': entry.kind === 'memory',
                     }"
                   />
@@ -271,7 +277,10 @@ onUnmounted(() => {
                     <h3 class="truncate text-[15px] font-bold text-theme-100">
                       {{ entry.kind === 'instance' ? entry.instance.agentName : memoryJobTitle(entry.job) }}
                     </h3>
-                    <span class="rounded-full border border-theme-700 bg-theme-900 px-2 py-0.5 text-[11px] text-theme-400">
+                    <span
+                      class="rounded-full border px-2 py-0.5 text-[11px]"
+                      :class="entry.kind === 'instance' ? instanceTypeClass(entry.instance.type) : 'border-theme-700 bg-theme-900 text-theme-400'"
+                    >
                       {{ entry.kind === 'instance' ? instanceTypeLabel(entry.instance.type) : memoryJobLabel(entry.job) }}
                     </span>
                     <span

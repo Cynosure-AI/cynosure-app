@@ -19,6 +19,7 @@ interface Props<TItem> {
   items: TItem[]
   columns: Column<TItem>[]
   selectable?: boolean
+  rowSelectable?: (item: TItem) => boolean
   selectionColumn?: SelectionColumn
   selectedIds?: string[]
   initialSortKey?: string | null
@@ -27,6 +28,11 @@ interface Props<TItem> {
   emptyMessage?: string
   loading?: boolean
   rowClass?: (item: TItem) => string | undefined
+  rowDraggable?: boolean | ((item: TItem) => boolean)
+  pagination?: boolean
+  page?: number
+  pageSize?: number
+  paginationPosition?: 'top' | 'bottom' | 'both'
 }
 
 const props = withDefaults(defineProps<Props<T>>(), {
@@ -39,12 +45,21 @@ const props = withDefaults(defineProps<Props<T>>(), {
     width: '40px',
   }),
   rowClass: undefined,
+  rowSelectable: undefined,
+  rowDraggable: false,
+  pagination: false,
+  page: 0,
+  pageSize: 30,
+  paginationPosition: 'bottom',
 })
 
 const emit = defineEmits<{
   'update:selectedIds': [value: string[]]
+  'update:page': [value: number]
   'row-click': [item: T]
+  'row-dragstart': [item: T, event: DragEvent]
   'selection-change': [value: string[]]
+  'page-change': [value: number]
 }>()
 
 const showSelectableColumn = computed(() => Boolean(props.selectable))
@@ -70,6 +85,9 @@ const gridColsTemplate = computed(() => {
 })
 
 function toggleSelection(id: string) {
+  const item = props.items.find(candidate => candidate.id === id)
+  if (item && !isSelectable(item)) return
+
   const current = new Set(props.selectedIds)
   if (current.has(id)) {
     current.delete(id)
@@ -83,10 +101,11 @@ function toggleSelection(id: string) {
 
 function toggleSelectAll() {
   const current = new Set(props.selectedIds)
+  const selectableItems = visibleItems.value.filter(isSelectable)
   if (allSelected.value) {
-    for (const item of props.items) current.delete(item.id)
+    for (const item of selectableItems) current.delete(item.id)
   } else {
-    for (const item of props.items) current.add(item.id)
+    for (const item of selectableItems) current.add(item.id)
   }
   const updated = [...current]
   emit('update:selectedIds', updated)
@@ -100,8 +119,20 @@ function handleRowClick(item: T, event: MouseEvent) {
   emit('row-click', item)
 }
 
+function isDraggable(item: T): boolean {
+  return typeof props.rowDraggable === 'function' ? props.rowDraggable(item) : props.rowDraggable
+}
+
+function handleDragStart(item: T, event: DragEvent) {
+  emit('row-dragstart', item, event)
+}
+
 function isSelected(id: string): boolean {
   return props.selectedIds.includes(id)
+}
+
+function isSelectable(item: T): boolean {
+  return props.rowSelectable ? props.rowSelectable(item) : true
 }
 
 function toggleSort(column: Column<T>) {
@@ -152,9 +183,27 @@ const sortedItems = computed(() => {
   return [...props.items].sort((a, b) => compareValues(valueForSort(a, column), valueForSort(b, column)) * direction)
 })
 
-const pageSelectedCount = computed(() => props.items.filter((item) => props.selectedIds.includes(item.id)).length)
-const allSelected = computed(() => pageSelectedCount.value === props.items.length && props.items.length > 0)
-const someSelected = computed(() => pageSelectedCount.value > 0 && pageSelectedCount.value < props.items.length)
+const pageCount = computed(() => Math.max(1, Math.ceil(sortedItems.value.length / props.pageSize)))
+const currentPage = computed(() => Math.min(Math.max(0, props.page), pageCount.value - 1))
+const visibleItems = computed(() => {
+  if (!props.pagination) return sortedItems.value
+  const start = currentPage.value * props.pageSize
+  return sortedItems.value.slice(start, start + props.pageSize)
+})
+const showPagination = computed(() => props.pagination && sortedItems.value.length > props.pageSize)
+const showTopPagination = computed(() => showPagination.value && (props.paginationPosition === 'top' || props.paginationPosition === 'both'))
+const showBottomPagination = computed(() => showPagination.value && (props.paginationPosition === 'bottom' || props.paginationPosition === 'both'))
+
+function setPage(nextPage: number) {
+  const normalized = Math.min(Math.max(0, nextPage), pageCount.value - 1)
+  emit('update:page', normalized)
+  emit('page-change', normalized)
+}
+
+const selectableVisibleItems = computed(() => visibleItems.value.filter(isSelectable))
+const pageSelectedCount = computed(() => selectableVisibleItems.value.filter((item) => props.selectedIds.includes(item.id)).length)
+const allSelected = computed(() => pageSelectedCount.value === selectableVisibleItems.value.length && selectableVisibleItems.value.length > 0)
+const someSelected = computed(() => pageSelectedCount.value > 0 && pageSelectedCount.value < selectableVisibleItems.value.length)
 const anySelected = computed(() => props.selectedIds.length > 0)
 </script>
 
@@ -163,6 +212,29 @@ const anySelected = computed(() => props.selectedIds.length > 0)
     v-if="items.length"
     class="rounded-xl border border-theme-800 overflow-x-auto bg-theme-950/45"
   >
+    <div
+      v-if="showTopPagination"
+      class="flex items-center justify-center gap-2 px-4 py-2 border-b border-theme-800/70 bg-theme-900/40"
+    >
+      <button
+        type="button"
+        :disabled="currentPage === 0"
+        class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+        @click="setPage(currentPage - 1)"
+      >
+        Prev
+      </button>
+      <span class="text-xs text-theme-500">{{ currentPage + 1 }} / {{ pageCount }}</span>
+      <button
+        type="button"
+        :disabled="currentPage >= pageCount - 1"
+        class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+        @click="setPage(currentPage + 1)"
+      >
+        Next
+      </button>
+    </div>
+
     <!-- Header Row -->
     <div
       v-if="showHeader"
@@ -212,11 +284,13 @@ const anySelected = computed(() => props.selectedIds.length > 0)
     <!-- Data Rows -->
     <div>
       <div
-        v-for="item in sortedItems"
+        v-for="item in visibleItems"
         :key="item.id"
         class="group border-b border-theme-800/70 last:border-b-0 cursor-pointer hover:bg-theme-800/30 transition-colors"
         :class="rowClass?.(item)"
+        :draggable="isDraggable(item)"
         @click="handleRowClick(item, $event)"
+        @dragstart.stop="handleDragStart(item, $event)"
       >
         <div
           class="grid gap-4 px-5 py-4 items-start dt-grid"
@@ -229,12 +303,17 @@ const anySelected = computed(() => props.selectedIds.length > 0)
             @click.stop
           >
             <input
+              v-if="isSelectable(item)"
               type="checkbox"
               class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
               :class="{ 'opacity-100': anySelected || isSelected(item.id) }"
               :checked="isSelected(item.id)"
               @change="toggleSelection(item.id)"
             >
+            <span
+              v-else
+              class="h-4 w-4"
+            />
           </div>
 
           <!-- Column Content (via slots) -->
@@ -262,6 +341,29 @@ const anySelected = computed(() => props.selectedIds.length > 0)
           :item="item"
         />
       </div>
+    </div>
+
+    <div
+      v-if="showBottomPagination"
+      class="flex items-center justify-center gap-2 px-4 py-2 border-t border-theme-800/70 bg-theme-900/40"
+    >
+      <button
+        type="button"
+        :disabled="currentPage === 0"
+        class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+        @click="setPage(currentPage - 1)"
+      >
+        Prev
+      </button>
+      <span class="text-xs text-theme-500">{{ currentPage + 1 }} / {{ pageCount }}</span>
+      <button
+        type="button"
+        :disabled="currentPage >= pageCount - 1"
+        class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+        @click="setPage(currentPage + 1)"
+      >
+        Next
+      </button>
     </div>
   </div>
 
