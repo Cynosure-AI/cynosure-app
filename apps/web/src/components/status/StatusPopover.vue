@@ -2,24 +2,20 @@
 import { ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProviderStore } from '../../stores/provider.store'
-import { useMemoryJobsStore } from '../../stores/memory-jobs.store'
 import { api } from '../../api/client'
-import type { AgentInstance, McpServerInfo, MemoryIndexJob } from '../../api/types'
+import type { McpServerInfo } from '../../api/types'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps<{
   show: boolean
-  instances: AgentInstance[]
 }>()
 
 const emit = defineEmits<{
   close: []
-  navigateToInstance: [instance: AgentInstance]
 }>()
 
 const router = useRouter()
 const providerStore = useProviderStore()
-const memoryJobsStore = useMemoryJobsStore()
 
 // Provider health
 interface ProviderHealth {
@@ -33,6 +29,7 @@ const providerChecked = ref(false)
 // MCP stats
 const mcpServers = ref<McpServerInfo[]>([])
 const mcpLoaded = ref(false)
+const appVersion = ref<string | null>(null)
 
 // Cache: skip re-fetch if data is less than 20s old
 let lastFetchedAt = 0
@@ -52,7 +49,6 @@ async function fetchStatus(force = false) {
   if (!force && lastFetchedAt && now - lastFetchedAt < CACHE_TTL) return
 
   refreshing.value = true
-  void memoryJobsStore.refresh()
 
   // Check providers (using listModels — free, no credits)
   providerChecked.value = false
@@ -86,6 +82,11 @@ async function fetchStatus(force = false) {
   } catch { /* non-critical */ }
   mcpLoaded.value = true
 
+  try {
+    const health = await api.system.health()
+    appVersion.value = health.version
+  } catch { /* non-critical */ }
+
   lastFetchedAt = Date.now()
   refreshing.value = false
 }
@@ -98,14 +99,6 @@ watch(() => props.show, (visible) => {
 function goTo(path: string) {
   emit('close')
   router.push(path)
-}
-
-function memoryJobLabel(job: MemoryIndexJob): string {
-  return job.kind === 'entity-index' ? 'Extracting entities' : 'Indexing memory'
-}
-
-function memoryJobIcon(job: MemoryIndexJob): string {
-  return job.kind === 'entity-index' ? 'lucide:network' : 'lucide:database-zap'
 }
 </script>
 
@@ -137,117 +130,6 @@ function memoryJobIcon(job: MemoryIndexJob): string {
           />
         </button>
       </div>
-
-      <!-- ── Memory Jobs ── -->
-      <div>
-        <div class="flex items-center gap-2 mb-1.5">
-          <Icon
-            icon="lucide:database"
-            class="w-3.5 h-3.5 text-theme-500"
-          />
-          <span class="text-[11px] font-medium text-theme-400 uppercase tracking-wider">Memory Jobs</span>
-          <button
-            v-if="memoryJobsStore.runningJobs.length > 1"
-            class="ml-auto text-[10px] text-theme-500 hover:text-red-300 transition-colors"
-            :disabled="memoryJobsStore.refreshing"
-            @click="memoryJobsStore.cancelRunningJobs()"
-          >
-            Cancel all
-          </button>
-        </div>
-
-        <template v-if="memoryJobsStore.runningJobs.length > 0">
-          <div
-            v-for="job in memoryJobsStore.runningJobs"
-            :key="job.id"
-            class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-theme-800 transition-colors group"
-          >
-            <Icon
-              :icon="memoryJobIcon(job)"
-              class="w-3.5 h-3.5 text-accent-400 animate-pulse shrink-0"
-            />
-            <button
-              class="min-w-0 flex-1 text-left"
-              @click="goTo('/memory-spaces/documents')"
-            >
-              <div class="text-[11px] text-theme-300 truncate">
-                {{ memoryJobLabel(job) }}
-              </div>
-              <div class="text-[10px] text-theme-600 truncate">
-                {{ job.fileName }}
-              </div>
-            </button>
-            <button
-              class="p-1 rounded-md text-theme-500 hover:text-red-300 hover:bg-red-500/10 transition-colors"
-              title="Cancel job"
-              @click="memoryJobsStore.cancelJob(job.id)"
-            >
-              <Icon
-                icon="lucide:x"
-                class="w-3 h-3"
-              />
-            </button>
-          </div>
-        </template>
-        <div
-          v-else
-          class="text-[11px] text-theme-600 px-2"
-        >
-          No memory jobs
-        </div>
-      </div>
-
-      <div class="border-t border-theme-800" />
-
-      <!-- ── Running Instances ── -->
-      <div>
-        <div class="flex items-center gap-2 mb-1.5">
-          <Icon
-            icon="lucide:activity"
-            class="w-3.5 h-3.5 text-theme-500"
-          />
-          <span class="text-[11px] font-medium text-theme-400 uppercase tracking-wider">Instances</span>
-          <span
-            v-if="instances.length"
-            class="text-[10px] text-theme-500 ml-auto"
-          >{{ instances.length }} running</span>
-        </div>
-
-        <template v-if="instances.length > 0">
-          <div
-            v-for="instance in instances"
-            :key="instance.id"
-            role="button"
-            tabindex="0"
-            class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-theme-800 transition-colors cursor-pointer group"
-            @click="emit('navigateToInstance', instance)"
-            @keydown.enter="emit('navigateToInstance', instance)"
-          >
-            <Icon
-              v-if="instance.status === 'awaiting-approval'"
-              icon="lucide:lightbulb"
-              class="w-3.5 h-3.5 text-amber-400 animate-pulse shrink-0"
-            />
-            <Icon
-              v-else
-              icon="lucide:loader-2"
-              class="w-3.5 h-3.5 text-accent-400 animate-spin shrink-0"
-            />
-            <span
-              class="text-[11px] truncate flex-1"
-              :class="instance.status === 'awaiting-approval' ? 'text-amber-400 group-hover:text-amber-300' : 'text-theme-400 group-hover:text-theme-200'"
-            >{{ instance.agentName }}</span>
-          </div>
-        </template>
-        <div
-          v-else
-          class="text-[11px] text-theme-600 px-2"
-        >
-          No running instances
-        </div>
-      </div>
-
-      <div class="border-t border-theme-800" />
 
       <!-- ── LLM Providers ── -->
       <div>
@@ -337,6 +219,12 @@ function memoryJobIcon(job: MemoryIndexJob): string {
             No MCP servers configured
           </div>
         </template>
+      </div>
+
+      <div class="border-t border-theme-800" />
+
+      <div class="px-2 text-[10px] text-theme-600">
+        Cynosure <span v-if="appVersion">v{{ appVersion }}</span>
       </div>
     </div>
   </Transition>
