@@ -222,9 +222,22 @@ const {
 } = useWhisper();
 
 const hasDownloadedModel = computed(() => downloadedModels.value.length > 0);
+const remoteTranscriptionConfigured = computed(() =>
+  !!prefs.remoteTranscriptionProviderId && !!prefs.remoteTranscriptionModel,
+);
+const voiceInputUnavailableReason = computed(() => {
+  if (prefs.voiceTranscriptionMode === "remote" && !remoteTranscriptionConfigured.value) {
+    return "Select a remote transcription provider and model in Settings → Voice.";
+  }
+  if (prefs.voiceTranscriptionMode === "local" && !hasDownloadedModel.value) {
+    return "Voice input requires a Whisper model to be downloaded first. Open Settings → Voice to download a model.";
+  }
+  return "";
+});
+const voiceInputUnavailable = computed(() => !!voiceInputUnavailableReason.value);
 
 async function toggleMic(): Promise<void> {
-  if (!hasDownloadedModel.value) return;
+  if (voiceInputUnavailable.value) return;
   if (whisperStatus.value === "recording") {
     const text = await stopRecording();
     if (text) emit("transcription", text);
@@ -413,7 +426,7 @@ async function toggleMic(): Promise<void> {
 
     <!-- Mic / voice input button -->
     <HoverTooltip
-      v-if="prefs.whisperEnabled && !hasDownloadedModel"
+      v-if="prefs.whisperEnabled && voiceInputUnavailable"
       placement="above"
     >
       <button
@@ -433,8 +446,7 @@ async function toggleMic(): Promise<void> {
             icon="mdi:information"
             class="h-4 w-4 text-amber-400 mt-0.5 shrink-0"
           />
-          <span>Voice input requires a Whisper model to be downloaded first. Open
-            Settings → Voice to download a model.</span>
+          <span>{{ voiceInputUnavailableReason }}</span>
         </div>
       </template>
     </HoverTooltip>

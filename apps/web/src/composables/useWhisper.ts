@@ -1,6 +1,7 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { usePreferencesStore } from '../stores/preferences.store'
 import { SK_WHISPER_DOWNLOADED } from '../utils/storage-keys'
+import { api } from '../api/client'
 
 export type WhisperStatus = 'idle' | 'loading' | 'ready' | 'recording' | 'transcribing' | 'error'
 
@@ -43,6 +44,7 @@ export function useWhisper() {
     let audioChunks: Blob[] = []
     let resolveTranscription: ((text: string) => void) | null = null
     let rejectTranscription: ((err: Error) => void) | null = null
+    let activeMode: 'local' | 'remote' = 'local'
 
     function getWorker(): Worker {
         if (!worker) {
@@ -143,8 +145,9 @@ export function useWhisper() {
     }
 
     async function startRecording(deviceId?: string): Promise<void> {
+        activeMode = prefs.voiceTranscriptionMode
         // Ensure model is loaded
-        if (status.value !== 'ready') {
+        if (activeMode === 'local' && status.value !== 'ready') {
             loadModel()
             await new Promise<void>((resolve, reject) => {
                 const check = setInterval(() => {
@@ -183,15 +186,89 @@ export function useWhisper() {
 
                 const blob = new Blob(audioChunks, { type: 'audio/webm' })
                 try {
-                    const float32 = await blobToFloat32(blob)
-                    getWorker().postMessage({ type: 'transcribe', audio: float32, language: prefs.whisperLanguage })
+                    if (activeMode === 'remote') {
+                        status.value = 'transcribing'
+                        const result = await transcribeRemote(blob)
+                        status.value = 'ready'
+                        resolve(result)
+                        resolveTranscription = null
+                        rejectTranscription = null
+                    } else {
+                        const float32 = await blobToFloat32(blob)
+                        getWorker().postMessage({ type: 'transcribe', audio: float32, language: prefs.whisperLanguage })
+                    }
                 } catch (err) {
-                    status.value = 'ready'
+                    status.value = 'error'
+                    errorMessage.value = err instanceof Error ? err.message : String(err)
                     reject(err)
+                    resolveTranscription = null
+                    rejectTranscription = null
                 }
             }
             mediaRecorder.stop()
         })
+    }
+
+    function languageCode(language: string): string | undefined {
+        const codes: Record<string, string> = {
+            english: 'en',
+            german: 'de',
+            french: 'fr',
+            spanish: 'es',
+            italian: 'it',
+            portuguese: 'pt',
+            dutch: 'nl',
+            polish: 'pl',
+            russian: 'ru',
+            chinese: 'zh',
+            japanese: 'ja',
+            korean: 'ko',
+            arabic: 'ar',
+            hindi: 'hi',
+            turkish: 'tr',
+            swedish: 'sv',
+            danish: 'da',
+            norwegian: 'no',
+            finnish: 'fi',
+            czech: 'cs',
+            romanian: 'ro',
+            hungarian: 'hu',
+            greek: 'el',
+            ukrainian: 'uk',
+            indonesian: 'id',
+            vietnamese: 'vi',
+            thai: 'th',
+            hebrew: 'he',
+            catalan: 'ca',
+            malay: 'ms',
+        }
+        return codes[language]
+    }
+
+    async function blobToBase64(blob: Blob): Promise<string> {
+        const buffer = await blob.arrayBuffer()
+        let binary = ''
+        const bytes = new Uint8Array(buffer)
+        const chunkSize = 0x8000
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+        }
+        return btoa(binary)
+    }
+
+    async function transcribeRemote(blob: Blob): Promise<string> {
+        const providerId = prefs.remoteTranscriptionProviderId
+        const model = prefs.remoteTranscriptionModel
+        if (!providerId || !model) {
+            throw new Error('Select a remote transcription provider and model in Settings > Voice.')
+        }
+        const data = await blobToBase64(blob)
+        const response = await api.provider.transcribeAudio(providerId, {
+            model,
+            inputAudio: { data, format: 'webm' },
+            language: languageCode(prefs.whisperLanguage),
+        })
+        return response.text ?? ''
     }
 
     async function blobToFloat32(blob: Blob): Promise<Float32Array> {

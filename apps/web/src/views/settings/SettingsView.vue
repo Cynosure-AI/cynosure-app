@@ -174,6 +174,13 @@ const sections: SettingsSection[] = [
     terms: ['enable voice', 'voice input', 'microphone button', 'mic button', 'speech input', 'enable microphone']
   },
   {
+    id: 'transcription-engine',
+    categoryId: 'speech-to-text',
+    label: 'Transcription Engine',
+    description: 'Choose local Whisper or a remote transcription model for voice input.',
+    terms: ['transcription engine', 'remote transcription', 'local whisper', 'speech to text provider', 'voice provider', 'stt model']
+  },
+  {
     id: 'voice-model',
     categoryId: 'speech-to-text',
     label: 'Model & Quantization',

@@ -9,11 +9,13 @@ import {
     SK_CONTEXT_STRATEGY, SK_INLINE_ATTACHMENT_TEXT_LIMIT, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL,
     SK_AGENT_CATEGORIES, SK_MA_CATEGORIES,
     SK_WHISPER_MODEL, SK_WHISPER_ENABLED, SK_WHISPER_QUANTIZATION, SK_WHISPER_LANGUAGE, SK_WHISPER_MIC_DEVICE,
+    SK_VOICE_TRANSCRIPTION_MODE, SK_REMOTE_TRANSCRIPTION_PROVIDER, SK_REMOTE_TRANSCRIPTION_MODEL,
 } from '@/utils/storage-keys'
 
 export type ThemeId = 'dark' | 'light' | 'arasaka' | 'galaxy' | 'cyberpunk' | 'matrix' | 'sakura'
 
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
+export type VoiceTranscriptionMode = 'local' | 'remote'
 
 export const usePreferencesStore = defineStore('preferences', () => {
     const theme = useLocalStorage<ThemeId>(SK_THEME, 'dark')
@@ -41,6 +43,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const whisperQuantization = useLocalStorage(SK_WHISPER_QUANTIZATION, 'q8')
     const whisperLanguage = useLocalStorage(SK_WHISPER_LANGUAGE, 'english')
     const whisperMicDeviceId = useLocalStorage(SK_WHISPER_MIC_DEVICE, '')
+    const voiceTranscriptionMode = useLocalStorage<VoiceTranscriptionMode>(SK_VOICE_TRANSCRIPTION_MODE, 'local')
+    const remoteTranscriptionProviderId = useLocalStorage(SK_REMOTE_TRANSCRIPTION_PROVIDER, '')
+    const remoteTranscriptionModel = useLocalStorage(SK_REMOTE_TRANSCRIPTION_MODEL, '')
 
     if (!autoRouterProviderId.value) {
         autoRouterProviderId.value = localStorage.getItem(SK_LEGACY_SKILL_ROUTER_PROVIDER) || ''
@@ -57,7 +62,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     // Sync all pref changes to Electron's JSON file (single watcher)
     watch(
         [theme, autoExpandSteps, autoExpandToolCalls, showInternalToolCalls, generateTitle, titleProviderId, titleModel, entityGraphProviderId, entityGraphModel, autoRouterProviderId, autoRouterModel, compactProviderId, compactModel, contextStrategy, inlineAttachmentTextLimit,
-            agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId],
+            agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
+            voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel],
         () => { syncPrefsToElectron() },
         { deep: true },
     )
@@ -118,6 +124,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
         contextStrategy, inlineAttachmentTextLimit,
         agentCategories, maCategories,
         whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
+        voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel,
         toggleTheme, setTheme, toggleAutoExpand,
         addAgentCategory, removeAgentCategory, renameAgentCategory, reorderAgentCategory,
         addMACategory, removeMACategory,

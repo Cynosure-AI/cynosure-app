@@ -2,14 +2,17 @@
 import { computed, ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
+import { useProviderStore } from '../../stores/provider.store'
 import { useWhisper } from '../../composables/useWhisper'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import CustomSelect from '../shared/CustomSelect.vue'
+import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import type { SelectOptionGroup } from '../shared/CustomSelect.vue'
 import SettingsSubheading from './SettingsSubheading.vue'
 
 const prefs = usePreferencesStore()
+const providerStore = useProviderStore()
 const { status, progress, fileProgress, downloadedModels, errorMessage, loadModel, clearDownloadedModels, dispose } = useWhisper()
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
@@ -57,6 +60,24 @@ const quantizationGroups = computed<SelectOptionGroup[]>(() => [{
     tooltip: q.description,
     iconName: 'lucide:gauge',
   })),
+}])
+
+const transcriptionModeGroups = computed<SelectOptionGroup[]>(() => [{
+  label: 'Transcription Engine',
+  options: [
+    {
+      value: 'local',
+      label: 'Local Whisper',
+      tooltip: 'Runs in your browser. Audio stays on this device.',
+      iconName: 'lucide:hard-drive',
+    },
+    {
+      value: 'remote',
+      label: 'Remote model',
+      tooltip: 'Uses a configured provider transcription model. Audio is sent to that provider.',
+      iconName: 'lucide:cloud',
+    },
+  ],
 }])
 
 const languages: { id: string; label: string }[] = [
@@ -179,6 +200,9 @@ const micDeviceGroups = computed<SelectOptionGroup[]>(() => [{
 
 onMounted(() => {
   if (prefs.whisperEnabled) enumerateMics()
+  if (!providerStore.providers.length) {
+    providerStore.loadProviders().catch(() => { })
+  }
 })
 </script>
 
@@ -216,13 +240,77 @@ onMounted(() => {
     </BaseCard>
 
     <SettingsSubheading
-      v-if="showAnySection(['voice-model', 'voice-language', 'microphone'])"
+      v-if="showAnySection(['transcription-engine', 'voice-model', 'voice-language', 'microphone'])"
       label="Recognition"
     />
 
+    <!-- Transcription Engine -->
+    <BaseCard
+      v-if="showSection('transcription-engine')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
+          <Icon
+            icon="lucide:audio-lines"
+            class="w-5 h-5 text-theme-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Transcription Engine
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Choose whether voice input is transcribed locally or by a remote model
+          </p>
+        </div>
+      </div>
+
+      <CustomSelect
+        v-model="prefs.voiceTranscriptionMode"
+        :groups="transcriptionModeGroups"
+        placeholder="Select transcription engine..."
+      />
+
+      <div
+        v-if="prefs.voiceTranscriptionMode === 'remote'"
+        class="space-y-1.5"
+      >
+        <label class="text-[11px] font-medium text-theme-500 uppercase tracking-wider">Remote Model</label>
+        <ProviderModelSelect
+          v-model:provider-id="prefs.remoteTranscriptionProviderId"
+          v-model:model-value="prefs.remoteTranscriptionModel"
+          :providers="providerStore.providers"
+          model-type="transcription"
+          placeholder="Select transcription provider/model..."
+          max-height="max-h-80"
+          dropdown-width="min-w-full"
+          only-show-available-models
+        />
+        <p class="text-xs text-theme-500">
+          Audio from the microphone is sent to the selected provider for transcription.
+        </p>
+      </div>
+
+      <div
+        v-else
+        class="rounded-lg bg-theme-800/60 border border-theme-700/50 p-3"
+      >
+        <div class="flex items-center gap-2 text-xs">
+          <Icon
+            icon="lucide:shield-check"
+            class="w-3.5 h-3.5 text-green-400 shrink-0"
+          />
+          <span class="text-theme-400">
+            Local mode keeps microphone audio on this device and uses the cached browser Whisper model.
+          </span>
+        </div>
+      </div>
+    </BaseCard>
+
     <!-- Model & Quantization -->
     <BaseCard
-      v-if="showSection('voice-model')"
+      v-if="showSection('voice-model') && prefs.voiceTranscriptionMode === 'local'"
       class="p-5 space-y-4"
     >
       <div class="flex items-center gap-3">
@@ -354,13 +442,13 @@ onMounted(() => {
     </BaseCard>
 
     <SettingsSubheading
-      v-if="showAnySection(['download-cache', 'voice-help'])"
+      v-if="showAnySection(['download-cache', 'voice-help']) && prefs.voiceTranscriptionMode === 'local'"
       label="Local Model"
     />
 
     <!-- Download & Cache -->
     <BaseCard
-      v-if="showSection('download-cache')"
+      v-if="showSection('download-cache') && prefs.voiceTranscriptionMode === 'local'"
       class="p-5 space-y-4"
     >
       <div class="flex items-center gap-3">
@@ -524,8 +612,12 @@ onMounted(() => {
       </div>
       <div class="space-y-2 text-xs text-theme-500 pl-12">
         <p>
-          <span class="text-theme-300 font-medium">100% local</span> - The Whisper model runs
+          <span class="text-theme-300 font-medium">Local mode</span> - The Whisper model runs
           entirely in your browser using WebAssembly. No audio data leaves your device.
+        </p>
+        <p>
+          <span class="text-theme-300 font-medium">Remote mode</span> - Microphone audio is sent
+          to the selected transcription provider and model.
         </p>
         <p>
           <span class="text-theme-300 font-medium">First use</span> - The model is downloaded

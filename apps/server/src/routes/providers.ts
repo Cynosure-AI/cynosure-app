@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
-import type { LLMProviderConfig, ModelListType, VideoGenerationRequest } from '../core/gateway/providers/base.provider.js'
+import type { LLMProviderConfig, ModelListType, TranscriptionRequest, VideoGenerationRequest } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 
 /** Load providers from DB into the gateway (called once at startup) */
@@ -119,6 +119,16 @@ export async function registerProviderRoutes(app: FastifyInstance): Promise<void
       }
       const models = await gateway.listModels(req.params.id, req.query.type)
       return models
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error).message })
+    }
+  })
+
+  // POST /api/providers/:id/transcriptions — transcribe a base64 audio payload
+  app.post<{ Params: { id: string }; Body: TranscriptionRequest }>('/:id/transcriptions', async (req, reply) => {
+    try {
+      const result = await gateway.transcribeAudio(req.body, req.params.id)
+      return result
     } catch (err) {
       return reply.status(500).send({ error: (err as Error).message })
     }
