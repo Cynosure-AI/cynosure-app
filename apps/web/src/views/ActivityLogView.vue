@@ -532,7 +532,7 @@ watch(searchQuery, () => {
 
               <p
                 v-if="item.description"
-                class="mt-1.5 text-[13px] leading-relaxed text-theme-400"
+                class="mt-1.5 text-[13px] leading-relaxed text-theme-400 wrap-break-word"
               >
                 {{ item.description }}
               </p>
