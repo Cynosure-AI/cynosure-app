@@ -56,16 +56,6 @@ async function loadInstances() {
   }
 }
 
-async function navigateToInstance(instance: AgentInstance) {
-  showStatusPopover.value = false;
-  closeSidebar();
-  await chatStore.setActiveAgent(instance.agentId || null);
-  if (instance.conversationId) {
-    await chatStore.selectConversation(instance.conversationId);
-  }
-  router.push(instance.conversationId ? `/triggers/chat/${instance.conversationId}` : "/triggers/chat");
-}
-
 onMounted(() => {
   loadInstances();
   memoryJobsStore.startPolling();
@@ -595,9 +585,7 @@ const chatRoute = computed(() =>
       <!-- Status Popover -->
       <StatusPopover
         :show="showStatusPopover"
-        :instances="instances"
         @close="showStatusPopover = false"
-        @navigate-to-instance="navigateToInstance"
       />
     </div>
 
