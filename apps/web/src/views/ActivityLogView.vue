@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { api } from "../api/client";
-import type { ActivityItem, ActivityKind } from "../api/types";
+import type { ActivityItem, ActivityKind, ActivityTotalsByKind } from "../api/types";
 import { useAgentDefinitionsStore } from "../stores/agent-definitions.store";
 import HoverMenu from "../components/shared/HoverMenu.vue";
 
@@ -15,7 +15,6 @@ const loading = ref(true);
 const loadingMore = ref(false);
 const hasMore = ref(false);
 const totalItems = ref(0);
-const selectedKinds = ref<ActivityKind[]>(["memory"]);
 const searchQuery = ref("");
 const now = ref(Date.now());
 const PAGE_SIZE = 30;
@@ -34,12 +33,11 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "memory", label: "Memory", icon: "lucide:brain" },
 ];
 
-const filteredItems = computed(() => {
-  return items.value;
-});
+const defaultSelectedKinds: ActivityKind[] = ["artifact", "channels", "notification", "cron", "memory"];
+const selectedKinds = ref<ActivityKind[]>([...defaultSelectedKinds]);
 
-const totalByKind = computed(() => {
-  const totals: Record<ActivityKind, number> = {
+function emptyTotalsByKind(): ActivityTotalsByKind {
+  return {
     instance: 0,
     artifact: 0,
     notification: 0,
@@ -48,14 +46,26 @@ const totalByKind = computed(() => {
     chat: 0,
     channels: 0,
   };
-  for (const item of items.value) totals[item.kind] += 1;
-  return totals;
+}
+
+const totalByKind = ref<ActivityTotalsByKind>(emptyTotalsByKind());
+
+const filteredItems = computed(() => {
+  return items.value;
 });
 
 const allKindsSelected = computed(() => selectedKinds.value.length === filterOptions.length);
+const defaultKindsSelected = computed(() =>
+  selectedKinds.value.length === defaultSelectedKinds.length
+  && defaultSelectedKinds.every((kind) => selectedKinds.value.includes(kind)),
+);
+
+const allActivityTotal = computed(() =>
+  defaultSelectedKinds.reduce((total, kind) => total + totalByKind.value[kind], 0),
+);
 
 const selectedKindSummary = computed(() => {
-  if (allKindsSelected.value) return "All activity";
+  if (allKindsSelected.value || defaultKindsSelected.value) return "All Activity";
   if (selectedKinds.value.length === 0) return "No filters";
   if (selectedKinds.value.length === 1) {
     return filterOptions.find((option) => option.value === selectedKinds.value[0])?.label || "1 filter";
@@ -70,9 +80,9 @@ function toggleKind(kind: ActivityKind): void {
 }
 
 function toggleAllKinds(): void {
-  selectedKinds.value = allKindsSelected.value
+  selectedKinds.value = allKindsSelected.value || defaultKindsSelected.value
     ? []
-    : filterOptions.map((option) => option.value);
+    : [...defaultSelectedKinds];
 }
 
 function clearSearch(): void {
@@ -102,6 +112,7 @@ async function loadActivity() {
     items.value = response.items;
     hasMore.value = Boolean(response.hasMore);
     totalItems.value = response.total ?? response.items.length;
+    totalByKind.value = response.totalsByKind ?? emptyTotalsByKind();
   } finally {
     loading.value = false;
   }
@@ -115,6 +126,7 @@ async function loadMoreActivity() {
     items.value = [...items.value, ...response.items];
     hasMore.value = Boolean(response.hasMore);
     totalItems.value = response.total ?? items.value.length;
+    totalByKind.value = response.totalsByKind ?? totalByKind.value;
   } finally {
     loadingMore.value = false;
   }
@@ -328,13 +340,13 @@ watch(searchQuery, () => {
             <button
               type="button"
               class="mb-1 flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-[13px] text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
-              :class="{ 'filter-menu-active': allKindsSelected }"
+              :class="{ 'filter-menu-active': allKindsSelected || defaultKindsSelected }"
               @click="toggleAllKinds"
             >
               <span class="inline-flex items-center gap-2">
                 <span class="flex h-4 w-4 items-center justify-center rounded border border-theme-600">
                   <Icon
-                    v-if="allKindsSelected"
+                    v-if="allKindsSelected || defaultKindsSelected"
                     icon="lucide:check"
                     class="h-3 w-3"
                   />
@@ -343,9 +355,9 @@ watch(searchQuery, () => {
                   icon="lucide:list-filter"
                   class="h-3.5 w-3.5"
                 />
-                Loaded activity
+                All Activity
               </span>
-              <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ totalItems }}</span>
+              <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ allActivityTotal }}</span>
             </button>
 
             <div class="my-1 h-px bg-theme-800" />

@@ -281,6 +281,8 @@ export interface ActivityItem {
     artifacts?: ActivityArtifact[]
 }
 
+export type ActivityTotalsByKind = Record<ActivityKind, number>
+
 // ── Memory ──────────────────────────────────────────────────────────────────
 
 export interface MemorySpace {

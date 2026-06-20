@@ -29,6 +29,8 @@ interface ActivityItem {
     artifacts?: ActivityArtifact[]
 }
 
+type ActivityTotalsByKind = Record<ActivityKind, number>
+
 const ARTIFACT_EXTENSIONS = [
     'png',
     'jpg',
@@ -233,290 +235,290 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         const searchQuery = cleanSearchQuery(req.query.search)
         const queryLimit = searchQuery ? -1 : Math.max(limit + offset, limit)
         const typeFilter = parseTypeFilter(req.query.types)
-        const includes = (kind: ActivityKind) => !typeFilter || typeFilter.has(kind)
         const items: ActivityItem[] = []
         const activeInstances = listActiveInstances()
 
-        if (includes('notification')) {
-            const rows = db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?').all(queryLimit) as {
-                id: string
-                agent_id: string
-                conversation_id: string | null
-                title: string
-                body: string
-                severity: string
-                read: number
-                created_at: number
-                scheduled_at: number | null
-                delivered_at: number | null
-            }[]
-            for (const row of rows) {
-                const isScheduled = row.scheduled_at !== null && row.delivered_at === null
-                items.push({
-                    id: `notification:${row.id}`,
-                    kind: 'notification',
-                    title: row.title,
-                    description: row.body,
-                    createdAt: row.scheduled_at ?? row.delivered_at ?? row.created_at,
-                    agentId: row.agent_id || null,
-                    ...agentInfo(row.agent_id || null),
-                    conversationId: row.conversation_id,
-                    severity: row.severity,
-                    status: isScheduled ? 'scheduled' : (row.read === 1 ? 'read' : 'unread'),
-                    sourceId: row.id,
-                    sourceLabel: isScheduled ? 'Scheduled Notification' : 'Notification',
-                })
-            }
+        const notificationRows = db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?').all(queryLimit) as {
+            id: string
+            agent_id: string
+            conversation_id: string | null
+            title: string
+            body: string
+            severity: string
+            read: number
+            created_at: number
+            scheduled_at: number | null
+            delivered_at: number | null
+        }[]
+        for (const row of notificationRows) {
+            const isScheduled = row.scheduled_at !== null && row.delivered_at === null
+            items.push({
+                id: `notification:${row.id}`,
+                kind: 'notification',
+                title: row.title,
+                description: row.body,
+                createdAt: row.scheduled_at ?? row.delivered_at ?? row.created_at,
+                agentId: row.agent_id || null,
+                ...agentInfo(row.agent_id || null),
+                conversationId: row.conversation_id,
+                severity: row.severity,
+                status: isScheduled ? 'scheduled' : (row.read === 1 ? 'read' : 'unread'),
+                sourceId: row.id,
+                sourceLabel: isScheduled ? 'Scheduled Notification' : 'Notification',
+            })
         }
 
-        if (includes('cron')) {
-            const activeCronRunsByConversation = new Map(
-                activeInstances
-                    .filter((instance) => instance.type === 'cron' && instance.conversationId)
-                    .map((instance) => [instance.conversationId!, instance])
-            )
-            const rows = db.prepare(
-                "SELECT id, title, agent_id, created_at, updated_at FROM conversations WHERE origin = 'cron' ORDER BY updated_at DESC LIMIT ?"
-            ).all(queryLimit) as { id: string; title: string | null; agent_id: string | null; created_at: number; updated_at: number }[]
-            for (const row of rows) {
-                const activeRun = activeCronRunsByConversation.get(row.id)
-                const isRunning = Boolean(activeRun)
-                const title = row.title && row.title !== 'New Chat'
-                    ? row.title
-                    : (isRunning ? 'Scheduled cron run' : 'Cron job finished')
-                items.push({
-                    id: `cron:${row.id}`,
-                    kind: 'cron',
-                    title,
-                    description: isRunning ? 'Scheduled run is running' : 'Scheduled run completed',
-                    createdAt: isRunning ? (activeRun?.startedAt || row.created_at) : row.updated_at,
-                    agentId: row.agent_id,
-                    ...agentInfo(row.agent_id),
-                    conversationId: row.id,
-                    status: isRunning ? activeRun?.status || 'running' : 'completed',
-                    sourceId: row.id,
-                    sourceLabel: 'Cron',
-                })
-            }
+        const activeCronRunsByConversation = new Map(
+            activeInstances
+                .filter((instance) => instance.type === 'cron' && instance.conversationId)
+                .map((instance) => [instance.conversationId!, instance])
+        )
+        const cronRows = db.prepare(
+            "SELECT id, title, agent_id, created_at, updated_at FROM conversations WHERE origin = 'cron' ORDER BY updated_at DESC LIMIT ?"
+        ).all(queryLimit) as { id: string; title: string | null; agent_id: string | null; created_at: number; updated_at: number }[]
+        for (const row of cronRows) {
+            const activeRun = activeCronRunsByConversation.get(row.id)
+            const isRunning = Boolean(activeRun)
+            const title = row.title && row.title !== 'New Chat'
+                ? row.title
+                : (isRunning ? 'Scheduled cron run' : 'Cron job finished')
+            items.push({
+                id: `cron:${row.id}`,
+                kind: 'cron',
+                title,
+                description: isRunning ? 'Scheduled run is running' : 'Scheduled run completed',
+                createdAt: isRunning ? (activeRun?.startedAt || row.created_at) : row.updated_at,
+                agentId: row.agent_id,
+                ...agentInfo(row.agent_id),
+                conversationId: row.id,
+                status: isRunning ? activeRun?.status || 'running' : 'completed',
+                sourceId: row.id,
+                sourceLabel: 'Cron',
+            })
         }
 
-        if (includes('chat')) {
-            const activeChatConversationIds = new Set(
-                activeInstances
-                    .filter((instance) => instance.conversationId)
-                    .map((instance) => instance.conversationId!)
-            )
-            const rows = db.prepare(
-                `SELECT c.id, c.title, c.agent_id, c.created_at, c.updated_at,
-                        (SELECT SUBSTR(m.content, 1, 220)
-                         FROM messages m
-                         WHERE m.conversation_id = c.id AND m.role = 'user'
-                         ORDER BY m.created_at DESC
-                         LIMIT 1) AS last_user_message
-                 FROM conversations c
-                 WHERE c.origin = 'chat'
-                 ORDER BY c.updated_at DESC
-                 LIMIT ?`
-            ).all(queryLimit) as {
-                id: string
-                title: string | null
-                agent_id: string | null
-                created_at: number
-                updated_at: number
-                last_user_message: string | null
-            }[]
+        const activeChatConversationIds = new Set(
+            activeInstances
+                .filter((instance) => instance.conversationId)
+                .map((instance) => instance.conversationId!)
+        )
+        const chatRows = db.prepare(
+            `SELECT c.id, c.title, c.agent_id, c.created_at, c.updated_at,
+                    (SELECT SUBSTR(m.content, 1, 220)
+                     FROM messages m
+                     WHERE m.conversation_id = c.id AND m.role = 'user'
+                     ORDER BY m.created_at DESC
+                     LIMIT 1) AS last_user_message
+             FROM conversations c
+             WHERE c.origin = 'chat'
+             ORDER BY c.updated_at DESC
+             LIMIT ?`
+        ).all(queryLimit) as {
+            id: string
+            title: string | null
+            agent_id: string | null
+            created_at: number
+            updated_at: number
+            last_user_message: string | null
+        }[]
 
-            for (const row of rows) {
-                if (activeChatConversationIds.has(row.id)) continue
-                const title = row.title && row.title !== 'New Chat' ? row.title : 'Chat message'
-                items.push({
-                    id: `chat:${row.id}`,
-                    kind: 'chat',
-                    title,
-                    description: row.last_user_message || 'User chat conversation',
-                    createdAt: row.updated_at || row.created_at,
-                    agentId: row.agent_id,
-                    ...agentInfo(row.agent_id),
-                    conversationId: row.id,
-                    status: 'completed',
-                    sourceId: row.id,
-                    sourceLabel: 'Chat',
-                })
-            }
+        for (const row of chatRows) {
+            if (activeChatConversationIds.has(row.id)) continue
+            const title = row.title && row.title !== 'New Chat' ? row.title : 'Chat message'
+            items.push({
+                id: `chat:${row.id}`,
+                kind: 'chat',
+                title,
+                description: row.last_user_message || 'User chat conversation',
+                createdAt: row.updated_at || row.created_at,
+                agentId: row.agent_id,
+                ...agentInfo(row.agent_id),
+                conversationId: row.id,
+                status: 'completed',
+                sourceId: row.id,
+                sourceLabel: 'Chat',
+            })
         }
 
-        if (includes('channels')) {
-            const rows = db.prepare(
-                `SELECT c.id, c.title, c.agent_id, c.created_at, c.updated_at,
-                        (SELECT SUBSTR(m.content, 1, 220)
-                         FROM messages m
-                         WHERE m.conversation_id = c.id AND m.role = 'user'
-                         ORDER BY m.created_at DESC
-                         LIMIT 1) AS last_user_message
-                 FROM conversations c
-                 WHERE c.origin = 'channel'
-                 ORDER BY c.updated_at DESC
-                 LIMIT ?`
-            ).all(queryLimit) as {
-                id: string
-                title: string | null
-                agent_id: string | null
-                created_at: number
-                updated_at: number
-                last_user_message: string | null
-            }[]
+        const channelRows = db.prepare(
+            `SELECT c.id, c.title, c.agent_id, c.created_at, c.updated_at,
+                    (SELECT SUBSTR(m.content, 1, 220)
+                     FROM messages m
+                     WHERE m.conversation_id = c.id AND m.role = 'user'
+                     ORDER BY m.created_at DESC
+                     LIMIT 1) AS last_user_message
+             FROM conversations c
+             WHERE c.origin = 'channel'
+             ORDER BY c.updated_at DESC
+             LIMIT ?`
+        ).all(queryLimit) as {
+            id: string
+            title: string | null
+            agent_id: string | null
+            created_at: number
+            updated_at: number
+            last_user_message: string | null
+        }[]
 
-            for (const row of rows) {
-                const title = row.title && row.title !== 'New Chat' ? row.title : 'Channel message'
-                items.push({
-                    id: `channels:${row.id}`,
-                    kind: 'channels',
-                    title,
-                    description: row.last_user_message || 'Channel conversation',
-                    createdAt: row.updated_at || row.created_at,
-                    agentId: row.agent_id,
-                    ...agentInfo(row.agent_id),
-                    conversationId: row.id,
-                    status: 'completed',
-                    sourceId: row.id,
-                    sourceLabel: 'Channel',
-                })
-            }
+        for (const row of channelRows) {
+            const title = row.title && row.title !== 'New Chat' ? row.title : 'Channel message'
+            items.push({
+                id: `channels:${row.id}`,
+                kind: 'channels',
+                title,
+                description: row.last_user_message || 'Channel conversation',
+                createdAt: row.updated_at || row.created_at,
+                agentId: row.agent_id,
+                ...agentInfo(row.agent_id),
+                conversationId: row.id,
+                status: 'completed',
+                sourceId: row.id,
+                sourceLabel: 'Channel',
+            })
         }
 
-        if (includes('artifact')) {
-            const messageArtifactKeysByConversation = new Map<string, Set<string>>()
-            const messageRows = db.prepare(
-                `SELECT m.id, m.conversation_id, m.content, m.image_urls_json, m.video_urls_json, m.created_at, c.title, c.agent_id
-                 FROM messages m
-                 JOIN conversations c ON c.id = m.conversation_id
-                 WHERE m.role = 'assistant'
-                 ORDER BY m.created_at DESC
-                 LIMIT ?`
-            ).all(searchQuery ? -1 : Math.max(queryLimit * 3, 100)) as {
-                id: string
-                conversation_id: string
-                content: string
-                image_urls_json: string | null
-                video_urls_json: string | null
-                created_at: number
-                title: string | null
-                agent_id: string | null
-            }[]
+        const messageArtifactKeysByConversation = new Map<string, Set<string>>()
+        const messageRows = db.prepare(
+            `SELECT m.id, m.conversation_id, m.content, m.image_urls_json, m.video_urls_json, m.created_at, c.title, c.agent_id
+             FROM messages m
+             JOIN conversations c ON c.id = m.conversation_id
+             WHERE m.role = 'assistant'
+             ORDER BY m.created_at DESC
+             LIMIT ?`
+        ).all(searchQuery ? -1 : Math.max(queryLimit * 3, 100)) as {
+            id: string
+            conversation_id: string
+            content: string
+            image_urls_json: string | null
+            video_urls_json: string | null
+            created_at: number
+            title: string | null
+            agent_id: string | null
+        }[]
 
-            for (const row of messageRows) {
-                const artifacts = dedupeArtifacts([
-                    ...parseJsonStringArray(row.image_urls_json).map((url) => artifactFromUrl(url, 'image')),
-                    ...parseJsonStringArray(row.video_urls_json).map((url) => artifactFromUrl(url, 'video')),
-                    ...fileArtifactsFromText(row.content),
-                ])
-                if (!artifacts.length) continue
-                let conversationKeys = messageArtifactKeysByConversation.get(row.conversation_id)
-                if (!conversationKeys) {
-                    conversationKeys = new Set<string>()
-                    messageArtifactKeysByConversation.set(row.conversation_id, conversationKeys)
-                }
-                for (const artifact of artifacts) {
-                    conversationKeys.add(artifactKey(artifact))
-                }
-                items.push({
-                    id: `artifact:${row.id}`,
-                    kind: 'artifact',
-                    title: artifacts.length === 1 ? `Generated ${artifacts[0].label}` : `Generated ${artifacts.length} artifacts`,
-                    description: row.title || 'Assistant response',
-                    createdAt: row.created_at,
-                    agentId: row.agent_id,
-                    ...agentInfo(row.agent_id),
-                    conversationId: row.conversation_id,
-                    sourceId: row.id,
-                    sourceLabel: 'Artifact',
-                    artifacts,
-                })
+        for (const row of messageRows) {
+            const artifacts = dedupeArtifacts([
+                ...parseJsonStringArray(row.image_urls_json).map((url) => artifactFromUrl(url, 'image')),
+                ...parseJsonStringArray(row.video_urls_json).map((url) => artifactFromUrl(url, 'video')),
+                ...fileArtifactsFromText(row.content),
+            ])
+            if (!artifacts.length) continue
+            let conversationKeys = messageArtifactKeysByConversation.get(row.conversation_id)
+            if (!conversationKeys) {
+                conversationKeys = new Set<string>()
+                messageArtifactKeysByConversation.set(row.conversation_id, conversationKeys)
             }
-
-            const stepRows = db.prepare(
-                `SELECT s.id, s.conversation_id, s.results_json, s.created_at, c.title, c.agent_id
-                 FROM execution_steps s
-                 JOIN conversations c ON c.id = s.conversation_id
-                 WHERE s.results_json IS NOT NULL AND s.results_json != ''
-                 ORDER BY s.created_at DESC
-                 LIMIT ?`
-            ).all(searchQuery ? -1 : Math.max(queryLimit * 2, 100)) as {
-                id: string
-                conversation_id: string
-                results_json: string
-                created_at: number
-                title: string | null
-                agent_id: string | null
-            }[]
-
-            for (const row of stepRows) {
-                const artifacts = dedupeArtifacts(fileArtifactsFromText(row.results_json))
-                if (!artifacts.length) continue
-                const messageArtifactKeys = messageArtifactKeysByConversation.get(row.conversation_id)
-                const overlapsAssistantArtifact = messageArtifactKeys
-                    ? artifacts.some((artifact) => messageArtifactKeys.has(artifactKey(artifact)))
-                    : false
-                const visibleArtifacts = overlapsAssistantArtifact
-                    ? artifacts.filter((artifact) => !isMediaArtifact(artifact))
-                    : artifacts
-                if (!visibleArtifacts.length) continue
-                items.push({
-                    id: `artifact-step:${row.id}`,
-                    kind: 'artifact',
-                    title: visibleArtifacts.length === 1 ? `Generated ${visibleArtifacts[0].label}` : `Generated ${visibleArtifacts.length} artifacts`,
-                    description: row.title || 'Tool output',
-                    createdAt: row.created_at,
-                    agentId: row.agent_id,
-                    ...agentInfo(row.agent_id),
-                    conversationId: row.conversation_id,
-                    sourceId: row.id,
-                    sourceLabel: 'Tool artifact',
-                    artifacts: visibleArtifacts,
-                })
+            for (const artifact of artifacts) {
+                conversationKeys.add(artifactKey(artifact))
             }
+            items.push({
+                id: `artifact:${row.id}`,
+                kind: 'artifact',
+                title: artifacts.length === 1 ? `Generated ${artifacts[0].label}` : `Generated ${artifacts.length} artifacts`,
+                description: row.title || 'Assistant response',
+                createdAt: row.created_at,
+                agentId: row.agent_id,
+                ...agentInfo(row.agent_id),
+                conversationId: row.conversation_id,
+                sourceId: row.id,
+                sourceLabel: 'Artifact',
+                artifacts,
+            })
         }
 
-        if (includes('memory')) {
-            const rows = db.prepare(
-                `SELECT mfi.space_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, mfi.entity_indexed_at, ms.name AS space_name
-                 FROM memory_file_index mfi
-                 LEFT JOIN memory_spaces ms ON ms.id = mfi.space_id
-                 ORDER BY MAX(mfi.last_indexed_at, mfi.entity_indexed_at, mfi.created_at) DESC
-                 LIMIT ?`
-            ).all(queryLimit) as {
-                space_id: string
-                file_name: string
-                chunk_count: number
-                created_at: number
-                last_indexed_at: number
-                entity_indexed_at: number
-                space_name: string | null
-            }[]
+        const stepRows = db.prepare(
+            `SELECT s.id, s.conversation_id, s.results_json, s.created_at, c.title, c.agent_id
+             FROM execution_steps s
+             JOIN conversations c ON c.id = s.conversation_id
+             WHERE s.results_json IS NOT NULL AND s.results_json != ''
+             ORDER BY s.created_at DESC
+             LIMIT ?`
+        ).all(searchQuery ? -1 : Math.max(queryLimit * 2, 100)) as {
+            id: string
+            conversation_id: string
+            results_json: string
+            created_at: number
+            title: string | null
+            agent_id: string | null
+        }[]
 
-            for (const row of rows) {
-                const createdAt = Math.max(row.last_indexed_at || 0, row.entity_indexed_at || 0, row.created_at || 0)
-                if (!createdAt) continue
-                const entityIndexed = row.entity_indexed_at && row.entity_indexed_at >= row.last_indexed_at
-                items.push({
-                    id: `memory-file:${row.space_id}:${row.file_name}:${createdAt}`,
-                    kind: 'memory',
-                    title: entityIndexed ? `Updated memory graph for ${row.file_name}` : `Indexed memory file ${row.file_name}`,
-                    description: `${row.space_name || 'Memory folder'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
-                    createdAt,
-                    agentId: null,
-                    agentName: null,
-                    agentIconUrl: null,
-                    conversationId: null,
-                    status: 'completed',
-                    sourceId: row.space_id,
-                    sourceLabel: 'Memory',
-                })
-            }
+        for (const row of stepRows) {
+            const artifacts = dedupeArtifacts(fileArtifactsFromText(row.results_json))
+            if (!artifacts.length) continue
+            const messageArtifactKeys = messageArtifactKeysByConversation.get(row.conversation_id)
+            const overlapsAssistantArtifact = messageArtifactKeys
+                ? artifacts.some((artifact) => messageArtifactKeys.has(artifactKey(artifact)))
+                : false
+            const visibleArtifacts = overlapsAssistantArtifact
+                ? artifacts.filter((artifact) => !isMediaArtifact(artifact))
+                : artifacts
+            if (!visibleArtifacts.length) continue
+            items.push({
+                id: `artifact-step:${row.id}`,
+                kind: 'artifact',
+                title: visibleArtifacts.length === 1 ? `Generated ${visibleArtifacts[0].label}` : `Generated ${visibleArtifacts.length} artifacts`,
+                description: row.title || 'Tool output',
+                createdAt: row.created_at,
+                agentId: row.agent_id,
+                ...agentInfo(row.agent_id),
+                conversationId: row.conversation_id,
+                sourceId: row.id,
+                sourceLabel: 'Tool artifact',
+                artifacts: visibleArtifacts,
+            })
         }
 
-        const sorted = items
-            .filter((item) => !searchQuery || activitySearchText(item).includes(searchQuery))
+        const memoryRows = db.prepare(
+            `SELECT mfi.space_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, mfi.entity_indexed_at, ms.name AS space_name
+             FROM memory_file_index mfi
+             LEFT JOIN memory_spaces ms ON ms.id = mfi.space_id
+             ORDER BY MAX(mfi.last_indexed_at, mfi.entity_indexed_at, mfi.created_at) DESC
+             LIMIT ?`
+        ).all(queryLimit) as {
+            space_id: string
+            file_name: string
+            chunk_count: number
+            created_at: number
+            last_indexed_at: number
+            entity_indexed_at: number
+            space_name: string | null
+        }[]
+
+        for (const row of memoryRows) {
+            const createdAt = Math.max(row.last_indexed_at || 0, row.entity_indexed_at || 0, row.created_at || 0)
+            if (!createdAt) continue
+            const entityIndexed = row.entity_indexed_at && row.entity_indexed_at >= row.last_indexed_at
+            items.push({
+                id: `memory-file:${row.space_id}:${row.file_name}:${createdAt}`,
+                kind: 'memory',
+                title: entityIndexed ? `Updated memory graph for ${row.file_name}` : `Indexed memory file ${row.file_name}`,
+                description: `${row.space_name || 'Memory folder'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
+                createdAt,
+                agentId: null,
+                agentName: null,
+                agentIconUrl: null,
+                conversationId: null,
+                status: 'completed',
+                sourceId: row.space_id,
+                sourceLabel: 'Memory',
+            })
+        }
+
+        const searched = items.filter((item) => !searchQuery || activitySearchText(item).includes(searchQuery))
+        const totalsByKind = searched.reduce<ActivityTotalsByKind>((totals, item) => {
+            totals[item.kind] += 1
+            return totals
+        }, {
+            instance: 0,
+            artifact: 0,
+            notification: 0,
+            cron: 0,
+            memory: 0,
+            chat: 0,
+            channels: 0,
+        })
+        const filtered = searched.filter((item) => !typeFilter || typeFilter.has(item.kind))
+        const sorted = filtered
             .sort((a, b) => {
                 const aActive = a.status === 'running' || a.status === 'awaiting-approval'
                 const bActive = b.status === 'running' || b.status === 'awaiting-approval'
@@ -528,6 +530,6 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             })
         const page = sorted.slice(offset, offset + limit)
 
-        return { items: page, hasMore: offset + limit < sorted.length, total: sorted.length }
+        return { items: page, hasMore: offset + limit < sorted.length, total: sorted.length, totalsByKind }
     })
 }
