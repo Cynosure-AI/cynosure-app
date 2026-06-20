@@ -247,7 +247,15 @@ onUnmounted(() => {
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="flex min-w-0 items-start gap-3">
                 <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-theme-700 bg-theme-800 text-accent-300">
+                  <img
+                    v-if="entry.kind === 'instance' && entry.instance.agentIconUrl"
+                    :src="entry.instance.agentIconUrl"
+                    :alt="entry.instance.agentName"
+                    class="h-full w-full rounded-lg object-cover"
+                    :class="{ 'opacity-70': entry.instance.status === 'awaiting-approval' }"
+                  >
                   <Icon
+                    v-else
                     :icon="entry.kind === 'instance'
                       ? (entry.instance.status === 'awaiting-approval' ? 'lucide:circle-alert' : typeIcon(entry.instance.type))
                       : memoryJobIcon(entry.job)"

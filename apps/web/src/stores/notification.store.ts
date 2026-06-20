@@ -7,13 +7,11 @@ export const useNotificationStore = defineStore('notifications', () => {
     const notifications = ref<AppNotification[]>([])
     const loaded = ref(false)
 
-    const unreadCount = computed(() => notifications.value.filter((n) => !n.read && n.deliveredAt !== null).length)
-    const reminderNotifications = computed(() => notifications.value.filter((n) => n.scheduledAt !== null && n.deliveredAt === null))
-    const deliveredNotifications = computed(() => notifications.value.filter((n) => n.deliveredAt !== null))
+    const unreadCount = computed(() => notifications.value.filter((n) => !n.read).length)
 
     function sortNotifications() {
         notifications.value.sort((a, b) =>
-            (b.scheduledAt ?? b.deliveredAt ?? b.createdAt) - (a.scheduledAt ?? a.deliveredAt ?? a.createdAt)
+            b.createdAt - a.createdAt
         )
     }
 
@@ -61,16 +59,8 @@ export const useNotificationStore = defineStore('notifications', () => {
         notifications.value = []
     }
 
-    async function removeDelivered() {
-        const deliveredIds = deliveredNotifications.value.map((n) => n.id)
-        await Promise.all(deliveredIds.map((id) => api.notifications.remove(id)))
-        notifications.value = notifications.value.filter((n) => !deliveredIds.includes(n.id))
-    }
-
     return {
         notifications,
-        reminderNotifications,
-        deliveredNotifications,
         unreadCount,
         loaded,
         load,
@@ -78,7 +68,6 @@ export const useNotificationStore = defineStore('notifications', () => {
         markRead,
         markAllRead,
         remove,
-        removeDelivered,
         removeAll
     }
 })

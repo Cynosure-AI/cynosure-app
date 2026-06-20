@@ -238,7 +238,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         const items: ActivityItem[] = []
         const activeInstances = listActiveInstances()
 
-        const notificationRows = db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?').all(queryLimit) as {
+        const notificationRows = db.prepare('SELECT id, agent_id, conversation_id, title, body, severity, read, created_at FROM notifications ORDER BY created_at DESC LIMIT ?').all(queryLimit) as {
             id: string
             agent_id: string
             conversation_id: string | null
@@ -247,24 +247,21 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             severity: string
             read: number
             created_at: number
-            scheduled_at: number | null
-            delivered_at: number | null
         }[]
         for (const row of notificationRows) {
-            const isScheduled = row.scheduled_at !== null && row.delivered_at === null
             items.push({
                 id: `notification:${row.id}`,
                 kind: 'notification',
                 title: row.title,
                 description: row.body,
-                createdAt: row.scheduled_at ?? row.delivered_at ?? row.created_at,
+                createdAt: row.created_at,
                 agentId: row.agent_id || null,
                 ...agentInfo(row.agent_id || null),
                 conversationId: row.conversation_id,
                 severity: row.severity,
-                status: isScheduled ? 'scheduled' : (row.read === 1 ? 'read' : 'unread'),
+                status: row.read === 1 ? 'read' : 'unread',
                 sourceId: row.id,
-                sourceLabel: isScheduled ? 'Scheduled Notification' : 'Notification',
+                sourceLabel: 'Notification',
             })
         }
 

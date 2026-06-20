@@ -11,6 +11,7 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableRow } from "@tiptap/extension-table-row";
 import { api } from "../../api/client";
+import ModalDialog from "../shared/ModalDialog.vue";
 
 const props = defineProps<{
   show: boolean;
@@ -226,54 +227,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="show && sourceFile"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      @click.self="close"
-    >
-      <div class="bg-theme-900 border border-theme-700 rounded-xl shadow-xl w-full max-w-5xl mx-4 h-[88vh] flex flex-col">
-        <div class="flex items-center justify-between gap-4 px-5 py-4 border-b border-theme-800 shrink-0">
-          <div class="flex items-center gap-3 min-w-0">
-            <Icon
-              icon="lucide:edit-3"
-              class="w-5 h-5 text-accent-400 shrink-0"
-            />
-            <div class="min-w-0">
-              <h3 class="text-sm font-medium text-theme-200 truncate">
-                {{ titleToFileName(editableTitle) || sourceFile }}
-              </h3>
-              <p class="text-xs text-theme-500">
-                Markdown memory
-              </p>
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            <button
-              :disabled="loading || saving || !canSave"
-              class="px-3 py-1.5 bg-accent-500/15 hover:bg-accent-500/25 text-accent-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-              @click="saveContent"
-            >
-              <Icon
-                :icon="saving ? 'lucide:loader-2' : 'lucide:save'"
-                class="w-4 h-4"
-                :class="{ 'animate-spin': saving }"
-              />
-              Save
-            </button>
-            <button
-              class="p-1.5 text-theme-500 hover:text-theme-300 rounded-lg hover:bg-theme-800 transition-colors"
-              title="Close editor"
-              @click="close"
-            >
-              <Icon
-                icon="lucide:x"
-                class="w-4 h-4"
-              />
-            </button>
-          </div>
-        </div>
-
+  <ModalDialog
+    :show="show && Boolean(sourceFile)"
+    :title="titleToFileName(editableTitle) || sourceFile"
+    icon="lucide:edit-3"
+    icon-color="accent"
+    max-width="max-w-5xl"
+    max-height="h-[88vh]"
+    @close="close"
+  >
+    <div class="flex h-full min-h-0 flex-col">
         <div class="flex items-center gap-3 px-5 py-3 border-b border-theme-800 bg-theme-950/25 shrink-0">
           <label class="text-xs text-theme-500 shrink-0">Name</label>
           <input
@@ -367,9 +330,32 @@ onBeforeUnmount(() => {
             class="memory-editor-shell"
           />
         </div>
-      </div>
     </div>
-  </Teleport>
+
+    <template #actions>
+      <div class="flex justify-end gap-2">
+        <button
+          class="px-3 py-1.5 text-theme-400 hover:text-theme-100 rounded-lg text-sm transition-colors"
+          :disabled="saving"
+          @click="close"
+        >
+          Close
+        </button>
+        <button
+          :disabled="loading || saving || !canSave"
+          class="px-3 py-1.5 bg-accent-500/15 hover:bg-accent-500/25 text-accent-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          @click="saveContent"
+        >
+          <Icon
+            :icon="saving ? 'lucide:loader-2' : 'lucide:save'"
+            class="w-4 h-4"
+            :class="{ 'animate-spin': saving }"
+          />
+          Save
+        </button>
+      </div>
+    </template>
+  </ModalDialog>
 </template>
 
 <style scoped>
