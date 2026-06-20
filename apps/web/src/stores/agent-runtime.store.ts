@@ -108,6 +108,7 @@ export const useAgentStore = defineStore('agent', () => {
     const conversationId = activeViewConversationId.value
     return Boolean(conversationId && executingConversationIds.value.has(conversationId))
   })
+  const liveExecutionConversationIds = computed(() => Array.from(executingConversationIds.value))
 
   async function loadToolApprovals(): Promise<void> {
     toolApprovals.value = await api.agent.getToolApprovals()
@@ -308,17 +309,16 @@ export const useAgentStore = defineStore('agent', () => {
     const eventData = data.data
     const taskId = eventData.taskId as string | undefined
     const convId = eventData.conversationId as string | undefined
+    if (!convId) return
 
     const viewingConvId = activeViewConversationId.value
-    if (convId && viewingConvId && convId !== viewingConvId && !executingConversationIds.value.has(convId)) {
+    if (viewingConvId && convId !== viewingConvId && !executingConversationIds.value.has(convId)) {
       return
     }
     // Only treat an event as "active view" when it targets the currently
     // open conversation. If no chat is open (viewingConvId = null), background
     // conversation events should not flip UI execution state.
-    const isForActiveView = convId
-      ? Boolean(viewingConvId && convId === viewingConvId)
-      : true
+    const isForActiveView = Boolean(viewingConvId && convId === viewingConvId)
 
     switch (data.event) {
       case 'task:started':
@@ -575,6 +575,7 @@ export const useAgentStore = defineStore('agent', () => {
     hasSteps,
     hasPlanningTasks,
     activeConversationIsExecuting,
+    liveExecutionConversationIds,
     loadToolApprovals,
     loadTools,
     toggleTool,
