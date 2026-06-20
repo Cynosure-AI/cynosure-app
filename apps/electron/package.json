@@ -1,7 +1,7 @@
 {
     "name": "cynosure-desktop",
     "version": "1.6.1",
-    "description": "Cynosure Desktop — Electron wrapper for Cynosure server + web UI",
+    "description": "Cynosure - local AI agent with tools, memories, and reasoning capabilities",
     "author": {
         "name": "Cynosure",
         "email": "dev@cynosure.app"
