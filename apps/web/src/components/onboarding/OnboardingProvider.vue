@@ -271,7 +271,7 @@ const providerStore = useProviderStore()
 const { providerLogos } = useProviderLogos()
 
 type ProviderType = LLMProviderConfig['type']
-const responseModelTypes: ModelListType[] = ['llm', 'image', 'video']
+const responseModelTypes: ModelListType[] = ['llm', 'image', 'video', 'transcription']
 
 const showApiKey = ref(false)
 const fetchedModels = ref<string[]>([])

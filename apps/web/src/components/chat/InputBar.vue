@@ -23,11 +23,17 @@ function modelHasInputModality(modality: string): boolean | null {
 }
 
 const imageInputUnsupported = computed(() => modelHasInputModality('image') === false)
-const audioInputUnsupported = computed(() => modelHasInputModality('audio') === false)
+const transcriptionOutputSelected = computed(() =>
+  chatStore.modelModalities?.output?.some((item) => item.toLowerCase() === 'transcription') === true
+)
+const audioInputUnsupported = computed(() =>
+  !transcriptionOutputSelected.value && modelHasInputModality('audio') === false
+)
+const canSend = computed(() => !!inputText.value.trim() || attachedAudio.value.length > 0)
 
 async function send(): Promise<void> {
   const content = inputText.value.trim()
-  if (!content || chatStore.isConversationLocked) return
+  if ((!content && !attachedAudio.value.length) || chatStore.isConversationLocked) return
   const images = attachedImages.value.map((i) => i.url)
   const files = attachedFiles.value.map((f) => ({ name: f.name, content: f.content }))
   const audio = attachedAudio.value.map((a) => a.url)
@@ -37,7 +43,7 @@ async function send(): Promise<void> {
   attachedAudio.value = []
   resetHeight()
   await chatStore.sendMessage(
-    content,
+    content || (audio.length ? 'Transcribe the attached audio.' : content),
     images.length ? images : undefined,
     files.length ? files : undefined,
     audio.length ? audio : undefined
@@ -314,7 +320,7 @@ defineExpose({ processFiles })
         />
 
         <InputToolbar
-          :can-send="!!inputText.trim()"
+          :can-send="canSend"
           @attach="openFilePicker"
           @send="send"
           @transcription="onTranscription"
