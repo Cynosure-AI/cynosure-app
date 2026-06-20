@@ -46,7 +46,7 @@ let unsubExecutionUpdate: (() => void) | undefined;
 const hasAwaitingApproval = computed(() =>
   instances.value.some((i) => i.status === "awaiting-approval"),
 );
-const activeWorkCount = computed(() => instances.value.length + memoryJobsStore.runningJobs.length);
+const activeWorkCount = computed(() => instances.value.length + memoryJobsStore.activeJobs.length);
 
 async function loadInstances() {
   try {

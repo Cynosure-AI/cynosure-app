@@ -99,9 +99,9 @@ const needsAttentionCount = computed(
 const selectedEntityIndexableFiles = computed(() =>
   files.value.filter((f) => f.supported && f.status === "indexed" && selectedFiles.value.has(f.fileName)),
 );
-const runningJobs = computed(() => jobs.value.filter((job) => job.status === "running"));
+const runningJobs = computed(() => jobs.value.filter((job) => job.status === "queued" || job.status === "running"));
 const selectedEntityIndexableIdleCount = computed(() =>
-  selectedEntityIndexableFiles.value.filter((f) => !isJobRunning("entity-index", f.fileName)).length,
+  selectedEntityIndexableFiles.value.filter((f) => !isJobActive("entity-index", f.fileName)).length,
 );
 
 // --- Data loading ---
@@ -120,24 +120,32 @@ function upsertJob(job: MemoryIndexJob) {
   next.push(job);
   jobs.value = next;
   memoryJobsStore.upsertJob(job);
-  if (job.status === "running") startJobsPolling();
+  if (job.status === "queued" || job.status === "running") startJobsPolling();
 }
 
-function runningJob(kind: MemoryIndexJob["kind"], fileName: string): MemoryIndexJob | undefined {
+function activeJob(kind: MemoryIndexJob["kind"], fileName: string): MemoryIndexJob | undefined {
   return jobs.value.find((job) =>
     job.kind === kind &&
     job.fileName === fileName &&
-    job.status === "running",
+    (job.status === "queued" || job.status === "running"),
   );
 }
 
+function runningJob(kind: MemoryIndexJob["kind"], fileName: string): MemoryIndexJob | undefined {
+  return activeJob(kind, fileName);
+}
+
+function isJobActive(kind: MemoryIndexJob["kind"], fileName: string): boolean {
+  return Boolean(activeJob(kind, fileName));
+}
+
 function isJobRunning(kind: MemoryIndexJob["kind"], fileName: string): boolean {
-  return Boolean(runningJob(kind, fileName));
+  return isJobActive(kind, fileName);
 }
 
 async function applyTerminalJobs(nextJobs: MemoryIndexJob[]) {
   const seen = new Set(handledTerminalJobIds.value);
-  const terminalJobs = nextJobs.filter((job) => job.status !== "running" && !seen.has(job.id));
+  const terminalJobs = nextJobs.filter((job) => job.status !== "queued" && job.status !== "running" && !seen.has(job.id));
   if (terminalJobs.length === 0) return;
   for (const job of terminalJobs) seen.add(job.id);
   handledTerminalJobIds.value = seen;
@@ -150,7 +158,7 @@ async function loadJobs() {
     const nextJobs = await api.memorySpaces.listJobs(props.spaceId);
     jobs.value = nextJobs;
     await applyTerminalJobs(nextJobs);
-    if (nextJobs.some((job) => job.status === "running")) startJobsPolling();
+    if (nextJobs.some((job) => job.status === "queued" || job.status === "running")) startJobsPolling();
     else stopJobsPolling();
   } catch {
     jobs.value = [];
@@ -199,7 +207,7 @@ async function entityIndexFile(fileName: string) {
 
 async function entityIndexSelected() {
   for (const f of selectedEntityIndexableFiles.value) {
-    if (!isJobRunning("entity-index", f.fileName)) await entityIndexFile(f.fileName);
+    if (!isJobActive("entity-index", f.fileName)) await entityIndexFile(f.fileName);
   }
 }
 
@@ -208,7 +216,7 @@ async function reindexAll() {
     (f) => f.supported && (f.status === "needs_reindex" || f.status === "not_indexed"),
   );
   for (const f of toReindex) {
-    if (!isJobRunning("reindex", f.fileName)) await reindexFile(f.fileName);
+    if (!isJobActive("reindex", f.fileName)) await reindexFile(f.fileName);
   }
 }
 
@@ -312,6 +320,7 @@ async function ingestFiles(fileList: File[]) {
     try {
       const content = await readFileContent(file);
       const res = await api.memorySpaces.ingestFile(props.spaceId, file.name, content);
+      if (res.job) upsertJob(res.job);
       results.push({ fileName: res.fileName, chunks: res.chunksStored });
     } catch (err) {
       results.push({ fileName: file.name, chunks: 0, error: (err as Error).message });
@@ -512,7 +521,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <span
           v-if="!r.error"
           class="text-theme-500"
-        >{{ r.chunks }} chunks</span>
+        >Uploaded, queued for indexing</span>
         <span
           v-else
           class="text-red-400"
@@ -531,7 +540,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       <div class="text-xs text-theme-500">
         {{ filteredFiles.length }} file{{ filteredFiles.length !== 1 ? "s" : "" }}
         <template v-if="runningJobs.length > 0">
-          · {{ runningJobs.length }} job{{ runningJobs.length !== 1 ? "s" : "" }} running
+          · {{ runningJobs.length }} job{{ runningJobs.length !== 1 ? "s" : "" }} active
         </template>
       </div>
       <div class="flex items-center gap-2">

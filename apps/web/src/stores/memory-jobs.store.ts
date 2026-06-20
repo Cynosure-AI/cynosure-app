@@ -9,14 +9,15 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
     const refreshing = ref(false)
     let pollTimer: ReturnType<typeof setInterval> | null = null
 
+    const activeJobs = computed(() => jobs.value.filter(job => job.status === 'queued' || job.status === 'running'))
     const runningJobs = computed(() => jobs.value.filter(job => job.status === 'running'))
-    const runningReindexJobs = computed(() => runningJobs.value.filter(job => job.kind === 'reindex'))
-    const runningEntityJobs = computed(() => runningJobs.value.filter(job => job.kind === 'entity-index'))
-    const hasRunningJobs = computed(() => runningJobs.value.length > 0)
+    const runningReindexJobs = computed(() => activeJobs.value.filter(job => job.kind === 'reindex'))
+    const runningEntityJobs = computed(() => activeJobs.value.filter(job => job.kind === 'entity-index'))
+    const hasRunningJobs = computed(() => activeJobs.value.length > 0)
     const statusLabel = computed(() => {
-        if (runningEntityJobs.value.length > 0 && runningReindexJobs.value.length > 0) return 'Memory jobs running...'
-        if (runningEntityJobs.value.length > 0) return 'Extracting entities...'
-        if (runningReindexJobs.value.length > 0) return 'Indexing memories...'
+        if (runningEntityJobs.value.length > 0 && runningReindexJobs.value.length > 0) return 'Memory jobs active...'
+        if (runningEntityJobs.value.length > 0) return 'Entity jobs active...'
+        if (runningReindexJobs.value.length > 0) return 'Memory indexing active...'
         return ''
     })
 
@@ -47,7 +48,7 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
     }
 
     async function cancelRunningJobs(): Promise<void> {
-        await Promise.all(runningJobs.value.map(job => cancelJob(job.id)))
+        await Promise.all(activeJobs.value.map(job => cancelJob(job.id)))
         await refresh()
     }
 
@@ -70,6 +71,7 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
         loaded,
         refreshing,
         runningJobs,
+        activeJobs,
         runningReindexJobs,
         runningEntityJobs,
         hasRunningJobs,

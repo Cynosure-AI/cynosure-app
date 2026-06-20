@@ -339,7 +339,7 @@ export interface MemoryIndexJob<T = unknown> {
     kind: 'reindex' | 'entity-index'
     spaceId: string
     fileName: string
-    status: 'running' | 'completed' | 'cancelled' | 'error'
+    status: 'queued' | 'running' | 'completed' | 'cancelled' | 'error'
     createdAt: number
     updatedAt: number
     result?: T

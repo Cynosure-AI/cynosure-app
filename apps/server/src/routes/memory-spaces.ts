@@ -3,7 +3,6 @@ import { getDb } from '../db/database.js'
 import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { andLanceDbFilters, lanceDbEqFilter } from '../core/memory/lancedb-filter.js'
-import { isParseableDocument, parseDocument } from '../core/utils/document-parser.js'
 import {
     ensureFolder,
     listFilesInFolder,
@@ -14,9 +13,10 @@ import {
     readTextFile,
     writeTextFile,
     PLAIN_TEXT_EXTENSIONS,
+    resolveUniqueFileName,
 } from '../core/memory/memory-file-manager.js'
 import { basename, extname, join, sep } from 'path'
-import { existsSync, renameSync } from 'fs'
+import { existsSync, renameSync, writeFileSync } from 'fs'
 import { watchMemorySpace, stopWatchingMemorySpace } from '../core/memory/memory-space-watcher.js'
 import {
     archiveMemorySpaceFolder,
@@ -556,28 +556,41 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
     // Ingest / upload
     // -----------------------------------------------------------------------
 
-    // POST /api/memory-spaces/:id/ingest-file — upload a document to a space
+    // POST /api/memory-spaces/:id/ingest-file — upload a document to a space without indexing it
     app.post<{ Params: { id: string }; Body: { fileName: string; content: string } }>('/:id/ingest-file', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         const { fileName, content } = req.body
-        if (!fileName || !content) return reply.status(400).send({ error: 'fileName and content are required' })
+        if (!fileName || content == null) return reply.status(400).send({ error: 'fileName and content are required' })
         if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
 
         try {
-            const mem = getAgentMemory()
-            let textContent = content
+            ensureFolder(row.folder_path)
+            const safeFileName = basename(fileName)
+            if (!safeFileName) return reply.status(400).send({ error: 'Invalid fileName' })
+            const uniqueName = resolveUniqueFileName(row.folder_path, safeFileName)
+            const targetPath = join(row.folder_path, uniqueName)
 
-            if (isParseableDocument(fileName) && content.startsWith('data:')) {
+            if (content.startsWith('data:')) {
                 const base64 = content.split(',')[1]
-                if (base64) {
-                    const buf = Buffer.from(base64, 'base64')
-                    textContent = await parseDocument(buf, fileName)
-                }
+                if (!base64) return reply.status(400).send({ error: 'Invalid file content' })
+                writeFileSync(targetPath, Buffer.from(base64, 'base64'))
+            } else {
+                writeTextFile(row.folder_path, uniqueName, content)
             }
 
-            const result = await mem.ingestExternalFile(textContent, fileName, row.id, row.folder_path)
-            return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
+            const mem = getAgentMemory()
+            const job = startMemoryIndexJob({
+                kind: 'reindex',
+                spaceId: row.id,
+                fileName: uniqueName,
+                run: async (signal) => {
+                    const result = await mem.reindexFile(row.folder_path, uniqueName, row.id, { signal })
+                    return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
+                },
+            })
+
+            return { success: true, chunksStored: 0, fileName: uniqueName, job }
         } catch (err) {
             return reply.status(500).send({ error: (err as Error).message || 'Failed to ingest file' })
         }
