@@ -18,6 +18,8 @@ export interface SelectOption {
   disabled?: boolean;
   /** Small badge shown to the right of the label (e.g. "+3") */
   tag?: string;
+  /** Visual variant for the tag badge (default = violet, cyan = bright cyan) */
+  tagVariant?: 'default' | 'cyan';
   /** Iconify icon name shown as a small badge instead of text */
   tagIconName?: string;
   actionIconName?: string;
@@ -311,6 +313,14 @@ onBeforeUnmount(() =>
         {{ selectedOption?.label ?? placeholder }}
       </span>
 
+      <span
+        v-if="selectedOption?.tag"
+        class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full"
+        :class="selectedOption.tagVariant === 'cyan' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-violet-500/10 text-violet-400'"
+      >
+        {{ selectedOption.tag }}
+      </span>
+
       <!-- Chevron -->
       <Icon
         icon="lucide:chevron-down"
@@ -449,7 +459,8 @@ onBeforeUnmount(() =>
             <!-- Optional tag text badge -->
             <span
               v-else-if="opt.tag"
-              class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-400"
+              class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full"
+              :class="opt.tagVariant === 'cyan' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-violet-500/10 text-violet-400'"
             >
               {{ opt.tag }}
             </span>

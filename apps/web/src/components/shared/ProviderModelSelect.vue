@@ -146,6 +146,12 @@ function humanizeSku(key: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function formatModalityName(modality: string): string {
+  return modality
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function pricingTag(model: ModelListItem): string | undefined {
   const inputPerM = dollarsPerMillion(model.pricing?.prompt);
   const outputPerM = dollarsPerMillion(model.pricing?.completion);
@@ -206,6 +212,19 @@ function pricingTooltip(model: ModelListItem): string | undefined {
   lines.push(...modalities);
 
   return lines.length ? lines.join("\n") : undefined;
+}
+
+function outputCapabilityTag(model: ModelListItem): string | undefined {
+  const output = (model.outputModalities ?? []).map((item) => item.toLowerCase());
+  if (!output.length) return undefined;
+  const nonTextOutput = output.filter((item) => item !== "text");
+  if (!nonTextOutput.length) return undefined;
+
+  if (nonTextOutput.includes("transcription")) return "Transcription";
+  if (nonTextOutput.includes("video")) return output.includes("text") ? "Video + text" : "Video";
+  if (nonTextOutput.includes("image")) return output.includes("text") ? "Image + text" : "Image";
+  if (nonTextOutput.includes("audio")) return output.includes("text") ? "Audio + text" : "Audio";
+  return nonTextOutput.map(formatModalityName).join(" + ");
 }
 
 function mergeModelItems(existing: ModelListItem, incoming: ModelListItem): ModelListItem {
@@ -382,7 +401,7 @@ const groups = computed((): SelectOptionGroup[] => {
     .filter(
       (favorite) =>
         providerById.has(favorite.providerId) &&
-        (favorite.modelType || "llm") === props.modelType &&
+        activeModelTypes.value.includes(favorite.modelType || "llm") &&
         (!props.onlyShowAvailableModels ||
           (providerModels.value[favorite.providerId] || []).some((model) => model.id === favorite.model)),
     )
@@ -429,11 +448,13 @@ const groups = computed((): SelectOptionGroup[] => {
         });
       } else {
         for (const model of models) {
+          const capabilityTag = outputCapabilityTag(model);
           options.push({
             value: encode(provider.id, model.id),
             label: model.id,
             imgSrc: logoUrl(provider.type),
-            tag: pricingTag(model),
+            tag: capabilityTag || pricingTag(model),
+            tagVariant: capabilityTag ? 'cyan' : 'default',
             tooltip: pricingTooltip(model),
             ...favoriteAction(provider.id, model.id),
           });
