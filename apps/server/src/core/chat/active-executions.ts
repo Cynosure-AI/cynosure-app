@@ -1,4 +1,4 @@
-import { closePlanningRun } from '../agent/planning-state.js'
+import { interruptPlanningRun } from '../agent/planning-state.js'
 
 export interface ActiveChatExecution {
     id: string
@@ -38,7 +38,7 @@ export function cancelChatExecution(executionId: string): boolean {
 
     const execution = activeChatExecutions.get(executionId)
     if (execution?.planningRunId) {
-        closePlanningRun(execution.planningRunId, 'cancelled', { error: 'Cancelled' })
+        interruptPlanningRun(execution.planningRunId, { error: 'Interrupted before completion.' })
     }
     controller.abort()
     activeAbortControllers.delete(executionId)

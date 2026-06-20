@@ -6,7 +6,7 @@ import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../core/agent/agent-executor.js'
 import { planExecution } from '../core/agent/pre-execution/execution-planner.js'
-import { closePlanningRun } from '../core/agent/planning-state.js'
+import { closePlanningRun, interruptPlanningRun } from '../core/agent/planning-state.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
@@ -342,7 +342,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       if (abortController.signal.aborted) {
         unregisterActiveChatExecution(executionId)
         if (planningRunId) {
-          closePlanningRun(planningRunId, 'cancelled', { error: 'Cancelled' })
+          interruptPlanningRun(planningRunId, { error: 'Interrupted before completion.' })
         }
         getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
         broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
@@ -573,7 +573,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             persistStickyUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
           }
           if (planningRunId) {
-            closePlanningRun(planningRunId, 'cancelled', { error: 'Cancelled' })
+            interruptPlanningRun(planningRunId, { error: 'Interrupted before completion.' })
           }
           getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
           broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
