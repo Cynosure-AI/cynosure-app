@@ -134,6 +134,18 @@ export function closePlanningRun(
   }
 
   const now = Date.now()
+  if (status === 'completed' && hasOpenItems(current.items)) {
+    const state: PlanningState = {
+      ...current,
+      status: 'running',
+      result,
+      updatedAt: now,
+    }
+    persistState(state)
+    emitState(state)
+    return state
+  }
+
   const items = reconcileItemsForClose(current.items, status, result?.error, now)
   const state: PlanningState = {
     ...current,
@@ -145,6 +157,28 @@ export function closePlanningRun(
     completedAt: now,
   }
   persistState(state, true)
+  emitState(state)
+  return state
+}
+
+export function interruptPlanningRun(
+  runId: string,
+  result?: { summary?: string; error?: string },
+): PlanningState | null {
+  const current = getPlanningState(runId)
+  if (!current || current.status !== 'running') return current
+  if (!current.items.length) return current
+
+  const now = Date.now()
+  const state: PlanningState = {
+    ...current,
+    status: 'running',
+    items: noteActiveItem(current.items, result?.error || 'Interrupted before completion.', now),
+    result,
+    updatedAt: now,
+    completedAt: undefined,
+  }
+  persistState(state)
   emitState(state)
   return state
 }
@@ -408,6 +442,18 @@ function reconcileItemsForClose(
   return items.map((item) => (
     item.status === 'in_progress'
       ? { ...item, status: 'blocked', note: cleanNote(error) || 'Stopped before completion.', updatedAt: now }
+      : item
+  ))
+}
+
+function hasOpenItems(items: PlanningTaskItem[]): boolean {
+  return items.some((item) => item.status === 'pending' || item.status === 'in_progress')
+}
+
+function noteActiveItem(items: PlanningTaskItem[], note: string, now: number): PlanningTaskItem[] {
+  return items.map((item) => (
+    item.status === 'in_progress'
+      ? { ...item, note: cleanNote(note) ?? item.note, updatedAt: now }
       : item
   ))
 }
