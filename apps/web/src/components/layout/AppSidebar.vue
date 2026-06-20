@@ -46,6 +46,7 @@ let unsubExecutionUpdate: (() => void) | undefined;
 const hasAwaitingApproval = computed(() =>
   instances.value.some((i) => i.status === "awaiting-approval"),
 );
+const activeWorkCount = computed(() => instances.value.length + memoryJobsStore.runningJobs.length);
 
 async function loadInstances() {
   try {
@@ -478,11 +479,11 @@ const chatRoute = computed(() =>
             class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse ml-1 shrink-0"
           />
           <div
-            v-if="instances.length"
+            v-if="activeWorkCount"
             class="rounded-full flex justify-center items-center bg-accent-400 text-xs text-white w-5 h-5 ml-2"
           >
-            <span v-if="instances.length > 9">9+</span>
-            <span v-else>{{ instances.length }}</span>
+            <span v-if="activeWorkCount > 9">9+</span>
+            <span v-else>{{ activeWorkCount }}</span>
           </div>
         </RouterLink>
         <template #content>

@@ -3,18 +3,15 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { api } from "../api/client";
-import type { ActivityItem, AgentInstance, MemoryIndexJob } from "../api/types";
+import type { AgentInstance, MemoryIndexJob } from "../api/types";
 import { useChatStore } from "../stores/chat.store";
-import { useAgentDefinitionsStore } from "../stores/agent-definitions.store";
 import { useMemoryJobsStore } from "../stores/memory-jobs.store";
 
 const router = useRouter();
 const chatStore = useChatStore();
-const agentDefs = useAgentDefinitionsStore();
 const memoryJobsStore = useMemoryJobsStore();
 
 const instances = ref<AgentInstance[]>([]);
-const recentItems = ref<ActivityItem[]>([]);
 const loading = ref(true);
 const refreshing = ref(false);
 const stoppingIds = ref<Set<string>>(new Set());
@@ -61,18 +58,11 @@ const runningCount = computed(() => runningEntries.value.length);
 async function loadData(): Promise<void> {
   try {
     refreshing.value = true;
-    const [active, , recent] = await Promise.all([
+    const [active] = await Promise.all([
       api.instances.list(),
       memoryJobsStore.refresh(),
-      api.activity.list({
-        limit: 50,
-        types: ["chat", "cron", "channels"],
-      }),
     ]);
     instances.value = active;
-    recentItems.value = recent.items
-      .filter((item) => item.status !== "running" && item.status !== "awaiting-approval")
-      .slice(0, 10);
   } finally {
     loading.value = false;
     refreshing.value = false;
@@ -91,10 +81,6 @@ async function openConversation(conversationId: string | null, agentId: string |
 
 async function openInstance(instance: AgentInstance): Promise<void> {
   await openConversation(instance.conversationId, instance.agentId || null);
-}
-
-async function openRecent(item: ActivityItem): Promise<void> {
-  await openConversation(item.conversationId, item.agentId);
 }
 
 async function stopInstance(instance: AgentInstance, event?: Event): Promise<void> {
@@ -164,12 +150,6 @@ function memoryJobIcon(job: MemoryIndexJob): string {
   return job.kind === "entity-index" ? "lucide:network" : "lucide:database-zap";
 }
 
-function agentLabel(item: ActivityItem): string {
-  if (item.agentName) return item.agentName;
-  if (item.agentId) return agentDefs.get(item.agentId)?.name || "Agent";
-  return "System";
-}
-
 onMounted(() => {
   void loadData();
   pollTimer = setInterval(() => void loadData(), 5_000);
@@ -200,194 +180,136 @@ onUnmounted(() => {
 <template>
   <div class="h-full overflow-y-auto">
     <div class="mx-auto max-w-6xl px-6 py-8">
-    <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-theme-100">
-          Instances
-        </h1>
-        <p class="mt-1 text-sm text-theme-500">
-          Running conversations, background jobs, and recent completed runs
-        </p>
-      </div>
-      <button
-        class="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 disabled:cursor-wait disabled:opacity-70 sm:w-auto"
-        :disabled="refreshing"
-        @click="loadData"
-      >
-        <Icon
-          icon="lucide:refresh-cw"
-          class="h-4 w-4"
-          :class="{ 'animate-spin': refreshing }"
-        />
-        Refresh
-      </button>
-    </header>
-
-    <section>
-      <div class="mb-3 flex items-center justify-between gap-3">
-        <h2 class="text-lg font-bold text-theme-100">
-          Running Now
-        </h2>
-        <span class="text-xs text-theme-600">{{ runningCount }} active</span>
-      </div>
-
-      <div
-        v-if="loading && !runningEntries.length"
-        class="flex min-h-44 flex-col items-center justify-center gap-3 rounded-lg border border-theme-800 bg-theme-900 text-sm text-theme-500"
-      >
-        <Icon
-          icon="lucide:loader-2"
-          class="h-7 w-7 animate-spin"
-        />
-        Loading instances...
-      </div>
-
-      <div
-        v-else-if="!runningEntries.length"
-        class="flex min-h-44 flex-col items-center justify-center gap-3 rounded-lg border border-theme-800 bg-theme-900 text-sm text-theme-500"
-      >
-        <Icon
-          icon="lucide:circle-check"
-          class="h-8 w-8 text-theme-600"
-        />
-        No running conversations or background jobs.
-      </div>
-
-      <div
-        v-else
-        class="grid gap-2"
-      >
-        <article
-          v-for="entry in runningEntries"
-          :key="entry.id"
-          class="instance-row rounded-lg border border-theme-800 bg-theme-900 px-4 py-3 transition hover:border-accent-500/40 hover:bg-theme-850"
-          :class="{ 'cursor-pointer': true, 'instance-attention': entry.requiresAttention }"
-          @click="entry.kind === 'instance' ? openInstance(entry.instance) : openMemoryJobs()"
+      <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 class="text-2xl font-bold text-theme-100">
+            Instances
+          </h1>
+          <p class="mt-1 text-sm text-theme-500">
+            Running conversations and background jobs
+          </p>
+        </div>
+        <button
+          class="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 disabled:cursor-wait disabled:opacity-70 sm:w-auto"
+          :disabled="refreshing"
+          @click="loadData"
         >
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex min-w-0 items-start gap-3">
-              <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-theme-700 bg-theme-800 text-accent-300">
-                <Icon
-                  :icon="entry.kind === 'instance'
-                    ? (entry.instance.status === 'awaiting-approval' ? 'lucide:circle-alert' : typeIcon(entry.instance.type))
-                    : memoryJobIcon(entry.job)"
-                  class="h-4.5 w-4.5"
-                  :class="{
-                    'animate-pulse text-amber-300': entry.kind === 'instance' && entry.instance.status === 'awaiting-approval',
-                    'animate-pulse text-accent-300': entry.kind === 'memory',
-                  }"
-                />
-              </div>
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h3 class="truncate text-[15px] font-bold text-theme-100">
-                    {{ entry.kind === 'instance' ? entry.instance.agentName : memoryJobTitle(entry.job) }}
-                  </h3>
-                  <span class="rounded-full border border-theme-700 bg-theme-900 px-2 py-0.5 text-[11px] text-theme-400">
-                    {{ entry.kind === 'instance' ? instanceTypeLabel(entry.instance.type) : memoryJobLabel(entry.job) }}
-                  </span>
-                  <span
-                    class="rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
-                    :class="entry.kind === 'instance' && entry.instance.status === 'awaiting-approval'
-                      ? 'border border-amber-400/35 bg-amber-400/10 text-amber-300'
-                      : 'border border-accent-400/30 bg-accent-400/10 text-accent-300'"
-                  >
-                    {{ entry.kind === 'instance' ? entry.instance.status : entry.job.status }}
-                  </span>
-                </div>
-                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-theme-500">
-                  <span>{{ entry.kind === 'instance' ? (entry.instance.model || "Model unknown") : entry.job.fileName }}</span>
-                  <span>{{ formatTimeAgo(entry.startedAt) }}</span>
-                </div>
-              </div>
-            </div>
+          <Icon
+            icon="lucide:refresh-cw"
+            class="h-4 w-4"
+            :class="{ 'animate-spin': refreshing }"
+          />
+          Refresh
+        </button>
+      </header>
 
-            <div class="flex shrink-0 gap-2">
-              <button
-                class="inline-flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-900 px-3 py-1.5 text-xs font-medium text-theme-300 transition hover:border-theme-600 hover:bg-theme-800 hover:text-theme-100"
-                @click.stop="entry.kind === 'instance' ? openInstance(entry.instance) : openMemoryJobs()"
-              >
-                <Icon
-                  icon="lucide:external-link"
-                  class="h-3.5 w-3.5"
-                />
-                Open
-              </button>
-              <button
-                class="inline-flex items-center gap-2 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:border-red-300/40 hover:bg-red-400/15 hover:text-red-200 disabled:cursor-wait disabled:opacity-70"
-                :disabled="entry.kind === 'instance' ? stoppingIds.has(entry.instance.id) : cancellingJobIds.has(entry.job.id)"
-                @click="entry.kind === 'instance' ? stopInstance(entry.instance, $event) : cancelMemoryJob(entry.job, $event)"
-              >
-                <Icon
-                  :icon="(entry.kind === 'instance' ? stoppingIds.has(entry.instance.id) : cancellingJobIds.has(entry.job.id)) ? 'lucide:loader-2' : (entry.kind === 'instance' ? 'lucide:square' : 'lucide:x')"
-                  class="h-3.5 w-3.5"
-                  :class="{ 'animate-spin': entry.kind === 'instance' ? stoppingIds.has(entry.instance.id) : cancellingJobIds.has(entry.job.id) }"
-                />
-                {{ entry.kind === 'instance' ? 'Stop' : 'Cancel' }}
-              </button>
-            </div>
-          </div>
-        </article>
-      </div>
-    </section>
+      <section>
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h2 class="text-lg font-bold text-theme-100">
+            Running Now
+          </h2>
+          <span class="text-xs text-theme-600">{{ runningCount }} active</span>
+        </div>
 
-    <section class="mt-8">
-      <div class="mb-3 flex items-center justify-between gap-3">
-        <h2 class="text-lg font-bold text-theme-100">
-          Recently Finished
-        </h2>
-        <span class="text-xs text-theme-600">Up to 10 runs</span>
-      </div>
-
-      <div
-        v-if="!recentItems.length"
-        class="flex min-h-36 flex-col items-center justify-center gap-3 rounded-lg border border-theme-800 bg-theme-900 text-sm text-theme-500"
-      >
-        <Icon
-          icon="lucide:history"
-          class="h-8 w-8 text-theme-600"
-        />
-        No recent finished runs yet.
-      </div>
-
-      <div
-        v-else
-        class="grid gap-2"
-      >
-        <article
-          v-for="item in recentItems"
-          :key="item.id"
-          class="cursor-pointer rounded-lg border border-theme-800 bg-theme-900 px-4 py-3 transition hover:border-theme-700 hover:bg-theme-850"
-          @click="openRecent(item)"
+        <div
+          v-if="loading && !runningEntries.length"
+          class="flex min-h-44 flex-col items-center justify-center gap-3 rounded-lg border border-theme-800 bg-theme-900 text-sm text-theme-500"
         >
-          <div class="flex items-start gap-3">
-            <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-theme-700 bg-theme-800 text-theme-400">
-              <Icon
-                :icon="typeIcon(item.kind)"
-                class="h-4 w-4"
-              />
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <h3 class="truncate text-[14px] font-bold text-theme-100">
-                  {{ item.title }}
-                </h3>
-                <span class="rounded-full border border-theme-700 bg-theme-900 px-2 py-0.5 text-[11px] text-theme-400">
-                  {{ item.sourceLabel || item.kind }}
-                </span>
+          <Icon
+            icon="lucide:loader-2"
+            class="h-7 w-7 animate-spin"
+          />
+          Loading instances...
+        </div>
+
+        <div
+          v-else-if="!runningEntries.length"
+          class="flex min-h-44 flex-col items-center justify-center gap-3 rounded-lg border border-theme-800 bg-theme-900 text-sm text-theme-500"
+        >
+          <Icon
+            icon="lucide:circle-check"
+            class="h-8 w-8 text-theme-600"
+          />
+          No running conversations or background jobs.
+        </div>
+
+        <div
+          v-else
+          class="grid gap-2"
+        >
+          <article
+            v-for="entry in runningEntries"
+            :key="entry.id"
+            class="instance-row rounded-lg border border-theme-800 bg-theme-900 px-4 py-3 transition hover:border-accent-500/40 hover:bg-theme-850"
+            :class="{ 'cursor-pointer': true, 'instance-attention': entry.requiresAttention }"
+            @click="entry.kind === 'instance' ? openInstance(entry.instance) : openMemoryJobs()"
+          >
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="flex min-w-0 items-start gap-3">
+                <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-theme-700 bg-theme-800 text-accent-300">
+                  <Icon
+                    :icon="entry.kind === 'instance'
+                      ? (entry.instance.status === 'awaiting-approval' ? 'lucide:circle-alert' : typeIcon(entry.instance.type))
+                      : memoryJobIcon(entry.job)"
+                    class="h-4.5 w-4.5"
+                    :class="{
+                      'animate-pulse text-amber-300': entry.kind === 'instance' && entry.instance.status === 'awaiting-approval',
+                      'animate-pulse text-accent-300': entry.kind === 'memory',
+                    }"
+                  />
+                </div>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="truncate text-[15px] font-bold text-theme-100">
+                      {{ entry.kind === 'instance' ? entry.instance.agentName : memoryJobTitle(entry.job) }}
+                    </h3>
+                    <span class="rounded-full border border-theme-700 bg-theme-900 px-2 py-0.5 text-[11px] text-theme-400">
+                      {{ entry.kind === 'instance' ? instanceTypeLabel(entry.instance.type) : memoryJobLabel(entry.job) }}
+                    </span>
+                    <span
+                      class="rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
+                      :class="entry.kind === 'instance' && entry.instance.status === 'awaiting-approval'
+                        ? 'border border-amber-400/35 bg-amber-400/10 text-amber-300'
+                        : 'border border-accent-400/30 bg-accent-400/10 text-accent-300'"
+                    >
+                      {{ entry.kind === 'instance' ? entry.instance.status : entry.job.status }}
+                    </span>
+                  </div>
+                  <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-theme-500">
+                    <span>{{ entry.kind === 'instance' ? (entry.instance.model || "Model unknown") : entry.job.fileName }}</span>
+                    <span>{{ formatTimeAgo(entry.startedAt) }}</span>
+                  </div>
+                </div>
               </div>
-              <p class="mt-1 line-clamp-2 text-xs text-theme-500">
-                {{ item.description }}
-              </p>
-              <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-theme-600">
-                <span>{{ agentLabel(item) }}</span>
-                <span>{{ formatTimeAgo(item.createdAt) }}</span>
+
+              <div class="flex shrink-0 gap-2">
+                <button
+                  class="inline-flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-900 px-3 py-1.5 text-xs font-medium text-theme-300 transition hover:border-theme-600 hover:bg-theme-800 hover:text-theme-100"
+                  @click.stop="entry.kind === 'instance' ? openInstance(entry.instance) : openMemoryJobs()"
+                >
+                  <Icon
+                    icon="lucide:external-link"
+                    class="h-3.5 w-3.5"
+                  />
+                  Open
+                </button>
+                <button
+                  class="inline-flex items-center gap-2 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:border-red-300/40 hover:bg-red-400/15 hover:text-red-200 disabled:cursor-wait disabled:opacity-70"
+                  :disabled="entry.kind === 'instance' ? stoppingIds.has(entry.instance.id) : cancellingJobIds.has(entry.job.id)"
+                  @click="entry.kind === 'instance' ? stopInstance(entry.instance, $event) : cancelMemoryJob(entry.job, $event)"
+                >
+                  <Icon
+                    :icon="(entry.kind === 'instance' ? stoppingIds.has(entry.instance.id) : cancellingJobIds.has(entry.job.id)) ? 'lucide:loader-2' : (entry.kind === 'instance' ? 'lucide:square' : 'lucide:x')"
+                    class="h-3.5 w-3.5"
+                    :class="{ 'animate-spin': entry.kind === 'instance' ? stoppingIds.has(entry.instance.id) : cancellingJobIds.has(entry.job.id) }"
+                  />
+                  {{ entry.kind === 'instance' ? 'Stop' : 'Cancel' }}
+                </button>
               </div>
             </div>
-          </div>
-        </article>
-      </div>
-    </section>
+          </article>
+        </div>
+      </section>
     </div>
   </div>
 </template>
