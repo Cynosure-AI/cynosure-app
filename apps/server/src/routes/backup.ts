@@ -24,8 +24,37 @@ import { ensureFolder, listFilesInFolder } from '../core/memory/memory-file-mana
 import { folderPathForRelative, relativePathForFolder, validateRelativePath } from '../core/memory/memory-space-folders.js'
 import { stopAllMemorySpaceWatchers, watchMemorySpace } from '../core/memory/memory-space-watcher.js'
 import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
-import { indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
+import { dropConversationAttachmentIndex, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
+
+type BroadcastFn = (event: string, data: unknown) => void
+
+type ResetModule =
+    | 'agents'
+    | 'providers'
+    | 'mcp'
+    | 'settings'
+    | 'channels'
+    | 'memory'
+    | 'entityGraph'
+    | 'conversations'
+    | 'notifications'
+    | 'usage'
+    | 'vectors'
+
+const RESET_MODULES: ResetModule[] = [
+    'agents',
+    'providers',
+    'mcp',
+    'settings',
+    'channels',
+    'memory',
+    'entityGraph',
+    'conversations',
+    'notifications',
+    'usage',
+    'vectors'
+]
 
 interface ManifestModule {
     count: number
@@ -174,11 +203,161 @@ function portableRelativePathForFolder(folderPath: string): string {
     return normalizeBackupRelativePath(relativePathForFolder(folderPath))
 }
 
+async function resetVectorIndexes(): Promise<void> {
+    const ragStore = getRAGStore()
+    await ragStore.close()
+    const lanceDir = join(getAppDataDir(), 'lancedb')
+    if (existsSync(lanceDir)) {
+        rmSync(lanceDir, { recursive: true, force: true })
+    }
+    await ragStore.initialize()
+    await dropConversationAttachmentIndex()
+    try { getDb().prepare('DELETE FROM memory_file_index').run() } catch { /* ignore */ }
+}
+
+async function resetMemorySpaces(db = getDb()): Promise<void> {
+    await stopAllMemorySpaceWatchers()
+    await resetVectorIndexes()
+    db.prepare('DELETE FROM agent_memory_spaces').run()
+    db.prepare('DELETE FROM memory_spaces').run()
+
+    const memoryRoot = getMemorySpacesRootDir()
+    if (existsSync(memoryRoot)) {
+        rmSync(memoryRoot, { recursive: true, force: true })
+    }
+
+    ensureDefaultMemorySpace(db)
+    watchMemorySpace('default', getDefaultMemorySpaceDir())
+}
+
+function resetEntityGraph(db = getDb()): void {
+    db.prepare('DELETE FROM entity_graph_edges').run()
+    db.prepare('DELETE FROM entity_graph_nodes').run()
+}
+
+async function resetConversations(db = getDb()): Promise<void> {
+    db.prepare('DELETE FROM pending_hitl').run()
+    db.prepare('DELETE FROM session_tool_approvals').run()
+    db.prepare('DELETE FROM tasks').run()
+    db.prepare('DELETE FROM execution_steps').run()
+    db.prepare('DELETE FROM messages').run()
+    db.prepare('DELETE FROM conversations').run()
+    await dropConversationAttachmentIndex()
+
+    const artifactsDir = join(getAppDataDir(), 'artifacts')
+    if (existsSync(artifactsDir)) {
+        rmSync(artifactsDir, { recursive: true, force: true })
+    }
+}
+
+function resetUsage(db = getDb()): void {
+    db.prepare('DELETE FROM execution_steps').run()
+    db.prepare('DELETE FROM execution_logs').run()
+    try { db.prepare('DELETE FROM auxiliary_model_usage').run() } catch { /* table may not exist */ }
+    db.prepare(`
+        INSERT INTO settings (key, value_json)
+        VALUES ('metrics_reset_at', ?)
+        ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json
+    `).run(JSON.stringify(Date.now()))
+}
+
+function resetNotifications(db = getDb()): void {
+    db.prepare('DELETE FROM notifications').run()
+}
+
+function resetSettings(db = getDb()): void {
+    const existingCronJobs = db.prepare('SELECT id FROM cron_jobs').all() as { id: string }[]
+    for (const job of existingCronJobs) {
+        unscheduleCronJob(job.id)
+    }
+    db.prepare('DELETE FROM tool_approvals').run()
+    db.prepare('DELETE FROM session_tool_approvals').run()
+    db.prepare('DELETE FROM cron_jobs').run()
+    db.prepare('DELETE FROM settings').run()
+    db.prepare('DELETE FROM tool_router_embeddings').run()
+    db.prepare('DELETE FROM tool_router_tool_embeddings').run()
+}
+
+async function resetProviders(db = getDb()): Promise<void> {
+    db.prepare('DELETE FROM providers').run()
+    const gateway = getGateway()
+    for (const id of gateway.getAllProviders().keys()) gateway.removeProvider(id)
+}
+
+async function resetMcpServers(db = getDb()): Promise<void> {
+    db.prepare('DELETE FROM mcp_servers').run()
+    await loadSavedMcpServers()
+}
+
+function resetAgents(db = getDb()): void {
+    const existingCronJobs = db.prepare('SELECT id FROM cron_jobs').all() as { id: string }[]
+    for (const job of existingCronJobs) {
+        unscheduleCronJob(job.id)
+    }
+    db.prepare('DELETE FROM pending_hitl').run()
+    db.prepare('DELETE FROM session_tool_approvals').run()
+    db.prepare('DELETE FROM cron_jobs').run()
+    db.prepare('DELETE FROM channels').run()
+    db.prepare('DELETE FROM agent_memory_spaces').run()
+    db.prepare('DELETE FROM agents').run()
+}
+
+function resetChannels(db = getDb()): void {
+    db.prepare('DELETE FROM channels').run()
+}
+
+async function resetSelectedModules(modules: ResetModule[]): Promise<Record<string, { reset: boolean; errors: string[] }>> {
+    const db = getDb()
+    const selected = new Set(modules)
+    const results: Record<string, { reset: boolean; errors: string[] }> = {}
+    const run = async (module: ResetModule, action: () => void | Promise<void>) => {
+        if (!selected.has(module)) return
+        const res = { reset: false, errors: [] as string[] }
+        try {
+            await action()
+            res.reset = true
+        } catch (e) {
+            res.errors.push((e as Error).message)
+        }
+        results[module] = res
+    }
+
+    if (selected.has('memory')) selected.delete('vectors')
+
+    await run('conversations', () => resetConversations(db))
+    await run('notifications', () => resetNotifications(db))
+    await run('usage', () => resetUsage(db))
+    await run('memory', () => resetMemorySpaces(db))
+    await run('vectors', resetVectorIndexes)
+    await run('entityGraph', () => resetEntityGraph(db))
+    await run('settings', () => resetSettings(db))
+    await run('channels', () => resetChannels(db))
+    await run('agents', () => resetAgents(db))
+    await run('providers', () => resetProviders(db))
+    await run('mcp', () => resetMcpServers(db))
+
+    if (selected.has('memory')) {
+        // resetMemorySpaces already restarted the default watcher.
+    } else {
+        try {
+            const spaces = db.prepare('SELECT id, folder_path FROM memory_spaces WHERE folder_path != ?').all('') as {
+                id: string
+                folder_path: string
+            }[]
+            for (const space of spaces) {
+                watchMemorySpace(space.id, space.folder_path)
+            }
+        } catch { /* ignore watcher refresh failures */ }
+    }
+
+    return results
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 //  Route registration
 // ────────────────────────────────────────────────────────────────────────────
 
-export async function registerBackupRoutes(app: FastifyInstance): Promise<void> {
+export async function registerBackupRoutes(app: FastifyInstance, broadcast?: BroadcastFn): Promise<void> {
     await app.register(multipart, { limits: { fileSize: 1024 * 1024 * 1024 } }) // 1 GB limit
 
     // ── GET /api/backup/export?modules=agents,providers,mcp,settings ────────
@@ -410,10 +589,22 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
 
         const db = getDb()
         const results: Record<string, { restored: number; errors: string[] }> = {}
+        const restoreModules = requestedModules.filter((module) => manifest.modules[module] || (module === 'entityGraph' && getEntityGraphBackup(zip)))
+        let restoreIndex = 0
+        const emitRestoreProgress = (module: string, status: 'started' | 'completed' | 'failed') => {
+            if (!broadcast) return
+            const total = restoreModules.length
+            const current = status === 'started'
+                ? restoreIndex + 1
+                : Math.min(restoreIndex + 1, total)
+            broadcast('backup:restore-progress', { module, status, current, total })
+            if (status !== 'started') restoreIndex++
+        }
 
         // --- Restore Agents ---
         if (requestedModules.includes('agents') && manifest.modules.agents) {
             const res = { restored: 0, errors: [] as string[] }
+            emitRestoreProgress('agents', 'started')
             try {
                 // Restore DB rows
                 const dbEntry = zip.getEntry('agents/_db_agents.json')
@@ -494,11 +685,13 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 res.errors.push((e as Error).message)
             }
             results.agents = res
+            emitRestoreProgress('agents', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
         // --- Restore Providers ---
         if (requestedModules.includes('providers') && manifest.modules.providers) {
             const res = { restored: 0, errors: [] as string[] }
+            emitRestoreProgress('providers', 'started')
             try {
                 const entry = zip.getEntry('providers/providers.json')
                 if (entry) {
@@ -542,11 +735,13 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 res.errors.push((e as Error).message)
             }
             results.providers = res
+            emitRestoreProgress('providers', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
         // --- Restore MCP ---
         if (requestedModules.includes('mcp') && manifest.modules.mcp) {
             const res = { restored: 0, errors: [] as string[] }
+            emitRestoreProgress('mcp', 'started')
             try {
                 const entry = zip.getEntry('mcp/servers.json')
                 if (entry) {
@@ -588,11 +783,13 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 res.errors.push((e as Error).message)
             }
             results.mcp = res
+            emitRestoreProgress('mcp', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
         // --- Restore Settings ---
         if (requestedModules.includes('settings') && manifest.modules.settings) {
             const res = { restored: 0, errors: [] as string[] }
+            emitRestoreProgress('settings', 'started')
             try {
                 // Settings key/values
                 const settingsEntry = zip.getEntry('settings/settings.json')
@@ -672,11 +869,13 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
             // so subsequent user-triggered indexing uses the restored configuration.
             getEmbeddingProvider().loadFromDb()
             getMemoryParser().refreshConfig()
+            emitRestoreProgress('settings', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
         // --- Restore Channels ---
         if (requestedModules.includes('channels') && manifest.modules.channels) {
             const res = { restored: 0, errors: [] as string[] }
+            emitRestoreProgress('channels', 'started')
             try {
                 const entry = zip.getEntry('channels/channels.json')
                 if (entry) {
@@ -712,11 +911,13 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 res.errors.push((e as Error).message)
             }
             results.channels = res
+            emitRestoreProgress('channels', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
         // --- Restore Memory spaces ---
         if (requestedModules.includes('memory') && manifest.modules.memory) {
             const res = { restored: 0, errors: [] as string[] }
+            emitRestoreProgress('memory', 'started')
             try {
                 await stopAllMemorySpaceWatchers()
 
@@ -821,11 +1022,13 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 res.errors.push((e as Error).message)
             }
             results.memory = res
+            emitRestoreProgress('memory', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
         // --- Restore Entity graph ---
         if (requestedModules.includes('entityGraph') && (manifest.modules.entityGraph || getEntityGraphBackup(zip))) {
             const res = { restored: 0, errors: [] as string[] }
+            emitRestoreProgress('entityGraph', 'started')
             try {
                 const graph = getEntityGraphBackup(zip)
                 if (graph) {
@@ -886,11 +1089,13 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 res.errors.push((e as Error).message)
             }
             results.entityGraph = res
+            emitRestoreProgress('entityGraph', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
         // --- Restore Conversations (only for agents present in DB) ---
         if (requestedModules.includes('conversations') && manifest.modules.conversations) {
             const res = { restored: 0, errors: [] as string[] }
+            emitRestoreProgress('conversations', 'started')
             try {
                 // Get the set of agent IDs that exist in the DB (including freshly imported ones)
                 const existingAgentIds = new Set(
@@ -1092,11 +1297,13 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 res.errors.push((e as Error).message)
             }
             results.conversations = res
+            emitRestoreProgress('conversations', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
         // --- Restore Usage statistics (execution trace data) ---
         if (requestedModules.includes('usage') && manifest.modules.usage) {
             const res = { restored: 0, errors: [] as string[] }
+            emitRestoreProgress('usage', 'started')
             try {
                 // Execution logs
                 const logsEntry = zip.getEntry('usage/execution_logs.json')
@@ -1146,6 +1353,7 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
                 res.errors.push((e as Error).message)
             }
             results.usage = res
+            emitRestoreProgress('usage', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
         return { success: true, results }
@@ -1181,63 +1389,28 @@ export async function registerBackupRoutes(app: FastifyInstance): Promise<void> 
     })
 
     // ── POST /api/backup/reset ─────────────────────────────────────────────
-    app.post('/reset', async (_req, _reply) => {
-        const db = getDb()
-        await stopAllMemorySpaceWatchers()
-        const existingCronJobs = db.prepare('SELECT id FROM cron_jobs').all() as { id: string }[]
-        for (const job of existingCronJobs) {
-            unscheduleCronJob(job.id)
+    app.post<{ Body?: { modules?: string[] } }>('/reset', async (req, reply) => {
+        const requested = Array.isArray(req.body?.modules) && req.body.modules.length > 0
+            ? req.body.modules
+            : RESET_MODULES
+        const modules = requested.filter((module): module is ResetModule =>
+            RESET_MODULES.includes(module as ResetModule)
+        )
+
+        if (modules.length === 0) {
+            return reply.status(400).send({ error: 'No valid reset modules selected' })
         }
 
-        // Clear all database tables
-        const tables = [
-            'messages', 'conversations', 'execution_steps', 'execution_logs',
-            'tasks', 'pending_hitl', 'notifications', 'tool_approvals', 'session_tool_approvals',
-            'cron_jobs', 'channels',
-            'entity_graph_edges', 'entity_graph_nodes',
-            'memory_file_index', 'memory_spaces', 'agent_memory_spaces',
-            'mcp_servers', 'providers', 'agents',
-            'settings', 'tool_router_embeddings', 'tool_router_tool_embeddings'
-        ]
-        for (const table of tables) {
-            try { db.prepare(`DELETE FROM ${table}`).run() } catch { /* table may not exist */ }
+        const results = await resetSelectedModules(modules)
+
+        // Clear logs only for the full reset path.
+        if (modules.length === RESET_MODULES.length) {
+            const logsDir = join(getAppDataDir(), 'logs')
+            if (existsSync(logsDir)) {
+                rmSync(logsDir, { recursive: true, force: true })
+            }
         }
 
-        // Clear LanceDB (vector memory)
-        const ragStore = getRAGStore()
-        await ragStore.close()
-        const lanceDir = join(getAppDataDir(), 'lancedb')
-        if (existsSync(lanceDir)) {
-            rmSync(lanceDir, { recursive: true, force: true })
-        }
-        await ragStore.initialize()
-
-        // Clear conversation artifacts (generated images, file attachments, etc.)
-        const artifactsDir = join(getAppDataDir(), 'artifacts')
-        if (existsSync(artifactsDir)) {
-            rmSync(artifactsDir, { recursive: true, force: true })
-        }
-
-        // Clear logs
-        const logsDir = join(getAppDataDir(), 'logs')
-        if (existsSync(logsDir)) {
-            rmSync(logsDir, { recursive: true, force: true })
-        }
-
-        const memoryRoot = getMemorySpacesRootDir()
-        if (existsSync(memoryRoot)) {
-            rmSync(memoryRoot, { recursive: true, force: true })
-        }
-        ensureDefaultMemorySpace(db)
-        watchMemorySpace('default', getDefaultMemorySpaceDir())
-
-        // Reload in-memory state
-        try {
-            const gateway = getGateway()
-            for (const id of gateway.getAllProviders().keys()) gateway.removeProvider(id)
-        } catch { /* ignore */ }
-        try { await loadSavedMcpServers() } catch { /* ignore */ }
-
-        return { success: true }
+        return { success: true, results }
     })
 }

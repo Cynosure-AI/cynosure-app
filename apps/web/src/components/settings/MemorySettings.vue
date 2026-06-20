@@ -143,12 +143,6 @@ onUnmounted(() => {
   unsubReembed?.()
 })
 
-// Manual clear
-const showManualClear = ref(false)
-const clearingDb = ref(false)
-const showGraphClear = ref(false)
-const clearingGraph = ref(false)
-
 onMounted(async () => {
   await providerStore.loadProviders()
   await loadEmbeddingConfig()
@@ -379,24 +373,6 @@ async function confirmDrop() {
 
 function cancelDrop() {
   showDropConfirm.value = false
-}
-
-async function manualClearDb() {
-  clearingDb.value = true
-  try {
-    await api.memory.dropVectors()
-  } catch { /* error handling */ }
-  clearingDb.value = false
-  showManualClear.value = false
-}
-
-async function manualClearGraph() {
-  clearingGraph.value = true
-  try {
-    await api.memory.clearGraph()
-  } catch { /* error handling */ }
-  clearingGraph.value = false
-  showGraphClear.value = false
 }
 
 </script>
@@ -742,73 +718,6 @@ async function manualClearGraph() {
       </div>
     </BaseCard>
 
-    <SettingsSubheading
-      v-if="showAnySection(['vector-database'])"
-      label="Maintenance"
-    />
-
-    <!-- Danger Zone -->
-    <div
-      v-if="showSection('vector-database')"
-      class="rounded-xl border border-red-900/50 bg-theme-800 p-5 space-y-4"
-    >
-      <div class="flex items-start gap-3">
-        <div class="w-9 h-9 rounded-lg bg-red-950/60 flex items-center justify-center shrink-0">
-          <Icon
-            icon="lucide:trash-2"
-            class="w-5 h-5 text-red-400"
-          />
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-theme-200">
-            Memory Data
-          </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
-            Clear derived memory indexes. These actions do not delete chat messages, agents, or provider settings.
-          </p>
-        </div>
-      </div>
-      <div class="space-y-3">
-        <div class="rounded-lg border border-red-900/40 bg-red-950/20 p-3">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div class="text-sm font-medium text-theme-200">
-                Entity Graph
-              </div>
-              <p class="text-xs text-theme-500 mt-0.5">
-                Delete all extracted entities and relationships. Vector memories and files are left untouched.
-              </p>
-            </div>
-            <button
-              class="px-4 py-2 bg-red-600/80 hover:bg-red-500 text-white text-sm rounded-lg transition-colors shrink-0"
-              @click="showGraphClear = true"
-            >
-              Clear Entity Graph
-            </button>
-          </div>
-        </div>
-
-        <div class="rounded-lg border border-red-900/40 bg-red-950/20 p-3">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div class="text-sm font-medium text-theme-200">
-                Vector Database
-              </div>
-              <p class="text-xs text-theme-500 mt-0.5">
-                Clear all stored vector embeddings. You will need to re-upload or re-index knowledge files afterwards.
-              </p>
-            </div>
-            <button
-              class="px-4 py-2 bg-red-600/80 hover:bg-red-500 text-white text-sm rounded-lg transition-colors shrink-0"
-              @click="showManualClear = true"
-            >
-              Clear Vector Database
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Model change confirmation modal -->
     <ModalDialog
       :show="showDropConfirm"
@@ -859,61 +768,6 @@ async function manualClearGraph() {
           :disabled="embSaving"
           class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
           @click="cancelDrop"
-        >
-          Cancel
-        </button>
-      </template>
-    </ModalDialog>
-
-    <ModalDialog
-      :show="showGraphClear"
-      title="Clear Entity Graph"
-      icon="lucide:network"
-      icon-color="red"
-      @close="showGraphClear = false"
-    >
-      <p class="text-theme-400 leading-relaxed">
-        This will permanently delete all extracted entities and relationships. Your memory files and vector embeddings will remain in place.
-      </p>
-      <template #actions>
-        <button
-          :disabled="clearingGraph"
-          class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 text-white rounded-xl text-center font-medium transition-colors"
-          @click="manualClearGraph"
-        >
-          {{ clearingGraph ? 'Clearing...' : 'Clear Entity Graph' }}
-        </button>
-        <button
-          class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
-          @click="showGraphClear = false"
-        >
-          Cancel
-        </button>
-      </template>
-    </ModalDialog>
-
-    <!-- Manual clear confirmation modal -->
-    <ModalDialog
-      :show="showManualClear"
-      title="Clear Vector Database"
-      icon="lucide:trash-2"
-      icon-color="red"
-      @close="showManualClear = false"
-    >
-      <p class="text-theme-400 leading-relaxed">
-        This will permanently delete all stored vector embeddings and memories across all agents. You will need to re-upload any knowledge files afterwards.
-      </p>
-      <template #actions>
-        <button
-          :disabled="clearingDb"
-          class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 text-white rounded-xl text-center font-medium transition-colors"
-          @click="manualClearDb"
-        >
-          {{ clearingDb ? 'Clearing...' : 'Clear All Vectors' }}
-        </button>
-        <button
-          class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
-          @click="showManualClear = false"
         >
           Cancel
         </button>

@@ -463,7 +463,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerInstanceRoutes, { prefix: '/api/instances' })
   app.register(registerActivityRoutes, { prefix: '/api/activity' })
   app.register(registerCronJobRoutes, { prefix: '/api/cron-jobs' })
-  app.register(registerBackupRoutes, { prefix: '/api/backup' })
+  app.register(async (instance) => registerBackupRoutes(instance, broadcast), { prefix: '/api/backup' })
   app.register(registerChannelRoutes, { prefix: '/api/channels' })
   app.register(registerMemorySpacesRoutes, { prefix: '/api/memory-spaces' })
   app.register(registerMetricsRoutes, { prefix: '/api/metrics' })

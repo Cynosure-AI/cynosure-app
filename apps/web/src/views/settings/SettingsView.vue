@@ -8,9 +8,10 @@ import ChatSettings from '../../components/settings/ChatSettings.vue'
 import SpeechToTextSettings from '../../components/settings/SpeechToTextSettings.vue'
 import AppearanceSettings from '../../components/settings/AppearanceSettings.vue'
 import BackupSettings from '../../components/settings/BackupSettings.vue'
+import ResetDataSettings from '../../components/settings/ResetDataSettings.vue'
 import ChannelsView from '../triggers/ChannelsView.vue'
 
-type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'appearance' | 'backup'
+type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'appearance' | 'backup' | 'reset-data'
 
 interface SettingsCategory {
   id: SettingsCategoryId
@@ -84,6 +85,13 @@ const categories: SettingsCategory[] = [
     description: 'Export your configuration as a zip file or restore from a previous backup.',
     icon: 'lucide:archive',
     component: BackupSettings
+  },
+  {
+    id: 'reset-data',
+    label: 'Reset Data',
+    description: 'Clear selected data areas, derived indexes, or the whole local workspace.',
+    icon: 'lucide:trash-2',
+    component: ResetDataSettings
   }
 ]
 
@@ -122,13 +130,6 @@ const sections: SettingsSection[] = [
     label: 'OCR for Document Images',
     description: 'Extract visible text from images embedded in uploaded documents.',
     terms: ['ocr', 'document images', 'parser', 'scanned documents', 'ocr language', 'languages', 'pdf', 'docx', 'pptx']
-  },
-  {
-    id: 'vector-database',
-    categoryId: 'memory',
-    label: 'Memory Data',
-    description: 'Clear the entity graph or all stored vector embeddings.',
-    terms: ['danger zone', 'entity graph', 'clear entity graph', 'relationships', 'entities', 'clear vector database', 'vectors', 'delete embeddings', 'reset memory', 'drop vectors']
   },
   {
     id: 'auto-router',
@@ -264,11 +265,11 @@ const sections: SettingsSection[] = [
     terms: ['backup', 'import', 'restore', 'upload', 'zip']
   },
   {
-    id: 'backup-reset',
-    categoryId: 'backup',
-    label: 'Reset Application',
-    description: 'Permanently delete all data and return Cynosure to a clean state.',
-    terms: ['reset', 'factory reset', 'wipe', 'delete all', 'clean state', 'start over', 'nuke']
+    id: 'reset-data',
+    categoryId: 'reset-data',
+    label: 'Reset Data',
+    description: 'Permanently delete selected data areas or return Cynosure to a clean state.',
+    terms: ['reset', 'factory reset', 'wipe', 'delete all', 'clean state', 'start over', 'clear data', 'partial reset', 'memory reset', 'entity graph', 'clear entity graph', 'relationships', 'entities', 'clear vector database', 'vector indexes', 'vectors', 'delete embeddings', 'drop vectors']
   }
 ]
 
