@@ -18,7 +18,7 @@ const automaticToolStates = computed(() => ({
     active: chatStore.sessionThinkingEnabled && hasSelectableExecutionTools.value,
     criteria: 'thinking mode and visible execution tools',
   },
-  todo_update: {
+  todo_upsert: {
     active: chatStore.sessionThinkingEnabled && hasSelectableExecutionTools.value,
     criteria: 'thinking mode and visible execution tools',
   },

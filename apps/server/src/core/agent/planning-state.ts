@@ -69,12 +69,31 @@ export function createPlanningRun(conversationId: string, objective: string): Pl
 
 export function resumeOrCreatePlanningRun(conversationId: string, objective: string): PlanningState {
   const latest = getLatestPlanningState(conversationId)
-  if (!latest || latest.status !== 'running' || latest.items.length === 0) {
+  if (!latest || latest.items.length === 0) {
     return createPlanningRun(conversationId, objective)
   }
 
+  if (latest.status !== 'running') {
+    const seeded = createPlanningRun(conversationId, latest.objective || objective)
+    const now = Date.now()
+    const items = renumberTaskIds(latest.items).map((item) => ({
+      ...item,
+      updatedAt: now,
+    }))
+    const state: PlanningState = {
+      ...seeded,
+      objective: latest.objective || cleanObjective(objective),
+      items,
+      currentTaskId: items.find((item) => item.status === 'in_progress')?.id,
+      updatedAt: now,
+    }
+    persistState(state)
+    emitState(state)
+    return state
+  }
+
   const now = Date.now()
-  const items = ensureResumedTask(latest.items, now)
+  const items = ensureResumedTask(renumberTaskIds(latest.items), now)
   const state: PlanningState = {
     ...latest,
     status: 'running',
@@ -184,15 +203,15 @@ export function interruptPlanningRun(
 }
 
 export function writeTodoList(runId: string, params: unknown): { success: boolean; output: string } {
-  const payload = params as { objective?: string; tasks?: Array<{ title?: string; status?: string; note?: string }> }
+  const payload = params as { objective?: string; tasks?: Array<{ taskId?: string; title?: string; status?: string; note?: string }> }
   const current = getPlanningState(runId)
   if (!current) return { success: false, output: 'Planning run not found.' }
 
   const now = Date.now()
   const items = (payload.tasks || [])
     .slice(0, MAX_TASKS)
-    .map((task) => ({
-      id: nanoid(8),
+    .map((task, index) => ({
+      id: normalizeTaskId(task.taskId) || formatTaskId(index),
       title: cleanTaskTitle(task.title),
       status: normalizeTaskStatus(task.status),
       note: cleanNote(task.note),
@@ -201,7 +220,7 @@ export function writeTodoList(runId: string, params: unknown): { success: boolea
     .filter((task) => task.title.length > 0)
 
   if (!items.length) return { success: false, output: 'At least one task with a title is required.' }
-  const normalizedItems = ensureActiveTask(items, now)
+  const normalizedItems = ensureActiveTask(renumberTaskIds(items), now)
 
   const state: PlanningState = {
     ...current,
@@ -215,18 +234,49 @@ export function writeTodoList(runId: string, params: unknown): { success: boolea
   return { success: true, output: JSON.stringify({ runId, tasks: normalizedItems.map(({ id, title, status }) => ({ id, title, status })) }) }
 }
 
-export function updateTodoItem(runId: string, params: unknown): { success: boolean; output: string } {
+export function upsertTodoItem(runId: string, params: unknown): { success: boolean; output: string } {
   const payload = params as { taskId?: string; title?: string; status?: string; note?: string }
   const current = getPlanningState(runId)
   if (!current) return { success: false, output: 'Planning run not found.' }
-  if (!current.items.length) return { success: false, output: 'No planning tasks have been set.' }
 
-  const idx = current.items.findIndex((item) => (
-    (payload.taskId && item.id === payload.taskId) ||
-    (payload.title && item.title.toLowerCase() === payload.title.trim().toLowerCase())
-  ))
-  if (idx === -1) return { success: false, output: 'Task not found. Use taskId from todo_write or the exact title.' }
+  const idx = findTaskIndex(current.items, payload)
+  if (idx !== -1) {
+    const updated = applyTodoItemUpdate(current, idx, payload)
+    persistState(updated.state)
+    emitState(updated.state)
+    return { success: true, output: JSON.stringify({ task: updated.task, action: 'updated' }) }
+  }
 
+  const title = cleanTaskTitle(payload.title)
+  if (!title) return { success: false, output: 'A title is required to append a planning task.' }
+  if (current.items.length >= MAX_TASKS) return { success: false, output: `Planning list is limited to ${MAX_TASKS} tasks.` }
+
+  const now = Date.now()
+  const appended: PlanningTaskItem = {
+    id: normalizeTaskId(payload.taskId) || formatTaskId(current.items.length),
+    title,
+    status: normalizeTaskStatus(payload.status),
+    note: cleanNote(payload.note),
+    updatedAt: now,
+  }
+  const items = renumberTaskIds([...current.items, appended])
+  const normalizedItems = ensureActiveTask(items, now)
+  const state: PlanningState = {
+    ...current,
+    items: normalizedItems,
+    currentTaskId: normalizedItems.find((item) => item.status === 'in_progress')?.id,
+    updatedAt: now,
+  }
+  persistState(state)
+  emitState(state)
+  return { success: true, output: JSON.stringify({ task: normalizedItems.at(-1), action: 'appended' }) }
+}
+
+function applyTodoItemUpdate(
+  current: PlanningState,
+  idx: number,
+  payload: { taskId?: string; title?: string; status?: string; note?: string },
+): { state: PlanningState; task: PlanningTaskItem } {
   const now = Date.now()
   const status = normalizeTaskStatus(payload.status)
   const items = current.items.map((item, itemIdx) => {
@@ -237,6 +287,7 @@ export function updateTodoItem(runId: string, params: unknown): { success: boole
     }
     return {
       ...item,
+      title: payload.title === undefined ? item.title : cleanTaskTitle(payload.title) || item.title,
       status,
       note: payload.note === undefined ? item.note : cleanNote(payload.note),
       updatedAt: now,
@@ -250,9 +301,7 @@ export function updateTodoItem(runId: string, params: unknown): { success: boole
     currentTaskId: normalizedItems.find((item) => item.status === 'in_progress')?.id,
     updatedAt: now,
   }
-  persistState(state)
-  emitState(state)
-  return { success: true, output: JSON.stringify({ task: normalizedItems[idx] }) }
+  return { state, task: normalizedItems[idx] }
 }
 
 export function reconcilePlanningAfterToolBatch(
@@ -456,6 +505,36 @@ function noteActiveItem(items: PlanningTaskItem[], note: string, now: number): P
       ? { ...item, note: cleanNote(note) ?? item.note, updatedAt: now }
       : item
   ))
+}
+
+function findTaskIndex(items: PlanningTaskItem[], payload: { taskId?: string; title?: string }): number {
+  const taskId = normalizeTaskId(payload.taskId)
+  const title = cleanTaskTitle(payload.title).toLowerCase()
+  return items.findIndex((item) => (
+    (taskId && normalizeTaskId(item.id) === taskId) ||
+    (title && item.title.toLowerCase() === title)
+  ))
+}
+
+function renumberTaskIds(items: PlanningTaskItem[]): PlanningTaskItem[] {
+  return items.map((item, index) => ({
+    ...item,
+    id: formatTaskId(index),
+  }))
+}
+
+function normalizeTaskId(taskId: string | undefined): string | undefined {
+  const raw = String(taskId || '').trim()
+  if (!raw) return undefined
+  const numeric = Number(raw)
+  if (Number.isInteger(numeric) && numeric > 0 && numeric <= MAX_TASKS) {
+    return formatTaskId(numeric - 1)
+  }
+  return raw
+}
+
+function formatTaskId(index: number): string {
+  return String(index + 1).padStart(2, '0')
 }
 
 function cleanNote(note: string | undefined): string | undefined {
