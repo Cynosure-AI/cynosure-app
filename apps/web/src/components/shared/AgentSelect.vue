@@ -70,6 +70,7 @@ const groups = computed((): SelectOptionGroup[] => {
       label: a.name,
       imgSrc,
       tooltip: a.description || undefined,
+      tagIconName: a.favorite ? 'lucide:star' : undefined,
       tag: a.favorite ? 'Favorite' : (a.subAgents?.length ? `+${a.subAgents.length}` : undefined),
     }
   })
