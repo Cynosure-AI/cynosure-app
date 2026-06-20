@@ -116,6 +116,8 @@ export function useChatStreaming(
     }
 
     function findPersistedMatchForBuffer(buf: StreamBuffer): DisplayMessage | undefined {
+        if (!buf.content && !buf.thinking && !buf.images.length && !buf.videos.length) return undefined
+
         for (let i = messages.value.length - 1; i >= 0; i--) {
             const msg = messages.value[i]
             if (msg.role === 'user') break
@@ -213,6 +215,14 @@ export function useChatStreaming(
             const existingMsg = subAgentStreamMsgs.get(streamId)
             if (existingMsg && messages.value.includes(existingMsg)) continue
             if (existingMsg) subAgentStreamMsgs.delete(streamId)
+
+            const persistedMatch = findPersistedMatchForBuffer(buf)
+            if (persistedMatch) {
+                hydrateMessageFromBuffer(persistedMatch, buf)
+                subAgentStreamMsgs.set(streamId, persistedMatch)
+                continue
+            }
+
             const msg: DisplayMessage = {
                 id: `sa_stream_${streamId}_${Date.now()}`,
                 role: 'assistant',
