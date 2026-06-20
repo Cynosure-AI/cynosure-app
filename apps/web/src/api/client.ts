@@ -215,7 +215,7 @@ export const api = {
     listTools: () =>
       get<{ key: string; name: string; executionName: string; description: string; parameters: Record<string, unknown>; autoApprove: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools'),
     listPolicyTools: () =>
-      get<{ key: string; name: string; executionName: string; description: string; parameters: Record<string, unknown>; autoApprove: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools?includePolicyBuiltIns=true'),
+      get<{ key: string; name: string; executionName: string; description: string; parameters: Record<string, unknown>; autoApprove: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools'),
     onExecutionUpdate: (cb: (data: unknown) => void) =>
       onWsEvent('agent:execution-update', cb),
     onPlanningStateUpdated: (cb: (data: unknown) => void) =>

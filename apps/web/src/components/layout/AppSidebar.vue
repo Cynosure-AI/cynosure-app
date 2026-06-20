@@ -439,10 +439,10 @@ const chatRoute = computed(() =>
             icon="lucide:wrench"
             class="w-4.5 h-4.5"
           />
-          <span>Tools</span>
+          <span>Tools Policy</span>
         </RouterLink>
         <template #content>
-          Tools
+          Tools Policy
         </template>
       </HoverTooltip>
 

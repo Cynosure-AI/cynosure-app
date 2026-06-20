@@ -39,7 +39,7 @@ const loading = ref(true)
 const columns: Column<NamespaceGroup>[] = [
   {
     key: 'category',
-    label: 'MCP / Category',
+    label: 'Category / MCP',
     width: 'minmax(280px, 1.8fr)',
     sortable: true,
     sortValue: (group) => group.namespace.label,
@@ -70,7 +70,7 @@ const groupedTools = computed<NamespaceGroup[]>(() => {
   const groups = new Map<string, NamespaceGroup>()
 
   for (const tool of filteredTools.value) {
-    const namespace = normalizeNamespace(tool.namespace, tool)
+    const namespace = normalizeNamespace(tool.namespace)
     if (!groups.has(namespace.id)) {
       groups.set(namespace.id, {
         id: namespace.id,
@@ -88,7 +88,7 @@ const groupedTools = computed<NamespaceGroup[]>(() => {
       tools: [...group.tools].sort((a, b) => displayName(a).localeCompare(displayName(b))),
     }))
     .sort((a, b) => {
-      const rank = (ns: string) => (ns === 'builtin' ? 0 : ns === 'builtin:internal' ? 1 : 2)
+      const rank = (ns: string) => (ns === 'builtin' ? 0 : 1)
       const ra = rank(a.namespace.id), rb = rank(b.namespace.id)
       return ra !== rb ? ra - rb : a.namespace.label.localeCompare(b.namespace.label)
     })
@@ -98,25 +98,16 @@ const autoApprovedCount = computed(() =>
   tools.value.filter((tool) => isAutoApproved(approvalName(tool))).length
 )
 
-function isInternalTool(tool: ToolInfo): boolean {
-  const name = tool.name
-  return name.startsWith('todo_') || name.startsWith('attachment_') || name.startsWith('memory_') || name.startsWith('relationship_graph_') || name === 'memory_forget' || name === 'expand_available_toolset' || name === 'spawn_subagent'
-}
-
-function normalizeNamespace(namespace: ToolNamespace, tool?: ToolInfo): ToolNamespace {
+function normalizeNamespace(namespace: ToolNamespace): ToolNamespace {
   if (namespace.id === 'builtin') {
-    if (tool && isInternalTool(tool)) return { id: 'builtin:internal', label: 'Internal' }
     return { ...namespace, label: 'Built-In' }
   }
   return namespace
 }
 
 function namespaceDescription(namespace: ToolNamespace, firstTool: ToolInfo): string {
-  if (namespace.id === 'builtin:internal') {
-    return 'Planning, attachments, tool routing, sub-agent delegation, memory, and other system-managed tools. These are always auto-approved.'
-  }
   if (namespace.id === 'builtin') {
-    return 'All built-in on-demand tools bundled with Cynosure.'
+    return 'Built-in tools bundled with Cynosure, including selectable tools and automatic system-managed tools.'
   }
   return displayDescription(firstTool)
 }
@@ -350,7 +341,7 @@ onMounted(loadPolicyTools)
                 <div class="flex flex-wrap items-center gap-2">
                   <span
                     class="text-sm font-semibold"
-                    :class="group.namespace.id === 'builtin:internal' ? 'text-violet-400' : group.namespace.id === 'builtin' ? 'text-accent-400' : 'text-theme-100'"
+                    :class="group.namespace.id === 'builtin' ? 'text-accent-400' : 'text-theme-100'"
                   >{{ group.namespace.label }}</span>
                   <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-theme-500">
                     {{ group.tools.length }} tool{{ group.tools.length === 1 ? '' : 's' }}
@@ -397,7 +388,7 @@ onMounted(loadPolicyTools)
                     <div class="flex flex-wrap items-center gap-2">
                       <span
                         class="font-mono text-sm"
-                        :class="group.namespace.id === 'builtin:internal' ? 'text-violet-400' : group.namespace.id === 'builtin' ? 'text-accent-400' : 'text-theme-200'"
+                        :class="group.namespace.id === 'builtin' ? 'text-accent-400' : 'text-theme-200'"
                       >{{ displayName(tool) }}</span>
                       <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-theme-500">
                         {{ toolCategory(tool) }}

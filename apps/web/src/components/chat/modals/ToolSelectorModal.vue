@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
 import ModalDialog from '../../shared/ModalDialog.vue'
 import ToolSelector from '../../shared/ToolSelector.vue'
@@ -7,6 +8,77 @@ import ToggleSwitch from '../../shared/ToggleSwitch.vue'
 const chatStore = useChatStore()
 
 const visible = defineModel<boolean>({ required: true })
+
+const hasMemoryScope = computed(() => chatStore.freeChatMemorySpaceIds.length > 0)
+const hasConversationAttachment = computed(() => chatStore.messages.some((message) => (message.fileAttachments?.length ?? 0) > 0))
+const hasSelectableExecutionTools = computed(() => chatStore.selectedToolNames.length > 0 || chatStore.sessionAutoToolRouting)
+
+const automaticToolStates = computed(() => ({
+  todo_write: {
+    active: chatStore.sessionThinkingEnabled && hasSelectableExecutionTools.value,
+    criteria: 'thinking mode and visible execution tools',
+  },
+  todo_update: {
+    active: chatStore.sessionThinkingEnabled && hasSelectableExecutionTools.value,
+    criteria: 'thinking mode and visible execution tools',
+  },
+  memory_list_documents: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  memory_retrieve_chunks: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  memory_semantic_search: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  memory_create: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  memory_update: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  memory_forget: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  relationship_graph_search: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  relationship_graph_assert: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  relationship_graph_delete: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
+  attachment_list_documents: {
+    active: hasConversationAttachment.value,
+    criteria: 'large indexed attachment available',
+  },
+  attachment_search: {
+    active: hasConversationAttachment.value,
+    criteria: 'large indexed attachment available',
+  },
+  attachment_retrieve_chunks: {
+    active: hasConversationAttachment.value,
+    criteria: 'large indexed attachment available',
+  },
+  expand_available_toolset: {
+    active: chatStore.sessionAutoToolRouting,
+    criteria: 'auto tool mode enabled',
+  },
+  spawn_subagent: {
+    active: chatStore.freeChatSubAgentIds.length > 0,
+    criteria: 'sub-agent selected',
+  },
+}))
 
 function closeModal(): void {
   visible.value = false
@@ -59,6 +131,7 @@ function onAutoRoutingUpdate(enabled: boolean): void {
     <ToolSelector
       :model-value="chatStore.selectedToolNames"
       :show-approvals="false"
+      :automatic-tool-states="automaticToolStates"
       @update:model-value="onToolsUpdate"
     />
   </ModalDialog>

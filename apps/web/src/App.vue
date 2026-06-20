@@ -160,7 +160,7 @@ onUnmounted(() => {
     >
       <div
         v-if="sidebarOpen"
-        class="fixed inset-0 z-40 bg-black/60 md:hidden"
+        class="fixed inset-0 z-30 bg-black/60 md:hidden"
         @click="closeSidebar"
       />
     </Transition>
@@ -168,7 +168,7 @@ onUnmounted(() => {
     <!-- Sidebar: always visible on md+, slide-in overlay on mobile -->
     <div
       v-if="!isOnboardingRoute"
-      class="fixed inset-y-0 left-0 z-50 w-60 transition-all duration-200 md:static md:translate-x-0"
+      class="fixed inset-y-0 left-0 z-30 w-60 transition-all duration-200 md:static md:translate-x-0"
       :class="[
         sidebarOpen ? 'translate-x-0' : '-translate-x-full',
         sidebarCollapsed ? 'md:w-16' : ''

@@ -4,6 +4,7 @@ import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import type { Conversation, DisplayMessage } from '../stores/chat.store'
 import type { ConversationExecutionConfig } from '@shared/types'
 import { SK_ACTIVE_AGENT, SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
+import { isAutoManagedBuiltInToolName } from '../utils/internal-tools'
 
 interface ChatPreset {
     tools: string[]
@@ -148,7 +149,11 @@ export function useChatAgentConfig(
     const freeChatPreset = ref<ChatPreset | null>(null)
 
     watch(() => agentStore.availableTools, (tools) => {
-        const availableKeys = new Set(tools.map((tool) => tool.key))
+        const availableKeys = new Set(
+            tools
+                .filter((tool) => !(tool.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(tool.name)))
+                .map((tool) => tool.key)
+        )
         const filtered = selectedToolNames.value.filter((name) => availableKeys.has(name))
         if (activeAgentId.value) {
             agentOriginalTools.value = agentOriginalTools.value.filter((name) => availableKeys.has(name))
@@ -252,7 +257,11 @@ export function useChatAgentConfig(
     }
 
     function setSelectedToolNames(names: string[]): void {
-        const availableKeys = new Set(agentStore.availableTools.map((tool) => tool.key))
+        const availableKeys = new Set(
+            agentStore.availableTools
+                .filter((tool) => !(tool.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(tool.name)))
+                .map((tool) => tool.key)
+        )
         const seen = new Set<string>()
         selectedToolNames.value = names.filter((name) => {
             if (!availableKeys.has(name) || seen.has(name)) return false

@@ -2,6 +2,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../api/client'
 import type { ExecutionStepRecord, PlanningState } from '../api/types'
+import { isAutoManagedBuiltInToolName } from '../utils/internal-tools'
 
 export interface ToolNamespace {
   id: string
@@ -69,6 +70,10 @@ export const useAgentStore = defineStore('agent', () => {
   const availableTools = ref<ToolInfo[]>([])
   const selectedToolNames = ref<string[]>([])
 
+  function isSelectableTool(tool: ToolInfo): boolean {
+    return !(tool.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(tool.name))
+  }
+
   // Per-conversation execution state for background support
   const executionConversationId = ref<string | null>(null)
   const executingConversationIds = ref<Set<string>>(new Set())
@@ -118,7 +123,11 @@ export const useAgentStore = defineStore('agent', () => {
     }
     toolApprovals.value = approvalMap
 
-    const availableKeys = new Set(availableTools.value.map((tool) => tool.key))
+    const availableKeys = new Set(
+      availableTools.value
+        .filter((tool) => !(tool.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(tool.name)))
+        .map((tool) => tool.key)
+    )
     const filtered = selectedToolNames.value.filter((name) => availableKeys.has(name))
 
     // Keep only previously selected tools that still exist; default to none.
@@ -126,7 +135,7 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   function toggleTool(name: string): void {
-    if (!availableTools.value.some((tool) => tool.key === name)) return
+    if (!availableTools.value.some((tool) => tool.key === name && isSelectableTool(tool))) return
 
     if (selectedToolNames.value.includes(name)) {
       selectedToolNames.value = selectedToolNames.value.filter((n) => n !== name)
@@ -137,7 +146,7 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   function selectAllTools(): void {
-    selectedToolNames.value = availableTools.value.map((tool) => tool.key)
+    selectedToolNames.value = availableTools.value.filter(isSelectableTool).map((tool) => tool.key)
   }
 
   function clearSelectedTools(): void {
