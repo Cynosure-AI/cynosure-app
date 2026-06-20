@@ -48,6 +48,51 @@ const selectedAgent = computed(() =>
   allAgents.value.find(a => a.id === dlgAgentId.value)
 )
 
+const stateMeta = computed(() => {
+  if (!dlgEnabled.value) {
+    return {
+      label: 'Disabled',
+      description: 'This channel is disabled and will not listen for messages.',
+      icon: 'lucide:pause-circle',
+      color: 'text-theme-500',
+      bg: 'bg-theme-800',
+      border: 'border-theme-700',
+      spin: false,
+    }
+  }
+  if (channel.value?.status?.connected) {
+    return {
+      label: 'Connected',
+      description: 'This channel is online and listening for messages.',
+      icon: 'lucide:radio',
+      color: 'text-emerald-400',
+      bg: 'bg-emerald-500/10',
+      border: 'border-emerald-500/25',
+      spin: false,
+    }
+  }
+  if (channel.value?.status?.error) {
+    return {
+      label: 'Error',
+      description: channel.value.status.error,
+      icon: 'lucide:circle-alert',
+      color: 'text-red-400',
+      bg: 'bg-red-500/10',
+      border: 'border-red-500/25',
+      spin: false,
+    }
+  }
+  return {
+    label: 'Starting',
+    description: 'This channel is enabled and waiting for a connection.',
+    icon: 'lucide:loader-2',
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/25',
+    spin: true,
+  }
+})
+
 const canSave = computed(() => {
   if (!dlgAgentId.value || !dlgName.value.trim()) return false
   if (channel.value?.type === 'slack') {
@@ -183,30 +228,6 @@ onMounted(loadChannel)
           </div>
 
           <div class="flex items-center gap-3">
-            <template v-if="channel.status?.connected">
-              <span class="flex items-center gap-1.5 text-xs text-emerald-400">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Connected
-              </span>
-            </template>
-            <template v-else-if="channel.enabled && channel.status?.error">
-              <span class="flex items-center gap-1.5 text-xs text-red-400">
-                <span class="w-2 h-2 rounded-full bg-red-500" />
-                Error
-              </span>
-            </template>
-            <template v-else-if="channel.enabled">
-              <span class="flex items-center gap-1.5 text-xs text-amber-400">
-                <span class="w-2 h-2 rounded-full bg-amber-500" />
-                Starting
-              </span>
-            </template>
-            <template v-else>
-              <span class="flex items-center gap-1.5 text-xs text-theme-500">
-                <span class="w-2 h-2 rounded-full bg-theme-600" />
-                Disabled
-              </span>
-            </template>
             <span
               v-if="saveMessage"
               class="text-sm text-green-400"
@@ -389,11 +410,11 @@ onMounted(loadChannel)
               Enable or disable this channel, and test the connection with the current credentials.
             </p>
 
-            <div class="flex items-center justify-between gap-4">
-              <div class="flex items-start justify-between gap-4 flex-1">
-                <div>
+            <div class="space-y-3">
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
                   <p class="text-sm font-medium text-theme-200">
-                    Enabled
+                    Enabled / State
                   </p>
                   <p class="text-xs text-theme-500">
                     Start listening for messages on this channel.
@@ -403,8 +424,29 @@ onMounted(loadChannel)
                   v-model="dlgEnabled"
                   size="md"
                   color="emerald"
-                  class="mt-0.5"
+                  class="mt-0.5 shrink-0"
                 />
+              </div>
+              <div
+                class="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2"
+                :class="[stateMeta.border, stateMeta.bg]"
+              >
+                <Icon
+                  :icon="stateMeta.icon"
+                  class="w-4 h-4 shrink-0"
+                  :class="[stateMeta.color, { 'animate-spin': stateMeta.spin }]"
+                />
+                <div class="min-w-0">
+                  <p
+                    class="text-sm font-medium leading-tight"
+                    :class="stateMeta.color"
+                  >
+                    {{ stateMeta.label }}
+                  </p>
+                  <p class="truncate text-[11px] text-theme-500 leading-tight">
+                    {{ stateMeta.description }}
+                  </p>
+                </div>
               </div>
             </div>
 

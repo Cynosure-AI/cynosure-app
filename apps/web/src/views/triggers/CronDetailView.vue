@@ -11,6 +11,7 @@ import { useProviderStore } from "../../stores/provider.store";
 import { Icon } from "@iconify/vue";
 import AgentSelect from "../../components/shared/AgentSelect.vue";
 import BaseCard from "../../components/shared/BaseCard.vue";
+import HoverMenu from "../../components/shared/HoverMenu.vue";
 import {
   parseCronExpr,
   buildCronExpr,
@@ -49,6 +50,7 @@ function resizePrompt() {
 const cronName = ref("");
 const cronAgentId = ref("");
 const cronPrompt = ref("");
+const cronEnabled = ref(true);
 const cronOneOff = ref(false);
 const cronOutputChannelId = ref("");
 const cronNotificationMode = ref<"always" | "conditional">("always");
@@ -76,11 +78,48 @@ const dlgParts = computed(() => ({
 }));
 const dlgGeneratedExpr = computed(() => buildCronExpr(dlgParts.value));
 const dlgHumanReadable = computed(() => cronToHuman(dlgParts.value));
+const selectedFrequencyOption = computed(() =>
+  FREQUENCY_OPTIONS.find((opt) => opt.value === dlgFrequency.value) || FREQUENCY_OPTIONS[0]
+);
+const stateMeta = computed(() => {
+  if (job.value?.isRunning) {
+    return {
+      label: "Executing",
+      description: "A run is currently in progress.",
+      icon: "lucide:loader-2",
+      color: "text-emerald-400",
+      bg: "bg-emerald-500/10",
+      border: "border-emerald-500/25",
+      spin: true,
+    };
+  }
+  if (cronEnabled.value) {
+    return {
+      label: "Scheduled",
+      description: "This job is enabled and will run on schedule.",
+      icon: "lucide:calendar-check",
+      color: "text-sky-400",
+      bg: "bg-sky-500/10",
+      border: "border-sky-500/25",
+      spin: false,
+    };
+  }
+  return {
+    label: "Paused",
+    description: "This job is disabled and will not run automatically.",
+    icon: "lucide:pause-circle",
+    color: "text-theme-500",
+    bg: "bg-theme-800",
+    border: "border-theme-700",
+    spin: false,
+  };
+});
 
 function populateFields(j: CronJob) {
   cronName.value = j.name || "";
   cronAgentId.value = j.agentId;
   cronPrompt.value = j.prompt || "";
+  cronEnabled.value = j.enabled;
   cronOneOff.value = j.oneOff;
   cronOutputChannelId.value = j.outputChannelId || "";
   cronNotificationMode.value = j.notificationMode === "conditional" ? "conditional" : "always";
@@ -130,6 +169,7 @@ async function save() {
       agentId: cronAgentId.value,
       schedule: expr.trim(),
       prompt: cronPrompt.value,
+      enabled: cronEnabled.value,
       oneOff: cronOneOff.value,
       outputChannelId: cronOutputChannelId.value,
       notificationMode: cronNotificationMode.value,
@@ -199,24 +239,6 @@ watch(cronPrompt, resizePrompt, { immediate: true });
           </div>
 
           <div class="flex items-center gap-3">
-            <template v-if="job.isRunning">
-              <span class="flex items-center gap-1.5 text-xs text-emerald-400">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Executing
-              </span>
-            </template>
-            <template v-else-if="job.enabled">
-              <span class="flex items-center gap-1.5 text-xs text-sky-400">
-                <span class="w-2 h-2 rounded-full bg-sky-500" />
-                Scheduled
-              </span>
-            </template>
-            <template v-else>
-              <span class="flex items-center gap-1.5 text-xs text-theme-500">
-                <span class="w-2 h-2 rounded-full bg-theme-600" />
-                Paused
-              </span>
-            </template>
             <span
               v-if="saveMessage"
               class="text-sm text-green-400"
@@ -263,6 +285,55 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             </div>
           </BaseCard>
 
+          <!-- State -->
+          <BaseCard class="p-5">
+            <div class="space-y-3">
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 mb-1">
+                    <Icon
+                      icon="lucide:power"
+                      class="w-4 h-4 text-emerald-400"
+                    />
+                    <h3 class="text-sm font-medium text-theme-200">
+                      Enabled / State
+                    </h3>
+                  </div>
+                  <p class="text-xs text-theme-500 leading-relaxed">
+                    Control whether this cron job runs automatically.
+                  </p>
+                </div>
+                <ToggleSwitch
+                  v-model="cronEnabled"
+                  size="md"
+                  color="emerald"
+                  class="mt-0.5 shrink-0"
+                />
+              </div>
+              <div
+                class="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2"
+                :class="[stateMeta.border, stateMeta.bg]"
+              >
+                <Icon
+                  :icon="stateMeta.icon"
+                  class="w-4 h-4 shrink-0"
+                  :class="[stateMeta.color, { 'animate-spin': stateMeta.spin }]"
+                />
+                <div class="min-w-0">
+                  <p
+                    class="text-sm font-medium leading-tight"
+                    :class="stateMeta.color"
+                  >
+                    {{ stateMeta.label }}
+                  </p>
+                  <p class="truncate text-[11px] text-theme-500 leading-tight">
+                    {{ stateMeta.description }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </BaseCard>
+
           <!-- Schedule -->
           <BaseCard class="p-5">
             <div class="flex items-center gap-2 mb-1">
@@ -278,208 +349,249 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               Define when this job should run. Choose a frequency and configure the timing below.
             </p>
 
-            <!-- Frequency tabs -->
-            <div class="grid grid-cols-3 gap-1.5 mb-4">
-              <button
-                v-for="opt in FREQUENCY_OPTIONS"
-                :key="opt.value"
-                type="button"
-                class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-colors"
-                :class="
-                  dlgFrequency === opt.value
-                    ? 'border-accent-500 bg-accent-500/10 text-accent-400'
-                    : 'border-theme-700 bg-theme-900 text-theme-400 hover:text-theme-200 hover:border-theme-600'
-                "
-                @click="dlgFrequency = opt.value"
+            <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <HoverMenu
+                placement="below"
+                :max-width="240"
+                :close-delay="180"
               >
-                <Icon
-                  :icon="opt.icon"
-                  class="w-3.5 h-3.5"
-                />
-                {{ opt.label }}
-              </button>
-            </div>
+                <template #trigger="{ open, toggle }">
+                  <button
+                    type="button"
+                    class="inline-flex w-full items-center justify-between gap-3 rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-200 transition hover:border-theme-600 hover:bg-theme-800 sm:w-48"
+                    aria-haspopup="menu"
+                    :aria-expanded="open"
+                    @click.stop="toggle"
+                  >
+                    <span class="inline-flex min-w-0 items-center gap-2">
+                      <Icon
+                        :icon="selectedFrequencyOption.icon"
+                        class="w-4 h-4 shrink-0 text-indigo-400"
+                      />
+                      <span class="truncate">{{ selectedFrequencyOption.label }}</span>
+                    </span>
+                    <Icon
+                      icon="lucide:chevron-down"
+                      class="w-4 h-4 shrink-0 text-theme-500 transition"
+                      :class="{ 'rotate-180': open }"
+                    />
+                  </button>
+                </template>
 
-            <!-- Every X minutes -->
-            <div
-              v-if="dlgFrequency === 'minutes'"
-              class="flex items-center gap-2 mb-4"
-            >
-              <span class="text-sm text-theme-400">Every</span>
-              <select
-                v-model.number="dlgEveryMinutes"
-                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-              >
-                <option
-                  v-for="m in INTERVAL_MINUTES"
-                  :key="m"
-                  :value="m"
-                >
-                  {{ m }}
-                </option>
-              </select>
-              <span class="text-sm text-theme-400">minutes</span>
-            </div>
+                <template #content="{ close }">
+                  <div
+                    class="w-56"
+                    role="menu"
+                    @click.stop
+                  >
+                    <button
+                      v-for="opt in FREQUENCY_OPTIONS"
+                      :key="opt.value"
+                      type="button"
+                      class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] transition hover:bg-theme-800"
+                      :class="
+                        dlgFrequency === opt.value
+                          ? 'text-accent-400 bg-accent-500/10'
+                          : 'text-theme-300 hover:text-theme-100'
+                      "
+                      @click="dlgFrequency = opt.value; close()"
+                    >
+                      <Icon
+                        :icon="opt.icon"
+                        class="w-3.5 h-3.5"
+                      />
+                      <span class="flex-1">{{ opt.label }}</span>
+                      <Icon
+                        v-if="dlgFrequency === opt.value"
+                        icon="lucide:check"
+                        class="w-3.5 h-3.5"
+                      />
+                    </button>
+                  </div>
+                </template>
+              </HoverMenu>
 
-            <!-- Hourly -->
-            <div
-              v-else-if="dlgFrequency === 'hourly'"
-              class="flex items-center gap-2 mb-4"
-            >
-              <span class="text-sm text-theme-400">Every hour at minute</span>
-              <select
-                v-model.number="dlgAtMinute"
-                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              <!-- Every X minutes -->
+              <div
+                v-if="dlgFrequency === 'minutes'"
+                class="flex min-w-0 flex-wrap items-center gap-2"
               >
-                <option
-                  v-for="m in MINUTE_OPTIONS"
-                  :key="m"
-                  :value="m"
+                <span class="text-sm text-theme-400">Every</span>
+                <select
+                  v-model.number="dlgEveryMinutes"
+                  class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
                 >
-                  :{{ String(m).padStart(2, "0") }}
-                </option>
-              </select>
-            </div>
+                  <option
+                    v-for="m in INTERVAL_MINUTES"
+                    :key="m"
+                    :value="m"
+                  >
+                    {{ m }}
+                  </option>
+                </select>
+                <span class="text-sm text-theme-400">minutes</span>
+              </div>
 
-            <!-- Daily -->
-            <div
-              v-else-if="dlgFrequency === 'daily'"
-              class="flex items-center gap-2 mb-4"
-            >
-              <span class="text-sm text-theme-400">Every day at</span>
-              <select
-                v-model.number="dlgAtHour"
-                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              <!-- Hourly -->
+              <div
+                v-else-if="dlgFrequency === 'hourly'"
+                class="flex min-w-0 flex-wrap items-center gap-2"
               >
-                <option
-                  v-for="h in HOUR_OPTIONS"
-                  :key="h"
-                  :value="h"
+                <span class="text-sm text-theme-400">Every hour at minute</span>
+                <select
+                  v-model.number="dlgAtMinute"
+                  class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
                 >
-                  {{ String(h).padStart(2, "0") }}
-                </option>
-              </select>
-              <span class="text-sm text-theme-400">:</span>
-              <select
-                v-model.number="dlgAtMinute"
-                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-              >
-                <option
-                  v-for="m in MINUTE_OPTIONS"
-                  :key="m"
-                  :value="m"
-                >
-                  {{ String(m).padStart(2, "0") }}
-                </option>
-              </select>
-            </div>
+                  <option
+                    v-for="m in MINUTE_OPTIONS"
+                    :key="m"
+                    :value="m"
+                  >
+                    :{{ String(m).padStart(2, "0") }}
+                  </option>
+                </select>
+              </div>
 
-            <!-- Weekly -->
-            <div
-              v-else-if="dlgFrequency === 'weekly'"
-              class="flex items-center gap-2 flex-wrap mb-4"
-            >
-              <span class="text-sm text-theme-400">Every</span>
-              <select
-                v-model.number="dlgWeekday"
-                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              <!-- Daily -->
+              <div
+                v-else-if="dlgFrequency === 'daily'"
+                class="flex min-w-0 flex-wrap items-center gap-2"
               >
-                <option
-                  v-for="(label, i) in WEEKDAYS"
-                  :key="i"
-                  :value="i"
+                <span class="text-sm text-theme-400">Every day at</span>
+                <select
+                  v-model.number="dlgAtHour"
+                  class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
                 >
-                  {{ label }}
-                </option>
-              </select>
-              <span class="text-sm text-theme-400">at</span>
-              <select
-                v-model.number="dlgAtHour"
-                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-              >
-                <option
-                  v-for="h in HOUR_OPTIONS"
-                  :key="h"
-                  :value="h"
+                  <option
+                    v-for="h in HOUR_OPTIONS"
+                    :key="h"
+                    :value="h"
+                  >
+                    {{ String(h).padStart(2, "0") }}
+                  </option>
+                </select>
+                <span class="text-sm text-theme-400">:</span>
+                <select
+                  v-model.number="dlgAtMinute"
+                  class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
                 >
-                  {{ String(h).padStart(2, "0") }}
-                </option>
-              </select>
-              <span class="text-sm text-theme-400">:</span>
-              <select
-                v-model.number="dlgAtMinute"
-                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-              >
-                <option
-                  v-for="m in MINUTE_OPTIONS"
-                  :key="m"
-                  :value="m"
-                >
-                  {{ String(m).padStart(2, "0") }}
-                </option>
-              </select>
-            </div>
+                  <option
+                    v-for="m in MINUTE_OPTIONS"
+                    :key="m"
+                    :value="m"
+                  >
+                    {{ String(m).padStart(2, "0") }}
+                  </option>
+                </select>
+              </div>
 
-            <!-- Monthly -->
-            <div
-              v-else-if="dlgFrequency === 'monthly'"
-              class="flex items-center gap-2 flex-wrap mb-4"
-            >
-              <span class="text-sm text-theme-400">On day</span>
-              <select
-                v-model.number="dlgMonthDay"
-                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              <!-- Weekly -->
+              <div
+                v-else-if="dlgFrequency === 'weekly'"
+                class="flex min-w-0 flex-wrap items-center gap-2"
               >
-                <option
-                  v-for="d in 28"
-                  :key="d"
-                  :value="d"
+                <span class="text-sm text-theme-400">Every</span>
+                <select
+                  v-model.number="dlgWeekday"
+                  class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
                 >
-                  {{ d }}
-                </option>
-              </select>
-              <span class="text-sm text-theme-400">at</span>
-              <select
-                v-model.number="dlgAtHour"
-                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-              >
-                <option
-                  v-for="h in HOUR_OPTIONS"
-                  :key="h"
-                  :value="h"
+                  <option
+                    v-for="(label, i) in WEEKDAYS"
+                    :key="i"
+                    :value="i"
+                  >
+                    {{ label }}
+                  </option>
+                </select>
+                <span class="text-sm text-theme-400">at</span>
+                <select
+                  v-model.number="dlgAtHour"
+                  class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
                 >
-                  {{ String(h).padStart(2, "0") }}
-                </option>
-              </select>
-              <span class="text-sm text-theme-400">:</span>
-              <select
-                v-model.number="dlgAtMinute"
-                class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-              >
-                <option
-                  v-for="m in MINUTE_OPTIONS"
-                  :key="m"
-                  :value="m"
+                  <option
+                    v-for="h in HOUR_OPTIONS"
+                    :key="h"
+                    :value="h"
+                  >
+                    {{ String(h).padStart(2, "0") }}
+                  </option>
+                </select>
+                <span class="text-sm text-theme-400">:</span>
+                <select
+                  v-model.number="dlgAtMinute"
+                  class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
                 >
-                  {{ String(m).padStart(2, "0") }}
-                </option>
-              </select>
-            </div>
+                  <option
+                    v-for="m in MINUTE_OPTIONS"
+                    :key="m"
+                    :value="m"
+                  >
+                    {{ String(m).padStart(2, "0") }}
+                  </option>
+                </select>
+              </div>
 
-            <!-- Custom -->
-            <div
-              v-else-if="dlgFrequency === 'custom'"
-              class="mb-4"
-            >
-              <input
-                v-model="dlgCustomExpr"
-                type="text"
-                placeholder="*/30 * * * *"
-                class="w-full px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono"
+              <!-- Monthly -->
+              <div
+                v-else-if="dlgFrequency === 'monthly'"
+                class="flex min-w-0 flex-wrap items-center gap-2"
               >
-              <p class="text-[11px] text-theme-600 mt-1">
-                Standard cron: minute hour day-of-month month day-of-week
-              </p>
+                <span class="text-sm text-theme-400">On day</span>
+                <select
+                  v-model.number="dlgMonthDay"
+                  class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                >
+                  <option
+                    v-for="d in 28"
+                    :key="d"
+                    :value="d"
+                  >
+                    {{ d }}
+                  </option>
+                </select>
+                <span class="text-sm text-theme-400">at</span>
+                <select
+                  v-model.number="dlgAtHour"
+                  class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                >
+                  <option
+                    v-for="h in HOUR_OPTIONS"
+                    :key="h"
+                    :value="h"
+                  >
+                    {{ String(h).padStart(2, "0") }}
+                  </option>
+                </select>
+                <span class="text-sm text-theme-400">:</span>
+                <select
+                  v-model.number="dlgAtMinute"
+                  class="px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                >
+                  <option
+                    v-for="m in MINUTE_OPTIONS"
+                    :key="m"
+                    :value="m"
+                  >
+                    {{ String(m).padStart(2, "0") }}
+                  </option>
+                </select>
+              </div>
+
+              <!-- Custom -->
+              <div
+                v-else-if="dlgFrequency === 'custom'"
+                class="min-w-0 flex-1"
+              >
+                <input
+                  v-model="dlgCustomExpr"
+                  type="text"
+                  placeholder="*/30 * * * *"
+                  class="w-full px-3 py-1.5 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono"
+                >
+                <p class="text-[11px] text-theme-600 mt-1">
+                  Standard cron: minute hour day-of-month month day-of-week
+                </p>
+              </div>
             </div>
 
             <!-- Schedule summary -->
