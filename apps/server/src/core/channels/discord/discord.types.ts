@@ -11,6 +11,7 @@ export interface DiscordConfig {
 export type BroadcastFn = (event: string, data: unknown) => void
 
 export interface PendingHITL {
+    conversationId: string
     discordChannelId: string
     messageId: string
     resolve: (result: { approved: boolean; reason?: string }) => void

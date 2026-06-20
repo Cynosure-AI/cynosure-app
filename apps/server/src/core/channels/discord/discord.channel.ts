@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, Events, TextChannel } from 'discord.js'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution } from '../base.channel.js'
-import type { DiscordConfig, DiscordCtx } from './discord.types.js'
+import type { DiscordConfig, DiscordCtx, PendingHITL } from './discord.types.js'
 import { handleMessage, handleInteraction, subscribeToHITL } from './discord.messaging.js'
 import { sendLongMessage } from './discord.api.js'
 
@@ -14,7 +14,7 @@ export class DiscordChannel implements ChannelProvider {
     activeExecutions = new Map<string, { exec: ActiveChannelExecution; controller: AbortController }>()
     channelAgentOverride = new Map<string, string>()
     channelLastUsedAgent = new Map<string, string>()
-    pendingHITL = new Map<string, { discordChannelId: string; messageId: string; resolve: (result: { approved: boolean; reason?: string }) => void }>()
+    pendingHITL = new Map<string, PendingHITL>()
     conversationToChannel = new Map<string, string>()
     channelLocks = new Map<string, Promise<void>>()
     conversationSendQueue = new Map<string, (fn: () => Promise<void>) => void>()

@@ -505,6 +505,7 @@ export function subscribeToHITL(ctx: DiscordCtx): () => void {
             try {
                 const sentMsg = await (channel as DiscordSendChannel).send({ content: text, components: [row] })
                 ctx.pendingHITL.set(data.taskId, {
+                    conversationId: data.conversationId,
                     discordChannelId,
                     messageId: sentMsg.id,
                     resolve: data.resolve
@@ -541,8 +542,8 @@ export async function handleInteraction(ctx: DiscordCtx, interaction: Interactio
     const approved = action === 'approve'
 
     pending.resolve({ approved, reason: approved ? undefined : 'Denied via Discord' })
-    ctx.broadcast('agent:hitl-resolved', { taskId, approved })
-    getEventBus().emit('hitl:resolved', { taskId })
+    ctx.broadcast('agent:hitl-resolved', { taskId, conversationId: pending.conversationId, approved })
+    getEventBus().emit('hitl:resolved', { taskId, conversationId: pending.conversationId })
     try { getDb().prepare('DELETE FROM pending_hitl WHERE task_id = ?').run(taskId) } catch { }
 
     const statusText = approved ? '✅ **Approved** — proceeding...' : '❌ **Denied** — the agent will try a different approach.'

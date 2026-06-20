@@ -32,6 +32,7 @@ export interface TelegramUpdate {
 }
 
 export interface PendingHITL {
+    conversationId: string
     chatId: number
     messageId: number
     resolve: (result: { approved: boolean; reason?: string }) => void

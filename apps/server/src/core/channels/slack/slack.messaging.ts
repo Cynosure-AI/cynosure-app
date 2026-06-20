@@ -507,6 +507,7 @@ export function subscribeToHITL(ctx: SlackCtx): () => void {
                 })
                 if (result.ts) {
                     ctx.pendingHITL.set(data.taskId, {
+                        conversationId: data.conversationId,
                         slackChannelId,
                         messageTs: result.ts,
                         resolve: data.resolve
@@ -544,8 +545,8 @@ export async function handleHITLAction(
 
     pending.resolve({ approved, reason: approved ? undefined : 'Denied via Slack' })
 
-    ctx.broadcast('agent:hitl-resolved', { taskId, approved })
-    getEventBus().emit('hitl:resolved', { taskId })
+    ctx.broadcast('agent:hitl-resolved', { taskId, conversationId: pending.conversationId, approved })
+    getEventBus().emit('hitl:resolved', { taskId, conversationId: pending.conversationId })
     try { getDb().prepare('DELETE FROM pending_hitl WHERE task_id = ?').run(taskId) } catch { }
 
     const statusText = approved ? '✅ *Approved* — proceeding...' : '❌ *Denied* — the agent will try a different approach.'
