@@ -10,6 +10,8 @@ import type {
   VideoGenerationJob,
   VideoGenerationModelInfo,
   VideoGenerationRequest,
+  TranscriptionRequest,
+  TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
 import type { ChatSendRequest, ConversationDto, ConversationMessagesResponse } from '@shared/types'
@@ -45,6 +47,8 @@ export const api = {
       get<VideoGenerationJob>(`/api/providers/${encodeURIComponent(id)}/videos/${encodeURIComponent(jobId)}`),
     getVideoContentUrl: (id: string, jobId: string, index = 0) =>
       `${BASE_URL}/api/providers/${encodeURIComponent(id)}/videos/${encodeURIComponent(jobId)}/content?index=${encodeURIComponent(String(index))}`,
+    transcribeAudio: (id: string, request: TranscriptionRequest) =>
+      post<TranscriptionResponse>(`/api/providers/${encodeURIComponent(id)}/transcriptions`, request),
     getModelInfo: (providerId: string, modelId: string) =>
       get<ModelInfo>(`/api/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}/info`),
     loadSaved: () => Promise.resolve() // no-op in web — server loads on startup

@@ -37,6 +37,9 @@ export const SK_WHISPER_QUANTIZATION = 'cy-whisper-quantization'
 export const SK_WHISPER_LANGUAGE = 'cy-whisper-language'
 export const SK_WHISPER_DOWNLOADED = 'cy-whisper-downloaded'
 export const SK_WHISPER_MIC_DEVICE = 'cy-whisper-mic-device'
+export const SK_VOICE_TRANSCRIPTION_MODE = 'cy-voice-transcription-mode'
+export const SK_REMOTE_TRANSCRIPTION_PROVIDER = 'cy-remote-transcription-provider'
+export const SK_REMOTE_TRANSCRIPTION_MODEL = 'cy-remote-transcription-model'
 
 // ── Onboarding ─────────────────────────────────────────────────────────────────
 export const SK_ONBOARDING_COMPLETE = 'cy-onboarding-complete'
@@ -82,4 +85,7 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_WHISPER_LANGUAGE,
     SK_CHAT_SIDEBAR_OPEN,
     SK_WHISPER_MIC_DEVICE,
+    SK_VOICE_TRANSCRIPTION_MODE,
+    SK_REMOTE_TRANSCRIPTION_PROVIDER,
+    SK_REMOTE_TRANSCRIPTION_MODEL,
 ] as const

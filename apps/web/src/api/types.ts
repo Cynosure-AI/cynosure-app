@@ -109,6 +109,28 @@ export interface VideoGenerationModelInfo {
     allowed_passthrough_parameters?: string[] | null
 }
 
+export interface TranscriptionRequest {
+    model: string
+    inputAudio: {
+        data: string
+        format?: string
+    }
+    language?: string
+    temperature?: number
+    provider?: Record<string, unknown>
+}
+
+export interface TranscriptionResponse {
+    text: string
+    usage?: {
+        cost?: number
+        input_tokens?: number
+        output_tokens?: number
+        seconds?: number
+        total_tokens?: number
+    }
+}
+
 export interface StoredMessage {
     id: string
     conversationId: string
