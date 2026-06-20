@@ -2,7 +2,7 @@ import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscri
 import type {
   LLMProviderConfig, McpServerInfo, McpRegistryResponse,
   AgentDefinition, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob,
-  AgentInstance, ActivityItem, ActivityKind, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
+  AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
   MetricsSummary, PlanningState,
   ModelListType,
   ModelInfo,
@@ -462,7 +462,7 @@ export const api = {
       if (opts?.types?.length) params.set('types', opts.types.join(','))
       if (opts?.search?.trim()) params.set('search', opts.search.trim())
       const qs = params.toString()
-      return get<{ items: ActivityItem[]; hasMore?: boolean; total?: number }>(`/api/activity${qs ? `?${qs}` : ''}`)
+      return get<{ items: ActivityItem[]; hasMore?: boolean; total?: number; totalsByKind?: ActivityTotalsByKind }>(`/api/activity${qs ? `?${qs}` : ''}`)
     },
   },
 
