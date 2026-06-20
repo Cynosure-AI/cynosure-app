@@ -290,62 +290,129 @@ const unifiedTimeline = computed(() => {
     return best?.id ?? null
   }
 
-  // Collect consecutive runs of sub-agent entries and reorder them so all
-  // entries sharing the same codename appear together (grouped by first seen).
-  const result: TimelineEntry[] = []
-  let subBatch: TimelineEntry[] = []
-
-  const flushBatch = () => {
-    if (!subBatch.length) return
-    const byCodename = new Map<string, TimelineEntry[]>()
-    const order: string[] = []
-    for (const e of subBatch) {
-      const key = subAgentGroupIdOf(e) ?? '__unknown__'
-      if (!byCodename.has(key)) { byCodename.set(key, []); order.push(key) }
-      byCodename.get(key)!.push(e)
+  function buildSubAgentGroup(groupId: string, innerEntries: TimelineEntry[]): TimelineEntry {
+    let agentName: string | null = null
+    let agentId: string | null = null
+    let codename: string | null = null
+    for (const e of innerEntries) {
+      if (e.type === 'message' && e.msg.agentName) agentName = agentName ?? e.msg.agentName
+      if (e.type === 'message' && e.msg.agentId) agentId = agentId ?? e.msg.agentId
+      if (e.type === 'message' && e.msg.maCodename) codename = codename ?? e.msg.maCodename
+      if (e.type === 'tool-group' && e.group.steps[0]?.maAgentName) agentName = agentName ?? e.group.steps[0].maAgentName
+      if (e.type === 'tool-group' && e.group.steps[0]?.maCodename) codename = codename ?? e.group.steps[0].maCodename
+      if (agentName && agentId && codename) break
     }
-    for (const groupId of order) {
-      const innerEntries = byCodename.get(groupId)!
-      let agentName: string | null = null
-      let agentId: string | null = null
-      let codename: string | null = null
-      for (const e of innerEntries) {
-        if (e.type === 'message' && e.msg.agentName) agentName = agentName ?? e.msg.agentName
-        if (e.type === 'message' && e.msg.agentId) agentId = agentId ?? e.msg.agentId
-        if (e.type === 'message' && e.msg.maCodename) codename = codename ?? e.msg.maCodename
-        if (e.type === 'tool-group' && e.group.steps[0]?.maAgentName) agentName = agentName ?? e.group.steps[0].maAgentName
-        if (e.type === 'tool-group' && e.group.steps[0]?.maCodename) codename = codename ?? e.group.steps[0].maCodename
-        if (agentName && agentId && codename) break
+    return {
+      type: 'sub-agent-group',
+      codename: codename ?? groupId,
+      agentName,
+      agentId,
+      entries: innerEntries,
+      ts: innerEntries[0].ts,
+      key: `sag-${groupId}-${innerEntries[0].ts}`
+    }
+  }
+
+  function isSpawnSubAgentToolGroup(entry: TimelineEntry): boolean {
+    return entry.type === 'tool-group' && entry.group.steps.some(step =>
+      step.toolCalls?.some(call => call.name === 'spawn_subagent')
+    )
+  }
+
+  function groupSubAgentEntriesForTurn(turnEntries: TimelineEntry[]): TimelineEntry[] {
+    const groupEntries = new Map<string, { entries: TimelineEntry[]; firstIndex: number }>()
+    const groupOrder: string[] = []
+    const nonSubEntries: Array<{ entry: TimelineEntry; originalIndex: number }> = []
+    let lastSpawnToolGroupIndex = -1
+
+    turnEntries.forEach((entry, index) => {
+      if (entry.isSubAgent) {
+        const groupId = subAgentGroupIdOf(entry) ?? '__unknown__'
+        if (!groupEntries.has(groupId)) {
+          groupEntries.set(groupId, { entries: [], firstIndex: index })
+          groupOrder.push(groupId)
+        }
+        groupEntries.get(groupId)!.entries.push(entry)
+        return
       }
-      result.push({
-        type: 'sub-agent-group',
-        codename: codename ?? groupId,
-        agentName,
-        agentId,
-        entries: innerEntries,
-        ts: innerEntries[0].ts,
-        key: `sag-${groupId}-${innerEntries[0].ts}`
-      })
-    }
-    subBatch = []
-  }
 
-  for (const entry of orderedEntries) {
-    if (entry.isSubAgent) {
-      subBatch.push(entry)
-    } else {
-      flushBatch()
+      if (isSpawnSubAgentToolGroup(entry)) lastSpawnToolGroupIndex = index
+      nonSubEntries.push({ entry, originalIndex: index })
+    })
+
+    if (!groupOrder.length) return turnEntries
+
+    const groupsByInsertIndex = new Map<number, TimelineEntry[]>()
+    for (const groupId of groupOrder) {
+      const group = groupEntries.get(groupId)!
+      const insertIndex = lastSpawnToolGroupIndex === -1
+        ? group.firstIndex
+        : Math.max(group.firstIndex, lastSpawnToolGroupIndex + 1)
+      const groups = groupsByInsertIndex.get(insertIndex) || []
+      groups.push(buildSubAgentGroup(groupId, group.entries))
+      groupsByInsertIndex.set(insertIndex, groups)
+    }
+
+    const result: TimelineEntry[] = []
+    const insertedGroupIndexes = new Set<number>()
+    for (const { entry, originalIndex } of nonSubEntries) {
+      const beforeGroups = groupsByInsertIndex.get(originalIndex)
+      if (beforeGroups) {
+        result.push(...beforeGroups)
+        insertedGroupIndexes.add(originalIndex)
+      }
       result.push(entry)
+      const afterGroups = groupsByInsertIndex.get(originalIndex + 1)
+      if (afterGroups) {
+        result.push(...afterGroups)
+        insertedGroupIndexes.add(originalIndex + 1)
+      }
     }
-  }
-  flushBatch()
 
-  return result
+    const trailingGroups = groupsByInsertIndex.get(turnEntries.length)
+    if (trailingGroups && !insertedGroupIndexes.has(turnEntries.length)) {
+      result.push(...trailingGroups)
+      insertedGroupIndexes.add(turnEntries.length)
+    }
+    for (const index of [...groupsByInsertIndex.keys()].sort((a, b) => a - b)) {
+      if (insertedGroupIndexes.has(index)) continue
+      result.push(...groupsByInsertIndex.get(index)!)
+    }
+
+    return result
+  }
+
+  function groupSubAgentEntriesByTurn(source: TimelineEntry[]): TimelineEntry[] {
+    const result: TimelineEntry[] = []
+    let turnEntries: TimelineEntry[] = []
+
+    const flushTurn = () => {
+      if (!turnEntries.length) return
+      result.push(...groupSubAgentEntriesForTurn(turnEntries))
+      turnEntries = []
+    }
+
+    for (const entry of source) {
+      if (entry.type === 'message' && entry.msg.role === 'user') {
+        flushTurn()
+      }
+      turnEntries.push(entry)
+    }
+    flushTurn()
+
+    return result
+  }
+
+  return groupSubAgentEntriesByTurn(orderedEntries)
 })
 
 /** Key of the last tool-group entry — only this one can show as "active" */
 const lastToolGroupKey = computed(() => {
-  const groups = unifiedTimeline.value.filter(e => e.type === 'tool-group')
+  const groups = unifiedTimeline.value.flatMap((entry) => {
+    if (entry.type === 'tool-group') return [entry]
+    if (entry.type === 'sub-agent-group') return entry.entries.filter(e => e.type === 'tool-group')
+    return []
+  })
   return groups.length ? groups[groups.length - 1].key : null
 })
 
