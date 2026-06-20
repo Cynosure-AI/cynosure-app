@@ -73,7 +73,7 @@ export interface ToolResult {
   imageDataUrls?: string[]
 }
 
-export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker'
+export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker' | 'transcription'
 
 export interface ModelPricing {
   /** Cost in $ per token. */
@@ -187,6 +187,29 @@ export interface VideoGenerationContent {
   contentType: string
 }
 
+export interface TranscriptionRequest {
+  model: string
+  inputAudio: {
+    data: string
+    format?: string
+  }
+  language?: string
+  temperature?: number
+  provider?: Record<string, unknown>
+  signal?: AbortSignal
+}
+
+export interface TranscriptionResponse {
+  text: string
+  usage?: {
+    cost?: number
+    input_tokens?: number
+    output_tokens?: number
+    seconds?: number
+    total_tokens?: number
+  }
+}
+
 export interface CompletionRequest {
   messages: ChatMessage[]
   model?: string
@@ -256,6 +279,10 @@ export abstract class BaseLLMProvider {
 
   async getVideoGenerationContent(_jobId: string, _index = 0): Promise<VideoGenerationContent> {
     throw new Error(`${this.config.name} does not support video generation`)
+  }
+
+  async transcribeAudio(_request: TranscriptionRequest): Promise<TranscriptionResponse> {
+    throw new Error(`${this.config.name} does not support audio transcription`)
   }
 
   /**

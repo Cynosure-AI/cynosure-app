@@ -12,6 +12,8 @@ import {
     type ModelListItem,
     type ModelListType,
     type ModelPricing,
+    type TranscriptionRequest,
+    type TranscriptionResponse,
     type VideoGenerationContent,
     type VideoGenerationJob,
     type VideoGenerationModelInfo,
@@ -708,9 +710,11 @@ export class OpenRouterProvider extends BaseLLMProvider {
                 ? 'video'
                 : type === 'reranker'
                     ? 'rerank'
-                    : type === 'image'
-                        ? 'image'
-                        : 'text'
+                    : type === 'transcription'
+                        ? 'transcription'
+                        : type === 'image'
+                            ? 'image'
+                            : 'text'
         const url = `${baseUrl}/models?output_modalities=${modality}`
 
         const res = await fetch(url, {
@@ -750,9 +754,11 @@ export class OpenRouterProvider extends BaseLLMProvider {
             ? 'embeddings'
             : type === 'reranker'
                 ? 'rerank'
-                : type === 'image'
-                    ? 'image'
-                    : 'text'
+                : type === 'transcription'
+                    ? 'transcription'
+                    : type === 'image'
+                        ? 'image'
+                        : 'text'
         const res = await fetch(`${baseUrl}/models?output_modalities=${modality}`, {
             headers: this.config.apiKey
                 ? { Authorization: `Bearer ${this.config.apiKey}` }
@@ -792,6 +798,21 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
     async getVideoGenerationContent(jobId: string, index = 0): Promise<VideoGenerationContent> {
         return await this.requestOpenRouterContent(`/videos/${encodeURIComponent(jobId)}/content?index=${encodeURIComponent(String(index))}`)
+    }
+
+    async transcribeAudio(request: TranscriptionRequest): Promise<TranscriptionResponse> {
+        const { signal, inputAudio, ...rest } = request
+        return await this.requestOpenRouter<TranscriptionResponse>('/audio/transcriptions', {
+            method: 'POST',
+            body: JSON.stringify({
+                ...rest,
+                input_audio: {
+                    data: inputAudio.data,
+                    ...(inputAudio.format ? { format: inputAudio.format } : {})
+                }
+            }),
+            signal
+        })
     }
 
     async testConnection(): Promise<boolean> {

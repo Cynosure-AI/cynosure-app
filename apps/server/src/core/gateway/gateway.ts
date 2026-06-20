@@ -7,6 +7,8 @@ import {
   type ModelInfo,
   type ModelListItem,
   type ModelListType,
+  type TranscriptionRequest,
+  type TranscriptionResponse,
   type VideoGenerationContent,
   type VideoGenerationJob,
   type VideoGenerationModelInfo,
@@ -180,6 +182,17 @@ export class LLMGateway {
       : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
     return provider.getVideoGenerationContent(jobId, index)
+  }
+
+  async transcribeAudio(
+    request: TranscriptionRequest,
+    providerId?: string
+  ): Promise<TranscriptionResponse> {
+    const provider = providerId
+      ? this.providers.get(providerId)
+      : this.getLastUsedProvider()
+    if (!provider) throw new Error(`Provider not found`)
+    return provider.transcribeAudio(request)
   }
 
   /**

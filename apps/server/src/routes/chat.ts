@@ -33,6 +33,26 @@ import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types
 
 type BroadcastFn = (event: string, data: unknown) => void
 
+function audioInputFromDataUrl(dataUrl: string): { data: string; format?: string } {
+  const match = /^data:audio\/([^;,]+)(?:;[^,]*)?;base64,(.+)$/i.exec(dataUrl)
+  if (!match) {
+    throw new Error('Attached audio must be a base64 audio data URL')
+  }
+  const rawFormat = match[1].toLowerCase()
+  const formatAliases: Record<string, string> = {
+    mpeg: 'mp3',
+    mp4: 'm4a',
+    'x-m4a': 'm4a',
+    'x-wav': 'wav',
+    wave: 'wav',
+    vorbis: 'ogg',
+  }
+  return {
+    format: formatAliases[rawFormat] || rawFormat,
+    data: match[2],
+  }
+}
+
 function usedToolKeysFromNames(
   tools: RegistryAwareToolDefinition[],
   usedToolNames: Set<string>,
@@ -144,6 +164,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     const conversationId = req.params.id
     return withConversationLock(conversationId, async () => {
       const { content, messageId: providedMsgId, imageDataUrls, audioDataUrls, files } = req.body
+      const normalizedContent = content.trim() || (audioDataUrls?.length ? 'Transcribe the attached audio.' : content)
       const run = req.body.run
       const {
         model,
@@ -198,7 +219,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       // Build content (text + optional images + optional audio + optional files)
       let userContent: string | ContentPart[]
       if (imageDataUrls?.length || audioDataUrls?.length || files?.length) {
-        const parts: ContentPart[] = [{ type: 'text', text: content }]
+        const parts: ContentPart[] = [{ type: 'text', text: normalizedContent }]
         if (storedFileAttachments.length) {
           for (const file of storedFileAttachments) {
             if (file.textBytes > inlineAttachmentTextLimit) {
@@ -231,7 +252,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
         userContent = parts
       } else {
-        userContent = content
+        userContent = normalizedContent
       }
 
       // Save user message (with images if present)
@@ -242,7 +263,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       db.prepare(
         `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(userMsgId, conversationId, 'user', content, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, now)
+      ).run(userMsgId, conversationId, 'user', normalizedContent, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, now)
       persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
@@ -301,7 +322,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           gateway,
           toolRegistry,
           messages,
-          userText: content,
+          userText: normalizedContent,
           run: {
             providerOverride: providerOverride || undefined,
             modelOverride: model || undefined,
@@ -357,7 +378,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if (responseSupportsToolCalls) {
           tools.push(...makeAttachmentTools(conversationId))
         }
-        messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, content, db))
+        messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, normalizedContent, db))
         messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
         // Persist the full session config with RESOLVED model/provider so it can
@@ -381,6 +402,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const resolvedModelInfo = await gateway.getModelInfo(responseModel, responseProvider).catch(() => null)
         const isVideoOutputModel = resolvedModelInfo?.outputModalities
           ?.some((modality) => modality.toLowerCase() === 'video') === true
+        const isTranscriptionOutputModel = resolvedModelInfo?.outputModalities
+          ?.some((modality) => modality.toLowerCase() === 'transcription') === true
         if (isVideoOutputModel) {
           broadcast('chat:stream-start', {
             streamId,
@@ -397,7 +420,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
           const submittedJob = await gateway.generateVideo({
             model: responseModel,
-            prompt: content,
+            prompt: normalizedContent,
             signal: abortController.signal,
           }, responseProvider)
           const completedJob = await pollVideoGeneration(gateway, responseProvider, submittedJob, abortController.signal)
@@ -431,14 +454,101 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             if (generateTitlePref !== false) {
               generateTitle({
                 conversationId,
-                userMessage: content,
+                userMessage: normalizedContent,
                 assistantResponse: assistantContent,
                 broadcast,
                 providerId: titleProviderIdPref || responseProvider,
                 model: titleModelPref || (titleProviderIdPref ? undefined : responseModel)
               }).catch(() => { })
             } else {
-              const fallback = buildFallbackTitle(content)
+              const fallback = buildFallbackTitle(normalizedContent)
+              if (fallback) {
+                db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(fallback, Date.now(), conversationId)
+                broadcast('chat:title-updated', { conversationId, title: fallback })
+              }
+            }
+          }
+          return { streamId }
+        }
+
+        if (isTranscriptionOutputModel) {
+          if (!audioDataUrls?.length) {
+            throw new Error('Transcription models require an attached audio file.')
+          }
+
+          broadcast('chat:stream-start', {
+            streamId,
+            conversationId,
+            agentId: agentId || undefined,
+            agentName: chatAgentName,
+            agentIconUrl: chatAgentIconUrl,
+          })
+          broadcast('chat:stream-chunk', {
+            streamId,
+            conversationId,
+            content: 'Transcribing audio...',
+          })
+
+          const transcripts: string[] = []
+          let promptTokens = 0
+          let completionTokens = 0
+          let totalTokens = 0
+          for (const audioUrl of audioDataUrls) {
+            const transcription = await gateway.transcribeAudio({
+              model: responseModel,
+              inputAudio: audioInputFromDataUrl(audioUrl),
+              signal: abortController.signal,
+            }, responseProvider)
+            if (transcription.text.trim()) transcripts.push(transcription.text.trim())
+            promptTokens += transcription.usage?.input_tokens ?? 0
+            completionTokens += transcription.usage?.output_tokens ?? 0
+            totalTokens += transcription.usage?.total_tokens ?? 0
+          }
+
+          const assistantContent = transcripts.length
+            ? transcripts.join('\n\n')
+            : '(No transcription text returned.)'
+          broadcast('chat:stream-chunk', {
+            streamId,
+            conversationId,
+            content: `\n\n${assistantContent}`,
+          })
+          broadcast('chat:stream-end', { streamId, conversationId, model: responseModel })
+
+          const assistantMsgId = nanoid()
+          const assistantNow = Date.now()
+          db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ).run(
+            assistantMsgId,
+            conversationId,
+            'assistant',
+            assistantContent,
+            agentId,
+            responseProvider,
+            responseModel,
+            promptTokens || null,
+            completionTokens || null,
+            totalTokens || null,
+            assistantNow - now,
+            assistantNow
+          )
+          db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
+
+          const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
+          if (conv && conv.title === 'New Chat') {
+            if (generateTitlePref !== false) {
+              generateTitle({
+                conversationId,
+                userMessage: normalizedContent,
+                assistantResponse: assistantContent,
+                broadcast,
+                providerId: titleProviderIdPref || responseProvider,
+                model: titleModelPref || (titleProviderIdPref ? undefined : responseModel)
+              }).catch(() => { })
+            } else {
+              const fallback = buildFallbackTitle(normalizedContent)
               if (fallback) {
                 db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(fallback, Date.now(), conversationId)
                 broadcast('chat:title-updated', { conversationId, title: fallback })
@@ -552,14 +662,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           if (generateTitlePref !== false) {
             generateTitle({
               conversationId,
-              userMessage: content,
+              userMessage: normalizedContent,
               assistantResponse: result.content,
               broadcast,
               providerId: titleProviderIdPref || responseProvider,
               model: titleModelPref || (titleProviderIdPref ? undefined : responseModel)
             }).catch(() => { })
           } else {
-            const fallback = buildFallbackTitle(content)
+            const fallback = buildFallbackTitle(normalizedContent)
             if (fallback) {
               db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(fallback, Date.now(), conversationId)
               broadcast('chat:title-updated', { conversationId, title: fallback })

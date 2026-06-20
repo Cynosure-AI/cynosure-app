@@ -13,7 +13,7 @@ export interface LLMProviderConfig {
     supportsVision: boolean
 }
 
-export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker'
+export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker' | 'transcription'
 
 export interface ModelPricing {
     prompt?: number

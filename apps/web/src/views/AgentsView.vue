@@ -400,7 +400,7 @@ function formatDate(ts: number): string {
               :provider-id="bulkProviderId"
               :model-value="bulkModel"
               :providers="providerStore.providers"
-              :model-types="['llm', 'image', 'video']"
+              :model-types="['llm', 'image', 'video', 'transcription']"
               placeholder="Set model for selected agents"
               size="sm"
               dropdown-width="w-[28rem]"

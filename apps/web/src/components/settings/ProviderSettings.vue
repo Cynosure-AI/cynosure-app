@@ -26,7 +26,7 @@ const testResult = ref<Map<string, boolean>>(new Map())
 const fetchedModels = ref<string[]>([])
 const loadingModels = ref(false)
 type ProviderType = LLMProviderConfig['type']
-const responseModelTypes: ModelListType[] = ['llm', 'image', 'video']
+const responseModelTypes: ModelListType[] = ['llm', 'image', 'video', 'transcription']
 
 const newProvider = reactive<{
   name: string
