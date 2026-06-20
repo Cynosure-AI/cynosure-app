@@ -1,6 +1,6 @@
 import { App } from '@slack/bolt'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution } from '../base.channel.js'
-import type { SlackConfig, BroadcastFn, SlackCtx } from './slack.types.js'
+import type { SlackConfig, BroadcastFn, SlackCtx, PendingHITL } from './slack.types.js'
 import { handleMessage, handleHITLAction, subscribeToHITL } from './slack.messaging.js'
 import { sendLongSlackMessage } from './slack.api.js'
 
@@ -16,7 +16,7 @@ export class SlackChannel implements ChannelProvider {
     activeExecutions = new Map<string, { exec: ActiveChannelExecution; controller: AbortController }>()
     channelAgentOverride = new Map<string, string>()
     channelLastUsedAgent = new Map<string, string>()
-    pendingHITL = new Map<string, { slackChannelId: string; messageTs: string; resolve: (result: { approved: boolean; reason?: string }) => void }>()
+    pendingHITL = new Map<string, PendingHITL>()
     conversationToChannel = new Map<string, string>()
     channelLocks = new Map<string, Promise<void>>()
     conversationSendQueue = new Map<string, (fn: () => Promise<void>) => void>()

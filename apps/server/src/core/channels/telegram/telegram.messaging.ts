@@ -489,6 +489,7 @@ export function subscribeToHITL(ctx: TelegramCtx): () => void {
                 const body = await res.json() as { ok: boolean; result?: { message_id: number } }
                 if (body.ok && body.result) {
                     ctx.pendingHITL.set(data.taskId, {
+                        conversationId: data.conversationId,
                         chatId,
                         messageId: body.result.message_id,
                         resolve: data.resolve
@@ -529,8 +530,8 @@ export async function handleCallbackQuery(ctx: TelegramCtx, query: NonNullable<T
 
     pending.resolve({ approved, reason: approved ? undefined : 'Denied via Telegram' })
 
-    ctx.broadcast('agent:hitl-resolved', { taskId, approved })
-    getEventBus().emit('hitl:resolved', { taskId })
+    ctx.broadcast('agent:hitl-resolved', { taskId, conversationId: pending.conversationId, approved })
+    getEventBus().emit('hitl:resolved', { taskId, conversationId: pending.conversationId })
     try { getDb().prepare('DELETE FROM pending_hitl WHERE task_id = ?').run(taskId) } catch { /* ignore */ }
 
     const statusText = approved ? '✅ *Approved* — proceeding...' : '❌ *Denied* — the agent will try a different approach.'

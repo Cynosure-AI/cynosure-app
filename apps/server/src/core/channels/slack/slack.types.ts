@@ -10,6 +10,7 @@ export interface SlackConfig {
 export type BroadcastFn = (event: string, data: unknown) => void
 
 export interface PendingHITL {
+    conversationId: string
     slackChannelId: string
     messageTs: string
     resolve: (result: { approved: boolean; reason?: string }) => void

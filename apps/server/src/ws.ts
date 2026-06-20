@@ -14,7 +14,9 @@ const conversationScopedEventPrefixes = [
   'chat:stream',
   'chat:subagent-stream',
   'chat:compact',
+  'chat:new-message',
   'chat:post-action',
+  'chat:title-updated',
   'agent:execution-update',
   'agent:hitl-',
   'planning:state-updated',
@@ -60,7 +62,7 @@ function canReceiveEvent(state: ClientState, event: string, data: unknown): bool
   if (!shouldScopeEvent(event)) return true
 
   const conversationId = getConversationId(data)
-  if (!conversationId) return true
+  if (!conversationId) return false
 
   // Conversation-scoped events must not fall back to a global firehose. During
   // startup or reconnects, a cron/channel run can emit before the UI sends its
