@@ -152,6 +152,14 @@ function slidingWindow(
         cutIndex++
     }
 
+    // If one recent tool result or assistant turn exceeds the budget by itself,
+    // the loop above can advance past the entire tail. Prefer overflowing with
+    // the latest user turn intact over sending the model an empty, amnesic
+    // continuation after a tool call.
+    if (cutIndex >= msgs.length && msgs.length > 0) {
+        cutIndex = findLastUserIndex(msgs)
+    }
+
     return { kept: msgs.slice(cutIndex), trimmed: cutIndex }
 }
 
@@ -207,9 +215,20 @@ function truncateMiddle(
         tailStart++
     }
 
+    if (tailStart >= msgs.length && msgs.length > headEnd) {
+        tailStart = findLastUserIndex(msgs, headEnd)
+    }
+
     const head = msgs.slice(0, headEnd)
     const tail = msgs.slice(tailStart)
     const trimmed = msgs.length - head.length - tail.length
 
     return { kept: [...head, ...tail], trimmed, headLength: head.length }
+}
+
+function findLastUserIndex(msgs: ChatMessage[], minIndex = 0): number {
+    for (let i = msgs.length - 1; i >= minIndex; i--) {
+        if (msgs[i].role === 'user') return i
+    }
+    return minIndex
 }

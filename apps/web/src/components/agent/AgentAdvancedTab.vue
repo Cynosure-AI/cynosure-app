@@ -13,6 +13,10 @@ const AGENT_ROUTER_PROVIDER = "__agent_provider__";
 const AGENT_ROUTER_MODEL = "__agent_model__";
 
 const providerStore = useProviderStore();
+const MIN_CONTEXT_TOKENS = 2048;
+const DEFAULT_CONTEXT_TOKENS = 30720;
+const CONTEXT_TOKEN_STEP = 2048;
+const DEFAULT_MAX_CONTEXT_TOKENS = 262144;
 
 const autoRouterLeadingSelections = [
   {
@@ -49,7 +53,12 @@ const maxCtxEnabled = computed(
     typeof props.agent.maxContextTokens === "number" &&
     props.agent.maxContextTokens > 0,
 );
-const maxCtxInput = ref(props.agent.maxContextTokens ?? "");
+const maxCtxInput = ref<number | "">(props.agent.maxContextTokens ?? "");
+const maxCtxSliderMax = computed(() => {
+  const value =
+    typeof maxCtxInput.value === "number" ? maxCtxInput.value : DEFAULT_CONTEXT_TOKENS;
+  return Math.max(DEFAULT_MAX_CONTEXT_TOKENS, Math.ceil(value / CONTEXT_TOKEN_STEP) * CONTEXT_TOKEN_STEP);
+});
 
 watch(
   () => props.agent.maxContextTokens,
@@ -60,7 +69,7 @@ watch(
 
 function onMaxCtxToggle(enabled: boolean) {
   if (enabled) {
-    const val = Number(maxCtxInput.value) || 30720; // default to 30k if enabling without a value
+    const val = Number(maxCtxInput.value) || DEFAULT_CONTEXT_TOKENS;
     maxCtxInput.value = val;
     emit("update", "maxContextTokens", val);
   } else {
@@ -71,12 +80,20 @@ function onMaxCtxToggle(enabled: boolean) {
 
 function onMaxCtxBlur() {
   const val = Number(maxCtxInput.value);
-  if (val > 0) {
-    emit("update", "maxContextTokens", val);
+  if (val >= MIN_CONTEXT_TOKENS) {
+    const rounded = Math.round(val / CONTEXT_TOKEN_STEP) * CONTEXT_TOKEN_STEP;
+    maxCtxInput.value = rounded;
+    emit("update", "maxContextTokens", rounded);
   } else {
     maxCtxInput.value = "";
     emit("update", "maxContextTokens", null);
   }
+}
+
+function onMaxCtxSliderInput(event: Event) {
+  const val = Number((event.target as HTMLInputElement).value);
+  maxCtxInput.value = val;
+  emit("update", "maxContextTokens", val);
 }
 </script>
 
@@ -191,18 +208,35 @@ function onMaxCtxBlur() {
           </p>
           <div
             v-if="maxCtxEnabled"
-            class="mt-3"
+            class="mt-4 space-y-3"
           >
-            <input
-              v-model.number="maxCtxInput"
-              type="number"
-              min="2048"
-              step="2048"
-              placeholder="e.g. 16384"
-              class="w-40 bg-theme-900 border border-theme-600 rounded-lg px-3 py-1.5 text-sm text-theme-200 placeholder-theme-600 focus:outline-none focus:border-amber-500/50"
-              @blur="onMaxCtxBlur"
-            >
-            <span class="ml-2 text-xs text-theme-600">tokens</span>
+            <div class="flex items-center gap-3">
+              <input
+                :value="Number(maxCtxInput) || DEFAULT_CONTEXT_TOKENS"
+                type="range"
+                :min="MIN_CONTEXT_TOKENS"
+                :max="maxCtxSliderMax"
+                :step="CONTEXT_TOKEN_STEP"
+                class="h-2 min-w-0 flex-1 cursor-pointer accent-amber-400"
+                @input="onMaxCtxSliderInput"
+              >
+              <div class="flex shrink-0 items-center gap-2">
+                <input
+                  v-model.number="maxCtxInput"
+                  type="number"
+                  :min="MIN_CONTEXT_TOKENS"
+                  :step="CONTEXT_TOKEN_STEP"
+                  placeholder="e.g. 16384"
+                  class="w-28 bg-theme-900 border border-theme-600 rounded-lg px-3 py-1.5 text-sm text-theme-200 placeholder-theme-600 focus:outline-none focus:border-amber-500/50"
+                  @blur="onMaxCtxBlur"
+                >
+                <span class="text-xs text-theme-600">tokens</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between text-[11px] text-theme-600">
+              <span>{{ MIN_CONTEXT_TOKENS.toLocaleString() }}</span>
+              <span>{{ maxCtxSliderMax.toLocaleString() }}</span>
+            </div>
           </div>
         </div>
         <ToggleSwitch
