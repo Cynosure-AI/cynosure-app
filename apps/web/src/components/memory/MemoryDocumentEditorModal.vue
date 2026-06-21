@@ -11,6 +11,8 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableRow } from "@tiptap/extension-table-row";
 import { api } from "../../api/client";
+import type { MemoryFileRevision } from "../../api/types";
+import HoverMenu from "../shared/HoverMenu.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
 
 const props = defineProps<{
@@ -69,6 +71,9 @@ const loadedMarkdown = ref("");
 const editableTitle = ref("");
 const currentFileName = ref("");
 const editorTick = ref(0);
+const revisions = ref<MemoryFileRevision[]>([]);
+const revisionsLoading = ref(false);
+const restoringRevision = ref("");
 
 const editor = useEditor({
   extensions: [
@@ -148,6 +153,7 @@ async function loadContent() {
   if (!props.show || !props.spaceId || !props.sourceFile || !editor.value) return;
   loading.value = true;
   error.value = "";
+  revisions.value = [];
   currentFileName.value = props.sourceFile;
   editableTitle.value = splitFileName(props.sourceFile).stem;
   try {
@@ -155,11 +161,25 @@ async function loadContent() {
     loadedMarkdown.value = res.content;
     editor.value.commands.setContent(markdownToHtml(res.content), { emitUpdate: false });
     editorTick.value++;
+    await loadRevisions(res.fileName);
   } catch (err) {
     error.value = (err as Error).message || "Failed to load memory";
     editor.value.commands.clearContent(false);
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadRevisions(fileName = currentFileName.value) {
+  if (!props.show || !props.spaceId || !fileName) return;
+  revisionsLoading.value = true;
+  try {
+    const res = await api.memorySpaces.listFileRevisions(props.spaceId, fileName);
+    revisions.value = res.revisions;
+  } catch {
+    revisions.value = [];
+  } finally {
+    revisionsLoading.value = false;
   }
 }
 
@@ -169,6 +189,7 @@ async function applyRename() {
   const res = await api.memorySpaces.renameFile(props.spaceId, currentFileName.value, nextFileName);
   currentFileName.value = res.fileName;
   editableTitle.value = splitFileName(res.fileName).stem;
+  await loadRevisions(res.fileName);
   return res.fileName;
 }
 
@@ -184,6 +205,7 @@ async function saveContent() {
       loadedMarkdown.value = markdown;
       currentFileName.value = res.fileName;
       editableTitle.value = splitFileName(res.fileName).stem;
+      await loadRevisions(res.fileName);
       emit("saved", { fileName: res.fileName, chunksStored: res.chunksStored });
     } else {
       emit("saved", { fileName, chunksStored: 0 });
@@ -193,6 +215,28 @@ async function saveContent() {
   } finally {
     saving.value = false;
   }
+}
+
+async function restoreRevision(revision: MemoryFileRevision) {
+  if (!editor.value || restoringRevision.value) return;
+  restoringRevision.value = revision.revisionName;
+  error.value = "";
+  try {
+    const res = await api.memorySpaces.getFileRevisionContent(props.spaceId, currentFileName.value, revision.revisionName);
+    editor.value.commands.setContent(markdownToHtml(res.content), { emitUpdate: false });
+    editorTick.value++;
+  } catch (err) {
+    error.value = (err as Error).message || "Failed to restore revision";
+  } finally {
+    restoringRevision.value = "";
+  }
+}
+
+function formatRevisionDate(ts: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(ts));
 }
 
 function toggleLink() {
@@ -268,6 +312,72 @@ onBeforeUnmount(() => {
             class="w-4 h-4"
           />
         </button>
+
+        <div class="mx-1 h-5 w-px bg-theme-800 shrink-0" />
+
+        <HoverMenu
+          placement="below"
+          :max-width="280"
+        >
+          <template #trigger="{ open }">
+            <button
+              type="button"
+              title="Restore a previous version"
+              :class="open ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
+              class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
+              :disabled="!editor || loading"
+              @click="loadRevisions()"
+            >
+              <Icon
+                icon="lucide:history"
+                class="w-4 h-4"
+              />
+            </button>
+          </template>
+          <template #content="{ close: closeMenu }">
+            <div class="min-w-60">
+              <div class="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-theme-500">
+                Previous versions
+              </div>
+              <div
+                v-if="revisionsLoading"
+                class="flex items-center gap-2 px-2 py-2 text-theme-500"
+              >
+                <Icon
+                  icon="lucide:loader-2"
+                  class="h-3.5 w-3.5 animate-spin"
+                />
+                Loading...
+              </div>
+              <div
+                v-else-if="revisions.length === 0"
+                class="px-2 py-2 text-theme-500"
+              >
+                No previous versions
+              </div>
+              <template v-else>
+                <button
+                  v-for="revision in revisions"
+                  :key="revision.revisionName"
+                  type="button"
+                  class="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100 disabled:opacity-50"
+                  :disabled="Boolean(restoringRevision)"
+                  @click="restoreRevision(revision); closeMenu()"
+                >
+                  <span class="min-w-0">
+                    <span class="block truncate">{{ formatRevisionDate(revision.createdAt) }}</span>
+                    <span class="block truncate text-[10px] text-theme-500">{{ revision.revisionName }}</span>
+                  </span>
+                  <Icon
+                    v-if="restoringRevision === revision.revisionName"
+                    icon="lucide:loader-2"
+                    class="h-3.5 w-3.5 shrink-0 animate-spin"
+                  />
+                </button>
+              </template>
+            </div>
+          </template>
+        </HoverMenu>
 
         <div class="mx-1 h-5 w-px bg-theme-800 shrink-0" />
 

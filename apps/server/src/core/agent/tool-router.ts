@@ -194,7 +194,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
 async function rankCandidateTools(
     query: string,
     queryVector: number[],
-    tools: ToolDefinition[],
+    tools: RegistryAwareToolDefinition[],
     limit: number,
     protectedNames: Set<string>,
     onStatus?: RouteToolsInput['onStatus'],
@@ -206,11 +206,11 @@ async function rankCandidateTools(
         const scope = getRouterEmbeddingScope(embedder)
 
         // Compute content hashes for all rankable tools
-        const hashes = new Map(rankable.map((tool) => [tool.name, toolContentHash(tool)]))
+        const hashes = new Map(rankable.map((tool) => [toolCacheKey(tool), toolContentHash(tool)]))
         const cachedVectors = loadCachedToolEmbeddings(
-            rankable.map(({ name }) => name), hashes, scope,
+            rankable.map(toolCacheKey), hashes, scope,
         )
-        const missingTools = rankable.filter(({ name }) => !cachedVectors.has(name))
+        const missingTools = rankable.filter((tool) => !cachedVectors.has(toolCacheKey(tool)))
 
         // Only embed tools not already cached — query vector is pre-computed
         const toolVectors = new Map(cachedVectors)
@@ -222,18 +222,19 @@ async function rankCandidateTools(
                 const vector = embeddings[index]?.vector
                 if (!vector) return
 
-                toolVectors.set(tool.name, vector)
-                saveCachedToolEmbedding(tool.name, hashes.get(tool.name) || '', vector, scope)
+                const cacheKey = toolCacheKey(tool)
+                toolVectors.set(cacheKey, vector)
+                saveCachedToolEmbedding(cacheKey, hashes.get(cacheKey) || '', vector, scope)
             })
-
-            pruneToolEmbeddingCache(rankable.map(({ name }) => name), scope)
         }
+
+        pruneToolEmbeddingCache(rankable.map(toolCacheKey), scope)
 
         onStatus?.('finding-tools', 'Finding required tools...')
         const scored = rankable
             .map((tool, index) => ({
                 tool,
-                score: cosineSimilarity(queryVector, toolVectors.get(tool.name) || []),
+                score: cosineSimilarity(queryVector, toolVectors.get(toolCacheKey(tool)) || []),
                 index,
             }))
             .sort((a, b) => b.score - a.score || a.index - b.index)
@@ -331,9 +332,18 @@ function groupContentHash(group: McpToolGroup): string {
 }
 
 function toolContentHash(tool: ToolDefinition): string {
+    const namespaceId = (tool as RegistryAwareToolDefinition).namespaceId || ''
+    const originalName = (tool as RegistryAwareToolDefinition).originalName || tool.name
+
     return createHash('sha256')
-        .update(`${tool.name}\n${compactToolDescription(tool.description)}\n${JSON.stringify(tool.parameters || {})}`)
+        .update(`${namespaceId}\n${originalName}\n${tool.name}\n${compactToolDescription(tool.description)}\n${JSON.stringify(tool.parameters || {})}`)
         .digest('hex')
+}
+
+function toolCacheKey(tool: RegistryAwareToolDefinition): string {
+    return tool.namespaceId
+        ? `${tool.namespaceId}::${tool.originalName || tool.name}`
+        : tool.name
 }
 
 function getRouterEmbeddingScope(
@@ -471,9 +481,9 @@ function countPreferredTools(tools: Array<{ name: string }>, preferredToolNames?
     return matches
 }
 
-function dedupeTools(tools: ToolDefinition[]): ToolDefinition[] {
+function dedupeTools<T extends ToolDefinition>(tools: T[]): T[] {
     const seen = new Set<string>()
-    const result: ToolDefinition[] = []
+    const result: T[] = []
 
     for (const tool of tools) {
         if (seen.has(tool.name)) continue

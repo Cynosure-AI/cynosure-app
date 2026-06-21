@@ -82,6 +82,7 @@ const activePanel = ref<MemoryPanel>("documents");
 const graph = ref<EntityGraphResponse | null>(null);
 const graphLoading = ref(false);
 const graphQuery = ref("");
+const graphSearchQuery = ref("");
 const graphSuggestions = ref<EntityGraphNode[]>([]);
 const graphLimit = ref<number | null>(null);
 const graphView = ref<GraphViewMode | null>(null);
@@ -572,6 +573,7 @@ async function loadGraph(query = graphQuery.value, nodeId?: string) {
     if (requestId !== graphRequest) return;
     focusedGraphNodeId.value = null;
     graph.value = capVisualGraph(nextGraph, view);
+    graphSearchQuery.value = trimmedQuery;
     graphLimit.value = limit;
     graphView.value = view;
   } catch {
@@ -589,6 +591,7 @@ async function loadGraph(query = graphQuery.value, nodeId?: string) {
 
 async function clearGraphWalk() {
   graphQuery.value = "";
+  graphSearchQuery.value = "";
   graphSuggestions.value = [];
   await loadGraph("");
 }
@@ -828,6 +831,7 @@ onMounted(() => loadSpaces());
           v-model:edge-path-type="graphEdgePathType"
           v-model:fact-level="graphFactLevel"
           :flow-id="ENTITY_FLOW_ID"
+          :graph-search-query="graphSearchQuery"
           :graph="activeGraph"
           :graph-loading="graphLoading"
           :graph-flow-nodes="graphFlowNodes"

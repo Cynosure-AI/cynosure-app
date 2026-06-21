@@ -45,6 +45,13 @@ export interface MemoryFileInfo {
     textDirect: boolean
 }
 
+export interface MemoryFileRevisionInfo {
+    fileName: string
+    revisionName: string
+    size: number
+    createdAt: number
+}
+
 // ---------------------------------------------------------------------------
 // Folder helpers
 // ---------------------------------------------------------------------------
@@ -103,6 +110,44 @@ export function writeTextFile(folderPath: string, fileName: string, content: str
 /** Read a text file from a folder. Throws if not found. */
 export function readTextFile(folderPath: string, fileName: string): string {
     return readFileSync(join(folderPath, fileName), 'utf-8')
+}
+
+export function listFileRevisions(folderPath: string, fileName: string): MemoryFileRevisionInfo[] {
+    const cleanName = basename(fileName)
+    const revisionsFolder = join(folderPath, '.revisions')
+    if (!cleanName || !existsSync(revisionsFolder)) return []
+
+    const dotIdx = cleanName.lastIndexOf('.')
+    const base = dotIdx > 0 ? cleanName.slice(0, dotIdx) : cleanName
+    const ext = dotIdx > 0 ? cleanName.slice(dotIdx) : ''
+    const revisionPattern = new RegExp(`^${escapeRegExp(base)}-\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}${escapeRegExp(ext)}$`)
+
+    try {
+        return readdirSync(revisionsFolder, { withFileTypes: true })
+            .filter((entry) => entry.isFile() && revisionPattern.test(entry.name))
+            .map((entry) => {
+                const filePath = join(revisionsFolder, entry.name)
+                const stat = statSync(filePath)
+                return {
+                    fileName: cleanName,
+                    revisionName: entry.name,
+                    size: stat.size,
+                    createdAt: stat.mtimeMs,
+                }
+            })
+            .sort((a, b) => b.createdAt - a.createdAt || b.revisionName.localeCompare(a.revisionName))
+    } catch {
+        return []
+    }
+}
+
+export function readFileRevision(folderPath: string, fileName: string, revisionName: string): string {
+    const revision = basename(revisionName || '')
+    const match = listFileRevisions(folderPath, fileName).some((item) => item.revisionName === revision)
+    if (!revision || !match) {
+        throw new Error('Revision not found')
+    }
+    return readFileSync(join(folderPath, '.revisions', revision), 'utf-8')
 }
 
 /** Delete a file from a folder. Returns true if the file existed. */
@@ -188,6 +233,10 @@ export function resolveUniqueFileName(folderPath: string, fileName: string): str
         candidate = `${base} (${counter})${ext}`
     }
     return candidate
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 // ---------------------------------------------------------------------------
