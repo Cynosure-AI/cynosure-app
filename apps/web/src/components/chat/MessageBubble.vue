@@ -161,7 +161,7 @@ const imageGridClass = computed(() => {
 
     <!-- Message bubble -->
     <div
-      class="relative md:max-w-[85%] max-w-[90%] rounded-3xl px-5 py-3 text-[15px] leading-relaxed shadow-sm transition-all"
+      class="relative md:max-w-[85%] max-w-[90%] rounded-3xl px-5 py-3 text-[15px] wrap-break-word leading-relaxed shadow-sm transition-all"
       :class="[
         isUser ? 'bg-accent-600 text-white rounded-tr-sm' : 'bg-theme-800/60 border text-theme-200 rounded-tl-sm',
         isError && !isUser ? 'border-red-500/40' : !isUser ? 'border-theme-700/50' : '',

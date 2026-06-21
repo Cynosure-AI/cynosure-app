@@ -315,7 +315,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="w-64 bg-theme-950/95 bg-sidebar-chat border-r border-theme-800/60 flex flex-col shrink-0 h-full">
+  <div class="w-64 bg-theme-900 md:bg-theme-950/60 bg-sidebar-chat border-r border-theme-800/60 flex flex-col shrink-0 h-full">
     <!-- Header -->
     <div class="px-3 py-2.5 border-b border-theme-800/60 flex items-center justify-between">
       <span class="text-xs font-medium text-theme-500 uppercase tracking-wider">Chat History</span>
