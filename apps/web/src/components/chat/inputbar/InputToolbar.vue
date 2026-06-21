@@ -15,6 +15,9 @@ import MemorySpacesButton from "./MemorySpacesButton.vue";
 import SystemPromptButton from "./SystemPromptButton.vue";
 import ThinkingModeButton from "./ThinkingModeButton.vue";
 import ModelSelectorModal from "../modals/ModelSelectorModal.vue";
+import {
+  modelPricingSummary,
+} from "../../../utils/model-pricing";
 
 defineProps<{
   canSend: boolean;
@@ -74,73 +77,6 @@ const currentProvider = computed(() =>
   providerStore.providers.find((p) => p.id === currentProviderId.value),
 );
 
-const formattedModelCost = computed(() => {
-  const cost = chatStore.modelCost;
-  if (!cost) return null;
-  const fmt = (n: number) => {
-    if (n < 0.01) return `$${n.toFixed(4)}`;
-    if (n < 1) return `$${n.toFixed(2)}`;
-    return `$${n.toFixed(2)}`;
-  };
-  return `${fmt(cost.input)} / ${fmt(cost.output)}`;
-});
-
-function formatSmallMoney(n: number): string {
-  if (n === 0) return "$0";
-  if (n < 0.01) return `$${n.toFixed(4)}`;
-  if (n < 1) return `$${n.toFixed(2)}`;
-  return `$${n.toFixed(2)}`;
-}
-
-function humanizeSku(key: string): string {
-  return key
-    .replace(/^cents_per_/, "cents ")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-const formattedImageCost = computed(() => {
-  const imageCost = chatStore.modelPricing?.image;
-  return imageCost == null ? null : `${formatSmallMoney(imageCost)} per image`;
-});
-
-const formattedExtraCosts = computed(() => {
-  const pricing = chatStore.modelPricing;
-  if (!pricing) return [];
-  const rows: { label: string; value: string }[] = [];
-  if (pricing.request != null && pricing.request > 0) {
-    rows.push({ label: "Request", value: `${formatSmallMoney(pricing.request)} each` });
-  }
-  if (pricing.audio != null && pricing.audio > 0) {
-    rows.push({ label: "Audio", value: formatSmallMoney(pricing.audio) });
-  }
-  if (pricing.webSearch != null && pricing.webSearch > 0) {
-    rows.push({ label: "Web search", value: `${formatSmallMoney(pricing.webSearch)} each` });
-  }
-  if (pricing.internalReasoning != null && pricing.internalReasoning > 0) {
-    rows.push({ label: "Reasoning", value: `${formatSmallMoney(pricing.internalReasoning * 1_000_000)} / 1M tokens` });
-  }
-  if (pricing.inputCacheRead != null && pricing.inputCacheRead > 0) {
-    rows.push({ label: "Cache read", value: `${formatSmallMoney(pricing.inputCacheRead * 1_000_000)} / 1M tokens` });
-  }
-  if (pricing.inputCacheWrite != null && pricing.inputCacheWrite > 0) {
-    rows.push({ label: "Cache write", value: `${formatSmallMoney(pricing.inputCacheWrite * 1_000_000)} / 1M tokens` });
-  }
-  return rows;
-});
-
-const formattedVideoCosts = computed(() => {
-  const skus = chatStore.modelPricing?.skus;
-  if (!skus) return [];
-  return Object.entries(skus)
-    .filter(([, value]) => Number.isFinite(value))
-    .slice(0, 4)
-    .map(([key, value]) => ({
-      label: humanizeSku(key),
-      value: formatSmallMoney(key.startsWith("cents_per_") ? value / 100 : value),
-    }));
-});
-
 function formatModalityName(modality: string): string {
   return modality
     .split(/[-_\s]+/)
@@ -161,6 +97,31 @@ const formattedInputModalities = computed(() =>
 const formattedOutputModalities = computed(() =>
   formatModalities(chatStore.modelModalities?.output),
 );
+
+const currentModelId = computed(() => {
+  const override = chatStore.sessionModelOverride;
+  if (override) return override;
+  const agentModel = selectedAgent.value?.model;
+  const providerDefault = currentProvider.value?.defaultModel;
+  const isProviderOverridden =
+    chatStore.sessionProviderOverride &&
+    chatStore.sessionProviderOverride !== selectedAgent.value?.providerId;
+  return isProviderOverridden ? providerDefault || "" : agentModel || providerDefault || "";
+});
+
+const pricingSummary = computed(() =>
+  modelPricingSummary({
+    id: currentModelId.value,
+    pricing: chatStore.modelPricing,
+    inputModalities: chatStore.modelModalities?.input,
+    outputModalities: chatStore.modelModalities?.output,
+  }),
+);
+
+const formattedTokenCosts = computed(() => pricingSummary.value.tokenRows);
+const formattedMediaCosts = computed(() => pricingSummary.value.mediaRows);
+const formattedExtraCosts = computed(() => pricingSummary.value.extraRows);
+const formattedSkuCosts = computed(() => pricingSummary.value.skuRows);
 
 const mobileModelLabel = computed(() => {
   const override = chatStore.sessionModelOverride;
@@ -376,27 +337,13 @@ async function toggleMic(): Promise<void> {
               </div>
             </div>
 
-            <div v-if="formattedModelCost">
+            <div v-if="formattedTokenCosts.length">
               <p class="text-xs text-theme-300 whitespace-nowrap">
-                Input / Output cost per 1M tokens
-              </p>
-              <span class="tabular-nums">{{ formattedModelCost }}</span>
-            </div>
-
-            <div v-if="formattedImageCost">
-              <p class="text-xs text-theme-300 whitespace-nowrap">
-                Image cost
-              </p>
-              <span class="tabular-nums">{{ formattedImageCost }}</span>
-            </div>
-
-            <div v-if="formattedExtraCosts.length">
-              <p class="text-xs text-theme-300 whitespace-nowrap">
-                Extra cost estimates
+                Token pricing
               </p>
               <div class="mt-1 grid grid-cols-[auto,1fr] gap-x-2 gap-y-1 text-xs">
                 <template
-                  v-for="cost in formattedExtraCosts"
+                  v-for="cost in formattedTokenCosts"
                   :key="cost.label"
                 >
                   <span class="text-theme-500">{{ cost.label }}</span>
@@ -405,17 +352,47 @@ async function toggleMic(): Promise<void> {
               </div>
             </div>
 
-            <div v-if="formattedVideoCosts.length">
+            <div v-if="formattedMediaCosts.length">
               <p class="text-xs text-theme-300 whitespace-nowrap">
-                Video cost estimates
+                Media pricing
               </p>
               <div class="mt-1 grid grid-cols-[auto,1fr] gap-x-2 gap-y-1 text-xs">
                 <template
-                  v-for="sku in formattedVideoCosts"
+                  v-for="cost in formattedMediaCosts"
+                  :key="cost.label"
+                >
+                  <span class="text-theme-500">{{ cost.label }}</span>
+                  <span class="text-theme-200 tabular-nums">{{ cost.value }}</span>
+                </template>
+              </div>
+            </div>
+
+            <div v-if="formattedSkuCosts.length">
+              <p class="text-xs text-theme-300 whitespace-nowrap">
+                Model SKU pricing
+              </p>
+              <div class="mt-1 grid grid-cols-[auto,1fr] gap-x-2 gap-y-1 text-xs">
+                <template
+                  v-for="sku in formattedSkuCosts"
                   :key="sku.label"
                 >
                   <span class="text-theme-500">{{ sku.label }}</span>
                   <span class="text-theme-200 tabular-nums">{{ sku.value }}</span>
+                </template>
+              </div>
+            </div>
+
+            <div v-if="formattedExtraCosts.length">
+              <p class="text-xs text-theme-300 whitespace-nowrap">
+                Extra pricing
+              </p>
+              <div class="mt-1 grid grid-cols-[auto,1fr] gap-x-2 gap-y-1 text-xs">
+                <template
+                  v-for="cost in formattedExtraCosts"
+                  :key="cost.label"
+                >
+                  <span class="text-theme-500">{{ cost.label }}</span>
+                  <span class="text-theme-200 tabular-nums">{{ cost.value }}</span>
                 </template>
               </div>
             </div>

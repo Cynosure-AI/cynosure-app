@@ -124,7 +124,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
     private parsePrice(value: unknown): number | undefined {
         if (typeof value === 'number' && Number.isFinite(value)) return value
         if (typeof value !== 'string' || !value.trim()) return undefined
-        const parsed = Number(value)
+        const parsed = Number(value.trim().replace(/^\$/, '').replace(/,/g, ''))
         return Number.isFinite(parsed) ? parsed : undefined
     }
 
@@ -149,6 +149,24 @@ export class OpenRouterProvider extends BaseLLMProvider {
         if (internalReasoning !== undefined) result.internalReasoning = internalReasoning
         if (inputCacheRead !== undefined) result.inputCacheRead = inputCacheRead
         if (inputCacheWrite !== undefined) result.inputCacheWrite = inputCacheWrite
+        const knownPricingKeys = new Set([
+            'prompt',
+            'completion',
+            'request',
+            'image',
+            'audio',
+            'web_search',
+            'internal_reasoning',
+            'input_cache_read',
+            'input_cache_write'
+        ])
+        const skus: Record<string, number> = {}
+        for (const [key, value] of Object.entries(pricing)) {
+            if (knownPricingKeys.has(key)) continue
+            const parsed = this.parsePrice(value)
+            if (parsed !== undefined) skus[key] = parsed
+        }
+        if (Object.keys(skus).length) result.skus = skus
         return Object.keys(result).length ? result : undefined
     }
 
@@ -860,13 +878,23 @@ export class OpenRouterProvider extends BaseLLMProvider {
             }
             const inputModalities = this.getInputModalities(model)
             const outputModalities = this.getOutputModalities(model)
+            let pricing = this.getPricing(model?.pricing)
+            if (outputModalities.includes('video')) {
+                const videoModel = (await this.listVideoModels().catch(() => []))
+                    .find((item) => item.id === modelId)
+                const skus = this.getSkuPricing(videoModel?.pricing_skus)
+                if (skus) {
+                    pricing ??= {}
+                    pricing.skus = { ...(pricing.skus ?? {}), ...skus }
+                }
+            }
             return {
                 id: modelId,
                 contextLength: model?.context_length || undefined,
                 inputModalities: inputModalities.length ? inputModalities : undefined,
                 outputModalities: outputModalities.length ? outputModalities : undefined,
                 supportsToolCalls: this.modelSupportsToolCalls(model),
-                pricing: this.getPricing(model?.pricing)
+                pricing
             }
         } catch {
             return { id: modelId }

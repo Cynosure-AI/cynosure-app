@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { LLMProviderConfig, ModelListItem, ModelListType, ModelPricing } from "../../api/types";
+import type { LLMProviderConfig, ModelListItem, ModelListType } from "../../api/types";
 import CustomSelect, {
   type SelectOption,
   type SelectOptionGroup,
@@ -9,6 +9,11 @@ import CustomSelect, {
 import { useProviderStore } from "../../stores/provider.store";
 import { useProviderLogos } from "../../composables/useProviderLogos";
 import { SK_PROVIDER_MODEL_FAVORITES } from "../../utils/storage-keys";
+import {
+  compactPricingTag,
+  humanizePricingKey,
+  pricingTooltipLines,
+} from "../../utils/model-pricing";
 
 interface ProviderModelSelection {
   providerId: string;
@@ -115,102 +120,12 @@ function modelId(model: string | ModelListItem): string {
   return typeof model === "string" ? model : model.id;
 }
 
-function dollarsPerMillion(price?: number): number | undefined {
-  return price == null ? undefined : price * 1_000_000;
-}
-
-function formatMoney(value: number): string {
-  if (value === 0) return "$0";
-  if (value < 0.01) return `$${value.toFixed(4)}`;
-  if (value < 1) return `$${value.toFixed(2)}`;
-  return `$${value.toFixed(2)}`;
-}
-
-function firstVideoSku(pricing?: ModelPricing): { key: string; value: number } | null {
-  const entries = Object.entries(pricing?.skus ?? {})
-    .filter(([, value]) => Number.isFinite(value))
-    .sort(([a], [b]) => {
-      const aScore = a.includes("720p") ? 0 : a.includes("duration") ? 1 : 2;
-      const bScore = b.includes("720p") ? 0 : b.includes("duration") ? 1 : 2;
-      return aScore - bScore || a.localeCompare(b);
-    });
-  if (!entries.length) return null;
-  const [key, value] = entries[0];
-  return { key, value };
-}
-
-function humanizeSku(key: string): string {
-  return key
-    .replace(/^cents_per_/, "cents ")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function formatModalityName(modality: string): string {
-  return modality
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 function pricingTag(model: ModelListItem): string | undefined {
-  const inputPerM = dollarsPerMillion(model.pricing?.prompt);
-  const outputPerM = dollarsPerMillion(model.pricing?.completion);
-  if (inputPerM !== undefined || outputPerM !== undefined) {
-    return `${formatMoney(inputPerM ?? 0)}/${formatMoney(outputPerM ?? 0)}`;
-  }
-
-  const image = model.pricing?.image;
-  if (image !== undefined) return `${formatMoney(image)}/img`;
-
-  const sku = firstVideoSku(model.pricing);
-  if (!sku) return undefined;
-  const value = sku.key.startsWith("cents_per_") ? sku.value / 100 : sku.value;
-  return `${formatMoney(value)}/sec`;
+  return compactPricingTag(model);
 }
 
 function pricingTooltip(model: ModelListItem): string | undefined {
-  const lines: string[] = [];
-  if (model.name && model.name !== model.id) lines.push(model.name);
-
-  const inputPerM = dollarsPerMillion(model.pricing?.prompt);
-  const outputPerM = dollarsPerMillion(model.pricing?.completion);
-  if (inputPerM !== undefined || outputPerM !== undefined) {
-    lines.push(`Tokens: ${formatMoney(inputPerM ?? 0)} input / ${formatMoney(outputPerM ?? 0)} output per 1M`);
-  }
-  if (model.pricing?.image !== undefined) {
-    lines.push(`Image: ${formatMoney(model.pricing.image)} per image`);
-  }
-  if (model.pricing?.audio !== undefined) {
-    lines.push(`Audio: ${formatMoney(model.pricing.audio)}`);
-  }
-  if (model.pricing?.request !== undefined && model.pricing.request > 0) {
-    lines.push(`Request: ${formatMoney(model.pricing.request)} per request`);
-  }
-  if (model.pricing?.webSearch !== undefined && model.pricing.webSearch > 0) {
-    lines.push(`Web search: ${formatMoney(model.pricing.webSearch)} per operation`);
-  }
-  if (model.pricing?.internalReasoning !== undefined && model.pricing.internalReasoning > 0) {
-    lines.push(`Reasoning: ${formatMoney(dollarsPerMillion(model.pricing.internalReasoning) ?? 0)} per 1M tokens`);
-  }
-  if (model.pricing?.inputCacheRead !== undefined && model.pricing.inputCacheRead > 0) {
-    lines.push(`Cache read: ${formatMoney(dollarsPerMillion(model.pricing.inputCacheRead) ?? 0)} per 1M tokens`);
-  }
-  if (model.pricing?.inputCacheWrite !== undefined && model.pricing.inputCacheWrite > 0) {
-    lines.push(`Cache write: ${formatMoney(dollarsPerMillion(model.pricing.inputCacheWrite) ?? 0)} per 1M tokens`);
-  }
-
-  const skus = Object.entries(model.pricing?.skus ?? {}).slice(0, 4);
-  for (const [key, value] of skus) {
-    const amount = key.startsWith("cents_per_") ? value / 100 : value;
-    lines.push(`${humanizeSku(key)}: ${formatMoney(amount)}`);
-  }
-
-  const modalities = [
-    model.inputModalities?.length ? `Input: ${model.inputModalities.join(", ")}` : "",
-    model.outputModalities?.length ? `Output: ${model.outputModalities.join(", ")}` : "",
-  ].filter(Boolean);
-  lines.push(...modalities);
-
+  const lines = pricingTooltipLines(model);
   return lines.length ? lines.join("\n") : undefined;
 }
 
@@ -224,7 +139,7 @@ function outputCapabilityTag(model: ModelListItem): string | undefined {
   if (nonTextOutput.includes("video")) return output.includes("text") ? "Video + text" : "Video";
   if (nonTextOutput.includes("image")) return output.includes("text") ? "Image + text" : "Image";
   if (nonTextOutput.includes("audio")) return output.includes("text") ? "Audio + text" : "Audio";
-  return nonTextOutput.map(formatModalityName).join(" + ");
+  return nonTextOutput.map((item) => humanizePricingKey(item)).join(" + ");
 }
 
 function mergeModelItems(existing: ModelListItem, incoming: ModelListItem): ModelListItem {
