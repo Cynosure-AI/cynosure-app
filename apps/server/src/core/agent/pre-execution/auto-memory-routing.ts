@@ -120,13 +120,12 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
 }
 
 export function emitAutoMemoryRoutingSkipped(
-    conversationId: string,
-    reason: 'disabled' | 'empty-scope' | 'no-query',
-    eventMeta?: Record<string, unknown>,
+    _conversationId: string,
+    _reason: 'disabled' | 'empty-scope' | 'no-query',
+    _eventMeta?: Record<string, unknown>,
 ): void {
-    const taskId = `memory_router_skipped_${nanoid()}`
-    emitMemoryRoutingStatus(conversationId, taskId, eventMeta)
-    emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, reason)
+    // Static or disabled memory selection is not auto-memory routing, so do
+    // not create a visible context-gathering step unless the router runs.
 }
 
 function shouldRouteMemory(userQuery?: string, opts: { enabled?: boolean } = {}): boolean {

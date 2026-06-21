@@ -113,13 +113,12 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
 }
 
 export function emitAutoToolRoutingSkipped(
-    conversationId: string,
-    reason: 'disabled' | 'no-query' | 'no-tools',
-    eventMeta?: Record<string, unknown>,
+    _conversationId: string,
+    _reason: 'disabled' | 'no-query' | 'no-tools',
+    _eventMeta?: Record<string, unknown>,
 ): void {
-    const taskId = `router_skipped_${nanoid()}`
-    emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Checking automatic tools...', eventMeta)
-    emitToolRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, reason)
+    // Static or disabled tool selection is not a routing step, so keep the
+    // pre-execution timeline quiet unless the auto-router actually runs.
 }
 
 async function curateRoutedTools(input: {
