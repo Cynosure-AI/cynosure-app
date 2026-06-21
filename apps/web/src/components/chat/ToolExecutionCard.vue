@@ -802,6 +802,7 @@ const hasDisplayableActivity = computed(() =>
                   <FileArtifactLinks
                     v-if="execution.result"
                     :text="execution.result.output"
+                    :exclude-hrefs="execution.result.images || []"
                   />
 
                   <div

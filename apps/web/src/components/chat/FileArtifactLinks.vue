@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
+import { fileArtifactKey, fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
 
 const props = defineProps<{
   text?: string
   artifacts?: FileArtifactLink[]
+  excludeHrefs?: string[]
 }>()
 
 const links = computed(() => {
-  if (props.artifacts) return props.artifacts
-  return fileArtifactLinks(props.text || '')
+  const excluded = new Set((props.excludeHrefs || []).map(fileArtifactKey))
+  const candidates = props.artifacts || fileArtifactLinks(props.text || '')
+  if (!excluded.size) return candidates
+  return candidates.filter((artifact) => !excluded.has(fileArtifactKey(artifact.href)))
 })
 </script>
 

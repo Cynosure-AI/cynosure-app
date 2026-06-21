@@ -49,3 +49,14 @@ export function fileArtifactLinks(text: string): FileArtifactLink[] {
 
   return links
 }
+
+export function fileArtifactKey(href: string): string {
+  try {
+    const parsed = new URL(href, window.location.origin)
+    const path = parsed.searchParams.get('path')
+    if (path) return `path:${path}`
+  } catch {
+    // Fall through to href-based matching.
+  }
+  return `href:${href}`
+}
