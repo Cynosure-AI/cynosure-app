@@ -150,7 +150,7 @@ async function install() {
     await api.mcp.addServer({
       originalName: 'Cynosure',
       command: 'npx',
-      args: ['-y', '@cynosure-mcp/cynosure'],
+      args: ['-y', '@cynosure-mcp/cynosure@latest'],
       origin: 'npm',
       description: 'Configure Cynosure itself via AI — manage agents, memory, MCPs and settings.',
     })

@@ -5,7 +5,7 @@
         Set Up Memory
       </h2>
       <p class="text-sm text-theme-500 mt-1">
-        Give your agents searchable, long-term memory. Choose an embedding model and prepare your memory folder.
+        Give your agents searchable, long-term memory. Choose an embedding model to be able to use auto-memories and auto tool calling.
         You can skip this and configure it later in Settings.
       </p>
     </div>
