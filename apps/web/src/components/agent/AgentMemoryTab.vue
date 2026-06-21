@@ -24,6 +24,12 @@ const assignedSpaces = computed(() =>
   allSpaces.value.filter(s => assignedIds.value.has(s.id))
 )
 
+const agentSpacePath = computed(() => `agents/${agentMemoryFolderName()}`)
+
+const agentSpaceExists = computed(() =>
+  allSpaces.value.some(s => s.relativePath === agentSpacePath.value)
+)
+
 const visibleSpaces = computed(() =>
   allSpaces.value.filter((space) => {
     if (space.isDefault) return true
@@ -145,6 +151,15 @@ function hasChildren(space: MemorySpace): boolean {
   return allSpaces.value.some((candidate) => space.isDefault ? Boolean(candidate.relativePath) : candidate.relativePath?.startsWith(prefix))
 }
 
+function isPartiallySelected(space: MemorySpace): boolean {
+  if (space.isDefault || !hasChildren(space)) return false
+  // Show partial icon whenever children are selected but the parent itself is not
+  if (assignedIds.value.has(space.id)) return false
+  const prefix = `${space.relativePath}/`
+  const directChildren = allSpaces.value.filter(c => c.relativePath?.startsWith(prefix))
+  return directChildren.some(c => assignedIds.value.has(c.id))
+}
+
 function toggleCollapsed(space: MemorySpace) {
   const key = space.relativePath || ''
   const next = new Set(collapsedFolders.value)
@@ -228,9 +243,12 @@ onMounted(() => loadSpaces())
         Select memory folders to give this agent access to shared knowledge.
       </p>
 
-      <div class="mb-3 rounded-lg border border-theme-800 bg-theme-900/50 p-3 flex items-center justify-between gap-3">
+      <div
+        v-if="!agentSpaceExists"
+        class="mb-3 rounded-lg border border-theme-800 bg-theme-900/50 p-3 flex items-center justify-between gap-3"
+      >
         <div class="min-w-0">
-          <div class="text-sm text-theme-200">
+          <div class="texExistst-theme-200">
             Create Memory Space for Agent
           </div>
           <div class="text-[11px] text-theme-500 truncate">
@@ -350,9 +368,15 @@ onMounted(() => loadSpaces())
               </div>
             </div>
             <Icon
-              v-if="assignedIds.has(space.id)"
+              v-if="assignedIds.has(space.id) && !isPartiallySelected(space)"
               icon="mdi:check-circle"
               class="w-4 h-4 text-accent-400 shrink-0"
+            />
+
+            <Icon
+              v-else-if="isPartiallySelected(space)"
+              icon="mdi:minus-circle"
+              class="w-4 h-4 text-accent-300 shrink-0"
             />
           </div>
         </div>

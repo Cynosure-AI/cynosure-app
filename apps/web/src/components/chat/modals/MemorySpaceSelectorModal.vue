@@ -71,6 +71,15 @@ function hasChildren(space: MemorySpace): boolean {
   return spaces.value.some((candidate) => space.isDefault ? Boolean(candidate.relativePath) : candidate.relativePath?.startsWith(prefix))
 }
 
+function isPartiallySelected(space: MemorySpace): boolean {
+  if (space.isDefault || !hasChildren(space)) return false
+  // Show partial icon whenever children are selected but the parent itself is not
+  if (selected.value.includes(space.id)) return false
+  const prefix = `${space.relativePath}/`
+  const directChildren = spaces.value.filter(c => c.relativePath?.startsWith(prefix))
+  return directChildren.some(c => selected.value.includes(c.id))
+}
+
 function toggleCollapsed(space: MemorySpace) {
   const key = space.relativePath || ''
   const next = new Set(collapsedFolders.value)
@@ -251,6 +260,12 @@ function toggleAutoMemory(enabled: boolean) {
             v-if="selected.includes(space.id)"
             icon="mdi:check-circle"
             class="w-4 h-4 text-accent-400 shrink-0"
+          />
+
+          <Icon
+            v-else-if="isPartiallySelected(space)"
+            icon="mdi:minus-circle"
+            class="w-4 h-4 text-accent-300 shrink-0"
           />
         </button>
       </div>
