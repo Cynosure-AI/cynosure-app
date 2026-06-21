@@ -527,6 +527,7 @@ export const useAgentStore = defineStore('agent', () => {
       const rows = await api.chat.getExecutionSteps(conversationId)
       if (!rows.length) return
       // Only apply if still viewing same conversation
+      if (activeViewConversationId.value !== conversationId) return
       if (executionSteps.value.length > 0) return
       const mapped: ExecutionStep[] = rows.map((r: ExecutionStepRecord) => ({
         iteration: r.iteration,

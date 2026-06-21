@@ -34,6 +34,7 @@ interface OpenRouterModel {
     architecture?: {
         input_modalities?: unknown
         output_modalities?: unknown
+        modality?: unknown
     }
 }
 
@@ -105,12 +106,25 @@ export class OpenRouterProvider extends BaseLLMProvider {
         return raw.filter((item): item is string => typeof item === 'string').map((item) => item.toLowerCase())
     }
 
+    private getModalitiesFromDescriptor(model: OpenRouterModel | undefined, direction: 'input' | 'output'): string[] {
+        const raw = model?.architecture?.modality
+        if (typeof raw !== 'string' || !raw.includes('->')) return []
+        const [input, output] = raw.split('->', 2)
+        const selected = direction === 'input' ? input : output
+        return selected
+            .split(/[,+/|&\s]+/)
+            .map((item) => item.trim().toLowerCase())
+            .filter(Boolean)
+    }
+
     private getInputModalities(model: OpenRouterModel | undefined): string[] {
-        return this.getModalities(model?.input_modalities ?? model?.architecture?.input_modalities)
+        const modalities = this.getModalities(model?.input_modalities ?? model?.architecture?.input_modalities)
+        return modalities.length ? modalities : this.getModalitiesFromDescriptor(model, 'input')
     }
 
     private getOutputModalities(model: OpenRouterModel | undefined): string[] {
-        return this.getModalities(model?.output_modalities ?? model?.architecture?.output_modalities)
+        const modalities = this.getModalities(model?.output_modalities ?? model?.architecture?.output_modalities)
+        return modalities.length ? modalities : this.getModalitiesFromDescriptor(model, 'output')
     }
 
     private modelSupportsToolCalls(model: OpenRouterModel | undefined): boolean | undefined {
