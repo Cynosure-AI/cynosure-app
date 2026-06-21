@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useProviderStore } from '../stores/provider.store'
@@ -106,6 +106,10 @@ const agentsWithIssues = computed(() => {
 
 const isBulkMode = computed(() => bulkSelectionIds.value.length > 0)
 const selectedAgentCount = computed(() => bulkSelectionIds.value.length)
+const selectedBulkAgents = computed(() => {
+  const selectedIds = new Set(bulkSelectionIds.value)
+  return agentDefs.agents.filter(agent => selectedIds.has(agent.id))
+})
 
 function isAgentSelected(agentId: string): boolean {
   return bulkSelectionIds.value.includes(agentId)
@@ -136,6 +140,23 @@ function clearBulkSelection(): void {
   hasBulkProviderModelSelection.value = false
   hasBulkTagsSelection.value = false
 }
+
+function tagsForSelectedAgents(): string[] {
+  const tagMap = new Map<string, string>()
+  for (const agent of selectedBulkAgents.value) {
+    for (const tag of agent.tags || []) {
+      const key = tag.toLowerCase()
+      if (!tagMap.has(key)) tagMap.set(key, tag)
+    }
+  }
+  return [...tagMap.values()].sort((a, b) => a.localeCompare(b))
+}
+
+watch(bulkSelectionIds, () => {
+  if (!hasBulkTagsSelection.value) {
+    bulkTags.value = tagsForSelectedAgents()
+  }
+})
 
 function toggleAgentSelection(agentId: string, selected?: boolean): void {
   const current = new Set(bulkSelectionIds.value)
