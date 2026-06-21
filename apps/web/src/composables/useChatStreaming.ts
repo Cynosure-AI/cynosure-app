@@ -101,8 +101,25 @@ export function useChatStreaming(
         return undefined
     }
 
+    function findMsgByStreamId(streamId: string): DisplayMessage | undefined {
+        for (let i = messages.value.length - 1; i >= 0; i--) {
+            if (messages.value[i].streamId === streamId) return messages.value[i]
+        }
+        return undefined
+    }
+
     function hasVisibleContent(msg: DisplayMessage): boolean {
         return Boolean(msg.content || msg.thinking || msg.imageDataUrls?.length || msg.videoDataUrls?.length)
+    }
+
+    function pushStreamErrorMessage(error: string): void {
+        messages.value.push({
+            id: `error_${Date.now()}`,
+            role: 'assistant',
+            content: error,
+            isError: true,
+            createdAt: Date.now()
+        })
     }
 
     function findReusableStreamingPlaceholder(): DisplayMessage | undefined {
@@ -598,16 +615,20 @@ export function useChatStreaming(
             const streamMsg = findStreamingMsg(data.streamId)
             if (streamMsg) {
                 streamMsg.isStreaming = false
-                streamMsg.isError = true
-                streamMsg.content = data.error
+                if (streamMsg.videoDataUrls?.length) {
+                    pushStreamErrorMessage(data.error)
+                } else {
+                    streamMsg.isError = true
+                    streamMsg.content = data.error
+                }
             } else {
-                messages.value.push({
-                    id: `error_${Date.now()}`,
-                    role: 'assistant',
-                    content: data.error,
-                    isError: true,
-                    createdAt: Date.now()
-                })
+                const previousMsg = findMsgByStreamId(data.streamId)
+                if (previousMsg && !hasVisibleContent(previousMsg)) {
+                    previousMsg.isError = true
+                    previousMsg.content = data.error
+                } else {
+                    pushStreamErrorMessage(data.error)
+                }
             }
         }
     }

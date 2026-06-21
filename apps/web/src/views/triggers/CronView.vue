@@ -95,6 +95,7 @@ const pendingDeleteId = ref<string | null>(null)
 const pendingDeleteName = ref('')
 
 const runningNow = ref(new Set<string>())
+const duplicatingNow = ref(new Set<string>())
 
 async function runJobNow(jobId: string) {
   runningNow.value = new Set([...runningNow.value, jobId])
@@ -104,6 +105,28 @@ async function runJobNow(jobId: string) {
   } finally {
     runningNow.value.delete(jobId)
     runningNow.value = new Set(runningNow.value)
+  }
+}
+
+async function duplicateCronJob(job: CronJob) {
+  duplicatingNow.value = new Set([...duplicatingNow.value, job.id])
+  try {
+    const created = await api.cronJobs.create({
+      name: `${job.name || job.agentName} Copy`,
+      agentId: job.agentId,
+      schedule: job.schedule,
+      prompt: job.prompt || '',
+      enabled: false,
+      oneOff: job.oneOff,
+      outputChannelId: job.outputChannelId,
+      notificationMode: job.notificationMode,
+      notificationCondition: job.notificationCondition,
+    })
+    await loadSchedules()
+    router.push(`/triggers/cron/${created.id}`)
+  } finally {
+    duplicatingNow.value.delete(job.id)
+    duplicatingNow.value = new Set(duplicatingNow.value)
   }
 }
 
@@ -136,7 +159,7 @@ const tableColumns: Column<CronJob>[] = [
   { key: 'job', label: 'Job', width: 'minmax(0,1.7fr)', sortable: true, sortValue: job => job.name || job.agentName },
   { key: 'schedule', label: 'Schedule', width: 'minmax(0,1.3fr)', sortable: true, sortValue: job => job.nextRunAt ?? Number.MAX_SAFE_INTEGER },
   { key: 'status', label: 'Status', width: '140px', sortable: true, sortValue: job => job.isRunning ? 2 : job.enabled ? 1 : 0 },
-  { key: 'actions', label: 'Actions', width: '170px' },
+  { key: 'actions', label: 'Actions', width: '200px' },
   { key: 'enable', label: 'Enable', width: '72px', sortable: true, sortValue: job => job.enabled },
 ]
 
@@ -381,6 +404,18 @@ onUnmounted(() => {
                 <Icon
                   icon="lucide:pencil"
                   class="w-4 h-4"
+                />
+              </button>
+              <button
+                class="p-1.5 rounded-lg text-theme-400 hover:text-sky-400 hover:bg-sky-500/10 transition-colors disabled:opacity-40"
+                title="Duplicate Cron Job"
+                :disabled="duplicatingNow.has(job.id)"
+                @click.stop="duplicateCronJob(job)"
+              >
+                <Icon
+                  :icon="duplicatingNow.has(job.id) ? 'lucide:loader-2' : 'lucide:copy-plus'"
+                  class="w-4 h-4"
+                  :class="{ 'animate-spin': duplicatingNow.has(job.id) }"
                 />
               </button>
               <button
