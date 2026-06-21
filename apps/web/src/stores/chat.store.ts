@@ -77,7 +77,6 @@ export const useChatStore = defineStore('chat', () => {
   const liveConversationSubscriptions = computed(() => {
     const ids = new Set<string>()
     if (activeConversationId.value) ids.add(activeConversationId.value)
-    for (const id of agentStore.liveExecutionConversationIds) ids.add(id)
     return Array.from(ids)
   })
 
