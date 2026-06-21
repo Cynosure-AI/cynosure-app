@@ -405,13 +405,15 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 conversationKeys = new Set<string>()
                 messageArtifactKeysByConversation.set(row.conversation_id, conversationKeys)
             }
-            for (const artifact of artifacts) {
+            const visibleArtifacts = artifacts.filter((artifact) => !conversationKeys.has(artifactKey(artifact)))
+            if (!visibleArtifacts.length) continue
+            for (const artifact of visibleArtifacts) {
                 conversationKeys.add(artifactKey(artifact))
             }
             items.push({
                 id: `artifact:${row.id}`,
                 kind: 'artifact',
-                title: artifacts.length === 1 ? `Generated ${artifacts[0].label}` : `Generated ${artifacts.length} artifacts`,
+                title: visibleArtifacts.length === 1 ? `Generated ${visibleArtifacts[0].label}` : `Generated ${visibleArtifacts.length} artifacts`,
                 description: row.title || 'Assistant response',
                 createdAt: row.created_at,
                 agentId: row.agent_id,
@@ -419,7 +421,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 conversationId: row.conversation_id,
                 sourceId: row.id,
                 sourceLabel: 'Artifact',
-                artifacts,
+                artifacts: visibleArtifacts,
             })
         }
 
