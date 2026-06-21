@@ -607,7 +607,7 @@ async function loadGraphSuggestions(query = graphQuery.value) {
   try {
     const result = await api.memory.getGraphSuggestions(trimmed, 8);
     if (requestId !== graphSuggestionRequest) return;
-    graphSuggestions.value = result.suggestions.filter((node) => node.name.toLowerCase() !== trimmed.toLowerCase());
+    graphSuggestions.value = result.suggestions;
   } catch {
     if (requestId === graphSuggestionRequest) graphSuggestions.value = [];
   }
