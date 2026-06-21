@@ -4,6 +4,7 @@ import { AgentExecutor } from './agent-executor.js'
 import { prepareAgentExecution } from './prepare-execution.js'
 import { getDb } from '../../db/database.js'
 import { getAssignedOrDefaultSpaces } from '../memory/memory-space-scope.js'
+import { extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
 import { nanoid } from 'nanoid'
 import type { ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 
@@ -162,9 +163,21 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     )
                 }
 
+                const imageLines = result.images.map((url, index) => {
+                    const path = extractFilePathFromFileUrl(url)
+                    return `image ${index + 1}: ${path ? `path=${path}; ` : ''}url=${url}`
+                })
+                const output = [
+                    result.content?.trim(),
+                    imageLines.length
+                        ? `Sub-agent produced ${imageLines.length} image artifact${imageLines.length === 1 ? '' : 's'}:\n${imageLines.join('\n')}`
+                        : '',
+                ].filter(Boolean).join('\n\n') || '(no output)'
+
                 return {
                     success: true,
-                    output: result.content || '(no output)',
+                    output,
+                    images: result.images.length ? result.images : undefined,
                 }
             } catch (err) {
                 return {

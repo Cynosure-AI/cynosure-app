@@ -1,11 +1,13 @@
 import { nanoid } from 'nanoid'
+import { existsSync, readFileSync } from 'fs'
+import { extname } from 'path'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getHITLGate } from './hitl-gate.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
-import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
+import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 import { isPlanningToolName } from '../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
 import { reconcilePlanningAfterToolBatch } from './planning-state.js'
@@ -713,13 +715,16 @@ export class AgentExecutor {
                 this.addLoadedTools(res.loadedTools)
             }
             const images = await this.materializeToolImages(res)
+            const imageDataUrls = res?.imageDataUrls?.length
+                ? res.imageDataUrls
+                : this.imageArtifactsToDataUrls(images)
             return {
                 toolCallId: tc.id,
                 name: tc.function.name,
                 output: res?.output ?? JSON.stringify(res),
                 success: res?.success !== false,
                 images,
-                imageDataUrls: res?.imageDataUrls,
+                imageDataUrls,
             }
         } catch (err) {
             return { toolCallId: tc.id, name: tc.function.name, output: `Error: ${(err as Error).message}`, success: false }
@@ -748,6 +753,40 @@ export class AgentExecutor {
             console.warn('[artifacts] Failed to materialize tool image:', err instanceof Error ? err.message : err)
             const nonInlineImages = res?.images?.filter((source) => !source.startsWith('data:'))
             return nonInlineImages?.length ? nonInlineImages : undefined
+        }
+    }
+
+    private imageArtifactsToDataUrls(images: string[] | undefined): string[] | undefined {
+        if (!images?.length) return undefined
+        const dataUrls: string[] = []
+        for (const image of images) {
+            const filePath = extractFilePathFromFileUrl(image)
+            if (!filePath || !existsSync(filePath)) continue
+            try {
+                const data = readFileSync(filePath).toString('base64')
+                dataUrls.push(`data:${this.imageMimeFromPath(filePath)};base64,${data}`)
+            } catch {
+                // Best effort: the artifact URL remains available in the text/UI result.
+            }
+        }
+        return dataUrls.length ? dataUrls : undefined
+    }
+
+    private imageMimeFromPath(filePath: string): string {
+        switch (extname(filePath).toLowerCase()) {
+            case '.jpg':
+            case '.jpeg':
+                return 'image/jpeg'
+            case '.gif':
+                return 'image/gif'
+            case '.webp':
+                return 'image/webp'
+            case '.bmp':
+                return 'image/bmp'
+            case '.svg':
+                return 'image/svg+xml'
+            default:
+                return 'image/png'
         }
     }
 
