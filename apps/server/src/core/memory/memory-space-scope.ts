@@ -27,7 +27,8 @@ export function getDefaultMemorySpace(): MemorySpaceRef | undefined {
 }
 
 /**
- * Return explicitly assigned spaces for an agent, or all memory folders if none are assigned.
+ * Return explicitly assigned memory spaces for an agent.
+ * An agent with no assignments has an explicit empty memory scope.
  */
 export function getAssignedOrDefaultSpaces(agentId: string): MemorySpaceRef[] {
     try {
@@ -47,9 +48,7 @@ export function getAssignedOrDefaultSpaces(agentId: string): MemorySpaceRef[] {
             relativePath: row.is_default === 1 ? '' : relativePathForFolder(row.folder_path),
         }))
 
-        if (assigned.length > 0) return assigned
-
-        return listAllMemorySpaceRefs(db)
+        return assigned
     } catch {
         return []
     }

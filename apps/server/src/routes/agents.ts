@@ -30,22 +30,11 @@ function defaultMemorySpaceIds(db = getDb()): string[] {
     return defaultSpace ? [defaultSpace.id] : []
 }
 
-function ensureAgentMemoryDefaults(agentId: string, db = getDb()): string[] {
-    const existing = db.prepare('SELECT space_id FROM agent_memory_spaces WHERE agent_id = ?').all(agentId) as { space_id: string }[]
-    if (existing.length > 0) return existing.map((row) => row.space_id)
-
-    const defaults = defaultMemorySpaceIds(db)
-    const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
-    for (const spaceId of defaults) insert.run(agentId, spaceId)
-    return defaults
-}
-
 export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promise<void> {
     // GET /api/agents — list all
     app.get('/', async () => {
         const db = getDb()
         const agents = listAgents()
-        for (const agent of agents) ensureAgentMemoryDefaults(agent.id, db)
         const allLinks = db.prepare('SELECT agent_id, space_id FROM agent_memory_spaces').all() as { agent_id: string; space_id: string }[]
         const linkMap = new Map<string, string[]>()
         for (const row of allLinks) {
@@ -64,7 +53,8 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
             return { error: 'Agent not found' }
         }
         const db = getDb()
-        return { ...agent, memorySpaces: ensureAgentMemoryDefaults(agent.id, db) }
+        const spaceRows = db.prepare('SELECT space_id FROM agent_memory_spaces WHERE agent_id = ?').all(agent.id) as { space_id: string }[]
+        return { ...agent, memorySpaces: spaceRows.map((row) => row.space_id) }
     })
 
     // GET /api/agents/:id/icon — serve agent icon

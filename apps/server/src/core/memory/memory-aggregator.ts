@@ -15,8 +15,9 @@ export interface AggregatedMemory {
  * 
  * Fallback logic:
  * - If explicit space IDs are provided → query only those spaces
- * - If agent has explicit memory space assignments → query only those spaces
- * - If agent has NO assignments or no scope is provided → query all memory folders
+ * - If an agent is provided → query only that agent's assigned spaces
+ * - If an agent has no assignments → return no memory
+ * - If no agent or explicit scope is provided → query all memory folders
  */
 export class MemoryAggregator {
   /**
@@ -50,6 +51,9 @@ export class MemoryAggregator {
       } catch { /* DB not ready */ }
     } else if (opts?.agentId) {
       scopedSpaces = getAssignedOrDefaultSpaces(opts.agentId)
+      if (scopedSpaces.length === 0) {
+        return { permanent: [], graph: undefined }
+      }
     } else {
       scopedSpaces = getAllMemorySpaces()
     }

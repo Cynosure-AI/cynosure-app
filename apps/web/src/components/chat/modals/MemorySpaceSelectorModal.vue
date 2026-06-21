@@ -128,11 +128,6 @@ function memorySpaceScopeIds(space: MemorySpace): string[] {
 
 function toggleAutoMemory(enabled: boolean) {
   chatStore.sessionAutoMemory = enabled
-  if (enabled && chatStore.freeChatMemorySpaceIds.length === 0 && spaces.value.length > 0) {
-    const defaultSpace = spaces.value.find((space) => space.isDefault)
-    const defaultIds = defaultSpace ? memorySpaceScopeIds(defaultSpace) : spaces.value.map((space) => space.id)
-    chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...defaultIds)
-  }
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
@@ -216,7 +211,9 @@ function toggleAutoMemory(enabled: boolean) {
         class="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg transition-colors text-left"
         :class="selected.includes(space.id)
           ? 'bg-accent-600/15 border border-accent-500/30'
-          : 'hover:bg-theme-800 border border-transparent'"
+          : isPartiallySelected(space)
+            ? 'bg-accent-600/8 border border-accent-500/15 hover:bg-accent-600/12'
+            : 'hover:bg-theme-800 border border-transparent'"
       >
         <!-- Indent spacer -->
         <span
@@ -245,7 +242,7 @@ function toggleAutoMemory(enabled: boolean) {
             <Icon
               :icon="space.isDefault ? 'lucide:hard-drive' : 'lucide:folder'"
               class="w-3.5 h-3.5"
-              :class="selected.includes(space.id) ? 'text-accent-400' : 'text-theme-500'"
+              :class="selected.includes(space.id) || isPartiallySelected(space) ? 'text-accent-400' : 'text-theme-500'"
             />
           </div>
           <div class="flex-1 min-w-0">

@@ -230,6 +230,7 @@ async function createAgent() {
     tools: [],
     autoApproveTools: false,
     autoToolRouting: false,
+    autoMemory: true,
     generateTitle: true
   })
   showCreateDialog.value = false

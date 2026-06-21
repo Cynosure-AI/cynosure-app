@@ -331,7 +331,11 @@ onMounted(() => loadSpaces())
             v-for="space in visibleSpaces"
             :key="space.id"
             class="flex items-center gap-2 w-full px-3 py-2.5 border-b border-theme-800 last:border-0 cursor-pointer transition-colors"
-            :class="assignedIds.has(space.id) ? 'bg-accent-600/10 hover:bg-accent-600/15' : 'hover:bg-theme-800/60'"
+            :class="assignedIds.has(space.id)
+              ? 'bg-accent-600/10 hover:bg-accent-600/15'
+              : isPartiallySelected(space)
+                ? 'bg-accent-600/8 hover:bg-accent-600/12'
+                : 'hover:bg-theme-800/60'"
             @click="toggleSpace(space.id)"
           >
             <!-- Indent spacer -->
@@ -356,7 +360,7 @@ onMounted(() => loadSpaces())
               <Icon
                 :icon="space.isDefault ? 'lucide:hard-drive' : 'lucide:folder'"
                 class="w-3.5 h-3.5"
-                :class="assignedIds.has(space.id) ? 'text-accent-400' : 'text-theme-500'"
+                :class="assignedIds.has(space.id) || isPartiallySelected(space) ? 'text-accent-400' : 'text-theme-500'"
               />
             </div>
             <div class="flex-1 min-w-0">
