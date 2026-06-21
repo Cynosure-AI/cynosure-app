@@ -10,6 +10,8 @@ import {
     copyFileToFolder,
     deleteFile as deletePhysicalFile,
     backupToRevisions,
+    listFileRevisions,
+    readFileRevision,
     readTextFile,
     writeTextFile,
     PLAIN_TEXT_EXTENSIONS,
@@ -479,6 +481,46 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             return { fileName, content: readTextFile(row.folder_path, fileName) }
         } catch {
             return reply.status(404).send({ error: 'File not found' })
+        }
+    })
+
+    // GET /api/memory-spaces/:id/files/:fileName/revisions — list hidden saved versions
+    app.get<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/revisions', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
+
+        let fileName: string
+        try {
+            fileName = validateEditableFileName(req.params.fileName)
+        } catch (err) {
+            return reply.status(400).send({ error: (err as Error).message })
+        }
+
+        return { revisions: listFileRevisions(row.folder_path, fileName) }
+    })
+
+    // GET /api/memory-spaces/:id/files/:fileName/revisions/:revisionName/content — read one saved version
+    app.get<{ Params: { id: string; fileName: string; revisionName: string } }>('/:id/files/:fileName/revisions/:revisionName/content', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
+
+        let fileName: string
+        try {
+            fileName = validateEditableFileName(req.params.fileName)
+        } catch (err) {
+            return reply.status(400).send({ error: (err as Error).message })
+        }
+
+        try {
+            return {
+                fileName,
+                revisionName: basename(req.params.revisionName || ''),
+                content: readFileRevision(row.folder_path, fileName, req.params.revisionName),
+            }
+        } catch {
+            return reply.status(404).send({ error: 'Revision not found' })
         }
     })
 

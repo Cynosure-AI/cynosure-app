@@ -31,6 +31,7 @@ const props = defineProps<{
   graph: EntityGraphResponse | null;
   graphLoading: boolean;
   graphQuery: string;
+  graphSearchQuery: string;
   graphSuggestions: EntityGraphNode[];
   graphFlowNodes: Node<FlowNodeData>[];
   graphFlowEdges: Edge<FlowEdgeData>[];
@@ -103,7 +104,7 @@ const sidebarTitle = computed(() => {
   return `${formatCount(selectedGraphNodes.value.length)} entities selected`;
 });
 
-const isWalkView = computed(() => Boolean(props.graphQuery.trim()));
+const isWalkView = computed(() => Boolean(props.graphSearchQuery.trim()));
 
 const selectedMentionCount = computed(() =>
   selectedGraphNodes.value.reduce((total, node) => total + node.mentionCount, 0),
