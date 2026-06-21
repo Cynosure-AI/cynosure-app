@@ -113,7 +113,13 @@ const isUser = computed(() => props.role === 'user')
 const isForkable = computed(() =>  props.role === 'assistant') //Could also include user too though it doesn't make as much sense since user messages are editable
 const hasAssistantImages = computed(() => !isUser.value && Boolean(props.imageDataUrls?.length))
 const hasAssistantVideos = computed(() => !isUser.value && Boolean(props.videoDataUrls?.length))
+const hasAssistantAudio = computed(() => !isUser.value && Boolean(props.audioDataUrls?.length))
 const hasAssistantFileArtifacts = computed(() => !isUser.value && Boolean(props.fileArtifacts?.length))
+const renderedMediaUrls = computed(() => [
+  ...(props.imageDataUrls || []),
+  ...(props.videoDataUrls || []),
+  ...(props.audioDataUrls || []),
+])
 const imageGridClass = computed(() => {
   const count = props.imageDataUrls?.length || 0
   if (count > 1) return 'grid grid-cols-2 md:grid-cols-3 gap-2 w-full min-w-72 max-w-3xl'
@@ -355,6 +361,7 @@ const imageGridClass = computed(() => {
       <FileArtifactLinks
         v-if="hasAssistantFileArtifacts"
         :artifacts="fileArtifacts"
+        :exclude-hrefs="renderedMediaUrls"
       />
 
       <!-- Model-generated images (assistant) -->
@@ -403,6 +410,20 @@ const imageGridClass = computed(() => {
             </a>
           </div>
         </div>
+      </div>
+
+      <!-- Model-generated audio (assistant) -->
+      <div
+        v-if="hasAssistantAudio"
+        class="mt-3 flex flex-col gap-2 w-full min-w-64 max-w-xl"
+      >
+        <audio
+          v-for="(url, idx) in audioDataUrls"
+          :key="idx"
+          :src="url"
+          controls
+          class="w-full h-10"
+        />
       </div>
 
       <!-- Streaming cursor -->
