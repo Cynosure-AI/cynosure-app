@@ -14,6 +14,8 @@ const router = useRouter()
 // --- Memory Folders ---
 const allSpaces = ref<MemorySpace[]>([])
 const spacesLoading = ref(false)
+const creatingAgentSpace = ref(false)
+const createAgentSpaceError = ref<string | null>(null)
 const collapsedFolders = ref<Set<string>>(new Set())
 
 const assignedIds = computed(() => new Set(props.agent.memorySpaces ?? []))
@@ -42,19 +44,43 @@ async function loadSpaces() {
       if (b.isDefault) return 1
       return (a.relativePath || '').localeCompare(b.relativePath || '')
     })
+    collapseFoldersWithChildren(allSpaces.value)
   } catch (err) {
     console.error('[memory] Failed to load spaces:', err)
   }
   spacesLoading.value = false
 }
 
-function toggleSpace(spaceId: string) {
-  const current = props.agent.memorySpaces ?? []
-  if (current.includes(spaceId)) {
-    emit('update', 'memorySpaces', current.filter((id: string) => id !== spaceId))
-  } else {
-    emit('update', 'memorySpaces', [...current, spaceId])
+function collapseFoldersWithChildren(spaces: MemorySpace[]) {
+  const pathsWithChildren = new Set<string>()
+  const paths = spaces
+    .map((space) => space.relativePath || '')
+    .filter(Boolean)
+
+  for (const path of paths) {
+    const parts = path.split('/')
+    for (let i = 1; i < parts.length; i++) {
+      pathsWithChildren.add(parts.slice(0, i).join('/'))
+    }
   }
+
+  collapsedFolders.value = pathsWithChildren
+}
+
+function toggleSpace(spaceId: string) {
+  const space = allSpaces.value.find((candidate) => candidate.id === spaceId)
+  if (!space) return
+
+  const current = new Set(props.agent.memorySpaces ?? [])
+  const scopedIds = memorySpaceScopeIds(space)
+
+  if (current.has(spaceId)) {
+    for (const id of scopedIds) current.delete(id)
+  } else {
+    for (const id of scopedIds) current.add(id)
+  }
+
+  emit('update', 'memorySpaces', Array.from(current))
 }
 
 function selectAll() {
@@ -63,6 +89,55 @@ function selectAll() {
 
 function deselectAll() {
   emit('update', 'memorySpaces', [])
+}
+
+function agentMemoryFolderName(): string {
+  return (props.agent.internalName || props.agent.name || 'agent')
+    .trim()
+    .replace(/[\\/]+/g, '-')
+    .replace(/[<>:"|?*\x00-\x1f]/g, '')
+    .replace(/\s+/g, '_')
+    || 'agent'
+}
+
+async function createAgentMemorySpace() {
+  if (creatingAgentSpace.value) return
+  creatingAgentSpace.value = true
+  createAgentSpaceError.value = null
+
+  const folderName = agentMemoryFolderName()
+  const relativePath = `agents/${folderName}`
+
+  try {
+    let created = allSpaces.value.find((space) => space.relativePath === relativePath)
+    if (!created) {
+      created = await api.memorySpaces.create(
+        folderName,
+        `Private memory folder for ${props.agent.name}`,
+        'agents',
+      )
+    }
+
+    await loadSpaces()
+    const space = allSpaces.value.find((candidate) => candidate.relativePath === relativePath) || created
+    const current = props.agent.memorySpaces ?? []
+    if (space && !current.includes(space.id)) {
+      emit('update', 'memorySpaces', [...current, space.id])
+    }
+  } catch (err) {
+    console.error('[memory] Failed to create agent memory folder:', err)
+    createAgentSpaceError.value = err instanceof Error ? err.message : 'Failed to create memory folder'
+  } finally {
+    creatingAgentSpace.value = false
+  }
+}
+
+function memorySpaceScopeIds(space: MemorySpace): string[] {
+  if (space.isDefault) return [space.id]
+  const prefix = space.relativePath ? `${space.relativePath}/` : ''
+  return allSpaces.value
+    .filter((candidate) => candidate.id === space.id || Boolean(prefix && candidate.relativePath?.startsWith(prefix)))
+    .map((candidate) => candidate.id)
 }
 
 function hasChildren(space: MemorySpace): boolean {
@@ -152,6 +227,35 @@ onMounted(() => loadSpaces())
       <p class="text-xs text-theme-500 mb-3">
         Select memory folders to give this agent access to shared knowledge.
       </p>
+
+      <div class="mb-3 rounded-lg border border-theme-800 bg-theme-900/50 p-3 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-sm text-theme-200">
+            Create Memory Space for Agent
+          </div>
+          <div class="text-[11px] text-theme-500 truncate">
+            Creates <span class="font-mono text-theme-400">agents/{{ agentMemoryFolderName() }}</span> and assigns it here.
+          </div>
+          <div
+            v-if="createAgentSpaceError"
+            class="text-[11px] text-red-400 mt-1"
+          >
+            {{ createAgentSpaceError }}
+          </div>
+        </div>
+        <button
+          :disabled="creatingAgentSpace || spacesLoading"
+          class="px-3 py-1.5 rounded-lg text-xs font-medium bg-accent-600 text-white hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 shrink-0"
+          @click="createAgentMemorySpace"
+        >
+          <Icon
+            :icon="creatingAgentSpace ? 'lucide:loader-2' : 'lucide:folder-plus'"
+            class="w-3.5 h-3.5"
+            :class="{ 'animate-spin': creatingAgentSpace }"
+          />
+          Create
+        </button>
+      </div>
 
       <!-- Count + select all/none -->
       <div

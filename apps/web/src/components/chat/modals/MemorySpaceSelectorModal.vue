@@ -19,6 +19,7 @@ watch(visible, async (val) => {
   loading.value = true
   try {
     await chatStore.loadMemorySpaces()
+    collapseFoldersWithChildren(spaces.value)
 
     // Prune any stale IDs that no longer exist
     const validIds = new Set(spaces.value.map((space) => space.id))
@@ -37,6 +38,22 @@ watch(visible, async (val) => {
 
 const selected = computed(() => chatStore.freeChatMemorySpaceIds)
 const allSelected = computed(() => spaces.value.length > 0 && spaces.value.every((space) => selected.value.includes(space.id)))
+
+function collapseFoldersWithChildren(memorySpaces: MemorySpace[]) {
+  const pathsWithChildren = new Set<string>()
+  const paths = memorySpaces
+    .map((space) => space.relativePath || '')
+    .filter(Boolean)
+
+  for (const path of paths) {
+    const parts = path.split('/')
+    for (let i = 1; i < parts.length; i++) {
+      pathsWithChildren.add(parts.slice(0, i).join('/'))
+    }
+  }
+
+  collapsedFolders.value = pathsWithChildren
+}
 
 const visibleSpaces = computed(() =>
   spaces.value.filter((space) => {
@@ -75,21 +92,37 @@ function deselectAll() {
 }
 
 function toggle(id: string) {
-  const idx = chatStore.freeChatMemorySpaceIds.indexOf(id)
-  if (idx >= 0) {
-    chatStore.freeChatMemorySpaceIds.splice(idx, 1)
+  const space = spaces.value.find((candidate) => candidate.id === id)
+  if (!space) return
+
+  const current = new Set(chatStore.freeChatMemorySpaceIds)
+  const scopedIds = memorySpaceScopeIds(space)
+
+  if (current.has(id)) {
+    for (const scopedId of scopedIds) current.delete(scopedId)
   } else {
-    chatStore.freeChatMemorySpaceIds.push(id)
+    for (const scopedId of scopedIds) current.add(scopedId)
   }
+
+  chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...current)
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
+}
+
+function memorySpaceScopeIds(space: MemorySpace): string[] {
+  if (space.isDefault) return [space.id]
+  const prefix = space.relativePath ? `${space.relativePath}/` : ''
+  return spaces.value
+    .filter((candidate) => candidate.id === space.id || Boolean(prefix && candidate.relativePath?.startsWith(prefix)))
+    .map((candidate) => candidate.id)
 }
 
 function toggleAutoMemory(enabled: boolean) {
   chatStore.sessionAutoMemory = enabled
   if (enabled && chatStore.freeChatMemorySpaceIds.length === 0 && spaces.value.length > 0) {
-    const defaultIds = spaces.value.filter((space) => space.isDefault).map((space) => space.id)
-    chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...(defaultIds.length ? defaultIds : spaces.value.map((space) => space.id)))
+    const defaultSpace = spaces.value.find((space) => space.isDefault)
+    const defaultIds = defaultSpace ? memorySpaceScopeIds(defaultSpace) : spaces.value.map((space) => space.id)
+    chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...defaultIds)
   }
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
