@@ -314,7 +314,18 @@ onBeforeUnmount(() =>
       </span>
 
       <span
-        v-if="selectedOption?.tag"
+        v-if="selectedOption?.tagIconName"
+        class="shrink-0 inline-flex items-center justify-center text-amber-400"
+        :title="selectedOption.tag"
+      >
+        <Icon
+          :icon="selectedOption.tagIconName"
+          class="h-3.5 w-3.5"
+        />
+      </span>
+
+      <span
+        v-else-if="selectedOption?.tag"
         class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full"
         :class="selectedOption.tagVariant === 'cyan' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-violet-500/10 text-violet-400'"
       >

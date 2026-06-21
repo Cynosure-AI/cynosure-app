@@ -411,7 +411,8 @@ const groups = computed((): SelectOptionGroup[] => {
         value: encode(favorite.providerId, favorite.model),
         label: favorite.model,
         imgSrc: provider ? logoUrl(provider.type) : favorite.imgSrc,
-        tag: provider?.name,
+        tag: "Favorite",
+        tagIconName: "lucide:star",
         ...favoriteAction(favorite.providerId, favorite.model),
       };
     });

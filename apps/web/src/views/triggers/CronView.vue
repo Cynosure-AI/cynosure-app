@@ -8,6 +8,7 @@ import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import BaseCard from '../../components/shared/BaseCard.vue'
 import DataTable, { type Column } from '../../components/shared/DataTable.vue'
+import AgentSelect from '../../components/shared/AgentSelect.vue'
 import {
   buildCronExpr, cronToHuman,
   WEEKDAYS, HOUR_OPTIONS, MINUTE_OPTIONS, INTERVAL_MINUTES, FREQUENCY_OPTIONS,
@@ -438,24 +439,13 @@ onUnmounted(() => {
             <!-- Agent picker -->
             <div>
               <label class="block text-sm text-theme-400 mb-1">Agent</label>
-              <select
+              <AgentSelect
                 v-model="cronAgentId"
-                class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-              >
-                <option
-                  value=""
-                  disabled
-                >
-                  Select an agent…
-                </option>
-                <option
-                  v-for="a in allAgents"
-                  :key="a.id"
-                  :value="a.id"
-                >
-                  {{ a.name }}
-                </option>
-              </select>
+                :agents="allAgents"
+                placeholder="Select an agent…"
+                max-height="max-h-96"
+                size="sm"
+              />
             </div>
 
             <!-- Schedule builder -->
