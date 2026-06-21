@@ -63,7 +63,9 @@ const FALLBACK_META: StatusMeta = { label: 'Executing', icon: 'lucide:play', col
 const STATUS_META: Record<string, StatusMeta> = {
   'building-task-context': { label: 'Preparing Context', icon: 'lucide:compass', color: 'text-cyan-600 dark:text-cyan-300' },
   'indexing-attachments': { label: 'Indexing Attachments', icon: 'lucide:paperclip', color: 'text-sky-600 dark:text-sky-300' },
-  'routing-tools': { label: 'Gathering Tool Context', icon: 'lucide:route', color: 'text-accent-500 dark:text-accent-300' },
+  'indexing-tools': { label: 'Indexing Tools', icon: 'lucide:database-zap', color: 'text-accent-500 dark:text-accent-300' },
+  'routing-tools': { label: 'Gathering Tools Context', icon: 'lucide:route', color: 'text-accent-500 dark:text-accent-300' },
+  'finding-tools': { label: 'Finding Required Tools', icon: 'lucide:search-check', color: 'text-accent-500 dark:text-accent-300' },
   'routing-memory': { label: 'Gathering Memory Context', icon: 'lucide:brain-circuit', color: 'text-accent-500 dark:text-accent-300' },
   'curating-tools': { label: 'Refining Tool Context', icon: 'lucide:list-filter', color: 'text-accent-500 dark:text-accent-300' },
   'curating-memory': { label: 'Refining Memory Context', icon: 'lucide:list-filter', color: 'text-accent-500 dark:text-accent-300' },
@@ -421,9 +423,21 @@ const isSubAgentSpawnIteration = computed(() => toolNames.value.some(isSubAgentS
 
 const isTaskContext = computed(() => props.steps.some((step) => step.status === 'building-task-context' || step.toolCalls?.some(isTaskContextCall)))
 const isAttachmentIndexing = computed(() => props.steps.some((step) => step.status === 'indexing-attachments' || step.toolCalls?.some(isAttachmentIndexCall)))
-const isToolRouting = computed(() => currentStatus.value === 'routing-tools' || currentStatus.value === 'curating-tools')
+const isToolRouting = computed(() => currentStatus.value === 'indexing-tools' || currentStatus.value === 'routing-tools' || currentStatus.value === 'finding-tools' || currentStatus.value === 'curating-tools')
 const isMemoryRouting = computed(() => currentStatus.value === 'routing-memory' || currentStatus.value === 'curating-memory')
 const isRoutingStatus = computed(() => isTaskContext.value || isAttachmentIndexing.value || isToolRouting.value || isMemoryRouting.value)
+
+const routingStatusSteps = computed(() => {
+  const seen = new Set<string>()
+  return props.steps
+    .filter((step) => ['routing-tools', 'indexing-tools', 'finding-tools', 'curating-tools'].includes(step.status))
+    .filter((step) => {
+      const key = `${step.status}:${step.message || ''}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+})
 
 const allSuccess = computed(() => results.value.length > 0 && results.value.every((result) => result.success))
 const anyFailed = computed(() => results.value.some((result) => !result.success))
@@ -532,6 +546,7 @@ const headerIconClass = computed(() => {
 
 const hasDisplayableActivity = computed(() =>
   isTaskContext.value ||
+  isRoutingStatus.value ||
   toolCallArgs.value.length > 0 ||
   results.value.length > 0 ||
   Boolean(streamingText.value && props.isActive),
@@ -644,6 +659,28 @@ const hasDisplayableActivity = computed(() =>
         </div>
 
         <div class="mt-1.5 ml-3 space-y-2">
+          <div
+            v-if="routingStatusSteps.length && (isToolRouting || mergedContextSections.length)"
+            class="rounded-lg border border-sky-400/25 bg-sky-500/5 px-2.5 py-2 dark:border-sky-500/20 dark:bg-sky-500/5"
+          >
+            <div
+              v-for="step in routingStatusSteps"
+              :key="`${step.status}-${step.timestamp}`"
+              class="flex items-center gap-2 py-1 text-[11px]"
+            >
+              <Icon
+                :icon="meta(step.status).icon"
+                class="h-3 w-3 shrink-0"
+                :class="meta(step.status).color"
+              />
+              <span class="font-medium text-theme-300">{{ meta(step.status).label }}</span>
+              <span
+                v-if="step.message"
+                class="min-w-0 truncate text-theme-500"
+              >{{ step.message }}</span>
+            </div>
+          </div>
+
           <div
             v-if="isTaskContext && taskContext"
             class="rounded-lg border border-cyan-300/30 bg-cyan-50/80 px-3 py-2 dark:border-cyan-500/15 dark:bg-cyan-500/5"

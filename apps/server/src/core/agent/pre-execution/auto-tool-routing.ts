@@ -59,7 +59,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
 
     const taskId = `router_${nanoid()}`
     try {
-        emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Selecting relevant tools...', eventMeta)
+        emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Gathering tool context...', eventMeta)
         const routedTools = await routeTools({
             userQuery: userQuery || '',
             recentMessages: recentMessages || [],
@@ -67,6 +67,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             mcpMetadata,
             preferredToolNames,
             usedToolNames,
+            onStatus: (status, message) => emitToolRoutingStatus(conversationId, taskId, status, message, eventMeta),
         })
         emitToolRoutingSelection(
             conversationId,
