@@ -417,6 +417,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       }
       const tools: RegistryAwareToolDefinition[] = plannedTools
       let executionConfig: ConversationExecutionConfig | null = null
+      let attemptedVideoOutput = false
       try {
         messages = planned.messages
 
@@ -451,6 +452,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const isTranscriptionOutputModel = resolvedModelInfo?.outputModalities
           ?.some((modality) => modality.toLowerCase() === 'transcription') === true
         if (isVideoOutputModel) {
+          attemptedVideoOutput = true
           broadcast('chat:stream-start', {
             streamId,
             conversationId,
@@ -747,7 +749,28 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           persistStickyUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
         }
         getEventBus().emit('task:error', { conversationId, error: (err as Error).message })
-        broadcast('chat:stream-error', { streamId, conversationId, error: (err as Error).message })
+        const errorMessage = attemptedVideoOutput
+          ? `Video generation failed: ${(err as Error).message}`
+          : (err as Error).message
+        if (attemptedVideoOutput) {
+          const assistantNow = Date.now()
+          db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, agent_id, provider, model, latency_ms, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ).run(
+            nanoid(),
+            conversationId,
+            'assistant',
+            errorMessage,
+            agentId,
+            responseProvider,
+            responseModel,
+            assistantNow - now,
+            assistantNow
+          )
+          db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
+        }
+        broadcast('chat:stream-error', { streamId, conversationId, error: errorMessage })
         return { streamId }
       } finally {
         unregisterActiveChatExecution(executionId)

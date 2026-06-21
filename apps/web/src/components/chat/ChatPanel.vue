@@ -342,42 +342,26 @@ const unifiedTimeline = computed(() => {
 
     if (!groupOrder.length) return turnEntries
 
-    const groupsByInsertIndex = new Map<number, TimelineEntry[]>()
-    for (const groupId of groupOrder) {
+    const orderedGroups = groupOrder.map((groupId) => {
       const group = groupEntries.get(groupId)!
-      const insertIndex = lastSpawnToolGroupIndex === -1
-        ? group.firstIndex
-        : Math.max(group.firstIndex, lastSpawnToolGroupIndex + 1)
-      const groups = groupsByInsertIndex.get(insertIndex) || []
-      groups.push(buildSubAgentGroup(groupId, group.entries))
-      groupsByInsertIndex.set(insertIndex, groups)
-    }
+      return buildSubAgentGroup(groupId, group.entries)
+    })
+    const firstGroupIndex = Math.min(...groupOrder.map((groupId) => groupEntries.get(groupId)!.firstIndex))
+    const insertIndex = lastSpawnToolGroupIndex === -1
+      ? firstGroupIndex
+      : lastSpawnToolGroupIndex + 1
 
     const result: TimelineEntry[] = []
-    const insertedGroupIndexes = new Set<number>()
+    let insertedGroups = false
     for (const { entry, originalIndex } of nonSubEntries) {
-      const beforeGroups = groupsByInsertIndex.get(originalIndex)
-      if (beforeGroups) {
-        result.push(...beforeGroups)
-        insertedGroupIndexes.add(originalIndex)
+      if (!insertedGroups && originalIndex >= insertIndex) {
+        result.push(...orderedGroups)
+        insertedGroups = true
       }
       result.push(entry)
-      const afterGroups = groupsByInsertIndex.get(originalIndex + 1)
-      if (afterGroups) {
-        result.push(...afterGroups)
-        insertedGroupIndexes.add(originalIndex + 1)
-      }
     }
 
-    const trailingGroups = groupsByInsertIndex.get(turnEntries.length)
-    if (trailingGroups && !insertedGroupIndexes.has(turnEntries.length)) {
-      result.push(...trailingGroups)
-      insertedGroupIndexes.add(turnEntries.length)
-    }
-    for (const index of [...groupsByInsertIndex.keys()].sort((a, b) => a - b)) {
-      if (insertedGroupIndexes.has(index)) continue
-      result.push(...groupsByInsertIndex.get(index)!)
-    }
+    if (!insertedGroups) result.push(...orderedGroups)
 
     return result
   }
