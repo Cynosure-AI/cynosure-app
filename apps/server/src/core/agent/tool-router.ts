@@ -41,6 +41,7 @@ export interface RouteToolsInput {
     topK?: number
     maxTools?: number
     contextWindowTurns?: number
+    onStatus?: (status: 'indexing-tools' | 'finding-tools', message: string) => void
 }
 
 export function buildRouterQuery(
@@ -78,6 +79,7 @@ export async function embeddingPreFilter(
     query: string,
     mcpGroups: McpToolGroup[],
     topK = MCP_CANDIDATE_COUNT,
+    onStatus?: RouteToolsInput['onStatus'],
 ): Promise<{ groupIds: string[]; queryVector: number[] }> {
     if (mcpGroups.length <= topK) {
         const embedder = getEmbeddingProvider()
@@ -91,6 +93,10 @@ export async function embeddingPreFilter(
         const hashes = new Map(mcpGroups.map((group) => [group.id, groupContentHash(group)]))
         const cachedVectors = loadCachedRouterEmbeddings(mcpGroups.map(({ id }) => id), hashes, scope)
         const missingGroups = mcpGroups.filter(({ id }) => !cachedVectors.has(id))
+
+        if (missingGroups.length) {
+            onStatus?.('indexing-tools', `Indexing ${missingGroups.length} tool group${missingGroups.length === 1 ? '' : 's'}...`)
+        }
 
         const embeddings = await embedder.embedBatch([
             query,
@@ -123,6 +129,7 @@ export async function embeddingPreFilter(
     } catch (err) {
         console.warn('[tool-router] Embedding pre-filter failed, using lexical fallback:', err)
         const embedder = getEmbeddingProvider()
+        onStatus?.('indexing-tools', 'Indexing tool search query...')
         const { vector: queryVector } = await embedder.embed(query)
         return { groupIds: lexicalPreFilter(query, mcpGroups, topK), queryVector }
     }
@@ -139,6 +146,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
         topK = MCP_CANDIDATE_COUNT,
         maxTools = MAX_ROUTED_TOOLS,
         contextWindowTurns = CONTEXT_WINDOW_TURNS,
+        onStatus,
     } = input
 
     const localTools = allTools.filter((tool) => !isMcpTool(tool))
@@ -162,7 +170,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
     ])
 
     // Single unified embedding pass: group pre-filter + tool ranking share the query vector.
-    const { groupIds: candidateGroupIdList, queryVector } = await embeddingPreFilter(query, groups, topK)
+    const { groupIds: candidateGroupIdList, queryVector } = await embeddingPreFilter(query, groups, topK, onStatus)
     const candidateGroupIds = new Set([...candidateGroupIdList, ...fixedGroupIds])
 
     const candidateMcpTools = groups
@@ -170,7 +178,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
         .flatMap(({ tools }) => tools)
 
     const candidateTools = dedupeTools([...localTools, ...candidateMcpTools])
-    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, maxTools, protectedNames)
+    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, maxTools, protectedNames, onStatus)
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
     let routedTools: RoutedToolDefinition[] = []
@@ -189,6 +197,7 @@ async function rankCandidateTools(
     tools: ToolDefinition[],
     limit: number,
     protectedNames: Set<string>,
+    onStatus?: RouteToolsInput['onStatus'],
 ): Promise<RoutedToolDefinition[]> {
     const rankable = tools.filter(({ name }) => !protectedNames.has(name))
 
@@ -206,6 +215,7 @@ async function rankCandidateTools(
         // Only embed tools not already cached — query vector is pre-computed
         const toolVectors = new Map(cachedVectors)
         if (missingTools.length) {
+            onStatus?.('indexing-tools', `Indexing ${missingTools.length} tool${missingTools.length === 1 ? '' : 's'}...`)
             const embeddings = await embedder.embedBatch(missingTools.map(toolEmbeddingText))
 
             missingTools.forEach((tool, index) => {
@@ -219,6 +229,7 @@ async function rankCandidateTools(
             pruneToolEmbeddingCache(rankable.map(({ name }) => name), scope)
         }
 
+        onStatus?.('finding-tools', 'Finding required tools...')
         const scored = rankable
             .map((tool, index) => ({
                 tool,
