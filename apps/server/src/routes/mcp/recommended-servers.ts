@@ -91,6 +91,18 @@ export const recommendedServers: RegistryServerEntry[] = [
         },
     ),
     cynosureMcp(
+        '@cynosure-mcp/chart-artifacts',
+        'Chart Artifacts',
+        'Render Vega-Lite charts as SVG or high-resolution PNG images for conversations.',
+        'mcp-charts',
+        [{
+            name: 'CHART_ARTIFACTS_OUTPUT_DIR',
+            description: 'Directory to save rendered chart images. Defaults to an OS temp directory.',
+            isRequired: false,
+            format: 'string',
+        }],
+    ),
+    cynosureMcp(
         '@cynosure-mcp/clockify',
         'Clockify',
         'Track time with Clockify: manage workspaces, projects, tasks, users, and time entries.',
@@ -166,6 +178,18 @@ export const recommendedServers: RegistryServerEntry[] = [
         'Document Reader & Writer',
         'Read documents as Markdown, and create or edit DOCX files for downloadable artifacts.',
         'mcp-document-parser',
+    ),
+    cynosureMcp(
+        '@cynosure-mcp/file-access',
+        'File Access',
+        'Safe file access, editing, directory browsing, and image thumbnails.',
+        'mcp-file-access',
+        [{
+            name: 'FILE_ACCESS_ALLOWED_DIRECTORIES',
+            description: 'Platform-delimited list of directory roots the MCP may access. Defaults to the current working directory.',
+            isRequired: true,
+            format: 'string',
+        }],
     ),
     cynosureMcp(
         '@cynosure-mcp/imap-email',
