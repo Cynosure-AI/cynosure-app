@@ -12,7 +12,14 @@ import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens } from '../core/agent/context-trimmer.js'
-import type { ChatMessage, ContentPart, RegistryAwareToolDefinition, VideoGenerationJob } from '../core/gateway/providers/base.provider.js'
+import type {
+  ChatMessage,
+  ContentPart,
+  RegistryAwareToolDefinition,
+  VideoGenerationJob,
+  VideoGenerationModelInfo,
+  VideoGenerationRequest,
+} from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
@@ -136,6 +143,45 @@ async function pollVideoGeneration(
 
 function videoContentUrl(providerId: string, jobId: string, index = 0): string {
   return `/api/providers/${encodeURIComponent(providerId)}/videos/${encodeURIComponent(jobId)}/content?index=${encodeURIComponent(String(index))}`
+}
+
+function buildVideoGenerationRequest(input: {
+  model: string
+  prompt: string
+  imageDataUrls?: string[]
+  videoModel?: VideoGenerationModelInfo
+  signal?: AbortSignal
+}): VideoGenerationRequest {
+  const request: VideoGenerationRequest = {
+    model: input.model,
+    prompt: input.prompt,
+    signal: input.signal,
+  }
+  const images = (input.imageDataUrls || []).filter((url) => typeof url === 'string' && url.trim())
+  if (!images.length) return request
+
+  const supportedFrames = new Set(input.videoModel?.supported_frame_images || [])
+  if (supportedFrames.has('first_frame')) {
+    request.frame_images = [{
+      type: 'image_url',
+      image_url: { url: images[0] },
+      frame_type: 'first_frame',
+    }]
+    if (images[1] && supportedFrames.has('last_frame')) {
+      request.frame_images.push({
+        type: 'image_url',
+        image_url: { url: images[1] },
+        frame_type: 'last_frame',
+      })
+    }
+    return request
+  }
+
+  request.input_references = images.map((url) => ({
+    type: 'image_url',
+    image_url: { url },
+  }))
+  return request
 }
 
 export async function registerChatRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
@@ -418,11 +464,16 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             content: 'Generating video...',
           })
 
-          const submittedJob = await gateway.generateVideo({
+          const videoModel = await gateway.listVideoModels(responseProvider)
+            .then((models) => models.find((item) => item.id === responseModel || item.canonical_slug === responseModel))
+            .catch(() => undefined)
+          const submittedJob = await gateway.generateVideo(buildVideoGenerationRequest({
             model: responseModel,
             prompt: normalizedContent,
+            imageDataUrls,
+            videoModel,
             signal: abortController.signal,
-          }, responseProvider)
+          }), responseProvider)
           const completedJob = await pollVideoGeneration(gateway, responseProvider, submittedJob, abortController.signal)
           const videoUrls = [videoContentUrl(responseProvider, completedJob.id)]
 
