@@ -496,6 +496,17 @@ const contextSections = computed<ContextSection[]>(() => props.steps
 
 const mergedContextSections = computed(() => mergeContextSections(contextSections.value))
 const toolExecutions = computed(() => buildExecutions(toolCallArgs.value, results.value))
+const latestContextSection = computed(() => [...mergedContextSections.value].reverse()[0])
+const headerToolNames = computed(() => {
+  if (latestContextSection.value?.phase === 'gathered-context') {
+    return latestContextSection.value.rows
+      .filter((row) => row.state !== 'candidate')
+      .map((row) => row.call?.name || row.result?.name)
+      .filter((name): name is string => Boolean(name))
+  }
+
+  return toolNames.value
+})
 
 const executionSections = computed<ExecutionSection[]>(() => {
   if (isTaskContext.value) return []
@@ -519,8 +530,7 @@ const executionSections = computed<ExecutionSection[]>(() => {
 const headerLabel = computed(() => {
   if (isTaskContext.value || isAttachmentIndexing.value) return currentPhase.value.label
 
-  const latestContextSection = [...mergedContextSections.value].reverse()[0]
-  if (latestContextSection?.phase === 'gathered-context') return contextSectionTitle(latestContextSection)
+  if (latestContextSection.value?.phase === 'gathered-context') return contextSectionTitle(latestContextSection.value)
 
   return currentPhase.value.label
 })
@@ -528,7 +538,7 @@ const headerLabel = computed(() => {
 const headerIcon = computed(() => {
   if (currentPhase.value.label === 'Denied') return 'lucide:shield-x'
   if (isRoutingStatus.value) return currentPhase.value.icon
-  if (toolNames.value.length && !results.value.length) return props.isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash'
+  if (headerToolNames.value.length && !results.value.length) return props.isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash'
   if (allSuccess.value) return 'lucide:check-circle'
   if (anyFailed.value) return 'lucide:alert-circle'
   return currentPhase.value.icon
@@ -538,7 +548,7 @@ const headerIconClass = computed(() => {
   if (currentPhase.value.label === 'Denied') return 'text-red-500 dark:text-red-400'
   if (isTaskContext.value) return 'text-cyan-600 dark:text-cyan-300'
   if (isRoutingStatus.value) return 'text-accent-500 dark:text-accent-300'
-  if (toolNames.value.length && !results.value.length) return props.isActive ? 'text-accent-500 dark:text-accent-400' : 'text-theme-500'
+  if (headerToolNames.value.length && !results.value.length) return props.isActive ? 'text-accent-500 dark:text-accent-400' : 'text-theme-500'
   if (allSuccess.value) return 'text-emerald-500 dark:text-emerald-400'
   if (anyFailed.value) return 'text-red-500 dark:text-red-400'
   return currentPhase.value.color
@@ -597,14 +607,14 @@ const hasDisplayableActivity = computed(() =>
                 >+{{ taskContextQueryLabels.length - 3 }}</span>
               </template>
 
-              <template v-else-if="toolNames.length">
+              <template v-else-if="headerToolNames.length">
                 <span
                   v-if="isRoutingStatus"
                   class="text-theme-400 shrink-0"
                   :class="currentPhase.color"
                 >{{ headerLabel }}</span>
                 <span
-                  v-for="name in toolNames.slice(0, 3)"
+                  v-for="name in headerToolNames.slice(0, 3)"
                   :key="name"
                   class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium truncate max-w-35"
                   :class="toolChipClass(name)"
@@ -617,9 +627,9 @@ const hasDisplayableActivity = computed(() =>
                   {{ toolDisplayName(name) }}
                 </span>
                 <span
-                  v-if="toolNames.length > 3"
+                  v-if="headerToolNames.length > 3"
                   class="text-[10px] text-theme-500"
-                >+{{ toolNames.length - 3 }}</span>
+                >+{{ headerToolNames.length - 3 }}</span>
               </template>
 
               <span
