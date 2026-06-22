@@ -97,6 +97,9 @@ export interface StoredMessageDto {
   agentId?: string
   agentName?: string
   agentIconUrl?: string | null
+  maCodename?: string
+  maAgentName?: string
+  maInvocationId?: string
   provider?: string | null
   model?: string | null
   promptTokens?: number | null

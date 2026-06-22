@@ -157,12 +157,15 @@ const unifiedTimeline = computed(() => {
       !msg.isError
     ) continue
 
-    // A message is from a sub-agent if it has a different agentId than the
-    // orchestrator, or if execution metadata identifies its agentName as a
-    // delegated sub-agent (important for free-chat orchestration).
+    // A message is from a sub-agent if explicit multi-agent metadata is present,
+    // if it has a different agentId than the orchestrator, or, in free chat,
+    // if execution metadata identifies its agentName as a delegated sub-agent.
     const isSubAgent = Boolean(
+      msg.maInvocationId ||
+      msg.maCodename ||
+      msg.maAgentName ||
       (msg.agentId && mainAgentId && msg.agentId !== mainAgentId) ||
-      (msg.agentName && agentNameToCodename.has(msg.agentName))
+      (!mainAgentId && msg.agentName && agentNameToCodename.has(msg.agentName))
     )
 
     if (msg.role === 'tool') {
@@ -259,11 +262,15 @@ const unifiedTimeline = computed(() => {
       const firstStep = entry.group.steps[0]
       return firstStep?.maInvocationId ?? firstStep?.maCodename ?? null
     }
-    if (entry.type === 'message' && entry.msg.agentName) {
+    if (entry.type === 'message') {
       return entry.msg.maInvocationId
         ?? inferSubAgentInvocationId(entry.msg)
-        ?? agentNameToCodename.get(entry.msg.agentName)
+        ?? entry.msg.maCodename
+        ?? entry.msg.maAgentName
+        ?? (entry.msg.agentName ? agentNameToCodename.get(entry.msg.agentName) : undefined)
         ?? entry.msg.agentName
+        ?? entry.msg.agentId
+        ?? null
     }
     return null
   }
@@ -298,6 +305,7 @@ const unifiedTimeline = computed(() => {
       if (e.type === 'message' && e.msg.agentName) agentName = agentName ?? e.msg.agentName
       if (e.type === 'message' && e.msg.agentId) agentId = agentId ?? e.msg.agentId
       if (e.type === 'message' && e.msg.maCodename) codename = codename ?? e.msg.maCodename
+      if (e.type === 'message' && e.msg.maAgentName) agentName = agentName ?? e.msg.maAgentName
       if (e.type === 'tool-group' && e.group.steps[0]?.maAgentName) agentName = agentName ?? e.group.steps[0].maAgentName
       if (e.type === 'tool-group' && e.group.steps[0]?.maCodename) codename = codename ?? e.group.steps[0].maCodename
       if (agentName && agentId && codename) break

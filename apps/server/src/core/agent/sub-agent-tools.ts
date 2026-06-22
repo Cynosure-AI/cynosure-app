@@ -149,11 +149,18 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 if (result.content || result.images.length) {
                     const db = getDb()
                     db.prepare(
-                        'INSERT INTO messages (id, conversation_id, role, content, thinking, image_urls_json, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                        `INSERT INTO messages (
+                            id, conversation_id, role, content, thinking, image_urls_json, agent_id,
+                            ma_codename, ma_agent_name, ma_invocation_id,
+                            provider, model, prompt_tokens, completion_tokens, context_tokens, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                     ).run(
                         nanoid(), conversationId, 'assistant', result.content, result.thinking || null,
                         result.images.length ? JSON.stringify(result.images) : null,
                         agentData.id,
+                        eventMeta.maCodename,
+                        eventMeta.maAgentName,
+                        eventMeta.maInvocationId,
                         result.provider || prepared.providerId || null,
                         result.model || prepared.model || null,
                         result.usage?.promptTokens ?? null,
