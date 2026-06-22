@@ -74,9 +74,25 @@ export const useChatStore = defineStore('chat', () => {
     return postActionsMap.get(activeConversationId.value) || new Set<string>()
   })
 
+  // ── Composables ──
+
+  const streaming = useChatStreaming(activeConversationId, messages, conversations, contextWindow)
   const liveConversationSubscriptions = computed(() => {
+    void postActionsTrigger.value // track active post-action map changes
     const ids = new Set<string>()
     if (activeConversationId.value) ids.add(activeConversationId.value)
+    for (const conversationId of agentStore.liveExecutionConversationIds) {
+      ids.add(conversationId)
+    }
+    for (const conversationId of postActionsMap.keys()) {
+      ids.add(conversationId)
+    }
+    for (const [conversationId, buffer] of streaming.streamBuffers.entries()) {
+      if (buffer.active) ids.add(conversationId)
+    }
+    for (const buffer of streaming.subAgentStreamBuffers.values()) {
+      if (buffer.active) ids.add(buffer.conversationId)
+    }
     return Array.from(ids)
   })
 
@@ -84,9 +100,6 @@ export const useChatStore = defineStore('chat', () => {
     api.chat.subscribeLiveConversations(conversationIds)
   }, { immediate: true })
 
-  // ── Composables ──
-
-  const streaming = useChatStreaming(activeConversationId, messages, conversations, contextWindow)
   const activeConversationIsStreaming = computed(() => {
     const convId = activeConversationId.value
     if (!convId) return false
