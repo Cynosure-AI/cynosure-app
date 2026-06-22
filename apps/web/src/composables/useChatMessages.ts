@@ -157,26 +157,30 @@ export function useChatMessages(
 
     async function retryFromMessage(messageId: string): Promise<void> {
         if (!activeConversationId.value || activeConversationIsRunning()) return
+        const conversationId = activeConversationId.value
         const idx = messages.value.findIndex(m => m.id === messageId)
         if (idx === -1) return
         const msg = messages.value[idx]
         if (msg.role !== 'user') return
-        await api.chat.truncateFrom(activeConversationId.value, messageId)
+        await api.chat.truncateFrom(conversationId, messageId)
         messages.value.splice(idx)
-        agentStore.clearExecution()
-        await sendMessage(msg.content, msg.imageDataUrls)
+        streaming.clearConversationStreamState(conversationId)
+        agentStore.truncateConversationExecution(conversationId, msg.createdAt)
+        await sendMessage(msg.content, msg.imageDataUrls, undefined, msg.audioDataUrls)
     }
 
     async function editMessage(messageId: string, newContent: string): Promise<void> {
         if (!activeConversationId.value || activeConversationIsRunning()) return
+        const conversationId = activeConversationId.value
         const idx = messages.value.findIndex(m => m.id === messageId)
         if (idx === -1) return
         const msg = messages.value[idx]
         if (msg.role !== 'user') return
-        await api.chat.truncateFrom(activeConversationId.value, messageId)
+        await api.chat.truncateFrom(conversationId, messageId)
         messages.value.splice(idx)
-        agentStore.clearExecution()
-        await sendMessage(newContent, msg.imageDataUrls)
+        streaming.clearConversationStreamState(conversationId)
+        agentStore.truncateConversationExecution(conversationId, msg.createdAt)
+        await sendMessage(newContent, msg.imageDataUrls, undefined, msg.audioDataUrls)
     }
 
     function cancelStream(): void {

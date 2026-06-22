@@ -420,6 +420,46 @@ export const useAgentStore = defineStore('agent', () => {
     executionConversationId.value = null
   }
 
+  function clearConversationExecution(conversationId: string): void {
+    stepsPerConversation.delete(conversationId)
+    planningPerConversation.delete(conversationId)
+    dismissHITLByConversation(conversationId)
+    setConversationExecutionState(conversationId, false)
+    if (activeViewConversationId.value === conversationId) {
+      executionSteps.value = []
+      planningState.value = null
+      isExecuting.value = false
+      activeTaskId.value = null
+    }
+    if (executionConversationId.value === conversationId) {
+      executionConversationId.value = null
+    }
+  }
+
+  function truncateConversationExecution(conversationId: string, createdAt: number): void {
+    const cachedSteps = stepsPerConversation.get(conversationId) || []
+    const remainingSteps = cachedSteps.filter((step) => step.timestamp < createdAt)
+    if (remainingSteps.length) {
+      stepsPerConversation.set(conversationId, remainingSteps)
+    } else {
+      stepsPerConversation.delete(conversationId)
+    }
+
+    planningPerConversation.delete(conversationId)
+    dismissHITLByConversation(conversationId)
+    setConversationExecutionState(conversationId, false)
+
+    if (activeViewConversationId.value === conversationId) {
+      executionSteps.value = executionSteps.value.filter((step) => step.timestamp < createdAt)
+      planningState.value = null
+      isExecuting.value = false
+      activeTaskId.value = null
+    }
+    if (executionConversationId.value === conversationId) {
+      executionConversationId.value = null
+    }
+  }
+
   /** Set which conversation the user is currently viewing.
    * Execution events for other conversations will be cached but not shown. */
   function setActiveViewConversation(conversationId: string | null): void {
@@ -593,6 +633,8 @@ export const useAgentStore = defineStore('agent', () => {
     handleExecutionUpdate,
     handlePlanningStateUpdated,
     clearExecution,
+    clearConversationExecution,
+    truncateConversationExecution,
     clearExecutionState,
     clearPlanningState,
     setConversationExecutionState,
