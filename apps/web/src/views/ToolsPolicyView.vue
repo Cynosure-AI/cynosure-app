@@ -35,6 +35,7 @@ const tools = ref<ToolInfo[]>([])
 const filterText = ref('')
 const expandedGroupIds = ref<Set<string>>(new Set())
 const loading = ref(true)
+const hasActiveSearch = computed(() => filterText.value.trim().length > 0)
 
 const columns: Column<NamespaceGroup>[] = [
   {
@@ -216,7 +217,7 @@ function paramDescription(param: ToolParam): string | undefined {
 }
 
 function isExpanded(groupId: string): boolean {
-  return expandedGroupIds.value.has(groupId)
+  return hasActiveSearch.value || expandedGroupIds.value.has(groupId)
 }
 
 function toggleExpanded(group: NamespaceGroup): void {
