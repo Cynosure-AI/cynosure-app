@@ -381,6 +381,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 video_urls_json: string | null
                 audio_urls_json: string | null
                 agent_id: string | null
+                ma_codename: string | null
+                ma_agent_name: string | null
+                ma_invocation_id: string | null
                 provider: string | null
                 model: string | null
                 prompt_tokens: number | null
@@ -450,6 +453,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     agentId: row.agent_id || undefined,
                     agentName,
                     agentIconUrl,
+                    maCodename: row.ma_codename || undefined,
+                    maAgentName: row.ma_agent_name || undefined,
+                    maInvocationId: row.ma_invocation_id || undefined,
                     provider: row.provider,
                     model: row.model,
                     promptTokens: row.prompt_tokens,

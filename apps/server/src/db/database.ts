@@ -89,6 +89,9 @@ function createTables(db: Database.Database): void {
       image_urls_json TEXT,
       video_urls_json TEXT,
       agent_id TEXT,
+      ma_codename TEXT,
+      ma_agent_name TEXT,
+      ma_invocation_id TEXT,
       memory_sources_json TEXT,
       thinking TEXT,
       audio_urls_json TEXT,
@@ -376,6 +379,9 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('mcp_servers', 'original_name', 'TEXT')
   addColumnIfMissing('mcp_servers', 'custom_name', 'TEXT')
   addColumnIfMissing('messages', 'video_urls_json', 'TEXT')
+  addColumnIfMissing('messages', 'ma_codename', 'TEXT')
+  addColumnIfMissing('messages', 'ma_agent_name', 'TEXT')
+  addColumnIfMissing('messages', 'ma_invocation_id', 'TEXT')
   addColumnIfMissing('execution_steps', 'ma_invocation_id', 'TEXT')
   addColumnIfMissing('notifications', 'scheduled_at', 'INTEGER')
   addColumnIfMissing('notifications', 'delivered_at', 'INTEGER')

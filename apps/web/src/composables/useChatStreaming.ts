@@ -59,7 +59,7 @@ export interface ChatStreamingState {
     handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void
     handleTitleUpdated(data: { conversationId: string; title: string }): void
-    handleNewMessage(data: { conversationId: string; message: { id: string; conversationId: string; role: string; content: string; createdAt: number; agentId?: string; agentName?: string; agentIconUrl?: string | null } }): void
+    handleNewMessage(data: { conversationId: string; message: { id: string; conversationId: string; role: string; content: string; createdAt: number; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
     handleCompactEvent(data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }): void
     handleCompactStart(data: { conversationId: string }): void
     handleCompactError(data: { conversationId: string; error: string }): void
@@ -802,6 +802,9 @@ export function useChatStreaming(
             agentId?: string
             agentName?: string
             agentIconUrl?: string | null
+            maCodename?: string
+            maAgentName?: string
+            maInvocationId?: string
         }
     }): void {
         // Bump updatedAt so the conversation shows as recently updated / unread
@@ -827,6 +830,9 @@ export function useChatStreaming(
                     agentId: data.message.agentId,
                     agentName: data.message.agentName,
                     agentIconUrl: data.message.agentIconUrl,
+                    maCodename: data.message.maCodename,
+                    maAgentName: data.message.maAgentName,
+                    maInvocationId: data.message.maInvocationId,
                     createdAt: data.message.createdAt
                 })
             }

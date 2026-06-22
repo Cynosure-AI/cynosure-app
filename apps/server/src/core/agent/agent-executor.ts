@@ -819,30 +819,55 @@ export class AgentExecutor {
         toolCalls: ToolCall[],
     ): void {
         const { agentId, providerId, model } = this.config
+        const meta = this.config.eventMeta
         const visibleToolCalls = toolCalls.filter((tc) => isVisibleExecutionTool(tc.function.name))
         if (!visibleToolCalls.length) return
         getDb().prepare(
-            'INSERT INTO messages (id, conversation_id, role, content, thinking, tool_calls_json, agent_id, provider, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(nanoid(), conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(visibleToolCalls), agentId || null, providerId || null, model || null, Date.now())
+            `INSERT INTO messages (
+                id, conversation_id, role, content, thinking, tool_calls_json, agent_id,
+                ma_codename, ma_agent_name, ma_invocation_id,
+                provider, model, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+            nanoid(), conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(visibleToolCalls), agentId || null,
+            (meta?.maCodename as string) || null,
+            (meta?.maAgentName as string) || null,
+            (meta?.maInvocationId as string) || null,
+            providerId || null, model || null, Date.now()
+        )
     }
 
     /** Save tool result messages to DB and broadcast them to the UI. */
     private saveToolResultMessages(conversationId: string, results: ToolCallResult[]): void {
         const { broadcast, agentId, agentName, agentIconUrl } = this.config
+        const meta = this.config.eventMeta
         const db = getDb()
         for (const tr of results) {
             if (!isVisibleExecutionTool(tr.name)) continue
             const toolMsgId = nanoid()
             const now = Date.now()
             db.prepare(
-                'INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-            ).run(toolMsgId, conversationId, 'tool', tr.output, tr.toolCallId, tr.images?.length ? JSON.stringify(tr.images) : null, now)
+                `INSERT INTO messages (
+                    id, conversation_id, role, content, tool_call_id, image_urls_json, agent_id,
+                    ma_codename, ma_agent_name, ma_invocation_id,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            ).run(
+                toolMsgId, conversationId, 'tool', tr.output, tr.toolCallId, tr.images?.length ? JSON.stringify(tr.images) : null, agentId || null,
+                (meta?.maCodename as string) || null,
+                (meta?.maAgentName as string) || null,
+                (meta?.maInvocationId as string) || null,
+                now
+            )
 
             broadcast('chat:new-message', {
                 conversationId,
                 message: {
                     id: toolMsgId, conversationId, role: 'tool', content: tr.output,
                     agentId, agentName, agentIconUrl,
+                    maCodename: meta?.maCodename,
+                    maAgentName: meta?.maAgentName,
+                    maInvocationId: meta?.maInvocationId,
                     imageDataUrls: tr.images,
                     createdAt: now,
                 },
