@@ -32,6 +32,22 @@ export interface SearchResult {
   createdAt: number
 }
 
+export interface RAGOptimizeResult {
+  tableName: string
+  success: boolean
+  compaction?: {
+    fragmentsRemoved: number
+    fragmentsAdded: number
+    filesRemoved: number
+    filesAdded: number
+  }
+  prune?: {
+    bytesRemoved: number
+    oldVersionsRemoved: number
+  }
+  error?: string
+}
+
 // ---------------------------------------------------------------------------
 // RAGStore
 // ---------------------------------------------------------------------------
@@ -47,14 +63,23 @@ export class RAGStore {
   private ftsIndexCurrent = new Set<string>()
   // Debounce timers for FTS rebuilds after writes
   private ftsRebuildTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private optimizePromises = new Map<string, Promise<RAGOptimizeResult>>()
   // Cached RRF reranker instance (async creation, reused across searches)
   private rerankerPromise: Promise<RRFReranker> | null = null
   // Per-table schema field names — avoids a schema() round-trip on every addDocuments
   private fieldNamesCache = new Map<string, Set<string>>()
 
-  async initialize(dbPath?: string): Promise<void> {
+  async initialize(dbPath?: string, opts: { optimizeOnStartup?: boolean } = {}): Promise<void> {
     const path = dbPath || join(getAppDataDir(), 'lancedb')
     this.db = await lancedb.connect(path)
+    if (opts.optimizeOnStartup) {
+      const results = await this.optimizeTables()
+      const reclaimed = results.reduce((total, result) => total + (result.prune?.bytesRemoved || 0), 0)
+      const versions = results.reduce((total, result) => total + (result.prune?.oldVersionsRemoved || 0), 0)
+      if (results.length) {
+        console.log(`[rag] LanceDB startup optimize complete: ${versions} old version(s), ${reclaimed} byte(s) reclaimed`)
+      }
+    }
   }
 
   /** Get or create the shared RRF reranker (K=60). */
@@ -192,6 +217,46 @@ export class RAGStore {
     }, 15_000)
 
     this.ftsRebuildTimers.set(tableName, timer)
+  }
+
+  async optimizeTable(tableName: string, cleanupOlderThan = new Date()): Promise<RAGOptimizeResult> {
+    const inflight = this.optimizePromises.get(tableName)
+    if (inflight) return inflight
+
+    const promise = (async (): Promise<RAGOptimizeResult> => {
+      const table = await this.openExistingTable(tableName)
+      if (!table) {
+        return { tableName, success: false, error: 'Table not found' }
+      }
+
+      try {
+        const stats = await table.optimize({ cleanupOlderThan })
+        return {
+          tableName,
+          success: true,
+          compaction: stats.compaction,
+          prune: stats.prune
+        }
+      } catch (err) {
+        return {
+          tableName,
+          success: false,
+          error: err instanceof Error ? err.message : String(err)
+        }
+      }
+    })().finally(() => {
+      this.optimizePromises.delete(tableName)
+    })
+
+    this.optimizePromises.set(tableName, promise)
+    return promise
+  }
+
+  async optimizeTables(tableNames?: string[], cleanupOlderThan = new Date()): Promise<RAGOptimizeResult[]> {
+    if (!this.db) return []
+    const names = tableNames ?? await this.db.tableNames()
+    const unique = Array.from(new Set(names))
+    return Promise.all(unique.map((tableName) => this.optimizeTable(tableName, cleanupOlderThan)))
   }
 
   // -----------------------------------------------------------------------

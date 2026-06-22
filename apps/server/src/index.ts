@@ -482,7 +482,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
   loadSavedProviders()
   getEmbeddingProvider().loadFromDb()
-  await getRAGStore().initialize()
+  await getRAGStore().initialize(undefined, { optimizeOnStartup: true })
   registerBuiltInTools()
 
   // Start filesystem watchers for all existing memory space folders
