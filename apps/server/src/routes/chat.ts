@@ -24,7 +24,7 @@ import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
-import { buildAttachmentContext, indexConversationAttachment, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
+import { buildAttachmentContext, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
 import {
   cancelChatExecution,
   cancelChatExecutionByConversation,
@@ -422,7 +422,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         messages = planned.messages
 
         const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(responseModel, responseProvider)
-        if (responseSupportsToolCalls) {
+        const hasConversationFileAttachments = listConversationFileAttachments(db, conversationId).length > 0
+        if (responseSupportsToolCalls && hasConversationFileAttachments) {
           tools.push(...makeAttachmentTools(conversationId))
         }
         messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, normalizedContent, db))
