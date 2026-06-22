@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { api } from '../api/client'
 import { useAgentStore, type ToolInfo, type ToolNamespace } from '../stores/agent-runtime.store.ts'
@@ -35,7 +35,8 @@ const tools = ref<ToolInfo[]>([])
 const filterText = ref('')
 const expandedGroupIds = ref<Set<string>>(new Set())
 const loading = ref(true)
-const hasActiveSearch = computed(() => filterText.value.trim().length > 0)
+const debouncedSearchExpansion = ref(false)
+let searchExpansionTimer: number | undefined
 
 const columns: Column<NamespaceGroup>[] = [
   {
@@ -217,7 +218,7 @@ function paramDescription(param: ToolParam): string | undefined {
 }
 
 function isExpanded(groupId: string): boolean {
-  return hasActiveSearch.value || expandedGroupIds.value.has(groupId)
+  return debouncedSearchExpansion.value || expandedGroupIds.value.has(groupId)
 }
 
 function toggleExpanded(group: NamespaceGroup): void {
@@ -259,6 +260,21 @@ async function loadPolicyTools(): Promise<void> {
     loading.value = false
   }
 }
+
+watch(filterText, (value) => {
+  window.clearTimeout(searchExpansionTimer)
+  if (!value.trim()) {
+    debouncedSearchExpansion.value = false
+    return
+  }
+  searchExpansionTimer = window.setTimeout(() => {
+    debouncedSearchExpansion.value = true
+  }, 150)
+})
+
+onBeforeUnmount(() => {
+  window.clearTimeout(searchExpansionTimer)
+})
 
 onMounted(loadPolicyTools)
 </script>

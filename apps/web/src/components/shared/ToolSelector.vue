@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
 import CollapsibleSection from './CollapsibleSection.vue'
@@ -24,10 +24,11 @@ const agentStore = useAgentStore()
 
 const toolFilterText = ref('')
 const expandedNamespaces = ref<Set<string>>(new Set())
+const debouncedSearchExpansion = ref(false)
+let searchExpansionTimer: number | undefined
 
 const selectedSet = computed(() => new Set(props.modelValue))
 const selectableToolCount = computed(() => selectableTools(agentStore.availableTools).length)
-const hasActiveToolSearch = computed(() => toolFilterText.value.trim().length > 0)
 
 /**
  * Composite key uniquely identifies a tool across namespaces.
@@ -188,7 +189,7 @@ function autoManagedCount(group: NamespaceGroup): number {
 }
 
 function isNamespaceExpanded(namespaceId: string): boolean {
-  return hasActiveToolSearch.value || expandedNamespaces.value.has(namespaceId)
+  return debouncedSearchExpansion.value || expandedNamespaces.value.has(namespaceId)
 }
 
 function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
@@ -198,6 +199,21 @@ function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
     expandedNamespaces.value.delete(namespaceId)
   }
 }
+
+watch(toolFilterText, (value) => {
+  window.clearTimeout(searchExpansionTimer)
+  if (!value.trim()) {
+    debouncedSearchExpansion.value = false
+    return
+  }
+  searchExpansionTimer = window.setTimeout(() => {
+    debouncedSearchExpansion.value = true
+  }, 150)
+})
+
+onBeforeUnmount(() => {
+  window.clearTimeout(searchExpansionTimer)
+})
 </script>
 
 <template>
