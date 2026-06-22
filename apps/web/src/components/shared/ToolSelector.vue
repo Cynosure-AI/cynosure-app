@@ -27,6 +27,7 @@ const expandedNamespaces = ref<Set<string>>(new Set())
 
 const selectedSet = computed(() => new Set(props.modelValue))
 const selectableToolCount = computed(() => selectableTools(agentStore.availableTools).length)
+const hasActiveToolSearch = computed(() => toolFilterText.value.trim().length > 0)
 
 /**
  * Composite key uniquely identifies a tool across namespaces.
@@ -187,7 +188,7 @@ function autoManagedCount(group: NamespaceGroup): number {
 }
 
 function isNamespaceExpanded(namespaceId: string): boolean {
-  return expandedNamespaces.value.has(namespaceId)
+  return hasActiveToolSearch.value || expandedNamespaces.value.has(namespaceId)
 }
 
 function setNamespaceExpanded(namespaceId: string, expanded: boolean): void {
