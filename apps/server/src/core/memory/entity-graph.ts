@@ -356,6 +356,39 @@ function rowToEdge(row: Record<string, unknown>): EntityEdge {
   }
 }
 
+function edgeSearchScore(edge: EntityEdge, query: string): number {
+  const normalizedQuery = normalizeName(query)
+  const tokens = tokenizeEntityQuery(query)
+  const relation = normalizeName(edge.relation.replace(/_/g, ' '))
+  const from = normalizeName(edge.fromName)
+  const to = normalizeName(edge.toName)
+  const evidence = normalizeName(edge.evidence)
+  const searchable = [relation, from, to, evidence].filter(Boolean).join(' ')
+  let score = 0
+
+  if (normalizedQuery) {
+    if (relation === normalizedQuery) score += 120
+    else if (relation.includes(normalizedQuery)) score += 90
+    else if (searchable.includes(normalizedQuery)) score += 45
+  }
+
+  for (const token of tokens) {
+    if (relation === token) score += 60
+    else if (relation.includes(token)) score += 44
+    else if (from === token || to === token) score += 35
+    else if (from.includes(token) || to.includes(token)) score += 22
+    else if (evidence.includes(token)) score += 12
+  }
+
+  if (score > 0) {
+    score += edge.importance * 8
+    score += Math.min(edge.mentionCount, 8)
+    score += edge.confidence * 4
+  }
+
+  return score
+}
+
 export class EntityGraphStore {
   upsertNode(entity: ExtractedEntity, sourceId: string, now = Date.now()): EntityNode {
     const db = getDb()
@@ -1035,6 +1068,44 @@ export class EntityGraphStore {
     const nodes = hydrateNodeOrigins(applyEffectiveNodeImportance(nodeRows.map(rowToNode), Array.from(edgeMap.values())))
     const seedNodes = nodes.filter((node) => seedIds.includes(node.id))
     return { seedNodes, nodes, edges: Array.from(edgeMap.values()) }
+  }
+
+  focusedWalk(seedNodeIds: string[], query: string, depth = 1, edgeLimit = 40, minImportance: ImportanceLevel = 0): GraphWalkResult {
+    const walk = this.walk(seedNodeIds, depth, Math.max(edgeLimit * 3, edgeLimit), minImportance)
+    if (walk.edges.length === 0) return walk
+
+    const scoredEdges = walk.edges
+      .map((edge) => ({ edge, score: edgeSearchScore(edge, query) }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) =>
+        b.score - a.score ||
+        b.edge.importance - a.edge.importance ||
+        b.edge.confidence - a.edge.confidence ||
+        b.edge.mentionCount - a.edge.mentionCount ||
+        b.edge.lastSeenAt - a.edge.lastSeenAt
+      )
+      .slice(0, edgeLimit)
+
+    if (scoredEdges.length === 0) {
+      return {
+        seedNodes: walk.seedNodes,
+        nodes: walk.nodes,
+        edges: walk.edges.slice(0, edgeLimit),
+      }
+    }
+
+    const includedNodeIds = new Set(walk.seedNodes.map((node) => node.id))
+    const focusedEdges = scoredEdges.map((entry) => entry.edge)
+    for (const edge of focusedEdges) {
+      includedNodeIds.add(edge.fromNodeId)
+      includedNodeIds.add(edge.toNodeId)
+    }
+
+    return {
+      seedNodes: walk.seedNodes,
+      nodes: walk.nodes.filter((node) => includedNodeIds.has(node.id)),
+      edges: focusedEdges,
+    }
   }
 
   async extractFromTurn(opts: {

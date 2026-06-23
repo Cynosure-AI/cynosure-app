@@ -508,7 +508,7 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
         description:
             'List memorised documents (source files) stored in your knowledge base. ' +
             'Returns document names, chunk counts, and ingestion dates. Paginated — max 100 per page. ' +
-            'By default results are newest first; pass "query" to filter document names before paging. ' +
+            'Results are newest first. ' +
             'Use this to discover what documents are available before using memory_retrieve_chunks or memory_semantic_search. ' +
             'Selected memory folders are treated as one unified knowledge base for reading — use the optional "folder" parameter to filter to a specific folder. ' +
             makeScopeSummary(assignedSpaces),
@@ -516,27 +516,22 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
             type: 'object',
             properties: {
                 pageIndex: { type: 'number', description: 'Zero-based page index (default: 0). Each page returns up to 100 documents.' },
-                query: { type: 'string', description: 'Optional search query to filter document names before paging.' },
-                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the listing. Without this, searches all selected folders.' },
+                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the listing. Without this, lists all selected folders.' },
             },
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { pageIndex, folder, query } = (params || {}) as { pageIndex?: number; folder?: string; query?: string }
+            const { pageIndex, folder } = (params || {}) as { pageIndex?: number; folder?: string }
             const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder, getKnownSpaces)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
-            const searchQuery = cleanToolString(query)
-            const allFiles = (await mem.listSourceFiles(undefined, resolvedScope.filter))
-                .filter((file) => !searchQuery || file.sourceFile.toLowerCase().includes(searchQuery.toLowerCase()))
+            const allFiles = await mem.listSourceFiles(undefined, resolvedScope.filter)
 
             if (allFiles.length === 0) {
                 const location = resolvedScope.space ? `"${resolvedScope.space.name}"` : 'memory'
                 return {
                     success: false,
-                    output: searchQuery
-                        ? `No documents matching "${searchQuery}" found in ${location}.`
-                        : `No documents stored in ${location} yet.`
+                    output: `No documents stored in ${location} yet.`
                 }
             }
 
@@ -555,10 +550,9 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
             )
 
             const scope = resolvedScope.space ? ` in "${resolvedScope.space.name}"` : ''
-            const queryLabel = searchQuery ? ` matching "${searchQuery}"` : ''
             const header = allFiles.length <= PAGE_SIZE
-                ? `${allFiles.length} document${allFiles.length !== 1 ? 's' : ''}${scope}${queryLabel}:`
-                : `Page ${page + 1}/${totalPages}${scope}${queryLabel} (showing ${pageFiles.length} of ${allFiles.length} documents):`
+                ? `${allFiles.length} document${allFiles.length !== 1 ? 's' : ''}${scope}:`
+                : `Page ${page + 1}/${totalPages}${scope} (showing ${pageFiles.length} of ${allFiles.length} documents):`
 
             return {
                 success: true,
@@ -750,7 +744,7 @@ export function makeRelationshipGraphSearchTool(): ToolDefinition {
             type: 'object',
             properties: {
                 query: { type: 'string', description: 'Entity name, alias, or natural-language phrase to search for.' },
-                depth: { type: 'number', description: 'Relationship walk depth from matched entities (default: 2, max: 3).' },
+                depth: { type: 'number', description: 'Relationship walk depth from matched entities (default: 1 for focused query searches, max: 3).' },
                 limit: { type: 'number', description: 'Maximum number of nodes/edges to return (default: 20, max: 80).' },
             },
         },
@@ -767,12 +761,12 @@ export function makeRelationshipGraphSearchTool(): ToolDefinition {
                     return { success: false, output: `No relationship graph nodes matched "${query}".` }
                 }
 
-                const walkDepth = Math.floor(clampToolNumber(depth, 2, 1, 3))
-                const walk = graph.walk(seedNodes.map((node) => node.id), walkDepth, cappedLimit)
+                const walkDepth = Math.floor(clampToolNumber(depth, 1, 1, 3))
+                const walk = graph.focusedWalk(seedNodes.map((node) => node.id), query, walkDepth, cappedLimit)
                 const nodeLines = walk.nodes.slice(0, cappedLimit).map(formatEntityNode)
                 const edgeLines = walk.edges.slice(0, cappedLimit).map(formatEntityEdge)
                 const sections = [
-                    `Matched ${seedNodes.length} seed node${seedNodes.length !== 1 ? 's' : ''}; walked ${walkDepth} hop${walkDepth !== 1 ? 's' : ''}.`,
+                    `Matched ${seedNodes.length} seed node${seedNodes.length !== 1 ? 's' : ''}; focused ${walkDepth} hop${walkDepth !== 1 ? 's' : ''}.`,
                     nodeLines.length ? `Nodes:\n${nodeLines.join('\n')}` : '',
                     edgeLines.length ? `Relationships:\n${edgeLines.join('\n')}` : 'No relationships connected to the matched nodes.',
                 ].filter(Boolean)

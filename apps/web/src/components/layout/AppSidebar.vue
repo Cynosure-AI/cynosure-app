@@ -59,7 +59,7 @@ async function loadInstances() {
 onMounted(() => {
   loadInstances();
   memoryJobsStore.startPolling();
-  instancePollTimer = setInterval(loadInstances, 3_000);
+  instancePollTimer = setInterval(loadInstances, 1_500);
   unsubHITLRequest = api.agent.onHITLRequest(() => {
     loadInstances();
   });

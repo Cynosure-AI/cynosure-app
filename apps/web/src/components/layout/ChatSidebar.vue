@@ -31,7 +31,7 @@ const SEARCH_DEBOUNCE_MS = 250
 function sortPinnedFirst(items: Conversation[]): Conversation[] {
   return [...items].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-    return b.updatedAt - a.updatedAt
+    return b.createdAt - a.createdAt
   })
 }
 
@@ -72,7 +72,6 @@ async function togglePin(id: string, pinned: boolean, event: Event): Promise<voi
     const conv = allConversations.value.find(c => c.id === id)
     if (conv) {
       conv.pinned = !pinned
-      conv.updatedAt = Date.now()
       allConversations.value = sortPinnedFirst(allConversations.value)
     }
   }
