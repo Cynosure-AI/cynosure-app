@@ -106,7 +106,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const query = req.query.query?.trim()
     if (query) {
       const seeds = graph.findSeedNodes(query, [], 12)
-      const walk = graph.walk(seeds.map((node) => node.id), 2, limit, minImportance)
+      const walk = graph.focusedWalk(seeds.map((node) => node.id), query, 1, limit, minImportance)
       return {
         stats: graph.stats(),
         seedNodes: walk.seedNodes,

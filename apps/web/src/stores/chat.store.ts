@@ -472,10 +472,10 @@ export const useChatStore = defineStore('chat', () => {
     const conv = conversations.value.find(c => c.id === id)
     if (conv) {
       conv.pinned = pinned
-      // Re-sort: pinned first, then by updatedAt desc
+      // Re-sort: pinned first, then by creation date desc.
       conversations.value.sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-        return b.updatedAt - a.updatedAt
+        return b.createdAt - a.createdAt
       })
     }
   }
@@ -531,7 +531,7 @@ export const useChatStore = defineStore('chat', () => {
   const sortedConversations = computed(() =>
     [...conversations.value].sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-      return b.updatedAt - a.updatedAt
+      return b.createdAt - a.createdAt
     })
   )
 
