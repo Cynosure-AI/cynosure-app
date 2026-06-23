@@ -4,6 +4,7 @@ import { useChatStore } from '../../../stores/chat.store'
 import ModalDialog from '../../shared/ModalDialog.vue'
 import ToolSelector from '../../shared/ToolSelector.vue'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
+import { memoryAutomaticToolStates } from '../../../utils/internal-tools'
 
 const chatStore = useChatStore()
 
@@ -22,30 +23,7 @@ const automaticToolStates = computed(() => ({
     active: chatStore.sessionThinkingEnabled && hasSelectableExecutionTools.value,
     criteria: 'thinking mode and visible execution tools',
   },
-  memory_list_documents: {
-    active: hasMemoryScope.value,
-    criteria: 'memory folder selected',
-  },
-  memory_retrieve_chunks: {
-    active: hasMemoryScope.value,
-    criteria: 'memory folder selected',
-  },
-  memory_semantic_search: {
-    active: hasMemoryScope.value,
-    criteria: 'memory folder selected',
-  },
-  memory_create: {
-    active: hasMemoryScope.value,
-    criteria: 'memory folder selected',
-  },
-  memory_update: {
-    active: hasMemoryScope.value,
-    criteria: 'memory folder selected',
-  },
-  memory_remove: {
-    active: hasMemoryScope.value,
-    criteria: 'memory folder selected',
-  },
+  ...memoryAutomaticToolStates(hasMemoryScope.value),
   relationship_graph_search: {
     active: hasMemoryScope.value,
     criteria: 'memory folder selected',
