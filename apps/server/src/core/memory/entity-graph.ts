@@ -58,6 +58,11 @@ export interface GraphWalkResult {
   edges: EntityEdge[]
 }
 
+export interface GraphWalkOptions {
+  sourceIds?: string[]
+  contextText?: string
+}
+
 export interface DeleteEdgeResult {
   edgeDeleted: boolean
   orphanedNodeIds: string[]
@@ -258,6 +263,26 @@ function tokenizeEntityQuery(value: string): string[] {
       .map((token) => token.trim())
       .filter((token) => token.length >= 3)
   ))
+}
+
+function scoreEdgeRelevance(edge: EntityEdge, seedIds: Set<string>, sourceIds: Set<string>, contextText: string, contextTokens: string[]): number {
+  let score = 0
+  if (sourceIds.has(edge.sourceId)) score += 120
+  if (seedIds.has(edge.fromNodeId) || seedIds.has(edge.toNodeId)) score += 20
+
+  const fromName = normalizeName(edge.fromName)
+  const toName = normalizeName(edge.toName)
+  const relation = normalizeName(edge.relation.replace(/_/g, ' '))
+  const evidence = normalizeName(edge.evidence)
+  const edgeText = `${fromName} ${toName} ${relation} ${evidence}`
+
+  if (fromName.length >= 3 && contextText.includes(fromName)) score += 35
+  if (toName.length >= 3 && contextText.includes(toName)) score += 35
+  for (const token of contextTokens) {
+    if (edgeText.includes(token)) score += 5
+  }
+
+  return score
 }
 
 function rowToNode(row: Record<string, unknown>): EntityNode {
@@ -1018,13 +1043,18 @@ export class EntityGraphStore {
     return rows.map(rowToNode)
   }
 
-  walk(seedNodeIds: string[], depth = 2, edgeLimit = 40, minImportance: ImportanceLevel = 0): GraphWalkResult {
+  walk(seedNodeIds: string[], depth = 2, edgeLimit = 40, minImportance: ImportanceLevel = 0, opts: GraphWalkOptions = {}): GraphWalkResult {
     const seedIds = Array.from(new Set(seedNodeIds.filter(Boolean)))
     if (seedIds.length === 0) return { seedNodes: [], nodes: [], edges: [] }
 
     const db = getDb()
     const nodeIds = new Set(seedIds)
     const edgeMap = new Map<string, EntityEdge>()
+    const seedIdSet = new Set(seedIds)
+    const sourceIds = new Set((opts.sourceIds || []).filter(Boolean))
+    const contextText = normalizeName(opts.contextText || '')
+    const contextTokens = tokenizeEntityQuery(opts.contextText || '').slice(0, MAX_SEED_SEARCH_TERMS)
+    const shouldRankByContext = sourceIds.size > 0 || contextText.length > 0
     let frontier = seedIds
     const maxDepth = Math.max(Math.floor(depth), 1)
     const perDepthLimit = Math.max(Math.ceil(edgeLimit / maxDepth), 1)
@@ -1035,6 +1065,9 @@ export class EntityGraphStore {
       const layerLimit = d === maxDepth - 1
         ? remainingLimit
         : Math.min(perDepthLimit, remainingLimit)
+      const candidateLimit = shouldRankByContext
+        ? Math.min(Math.max(layerLimit * 6, layerLimit + 16), 120)
+        : layerLimit
       const rows = db.prepare(`
         SELECT e.*, fn.name AS from_name, tn.name AS to_name
         FROM entity_graph_edges e
@@ -1044,11 +1077,32 @@ export class EntityGraphStore {
           AND e.importance >= ?
         ORDER BY e.confidence DESC, e.mention_count DESC, e.last_seen_at DESC
         LIMIT ?
-      `).all(...frontier, ...frontier, minImportance, layerLimit) as Record<string, unknown>[]
+      `).all(...frontier, ...frontier, minImportance, candidateLimit) as Record<string, unknown>[]
+
+      const rankedEdges = rows.map(rowToEdge)
+        .map((edge, index) => ({
+          edge,
+          index,
+          relevance: shouldRankByContext
+            ? scoreEdgeRelevance(edge, seedIdSet, sourceIds, contextText, contextTokens)
+            : 0,
+        }))
+        .filter((entry) => {
+          if (!shouldRankByContext || d === 0) return true
+          return entry.relevance > 0
+        })
+        .sort((a, b) =>
+          b.relevance - a.relevance ||
+          b.edge.importance - a.edge.importance ||
+          b.edge.confidence - a.edge.confidence ||
+          b.edge.mentionCount - a.edge.mentionCount ||
+          b.edge.lastSeenAt - a.edge.lastSeenAt ||
+          a.index - b.index
+        )
+        .slice(0, layerLimit)
 
       const next = new Set<string>()
-      for (const row of rows) {
-        const edge = rowToEdge(row)
+      for (const { edge } of rankedEdges) {
         if (!edgeMap.has(edge.id)) edgeMap.set(edge.id, edge)
         for (const id of [edge.fromNodeId, edge.toNodeId]) {
           if (!nodeIds.has(id)) {
