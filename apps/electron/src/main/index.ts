@@ -375,16 +375,19 @@ function createWindow(): BrowserWindow {
         })
         win.loadURL(devUrl)
         //win.webContents.openDevTools({ mode: 'detach' })
+
+        // F12 / Ctrl+Shift+I to toggle DevTools
+        win.webContents.on('before-input-event', (_event, input) => {
+            if (input.key === 'F12' || (input.control && input.shift && input.key === 'I')) {
+                win.webContents.toggleDevTools()
+            }
+        })
+
     } else {
         win.loadURL('app://cynosure/')
     }
 
-    // F12 / Ctrl+Shift+I to toggle DevTools
-    win.webContents.on('before-input-event', (_event, input) => {
-        if (input.key === 'F12' || (input.control && input.shift && input.key === 'I')) {
-            win.webContents.toggleDevTools()
-        }
-    })
+
 
     return win
 }
