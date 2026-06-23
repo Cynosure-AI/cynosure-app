@@ -44,7 +44,7 @@ export const MEMORY_READ_TOOL_NAMES = [
 export const MEMORY_WRITE_TOOL_NAMES = [
     'memory_create',
     'memory_update',
-    'memory_forget',
+    'memory_remove',
 ] as const
 
 export const MEMORY_TOOL_NAMES = [
@@ -1142,14 +1142,14 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
 }
 
 /**
- * Create a `memory_forget` tool that lets the LLM remove obsolete memory.
+ * Create a `memory_remove` tool that lets the LLM remove obsolete memory.
  * Supports full source-file removal or targeted removal by indexed chunk range.
  */
 export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedSpaces = [] } = opts
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
-        name: 'memory_forget',
+        name: 'memory_remove',
         description:
             'Remove an obsolete or incorrect memory entry. Auto-matches the title to find the file; if multiple folders contain the same title, folder parameter is required. ' +
             'By default, forgets the whole memory by moving the source file to revisions and deleting its indexed chunks. ' +

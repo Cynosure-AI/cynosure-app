@@ -231,7 +231,7 @@ resolveExecutionTools(input)
   │   ├─ memory_retrieve_chunks
   │   ├─ memory_semantic_search
   │   ├─ memory_create / memory_update
-  │   ├─ memory_forget
+  │   ├─ memory_remove
   │   ├─ relationship_graph_search / relationship_graph_assert / relationship_graph_delete
   │
   ├─ Inject sub-agent delegation tools (if sub-agents configured):
@@ -347,7 +347,7 @@ During execution, the agent can interact with memory via built-in tools:
 - `memory_retrieve_chunks` — Get specific chunks by file reference
 - `memory_semantic_search` — Query by semantic similarity
 - `memory_create` / `memory_update` — Add or modify memory
-- `memory_forget` — Delete memories
+- `memory_remove` — Delete memories
 - `relationship_graph_search` — Find related relationships via graph traversal
 - `relationship_graph_assert` / `relationship_graph_delete` — Manage relationships
 
@@ -359,10 +359,10 @@ During execution, the agent can interact with memory via built-in tools:
 
 Before execution begins, if any auto-routing mode is enabled, a lightweight "task context" LLM call builds a compact context summary. This LLM call uses a `set_task_context` tool to produce:
 
-| Field           | Purpose                                                       |
-| --------------- | ------------------------------------------------------------- |
-| `toolQuery`     | Action/capability terms for tool selection                    |
-| `memoryQuery`   | Knowledge/entity terms for memory retrieval                   |
+| Field         | Purpose                                     |
+| ------------- | ------------------------------------------- |
+| `toolQuery`   | Action/capability terms for tool selection  |
+| `memoryQuery` | Knowledge/entity terms for memory retrieval |
 
 Each auto-routing layer (tools and memory) uses its dedicated query string for more precise selection.
 
