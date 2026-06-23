@@ -5,7 +5,7 @@ import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getM
 import { relativePathForFolder } from '../../memory/memory-space-folders.js'
 import { readTextFile, writeTextFile, fileExists, backupToRevisions, resolveUniqueFileName } from '../../memory/memory-file-manager.js'
 import { getEntityGraphStore, type EntityEdge, type EntityNode, type EntityType } from '../../memory/entity-graph.js'
-import { deleteMemoryGraphSource } from '../../memory/memory-entity-indexer.js'
+import { deleteMemoryGraphSource, legacyMemoryGraphSourceId, memoryGraphSourceId } from '../../memory/memory-entity-indexer.js'
 import { cancelMemoryIndexJobsForFile, startMemoryIndexJob } from '../../memory/memory-index-jobs.js'
 
 function abortPendingMemoryIndexJobs(spaceId: string, fileName: string): void {
@@ -719,14 +719,28 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
 
             const graph = getEntityGraphStore()
             const seedNodes = graph.findSeedNodes(query, results.map((r) => r.text), 8)
+            const graphSourceIds = memoryGraphSourceIdsForChunks(results)
             const graphContext = seedNodes.length > 0
-                ? graph.formatWalk(graph.walk(seedNodes.map((node) => node.id), 2, 24))
+                ? graph.formatWalk(graph.walk(seedNodes.map((node) => node.id), 2, 24, 0, {
+                    sourceIds: graphSourceIds,
+                    contextText: [query, ...results.map((r) => r.text)].join(' '),
+                }))
                 : ''
             const graphSection = graphContext ? `\n\n---\n\n${graphContext}` : ''
 
             return { success: true, output: `Showing ${results.length} result${results.length !== 1 ? 's' : ''}${resolvedScope.space ? ` from "${resolvedScope.space.name}"` : ''}:\n\n${formatted}${graphSection}` }
         }
     }
+}
+
+function memoryGraphSourceIdsForChunks(chunks: Array<{ sourceFile?: string; spaceId?: string }>): string[] {
+    const sourceIds = new Set<string>()
+    for (const chunk of chunks) {
+        if (!chunk.sourceFile) continue
+        if (chunk.spaceId) sourceIds.add(memoryGraphSourceId(chunk.spaceId, chunk.sourceFile))
+        sourceIds.add(legacyMemoryGraphSourceId(chunk.sourceFile))
+    }
+    return Array.from(sourceIds)
 }
 
 /**
