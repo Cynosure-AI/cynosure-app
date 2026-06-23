@@ -3,6 +3,7 @@ import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces, getAssignedOrDefaultSpaces } from './memory-space-scope.js'
 import type { RetrievedChunk } from './parser.js'
 import { getEntityGraphStore, type GraphWalkResult } from './entity-graph.js'
+import { legacyMemoryGraphSourceId, memoryGraphSourceId } from './memory-entity-indexer.js'
 
 export interface AggregatedMemory {
   permanent: RetrievedChunk[]
@@ -122,7 +123,13 @@ export class MemoryAggregator {
     try {
       const graph = getEntityGraphStore()
       const seedNodes = graph.findSeedNodes(query, dedupedPermanent.map((chunk) => chunk.text), 8)
-      graphWalk = seedNodes.length > 0 ? graph.walk(seedNodes.map((node) => node.id), 2, 32) : undefined
+      const graphSourceIds = memoryGraphSourceIdsForChunks(dedupedPermanent)
+      graphWalk = seedNodes.length > 0
+        ? graph.walk(seedNodes.map((node) => node.id), 2, 32, 0, {
+          sourceIds: graphSourceIds,
+          contextText: [query, ...dedupedPermanent.map((chunk) => chunk.text)].join(' '),
+        })
+        : undefined
     } catch (err) {
       console.warn('[memory-aggregator] Entity graph enrichment failed; returning semantic memory only:', err)
     }
@@ -168,6 +175,16 @@ export class MemoryAggregator {
 
     return sections.join('\n\n')
   }
+}
+
+function memoryGraphSourceIdsForChunks(chunks: RetrievedChunk[]): string[] {
+  const sourceIds = new Set<string>()
+  for (const chunk of chunks) {
+    if (!chunk.sourceFile) continue
+    if (chunk.spaceId) sourceIds.add(memoryGraphSourceId(chunk.spaceId, chunk.sourceFile))
+    sourceIds.add(legacyMemoryGraphSourceId(chunk.sourceFile))
+  }
+  return Array.from(sourceIds)
 }
 
 let aggregatorInstance: MemoryAggregator | null = null
