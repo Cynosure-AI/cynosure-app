@@ -6,7 +6,7 @@ const INTERNAL_TOOL_PREFIXES = [
 
 const INTERNAL_TOOL_NAMES = new Set([
   'expand_available_toolset',
-  'memory_forget',
+  'memory_remove',
   'spawn_subagent',
 ])
 
@@ -18,7 +18,7 @@ const AUTO_MANAGED_BUILT_IN_TOOL_PREFIXES = [
 
 const AUTO_MANAGED_BUILT_IN_TOOL_NAMES = new Set([
   'expand_available_toolset',
-  'memory_forget',
+  'memory_remove',
   'spawn_subagent',
 ])
 

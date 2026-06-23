@@ -42,7 +42,7 @@ const automaticToolStates = computed(() => ({
     active: hasMemoryScope.value,
     criteria: 'memory folder selected',
   },
-  memory_forget: {
+  memory_remove: {
     active: hasMemoryScope.value,
     criteria: 'memory folder selected',
   },

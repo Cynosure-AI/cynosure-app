@@ -55,7 +55,7 @@ function automaticToolState(tool: ToolInfo): { active: boolean; criteria: string
 
 function automaticToolCriteria(toolName: string): string {
   if (toolName.startsWith('todo_')) return 'thinking mode and visible execution tools'
-  if (toolName.startsWith('memory_') || toolName === 'memory_forget') return 'memory folder selected'
+  if (toolName.startsWith('memory_') || toolName === 'memory_remove') return 'memory folder selected'
   if (toolName.startsWith('relationship_graph_')) return 'memory folder selected'
   if (toolName.startsWith('attachment_')) return 'large indexed attachment available'
   if (toolName === 'expand_available_toolset') return 'auto tool mode enabled'
