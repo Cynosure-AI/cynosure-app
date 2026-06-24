@@ -142,7 +142,6 @@ const triggerItems: NavItem[] = [
 const settingsItems: NavItem[] = [
   { to: "/settings", icon: "lucide:settings", label: "Settings", exact: true },
   { to: "/settings/mcp", icon: "lucide:plug", label: "MCP Servers" },
-  { to: "/usage", icon: "lucide:bar-chart-3", label: "Usage" },
 ];
 
 const chatRoute = computed(() =>
@@ -492,6 +491,27 @@ const chatRoute = computed(() =>
         </RouterLink>
         <template #content>
           Activity Log
+        </template>
+      </HoverTooltip>
+
+      <HoverTooltip
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
+      >
+        <RouterLink
+          to="/usage"
+          class="nav-item"
+          :class="{ active: isActive('/usage') }"
+        >
+          <Icon
+            icon="lucide:bar-chart-3"
+            class="w-4.5 h-4.5"
+          />
+          <span>Usage</span>
+        </RouterLink>
+        <template #content>
+          Usage
         </template>
       </HoverTooltip>
 
