@@ -294,6 +294,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       const rag = getRAGStore()
       await rag.deleteTable('permanent_memory')
       await dropConversationAttachmentIndex()
+      getDb().prepare('DELETE FROM memory_file_index').run()
     }
 
     return { success: true, vectorsDropped: embeddingChanged, reembedded: false, reembeddedCount: 0, dimensions: newDimensions }
