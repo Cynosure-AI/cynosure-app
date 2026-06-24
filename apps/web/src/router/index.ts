@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { SK_ONBOARDING_COMPLETE } from '@/utils/storage-keys'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -153,6 +154,14 @@ const router = createRouter({
       redirect: { name: 'settings', query: { category: 'speech-to-text' } }
     }
   ]
+})
+
+const onboardingComplete = () => localStorage.getItem(SK_ONBOARDING_COMPLETE) === 'true'
+
+router.beforeEach((to) => {
+  if (!onboardingComplete() && to.name !== 'onboarding') {
+    return { name: 'onboarding' }
+  }
 })
 
 export default router
