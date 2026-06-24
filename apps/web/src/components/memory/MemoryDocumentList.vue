@@ -37,6 +37,7 @@ const files = ref<MemoryFileStatus[]>([]);
 const filesLoading = ref(false);
 const selectedFiles = ref<Set<string>>(new Set());
 const deleting = ref(false);
+const droppingIndexes = ref(false);
 const moving = ref(false);
 const showMoveDialog = ref(false);
 const jobs = ref<MemoryIndexJob[]>([]);
@@ -98,6 +99,13 @@ const needsAttentionCount = computed(
 );
 const selectedEntityIndexableFiles = computed(() =>
   files.value.filter((f) => f.supported && f.status === "indexed" && selectedFiles.value.has(f.fileName)),
+);
+const selectedIndexedFiles = computed(() =>
+  files.value.filter((f) =>
+    f.supported &&
+    f.status !== "not_indexed" &&
+    selectedFiles.value.has(f.fileName),
+  ),
 );
 const runningJobs = computed(() => jobs.value.filter((job) => job.status === "queued" || job.status === "running"));
 const selectedEntityIndexableIdleCount = computed(() =>
@@ -244,6 +252,22 @@ async function deleteSelectedFiles() {
     /* error */
   }
   deleting.value = false;
+}
+
+async function dropSelectedIndexes() {
+  const sourceFiles = selectedIndexedFiles.value.map((file) => file.fileName);
+  if (sourceFiles.length === 0) return;
+  droppingIndexes.value = true;
+  try {
+    await api.memorySpaces.dropIndexes(props.spaceId, sourceFiles);
+    selectedFiles.value = new Set();
+    await loadFiles();
+    await loadJobs();
+    emit("spacesChanged");
+  } catch {
+    /* error */
+  }
+  droppingIndexes.value = false;
 }
 
 // --- Move ---
@@ -584,6 +608,20 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
               :class="{ 'animate-spin': selectedEntityIndexableIdleCount === 0 }"
             />
             Entity index {{ selectedEntityIndexableIdleCount || selectedEntityIndexableFiles.length }}
+          </button>
+          <button
+            v-if="selectedIndexedFiles.length > 0"
+            :disabled="droppingIndexes"
+            class="flex items-center gap-1 px-2 py-1 text-xs bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded transition-colors disabled:opacity-50"
+            title="Remove vectors, index tracking, and entity graph data while keeping the source files"
+            @click="dropSelectedIndexes"
+          >
+            <Icon
+              :icon="droppingIndexes ? 'lucide:loader-2' : 'lucide:database-x'"
+              class="w-3.5 h-3.5"
+              :class="{ 'animate-spin': droppingIndexes }"
+            />
+            Drop index {{ selectedIndexedFiles.length }}
           </button>
           <button
             :disabled="deleting"

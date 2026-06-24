@@ -411,6 +411,10 @@ export const api = {
       post<{ success: boolean }>(
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/delete-groups`, { sourceFiles }
       ),
+    dropIndexes: (spaceId: string, sourceFiles: string[]) =>
+      post<{ success: boolean; filesReset: number; chunksDeleted: number; graphEdgesDeleted: number }>(
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/drop-indexes`, { sourceFiles }
+      ),
     moveGroups: (spaceId: string, sourceFiles: string[], targetSpaceId: string) =>
       post<{ success: boolean; moved: number }>(
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/move-groups`, { sourceFiles, targetSpaceId }
