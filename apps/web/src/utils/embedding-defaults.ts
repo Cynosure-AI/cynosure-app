@@ -22,6 +22,8 @@ export function defaultEmbeddingModelForProviderId(
 }
 
 export function withDefaultEmbeddingModel(models: string[], defaultModel: string): string[] {
-  if (!defaultModel || models.includes(defaultModel)) return models
-  return [defaultModel, ...models]
+  if (!defaultModel) return models
+
+  const remainingModels = models.filter((model) => model !== defaultModel)
+  return [defaultModel, ...remainingModels]
 }
