@@ -56,11 +56,6 @@ export const PROMPT_SMART_TAGS: PromptSmartTag[] = [
     description: "Resolved server locale.",
   },
   {
-    name: "location",
-    label: "Location",
-    description: "Location hint from server environment settings.",
-  },
-  {
     name: "agentId",
     label: "Agent ID",
     description: "Current agent identifier.",

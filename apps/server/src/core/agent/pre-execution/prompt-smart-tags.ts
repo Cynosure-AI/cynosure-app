@@ -27,8 +27,6 @@ function buildPromptSmartTagValues(context: PromptSmartTagContext): PromptSmartT
     const now = context.now ?? new Date()
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || 'en-US'
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || process.env.TZ || 'UTC'
-    const location = resolveLocation()
-
     return {
         currentDateTime: formatDateTime(now, locale, timezone),
         currentDate: formatDate(now, locale, timezone),
@@ -40,7 +38,6 @@ function buildPromptSmartTagValues(context: PromptSmartTagContext): PromptSmartT
         isoTime: now.toISOString().slice(11, 19),
         timezone,
         locale,
-        location,
         agentId: context.agentId || '',
         agentName: context.agentName || '',
         agentInternalName: context.agentInternalName || '',
@@ -78,12 +75,4 @@ function formatTime(date: Date, locale: string, timeZone: string): string {
         timeStyle: 'long',
         timeZone,
     }).format(date)
-}
-
-function resolveLocation(): string {
-    return process.env.CYNOSURE_LOCATION
-        || process.env.APP_LOCATION
-        || process.env.USER_LOCATION
-        || process.env.LOCATION
-        || ''
 }

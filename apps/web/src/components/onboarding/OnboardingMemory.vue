@@ -5,81 +5,72 @@
         Set Up Memory
       </h2>
       <p class="text-sm text-theme-500 mt-1">
-        Give your agents searchable, long-term memory. Choose an embedding model to be able to use auto-memories and auto tool calling.
-        You can skip this and configure it later in Settings.
+        Choose which provider Cynosure should use to turn documents and conversations into
+        searchable memory. We’ll select a suitable embedding model automatically.
       </p>
     </div>
 
-    <!-- Embedding Config -->
     <div class="bg-theme-800/50 border border-theme-700/60 rounded-xl p-5 space-y-4 mb-4">
-      <h3 class="text-sm font-semibold text-theme-200">
-        Embeddings Provider
-      </h3>
-
-      <!-- Provider select -->
       <div>
-        <label class="block text-xs font-medium text-theme-400 mb-1.5">Provider</label>
+        <label class="block text-sm font-medium text-theme-300 mb-1.5">
+          Memory embedding provider
+        </label>
+        <p class="text-xs text-theme-500 mb-3">
+          OpenAI, Google, and OpenRouter have recommended defaults. Other providers are supported
+          when they expose embedding models.
+        </p>
         <select
           v-model="embProviderId"
-          class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+          class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
         >
           <option value="">
             Select a provider…
           </option>
           <option
-            v-for="p in providerStore.providers"
-            :key="p.id"
-            :value="p.id"
+            v-for="provider in providerStore.providers"
+            :key="provider.id"
+            :value="provider.id"
           >
-            {{ p.name }}
+            {{ provider.name }}
           </option>
         </select>
       </div>
 
-      <!-- Model -->
-      <div>
-        <div class="flex items-center justify-between gap-3 mb-1.5">
-          <label class="block text-xs font-medium text-theme-400">Embedding Model</label>
-          <span
-            v-if="embDimensions"
-            class="text-[11px] text-theme-500 whitespace-nowrap"
+      <div
+        v-if="embProviderId"
+        class="flex items-start gap-2.5 rounded-lg border border-theme-700/60 bg-theme-900/50 px-3.5 py-3"
+      >
+        <Icon
+          :icon="resolvingModel ? 'lucide:loader-2' : embModel ? 'lucide:sparkles' : 'lucide:triangle-alert'"
+          class="w-4 h-4 mt-0.5 shrink-0"
+          :class="[
+            resolvingModel ? 'animate-spin text-theme-500' : '',
+            !resolvingModel && embModel ? 'text-accent-400' : '',
+            !resolvingModel && !embModel ? 'text-amber-400' : '',
+          ]"
+        />
+        <div class="min-w-0">
+          <p class="text-xs font-medium text-theme-300">
+            {{ resolvingModel ? 'Finding an embedding model…' : embModel ? 'Embedding model selected automatically' : 'No embedding model found' }}
+          </p>
+          <p
+            v-if="!resolvingModel && embModel"
+            class="text-[11px] text-theme-500 mt-0.5 font-mono truncate"
           >
-            {{ embDimensions }} dimensions
-          </span>
-        </div>
-        <div class="flex gap-2">
-          <div class="flex-1">
-            <input
-              v-if="!embModels.length"
-              v-model="embModel"
-              type="text"
-              placeholder="e.g. text-embedding-3-small"
-              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-            >
-            <select
-              v-else
-              v-model="embModel"
-              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
-            >
-              <option value="">
-                Select model…
-              </option>
-              <option
-                v-for="m in embModels"
-                :key="m"
-                :value="m"
-              >
-                {{ m }}
-              </option>
-            </select>
-          </div>
+            {{ embModel }}<span v-if="embDimensions"> · {{ embDimensions }} dimensions</span>
+          </p>
+          <p
+            v-else-if="!resolvingModel"
+            class="text-[11px] text-theme-500 mt-0.5"
+          >
+            You can configure a model manually later in Settings → Memory.
+          </p>
         </div>
       </div>
 
-      <!-- Save embeddings button -->
       <button
         class="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-        :disabled="!embModel || savingEmb"
+        :disabled="!embProviderId || !embModel || savingEmb || resolvingModel"
         @click="saveEmbeddings"
       >
         <Icon
@@ -87,26 +78,25 @@
           class="w-4 h-4"
           :class="{ 'animate-spin': savingEmb }"
         />
-        {{ savingEmb ? 'Saving…' : embSaved ? 'Saved!' : 'Save Embedding Config' }}
+        {{ savingEmb ? 'Configuring…' : embSaved ? 'Memory configured!' : 'Configure Memory' }}
       </button>
     </div>
 
-    <!-- Next step callout (shown after embeddings are saved) -->
     <Transition name="fade">
       <div
         v-if="embSaved || embConfigured"
         class="flex items-start gap-3 bg-accent-500/10 border border-accent-500/30 rounded-xl px-4 py-3.5"
       >
         <Icon
-          icon="lucide:arrow-right-circle"
+          icon="lucide:check-circle-2"
           class="w-5 h-5 text-accent-400 shrink-0 mt-0.5"
         />
         <div>
           <p class="text-sm font-medium text-accent-300">
-            Embeddings configured!
+            Memory embeddings are ready
           </p>
           <p class="text-xs text-theme-400 mt-0.5">
-            Click <strong class="text-theme-200">Continue</strong> to set up your memory folder — a place to store and search documents for your agents.
+            Cynosure can now index memory spaces and retrieve relevant knowledge for your agents.
           </p>
         </div>
       </div>
@@ -129,11 +119,12 @@ const providerStore = useProviderStore()
 const embProviderId = ref('')
 const embModel = ref('')
 const embDimensions = ref(0)
-const embModels = ref<string[]>([])
 const savingEmb = ref(false)
 const embSaved = ref(false)
 const embConfigured = ref(false)
 const loadingInitialConfig = ref(true)
+const resolvingModel = ref(false)
+let modelRequest = 0
 
 onMounted(async () => {
   await providerStore.loadProviders()
@@ -143,7 +134,6 @@ onMounted(async () => {
     embModel.value = cfg.model
     embDimensions.value = cfg.dimensions
     if (cfg.providerId) {
-      fetchEmbModels(cfg.providerId)
       embConfigured.value = true
     } else {
       applyDefaultEmbeddingConfig()
@@ -155,47 +145,61 @@ onMounted(async () => {
 })
 
 watch(embProviderId, (id) => {
-  if (!loadingInitialConfig.value) {
-    embModel.value = defaultEmbeddingModelForProviderId(id, providerStore.providers)
-    embDimensions.value = 0
-  }
-  fetchEmbModels(id)
+  if (loadingInitialConfig.value) return
+  embDimensions.value = 0
+  embConfigured.value = false
+  embSaved.value = false
+  void resolveEmbeddingModel(id)
 })
 
-async function fetchEmbModels(providerId: string) {
-  if (!providerId) { embModels.value = []; return }
+async function resolveEmbeddingModel(providerId: string) {
+  const requestId = ++modelRequest
+  if (!providerId) {
+    embModel.value = ''
+    resolvingModel.value = false
+    return
+  }
+
+  resolvingModel.value = true
   const defaultModel = defaultEmbeddingModelForProviderId(providerId, providerStore.providers)
   try {
     const models = await providerStore.listModels(providerId, 'embedding')
-    embModels.value = withDefaultEmbeddingModel(models, defaultModel)
-  } catch { embModels.value = withDefaultEmbeddingModel([], defaultModel) }
+    if (requestId !== modelRequest) return
+    embModel.value = withDefaultEmbeddingModel(models, defaultModel)[0] || ''
+  } catch {
+    if (requestId !== modelRequest) return
+    embModel.value = defaultModel
+  } finally {
+    if (requestId === modelRequest) resolvingModel.value = false
+  }
 }
 
 function applyDefaultEmbeddingConfig() {
   const providerId = providerStore.lastUsedProviderId || providerStore.providers[0]?.id || ''
-  const defaultModel = defaultEmbeddingModelForProviderId(providerId, providerStore.providers)
-  if (!providerId || !defaultModel) return
+  if (!providerId) return
   embProviderId.value = providerId
-  embModel.value = defaultModel
   embDimensions.value = 0
-  fetchEmbModels(providerId)
+  void resolveEmbeddingModel(providerId)
 }
 
 async function saveEmbeddings() {
-  if (!embModel.value) return
+  if (!embProviderId.value || !embModel.value) return
   savingEmb.value = true
   embSaved.value = false
   try {
     const res = await api.memory.configureEmbeddings({
-      providerId: embProviderId.value || undefined,
+      providerId: embProviderId.value,
       model: embModel.value,
     })
     embDimensions.value = res.dimensions
     embSaved.value = true
     embConfigured.value = true
     setTimeout(() => { embSaved.value = false }, 3000)
-  } catch { /* ignore */ }
-  savingEmb.value = false
+  } catch {
+    // Settings remains optional during onboarding.
+  } finally {
+    savingEmb.value = false
+  }
 }
 </script>
 
