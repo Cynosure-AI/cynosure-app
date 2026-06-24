@@ -104,14 +104,11 @@
           <!-- AI Provider -->
           <OnboardingProvider v-else-if="currentStep === STEP_PROVIDER" />
 
-          <!-- Cynosure MCP -->
-          <OnboardingCynosureMcp v-else-if="currentStep === STEP_CYNOSURE_MCP" />
-
           <!-- Memory -->
           <OnboardingMemory v-else-if="currentStep === STEP_MEMORY" />
 
-          <!-- Popular MCPs -->
-          <OnboardingPopularMcps v-else-if="currentStep === STEP_POPULAR_MCPS" />
+          <!-- MCP tools -->
+          <OnboardingPopularMcps v-else-if="currentStep === STEP_MCPS" />
 
           <!-- Done -->
           <div
@@ -198,7 +195,7 @@
             :disabled="!canContinue"
             @click="goNext"
           >
-            {{ currentStep === STEP_POPULAR_MCPS ? 'Finish' : 'Continue' }}
+            {{ currentStep === STEP_MCPS ? 'Finish' : 'Continue' }}
             <Icon
               icon="lucide:arrow-right"
               class="w-4 h-4"
@@ -231,7 +228,6 @@ import { useProviderStore } from '../stores/provider.store'
 import { api } from '../api/client'
 import OnboardingWelcome from '../components/onboarding/OnboardingWelcome.vue'
 import OnboardingProvider from '../components/onboarding/OnboardingProvider.vue'
-import OnboardingCynosureMcp from '../components/onboarding/OnboardingCynosureMcp.vue'
 import OnboardingMemory from '../components/onboarding/OnboardingMemory.vue'
 import OnboardingPopularMcps from '../components/onboarding/OnboardingPopularMcps.vue'
 
@@ -242,12 +238,11 @@ const providerStore = useProviderStore()
 // ── Step indices ──────────────────────────────────────────────────
 const STEP_WELCOME = 0
 const STEP_PROVIDER = 1
-const STEP_CYNOSURE_MCP = 2
-const STEP_MEMORY = 3
-const STEP_POPULAR_MCPS = 4
-const STEP_DONE = 5
+const STEP_MEMORY = 2
+const STEP_MCPS = 3
+const STEP_DONE = 4
 
-const totalSteps = STEP_DONE + 1 // 0..5
+const totalSteps = STEP_DONE + 1 // 0..4
 
 // ── Navigation state ──────────────────────────────────────────────
 const currentStep = ref(STEP_WELCOME)
@@ -261,19 +256,18 @@ const transitionName = computed(() =>
 
 // ── Breadcrumb data ───────────────────────────────────────────────
 const breadcrumbSteps = [
-  { id: 'provider',      label: 'AI Provider',    globalIndex: STEP_PROVIDER },
-  { id: 'cynosure',      label: 'Cynosure MCP',   globalIndex: STEP_CYNOSURE_MCP },
-  { id: 'memory',        label: 'Embeddings',     globalIndex: STEP_MEMORY },
-  { id: 'popular-mcps',  label: 'Popular Tools',  globalIndex: STEP_POPULAR_MCPS },
+  { id: 'provider', label: 'AI Provider', globalIndex: STEP_PROVIDER },
+  { id: 'memory', label: 'Memory', globalIndex: STEP_MEMORY },
+  { id: 'mcps', label: 'MCP Tools', globalIndex: STEP_MCPS },
 ]
 
 // Which breadcrumb index is active (0-based within breadcrumbSteps)
 const breadcrumbStepIndex = computed(() =>
-  Math.max(0, currentStep.value - 1) // steps 1-4 map to breadcrumb 0-3
+  Math.max(0, currentStep.value - 1) // steps 1-3 map to breadcrumb 0-2
 )
 
 const showBreadcrumb = computed(() =>
-  currentStep.value >= STEP_PROVIDER && currentStep.value <= STEP_POPULAR_MCPS
+  currentStep.value >= STEP_PROVIDER && currentStep.value <= STEP_MCPS
 )
 
 function stepCircleClass(bIndex: number): string {

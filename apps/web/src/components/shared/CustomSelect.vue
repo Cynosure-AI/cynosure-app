@@ -113,7 +113,9 @@ const filteredGroups = computed(() => {
   return props.groups
     .map((g) => ({
       ...g,
-      options: g.options.filter((o) => fuzzyMatch(o.label, q)),
+      options: g.options.filter((o) =>
+        fuzzyMatch(`${o.label} ${o.value} ${o.tooltip || ""}`, q)
+      ),
     }))
     .filter((g) => g.options.length > 0);
 });
