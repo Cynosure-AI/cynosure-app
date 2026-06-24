@@ -707,6 +707,31 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         return { success: true }
     })
 
+    // POST /api/memory-spaces/:id/drop-indexes — reset files to a clean, not-indexed state
+    app.post<{ Params: { id: string }; Body: { sourceFiles: string[] } }>('/:id/drop-indexes', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        const sourceFiles = Array.from(new Set(
+            (req.body.sourceFiles || []).filter((sourceFile): sourceFile is string =>
+                typeof sourceFile === 'string' && sourceFile.length > 0
+            )
+        ))
+        if (sourceFiles.length === 0) return reply.status(400).send({ error: 'No sourceFiles provided' })
+
+        const chunksDeleted = await getAgentMemory().dropSourceIndexes(sourceFiles, row.id)
+        let graphEdgesDeleted = 0
+        for (const sourceFile of sourceFiles) {
+            graphEdgesDeleted += deleteMemoryGraphSource(row.id, sourceFile).edgesDeleted
+        }
+
+        return {
+            success: true,
+            filesReset: sourceFiles.length,
+            chunksDeleted,
+            graphEdgesDeleted,
+        }
+    })
+
     // POST /api/memory-spaces/:id/move-groups — move files to another space
     app.post<{ Params: { id: string }; Body: { sourceFiles: string[]; targetSpaceId: string } }>('/:id/move-groups', async (req, reply) => {
         const db = getDb()

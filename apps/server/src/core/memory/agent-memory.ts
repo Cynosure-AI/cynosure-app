@@ -255,6 +255,35 @@ export class AgentMemory {
         return deleted
     }
 
+    /**
+     * Drop vector and tracking data for source files without touching the
+     * physical files. The files will appear as not indexed and can be cleanly
+     * re-indexed later.
+     */
+    async dropSourceIndexes(sourceFiles: string[], spaceId: string): Promise<number> {
+        const uniqueSourceFiles = Array.from(new Set(sourceFiles.filter(Boolean)))
+        if (uniqueSourceFiles.length === 0) return 0
+
+        for (const sourceFile of uniqueSourceFiles) {
+            cancelMemoryIndexJobsForFile(spaceId, sourceFile)
+        }
+
+        const deleted = await getRAGStore().deleteBySources(
+            TABLE_NAME,
+            uniqueSourceFiles,
+            buildMemorySpaceFilter([{ id: spaceId }]),
+        )
+
+        const db = getDb()
+        const removeIndexes = db.transaction(() => {
+            const stmt = db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?')
+            for (const sourceFile of uniqueSourceFiles) stmt.run(spaceId, sourceFile)
+        })
+        removeIndexes()
+
+        return deleted
+    }
+
     /** Delete vectors by source file without touching the physical file. */
     async deleteBySource(sourceFile: string, filter?: string): Promise<number> {
         return getRAGStore().deleteBySource(TABLE_NAME, sourceFile, filter)
