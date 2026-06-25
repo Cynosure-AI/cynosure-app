@@ -67,20 +67,6 @@ function clonePreset(preset: ChatPreset): ChatPreset {
     }
 }
 
-function presetsEqual(a: ChatPreset, b: ChatPreset): boolean {
-    return (
-        arraysEqual(a.tools, b.tools) &&
-        arraysEqual(a.subAgentIds, b.subAgentIds) &&
-        arraysEqual(a.memorySpaceIds, b.memorySpaceIds) &&
-        a.systemPrompt === b.systemPrompt &&
-        a.thinkingEnabled === b.thinkingEnabled &&
-        a.autoToolRouting === b.autoToolRouting &&
-        a.autoMemory === b.autoMemory &&
-        a.modelOverride === b.modelOverride &&
-        a.providerOverride === b.providerOverride
-    )
-}
-
 function presetsEqualWithoutProviderModel(a: ChatPreset, b: ChatPreset): boolean {
     return (
         arraysEqual(a.tools, b.tools) &&
@@ -276,10 +262,22 @@ export function useChatAgentConfig(
         const previousDefault = regularFreeChatPreset()
         freeChatDefaultMemorySpaceIds.value = nextIds
         const nextDefault = regularFreeChatPreset()
-        if (!freeChatPreset.value || presetsEqual(freeChatPreset.value, previousDefault)) {
+        if (!freeChatPreset.value) {
             freeChatPreset.value = clonePreset(nextDefault)
+        } else if (presetsEqualWithoutProviderModel(freeChatPreset.value, previousDefault)) {
+            freeChatPreset.value = {
+                ...clonePreset(nextDefault),
+                modelOverride: freeChatPreset.value.modelOverride,
+                providerOverride: freeChatPreset.value.providerOverride,
+            }
         }
-        if (!activeAgentId.value && (!freeChatMemorySelectionInitialized.value || presetsEqual(currentPreset(), previousDefault))) {
+        if (
+            !activeAgentId.value &&
+            (
+                !freeChatMemorySelectionInitialized.value ||
+                presetsEqualWithoutProviderModel(currentPreset(), previousDefault)
+            )
+        ) {
             applyPreset(freeChatPreset.value)
         }
     }

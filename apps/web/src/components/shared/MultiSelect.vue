@@ -85,6 +85,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
     <!-- Trigger -->
     <button
       type="button"
+      v-bind="$attrs"
       :disabled="disabled"
       class="w-full flex items-center justify-between bg-theme-900 border border-theme-700 rounded px-2.5 py-1.5 text-sm text-theme-200 hover:border-theme-500 focus:outline-none focus:border-accent-500 disabled:opacity-50 disabled:cursor-not-allowed"
       @click="isOpen = !isOpen"

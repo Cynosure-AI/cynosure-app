@@ -40,6 +40,7 @@ const cleanups: (() => void)[] = []
 async function loadAllStores() {
   await providerStore.loadProviders()
   await agentDefs.load()
+  await chatStore.loadMemorySpaces()
   await chatStore.loadConversations()
   chatStore.syncAgentBaseline()
   await agentStore.loadTools()
