@@ -10,6 +10,8 @@ import ModalDialog from '../components/shared/ModalDialog.vue'
 import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import ProviderModelSelect from '../components/shared/ProviderModelSelect.vue'
 import TagInput from '../components/shared/TagInput.vue'
+import MultiSelect from '../components/shared/MultiSelect.vue'
+import type { MultiSelectOption } from '../components/shared/MultiSelect.vue'
 import { useProviderLogos } from '../composables/useProviderLogos'
 import type { AgentDefinition } from '../api/types'
 
@@ -55,6 +57,10 @@ const allTags = computed(() => {
   }
   return [...tagMap.values()].sort((a, b) => a.localeCompare(b))
 })
+
+const tagFilterOptions = computed<MultiSelectOption[]>(() =>
+  allTags.value.map(tag => ({ value: tag, label: tag }))
+)
 
 function agentSort(a: AgentDefinition, b: AgentDefinition): number {
   if (a.favorite !== b.favorite) return a.favorite ? -1 : 1
@@ -351,7 +357,7 @@ function formatDate(ts: number): string {
       </div>
 
       <div class="flex flex-col gap-3 mb-5 lg:flex-row lg:items-center">
-        <div class="relative flex-1">
+        <div class="relative flex-1 flex items-center gap-2">
           <Icon
             icon="lucide:search"
             class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-500"
@@ -362,6 +368,12 @@ function formatDate(ts: number): string {
             placeholder="Search agents, tags, providers, or models..."
             class="w-full pl-10 pr-9 py-2 bg-theme-800/60 border border-theme-700/60 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500/60 focus:border-accent-500/40 transition-colors"
           >
+          <MultiSelect
+            v-model="selectedTags"
+            class=" max-w-3xs"
+            :options="tagFilterOptions"
+            placeholder="Filter by tags..."
+          />
           <button
             v-if="searchQuery"
             class="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-theme-500 hover:text-theme-300 transition-colors"
@@ -377,27 +389,28 @@ function formatDate(ts: number): string {
 
       <div
         v-if="allTags.length"
-        class="mb-5 flex flex-wrap items-center gap-2"
+        class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center"
       >
-        <span class="text-xs font-medium uppercase tracking-wider text-theme-500">Tags</span>
-        <button
-          v-for="tag in allTags"
-          :key="tag"
-          class="rounded-full border px-2.5 py-1 text-xs transition-colors"
-          :class="isTagSelected(tag)
-            ? 'border-accent-500/70 bg-accent-500/15 text-accent-300'
-            : 'border-theme-700 bg-theme-900/60 text-theme-400 hover:border-theme-600 hover:text-theme-200'"
-          @click="toggleTag(tag)"
-        >
-          {{ tag }}
-        </button>
-        <button
+        <div
           v-if="selectedTags.length"
-          class="rounded-full px-2.5 py-1 text-xs text-theme-500 hover:bg-theme-800 hover:text-theme-300 transition-colors"
-          @click="selectedTags = []"
+          class="flex flex-wrap items-center gap-2"
         >
-          Clear tags
-        </button>
+          <button
+            v-for="tag in selectedTags"
+            :key="tag"
+            class="rounded-full border border-accent-500/70 bg-accent-500/15 px-2.5 py-1 text-xs text-accent-300 transition-colors hover:border-accent-400 hover:text-accent-200"
+            :title="`Remove ${tag} filter`"
+            @click="toggleTag(tag)"
+          >
+            {{ tag }}
+          </button>
+          <button
+            class="rounded-full px-2.5 py-1 text-xs text-theme-500 hover:bg-theme-800 hover:text-theme-300 transition-colors"
+            @click="selectedTags = []"
+          >
+            Clear tags
+          </button>
+        </div>
       </div>
 
       <div
