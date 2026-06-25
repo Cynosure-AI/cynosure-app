@@ -94,17 +94,15 @@ const selectedOption = computed(
   () => allOptions.value.find((o) => o.value === props.modelValue) ?? null,
 );
 
-/** Fuzzy match: true if all query chars appear in text in order (case-insensitive) */
-function fuzzyMatch(text: string, query: string): boolean {
-  const textLower = text.toLowerCase().replace(/\s+/g, "");
-  const queryLower = query.toLowerCase().replace(/\s+/g, "");
-  let queryIdx = 0;
-  for (let i = 0; i < textLower.length && queryIdx < queryLower.length; i++) {
-    if (textLower[i] === queryLower[queryIdx]) {
-      queryIdx++;
-    }
-  }
-  return queryIdx === queryLower.length;
+function normalizeSearchText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/** Match every query term against user-visible option text. */
+function searchMatches(text: string, query: string): boolean {
+  const haystack = normalizeSearchText(text);
+  const terms = normalizeSearchText(query).split(/\s+/).filter(Boolean);
+  return terms.every((term) => haystack.includes(term));
 }
 
 const filteredGroups = computed(() => {
@@ -114,7 +112,7 @@ const filteredGroups = computed(() => {
     .map((g) => ({
       ...g,
       options: g.options.filter((o) =>
-        fuzzyMatch(`${o.label} ${o.value} ${o.tooltip || ""}`, q)
+        searchMatches(`${g.label || ""} ${o.label} ${o.tooltip || ""}`, q)
       ),
     }))
     .filter((g) => g.options.length > 0);

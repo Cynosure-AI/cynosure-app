@@ -425,7 +425,6 @@ function onSelectionChange(value: string): void {
     :size="size"
     :sticky-group-headers="true"
     @update:model-value="onSelectionChange"
-    @change="onSelectionChange"
     @option-action="toggleFavorite"
   />
 </template>

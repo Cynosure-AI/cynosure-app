@@ -24,20 +24,29 @@ const collapsedSubAgentGroups = reactive(new Set<string>())
 const fullHeightSubAgentGroups = reactive(new Set<string>())
 const SCROLL_BOTTOM_THRESHOLD = 72
 
+const conversationAgentId = computed(() => {
+  if (!chatStore.activeConversationId) return chatStore.activeAgentId
+  const conversation = chatStore.conversations.find(
+    candidate => candidate.id === chatStore.activeConversationId
+  )
+  if (conversation) return conversation.agentId ?? null
+  return chatStore.activeAgentId
+})
+
 const activeAgentIconUrl = computed(() => {
-  if (!chatStore.activeAgentId) return null
-  return agentDefs.get(chatStore.activeAgentId)?.iconUrl ?? null
+  if (!conversationAgentId.value) return null
+  return agentDefs.get(conversationAgentId.value)?.iconUrl ?? null
 })
 
 const activeAgentName = computed(() => {
-  if (!chatStore.activeAgentId) return null
-  return agentDefs.get(chatStore.activeAgentId)?.name ?? null
+  if (!conversationAgentId.value) return null
+  return agentDefs.get(conversationAgentId.value)?.name ?? null
 })
 
 /** Resolve agent identity: prefer message's own data, then look up from agent
- *  definitions store by agentId, and only fall back to active agent last. */
+ *  definitions store by agentId, and only fall back to the conversation agent. */
 function resolveAgentId(msg: DisplayMessage): string | undefined {
-  return msg.agentId ?? chatStore.activeAgentId ?? undefined
+  return msg.agentId ?? conversationAgentId.value ?? undefined
 }
 function resolveAgentIconUrl(msg: DisplayMessage): string | null | undefined {
   if (msg.agentIconUrl !== undefined) return msg.agentIconUrl
@@ -112,7 +121,7 @@ type TimelineEntry =
 const unifiedTimeline = computed(() => {
   const entries: TimelineEntry[] = []
   const hasExecSteps = agentStore.executionSteps.length > 0
-  const mainAgentId = chatStore.activeAgentId
+  const mainAgentId = conversationAgentId.value
   // Build a display-name -> codename map up front so free-chat runs (where
   // there is no main agentId to compare against) can still group sub-agent
   // stream messages with their execution cards.
