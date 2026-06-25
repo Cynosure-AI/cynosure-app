@@ -4,7 +4,7 @@ import ChatHeaderBar from '../../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import InputBar from '../../components/chat/InputBar.vue'
 import PlanningTaskList from '../../components/chat/PlanningTaskList.vue'
-import { onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatSidebar } from '../../composables/useSidebar'
 import { useChatStore } from '../../stores/chat.store'
@@ -17,6 +17,17 @@ const inputBarRef = ref<InstanceType<typeof InputBar> | null>(null)
 const isDragOver = ref(false)
 let dragCounter = 0
 let syncingFromRoute = false
+
+const showCenteredComposer = computed(() => {
+  const routeConversationId = Array.isArray(route.params.conversationId)
+    ? route.params.conversationId[0]
+    : route.params.conversationId
+
+  return !routeConversationId &&
+    !chatStore.activeConversationId &&
+    !chatStore.loadingMessages &&
+    chatStore.messages.length === 0
+})
 
 function onDragEnter(e: DragEvent) {
   e.preventDefault()
@@ -109,7 +120,10 @@ watch(
       </div>
 
       <!-- Chat column: panel + input bar -->
-      <div class="flex flex-col flex-1 min-w-0">
+      <div
+        class="chat-column flex flex-col flex-1 min-w-0"
+        :class="{ 'chat-column--empty': showCenteredComposer }"
+      >
         <!-- Chat area -->
         <div
           class="flex flex-col flex-1 min-h-0 relative"
@@ -141,7 +155,15 @@ watch(
         <PlanningTaskList />
 
         <!-- Input bar (full width of chat column) -->
-        <InputBar ref="inputBarRef" />
+        <InputBar
+          ref="inputBarRef"
+          :floating="showCenteredComposer"
+        />
+
+        <div
+          class="composer-spacer"
+          aria-hidden="true"
+        />
       </div>
     </div>
   </div>
@@ -156,5 +178,30 @@ watch(
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.chat-column > :deep(.chat-input-bar) {
+  flex: 0 0 auto;
+}
+
+.composer-spacer {
+  flex: 0 0 0;
+  min-height: 0;
+  transition: flex-grow 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chat-column--empty .composer-spacer {
+  flex-grow: 1;
+}
+
+.chat-column--empty > div:first-child {
+  flex-grow: 1;
+  flex-basis: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-spacer {
+    transition: none;
+  }
 }
 </style>

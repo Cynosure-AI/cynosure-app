@@ -9,6 +9,10 @@ import HoverTooltip from '../shared/HoverTooltip.vue'
 
 const chatStore = useChatStore()
 
+defineProps<{
+  floating?: boolean
+}>()
+
 const inputText = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -172,13 +176,21 @@ defineExpose({ processFiles })
 </script>
 
 <template>
-  <div class="border-t border-theme-800 bg-theme-900 px-4 py-3 flex items-end gap-3">
+  <div
+    class="chat-input-bar relative px-4 py-3 flex items-end gap-3 transition-[background-color,border-color] duration-300"
+    :class="floating
+      ? 'border border-transparent bg-transparent'
+      : 'border-t border-x-0 border-b-0 border-theme-800 bg-theme-900'"
+  >
     <!--Placeholder to even out the context ring space so the input is centered-->
-    <div class="hidden sm:flex w-10 items-center justify-center" />
+    <div
+      v-if="!floating"
+      class="hidden sm:flex w-10 items-center justify-center"
+    />
 
 
     <!-- Main input area -->
-    <div class="max-w-5xl mx-auto flex-1 min-w-0">
+    <div class="relative max-w-5xl mx-auto flex-1 min-w-0">
       <!-- Attached images preview -->
       <div
         v-if="attachedImages.length"
@@ -297,7 +309,10 @@ defineExpose({ processFiles })
       <SaveAgentModal />
 
       <!-- Input area: textarea + bottom bar inside a unified container -->
-      <div class="rounded-xl border border-theme-700 bg-theme-800 focus-within:ring-1 focus-within:ring-accent-500">
+      <div
+        class="rounded-xl border border-theme-700 bg-theme-800 focus-within:ring-1 focus-within:ring-accent-500 transition-shadow duration-300"
+        :class="{ 'shadow-2xl shadow-black/40': floating }"
+      >
         <input
           ref="fileInputRef"
           type="file"
@@ -326,10 +341,20 @@ defineExpose({ processFiles })
           @transcription="onTranscription"
         />
       </div>
+
+      <div
+        v-if="floating"
+        class="hidden sm:flex absolute -right-12 bottom-2 w-10 items-center justify-center"
+      >
+        <ContextRing />
+      </div>
     </div>
 
     <!-- Context window usage ring — pinned to the far right of the bar -->
-    <div class="hidden sm:flex w-10 items-center justify-center">
+    <div
+      v-if="!floating"
+      class="hidden sm:flex w-10 items-center justify-center"
+    >
       <ContextRing />
     </div>
   </div>
