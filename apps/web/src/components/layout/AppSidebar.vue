@@ -153,21 +153,62 @@ const chatRoute = computed(() =>
 
 <template>
   <aside
-    class="bg-theme-950 flex flex-col h-full shrink-0 transition-all duration-200 overflow-hidden"
+    class="bg-theme-950 relative flex flex-col h-full shrink-0 transition-all duration-200 overflow-hidden"
     :class="sidebarCollapsed ? 'w-60 md:w-16 sidebar-collapsed' : 'w-60'"
   >
     <!-- Brand -->
-    <div class="brand-area px-1 p-3 mt-2 mb-2 flex items-center gap-3 shrink-0">
-      <img
-        :src="logoIconUrl"
-        alt="Cynosure"
-        class="brand-logo-icon w-8 h-8 object-contain"
-      >
-      <img
-        :src="logoTextUrl"
-        alt="Cynosure"
-        class="brand-logo-text h-8 w-auto max-w-36 object-contain flex-1"
-      >
+    <div class="brand-area pl-3 pr-2 py-3 mt-2 mb-2 flex items-center gap-3 shrink-0">
+      <div class="brand-logo-glitch-wrap">
+        <div
+          class="brand-logo-glitch"
+          aria-label="Cynosure"
+        >
+          <div class="brand-logo-layer brand-logo-base">
+            <img
+              :src="logoIconUrl"
+              alt=""
+              class="brand-logo-icon w-8 h-8 object-contain"
+            >
+            <img
+              :src="logoTextUrl"
+              alt="Cynosure"
+              class="brand-logo-text h-8 w-auto max-w-36 object-contain flex-1"
+            >
+          </div>
+
+          <div
+            class="brand-logo-layer brand-logo-copy brand-logo-copy-a"
+            aria-hidden="true"
+          >
+            <img
+              :src="logoIconUrl"
+              alt=""
+              class="brand-logo-icon w-8 h-8 object-contain"
+            >
+            <img
+              :src="logoTextUrl"
+              alt=""
+              class="brand-logo-text h-8 w-auto max-w-36 object-contain flex-1"
+            >
+          </div>
+
+          <div
+            class="brand-logo-layer brand-logo-copy brand-logo-copy-b"
+            aria-hidden="true"
+          >
+            <img
+              :src="logoIconUrl"
+              alt=""
+              class="brand-logo-icon w-8 h-8 object-contain"
+            >
+            <img
+              :src="logoTextUrl"
+              alt=""
+              class="brand-logo-text h-8 w-auto max-w-36 object-contain flex-1"
+            >
+          </div>
+        </div>
+      </div>
 
       <!-- Notification Bell -->
       <div class="relative">
@@ -736,6 +777,128 @@ const chatRoute = computed(() =>
 
   .sidebar-collapsed .status-section button>*:not(:first-child) {
     display: none;
+  }
+}
+
+/* ── Logo glitch effect ── */
+.brand-logo-glitch-wrap {
+  flex: 1;
+  min-width: 0;
+  padding-left: 0.25rem;
+}
+
+.brand-logo-glitch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  height: 2rem;
+}
+
+.brand-logo-layer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.brand-logo-base {
+  position: relative;
+  z-index: 2;
+}
+
+.brand-logo-copy {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.brand-logo-glitch:hover .brand-logo-base {
+  animation: logo-glitch-base 700ms steps(2, jump-none) 1;
+}
+
+.brand-logo-glitch:hover .brand-logo-copy-a {
+  animation: logo-glitch-a 700ms steps(2, jump-none) 1;
+}
+
+.brand-logo-glitch:hover .brand-logo-copy-b {
+  animation: logo-glitch-b 700ms steps(2, jump-none) 1;
+}
+
+@keyframes logo-glitch-base {
+  0% {
+    transform: translate(0, 0);
+  }
+  16% {
+    transform: translate(-1px, 0);
+  }
+  32% {
+    transform: translate(1px, 0);
+  }
+  48%,
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes logo-glitch-a {
+  0% {
+    opacity: 0;
+    clip-path: polygon(0 0, 0 0, 0 0, 0 0);
+    transform: translate(0, 0);
+  }
+  8% {
+    opacity: 0.8;
+    clip-path: polygon(0 6%, 100% 6%, 100% 18%, 0 18%);
+    transform: translate(3px, 0);
+  }
+  18% {
+    opacity: 0.75;
+    clip-path: polygon(0 58%, 100% 58%, 100% 72%, 0 72%);
+    transform: translate(-3px, 0);
+  }
+  28% {
+    opacity: 0.65;
+    clip-path: polygon(0 34%, 100% 34%, 100% 46%, 0 46%);
+    transform: translate(2px, 0);
+  }
+  40%,
+  100% {
+    opacity: 0;
+    clip-path: polygon(0 0, 0 0, 0 0, 0 0);
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes logo-glitch-b {
+  0% {
+    opacity: 0;
+    clip-path: polygon(0 0, 0 0, 0 0, 0 0);
+    transform: translate(0, 0);
+  }
+  10% {
+    opacity: 0.55;
+    clip-path: polygon(0 72%, 100% 72%, 100% 86%, 0 86%);
+    transform: translate(-2px, 0);
+  }
+  20% {
+    opacity: 0.5;
+    clip-path: polygon(0 18%, 100% 18%, 100% 28%, 0 28%);
+    transform: translate(2px, 0);
+  }
+  30% {
+    opacity: 0.45;
+    clip-path: polygon(0 48%, 100% 48%, 100% 60%, 0 60%);
+    transform: translate(-3px, 0);
+  }
+  42%,
+  100% {
+    opacity: 0;
+    clip-path: polygon(0 0, 0 0, 0 0, 0 0);
+    transform: translate(0, 0);
   }
 }
 </style>
