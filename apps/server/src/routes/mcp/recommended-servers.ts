@@ -284,40 +284,7 @@ export const recommendedServers: RegistryServerEntry[] = [
         'Send local system notifications from MCP tools.',
         'mcp-system-notifications',
     ),
-    cynosureMcp(
-        '@cynosure-mcp/ticknotes',
-        'TickNotes',
-        'Manage TickNotes workspaces, lists, and tasks through Supabase.',
-        'mcp-ticknotes',
-        [
-            {
-                name: 'TICKNOTES_SUPABASE_URL',
-                description: 'Your TickNotes Supabase project URL.',
-                isRequired: true,
-                format: 'string',
-            },
-            {
-                name: 'TICKNOTES_SUPABASE_KEY',
-                description: 'Your TickNotes Supabase anonymous/public key.',
-                isRequired: true,
-                format: 'password',
-                isSecret: true,
-            },
-            {
-                name: 'TICKNOTES_EMAIL',
-                description: 'Email address for your TickNotes account.',
-                isRequired: true,
-                format: 'string',
-            },
-            {
-                name: 'TICKNOTES_PASSWORD',
-                description: 'Password for your TickNotes account.',
-                isRequired: true,
-                format: 'password',
-                isSecret: true,
-            },
-        ],
-    ),
+
     cynosureMcp(
         '@cynosure-mcp/weather',
         'Weather',
