@@ -373,6 +373,7 @@ function formatDate(ts: number): string {
             class=" max-w-3xs"
             :options="tagFilterOptions"
             placeholder="Filter by tags..."
+            max-height="max-h-96"
           />
           <button
             v-if="searchQuery"
