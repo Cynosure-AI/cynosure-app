@@ -1,32 +1,23 @@
 <template>
   <div class="max-w-4xl mx-auto px-4 py-8 w-full">
     <!-- HERO -->
-    <div
-      class="hero-card relative overflow-hidden rounded-[28px] border border-accent-500/25 mb-7"
-    >
+    <div class="hero-card relative overflow-hidden rounded-[28px] border border-accent-500/25 mb-7">
       <!-- Background layers -->
       <div class="hero-grid absolute inset-0 pointer-events-none" />
-      <div class="hero-noise absolute inset-0 pointer-events-none" />
+      <div class="hero-noise absolute inset-0 pointer-events-none opacity-70" />
 
       <!-- Glow blobs -->
-      <div
-        class="absolute -right-20 -top-24 w-80 h-80 rounded-full pointer-events-none hero-blob hero-blob-gold"
-      />
-      <div
-        class="absolute -left-20 -bottom-24 w-72 h-72 rounded-full pointer-events-none hero-blob hero-blob-teal"
-      />
-      <div
-        class="absolute left-1/2 top-1/2 w-72 h-72 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none hero-blob hero-blob-soft"
-      />
+      <div class="absolute -right-20 -top-24 w-80 h-80 rounded-full pointer-events-none hero-blob hero-blob-gold" />
+      <div class="absolute -left-20 -bottom-24 w-72 h-72 rounded-full pointer-events-none hero-blob hero-blob-teal" />
+      <div class="absolute left-1/2 top-1/2 w-72 h-72 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none hero-blob hero-blob-soft" />
 
       <div class="relative p-7 sm:p-9">
         <div class="flex flex-col sm:flex-row items-center sm:items-start gap-6">
           <!-- Logo -->
-          <div class="logo-wrap relative shrink-0 w-[82px] h-[82px]">
+          <div class="relative shrink-0 w-[82px] h-[82px]">
             <div class="logo-ring-outer absolute -inset-4 rounded-[28px]" />
             <div class="logo-ring absolute -inset-2 rounded-[24px]" />
-
-            <div class="relative logo-tile w-[82px] h-[82px] rounded-[22px] flex items-center justify-center">
+            <div class="logo-tile relative w-[82px] h-[82px] rounded-[22px] flex items-center justify-center">
               <img
                 :src="logoIconUrl"
                 alt="Cynosure"
@@ -93,7 +84,7 @@
       </div>
     </div>
 
-    <div class="h-full flex flex-col items-center justify-center gap-6 ">
+    <div class="h-full flex flex-col items-center justify-center gap-6">
       <!-- SECTION LABEL -->
       <div class="flex items-center gap-2.5 mb-3.5">
         <span class="text-[10px] font-bold uppercase tracking-[0.18em] text-theme-600">
@@ -132,14 +123,13 @@
 
               <Icon
                 icon="lucide:arrow-up-right"
-                class="feature-arrow w-4 h-4 text-theme-700 transition-all duration-300 group-hover:text-theme-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                class="feature-arrow w-4 h-4 text-theme-700 opacity-45 transition-all duration-300 group-hover:text-theme-400 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
               />
             </div>
 
             <p class="text-[13px] font-bold text-theme-150 mb-1.5 leading-snug">
               {{ feature.title }}
             </p>
-
             <p class="text-[11.5px] text-theme-550 leading-relaxed">
               {{ feature.description }}
             </p>
@@ -157,22 +147,10 @@ import { useAppBranding } from '../../composables/useAppBranding'
 const { logoIconUrl } = useAppBranding()
 
 const pills = [
-  {
-    label: 'Agents',
-    icon: 'lucide:bot',
-  },
-  {
-    label: 'Memory',
-    icon: 'lucide:brain',
-  },
-  {
-    label: 'Tools',
-    icon: 'lucide:wrench',
-  },
-  {
-    label: 'Automations',
-    icon: 'lucide:calendar-clock',
-  },
+  { label: 'Agents',      icon: 'lucide:bot' },
+  { label: 'Memory',      icon: 'lucide:brain' },
+  { label: 'Tools',       icon: 'lucide:wrench' },
+  { label: 'Automations', icon: 'lucide:calendar-clock' },
 ]
 
 const introSteps = [
@@ -264,6 +242,7 @@ const features = [
 </script>
 
 <style scoped>
+/* ─── Hero card ─────────────────────────────────────────────────────────────── */
 .hero-card {
   background:
     radial-gradient(circle at 80% 0%, rgba(209, 178, 56, 0.14) 0%, transparent 34%),
@@ -274,7 +253,7 @@ const features = [
     inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
 
-/* Hero background grid */
+/* Grid overlay */
 .hero-grid {
   background-image:
     linear-gradient(rgba(209, 178, 56, 0.045) 1px, transparent 1px),
@@ -283,33 +262,29 @@ const features = [
   mask-image: radial-gradient(ellipse 85% 70% at 50% 5%, black 28%, transparent 100%);
 }
 
-/* Very subtle texture */
+/* Noise wash */
 .hero-noise {
-  background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.035), transparent 30%, rgba(255, 255, 255, 0.018));
-  opacity: 0.7;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.035), transparent 30%, rgba(255, 255, 255, 0.018));
 }
 
+/* ─── Glow blobs ─────────────────────────────────────────────────────────────── */
 .hero-blob {
   filter: blur(2px);
   animation: heroPulse 5s ease-in-out infinite;
 }
-
 .hero-blob-gold {
   background: radial-gradient(circle, rgba(209, 178, 56, 0.2) 0%, transparent 68%);
 }
-
 .hero-blob-teal {
   background: radial-gradient(circle, rgba(20, 184, 166, 0.12) 0%, transparent 70%);
   animation-delay: 0.8s;
 }
-
 .hero-blob-soft {
   background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, transparent 72%);
   animation-delay: 1.4s;
 }
 
-/* Logo */
+/* ─── Logo ───────────────────────────────────────────────────────────────────── */
 .logo-tile {
   background:
     radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.12), transparent 34%),
@@ -319,18 +294,16 @@ const features = [
     0 0 28px rgba(209, 178, 56, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
-
 .logo-ring {
   border: 1px solid rgba(209, 178, 56, 0.26);
   animation: ringPulse 3.2s ease-in-out infinite;
 }
-
 .logo-ring-outer {
   border: 1px solid rgba(209, 178, 56, 0.11);
   animation: ringPulse 3.2s ease-in-out 0.5s infinite;
 }
 
-/* Gradient text */
+/* ─── Text effects ───────────────────────────────────────────────────────────── */
 .hero-gradient-text {
   background: linear-gradient(90deg, #d1b238 0%, #f8dd78 45%, #14b8a6 100%);
   background-size: 220% auto;
@@ -345,6 +318,7 @@ const features = [
   animation: blink 2s ease-in-out infinite;
 }
 
+/* ─── Intro steps ────────────────────────────────────────────────────────────── */
 .intro-step {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
@@ -355,19 +329,18 @@ const features = [
   border: 1px solid rgba(209, 178, 56, 0.22);
 }
 
+/* ─── Section divider ────────────────────────────────────────────────────────── */
 .section-line {
   background: linear-gradient(90deg, rgba(75, 85, 99, 0.42) 0%, transparent 100%);
 }
 
-/* Feature cards */
+/* ─── Feature cards ──────────────────────────────────────────────────────────── */
 .feature-card {
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.018) 100%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.018) 100%);
   box-shadow:
     0 14px 38px rgba(0, 0, 0, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
-
 .feature-card:hover {
   box-shadow:
     0 20px 52px rgba(0, 0, 0, 0.28),
@@ -375,16 +348,11 @@ const features = [
 }
 
 .feature-glow {
-  opacity: 1;
   background:
     radial-gradient(circle at 0% 0%, var(--feature-glow) 0%, transparent 58%),
     linear-gradient(135deg, var(--feature-glow) 0%, transparent 42%);
-  transition:
-    opacity 300ms ease,
-    background 300ms ease,
-    transform 300ms ease;
+  transition: background 300ms ease, transform 300ms ease;
 }
-
 .feature-card:hover .feature-glow {
   background:
     radial-gradient(circle at 0% 0%, var(--feature-glow-strong) 0%, transparent 62%),
@@ -394,18 +362,10 @@ const features = [
 
 .feature-sheen {
   opacity: 0;
-  background: linear-gradient(
-    120deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.055) 42%,
-    transparent 70%
-  );
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.055) 42%, transparent 70%);
   transform: translateX(-60%);
-  transition:
-    opacity 300ms ease,
-    transform 500ms ease;
+  transition: opacity 300ms ease, transform 500ms ease;
 }
-
 .feature-card:hover .feature-sheen {
   opacity: 1;
   transform: translateX(60%);
@@ -417,55 +377,21 @@ const features = [
     0 8px 20px rgba(0, 0, 0, 0.18);
 }
 
-.feature-arrow {
-  opacity: 0.45;
-}
-
-.feature-card:hover .feature-arrow {
-  opacity: 1;
-}
-
+/* ─── Keyframes ──────────────────────────────────────────────────────────────── */
 @keyframes heroPulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  50% {
-    opacity: 0.72;
-    transform: scale(1.06);
-  }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.72; transform: scale(1.06); }
 }
-
 @keyframes ringPulse {
-  0%, 100% {
-    opacity: 0.68;
-    transform: scale(1);
-  }
-
-  50% {
-    opacity: 0.24;
-    transform: scale(1.04);
-  }
+  0%, 100% { opacity: 0.68; transform: scale(1); }
+  50%       { opacity: 0.24; transform: scale(1.04); }
 }
-
 @keyframes blink {
-  0%, 100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.35;
-  }
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
 }
-
 @keyframes shimmer {
-  0% {
-    background-position: 220% center;
-  }
-
-  100% {
-    background-position: -220% center;
-  }
+  0%   { background-position: 220% center; }
+  100% { background-position: -220% center; }
 }
 </style>
