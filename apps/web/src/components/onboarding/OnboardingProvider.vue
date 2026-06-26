@@ -5,7 +5,7 @@
         Connect an AI Provider
       </h2>
       <p class="text-sm text-theme-500 mt-1">
-        You need at least one provider to use Cynosure. You can add more later in Settings. We recommend <b>deepseek-v4</b> as base model.
+        You need at least one provider to use Cynosure. You can add more later in Settings. <br> It is recommended to use <b>Deepseek-v4</b> as base model.
       </p>
     </div>
 
