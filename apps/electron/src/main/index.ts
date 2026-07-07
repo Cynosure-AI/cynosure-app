@@ -18,6 +18,7 @@ const CYNOSURE_DATA_DIR_NAME = 'cynosure'
 let serverPort = PREFERRED_PORT
 let serverProcess: ChildProcess | null = null
 let tray: Tray | null = null
+let mainWindow: BrowserWindow | null = null
 let isQuitting = false
 let activeTasks = 0
 let trayWs: WebSocket | null = null
@@ -99,6 +100,21 @@ protocol.registerSchemesAsPrivileged([
         }
     }
 ])
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) {
+    app.quit()
+} else {
+    app.on('second-instance', () => {
+        const win = mainWindow ?? BrowserWindow.getAllWindows()[0]
+        if (!win || win.isDestroyed()) return
+
+        if (win.isMinimized()) win.restore()
+        win.show()
+        win.focus()
+    })
+}
 
 // ── Path resolution ────────────────────────────────────────────────────────────
 
@@ -395,6 +411,8 @@ function createWindow(): BrowserWindow {
 // ── App lifecycle ──────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+    if (!hasSingleInstanceLock) return
+
     electronApp.setAppUserModelId('com.cynosure.desktop')
 
     app.on('browser-window-created', (_, window) => {
@@ -440,16 +458,18 @@ app.whenReady().then(async () => {
 
     // Show the UI immediately — the web app's WebSocket logic will auto-connect
     // once the server is ready. This avoids a blank wait while MCPs load.
-    const mainWindow = createWindow()
+    mainWindow = createWindow()
     tray = createTray(mainWindow)
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
-            const win = createWindow()
-            tray = createTray(win)
+            mainWindow = createWindow()
+            tray = createTray(mainWindow)
         } else {
-            mainWindow.show()
-            mainWindow.focus()
+            const win = mainWindow ?? BrowserWindow.getAllWindows()[0]
+            if (!win || win.isDestroyed()) return
+            win.show()
+            win.focus()
         }
     })
 })
