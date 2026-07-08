@@ -210,6 +210,8 @@ const chatRoute = computed(() =>
         </div>
       </div>
 
+      <!-- Header actions -->
+      <div class="brand-actions flex items-center gap-1 shrink-0">
       <!-- Notification Bell -->
       <div class="relative">
         <button
@@ -353,6 +355,19 @@ const chatRoute = computed(() =>
             @click="showNotifications = false"
           />
         </Teleport>
+      </div>
+
+      <!-- Collapse toggle (desktop only) -->
+      <button
+        class="collapse-toggle-btn hidden md:flex p-1.5 rounded-lg text-theme-500 hover:text-theme-300 hover:bg-theme-800 transition-colors"
+        :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        @click="toggleCollapse"
+      >
+        <Icon
+          icon="lucide:menu"
+          class="w-4 h-4"
+        />
+      </button>
       </div>
     </div>
 
@@ -585,26 +600,6 @@ const chatRoute = computed(() =>
       </HoverTooltip>
     </nav>
 
-    <!-- Collapse toggle (desktop only) -->
-    <div class="shrink-0 hidden md:block px-3 py-1 border-t border-theme-800/50">
-      <button
-        class="w-full flex items-center gap-2.5 rounded-lg text-theme-500 hover:text-theme-300 hover:bg-theme-800/50 transition-colors"
-        :class="sidebarCollapsed ? 'justify-center p-2' : 'px-2 py-1.5'"
-        :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-        @click="toggleCollapse"
-      >
-        <Icon
-          icon="lucide:panel-left-close"
-          class="w-4 h-4 shrink-0 transition-transform"
-          :class="{ 'rotate-180': sidebarCollapsed }"
-        />
-        <span
-          v-show="!sidebarCollapsed"
-          class="text-[11px]"
-        >Collapse</span>
-      </button>
-    </div>
-
     <!-- Status Footer -->
     <div class="status-section px-3 py-3 shrink-0 relative">
       <button
@@ -756,17 +751,38 @@ const chatRoute = computed(() =>
   }
 
   .sidebar-collapsed .brand-area {
+    flex-direction: column;
     justify-content: center;
+    align-items: center;
     padding-inline: 0;
-    gap: 0;
+    gap: 0.5rem;
   }
 
-  .sidebar-collapsed .brand-area>*:not(:first-child) {
+  .sidebar-collapsed .brand-area>*:not(:first-child):not(.brand-actions) {
     display: none;
+  }
+
+  .sidebar-collapsed .brand-logo-glitch-wrap {
+    flex: none;
+    padding-left: 0;
   }
 
   .sidebar-collapsed .brand-logo-icon {
     display: block;
+  }
+
+  .sidebar-collapsed .brand-logo-text {
+    display: none;
+  }
+
+  .sidebar-collapsed .brand-actions {
+    flex: none;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .sidebar-collapsed .brand-actions .relative {
+    display: none;
   }
 
   .sidebar-collapsed .status-section button {
