@@ -10,17 +10,22 @@ interface ClientState {
 
 const clients = new Map<WebSocket, ClientState>()
 
-const conversationScopedEventPrefixes = [
-  'chat:stream',
-  'chat:subagent-stream',
-  'chat:compact',
-  'chat:new-message',
-  'chat:post-action',
-  'chat:title-updated',
-  'agent:execution-update',
-  'agent:hitl-',
-  'planning:state-updated',
-]
+// Events that are never tied to a single conversation and should always reach
+// every connected client (system-wide progress/status, not chat content).
+// IMPORTANT: this is the only list that should require manual upkeep. Any event
+// whose payload carries a `conversationId` (directly or nested under `data`) is
+// automatically scoped to clients subscribed to that conversation — see
+// `canReceiveEvent` below. Do NOT add conversation-specific events here; doing
+// so is exactly what caused past "sub-agent events leaking into other chats"
+// regressions (an event forgotten from an allowlist silently broadcast globally).
+const globalEventNames = new Set([
+  'memory:job-updated',
+  'memory:reembed-progress',
+  'backup:restore-progress',
+  'notification:created',
+  'mcp-auth-needed',
+  'mcp-auth-complete',
+])
 
 export function addClient(ws: WebSocket): void {
   clients.set(ws, { ws, alive: true, conversationIds: new Set(), hasConversationSubscription: false })
@@ -55,13 +60,17 @@ function getConversationId(data: unknown): string | undefined {
 }
 
 function shouldScopeEvent(event: string): boolean {
-  return conversationScopedEventPrefixes.some((prefix) => event.startsWith(prefix))
+  return !globalEventNames.has(event)
 }
 
 function canReceiveEvent(state: ClientState, event: string, data: unknown): boolean {
   if (!shouldScopeEvent(event)) return true
 
   const conversationId = getConversationId(data)
+  // No conversationId found on an event that isn't explicitly global — this
+  // most likely means it's genuinely conversation-scoped but the payload
+  // shape wasn't recognized. Dropping it is safer than leaking it into
+  // whatever conversation the client happens to be viewing.
   if (!conversationId) return false
 
   // Conversation-scoped events must not fall back to a global firehose. During
