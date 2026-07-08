@@ -178,7 +178,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
         .flatMap(({ tools }) => tools)
 
     const candidateTools = dedupeTools([...localTools, ...candidateMcpTools])
-    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, maxTools, protectedNames, onStatus)
+    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, allTools, maxTools, protectedNames, onStatus)
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
     let routedTools: RoutedToolDefinition[] = []
@@ -195,6 +195,7 @@ async function rankCandidateTools(
     query: string,
     queryVector: number[],
     tools: RegistryAwareToolDefinition[],
+    allTools: RegistryAwareToolDefinition[],
     limit: number,
     protectedNames: Set<string>,
     onStatus?: RouteToolsInput['onStatus'],
@@ -228,7 +229,10 @@ async function rankCandidateTools(
             })
         }
 
-        pruneToolEmbeddingCache(rankable.map(toolCacheKey), scope)
+        // Prune against the full installed tool set, not just this call's narrowed
+        // candidate subset — otherwise tools outside the current top-K groups would
+        // have their cached embeddings evicted every call, defeating the cache.
+        pruneToolEmbeddingCache(allTools.map(toolCacheKey), scope)
 
         onStatus?.('finding-tools', 'Finding required tools...')
         const scored = rankable
