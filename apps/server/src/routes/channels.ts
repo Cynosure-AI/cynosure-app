@@ -3,6 +3,14 @@ import { getDb } from '../db/database.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { nanoid } from 'nanoid'
 import type { ChannelType } from '../core/channels/base.channel.js'
+import { normalizeTelegramUserIds } from '../core/channels/telegram/telegram.security.js'
+
+function telegramAccessError(type: ChannelType, config: Record<string, unknown>, enabled: boolean): string | null {
+    if (type === 'telegram' && enabled && normalizeTelegramUserIds(config.allowedUserIds).length === 0) {
+        return 'At least one allowed Telegram user ID is required before enabling this channel.'
+    }
+    return null
+}
 
 export async function registerChannelRoutes(app: FastifyInstance): Promise<void> {
     const manager = getChannelManager()
@@ -32,12 +40,14 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
             config: Record<string, unknown>
             enabled?: boolean
         }
-    }>('/', async (req) => {
+    }>('/', async (req, reply) => {
         const { name, type, agentId, config, enabled } = req.body
         const db = getDb()
         const id = nanoid()
         const now = Date.now()
         const isEnabled = enabled !== false ? 1 : 0
+        const accessError = telegramAccessError(type, config, isEnabled === 1)
+        if (accessError) return reply.status(400).send({ error: accessError })
 
         db.prepare(
             'INSERT INTO channels (id, name, type, agent_id, config_json, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
@@ -69,6 +79,10 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
 
         const { name, agentId, config, enabled } = req.body
         const now = Date.now()
+        const nextConfig = config ?? existing.config
+        const nextEnabled = enabled ?? existing.enabled
+        const accessError = telegramAccessError(existing.type, nextConfig, nextEnabled)
+        if (accessError) return reply.status(400).send({ error: accessError })
 
         const updates: string[] = []
         const values: unknown[] = []
@@ -112,6 +126,8 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
         if (!existing) return reply.status(404).send({ error: 'Channel not found' })
 
         const newEnabled = !existing.enabled
+        const accessError = telegramAccessError(existing.type, existing.config, newEnabled)
+        if (accessError) return reply.status(400).send({ error: accessError })
         db.prepare('UPDATE channels SET enabled = ?, updated_at = ? WHERE id = ?')
             .run(newEnabled ? 1 : 0, Date.now(), req.params.id)
 

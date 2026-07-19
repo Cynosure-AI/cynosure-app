@@ -15,9 +15,11 @@ import type { TelegramCtx, TelegramUpdate } from './telegram.types.js'
 import { handleCommand } from './telegram.commands.js'
 import { sendMessage, sendMessageReturningId, editMessage, sendLongMessage, sendChatAction, sendPhoto, answerCallbackQuery } from './telegram.api.js'
 import { extractAttachments } from './telegram.attachments.js'
+import { isTelegramUserAllowed } from './telegram.security.js'
 
 export async function handleMessage(ctx: TelegramCtx, update: TelegramUpdate): Promise<void> {
     const msg = update.message!
+    if (msg.chat.type !== 'private' || !isTelegramUserAllowed(ctx.allowedUserIds, msg.from?.id)) return
     const chatId = msg.chat.id
     const text = msg.text || msg.caption || ''
 
@@ -62,6 +64,7 @@ export async function handleMessage(ctx: TelegramCtx, update: TelegramUpdate): P
 
 export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): Promise<void> {
     const msg = update.message!
+    if (msg.chat.type !== 'private' || !isTelegramUserAllowed(ctx.allowedUserIds, msg.from?.id)) return
     const chatId = msg.chat.id
     const userText = msg.text || msg.caption || ''
     const senderName = msg.from?.first_name || 'User'
@@ -114,6 +117,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
     let thinkingTimer: ReturnType<typeof setInterval> | null = null
     const conversationId = getOrCreateConversation(ctx, chatId, senderName, effectiveAgentId)
     ctx.conversationToChat.set(conversationId, chatId)
+    ctx.conversationToUser.set(conversationId, msg.from!.id)
 
     const db = getDb()
     const now = Date.now()
@@ -462,7 +466,8 @@ export function subscribeToHITL(ctx: TelegramCtx): () => void {
             resolve: (result: { approved: boolean; reason?: string }) => void
         }
         const chatId = ctx.conversationToChat.get(data.conversationId)
-        if (chatId === undefined) return
+        const userId = ctx.conversationToUser.get(data.conversationId)
+        if (chatId === undefined || userId === undefined || !isTelegramUserAllowed(ctx.allowedUserIds, userId)) return
 
         const toolNames = data.toolCalls.map(tc => `\`${tc.function.name}\``).join(', ')
         const text = `🔐 *Tool approval required*\n\nThe agent wants to use: ${toolNames}\n\nApprove or deny?`
@@ -491,6 +496,7 @@ export function subscribeToHITL(ctx: TelegramCtx): () => void {
                     ctx.pendingHITL.set(data.taskId, {
                         conversationId: data.conversationId,
                         chatId,
+                        userId,
                         messageId: body.result.message_id,
                         resolve: data.resolve
                     })
@@ -509,6 +515,10 @@ export function subscribeToHITL(ctx: TelegramCtx): () => void {
 
 /** Handle a Telegram callback query (inline button press). */
 export async function handleCallbackQuery(ctx: TelegramCtx, query: NonNullable<TelegramUpdate['callback_query']>): Promise<void> {
+    if (!isTelegramUserAllowed(ctx.allowedUserIds, query.from.id)) {
+        await answerCallbackQuery(ctx, query.id)
+        return
+    }
     const callbackData = query.data
     if (!callbackData?.startsWith('hitl:')) {
         await answerCallbackQuery(ctx, query.id)
@@ -522,6 +532,11 @@ export async function handleCallbackQuery(ctx: TelegramCtx, query: NonNullable<T
 
     if (!pending) {
         await answerCallbackQuery(ctx, query.id, 'This approval has already been handled.')
+        return
+    }
+
+    if (pending.userId !== query.from.id || pending.chatId !== query.message?.chat.id) {
+        await answerCallbackQuery(ctx, query.id, 'This approval is not assigned to you.')
         return
     }
 

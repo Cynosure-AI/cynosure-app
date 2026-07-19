@@ -27,11 +27,16 @@ const dlgBotToken = ref('')
 const dlgAppToken = ref('')
 const dlgEnabled = ref(true)
 const dlgAllowedAgentIds = ref<string[]>([])
+const dlgAllowedTelegramUserIds = ref('')
 
 const channelId = computed(() => route.params.id as string)
 const agentOptions = computed<MultiSelectOption[]>(() =>
   allAgents.value.map(a => ({ value: a.id, label: a.name }))
 )
+
+function parseTelegramUserIds(value: string): string[] {
+  return [...new Set(value.split(/[\s,]+/).map(id => id.trim()).filter(id => /^\d+$/.test(id) && id !== '0'))]
+}
 
 const channelTypeOptions = [
   { value: 'telegram' as ChannelType, label: 'Telegram', icon: 'mdi:telegram', color: 'sky' },
@@ -98,6 +103,9 @@ const canSave = computed(() => {
   if (channel.value?.type === 'slack') {
     return !!dlgBotToken.value.trim() && !!dlgAppToken.value.trim()
   }
+  if (channel.value?.type === 'telegram' && parseTelegramUserIds(dlgAllowedTelegramUserIds.value).length === 0) {
+    return false
+  }
   return !!dlgBotToken.value.trim()
 })
 
@@ -107,6 +115,9 @@ function populateFields(ch: ChannelDefinition) {
   dlgBotToken.value = (ch.config.botToken as string) || ''
   dlgAppToken.value = (ch.config.appToken as string) || ''
   dlgAllowedAgentIds.value = (ch.config.allowedAgentIds as string[]) || []
+  dlgAllowedTelegramUserIds.value = Array.isArray(ch.config.allowedUserIds)
+    ? ch.config.allowedUserIds.map(String).join(', ')
+    : ''
   dlgEnabled.value = ch.enabled
   testResult.value = null
 }
@@ -117,6 +128,9 @@ function buildConfig(): Record<string, unknown> {
 
   if (channel.value.type === 'telegram' || channel.value.type === 'discord') {
     config.botToken = dlgBotToken.value.trim()
+  }
+  if (channel.value.type === 'telegram') {
+    config.allowedUserIds = parseTelegramUserIds(dlgAllowedTelegramUserIds.value)
   }
   if (channel.value.type === 'slack') {
     config.botToken = dlgBotToken.value.trim()
@@ -320,6 +334,19 @@ onMounted(loadChannel)
             </div>
 
             <template v-if="channel.type === 'telegram'">
+              <div>
+                <label class="block text-xs text-theme-400 mb-1.5">Allowed Telegram User IDs</label>
+                <input
+                  v-model="dlgAllowedTelegramUserIds"
+                  type="text"
+                  inputmode="numeric"
+                  placeholder="e.g. 123456789"
+                  class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
+                >
+                <p class="text-[11px] text-theme-600 mt-1.5">
+                  Required. Only these numeric Telegram user IDs can use the bot. Separate multiple IDs with commas. Group chats are blocked.
+                </p>
+              </div>
               <div>
                 <label class="block text-xs text-theme-400 mb-1.5">Bot Token</label>
                 <input

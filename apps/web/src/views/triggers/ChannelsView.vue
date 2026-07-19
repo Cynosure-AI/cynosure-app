@@ -38,10 +38,22 @@ const dlgSaving = ref(false)
 const dlgTesting = ref(false)
 const dlgTestResult = ref<{ success: boolean; username?: string; error?: string } | null>(null)
 const dlgAllowedAgentIds = ref<string[]>([])
+const dlgAllowedTelegramUserIds = ref('')
 
 const agentOptions = computed<MultiSelectOption[]>(() =>
   allAgents.value.map(a => ({ value: a.id, label: a.name }))
 )
+
+function parseTelegramUserIds(value: string): string[] {
+  return [...new Set(value.split(/[\s,]+/).map(id => id.trim()).filter(id => /^\d+$/.test(id) && id !== '0'))]
+}
+
+const canSaveChannel = computed(() => {
+  if (!dlgAgentId.value || !dlgBotToken.value.trim() || dlgSaving.value) return false
+  if (dlgType.value === 'slack' && !dlgAppToken.value.trim()) return false
+  if (dlgType.value === 'telegram' && parseTelegramUserIds(dlgAllowedTelegramUserIds.value).length === 0) return false
+  return true
+})
 
 // Delete confirm
 const showDeleteConfirm = ref(false)
@@ -75,6 +87,7 @@ function resetDialog() {
   dlgEnabled.value = true
   dlgTestResult.value = null
   dlgAllowedAgentIds.value = []
+  dlgAllowedTelegramUserIds.value = ''
   editingId.value = null
 }
 
@@ -88,6 +101,9 @@ function buildConfig(): Record<string, unknown> {
   const config: Record<string, unknown> = {}
   if (dlgType.value === 'telegram' || dlgType.value === 'discord') {
     config.botToken = dlgBotToken.value.trim()
+  }
+  if (dlgType.value === 'telegram') {
+    config.allowedUserIds = parseTelegramUserIds(dlgAllowedTelegramUserIds.value)
   }
   if (dlgType.value === 'slack') {
     config.botToken = dlgBotToken.value.trim()
@@ -470,6 +486,20 @@ onUnmounted(() => {
           <!-- Telegram-specific config -->
           <template v-if="dlgType === 'telegram'">
             <label class="block text-sm text-theme-400 mb-1">
+              Allowed Telegram User IDs
+            </label>
+            <input
+              v-model="dlgAllowedTelegramUserIds"
+              type="text"
+              inputmode="numeric"
+              placeholder="e.g. 123456789"
+              class="w-full px-3 py-2 mb-1 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono"
+            >
+            <p class="text-[11px] text-theme-600 mb-4">
+              Required. Only these numeric Telegram user IDs can use the bot. Group chats are blocked.
+            </p>
+
+            <label class="block text-sm text-theme-400 mb-1">
               Bot Token
             </label>
             <div class="relative mb-1">
@@ -593,7 +623,7 @@ onUnmounted(() => {
               Cancel
             </button>
             <button
-              :disabled="!dlgAgentId || !dlgBotToken.trim() || dlgSaving"
+              :disabled="!canSaveChannel"
               class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
               @click="saveChannel"
             >

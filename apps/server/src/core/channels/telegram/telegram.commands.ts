@@ -38,12 +38,7 @@ export async function handleCommand(ctx: TelegramCtx, chatId: number, text: stri
     const command = text.split(/\s|@/)[0].slice(1).toLowerCase()
 
     if (command === 'stop') {
-        let cancelled = 0
-        for (const [id, entry] of ctx.activeExecutions) {
-            entry.controller.abort()
-            ctx.activeExecutions.delete(id)
-            cancelled++
-        }
+        const cancelled = cancelExecutionsForChat(ctx, chatId)
         if (cancelled > 0) {
             await sendMessage(ctx, chatId, `⏹ Stopped ${cancelled} running execution(s).`)
         } else {
@@ -106,14 +101,17 @@ export async function handleCommand(ctx: TelegramCtx, chatId: number, text: stri
 }
 
 /** Cancel all active executions whose conversationId maps to the given Telegram chatId. */
-export function cancelExecutionsForChat(ctx: TelegramCtx, chatId: number): void {
+export function cancelExecutionsForChat(ctx: TelegramCtx, chatId: number): number {
+    let cancelled = 0
     for (const [id, entry] of ctx.activeExecutions) {
         const execChatId = ctx.conversationToChat.get(entry.exec.conversationId)
         if (execChatId === chatId) {
             entry.controller.abort()
             ctx.activeExecutions.delete(id)
+            cancelled++
         }
     }
+    return cancelled
 }
 
 /** Archive the active conversation for a Telegram chat so a fresh one is created next time. */
