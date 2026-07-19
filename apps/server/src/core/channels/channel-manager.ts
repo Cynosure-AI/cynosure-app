@@ -158,7 +158,7 @@ class ChannelManager {
                 return new TelegramChannel(
                     channel.id,
                     channel.agentId,
-                    channel.config as { botToken: string; allowedAgentIds?: string[] },
+                    channel.config as { botToken: string; allowedAgentIds?: string[]; allowedUserIds?: Array<string | number> },
                     this.broadcast
                 )
             case 'discord':

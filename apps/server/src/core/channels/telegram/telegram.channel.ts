@@ -4,6 +4,7 @@ import { TELEGRAM_API } from './telegram.types.js'
 import { registerBotCommands } from './telegram.commands.js'
 import { handleMessage, handleCallbackQuery, subscribeToHITL } from './telegram.messaging.js'
 import { sendLongMessage } from './telegram.api.js'
+import { isTelegramUserAllowed, normalizeTelegramUserIds } from './telegram.security.js'
 
 export class TelegramChannel implements ChannelProvider {
     botToken: string
@@ -11,11 +12,13 @@ export class TelegramChannel implements ChannelProvider {
     channelId: string
     broadcast: BroadcastFn
     allowedAgentIds: string[]
+    allowedUserIds: ReadonlySet<string>
     activeExecutions = new Map<string, { exec: ActiveChannelExecution; controller: AbortController }>()
     chatAgentOverride = new Map<number, string>()
     chatLastUsedAgent = new Map<number, string>()
     pendingHITL = new Map<string, PendingHITL>()
     conversationToChat = new Map<string, number>()
+    conversationToUser = new Map<string, number>()
     chatLocks = new Map<number, Promise<void>>()
     conversationSendQueue = new Map<string, (fn: () => Promise<void>) => void>()
     pendingAttachments = new Map<number, { imageDataUrls: string[]; audioDataUrls: string[] }>()
@@ -40,9 +43,15 @@ export class TelegramChannel implements ChannelProvider {
         this.botToken = config.botToken
         this.broadcast = broadcast
         this.allowedAgentIds = config.allowedAgentIds ?? []
+        this.allowedUserIds = new Set(normalizeTelegramUserIds(config.allowedUserIds))
     }
 
     async start(): Promise<void> {
+        if (this.allowedUserIds.size === 0) {
+            this.connected = false
+            this.errorMsg = 'Telegram access is locked: add at least one allowed Telegram user ID.'
+            return
+        }
         const testResult = await this.test()
         if (!testResult.success) {
             this.connected = false
@@ -72,6 +81,7 @@ export class TelegramChannel implements ChannelProvider {
             this.abortController = null
         }
         this.conversationToChat.clear()
+        this.conversationToUser.clear()
         this.chatLocks.clear()
     }
 
@@ -125,6 +135,9 @@ export class TelegramChannel implements ChannelProvider {
         if (isNaN(chatId)) {
             throw new Error(`Invalid Telegram chat target: ${target}`)
         }
+        if (!isTelegramUserAllowed(this.allowedUserIds, chatId)) {
+            throw new Error('Telegram notification target is not an allowed user')
+        }
         await sendLongMessage(this, chatId, text)
     }
 
@@ -149,9 +162,13 @@ export class TelegramChannel implements ChannelProvider {
                 if (data.ok && data.result) {
                     for (const update of data.result) {
                         this.lastUpdateId = update.update_id
-                        if (update.callback_query) {
+                        if (update.callback_query && isTelegramUserAllowed(this.allowedUserIds, update.callback_query.from.id)) {
                             handleCallbackQuery(this, update.callback_query).catch(() => { })
-                        } else if (update.message?.text || update.message?.photo || update.message?.document || update.message?.audio || update.message?.voice || update.message?.video || update.message?.video_note) {
+                        } else if (
+                            update.message?.chat.type === 'private'
+                            && isTelegramUserAllowed(this.allowedUserIds, update.message.from?.id)
+                            && (update.message.text || update.message.photo || update.message.document || update.message.audio || update.message.voice || update.message.video || update.message.video_note)
+                        ) {
                             handleMessage(this, update).catch((err) => {
                                 console.error(`[Telegram] Error handling message: ${(err as Error).message}`)
                             })

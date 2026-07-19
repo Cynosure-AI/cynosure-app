@@ -5,6 +5,8 @@ export const TELEGRAM_API = 'https://api.telegram.org'
 export interface TelegramConfig {
     botToken: string
     allowedAgentIds?: string[]
+    /** Numeric Telegram user IDs permitted to use this bot. Empty means deny all. */
+    allowedUserIds?: Array<string | number>
 }
 
 export interface TelegramUpdate {
@@ -26,7 +28,7 @@ export interface TelegramUpdate {
     callback_query?: {
         id: string
         from: { id: number; first_name: string }
-        message?: { message_id: number; chat: { id: number } }
+        message?: { message_id: number; chat: { id: number; type?: string } }
         data?: string
     }
 }
@@ -34,6 +36,7 @@ export interface TelegramUpdate {
 export interface PendingHITL {
     conversationId: string
     chatId: number
+    userId: number
     messageId: number
     resolve: (result: { approved: boolean; reason?: string }) => void
 }
@@ -47,11 +50,13 @@ export interface TelegramCtx {
     channelId: string
     broadcast: BroadcastFn
     allowedAgentIds: string[]
+    allowedUserIds: ReadonlySet<string>
     activeExecutions: Map<string, { exec: ActiveChannelExecution; controller: AbortController }>
     chatAgentOverride: Map<number, string>
     chatLastUsedAgent: Map<number, string>
     pendingHITL: Map<string, PendingHITL>
     conversationToChat: Map<string, number>
+    conversationToUser: Map<string, number>
     chatLocks: Map<number, Promise<void>>
     conversationSendQueue: Map<string, (fn: () => Promise<void>) => void>
     pendingAttachments: Map<number, { imageDataUrls: string[]; audioDataUrls: string[] }>
