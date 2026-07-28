@@ -506,11 +506,22 @@ const chatRoute = computed(() =>
           to="/instances"
           class="nav-item"
           :class="{ active: isActive('/instances') }"
+          :aria-label="hasAwaitingApproval ? 'Instances — approval required' : 'Instances'"
         >
-          <Icon
-            icon="lucide:activity"
-            class="w-4.5 h-4.5"
-          />
+          <span class="relative inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center">
+            <Icon
+              icon="lucide:activity"
+              class="w-4.5 h-4.5"
+            />
+            <span
+              v-if="hasAwaitingApproval"
+              class="collapsed-hitl-indicator absolute -right-1.5 -top-1.5 h-3 w-3 items-center justify-center"
+              aria-hidden="true"
+            >
+              <span class="absolute h-full w-full rounded-full bg-amber-400/50 animate-ping" />
+              <span class="relative h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-theme-950" />
+            </span>
+          </span>
           <span>Instances</span>
           <span
             v-if="hasAwaitingApproval"
@@ -525,7 +536,7 @@ const chatRoute = computed(() =>
           </div>
         </RouterLink>
         <template #content>
-          Instances
+          {{ hasAwaitingApproval ? "Instances — approval required" : "Instances" }}
         </template>
       </HoverTooltip>
 
@@ -708,6 +719,10 @@ const chatRoute = computed(() =>
   display: none;
 }
 
+.collapsed-hitl-indicator {
+  display: none;
+}
+
 /* ── Collapsed sidebar (desktop only) ── */
 @media (min-width: 768px) {
   .sidebar-collapsed nav {
@@ -738,6 +753,10 @@ const chatRoute = computed(() =>
 
   .sidebar-collapsed .nav-item>*:not(:first-child) {
     display: none;
+  }
+
+  .sidebar-collapsed .collapsed-hitl-indicator {
+    display: flex;
   }
 
   .sidebar-collapsed .section-label {
