@@ -215,6 +215,51 @@ export class LLMGateway {
 
     const info = await provider.getModelInfo(modelId)
 
+    // The model-list endpoint is often richer than the provider's single-model
+    // endpoint (some OpenAI-compatible APIs only return an id from /models/:id).
+    // Keep getModelInfo authoritative by filling gaps from that same list data.
+    if (
+      !info.contextLength ||
+      !info.inputModalities?.length ||
+      !info.outputModalities?.length ||
+      !info.pricing
+    ) {
+      try {
+        let listedModel: ModelListItem | undefined
+        const listTypes: Array<ModelListType | undefined> = [
+          undefined,
+          'image',
+          'video',
+          'transcription'
+        ]
+        for (const type of listTypes) {
+          listedModel = (await provider.listModelItems(type)).find((model) => model.id === modelId)
+          if (listedModel) break
+        }
+        if (listedModel) {
+          info.contextLength ||= listedModel.contextLength
+          if (!info.inputModalities?.length && listedModel.inputModalities?.length) {
+            info.inputModalities = listedModel.inputModalities
+          }
+          if (!info.outputModalities?.length && listedModel.outputModalities?.length) {
+            info.outputModalities = listedModel.outputModalities
+          }
+          if (listedModel.pricing) {
+            info.pricing = {
+              ...listedModel.pricing,
+              ...info.pricing,
+              skus: {
+                ...listedModel.pricing.skus,
+                ...info.pricing?.skus
+              }
+            }
+          }
+        }
+      } catch {
+        // Best effort; models.dev below may still provide the missing fields.
+      }
+    }
+
     // Fallback: if provider didn't return contextLength, try models.dev
     if (!info.contextLength) {
       await ensurePricingLoaded()

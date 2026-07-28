@@ -65,6 +65,7 @@ export const useChatStore = defineStore('chat', () => {
   const modelCost = ref<{ input: number; output: number } | null>(null)
   const modelPricing = ref<ModelPricing | null>(null)
   const modelModalities = ref<{ input: string[]; output: string[] } | null>(null)
+  let modelInfoRequestId = 0
   const memorySpaces = ref<MemorySpace[]>([])
   const postActionsMap = new Map<string, Set<string>>()
   const postActionsTrigger = ref(0)
@@ -335,8 +336,15 @@ export const useChatStore = defineStore('chat', () => {
 
   /** Fetch and update the context window for a given provider + model. */
   function fetchContextWindow(providerId: string, model: string): void {
+    const requestId = ++modelInfoRequestId
+    contextWindow.value = null
+    modelCost.value = null
+    modelPricing.value = null
+    modelModalities.value = null
+
     api.provider.getModelInfo(providerId, model)
       .then(info => {
+        if (requestId !== modelInfoRequestId) return
         if (info.contextLength) {
           contextWindow.value = info.contextLength
         } else {
@@ -352,6 +360,7 @@ export const useChatStore = defineStore('chat', () => {
           : null
       })
       .catch(() => {
+        if (requestId !== modelInfoRequestId) return
         contextWindow.value = null
         modelCost.value = null
         modelPricing.value = null
@@ -402,6 +411,7 @@ export const useChatStore = defineStore('chat', () => {
     if (resolved) {
       fetchContextWindow(resolved.providerId, resolved.model)
     } else {
+      modelInfoRequestId++
       contextWindow.value = null
       modelCost.value = null
       modelPricing.value = null
