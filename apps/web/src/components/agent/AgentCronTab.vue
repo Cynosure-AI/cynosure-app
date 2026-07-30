@@ -19,7 +19,6 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
         <h3 class="text-sm font-medium text-theme-200">
           Cron Prompt
         </h3>
-        <span class="text-[10px] text-theme-600 font-mono">CRON.md</span>
       </div>
       <p class="text-xs text-theme-500 mb-4">
         Instructions for the agent when it wakes up on a cron trigger.
