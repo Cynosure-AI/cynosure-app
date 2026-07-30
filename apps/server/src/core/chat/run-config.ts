@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ToolRegistry } from '../tools/tool-registry.js'
-import type { ConversationExecutionConfig } from '@shared/types'
+import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { relativePathForFolder } from '../memory/memory-space-folders.js'
 import type { MemorySpaceRef } from '../memory/memory-space-scope.js'
 
@@ -22,6 +22,7 @@ export interface PersistedChatConfigInput {
     responseModel: string
     responseProvider: string
     thinkingEnabled: boolean
+    reasoningEffort?: ReasoningEffort
     autoToolRouting: boolean
     autoMemory: boolean
 }
@@ -79,6 +80,7 @@ export function buildPersistedChatConfig(input: PersistedChatConfigInput): Conve
         model: input.responseModel,
         providerId: input.responseProvider,
         thinkingEnabled: input.thinkingEnabled,
+        reasoningEffort: input.reasoningEffort ?? 'medium',
         autoToolRouting: input.autoToolRouting,
         autoMemory: input.autoMemory,
     }
@@ -97,6 +99,7 @@ export function buildInitialExecutionConfig(input: {
         model: agent?.model ?? '',
         providerId: agent?.providerId ?? '',
         thinkingEnabled: agent?.thinkingEnabled !== false,
+        reasoningEffort: agent?.reasoningEffort ?? 'medium',
         autoToolRouting: agent?.autoToolRouting === true,
         autoMemory: agent?.autoMemory === true,
     }
@@ -117,6 +120,9 @@ export function parseExecutionConfig(raw: string | null | undefined): Conversati
         model: typeof parsed.model === 'string' ? parsed.model : '',
         providerId: typeof parsed.providerId === 'string' ? parsed.providerId : '',
         thinkingEnabled: parsed.thinkingEnabled !== false,
+        reasoningEffort: parsed.reasoningEffort === 'low' || parsed.reasoningEffort === 'high'
+            ? parsed.reasoningEffort
+            : 'medium',
         autoToolRouting: parsed.autoToolRouting === true,
         autoMemory: parsed.autoMemory === true,
     }

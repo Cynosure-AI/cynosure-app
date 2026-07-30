@@ -221,6 +221,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         subAgents: reqSubAgents,
         memorySpaceIds: reqMemorySpaceIds,
         thinkingEnabled: reqThinkingEnabled,
+        reasoningEffort: reqReasoningEffort,
         contextStrategy: reqContextStrategy,
         autoToolRouting: reqAutoToolRouting,
         autoMemory: reqAutoMemory,
@@ -383,6 +384,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             hasExplicitToolAllowlist,
             usedToolNames,
             thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
+            reasoningEffort: reqReasoningEffort,
             inlineAttachmentTextLimit,
           },
         })
@@ -438,7 +440,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           systemPrompt,
           responseModel,
           responseProvider,
-          thinkingEnabled: reqThinkingEnabled ?? true,
+          thinkingEnabled: reqThinkingEnabled !== undefined
+            ? reqThinkingEnabled
+            : (resolvedAgent?.thinkingEnabled !== false),
+          reasoningEffort: reqReasoningEffort ?? resolvedAgent?.reasoningEffort,
           autoToolRouting: reqAutoToolRouting === true,
           autoMemory: effectiveRunFlags.autoMemory,
         })
@@ -663,6 +668,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           hitl: resolvedAgent ? !resolvedAgent.autoApproveTools : true,
           maxRounds: MAIN_AGENT_MAX_ROUNDS,
           thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
+          reasoningEffort: reqReasoningEffort ?? resolvedAgent?.reasoningEffort,
           streamMode: 'single',
           signal: abortController.signal,
           streamId,

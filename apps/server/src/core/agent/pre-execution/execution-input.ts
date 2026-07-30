@@ -3,6 +3,7 @@ import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
 import type { MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import type { ToolRegistry } from '../../tools/tool-registry.js'
+import type { ReasoningEffort } from '@shared/types'
 
 export type BroadcastFn = (event: string, data: unknown) => void
 
@@ -30,6 +31,7 @@ export interface ExecutionRequest {
         hasExplicitToolAllowlist?: boolean
         usedToolNames?: Set<string>
         thinkingEnabled?: boolean
+        reasoningEffort?: ReasoningEffort
         inlineAttachmentTextLimit?: number
     }
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */

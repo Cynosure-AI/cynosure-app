@@ -204,6 +204,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
         hitl: !resolvedAgent.autoApproveTools,
         maxRounds: MAIN_AGENT_MAX_ROUNDS,
         thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
+        reasoningEffort: resolvedAgent.reasoningEffort,
         streamMode: 'single',
         signal: execAbort.signal,
         streamId,

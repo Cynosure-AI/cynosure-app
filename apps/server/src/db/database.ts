@@ -413,6 +413,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('agents', 'auto_router_provider_id', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'auto_router_model', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'thinking_enabled', 'INTEGER NOT NULL DEFAULT 1')
+  addColumnIfMissing('agents', 'reasoning_effort', "TEXT NOT NULL DEFAULT 'medium'")
   addColumnIfMissing('agents', 'max_context_tokens', 'INTEGER')
   addColumnIfMissing('agents', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('agents', 'tags_json', "TEXT NOT NULL DEFAULT '[]'")

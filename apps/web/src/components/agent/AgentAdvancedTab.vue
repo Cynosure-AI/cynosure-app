@@ -17,6 +17,7 @@ const MIN_CONTEXT_TOKENS = 2048;
 const DEFAULT_CONTEXT_TOKENS = 30720;
 const CONTEXT_TOKEN_STEP = 2048;
 const DEFAULT_MAX_CONTEXT_TOKENS = 262144;
+const REASONING_LEVELS = ["low", "medium", "high"] as const;
 
 const autoRouterLeadingSelections = [
   {
@@ -184,6 +185,25 @@ function onMaxCtxSliderInput(event: Event) {
           class="mt-0.5"
           @update:model-value="emit('update', 'thinkingEnabled', $event)"
         />
+      </div>
+      <div
+        v-if="agent.thinkingEnabled !== false"
+        class="mt-4 flex items-center gap-1 rounded-lg border border-theme-700 bg-theme-900/50 p-1"
+        aria-label="Default reasoning level"
+      >
+        <button
+          v-for="level in REASONING_LEVELS"
+          :key="level"
+          type="button"
+          class="flex-1 rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400"
+          :class="(agent.reasoningEffort || 'medium') === level
+            ? 'bg-indigo-500/20 text-indigo-300'
+            : 'text-theme-500 hover:bg-theme-800 hover:text-theme-300'"
+          :aria-pressed="(agent.reasoningEffort || 'medium') === level"
+          @click="emit('update', 'reasoningEffort', level)"
+        >
+          {{ level }}
+        </button>
       </div>
     </div>
 

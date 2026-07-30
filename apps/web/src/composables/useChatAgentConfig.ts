@@ -2,7 +2,7 @@ import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import type { Conversation, DisplayMessage } from '../stores/chat.store'
-import type { ConversationExecutionConfig } from '@shared/types'
+import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { SK_ACTIVE_AGENT, SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
 import { isAutoManagedBuiltInToolName } from '../utils/internal-tools'
 
@@ -12,6 +12,7 @@ interface ChatPreset {
     memorySpaceIds: string[]
     systemPrompt: string
     thinkingEnabled: boolean
+    reasoningEffort: ReasoningEffort
     autoToolRouting: boolean
     autoMemory: boolean
     modelOverride: string | null
@@ -24,6 +25,7 @@ export interface ChatAgentConfigApi {
     sessionProviderOverride: Ref<string | null>
     sessionSystemPrompt: Ref<string>
     sessionThinkingEnabled: Ref<boolean>
+    sessionReasoningEffort: Ref<ReasoningEffort>
     sessionAutoToolRouting: Ref<boolean>
     sessionAutoMemory: Ref<boolean>
     selectedToolNames: Ref<string[]>
@@ -45,6 +47,7 @@ export interface ChatAgentConfigApi {
     setConversationAgent(id: string | null): void
     restoreConversationConfig(config: ConversationExecutionConfig): void
     setSessionModel(model: string | null, providerId?: string | null): void
+    setSessionReasoningEffort(effort: ReasoningEffort | 'off'): void
     syncAgentBaseline(): void
     setFreeChatDefaultMemorySpaceIds(ids: string[]): void
     ensureFreeChatPreset(): void
@@ -74,6 +77,7 @@ function presetsEqualWithoutProviderModel(a: ChatPreset, b: ChatPreset): boolean
         arraysEqual(a.memorySpaceIds, b.memorySpaceIds) &&
         a.systemPrompt === b.systemPrompt &&
         a.thinkingEnabled === b.thinkingEnabled &&
+        a.reasoningEffort === b.reasoningEffort &&
         a.autoToolRouting === b.autoToolRouting &&
         a.autoMemory === b.autoMemory
     )
@@ -116,12 +120,14 @@ export function useChatAgentConfig(
     const sessionProviderOverride = ref<string | null>(activeAgentId.value ? null : freeChatProviderOverride.value)
     const sessionSystemPrompt = ref<string>('')
     const sessionThinkingEnabled = ref<boolean>(true)
+    const sessionReasoningEffort = ref<ReasoningEffort>('medium')
     const sessionAutoToolRouting = ref<boolean>(!activeAgentId.value)
     const sessionAutoMemory = ref<boolean>(true)
     const selectedToolNames = ref<string[]>([])
     const agentOriginalAutoToolRouting = ref<boolean>(false)
     const agentOriginalAutoMemory = ref<boolean>(true)
     const agentOriginalThinkingEnabled = ref<boolean>(true)
+    const agentOriginalReasoningEffort = ref<ReasoningEffort>('medium')
     const agentOriginalSystemPrompt = ref<string>('')
     const agentOriginalModelOverride = ref<string | null>(null)
     const agentOriginalProviderOverride = ref<string | null>(null)
@@ -157,6 +163,7 @@ export function useChatAgentConfig(
             memorySpaceIds: [...freeChatDefaultMemorySpaceIds.value],
             systemPrompt: '',
             thinkingEnabled: true,
+            reasoningEffort: 'medium',
             autoToolRouting: true,
             autoMemory: true,
             modelOverride: null,
@@ -171,6 +178,7 @@ export function useChatAgentConfig(
             memorySpaceIds: [...freeChatMemorySpaceIds.value],
             systemPrompt: sessionSystemPrompt.value,
             thinkingEnabled: sessionThinkingEnabled.value,
+            reasoningEffort: sessionReasoningEffort.value,
             autoToolRouting: sessionAutoToolRouting.value,
             autoMemory: sessionAutoMemory.value,
             modelOverride: sessionModelOverride.value,
@@ -185,6 +193,7 @@ export function useChatAgentConfig(
         freeChatMemorySelectionInitialized.value = true
         sessionSystemPrompt.value = preset.systemPrompt
         sessionThinkingEnabled.value = preset.thinkingEnabled
+        sessionReasoningEffort.value = preset.reasoningEffort
         sessionAutoToolRouting.value = preset.autoToolRouting
         sessionAutoMemory.value = preset.autoMemory
         sessionModelOverride.value = preset.modelOverride
@@ -202,6 +211,7 @@ export function useChatAgentConfig(
         agentOriginalMemorySpaceIds.value = [...preset.memorySpaceIds]
         agentOriginalSystemPrompt.value = preset.systemPrompt
         agentOriginalThinkingEnabled.value = preset.thinkingEnabled
+        agentOriginalReasoningEffort.value = preset.reasoningEffort
         agentOriginalAutoToolRouting.value = preset.autoToolRouting
         agentOriginalAutoMemory.value = preset.autoMemory
         agentOriginalModelOverride.value = preset.modelOverride
@@ -218,6 +228,7 @@ export function useChatAgentConfig(
                 memorySpaceIds: agent?.memorySpaces?.length ? [...agent.memorySpaces] : [],
                 systemPrompt: agent?.systemPrompt || '',
                 thinkingEnabled: agent?.thinkingEnabled !== false,
+                reasoningEffort: agent?.reasoningEffort || 'medium',
                 autoToolRouting: agent?.autoToolRouting === true,
                 autoMemory: agent?.autoMemory === true,
                 modelOverride: null,
@@ -290,6 +301,7 @@ export function useChatAgentConfig(
             !arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value) ||
             sessionSystemPrompt.value !== agentOriginalSystemPrompt.value ||
             sessionThinkingEnabled.value !== agentOriginalThinkingEnabled.value ||
+            sessionReasoningEffort.value !== agentOriginalReasoningEffort.value ||
             sessionAutoToolRouting.value !== agentOriginalAutoToolRouting.value ||
             sessionAutoMemory.value !== agentOriginalAutoMemory.value ||
             sessionProviderOverride.value !== agentOriginalProviderOverride.value ||
@@ -313,6 +325,7 @@ export function useChatAgentConfig(
             memorySpaceIds: [...agentOriginalMemorySpaceIds.value],
             systemPrompt: agentOriginalSystemPrompt.value,
             thinkingEnabled: agentOriginalThinkingEnabled.value,
+            reasoningEffort: agentOriginalReasoningEffort.value,
             autoToolRouting: agentOriginalAutoToolRouting.value,
             autoMemory: agentOriginalAutoMemory.value,
             modelOverride: agentOriginalModelOverride.value,
@@ -351,6 +364,7 @@ export function useChatAgentConfig(
         }
         if (sessionSystemPrompt.value !== actualPreset.systemPrompt) updates.systemPrompt = sessionSystemPrompt.value
         if (sessionThinkingEnabled.value !== actualPreset.thinkingEnabled) updates.thinkingEnabled = sessionThinkingEnabled.value
+        if (sessionReasoningEffort.value !== actualPreset.reasoningEffort) updates.reasoningEffort = sessionReasoningEffort.value
         if (sessionAutoToolRouting.value !== actualPreset.autoToolRouting) updates.autoToolRouting = sessionAutoToolRouting.value
         if (sessionAutoMemory.value !== actualPreset.autoMemory) updates.autoMemory = sessionAutoMemory.value
 
@@ -455,6 +469,7 @@ export function useChatAgentConfig(
             memorySpaceIds: [...config.memorySpaceIds],
             systemPrompt: config.systemPrompt,
             thinkingEnabled: config.thinkingEnabled,
+            reasoningEffort: config.reasoningEffort || 'medium',
             autoToolRouting: config.autoToolRouting,
             autoMemory: config.autoMemory,
             modelOverride: activeAgent && matchesAgentModel ? null : restoredModel,
@@ -486,6 +501,12 @@ export function useChatAgentConfig(
         persistStoredValue(SK_FREE_CHAT_PROVIDER, freeChatProviderOverride.value)
     }
 
+    function setSessionReasoningEffort(effort: ReasoningEffort | 'off'): void {
+        sessionThinkingEnabled.value = effort !== 'off'
+        if (effort !== 'off') sessionReasoningEffort.value = effort
+        markOverridesModified()
+    }
+
     function syncAgentBaseline(): void {
         if (!activeAgentId.value) {
             ensureFreeChatPreset()
@@ -503,6 +524,7 @@ export function useChatAgentConfig(
         sessionProviderOverride,
         sessionSystemPrompt,
         sessionThinkingEnabled,
+        sessionReasoningEffort,
         sessionAutoToolRouting,
         sessionAutoMemory,
         selectedToolNames,
@@ -524,6 +546,7 @@ export function useChatAgentConfig(
         setConversationAgent,
         restoreConversationConfig,
         setSessionModel,
+        setSessionReasoningEffort,
         syncAgentBaseline,
         setFreeChatDefaultMemorySpaceIds,
         ensureFreeChatPreset,

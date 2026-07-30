@@ -87,6 +87,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         responseModel: planned.responseModel,
         responseProvider: planned.responseProvider,
         thinkingEnabled: agent.thinkingEnabled !== false,
+        reasoningEffort: agent.reasoningEffort,
         autoToolRouting: agent.autoToolRouting === true,
         autoMemory: agent.autoMemory === true,
     })
@@ -115,6 +116,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         model: planned.responseModel,
         maxRounds: 10,
         thinkingEnabled: agent.thinkingEnabled !== false,
+        reasoningEffort: agent.reasoningEffort,
         streamMode: 'per-round',
         hitl: !agent.autoApproveTools,
         agentId: agent.id,

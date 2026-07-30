@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
+import type { ReasoningEffort } from '@shared/types'
 
 // ---- Types ----
 
@@ -23,6 +24,7 @@ export interface AgentConfig {
     autoRouterProviderId: string
     autoRouterModel: string
     thinkingEnabled: boolean
+    reasoningEffort: ReasoningEffort
     maxContextTokens: number | null
     sortOrder: number
     tags: string[]
@@ -56,6 +58,7 @@ export type CreateAgentInput = {
     autoRouterProviderId?: string
     autoRouterModel?: string
     thinkingEnabled?: boolean
+    reasoningEffort?: ReasoningEffort
     maxContextTokens?: number | null
     sortOrder?: number
     tags?: string[]
@@ -127,6 +130,7 @@ interface AgentRow {
     auto_router_provider_id: string
     auto_router_model: string
     thinking_enabled: number
+    reasoning_effort: string
     max_context_tokens: number | null
     sort_order: number
     tags_json: string
@@ -159,6 +163,9 @@ function rowToAgentData(row: AgentRow): AgentData {
         autoRouterProviderId: row.auto_router_provider_id || '',
         autoRouterModel: row.auto_router_model || '',
         thinkingEnabled: row.thinking_enabled !== 0,
+        reasoningEffort: row.reasoning_effort === 'low' || row.reasoning_effort === 'high'
+            ? row.reasoning_effort
+            : 'medium',
         maxContextTokens: typeof row.max_context_tokens === 'number' ? row.max_context_tokens : null,
         sortOrder: typeof row.sort_order === 'number' ? row.sort_order : 0,
         tags: parseTags(row.tags_json),
@@ -235,11 +242,11 @@ export function createAgent(input: CreateAgentInput): AgentData {
 
     db.prepare(
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
-            category, sub_agents_json, auto_approve_tools, thinking_enabled, max_context_tokens,
+            category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, tool_router_provider_id, tool_router_model,
             auto_memory, memory_router_provider_id, memory_router_model,
             sort_order, tags_json, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.name,
@@ -254,6 +261,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
         JSON.stringify(input.subAgents || []),
         input.autoApproveTools === true ? 1 : 0,
         input.thinkingEnabled !== false ? 1 : 0,
+        input.reasoningEffort || 'medium',
         typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null,
         input.autoToolRouting === true ? 1 : 0,
         '',
@@ -297,6 +305,11 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     const updatedAutoRouterProviderId = input.autoRouterProviderId !== undefined ? (input.autoRouterProviderId || '') : (existing.auto_router_provider_id || '')
     const updatedAutoRouterModel = input.autoRouterModel !== undefined ? (input.autoRouterModel || '') : (existing.auto_router_model || '')
     const updatedThinkingEnabled = input.thinkingEnabled !== undefined ? input.thinkingEnabled : (existing.thinking_enabled !== 0)
+    const updatedReasoningEffort = input.reasoningEffort ?? (
+        existing.reasoning_effort === 'low' || existing.reasoning_effort === 'high'
+            ? existing.reasoning_effort
+            : 'medium'
+    )
     const updatedMaxContextTokens = input.maxContextTokens !== undefined
         ? (typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null)
         : existing.max_context_tokens
@@ -323,7 +336,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     db.prepare(
         `UPDATE agents SET name = ?, description = ?, provider_id = ?, model = ?, system_prompt = ?, tools_json = ?,
          internal_name = ?, category = ?, sub_agents_json = ?, auto_approve_tools = ?,
-            thinking_enabled = ?, max_context_tokens = ?, auto_tool_routing = ?, tool_router_provider_id = ?, tool_router_model = ?,
+            thinking_enabled = ?, reasoning_effort = ?, max_context_tokens = ?, auto_tool_routing = ?, tool_router_provider_id = ?, tool_router_model = ?,
             auto_memory = ?, memory_router_provider_id = ?, memory_router_model = ?,
             auto_router_provider_id = ?, auto_router_model = ?, sort_order = ?, tags_json = ?, favorite = ?, cron_prompt = ?,
          icon_data = ?, icon_mime = ?, updated_at = ?
@@ -340,6 +353,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         JSON.stringify(updatedSubAgents),
         updatedAutoApprove ? 1 : 0,
         updatedThinkingEnabled ? 1 : 0,
+        updatedReasoningEffort,
         updatedMaxContextTokens,
         updatedAutoToolRouting ? 1 : 0,
         existing.tool_router_provider_id || '',
@@ -380,11 +394,11 @@ export function duplicateAgent(id: string): AgentData | null {
 
     db.prepare(
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
-            category, sub_agents_json, auto_approve_tools, thinking_enabled, max_context_tokens,
+            category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, tool_router_provider_id, tool_router_model,
             auto_memory, memory_router_provider_id, memory_router_model,
             sort_order, tags_json, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         newId,
         newName,
@@ -399,6 +413,7 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.sub_agents_json,
         existing.auto_approve_tools,
         existing.thinking_enabled,
+        existing.reasoning_effort,
         existing.max_context_tokens,
         existing.auto_tool_routing,
         existing.tool_router_provider_id,

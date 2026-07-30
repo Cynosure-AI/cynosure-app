@@ -247,6 +247,7 @@ export interface AgentDefinition {
     autoRouterModel: string
     generateTitle: boolean
     thinkingEnabled: boolean
+    reasoningEffort: 'low' | 'medium' | 'high'
     maxContextTokens: number | null
     sortOrder: number
     tags: string[]
