@@ -6,7 +6,7 @@ import { usePreferencesStore } from '../stores/preferences.store'
 import type { SubAgentAssignment } from '../api/types'
 import type { DisplayMessage } from '../stores/chat.store'
 import type { ChatStreamingState } from './useChatStreaming'
-import type { ChatSendRequest } from '@shared/types'
+import type { ChatSendRequest, ReasoningEffort } from '@shared/types'
 
 export interface ChatMessagesApi {
     sendMessage(content: string, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void>
@@ -27,6 +27,7 @@ export function useChatMessages(
         sessionProviderOverride: Ref<string | null>
         sessionSystemPrompt: Ref<string>
         sessionThinkingEnabled: Ref<boolean>
+        sessionReasoningEffort: Ref<ReasoningEffort>
         sessionAutoToolRouting: Ref<boolean>
         sessionAutoMemory: Ref<boolean>
         selectedToolNames: Ref<string[]>
@@ -111,6 +112,7 @@ export function useChatMessages(
             subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.freeChatSubAgentIds.value]),
             memorySpaceIds: agentConfig.freeChatMemorySelectionInitialized.value ? [...agentConfig.freeChatMemorySpaceIds.value] : undefined,
             thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
+            reasoningEffort: agentConfig.sessionReasoningEffort.value,
             autoToolRouting: agentConfig.sessionAutoToolRouting.value,
             autoMemory: agentConfig.sessionAutoMemory.value,
         }
@@ -132,6 +134,7 @@ export function useChatMessages(
                 subAgents: executionRun.subAgents,
                 memorySpaceIds: executionRun.memorySpaceIds,
                 thinkingEnabled: executionRun.thinkingEnabled,
+                reasoningEffort: executionRun.reasoningEffort,
                 contextStrategy: prefs.contextStrategy,
                 titleProviderId: prefs.titleProviderId || undefined,
                 titleModel: prefs.titleModel || undefined,

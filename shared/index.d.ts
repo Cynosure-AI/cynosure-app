@@ -2,6 +2,8 @@ export type ChatRole = 'user' | 'assistant' | 'system' | 'tool'
 
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 
+export type ReasoningEffort = 'low' | 'medium' | 'high'
+
 export interface SubAgentAssignmentDto {
   agentId: string
 }
@@ -15,6 +17,7 @@ export interface ChatRunConfig {
   subAgents?: SubAgentAssignmentDto[]
   memorySpaceIds?: string[]
   thinkingEnabled?: boolean
+  reasoningEffort?: ReasoningEffort
   contextStrategy?: ContextStrategy
   titleProviderId?: string
   titleModel?: string
@@ -49,6 +52,7 @@ export interface ConversationExecutionConfig {
   model: string
   providerId: string
   thinkingEnabled: boolean
+  reasoningEffort: ReasoningEffort
   autoToolRouting: boolean
   autoMemory: boolean
 }

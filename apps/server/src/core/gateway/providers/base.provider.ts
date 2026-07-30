@@ -222,6 +222,8 @@ export interface CompletionRequest {
   signal?: AbortSignal
   /** Enable reasoning/thinking tokens (default: true) */
   thinkingEnabled?: boolean
+  /** Amount of reasoning work requested when thinking is enabled. */
+  reasoningEffort?: 'low' | 'medium' | 'high'
 }
 
 export interface CompletionResponse {

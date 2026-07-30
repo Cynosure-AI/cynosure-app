@@ -127,6 +127,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 hitl: !agentData.autoApproveTools,
                 maxRounds: SUB_AGENT_MAX_ROUNDS,
                 thinkingEnabled: agentData.thinkingEnabled !== false,
+                reasoningEffort: agentData.reasoningEffort,
                 signal,
                 streamMode: 'per-round',
                 streamEventPrefix: 'chat:subagent-stream',

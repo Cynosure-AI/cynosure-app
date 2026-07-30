@@ -7,6 +7,7 @@ import { getHITLGate } from './hitl-gate.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
+import type { ReasoningEffort } from '@shared/types'
 import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 import { isPlanningToolName } from '../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
@@ -38,6 +39,8 @@ export interface AgentExecutorConfig {
     temperature?: number
     /** Enable reasoning/thinking tokens (default: true) */
     thinkingEnabled?: boolean
+    /** Amount of model reasoning work requested when thinking is enabled. */
+    reasoningEffort?: ReasoningEffort
     /** AbortSignal for cancellation */
     signal?: AbortSignal
     /** Whether to save messages to the database (default: true) */
@@ -433,7 +436,7 @@ export class AgentExecutor {
      * Create a gateway stream from the current messages, with old images trimmed.
      */
     private createStream(messages: ChatMessage[]) {
-        const { gateway, tools, model, temperature, thinkingEnabled, signal, providerId } = this.config
+        const { gateway, tools, model, temperature, thinkingEnabled, reasoningEffort, signal, providerId } = this.config
         return gateway.streamComplete(
             {
                 messages: AgentExecutor.trimOldImages(messages),
@@ -441,6 +444,7 @@ export class AgentExecutor {
                 tools: tools.length ? tools : undefined,
                 temperature,
                 thinkingEnabled,
+                reasoningEffort,
                 signal,
             },
             providerId

@@ -61,6 +61,8 @@ async function saveAsNewAgent() {
       tools: [...chatStore.selectedToolNames],
       subAgents,
       memorySpaces: [...chatStore.freeChatMemorySpaceIds],
+      thinkingEnabled: chatStore.sessionThinkingEnabled,
+      reasoningEffort: chatStore.sessionReasoningEffort,
     })
     showModal.value = false
     newAgentName.value = ''

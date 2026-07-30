@@ -197,7 +197,7 @@ export class OpenAIProvider extends BaseLLMProvider {
       }
     }
     if (request.thinkingEnabled) {
-      params.reasoning = { effort: 'medium', summary: 'auto' }
+      params.reasoning = { effort: request.reasoningEffort ?? 'medium', summary: 'auto' }
     }
 
     type ResponsesCreate = (
@@ -275,7 +275,7 @@ export class OpenAIProvider extends BaseLLMProvider {
       }
     }
     if (request.thinkingEnabled) {
-      params.reasoning = { effort: 'medium', summary: 'auto' }
+      params.reasoning = { effort: request.reasoningEffort ?? 'medium', summary: 'auto' }
     }
 
     const stream = (this.client.responses as unknown as {

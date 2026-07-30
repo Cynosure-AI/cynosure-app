@@ -196,6 +196,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         hitl: !resolvedAgent.autoApproveTools,
         maxRounds: MAIN_AGENT_MAX_ROUNDS,
         thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
+        reasoningEffort: resolvedAgent.reasoningEffort,
         streamMode: 'single',
         signal: execAbort.signal,
         streamId,
