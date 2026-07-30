@@ -73,7 +73,7 @@ const missingTools = computed(() => {
       </div>
       <div
         v-if="chatStore.sessionAutoToolRouting"
-        class="mb-1.5 px-1 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px]"
+        class="mb-1.5 rounded border border-emerald-200 bg-emerald-50 px-1 py-1 text-[10px] font-medium text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
       >
         Auto-selection enabled
       </div>

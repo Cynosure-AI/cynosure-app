@@ -699,7 +699,6 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <h3 class="text-sm font-medium text-theme-200">
                 Cron Prompt
               </h3>
-              <span class="text-[10px] text-theme-600 font-mono">CRON.md</span>
             </div>
             <p class="text-xs text-theme-500 leading-relaxed mb-4">
               Describe what the agent should do on each cron trigger — API calls, file checks, data processing, etc.
