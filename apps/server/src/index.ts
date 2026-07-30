@@ -7,6 +7,7 @@ import fastifyWebsocket from '@fastify/websocket'
 import fastifySwagger from '@fastify/swagger'
 import fastifySwaggerUi from '@fastify/swagger-ui'
 import fastifyStatic from '@fastify/static'
+import packageJson from '../package.json' with { type: 'json' }
 import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { basename, dirname, join, resolve } from 'path'
@@ -45,7 +46,7 @@ import { registerBuiltInTools } from './core/tools/built-in-tools.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
 
 const APP_NAME = 'cynosure-server'
-const APP_VERSION = process.env.CYNOSURE_VERSION || '1.0.0'
+const APP_VERSION = packageJson.version
 const DEFAULT_PORT = 3099
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
