@@ -139,7 +139,35 @@ export class LLMGateway {
       ? this.providers.get(providerId)
       : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
-    return provider.listModelItems(type)
+
+    const models = await provider.listModelItems(type)
+    if (
+      (type !== 'embedding' && type !== 'reranker') ||
+      provider.config.type === 'ollama' ||
+      provider.config.type === 'lmstudio' ||
+      models.every((model) => model.pricing)
+    ) {
+      return models
+    }
+
+    // Provider model-list endpoints are the richest pricing source when they
+    // expose it (for example OpenRouter). Fill only missing token prices from
+    // models.dev so embedding/reranker selectors get the same cost badges as
+    // regular chat models across providers.
+    await ensurePricingLoaded().catch(() => { /* pricing is best-effort */ })
+    return models.map((model) => {
+      const cost = getModelCost(provider.config.type, model.id)
+      if (!cost) return model
+
+      return {
+        ...model,
+        pricing: {
+          prompt: cost.input / 1_000_000,
+          completion: cost.output / 1_000_000,
+          ...model.pricing
+        }
+      }
+    })
   }
 
   async listVideoModels(providerId?: string): Promise<VideoGenerationModelInfo[]> {

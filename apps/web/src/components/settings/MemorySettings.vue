@@ -8,13 +8,11 @@ import ModalDialog from '../shared/ModalDialog.vue'
 import MultiSelect from '../shared/MultiSelect.vue'
 import ProviderSelect from '../shared/ProviderSelect.vue'
 import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
-import CustomSelect from '../shared/CustomSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import SettingsSubheading from './SettingsSubheading.vue'
 import {
   defaultEmbeddingModelForProviderId,
-  withDefaultEmbeddingModel,
 } from '../../utils/embedding-defaults'
 
 const providerStore = useProviderStore()
@@ -37,8 +35,7 @@ function showAnySection(ids: string[]): boolean {
 const embProviderId = ref('')
 const embModel = ref('')
 const embDimensions = ref(1536)
-const embModels = ref<string[]>([])
-const embLoadingModels = ref(false)
+const embModelRefreshKey = ref(0)
 
 const embSaving = ref(false)
 const embDirty = ref(false)
@@ -107,14 +104,10 @@ async function onOcrLangsUpdate(langs: string[]) {
   await saveOcrLanguage()
 }
 
-const embModelGroups = computed(() => [
-  {
-    options: embModels.value.map((m) => ({
-      value: m,
-      label: m,
-    })),
-  },
-])
+const embeddingProviders = computed(() => {
+  const provider = providerStore.providers.find((candidate) => candidate.id === embProviderId.value)
+  return provider ? [provider] : []
+})
 
 const openRouterProviders = computed(() =>
   providerStore.providers.filter((provider) => provider.type === 'openrouter')
@@ -160,7 +153,6 @@ async function loadEmbeddingConfig() {
       embProviderId.value = config.providerId
       embModel.value = config.model
       embDimensions.value = config.dimensions
-      await fetchEmbModels(embProviderId.value)
     } else {
       applyDefaultEmbeddingConfig()
     }
@@ -288,15 +280,9 @@ function updateRerankerSelection(selection: { providerId: string; model: string 
   rerankModel.value = selection.model
 }
 
-async function fetchEmbModels(providerId: string) {
-  if (!providerId) { embModels.value = []; return }
-  embLoadingModels.value = true
-  const defaultModel = defaultEmbeddingModelForProviderId(providerId, providerStore.providers)
-  try {
-    const models = await providerStore.listModels(providerId, 'embedding')
-    embModels.value = withDefaultEmbeddingModel(models, defaultModel)
-  } catch { embModels.value = withDefaultEmbeddingModel([], defaultModel) }
-  embLoadingModels.value = false
+function updateEmbeddingSelection(selection: { providerId: string; model: string }) {
+  embProviderId.value = selection.providerId
+  embModel.value = selection.model
 }
 
 watch(embProviderId, (id) => {
@@ -304,7 +290,6 @@ watch(embProviderId, (id) => {
   embDirty.value = true
   const defaultModel = defaultEmbeddingModelForProviderId(id, providerStore.providers)
   if (defaultModel) embModel.value = defaultModel
-  fetchEmbModels(id)
 })
 watch(embModel, () => { embDirty.value = true })
 
@@ -315,7 +300,6 @@ function applyDefaultEmbeddingConfig() {
   embProviderId.value = providerId
   embModel.value = defaultModel
   embDimensions.value = 0
-  fetchEmbModels(providerId)
 }
 
 async function probeDimensions() {
@@ -430,26 +414,27 @@ function cancelDrop() {
             </span>
           </div>
           <div class="flex gap-2">
-            <CustomSelect
-              v-model="embModel"
-              :groups="embModelGroups"
-              placeholder="Select or type model name..."
-              filterable
-              dropdown-width="min-w-full"
+            <ProviderModelSelect
               class="flex-1"
+              :provider-id="embProviderId"
+              :model-value="embModel"
+              :providers="embeddingProviders"
+              model-type="embedding"
+              :include-provider-default="false"
+              :refresh-key="embModelRefreshKey"
+              placeholder="Select embedding model"
+              dropdown-width="min-w-full"
+              max-height="max-h-72"
+              @change="updateEmbeddingSelection"
             />
             <button
-              :disabled="embLoadingModels || !embProviderId"
+              :disabled="!embProviderId"
               class="px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:bg-theme-800 disabled:text-theme-600 text-theme-300 text-sm rounded-lg transition-colors"
-              @click="fetchEmbModels(embProviderId)"
+              title="Refresh embedding models"
+              aria-label="Refresh embedding models"
+              @click="embModelRefreshKey += 1"
             >
               <Icon
-                v-if="embLoadingModels"
-                icon="lucide:loader-2"
-                class="w-4 h-4 animate-spin"
-              />
-              <Icon
-                v-else
                 icon="lucide:refresh-cw"
                 class="w-4 h-4"
               />

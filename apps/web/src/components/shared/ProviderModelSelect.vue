@@ -41,6 +41,7 @@ const props = withDefaults(
     defaultIcon?: string;
     leadingSelections?: ProviderModelSelection[];
     providerDefaultLabel?: string;
+    includeProviderDefault?: boolean;
     placeholder?: string;
     maxHeight?: string;
     filterable?: boolean;
@@ -49,6 +50,7 @@ const props = withDefaults(
     dropdownWidth?: string;
     size?: SelectSize;
     onlyShowAvailableModels?: boolean;
+    refreshKey?: string | number;
   }>(),
   {
     modelType: "llm",
@@ -58,6 +60,7 @@ const props = withDefaults(
     defaultIcon: "lucide:settings",
     leadingSelections: () => [],
     providerDefaultLabel: "Use provider default",
+    includeProviderDefault: true,
     placeholder: "Select provider/model…",
     maxHeight: "max-h-80",
     filterable: true,
@@ -66,6 +69,7 @@ const props = withDefaults(
     dropdownWidth: "w-full",
     size: "sm",
     onlyShowAvailableModels: false,
+    refreshKey: 0,
   },
 );
 
@@ -283,6 +287,21 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => props.refreshKey,
+  () => {
+    const nextModels = { ...providerModels.value };
+    for (const provider of props.providers) {
+      sharedModelCache.delete(cacheKey(provider.id));
+      delete nextModels[provider.id];
+    }
+    providerModels.value = nextModels;
+    for (const provider of props.providers) {
+      void ensureProviderModels(provider.id);
+    }
+  },
+);
+
 const selectedEncoded = computed(() =>
   encode(props.providerId || "", props.modelValue || ""),
 );
@@ -335,14 +354,31 @@ const groups = computed((): SelectOptionGroup[] => {
       const models = providerModels.value[provider.id] || [];
       const modelIds = models.map(modelId);
       const isLoading = !!loadingByProvider.value[provider.id];
-      const options: SelectOption[] = [
-        {
+      const options: SelectOption[] = [];
+
+      if (props.includeProviderDefault) {
+        options.push({
           value: encode(provider.id, ""),
           label: `${provider.name}${provider.defaultModel ? ` (${provider.defaultModel})` : ""}`,
           iconName: "lucide:settings",
           imgSrc: logoUrl(provider.type),
-        },
-      ];
+        });
+      }
+
+      if (
+        props.providerId === provider.id &&
+        props.modelValue &&
+        !props.onlyShowAvailableModels &&
+        !modelIds.includes(props.modelValue)
+      ) {
+        options.push({
+          value: encode(provider.id, props.modelValue),
+          label: props.modelValue,
+          imgSrc: logoUrl(provider.type),
+          tag: "Current",
+          ...favoriteAction(provider.id, props.modelValue),
+        });
+      }
 
       if (isLoading && models.length === 0) {
         options.push({
@@ -361,31 +397,23 @@ const groups = computed((): SelectOptionGroup[] => {
           imgSrc: logoUrl(provider.type),
         });
       } else {
+        const preferCostTag = activeModelTypes.value.some(
+          (type) => type === "embedding" || type === "reranker",
+        );
         for (const model of models) {
           const capabilityTag = outputCapabilityTag(model);
+          const costTag = pricingTag(model);
+          const tag = preferCostTag
+            ? costTag || capabilityTag
+            : capabilityTag || costTag;
           options.push({
             value: encode(provider.id, model.id),
             label: model.id,
             imgSrc: logoUrl(provider.type),
-            tag: capabilityTag || pricingTag(model),
-            tagVariant: capabilityTag ? 'cyan' : 'default',
+            tag,
+            tagVariant: tag === capabilityTag ? 'cyan' : 'default',
             tooltip: pricingTooltip(model),
             ...favoriteAction(provider.id, model.id),
-          });
-        }
-
-        if (
-          props.providerId === provider.id &&
-          props.modelValue &&
-          !props.onlyShowAvailableModels &&
-          !modelIds.includes(props.modelValue)
-        ) {
-          options.unshift({
-            value: encode(provider.id, props.modelValue),
-            label: props.modelValue,
-            imgSrc: logoUrl(provider.type),
-            tag: "Current",
-            ...favoriteAction(provider.id, props.modelValue),
           });
         }
       }
