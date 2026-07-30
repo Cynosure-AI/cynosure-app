@@ -26,6 +26,7 @@ const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar();
 const { logoIconUrl, logoTextUrl } = useAppBranding();
 
 const showStatusPopover = ref(false);
+const statusButtonRef = ref<HTMLElement | null>(null);
 const showNotifications = ref(false);
 const bellBtnRef = ref<HTMLElement | null>(null);
 const notifPopoverStyle = computed(() => {
@@ -614,7 +615,9 @@ const chatRoute = computed(() =>
     <!-- Status Footer -->
     <div class="status-section px-3 py-3 shrink-0 relative">
       <button
-        class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-theme-800/60 transition-colors text-left"
+        ref="statusButtonRef"
+        class="status-trigger w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-theme-800/60 transition-colors text-left"
+        :aria-expanded="showStatusPopover"
         @click="showStatusPopover = !showStatusPopover"
       >
         <span
@@ -652,6 +655,7 @@ const chatRoute = computed(() =>
       <!-- Status Popover -->
       <StatusPopover
         :show="showStatusPopover"
+        :anchor-el="statusButtonRef"
         @close="showStatusPopover = false"
       />
     </div>
@@ -804,13 +808,13 @@ const chatRoute = computed(() =>
     display: none;
   }
 
-  .sidebar-collapsed .status-section button {
+  .sidebar-collapsed .status-section>.status-trigger {
     justify-content: center;
     gap: 0;
     padding: 0.5rem;
   }
 
-  .sidebar-collapsed .status-section button>*:not(:first-child) {
+  .sidebar-collapsed .status-section>.status-trigger>*:not(:first-child) {
     display: none;
   }
 }
