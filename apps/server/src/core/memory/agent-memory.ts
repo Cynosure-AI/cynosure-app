@@ -2,7 +2,7 @@ import { getMemoryParser, type RetrievedChunk } from './parser.js'
 import { getRAGStore } from './rag.js'
 import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getMemorySpaceFolderPath } from './memory-space-scope.js'
-import { andLanceDbFilters, lanceDbEqFilter } from './lancedb-filter.js'
+import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
 import { moveMemoryGraphSource } from './memory-entity-indexer.js'
 import {
     ensureFolder,
@@ -19,8 +19,7 @@ import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 import { cancelMemoryIndexJobsForFile } from './memory-index-jobs.js'
-
-const TABLE_NAME = 'permanent_memory'
+import { getActivePermanentMemoryTableName } from './memory-index-manifest.js'
 
 export interface ReindexFileResult {
     fileName: string
@@ -89,12 +88,45 @@ export class AgentMemory {
     // Core: ingest text into LanceDB (low-level, no file I/O)
     // -----------------------------------------------------------------------
 
-    private async ingestText(text: string, sourceFile: string, spaceId: string, signal?: AbortSignal): Promise<number> {
-        return this.parser.ingest(TABLE_NAME, text, {
+    private async ingestText(
+        text: string,
+        sourceFile: string,
+        spaceId: string,
+        signal?: AbortSignal,
+        tableName = getActivePermanentMemoryTableName(),
+    ): Promise<number> {
+        return this.parser.ingest(tableName, text, {
             source: 'permanent',
             sourceFile,
             spaceId,
         }, { signal })
+    }
+
+    /**
+     * Stage a complete replacement before removing the prior chunk IDs. This
+     * guarantees failed embeddings leave the last searchable version intact.
+     */
+    private async replaceIndexedText(
+        text: string,
+        sourceFile: string,
+        spaceId: string,
+        replacedSourceFiles: string[],
+        signal?: AbortSignal,
+    ): Promise<number> {
+        const ragStore = getRAGStore()
+        const tableName = getActivePermanentMemoryTableName()
+        const oldFilter = andLanceDbFilters(
+            buildMemorySpaceFilter([{ id: spaceId }]),
+            lanceDbInFilter('sourceFile', Array.from(new Set(replacedSourceFiles.filter(Boolean)))),
+        )
+        const oldIds = oldFilter
+            ? (await ragStore.listDocuments(tableName, oldFilter)).map((doc) => doc.id)
+            : []
+
+        const count = await this.ingestText(text, sourceFile, spaceId, signal, tableName)
+        throwIfAborted(signal)
+        if (oldIds.length > 0) await ragStore.deleteByIds(tableName, oldIds)
+        return count
     }
 
     // -----------------------------------------------------------------------
@@ -139,7 +171,6 @@ export class AgentMemory {
     ): Promise<ReindexFileResult> {
         throwIfAborted(opts?.signal)
         const filePath = join(folderPath, fileName)
-        const ragStore = getRAGStore()
 
         let text: string
         const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase()
@@ -156,12 +187,10 @@ export class AgentMemory {
 
             moveToRevisions(folderPath, fileName)
 
-            await ragStore.deleteBySources(TABLE_NAME, [fileName, mdName], buildMemorySpaceFilter([{ id: spaceId }]))
+            const count = await this.replaceIndexedText(text, mdName, spaceId, [fileName, mdName], opts?.signal)
             throwIfAborted(opts?.signal)
+            moveToRevisions(folderPath, fileName)
             removeFileIndex(spaceId, fileName)
-
-            const count = await this.ingestText(text, mdName, spaceId, opts?.signal)
-            throwIfAborted(opts?.signal)
             const hash = computeFileHash(mdPath)
             upsertFileIndex(spaceId, mdName, hash, count)
             return { fileName: mdName, chunkCount: count }
@@ -169,11 +198,7 @@ export class AgentMemory {
             throw new Error(`Unsupported file type: ${ext}`)
         }
 
-        // Remove old vectors for this file in this space
-        await ragStore.deleteBySource(TABLE_NAME, fileName, buildMemorySpaceFilter([{ id: spaceId }]))
-        throwIfAborted(opts?.signal)
-
-        const count = await this.ingestText(text, fileName, spaceId, opts?.signal)
+        const count = await this.replaceIndexedText(text, fileName, spaceId, [fileName], opts?.signal)
         throwIfAborted(opts?.signal)
         const hash = computeFileHash(filePath)
         upsertFileIndex(spaceId, fileName, hash, count)
@@ -198,7 +223,7 @@ export class AgentMemory {
         const hash = computeFileHash(filePath)
 
         const ragStore = getRAGStore()
-        await ragStore.deleteBySource(TABLE_NAME, uniqueName, buildMemorySpaceFilter([{ id: spaceId }]))
+        await ragStore.deleteBySource(getActivePermanentMemoryTableName(), uniqueName, buildMemorySpaceFilter([{ id: spaceId }]))
         const count = await this.ingestText(parsedContent, uniqueName, spaceId)
         upsertFileIndex(spaceId, uniqueName, hash, count)
         return { fileName: uniqueName, chunkCount: count }
@@ -218,7 +243,7 @@ export class AgentMemory {
     // -----------------------------------------------------------------------
 
     async recall(query: string, topK: number = 3, filter?: string): Promise<RetrievedChunk[]> {
-        return this.parser.retrieve(TABLE_NAME, query, topK, filter || undefined)
+        return this.parser.retrieve(getActivePermanentMemoryTableName(), query, topK, filter || undefined)
     }
 
     async getChunksByRange(
@@ -227,11 +252,11 @@ export class AgentMemory {
         maxIndex: number,
         filter?: string,
     ): Promise<{ text: string; chunkIndex: number; sourceFile: string; spaceId?: string }[]> {
-        return getRAGStore().getChunksByRange(TABLE_NAME, sourceFile, minIndex, maxIndex, filter)
+        return getRAGStore().getChunksByRange(getActivePermanentMemoryTableName(), sourceFile, minIndex, maxIndex, filter)
     }
 
     async countChunks(sourceFile: string, filter?: string): Promise<number> {
-        return getRAGStore().countBySource(TABLE_NAME, sourceFile, filter)
+        return getRAGStore().countBySource(getActivePermanentMemoryTableName(), sourceFile, filter)
     }
 
     // -----------------------------------------------------------------------
@@ -245,7 +270,7 @@ export class AgentMemory {
     async deleteSourceFile(sourceFile: string, spaceId: string): Promise<number> {
         const ragStore = getRAGStore()
         const spaceFilter = buildMemorySpaceFilter([{ id: spaceId }])
-        const deleted = await ragStore.deleteBySource(TABLE_NAME, sourceFile, spaceFilter)
+        const deleted = await ragStore.deleteBySource(getActivePermanentMemoryTableName(), sourceFile, spaceFilter)
 
         const folderPath = getMemorySpaceFolderPath(spaceId)
         if (folderPath) {
@@ -269,7 +294,7 @@ export class AgentMemory {
         }
 
         const deleted = await getRAGStore().deleteBySources(
-            TABLE_NAME,
+            getActivePermanentMemoryTableName(),
             uniqueSourceFiles,
             buildMemorySpaceFilter([{ id: spaceId }]),
         )
@@ -286,7 +311,7 @@ export class AgentMemory {
 
     /** Delete vectors by source file without touching the physical file. */
     async deleteBySource(sourceFile: string, filter?: string): Promise<number> {
-        return getRAGStore().deleteBySource(TABLE_NAME, sourceFile, filter)
+        return getRAGStore().deleteBySource(getActivePermanentMemoryTableName(), sourceFile, filter)
     }
 
     /**
@@ -346,7 +371,7 @@ export class AgentMemory {
             lanceDbEqFilter('sourceFile', candidate.fileName),
         )
         if (oldFilter && candidate.fileName !== targetFileName) {
-            await ragStore.updateSourceFile(TABLE_NAME, oldFilter, targetFileName)
+            await ragStore.updateSourceFile(getActivePermanentMemoryTableName(), oldFilter, targetFileName)
         }
 
         const newNameFilter = andLanceDbFilters(
@@ -354,7 +379,7 @@ export class AgentMemory {
             lanceDbEqFilter('sourceFile', targetFileName),
         )
         if (newNameFilter && candidate.spaceId !== targetSpaceId) {
-            await ragStore.updateSpaceId(TABLE_NAME, newNameFilter, targetSpaceId)
+            await ragStore.updateSpaceId(getActivePermanentMemoryTableName(), newNameFilter, targetSpaceId)
         }
 
         const moveIndex = db.transaction(() => {
@@ -396,7 +421,7 @@ export class AgentMemory {
         } else if (spaceId) {
             filter = buildMemorySpaceFilter([{ id: spaceId }])
         }
-        const docs = await ragStore.listDocuments(TABLE_NAME, filter)
+        const docs = await ragStore.listDocuments(getActivePermanentMemoryTableName(), filter)
         const indexedFiles = this.getIndexedFilePairs()
 
         const map = new Map<string, { count: number; latest: number }>()

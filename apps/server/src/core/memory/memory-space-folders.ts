@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid'
 import { getMemorySpacesRootDir } from '../data-dir.js'
 import { lanceDbEqFilter } from './lancedb-filter.js'
 import { getRAGStore } from './rag.js'
+import { getActivePermanentMemoryTableName } from './memory-index-manifest.js'
 import { stopWatchingMemorySpace, watchMemorySpace } from './memory-space-watcher.js'
 
 export const DEFAULT_MEMORY_SPACE_ID = 'default'
@@ -182,7 +183,7 @@ export async function runFolderModelCleanupOnce(db: Database.Database): Promise<
     const legacyRows = db.prepare('SELECT id FROM memory_spaces WHERE id != ?').all(DEFAULT_MEMORY_SPACE_ID) as { id: string }[]
     const rag = getRAGStore()
     for (const row of legacyRows) {
-        await rag.deleteByFilter('permanent_memory', lanceDbEqFilter('spaceId', row.id)).catch(() => undefined)
+        await rag.deleteByFilter(getActivePermanentMemoryTableName(), lanceDbEqFilter('spaceId', row.id)).catch(() => undefined)
         stopWatchingMemorySpace(row.id)
     }
 

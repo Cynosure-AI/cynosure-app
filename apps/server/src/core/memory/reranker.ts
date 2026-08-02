@@ -23,7 +23,7 @@ export const MEMORY_MIN_MATCH_THRESHOLD = 0.3
 const DEFAULT_CONFIG: MemoryRerankerConfig = {
   enabled: false,
   model: '',
-  candidateCount: 30,
+  candidateCount: 40,
   minMatchThreshold: MEMORY_MIN_MATCH_THRESHOLD
 }
 
@@ -39,7 +39,7 @@ function normalizeConfig(config: Partial<MemoryRerankerConfig> | undefined): Mem
     enabled: !!config?.enabled,
     providerId: config?.providerId?.trim() || undefined,
     model: config?.model?.trim() || '',
-    candidateCount: Math.min(50, Math.max(3, candidateCount)),
+    candidateCount: Math.min(100, Math.max(3, candidateCount)),
     minMatchThreshold: Math.min(1, Math.max(0, minMatchThreshold))
   }
 }
@@ -79,6 +79,7 @@ export class MemoryReranker {
 
     const provider = this.resolveOpenRouterProvider(config.providerId)
     if (!provider) return results.slice(0, topK)
+    const documents = results.map(formatRerankerDocument)
 
     const baseUrl = provider.config.baseUrl.replace(/\/+$/, '')
     const res = await fetch(`${baseUrl}/rerank`, {
@@ -92,7 +93,7 @@ export class MemoryReranker {
       body: JSON.stringify({
         model: config.model,
         query,
-        documents: results.map((r) => r.text),
+        documents,
         top_n: Math.min(topK, results.length)
       })
     })
@@ -106,7 +107,7 @@ export class MemoryReranker {
       kind: 'reranker',
       provider: provider.config.type,
       model: config.model,
-      inputTokens: estimateTextTokens(query) + estimateTextsTokens(results.map((r) => r.text)),
+      inputTokens: estimateTextTokens(query) + estimateTextsTokens(documents),
     })
 
     const reranked = (data.results || [])
@@ -118,6 +119,7 @@ export class MemoryReranker {
         return {
           ...result,
           score: rerankerScore ?? result.score,
+          scoreType: rerankerScore !== undefined ? 'reranker' as const : result.scoreType,
           ...(rerankerScore !== undefined ? { rerankerScore } : {}),
         }
       })
@@ -145,6 +147,14 @@ export class MemoryReranker {
     }
     return undefined
   }
+}
+
+function formatRerankerDocument(result: SearchResult): string {
+  return [
+    result.documentTitle ? `Document: ${result.documentTitle}` : '',
+    result.sectionPath && result.sectionPath !== result.documentTitle ? `Section: ${result.sectionPath}` : '',
+    result.text,
+  ].filter(Boolean).join('\n')
 }
 
 let rerankerInstance: MemoryReranker | null = null

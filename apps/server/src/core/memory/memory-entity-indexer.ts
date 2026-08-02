@@ -69,8 +69,32 @@ export function moveMemoryGraphSource(sourceSpaceId: string, sourceFileName: str
   const oldLegacySourceId = legacyMemoryGraphSourceId(sourceFileName)
   const newSourceId = memoryGraphSourceId(targetSpaceId, targetFileName)
   const db = getDb()
-  db.prepare('UPDATE entity_graph_edges SET source_id = ? WHERE source_id = ?').run(newSourceId, oldSourceId)
-  db.prepare('UPDATE entity_graph_edges SET source_id = ? WHERE source_id = ?').run(newSourceId, oldLegacySourceId)
+  db.transaction(() => {
+    db.prepare('UPDATE entity_graph_edges SET source_id = ? WHERE source_id = ?').run(newSourceId, oldSourceId)
+    db.prepare('UPDATE entity_graph_edges SET source_id = ? WHERE source_id = ?').run(newSourceId, oldLegacySourceId)
+    const moveEvidence = (priorSourceId: string) => {
+      const rows = db.prepare('SELECT * FROM entity_graph_edge_evidence WHERE source_id = ?').all(priorSourceId) as Record<string, unknown>[]
+      for (const row of rows) {
+        db.prepare(`
+          INSERT INTO entity_graph_edge_evidence
+            (id, edge_id, source_kind, source_id, evidence, confidence, mention_count, first_seen_at, last_seen_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(edge_id, source_kind, source_id) DO UPDATE SET
+            evidence = CASE WHEN excluded.evidence != '' THEN excluded.evidence ELSE entity_graph_edge_evidence.evidence END,
+            confidence = MAX(entity_graph_edge_evidence.confidence, excluded.confidence),
+            mention_count = entity_graph_edge_evidence.mention_count + excluded.mention_count,
+            first_seen_at = MIN(entity_graph_edge_evidence.first_seen_at, excluded.first_seen_at),
+            last_seen_at = MAX(entity_graph_edge_evidence.last_seen_at, excluded.last_seen_at)
+        `).run(
+          row.id, row.edge_id, row.source_kind, newSourceId, row.evidence,
+          row.confidence, row.mention_count, row.first_seen_at, row.last_seen_at,
+        )
+        db.prepare('DELETE FROM entity_graph_edge_evidence WHERE id = ? AND source_id = ?').run(row.id, priorSourceId)
+      }
+    }
+    moveEvidence(oldSourceId)
+    moveEvidence(oldLegacySourceId)
+  })()
 }
 
 export function deleteMemoryGraphSource(spaceId: string, fileName: string): { edgesDeleted: number; orphanedNodeIds: string[] } {

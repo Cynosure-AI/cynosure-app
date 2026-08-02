@@ -10,7 +10,9 @@
     "start": "node dist/index.js",
     "rebuild:native": "npm rebuild better-sqlite3",
     "lint": "eslint \"src/**/*.ts\"",
-    "lint:fix": "eslint \"src/**/*.ts\" --fix"
+    "lint:fix": "eslint \"src/**/*.ts\" --fix",
+    "test": "tsx --test src/core/memory/*.test.ts",
+    "memory:evaluate": "tsx src/scripts/evaluate-memory.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -21,7 +23,7 @@
     "@fastify/swagger-ui": "^5.2.5",
     "@fastify/websocket": "^11.2.0",
     "@google/genai": "^1.44.0",
-    "@lancedb/lancedb": "^0.26.2",
+    "@lancedb/lancedb": "^0.33.0",
     "@langchain/textsplitters": "^1.0.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@slack/bolt": "^4.6.0",

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getMemoryAggregator } from '../core/memory/memory-aggregator.js'
 import { getHistoryStore } from '../core/memory/history.js'
-import { getEmbeddingProvider } from '../core/memory/embedding.js'
+import { EmbeddingProvider, getEmbeddingProvider } from '../core/memory/embedding.js'
 import { getMemoryParser } from '../core/memory/parser.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
@@ -11,6 +11,7 @@ import { getEntityGraphStore, type EntityType, type ImportanceLevel } from '../c
 import { getMemoryEntityExtractionConfig, saveMemoryEntityExtractionConfig, type MemoryEntityExtractionConfig } from '../core/memory/memory-entity-indexer.js'
 import { dropConversationAttachmentIndex } from '../core/artifacts/attachment-rag.js'
 import { getDb } from '../db/database.js'
+import { activatePermanentMemoryIndex, DEFAULT_PERMANENT_MEMORY_TABLE, getActivePermanentMemoryTableName, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import OpenAI from 'openai'
 import { GoogleGenAI } from '@google/genai'
@@ -46,8 +47,12 @@ async function detectEmbeddingDimensions(providerId: string | undefined, model: 
 
 export async function registerMemoryRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   // POST /api/memory/search — search permanent memory
-  app.post<{ Body: { query: string; topK?: number; spaceId?: string } }>('/search', async (req) => {
+  app.post<{ Body: { query: string; topK?: number; spaceId?: string } }>('/search', async (req, reply) => {
     const { query, topK, spaceId } = req.body
+    if (typeof query !== 'string' || !query.trim()) {
+      return reply.code(400).send({ error: 'A non-empty search query is required' })
+    }
+    const boundedTopK = Math.min(100, Math.max(1, Math.round(topK ?? 5)))
     const mem = getAgentMemory()
     let filter: string | undefined
 
@@ -56,12 +61,13 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       const row = db
         .prepare('SELECT id, name FROM memory_spaces WHERE id = ?')
         .get(spaceId.trim()) as { id: string; name: string } | undefined
-      filter = row ? buildMemorySpaceFilter([row]) : undefined
+      if (!row) return reply.code(404).send({ error: 'Memory space not found' })
+      filter = buildMemorySpaceFilter([row])
     } else {
       filter = buildMemorySpaceFilter(getAllMemorySpaces())
     }
 
-    return mem.recall(query, topK, filter)
+    return mem.recall(query.trim(), boundedTopK, filter)
   })
 
   // POST /api/memory/entries/delete — delete entries by IDs
@@ -69,7 +75,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const { ids } = req.body
     if (!ids?.length) return { success: false, error: 'No IDs provided' }
     const rag = getRAGStore()
-    await rag.deleteByIds('permanent_memory', ids)
+    await rag.deleteByIds(getActivePermanentMemoryTableName(), ids)
     return { success: true, deleted: ids.length }
   })
 
@@ -236,65 +242,99 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       oldConfig.dimensions !== newDimensions
 
     if (embeddingChanged && reembed) {
-      // Re-embed flow: read all existing chunks → configure new provider → drop → re-embed → write back
+      // Blue/green re-embedding: build and verify an isolated table, then swap.
+      // The active provider and table remain available throughout staging.
       const rag = getRAGStore()
-      const existingDocs = await rag.listDocuments('permanent_memory')
+      const activeTable = getActivePermanentMemoryTableName()
+      const existingDocs = await rag.listDocuments(activeTable)
       const chunksToReembed = existingDocs.filter(d => d.id !== '__seed__')
+      const migrationEmbedder = new EmbeddingProvider()
+      migrationEmbedder.configure(resolvedConfig, false)
+      const migrationId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+      const stagingTable = `permanent_memory_v_${migrationId}`
+      let activated = false
 
-      // Configure new provider FIRST so embedBatch uses the new model
-      embedder.configure(resolvedConfig)
-
-      // Drop old table (incompatible dimensions)
-      await rag.deleteTable('permanent_memory')
-      await dropConversationAttachmentIndex()
-
-      if (chunksToReembed.length > 0) {
+      try {
         // Re-embed in batches
         const BATCH_SIZE = 32
         let totalReembedded = 0
         const totalChunks = chunksToReembed.length
+        await rag.ensureTable(stagingTable, newDimensions)
 
         broadcast('memory:reembed-progress', { current: 0, total: totalChunks, status: 'started' })
 
         for (let i = 0; i < chunksToReembed.length; i += BATCH_SIZE) {
           const batch = chunksToReembed.slice(i, i + BATCH_SIZE)
-          const texts = batch.map(d => d.text)
+          const texts = batch.map(d => d.searchText || d.text)
 
           try {
-            const embeddings = await embedder.embedBatch(texts)
+            const embeddings = await migrationEmbedder.embedBatch(texts)
+            if (embeddings.length !== batch.length || embeddings.some((item) => item.vector.length !== newDimensions)) {
+              throw new Error(`Embedding batch ${i / BATCH_SIZE + 1} returned invalid dimensions or row count`)
+            }
             const docs = batch.map((doc, j) => ({
               id: doc.id,
               text: doc.text,
+              searchText: doc.searchText || doc.text,
               vector: embeddings[j].vector,
               source: doc.source,
               sourceFile: doc.sourceFile || '',
               chunkIndex: doc.chunkIndex ?? 0,
               spaceId: doc.spaceId || '',
-              createdAt: doc.createdAt
+              createdAt: doc.createdAt,
+              documentTitle: doc.documentTitle || '',
+              sectionPath: doc.sectionPath || '',
+              contentHash: doc.contentHash || '',
+              embeddingModel: embeddings[j].model
             }))
-            await rag.addDocuments('permanent_memory', docs, newDimensions)
+            await rag.addDocuments(stagingTable, docs, newDimensions)
             totalReembedded += docs.length
             broadcast('memory:reembed-progress', { current: totalReembedded, total: totalChunks, status: 'in-progress' })
           } catch (err) {
-            console.error(`[reembed] Batch failed at offset ${i}:`, err)
-            // Continue with remaining batches
+            throw new Error(`Re-embedding failed at chunk ${i}: ${err instanceof Error ? err.message : String(err)}`)
           }
         }
 
+        const stagedDocs = await rag.listDocuments(stagingTable)
+        if (stagedDocs.length !== totalChunks) {
+          throw new Error(`Staging verification failed: expected ${totalChunks} chunks, found ${stagedDocs.length}`)
+        }
+        await rag.rebuildFtsIndex(stagingTable)
+
+        // Attachment vectors use the old dimensions, so invalidate them before
+        // publishing the new provider/index pair.
+        await dropConversationAttachmentIndex()
+        activatePermanentMemoryIndex(stagingTable, resolvedConfig)
+        embedder.configure(resolvedConfig, false)
+        activated = true
+        if (activeTable !== stagingTable) await rag.deleteTable(activeTable)
         broadcast('memory:reembed-progress', { current: totalReembedded, total: totalChunks, status: 'completed' })
         return { success: true, vectorsDropped: false, reembedded: true, reembeddedCount: totalReembedded, dimensions: newDimensions }
+      } catch (err) {
+        if (!activated) await rag.deleteTable(stagingTable).catch(() => undefined)
+        broadcast('memory:reembed-progress', {
+          current: 0,
+          total: chunksToReembed.length,
+          status: 'failed',
+          error: err instanceof Error ? err.message : String(err),
+        })
+        throw err
       }
-
-      return { success: true, vectorsDropped: false, reembedded: true, reembeddedCount: 0, dimensions: newDimensions }
     }
-
-    embedder.configure(resolvedConfig)
 
     if (embeddingChanged) {
       const rag = getRAGStore()
-      await rag.deleteTable('permanent_memory')
+      const activeTable = getActivePermanentMemoryTableName()
+      await rag.deleteTable(activeTable)
+      if (activeTable !== DEFAULT_PERMANENT_MEMORY_TABLE) {
+        await rag.deleteTable(DEFAULT_PERMANENT_MEMORY_TABLE)
+      }
       await dropConversationAttachmentIndex()
       getDb().prepare('DELETE FROM memory_file_index').run()
+      activatePermanentMemoryIndex(DEFAULT_PERMANENT_MEMORY_TABLE, resolvedConfig)
+      embedder.configure(resolvedConfig, false)
+    } else {
+      embedder.configure(resolvedConfig)
     }
 
     return { success: true, vectorsDropped: embeddingChanged, reembedded: false, reembeddedCount: 0, dimensions: newDimensions }
@@ -309,7 +349,9 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   // POST /api/memory/embeddings/drop — drop all vector data
   app.post('/embeddings/drop', async () => {
     const rag = getRAGStore()
-    await rag.deleteTable('permanent_memory')
+    const activeTable = getActivePermanentMemoryTableName()
+    await rag.deleteTable(activeTable)
+    setActivePermanentMemoryTableName(DEFAULT_PERMANENT_MEMORY_TABLE)
     await dropConversationAttachmentIndex()
     getDb().prepare('DELETE FROM memory_file_index').run()
     return { success: true }

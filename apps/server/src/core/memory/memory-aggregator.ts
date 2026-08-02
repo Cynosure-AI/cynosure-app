@@ -48,6 +48,11 @@ export class MemoryAggregator {
         if (uniqueSpaceIds.length > 0) {
           const placeholders = uniqueSpaceIds.map(() => '?').join(', ')
           scopedSpaces = db.prepare(`SELECT id, name FROM memory_spaces WHERE id IN (${placeholders})`).all(...uniqueSpaceIds) as { id: string; name: string }[]
+          // Explicit scopes are security boundaries. A stale or invalid ID
+          // must never broaden or partially alter the requested scope.
+          if (!hasExactMemorySpaceScope(uniqueSpaceIds, scopedSpaces)) {
+            return { permanent: [], graph: undefined }
+          }
         }
       } catch { /* DB not ready */ }
     } else if (opts?.agentId) {
@@ -160,6 +165,9 @@ export class MemoryAggregator {
             } else {
               parts.push(`[${label}]`)
             }
+            if (c.sectionPath && c.sectionPath !== c.documentTitle) {
+              parts.push(`[Section: ${c.sectionPath}]`)
+            }
           } else if (c.spaceName) {
             parts.push(`[${c.spaceName}]`)
           }
@@ -175,6 +183,15 @@ export class MemoryAggregator {
 
     return sections.join('\n\n')
   }
+}
+
+export function hasExactMemorySpaceScope(
+  requestedIds: string[],
+  resolvedSpaces: Array<{ id: string }>,
+): boolean {
+  const requested = new Set(requestedIds.map((id) => id.trim()).filter(Boolean))
+  const resolved = new Set(resolvedSpaces.map((space) => space.id))
+  return requested.size === resolved.size && Array.from(requested).every((id) => resolved.has(id))
 }
 
 function memoryGraphSourceIdsForChunks(chunks: RetrievedChunk[]): string[] {

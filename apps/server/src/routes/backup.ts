@@ -26,6 +26,7 @@ import { stopAllMemorySpaceWatchers, watchMemorySpace } from '../core/memory/mem
 import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { dropConversationAttachmentIndex, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
+import { DEFAULT_PERMANENT_MEMORY_TABLE, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -86,6 +87,7 @@ interface MemorySpaceBackupRow extends Record<string, unknown> {
 interface EntityGraphBackup {
     nodes: Record<string, unknown>[]
     edges: Record<string, unknown>[]
+    evidence: Record<string, unknown>[]
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -151,7 +153,8 @@ function getEntityGraphRows(): EntityGraphBackup {
     const db = getDb()
     return {
         nodes: db.prepare('SELECT * FROM entity_graph_nodes ORDER BY last_seen_at DESC').all() as Record<string, unknown>[],
-        edges: db.prepare('SELECT * FROM entity_graph_edges ORDER BY last_seen_at DESC').all() as Record<string, unknown>[]
+        edges: db.prepare('SELECT * FROM entity_graph_edges ORDER BY last_seen_at DESC').all() as Record<string, unknown>[],
+        evidence: db.prepare('SELECT * FROM entity_graph_edge_evidence ORDER BY last_seen_at DESC').all() as Record<string, unknown>[]
     }
 }
 
@@ -161,17 +164,20 @@ function getEntityGraphBackup(zip: AdmZip): EntityGraphBackup | null {
         const graph = JSON.parse(combinedEntry.getData().toString('utf-8')) as Partial<EntityGraphBackup>
         return {
             nodes: Array.isArray(graph.nodes) ? graph.nodes : [],
-            edges: Array.isArray(graph.edges) ? graph.edges : []
+            edges: Array.isArray(graph.edges) ? graph.edges : [],
+            evidence: Array.isArray(graph.evidence) ? graph.evidence : []
         }
     }
 
     const nodesEntry = zip.getEntry('entity-graph/nodes.json') || zip.getEntry('memory/entity_graph_nodes.json')
     const edgesEntry = zip.getEntry('entity-graph/edges.json') || zip.getEntry('memory/entity_graph_edges.json')
+    const evidenceEntry = zip.getEntry('entity-graph/evidence.json')
     if (!nodesEntry && !edgesEntry) return null
 
     return {
         nodes: nodesEntry ? JSON.parse(nodesEntry.getData().toString('utf-8')) as Record<string, unknown>[] : [],
-        edges: edgesEntry ? JSON.parse(edgesEntry.getData().toString('utf-8')) as Record<string, unknown>[] : []
+        edges: edgesEntry ? JSON.parse(edgesEntry.getData().toString('utf-8')) as Record<string, unknown>[] : [],
+        evidence: evidenceEntry ? JSON.parse(evidenceEntry.getData().toString('utf-8')) as Record<string, unknown>[] : []
     }
 }
 
@@ -211,6 +217,7 @@ async function resetVectorIndexes(): Promise<void> {
         rmSync(lanceDir, { recursive: true, force: true })
     }
     await ragStore.initialize()
+    setActivePermanentMemoryTableName(DEFAULT_PERMANENT_MEMORY_TABLE)
     await dropConversationAttachmentIndex()
     try { getDb().prepare('DELETE FROM memory_file_index').run() } catch { /* ignore */ }
 }
@@ -231,6 +238,7 @@ async function resetMemorySpaces(db = getDb()): Promise<void> {
 }
 
 function resetEntityGraph(db = getDb()): void {
+    db.prepare('DELETE FROM entity_graph_edge_evidence').run()
     db.prepare('DELETE FROM entity_graph_edges').run()
     db.prepare('DELETE FROM entity_graph_nodes').run()
 }
@@ -496,7 +504,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 const graph = getEntityGraphRows()
                 archive.append(JSON.stringify(graph.nodes, null, 2), { name: 'entity-graph/nodes.json' })
                 archive.append(JSON.stringify(graph.edges, null, 2), { name: 'entity-graph/edges.json' })
-                manifest.modules.entityGraph = { count: graph.nodes.length + graph.edges.length }
+                archive.append(JSON.stringify(graph.evidence, null, 2), { name: 'entity-graph/evidence.json' })
+                manifest.modules.entityGraph = { count: graph.nodes.length + graph.edges.length + graph.evidence.length }
             }
 
             // --- Conversations (agent-linked chat history) ---
@@ -1032,6 +1041,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             try {
                 const graph = getEntityGraphBackup(zip)
                 if (graph) {
+                    db.prepare('DELETE FROM entity_graph_edge_evidence').run()
                     db.prepare('DELETE FROM entity_graph_edges').run()
                     db.prepare('DELETE FROM entity_graph_nodes').run()
 
@@ -1082,6 +1092,42 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             res.restored++
                         } catch (e) {
                             res.errors.push(`Entity graph edge ${edge.id}: ${(e as Error).message}`)
+                        }
+                    }
+
+                    const evidenceRows = graph.evidence.length > 0
+                        ? graph.evidence
+                        : graph.edges.map((edge) => ({
+                            id: `legacy-${edge.id}`,
+                            edge_id: edge.id,
+                            source_kind: edge.source_kind,
+                            source_id: edge.source_id,
+                            evidence: edge.evidence,
+                            confidence: edge.confidence,
+                            mention_count: edge.mention_count,
+                            first_seen_at: edge.first_seen_at,
+                            last_seen_at: edge.last_seen_at,
+                        }))
+                    for (const evidence of evidenceRows) {
+                        try {
+                            db.prepare(`
+                                INSERT OR REPLACE INTO entity_graph_edge_evidence
+                                    (id, edge_id, source_kind, source_id, evidence, confidence, mention_count, first_seen_at, last_seen_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            `).run(
+                                evidence.id,
+                                evidence.edge_id,
+                                evidence.source_kind || 'conversation',
+                                evidence.source_id || '',
+                                evidence.evidence || '',
+                                evidence.confidence ?? 0.7,
+                                evidence.mention_count ?? 1,
+                                evidence.first_seen_at || Date.now(),
+                                evidence.last_seen_at || Date.now(),
+                            )
+                            res.restored++
+                        } catch (e) {
+                            res.errors.push(`Entity graph evidence ${evidence.id}: ${(e as Error).message}`)
                         }
                     }
                 }
@@ -1381,7 +1427,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
         if (!manifest.modules.entityGraph) {
             const graph = getEntityGraphBackup(zip)
             if (graph && (graph.nodes.length > 0 || graph.edges.length > 0)) {
-                manifest.modules.entityGraph = { count: graph.nodes.length + graph.edges.length }
+                manifest.modules.entityGraph = { count: graph.nodes.length + graph.edges.length + graph.evidence.length }
             }
         }
 
