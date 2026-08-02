@@ -1,9 +1,8 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import { expect, test } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { RAGStore } from './rag.js'
+import { RAGStore } from '../../../src/core/memory/rag.js'
 
 test('hybrid search retains LanceDB fusion scores for lexical candidates', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'cynosure-rag-'))
@@ -19,10 +18,10 @@ test('hybrid search retains LanceDB fusion scores for lexical candidates', async
 
     const results = await store.hybridSearch('memory', [1, 0, 0], 'ExactCode-ZX91', 3)
     const lexical = results.find((item) => item.id === 'lexical')
-    assert.ok(lexical)
-    assert.equal(lexical.scoreType, 'fusion')
-    assert.equal(lexical.score, lexical.fusionScore)
-    assert.ok((lexical.fusionScore ?? 0) > 0)
+    expect(lexical).toBeDefined()
+    expect(lexical?.scoreType).toBe('fusion')
+    expect(lexical?.score).toBe(lexical?.fusionScore)
+    expect(lexical?.fusionScore ?? 0).toBeGreaterThan(0)
 
   } finally {
     await store.close()

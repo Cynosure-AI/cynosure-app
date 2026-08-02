@@ -1,5 +1,4 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import { describe, expect, test } from 'vitest'
 import { inferDocumentTitle, inferSectionPath, isRetrievableChunk, passesRetrievalThreshold } from './parser.js'
 import { hasExactMemorySpaceScope } from './memory-aggregator.js'
 import { splitEntityExtractionContent } from './entity-graph.js'
@@ -17,35 +16,37 @@ function result(overrides: Partial<SearchResult>): SearchResult {
   }
 }
 
-test('rejects separator-only and markup-only chunks', () => {
-  assert.equal(isRetrievableChunk('---'), false)
-  assert.equal(isRetrievableChunk('##'), false)
-  assert.equal(isRetrievableChunk('***\n---'), false)
-  assert.equal(isRetrievableChunk('## Retrieval\nHybrid search finds documents.'), true)
-})
+describe('memory retrieval policy', () => {
+  test('rejects separator-only and markup-only chunks', () => {
+    expect(isRetrievableChunk('---')).toBe(false)
+    expect(isRetrievableChunk('##')).toBe(false)
+    expect(isRetrievableChunk('***\n---')).toBe(false)
+    expect(isRetrievableChunk('## Retrieval\nHybrid search finds documents.')).toBe(true)
+  })
 
-test('only applies a configured threshold to reranker scores', () => {
-  assert.equal(passesRetrievalThreshold(result({ score: 0, scoreType: 'fusion' }), 0.3), true)
-  assert.equal(passesRetrievalThreshold(result({ rerankerScore: 0.29, scoreType: 'reranker' }), 0.3), false)
-  assert.equal(passesRetrievalThreshold(result({ rerankerScore: 0.31, scoreType: 'reranker' }), 0.3), true)
-})
+  test('only applies a configured threshold to reranker scores', () => {
+    expect(passesRetrievalThreshold(result({ score: 0, scoreType: 'fusion' }), 0.3)).toBe(true)
+    expect(passesRetrievalThreshold(result({ rerankerScore: 0.29, scoreType: 'reranker' }), 0.3)).toBe(false)
+    expect(passesRetrievalThreshold(result({ rerankerScore: 0.31, scoreType: 'reranker' }), 0.3)).toBe(true)
+  })
 
-test('explicit memory scopes fail closed on missing IDs', () => {
-  assert.equal(hasExactMemorySpaceScope(['a', 'b'], [{ id: 'a' }, { id: 'b' }]), true)
-  assert.equal(hasExactMemorySpaceScope(['a', 'missing'], [{ id: 'a' }]), false)
-})
+  test('explicit memory scopes fail closed on missing IDs', () => {
+    expect(hasExactMemorySpaceScope(['a', 'b'], [{ id: 'a' }, { id: 'b' }])).toBe(true)
+    expect(hasExactMemorySpaceScope(['a', 'missing'], [{ id: 'a' }])).toBe(false)
+  })
 
-test('entity extraction covers an entire long document at safe boundaries', () => {
-  const content = Array.from({ length: 120 }, (_, index) => `## Section ${index}\nFact ${index} relates to project ${index}.`).join('\n\n')
-  const chunks = splitEntityExtractionContent(content, 500)
-  assert.ok(chunks.length > 1)
-  assert.equal(chunks.join('').replace(/\s/g, ''), content.replace(/\s/g, ''))
-  assert.ok(chunks.every((chunk) => chunk.length <= 500))
-})
+  test('entity extraction covers an entire long document at safe boundaries', () => {
+    const content = Array.from({ length: 120 }, (_, index) => `## Section ${index}\nFact ${index} relates to project ${index}.`).join('\n\n')
+    const chunks = splitEntityExtractionContent(content, 500)
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(chunks.join('').replace(/\s/g, '')).toBe(content.replace(/\s/g, ''))
+    expect(chunks.every((chunk) => chunk.length <= 500)).toBe(true)
+  })
 
-test('derives stable retrieval context from document structure', () => {
-  const text = '# Memory Architecture\n\n## Retrieval\nHybrid retrieval combines semantic and lexical search.'
-  assert.equal(inferDocumentTitle(text, 'fallback.md'), 'Memory Architecture')
-  assert.equal(inferSectionPath(text, 'Memory Architecture'), 'Retrieval')
-  assert.equal(inferDocumentTitle('No heading here', 'project_notes.md'), 'project notes')
+  test('derives stable retrieval context from document structure', () => {
+    const text = '# Memory Architecture\n\n## Retrieval\nHybrid retrieval combines semantic and lexical search.'
+    expect(inferDocumentTitle(text, 'fallback.md')).toBe('Memory Architecture')
+    expect(inferSectionPath(text, 'Memory Architecture')).toBe('Retrieval')
+    expect(inferDocumentTitle('No heading here', 'project_notes.md')).toBe('project notes')
+  })
 })
