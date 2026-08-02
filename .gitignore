@@ -45,3 +45,9 @@ apps/server/data/
 
 # TypeScript build cache
 *.tsbuildinfo
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+.tmp/

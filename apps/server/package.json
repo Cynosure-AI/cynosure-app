@@ -11,7 +11,12 @@
     "rebuild:native": "npm rebuild better-sqlite3",
     "lint": "eslint \"src/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" --fix",
-    "test": "tsx --test src/core/memory/*.test.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run src",
+    "test:integration": "vitest run tests/integration",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck:test": "tsc --project tsconfig.test.json",
     "memory:evaluate": "tsx src/scripts/evaluate-memory.ts"
   },
   "dependencies": {

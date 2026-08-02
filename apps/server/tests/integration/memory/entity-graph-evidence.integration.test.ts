@@ -1,5 +1,4 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import { expect, test } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,8 +7,8 @@ test('a graph edge survives until its final supporting source is removed', async
   const directory = await mkdtemp(join(tmpdir(), 'cynosure-graph-'))
   process.env.CYNOSURE_DATA_DIR = directory
 
-  const { closeDb, getDb } = await import('../../db/database.js')
-  const { EntityGraphStore } = await import('./entity-graph.js')
+  const { closeDb, getDb } = await import('../../../src/db/database.js')
+  const { EntityGraphStore } = await import('../../../src/core/memory/entity-graph.js')
   try {
     const graph = new EntityGraphStore()
     const relation = {
@@ -22,18 +21,17 @@ test('a graph edge survives until its final supporting source is removed', async
     }
     const first = graph.upsertEdge(relation, 'memory', 'source-a')
     const second = graph.upsertEdge(relation, 'memory', 'source-b')
-    assert.ok(first)
-    assert.equal(second?.id, first?.id)
+    expect(first).toBeDefined()
+    expect(second?.id).toBe(first?.id)
 
-    assert.equal(graph.deleteEdgesBySourceId('source-b').edgesDeleted, 0)
-    assert.ok(graph.getEdge(first!.id))
-    assert.equal(
+    expect(graph.deleteEdgesBySourceId('source-b').edgesDeleted).toBe(0)
+    expect(graph.getEdge(first!.id)).not.toBeNull()
+    expect(
       (getDb().prepare('SELECT COUNT(*) AS count FROM entity_graph_edge_evidence WHERE edge_id = ?').get(first!.id) as { count: number }).count,
-      1,
-    )
+    ).toBe(1)
 
-    assert.equal(graph.deleteEdgesBySourceId('source-a').edgesDeleted, 1)
-    assert.equal(graph.getEdge(first!.id), null)
+    expect(graph.deleteEdgesBySourceId('source-a').edgesDeleted).toBe(1)
+    expect(graph.getEdge(first!.id)).toBeNull()
   } finally {
     closeDb()
     delete process.env.CYNOSURE_DATA_DIR
