@@ -12,6 +12,7 @@ import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { basename, dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
+import { createServer } from 'net'
 import type { WebSocket } from 'ws'
 import { nanoid } from 'nanoid'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
@@ -82,6 +83,25 @@ interface StartServerOptions {
 
 interface RunningServer {
   close: () => Promise<void>
+}
+
+async function assertPortAvailable(port: number, host: string): Promise<void> {
+  await new Promise<void>((resolvePromise, reject) => {
+    const probe = createServer()
+    probe.unref()
+    probe.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        reject(new Error(
+          `Port ${port} is already in use on ${host}. Stop the existing Cynosure server or start this instance with --port <number>.`,
+        ))
+        return
+      }
+      reject(error)
+    })
+    probe.listen(port, host, () => {
+      probe.close((error) => error ? reject(error) : resolvePromise())
+    })
+  })
 }
 
 function parsePort(value: string, source: string): number {
@@ -290,6 +310,11 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   if (options.dataDir) {
     process.env.CYNOSURE_DATA_DIR = options.dataDir
   }
+
+  const listenHost = options.host || '0.0.0.0'
+  // Fail before opening the database, starting watchers, or spawning configured
+  // MCP/channel processes when this server can never acquire its listen port.
+  await assertPortAvailable(options.port, listenHost)
 
   const startedAt = new Date().toISOString()
   const app = Fastify({ bodyLimit: 50 * 1024 * 1024 })
@@ -501,7 +526,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
   startCronScheduler(broadcast)
 
-  await app.listen({ port: options.port, host: options.host || '0.0.0.0' })
+  await app.listen({ port: options.port, host: listenHost })
 
   console.log(`Cynosure server listening on ${formatListenAddress(options.host, options.port)}`)
 

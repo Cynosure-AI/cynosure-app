@@ -613,7 +613,9 @@ defineExpose({ loadServers })
           </button>
 
           <button
+            type="button"
             class="p-1.5 text-theme-600 hover:text-red-400 rounded-md hover:bg-red-500/10 transition-colors"
+            :aria-label="`Remove ${server.name}`"
             @click="promptRemoveServer(server.id)"
           >
             <Icon
@@ -642,6 +644,7 @@ defineExpose({ loadServers })
         <ToggleSwitch
           v-if="!editingId || editingId !== server.id"
           :model-value="server.enabled"
+          :label="server.enabled ? `Disable ${server.name}` : `Enable ${server.name}`"
           size="sm"
           color="green"
           :title="server.enabled ? 'Disable' : 'Enable'"

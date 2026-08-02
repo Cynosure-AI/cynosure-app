@@ -162,6 +162,7 @@ onUnmounted(() => {
       <div
         v-if="sidebarOpen"
         class="fixed inset-0 z-30 bg-black/60 md:hidden"
+        aria-hidden="true"
         @click="closeSidebar"
       />
     </Transition>
@@ -169,6 +170,7 @@ onUnmounted(() => {
     <!-- Sidebar: always visible on md+, slide-in overlay on mobile -->
     <div
       v-if="!isOnboardingRoute"
+      id="primary-navigation"
       class="fixed inset-y-0 left-0 z-30 w-60 transition-all duration-200 md:static md:translate-x-0"
       :class="[
         sidebarOpen ? 'translate-x-0' : '-translate-x-full',
@@ -188,7 +190,11 @@ onUnmounted(() => {
         class="flex items-center gap-2 px-2 py-1.5 md:hidden"
       >
         <button
+          type="button"
           class="p-2 rounded-lg text-theme-400 hover:text-theme-100 hover:bg-theme-800 transition-colors"
+          aria-label="Open navigation"
+          aria-controls="primary-navigation"
+          :aria-expanded="sidebarOpen"
           @click="sidebarOpen = !sidebarOpen"
         >
           <Icon

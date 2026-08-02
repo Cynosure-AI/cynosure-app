@@ -756,54 +756,62 @@ function formatDate(ts: number): string {
         </button>
       </div>
 
-      <Teleport to="body">
-        <div
-          v-if="showCreateDialog"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-          @click.self="showCreateDialog = false"
-        >
-          <div class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h2 class="text-lg font-semibold text-theme-100 mb-4">
-              Create New Agent
-            </h2>
-            <div class="space-y-4">
-              <div>
-                <label class="block text-sm text-theme-400 mb-1.5">Name</label>
-                <input
-                  v-model="newName"
-                  type="text"
-                  placeholder="My Agent"
-                  class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
-                  @keydown.enter="createAgent"
-                >
-              </div>
-              <div>
-                <label class="block text-sm text-theme-400 mb-1.5">Description</label>
-                <textarea
-                  v-model="newDescription"
-                  placeholder="What does this agent do?"
-                  class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none h-20"
-                />
-              </div>
-            </div>
-            <div class="flex justify-end gap-2 mt-6">
-              <button
-                class="px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors"
-                @click="showCreateDialog = false"
-              >
-                Cancel
-              </button>
-              <button
-                class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                :disabled="!newName.trim()"
-                @click="createAgent"
-              >
-                Create
-              </button>
-            </div>
+      <ModalDialog
+        :show="showCreateDialog"
+        title="Create New Agent"
+        icon="lucide:bot"
+        icon-color="accent"
+        @close="showCreateDialog = false"
+      >
+        <div class="space-y-4">
+          <div>
+            <label
+              for="new-agent-name"
+              class="block text-sm text-theme-400 mb-1.5"
+            >Name</label>
+            <input
+              id="new-agent-name"
+              v-model="newName"
+              type="text"
+              autocomplete="off"
+              placeholder="My Agent"
+              class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              @keydown.enter="createAgent"
+            >
+          </div>
+          <div>
+            <label
+              for="new-agent-description"
+              class="block text-sm text-theme-400 mb-1.5"
+            >Description <span class="text-theme-600">(optional)</span></label>
+            <textarea
+              id="new-agent-description"
+              v-model="newDescription"
+              placeholder="What does this agent do?"
+              class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none h-20"
+            />
           </div>
         </div>
-      </Teleport>
+        <template #actions>
+          <div class="flex justify-end gap-2">
+            <button
+              type="button"
+              class="px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors"
+              @click="showCreateDialog = false"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              :disabled="!newName.trim()"
+              @click="createAgent"
+            >
+              Create Agent
+            </button>
+          </div>
+        </template>
+      </ModalDialog>
 
       <ModalDialog
         :show="showDeleteConfirm"

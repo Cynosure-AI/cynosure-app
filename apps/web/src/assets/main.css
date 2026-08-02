@@ -43,6 +43,37 @@
 body {
   background-color: var(--color-theme-950);
   color: var(--color-theme-100);
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+/* A consistent keyboard focus treatment across native and custom controls. */
+:where(button, a, input, textarea, select, [role="button"], [role="tab"], [role="option"]):focus-visible {
+  outline: 2px solid var(--color-accent-400);
+  outline-offset: 2px;
+}
+
+:where(button, input, textarea, select):disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ── Main content area: always keep rounded corners regardless of theme ── */

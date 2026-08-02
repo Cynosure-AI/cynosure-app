@@ -235,7 +235,10 @@ onMounted(() => {
             </p>
           </div>
         </div>
-        <ToggleSwitch v-model="prefs.whisperEnabled" />
+        <ToggleSwitch
+          v-model="prefs.whisperEnabled"
+          label="Show microphone button"
+        />
       </div>
     </BaseCard>
 

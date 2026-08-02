@@ -457,8 +457,10 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           {{ currentSpace?.name }}
         </h2>
         <button
+          type="button"
           class="p-1 text-theme-500 hover:text-theme-300 transition-colors"
           title="Edit folder"
+          :aria-label="`Edit ${currentSpace?.name || 'folder'}`"
           @click="emit('editSpace')"
         >
           <Icon
@@ -467,8 +469,10 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           />
         </button>
         <button
+          type="button"
           :disabled="currentSpace?.isDefault"
           :title="currentSpace?.isDefault ? 'Cannot archive the default memory folder' : 'Archive folder'"
+          :aria-label="currentSpace?.isDefault ? 'Default memory folder cannot be archived' : `Archive ${currentSpace?.name || 'folder'}`"
           class="p-1 text-theme-500 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-theme-500"
           @click="emit('deleteSpace')"
         >
@@ -651,8 +655,10 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           </button>
         </template>
         <button
+          type="button"
           :disabled="filesLoading"
           class="px-2 py-1.5 text-xs text-theme-400 hover:text-theme-200"
+          aria-label="Refresh documents"
           @click="loadFiles"
         >
           <Icon

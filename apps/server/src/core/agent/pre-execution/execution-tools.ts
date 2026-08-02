@@ -17,8 +17,6 @@ export interface ResolveExecutionToolsInput {
     gateway: LLMGateway
     resolvedProviderId: string
     resolvedModel: string
-    providerOverride?: string
-    modelOverride?: string
     userQuery?: string
     recentMessages?: ChatMessage[]
     usedToolNames?: Set<string>
@@ -49,8 +47,6 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         gateway,
         resolvedProviderId,
         resolvedModel,
-        providerOverride,
-        modelOverride,
         userQuery,
         recentMessages,
         usedToolNames,

@@ -380,6 +380,7 @@ onUnmounted(() => {
             <!-- Toggle -->
             <ToggleSwitch
               :model-value="ch.enabled"
+              :label="ch.enabled ? `Disable ${ch.name}` : `Enable ${ch.name}`"
               size="sm"
               color="emerald"
               :title="ch.enabled ? 'Disable channel' : 'Enable channel'"
@@ -606,6 +607,7 @@ onUnmounted(() => {
           <label class="flex items-center gap-2 mb-4 cursor-pointer select-none">
             <ToggleSwitch
               v-model="dlgEnabled"
+              label="Enable channel on save"
               size="md"
               color="emerald"
             />

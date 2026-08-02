@@ -449,6 +449,7 @@ onMounted(loadChannel)
                 </div>
                 <ToggleSwitch
                   v-model="dlgEnabled"
+                  label="Enable channel"
                   size="md"
                   color="emerald"
                   class="mt-0.5 shrink-0"

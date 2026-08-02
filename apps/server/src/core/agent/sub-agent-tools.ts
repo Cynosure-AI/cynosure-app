@@ -38,7 +38,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
     const availableSubAgents = subAgents
         .map((assignment) => {
             const agentData = getAgent(assignment.agentId)
-            return agentData ? { assignment, agentData } : null
+            return agentData ? { agentData } : null
         })
         .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
 
@@ -81,7 +81,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 }
             }
 
-            const { assignment, agentData } = selected
+            const { agentData } = selected
             const invocationId = nanoid()
             const eventMeta = {
                 maCodename: agentData.internalName,

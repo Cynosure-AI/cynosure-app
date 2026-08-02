@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/* eslint-disable vue/no-v-html -- both HTML producers below escape or sanitize untrusted content. */
 import { computed, ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { renderMarkdown, handleMarkdownClick } from '../../utils/markdown'

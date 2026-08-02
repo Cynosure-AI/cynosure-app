@@ -41,7 +41,7 @@ export function makeNotificationTool(opts: NotificationToolOptions): ToolDefinit
                 severity?: string
             }
 
-            const notification = createAppNotification({
+            createAppNotification({
                 agentId,
                 conversationId,
                 title,

@@ -19,10 +19,17 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="w-full flex gap-1 border-b border-theme-800 overflow-x-auto overflow-y-hidden scrollbar-none">
+  <div
+    role="tablist"
+    class="w-full flex gap-1 border-b border-theme-800 overflow-x-auto overflow-y-hidden scrollbar-none"
+  >
     <button
       v-for="tab in props.tabs"
       :key="tab.value"
+      type="button"
+      role="tab"
+      :aria-selected="modelValue === tab.value"
+      :tabindex="modelValue === tab.value ? 0 : -1"
       class="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2.5 text-sm transition-colors border-b-2 -mb-px"
       :class="modelValue === tab.value
         ? 'text-accent-400 border-accent-400'
