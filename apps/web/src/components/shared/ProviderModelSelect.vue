@@ -38,6 +38,7 @@ const props = withDefaults(
     modelTypes?: ModelListType[];
     includeDefault?: boolean;
     defaultLabel?: string;
+    defaultTag?: string;
     defaultIcon?: string;
     leadingSelections?: ProviderModelSelection[];
     providerDefaultLabel?: string;
@@ -57,6 +58,7 @@ const props = withDefaults(
     modelTypes: undefined,
     includeDefault: false,
     defaultLabel: "Use defaults",
+    defaultTag: undefined,
     defaultIcon: "lucide:settings",
     leadingSelections: () => [],
     providerDefaultLabel: "Use provider default",
@@ -317,6 +319,7 @@ const groups = computed((): SelectOptionGroup[] => {
       value: encode("", ""),
       label: props.defaultLabel,
       iconName: props.defaultIcon,
+      tag: props.defaultTag,
     });
   }
 
