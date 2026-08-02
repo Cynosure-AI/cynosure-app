@@ -365,6 +365,21 @@ function createTables(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_ege_relation ON entity_graph_edges(relation);
     CREATE INDEX IF NOT EXISTS idx_ege_seen ON entity_graph_edges(last_seen_at);
 
+    CREATE TABLE IF NOT EXISTS entity_graph_edge_evidence (
+      id TEXT PRIMARY KEY,
+      edge_id TEXT NOT NULL REFERENCES entity_graph_edges(id) ON DELETE CASCADE,
+      source_kind TEXT NOT NULL DEFAULT 'conversation',
+      source_id TEXT NOT NULL DEFAULT '',
+      evidence TEXT NOT NULL DEFAULT '',
+      confidence REAL NOT NULL DEFAULT 0.7,
+      mention_count INTEGER NOT NULL DEFAULT 1,
+      first_seen_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      UNIQUE(edge_id, source_kind, source_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_egee_edge ON entity_graph_edge_evidence(edge_id);
+    CREATE INDEX IF NOT EXISTS idx_egee_source ON entity_graph_edge_evidence(source_id);
+
   `)
 
   // Migrations for existing databases
@@ -396,6 +411,25 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('entity_graph_nodes', 'importance', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('entity_graph_edges', 'importance', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('memory_file_index', 'entity_indexed_at', 'INTEGER NOT NULL DEFAULT 0')
+
+  // Preserve the legacy edge source as its first evidence observation. New
+  // assertions are stored one-per-source instead of overwriting provenance.
+  db.exec(`
+    INSERT OR IGNORE INTO entity_graph_edge_evidence
+      (id, edge_id, source_kind, source_id, evidence, confidence, mention_count, first_seen_at, last_seen_at)
+    SELECT lower(hex(randomblob(16))), id, source_kind, source_id, evidence, confidence,
+           mention_count, first_seen_at, last_seen_at
+    FROM entity_graph_edges
+  `)
+  db.exec(`
+    UPDATE entity_graph_nodes
+    SET source_count = (
+      SELECT COUNT(DISTINCT ev.source_kind || char(0) || ev.source_id)
+      FROM entity_graph_edges e
+      JOIN entity_graph_edge_evidence ev ON ev.edge_id = e.id
+      WHERE e.from_node_id = entity_graph_nodes.id OR e.to_node_id = entity_graph_nodes.id
+    )
+  `)
 
   ensureDefaultMemorySpace(db)
 

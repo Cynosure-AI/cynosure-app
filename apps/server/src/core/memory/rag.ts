@@ -18,6 +18,11 @@ export interface VectorDocument {
   chunkIndex?: number
   spaceId?: string
   createdAt: number
+  searchText?: string
+  documentTitle?: string
+  sectionPath?: string
+  contentHash?: string
+  embeddingModel?: string
 }
 
 export interface SearchResult {
@@ -28,8 +33,16 @@ export interface SearchResult {
   chunkIndex?: number
   spaceId?: string
   score: number
+  /** Cosine similarity from dense retrieval, when available. */
+  denseScore?: number
+  /** Reciprocal-rank-fusion relevance returned by LanceDB hybrid search. */
+  fusionScore?: number
+  scoreType: 'dense' | 'fusion' | 'reranker'
   rerankerScore?: number
   createdAt: number
+  documentTitle?: string
+  sectionPath?: string
+  contentHash?: string
 }
 
 export interface RAGOptimizeResult {
@@ -101,7 +114,19 @@ export class RAGStore {
     try {
       const table = await this.db.openTable(tableName)
       this.tables.set(tableName, table)
-      const schema = await table.schema()
+      let schema = await table.schema()
+      const existingFields = new Set(schema.fields.map((f: { name: string }) => f.name))
+      const metadataColumns = [
+        { name: 'searchText', valueSql: 'text' },
+        { name: 'documentTitle', valueSql: "''" },
+        { name: 'sectionPath', valueSql: "''" },
+        { name: 'contentHash', valueSql: "''" },
+        { name: 'embeddingModel', valueSql: "''" },
+      ].filter((column) => !existingFields.has(column.name))
+      if (metadataColumns.length > 0) {
+        await table.addColumns(metadataColumns)
+        schema = await table.schema()
+      }
       this.fieldNamesCache.set(tableName, new Set(schema.fields.map((f: { name: string }) => f.name)))
       return table
     } catch {
@@ -135,14 +160,19 @@ export class RAGStore {
         sourceFile: '',
         chunkIndex: 0,
         spaceId: '',
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        searchText: '',
+        documentTitle: '',
+        sectionPath: '',
+        contentHash: '',
+        embeddingModel: ''
       }
       const table = await this.db!.createTable(tableName, [{ ...seed }])
 
       // Build initial FTS index — may fail on seed-only data; that's OK,
       // refreshFtsIndex will rebuild before the first real search.
       try {
-        await table.createIndex('text', { config: lancedb.Index.fts() })
+        await table.createIndex('searchText', { config: lancedb.Index.fts() })
         this.ftsIndexCurrent.add(tableName)
       } catch { /* will retry before first search */ }
 
@@ -186,7 +216,7 @@ export class RAGStore {
     const table = await this.openExistingTable(tableName)
     if (!table) return
     try {
-      await table.createIndex('text', {
+      await table.createIndex('searchText', {
         config: lancedb.Index.fts(),
         replace: true
       })
@@ -263,6 +293,10 @@ export class RAGStore {
   // Write operations
   // -----------------------------------------------------------------------
 
+  async ensureTable(tableName: string, dimensions: number): Promise<void> {
+    await this.getOrCreateTable(tableName, dimensions)
+  }
+
   async addDocuments(
     tableName: string,
     docs: VectorDocument[],
@@ -307,7 +341,7 @@ export class RAGStore {
     const table = await this.getOrCreateTable(tableName, queryVector.length)
     await this.ensureSpaceIdIndex(table, tableName)
     const fieldNames = await this.getFieldNames(table, tableName)
-    const cols = ['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt']
+    const cols = ['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt', '_distance', 'documentTitle', 'sectionPath', 'contentHash']
     if (fieldNames.has('spaceId')) cols.push('spaceId')
 
     let query = (table.search(queryVector) as lancedb.VectorQuery)
@@ -329,6 +363,11 @@ export class RAGStore {
         chunkIndex: r.chunkIndex != null ? (r.chunkIndex as number) : undefined,
         spaceId: (r.spaceId as string | undefined) || undefined,
         score: r._distance != null ? 1 - (r._distance as number) : 0,
+        denseScore: r._distance != null ? 1 - (r._distance as number) : undefined,
+        scoreType: 'dense' as const,
+        documentTitle: (r.documentTitle as string | undefined) || undefined,
+        sectionPath: (r.sectionPath as string | undefined) || undefined,
+        contentHash: (r.contentHash as string | undefined) || undefined,
         createdAt: r.createdAt as number
       }))
 
@@ -350,7 +389,7 @@ export class RAGStore {
   ): Promise<SearchResult[]> {
     const table = await this.getOrCreateTable(tableName, queryVector.length)
     const fieldNames = await this.getFieldNames(table, tableName)
-    const cols = ['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt']
+    const cols = ['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash']
     if (fieldNames.has('spaceId')) cols.push('spaceId')
 
     // Safety fallback: rebuild FTS if callers didn't trigger it eagerly
@@ -364,34 +403,21 @@ export class RAGStore {
       const reranker = await this.getReranker()
 
       let hybridQuery = (table.search(queryVector) as lancedb.VectorQuery)
-        .fullTextSearch(queryText)
+        .fullTextSearch(queryText, { columns: 'searchText' })
         .rerank(reranker)
         .select(cols)
         .limit(topK)
       if (filter) hybridQuery = hybridQuery.where(filter)
 
-      // Scoring-only query: only needs id + _distance (auto-returned); skip vector column
-      let vectorQuery = (table.search(queryVector) as lancedb.VectorQuery)
-        .distanceType('cosine')
-        .select(['id'])
-        .limit(topK * 3)
-      if (filter) vectorQuery = vectorQuery.where(filter)
-
-      // Both queries are independent — run them concurrently
-      const [results, vectorResults] = await Promise.all([
-        hybridQuery.toArray(),
-        vectorQuery.toArray()
-      ])
-      const scoreMap = new Map<string, number>()
-      for (const vr of vectorResults) {
-        if (vr.id !== '__seed__' && vr._distance != null) {
-          scoreMap.set(vr.id as string, 1 - (vr._distance as number))
-        }
-      }
+      const results = await hybridQuery.toArray()
 
       return results
         .filter((r) => r.id !== '__seed__')
         .map((r) => {
+          const fusionScore = typeof r._relevance_score === 'number'
+            ? r._relevance_score
+            : undefined
+          const denseScore = typeof r._distance === 'number' ? 1 - r._distance : undefined
           return {
             id: r.id as string,
             text: r.text as string,
@@ -399,7 +425,16 @@ export class RAGStore {
             sourceFile: r.sourceFile as string | undefined,
             chunkIndex: r.chunkIndex != null ? (r.chunkIndex as number) : undefined,
             spaceId: (r.spaceId as string | undefined) || undefined,
-            score: scoreMap.get(r.id as string) ?? 0,
+            // A hybrid result must retain the score that produced its rank.
+            // Dense and BM25 scores are not comparable, so never substitute a
+            // secondary vector-only similarity for LanceDB's RRF score.
+            score: fusionScore ?? 0,
+            fusionScore,
+            denseScore,
+            scoreType: 'fusion' as const,
+            documentTitle: (r.documentTitle as string | undefined) || undefined,
+            sectionPath: (r.sectionPath as string | undefined) || undefined,
+            contentHash: (r.contentHash as string | undefined) || undefined,
             createdAt: r.createdAt as number
           }
         })
@@ -485,10 +520,18 @@ export class RAGStore {
     if (!this.db) return
     try {
       await this.db.dropTable(tableName)
-      this.tables.delete(tableName)
-      this.ftsIndexCurrent.delete(tableName)
-      this.spaceIdIndexReady.delete(tableName)
+      this.clearTableCaches(tableName)
     } catch { /* table may not exist */ }
+  }
+
+  private clearTableCaches(tableName: string): void {
+    const timer = this.ftsRebuildTimers.get(tableName)
+    if (timer) clearTimeout(timer)
+    this.ftsRebuildTimers.delete(tableName)
+    this.tables.delete(tableName)
+    this.fieldNamesCache.delete(tableName)
+    this.ftsIndexCurrent.delete(tableName)
+    this.spaceIdIndexReady.delete(tableName)
   }
 
   /** List all documents (excluding vectors) with optional filter. */
@@ -501,7 +544,7 @@ export class RAGStore {
       const table = await this.openExistingTable(tableName)
       if (!table) return []
 
-      const fullCols = ['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'spaceId', 'createdAt']
+      const fullCols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'spaceId', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', 'embeddingModel']
       const safeCols = ['id', 'text', 'source', 'createdAt']
 
       let results: Record<string, unknown>[]
@@ -524,7 +567,12 @@ export class RAGStore {
           sourceFile: (r.sourceFile as string | undefined) || undefined,
           chunkIndex: r.chunkIndex != null ? (r.chunkIndex as number) : undefined,
           spaceId: (r.spaceId as string | undefined) || undefined,
-          createdAt: r.createdAt as number
+          createdAt: r.createdAt as number,
+          searchText: (r.searchText as string | undefined) || undefined,
+          documentTitle: (r.documentTitle as string | undefined) || undefined,
+          sectionPath: (r.sectionPath as string | undefined) || undefined,
+          contentHash: (r.contentHash as string | undefined) || undefined,
+          embeddingModel: (r.embeddingModel as string | undefined) || undefined
         }))
     } catch (err) {
       console.error('[rag] listDocuments error:', (err as Error).message)
@@ -612,7 +660,7 @@ export class RAGStore {
   }
 
   /** Delete documents by their IDs. */
-  async deleteByIds(tableName: string, ids: string[], opts: { rebuildFts?: boolean } = {}): Promise<void> {
+  async deleteByIds(tableName: string, ids: string[], opts: { rebuildFts?: boolean; throwOnError?: boolean } = {}): Promise<void> {
     if (!this.db || ids.length === 0) return
     try {
       const table = await this.openExistingTable(tableName)
@@ -624,7 +672,9 @@ export class RAGStore {
       if (opts.rebuildFts !== false) {
         await this.rebuildFtsIndex(tableName)
       }
-    } catch { /* best-effort */ }
+    } catch (err) {
+      if (opts.throwOnError) throw err
+    }
   }
 
   async close(): Promise<void> {

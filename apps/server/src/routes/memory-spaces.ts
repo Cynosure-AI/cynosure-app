@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getRAGStore } from '../core/memory/rag.js'
+import { getActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 import { andLanceDbFilters, lanceDbEqFilter } from '../core/memory/lancedb-filter.js'
 import {
     ensureFolder,
@@ -282,7 +283,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const descendants = db.prepare('SELECT * FROM memory_spaces WHERE id != ? AND folder_path LIKE ?').all(row.id, `${row.folder_path}${row.folder_path.endsWith(sep) ? '' : sep}%`) as MemorySpaceRow[]
         const rowsToDelete = [row, ...descendants]
         for (const target of rowsToDelete) {
-            await rag.deleteByFilter('permanent_memory', lanceDbEqFilter('spaceId', target.id))
+            await rag.deleteByFilter(getActivePermanentMemoryTableName(), lanceDbEqFilter('spaceId', target.id))
             stopWatchingMemorySpace(target.id)
         }
         archiveMemorySpaceFolder(row)
@@ -582,7 +583,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                 lanceDbEqFilter('spaceId', row.id),
                 lanceDbEqFilter('sourceFile', currentFileName),
             )
-            if (filter) await rag.updateSourceFile('permanent_memory', filter, nextFileName)
+            if (filter) await rag.updateSourceFile(getActivePermanentMemoryTableName(), filter, nextFileName)
 
             getDb().prepare('UPDATE memory_file_index SET file_name = ? WHERE space_id = ? AND file_name = ?')
                 .run(nextFileName, row.id, currentFileName)
@@ -682,7 +683,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         if (req.query.sourceFile) {
             filter = andLanceDbFilters(filter, lanceDbEqFilter('sourceFile', req.query.sourceFile)) || filter
         }
-        return rag.listDocuments('permanent_memory', filter)
+        return rag.listDocuments(getActivePermanentMemoryTableName(), filter)
     })
 
     // PUT /api/memory-spaces/:id/entries/:entryId — legacy vector-only edits are disabled.
@@ -771,7 +772,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     lanceDbEqFilter('spaceId', source.id),
                     lanceDbEqFilter('sourceFile', sf),
                 )
-                if (srcFilter) await rag.updateSourceFile('permanent_memory', srcFilter, uniqueName)
+                if (srcFilter) await rag.updateSourceFile(getActivePermanentMemoryTableName(), srcFilter, uniqueName)
             }
 
             // Move vectors to target space
@@ -780,7 +781,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                 lanceDbEqFilter('sourceFile', uniqueName),
             )
             if (!filter) continue
-            await rag.updateSpaceId('permanent_memory', filter, target.id)
+            await rag.updateSpaceId(getActivePermanentMemoryTableName(), filter, target.id)
 
             // Move file index entry
             if (existingIndex) {

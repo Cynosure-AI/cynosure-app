@@ -1,7 +1,9 @@
 import { nanoid } from 'nanoid'
+import { createHash } from 'node:crypto'
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 import { getEmbeddingProvider } from './embedding.js'
 import { getRAGStore, type VectorDocument } from './rag.js'
+import type { SearchResult } from './rag.js'
 import { getMemoryReranker } from './reranker.js'
 import { getDb } from '../../db/database.js'
 
@@ -17,11 +19,17 @@ export interface RetrievedChunk {
   source: string
   score: number
   rerankerScore?: number
+  denseScore?: number
+  fusionScore?: number
+  scoreType?: 'dense' | 'fusion' | 'reranker'
   sourceFile?: string
   chunkIndex?: number
   spaceId?: string
   spaceName?: string
   totalChunks?: number
+  documentTitle?: string
+  sectionPath?: string
+  contentHash?: string
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -76,8 +84,8 @@ export class MemoryParser {
    *
    * Both embedding calls and write calls are retried up to 2 times with
    * exponential back-off on transient failures. If a batch ultimately
-   * fails, the function returns the count of chunks stored so far rather
-   * than throwing, so callers always get a usable partial result.
+   * fails, every row written by this ingest attempt is rolled back and the
+   * error is propagated. A partial index must never be reported as usable.
    */
   async ingest(
     tableName: string,
@@ -95,24 +103,40 @@ export class MemoryParser {
     const BATCH_SIZE = 32
     let totalStored = 0
     let dimensions: number | undefined
+    const documentTitle = inferDocumentTitle(text, meta.sourceFile)
 
     // pendingWrite tracks the in-flight LanceDB write and its chunk count so
     // we can overlap it with the next embedding batch (sliding-window pipeline)
     // and only increment totalStored once the write is confirmed.
-    let pendingWrite: { promise: Promise<void>; count: number } | null = null
+    let pendingWrite: { promise: Promise<void>; ids: string[] } | null = null
+    const storedIds: string[] = []
 
     try {
       for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
         throwIfAborted(opts?.signal)
         const batch = chunks.slice(i, i + BATCH_SIZE)
+        const enrichedBatch = batch.map((chunk) => {
+          const sectionPath = inferSectionPath(chunk, documentTitle)
+          const searchText = [
+            documentTitle ? `Document: ${documentTitle}` : '',
+            sectionPath && sectionPath !== documentTitle ? `Section: ${sectionPath}` : '',
+            chunk,
+          ].filter(Boolean).join('\n')
+          return { chunk, sectionPath, searchText }
+        })
 
         // Start embedding current batch immediately so it runs concurrently
         // with the previous batch's LanceDB write (sliding-window pipeline).
-        const embedPromise = MemoryParser.withRetry(() => embedder.embedBatch(batch))
+        const embedPromise = MemoryParser.withRetry(() => embedder.embedBatch(enrichedBatch.map((item) => item.searchText)))
 
         // Wait for the previous write to finish, then count it.
-        await (pendingWrite?.promise ?? Promise.resolve())
-        if (pendingWrite) totalStored += pendingWrite.count
+        const completedWrite = pendingWrite
+        await (completedWrite?.promise ?? Promise.resolve())
+        if (completedWrite) {
+          totalStored += completedWrite.ids.length
+          storedIds.push(...completedWrite.ids)
+          pendingWrite = null
+        }
 
         const embeddings = await embedPromise
         throwIfAborted(opts?.signal)
@@ -121,20 +145,25 @@ export class MemoryParser {
         if (dimensions === undefined) dimensions = embeddings[0].dimensions
         const dims = dimensions as number
 
-        const docs: VectorDocument[] = batch.map((chunk, j) => ({
+        const docs: VectorDocument[] = enrichedBatch.map((item, j) => ({
           id: nanoid(),
-          text: chunk,
+          text: item.chunk,
+          searchText: item.searchText,
           vector: embeddings[j].vector,
           source: meta.source,
           sourceFile: meta.sourceFile || '',
           chunkIndex: i + j,
           spaceId: meta.spaceId || '',
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          documentTitle,
+          sectionPath: item.sectionPath,
+          contentHash: createHash('sha256').update(item.chunk).digest('hex'),
+          embeddingModel: embeddings[j].model
         }))
 
         pendingWrite = {
           promise: MemoryParser.withRetry(() => ragStore.addDocuments(tableName, docs, dims)),
-          count: docs.length
+          ids: docs.map((doc) => doc.id)
         }
       }
 
@@ -142,21 +171,29 @@ export class MemoryParser {
       if (pendingWrite) {
         await pendingWrite.promise
         throwIfAborted(opts?.signal)
-        totalStored += pendingWrite.count
+        totalStored += pendingWrite.ids.length
+        storedIds.push(...pendingWrite.ids)
       }
     } catch (err) {
-      if (opts?.signal?.aborted || (err as Error | undefined)?.name === 'AbortError') throw err
-      // Ensure any in-flight write is settled so totalStored reflects reality
-      // before we log and return the partial count.
+      // Settle the in-flight write, then remove every row belonging to this
+      // attempt. Cancellation follows the same rollback path as failure.
       if (pendingWrite) {
         try {
           await pendingWrite.promise
-          totalStored += pendingWrite.count
         } catch {
-          // Write also failed — totalStored already reflects what we know succeeded
+          // Still attempt cleanup in case a failed storage operation became
+          // partially visible.
+        } finally {
+          storedIds.push(...pendingWrite.ids)
         }
       }
-      console.error(`[MemoryParser] ingest aborted after storing ${totalStored} chunks:`, err)
+      if (storedIds.length > 0) {
+        await ragStore.deleteByIds(tableName, Array.from(new Set(storedIds)), { throwOnError: true }).catch((rollbackError) => {
+          console.error('[MemoryParser] failed to roll back incomplete ingest:', rollbackError)
+        })
+      }
+      console.error(`[MemoryParser] ingest failed; rolled back ${storedIds.length} chunk(s):`, err)
+      throw err
     }
 
     return totalStored
@@ -190,18 +227,14 @@ export class MemoryParser {
 
     const { vector } = await embedder.embed(query)
     const candidateCount = reranker.getCandidateCount(topK)
-    const results = await ragStore.hybridSearch(tableName, vector, query, candidateCount, filter)
+    const results = (await ragStore.hybridSearch(tableName, vector, query, candidateCount, filter))
+      .filter((result) => isRetrievableChunk(result.text))
     const ranked = await reranker.rerank(query, results, topK).catch((err) => {
       console.warn('[memory-reranker] Rerank failed, using hybrid ranking:', err)
       return results.slice(0, topK)
     })
     const minMatchThreshold = reranker.getMinMatchThreshold()
-    const filtered = ranked.filter((r) => {
-      const score = typeof r.rerankerScore === 'number' && Number.isFinite(r.rerankerScore)
-        ? r.rerankerScore
-        : r.score
-      return typeof score === 'number' && Number.isFinite(score) && score >= minMatchThreshold
-    })
+    const filtered = ranked.filter((r) => passesRetrievalThreshold(r, minMatchThreshold))
 
     return filtered.map((r) => ({
       id: r.id,
@@ -209,6 +242,12 @@ export class MemoryParser {
       source: r.source,
       score: r.score,
       rerankerScore: r.rerankerScore,
+      denseScore: r.denseScore,
+      fusionScore: r.fusionScore,
+      scoreType: r.scoreType,
+      documentTitle: r.documentTitle,
+      sectionPath: r.sectionPath,
+      contentHash: r.contentHash,
       sourceFile: r.sourceFile,
       chunkIndex: r.chunkIndex,
       spaceId: r.spaceId
@@ -228,7 +267,9 @@ export class MemoryParser {
   private async chunk(text: string): Promise<string[]> {
     const trimmed = text.trim()
     if (!trimmed) return []
-    if (trimmed.length <= this.chunkSize * CHARS_PER_TOKEN) return [trimmed]
+    if (trimmed.length <= this.chunkSize * CHARS_PER_TOKEN) {
+      return isRetrievableChunk(trimmed) ? [trimmed] : []
+    }
 
     const splitter = RecursiveCharacterTextSplitter.fromLanguage('markdown', {
       chunkSize: this.chunkSize * CHARS_PER_TOKEN,
@@ -236,8 +277,8 @@ export class MemoryParser {
     })
 
     const docs = await splitter.createDocuments([trimmed])
-    const raw = docs.map(d => d.pageContent).filter(c => c.trim().length > 0)
-    return this.mergeHeadingOnlyChunks(raw)
+    const raw = docs.map(d => d.pageContent).filter(isRetrievableChunk)
+    return this.mergeHeadingOnlyChunks(raw).filter(isRetrievableChunk)
   }
 
   /**
@@ -266,6 +307,37 @@ export class MemoryParser {
 
     return result
   }
+}
+
+/** Reject markup fragments and other chunks that carry no searchable meaning. */
+export function isRetrievableChunk(value: string): boolean {
+  const text = value.trim()
+  if (!text) return false
+  const withoutMarkdown = text
+    .replace(/^\s{0,3}#{1,6}\s*/gm, '')
+    .replace(/[`*_~>\-|=+:.\s]/g, '')
+  if (withoutMarkdown.length < 3) return false
+  return /[\p{L}\p{N}]/u.test(withoutMarkdown)
+}
+
+export function passesRetrievalThreshold(result: SearchResult, rerankerThreshold: number): boolean {
+  // Thresholds are calibrated for a particular reranker. Applying the same
+  // value to cosine similarity or RRF scores is mathematically invalid.
+  if (typeof result.rerankerScore !== 'number') return true
+  return Number.isFinite(result.rerankerScore) && result.rerankerScore >= rerankerThreshold
+}
+
+export function inferDocumentTitle(text: string, sourceFile?: string): string {
+  const heading = text.match(/^\s*#\s+(.+?)\s*$/m)?.[1]?.trim()
+  if (heading) return heading.slice(0, 240)
+  return (sourceFile || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 240)
+}
+
+export function inferSectionPath(chunk: string, documentTitle: string): string {
+  const headings = Array.from(chunk.matchAll(/^\s*#{1,6}\s+(.+?)\s*$/gm))
+    .map((match) => match[1].trim())
+    .filter(Boolean)
+  return (headings.at(-1) || documentTitle).slice(0, 500)
 }
 
 let parserInstance: MemoryParser | null = null

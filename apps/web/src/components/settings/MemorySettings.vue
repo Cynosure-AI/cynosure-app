@@ -56,7 +56,7 @@ const ocrSaving = ref(false)
 const rerankEnabled = ref(false)
 const rerankProviderId = ref('')
 const rerankModel = ref('')
-const rerankCandidateCount = ref(12)
+const rerankCandidateCount = ref(40)
 const minMatchThresholdPercent = ref(30)
 const rerankSaving = ref(false)
 
@@ -512,7 +512,7 @@ function cancelDrop() {
             v-model.number="rerankCandidateCount"
             type="number"
             min="3"
-            max="50"
+            max="100"
             step="1"
             class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
           >
@@ -535,7 +535,7 @@ function cancelDrop() {
             class="w-full accent-accent-500"
           >
           <p class="text-xs text-theme-500 mt-1">
-            Semantic search and auto-memory results below this score are ignored.
+            Reranker results below this score are ignored. Calibrate this with representative queries; raw vector and fusion scores are not filtered by it.
           </p>
         </div>
       </div>
