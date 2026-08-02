@@ -44,7 +44,7 @@ const selectedAgent = computed(() =>
 
 const agentDefaultLabel = computed(() => {
   const model = selectedAgent.value?.model;
-  return model ? `Use agent defaults (${model})` : "Use agent defaults";
+  return model || "Agent defaults";
 });
 
 const currentProviderId = computed(
@@ -312,6 +312,7 @@ async function toggleMic(): Promise<void> {
             :providers="providerStore.providers"
             :include-default="!!selectedAgent"
             :default-label="agentDefaultLabel"
+            default-tag="Default"
             placeholder="Select provider/model"
             max-height="max-h-96"
             dropdown-width="min-w-full"

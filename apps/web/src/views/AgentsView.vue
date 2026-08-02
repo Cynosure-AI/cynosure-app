@@ -416,12 +416,12 @@ function formatDate(ts: number): string {
 
       <div
         v-if="isBulkMode"
-        class="mb-5 flex flex-col gap-3 rounded-xl border border-accent-500/30 bg-accent-500/8 px-4 py-3 md:flex-row md:items-center md:justify-between"
+        class="mb-5 flex flex-col gap-3 rounded-xl border border-accent-500/30 bg-accent-500/8 px-4 py-3 md:flex-row md:items-start md:justify-between"
       >
         <div class="text-sm text-theme-200">
           {{ selectedAgentCount }} agent{{ selectedAgentCount === 1 ? '' : 's' }} selected
         </div>
-        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-end md:flex-1">
+        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-end md:flex-1">
           <div class="min-w-0 md:min-w-72">
             <TagInput
               :model-value="bulkTags"

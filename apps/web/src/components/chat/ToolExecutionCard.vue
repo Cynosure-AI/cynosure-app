@@ -501,6 +501,10 @@ const toolExecutions = computed(() => buildExecutions(toolCallArgs.value, result
 const latestContextSection = computed(() => [...mergedContextSections.value].reverse()[0])
 const headerToolNames = computed(() => {
   if (latestContextSection.value?.phase === 'gathered-context') {
+    // Memory source names belong to the expanded retrieval details. Showing them
+    // as summary chips repeats the memory-space label and crowds the header.
+    if (latestContextSection.value.kind === 'memory') return []
+
     return latestContextSection.value.rows
       .filter((row) => row.state !== 'candidate')
       .map((row) => row.call?.name || row.result?.name)

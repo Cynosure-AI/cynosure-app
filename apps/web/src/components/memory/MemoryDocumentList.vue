@@ -84,7 +84,7 @@ const columns: Column<DocumentRow>[] = [
   { key: "chunkCount", label: "Chunks", width: "96px", sortable: true, sortValue: (file) => file.chunkCount || 0 },
   { key: "entityIndexed", label: "Graph", width: "88px", sortable: true, sortValue: (file) => file.entityIndexed },
   { key: "status", label: "Status", width: "140px", sortable: true, sortValue: (file) => file.status },
-  { key: "actions", label: "", width: "190px" },
+  { key: "actions", label: "Actions", width: "190px" },
 ];
 
 const allFilteredSelected = computed(
