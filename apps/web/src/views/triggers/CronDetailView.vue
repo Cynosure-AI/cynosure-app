@@ -7,7 +7,6 @@ import type {
   ChannelDefinition,
   CronJob,
 } from "../../api/types";
-import { useProviderStore } from "../../stores/provider.store";
 import { Icon } from "@iconify/vue";
 import AgentSelect from "../../components/shared/AgentSelect.vue";
 import BaseCard from "../../components/shared/BaseCard.vue";
@@ -27,7 +26,6 @@ import ToggleSwitch from "@/components/shared/ToggleSwitch.vue";
 
 const route = useRoute();
 const router = useRouter();
-const providerStore = useProviderStore();
 
 const job = ref<CronJob | null>(null);
 const allAgents = ref<AgentDefinition[]>([]);
@@ -305,6 +303,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 </div>
                 <ToggleSwitch
                   v-model="cronEnabled"
+                  label="Enable scheduled job"
                   size="md"
                   color="emerald"
                   class="mt-0.5 shrink-0"
@@ -622,6 +621,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               </div>
               <ToggleSwitch
                 v-model="cronOneOff"
+                label="Disable after first successful run"
                 size="md"
                 color="amber"
                 class="mt-0.5"

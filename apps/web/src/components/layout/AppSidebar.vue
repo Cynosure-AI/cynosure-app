@@ -213,162 +213,175 @@ const chatRoute = computed(() =>
 
       <!-- Header actions -->
       <div class="brand-actions flex items-center gap-1 shrink-0">
-      <!-- Notification Bell -->
-      <div class="relative">
-        <button
-          ref="bellBtnRef"
-          class="p-1.5 rounded-lg hover:bg-theme-800 transition-colors relative"
-          @click.stop="showNotifications = !showNotifications"
-        >
-          <Icon
-            icon="lucide:bell"
-            class="w-4 h-4"
-            :class="notificationStore.unreadCount > 0
-              ? 'text-accent-400'
-              : 'text-theme-500'
-            "
-          />
-          <span
-            v-if="notificationStore.unreadCount > 0"
-            class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center leading-none"
+        <!-- Notification Bell -->
+        <div class="relative">
+          <button
+            ref="bellBtnRef"
+            type="button"
+            class="p-1.5 rounded-lg hover:bg-theme-800 transition-colors relative"
+            aria-label="Open notifications"
+            aria-haspopup="dialog"
+            :aria-expanded="showNotifications"
+            @click.stop="showNotifications = !showNotifications"
           >
-            {{
-              notificationStore.unreadCount > 9
-                ? "9+"
-                : notificationStore.unreadCount
-            }}
-          </span>
-        </button>
+            <Icon
+              icon="lucide:bell"
+              class="w-4 h-4"
+              :class="notificationStore.unreadCount > 0
+                ? 'text-accent-400'
+                : 'text-theme-500'
+              "
+            />
+            <span
+              v-if="notificationStore.unreadCount > 0"
+              class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center leading-none"
+            >
+              {{
+                notificationStore.unreadCount > 9
+                  ? "9+"
+                  : notificationStore.unreadCount
+              }}
+            </span>
+          </button>
 
-        <Teleport to="body">
-          <!-- Notification Popover -->
-          <Transition
-            enter-active-class="transition duration-150 ease-out"
-            enter-from-class="opacity-0 -translate-y-2"
-            enter-to-class="opacity-100 translate-y-0"
-            leave-active-class="transition duration-100 ease-in"
-            leave-from-class="opacity-100 translate-y-0"
-            leave-to-class="opacity-0 -translate-y-2"
-          >
+          <Teleport to="body">
+            <!-- Notification Popover -->
+            <Transition
+              enter-active-class="transition duration-150 ease-out"
+              enter-from-class="opacity-0 -translate-y-2"
+              enter-to-class="opacity-100 translate-y-0"
+              leave-active-class="transition duration-100 ease-in"
+              leave-from-class="opacity-100 translate-y-0"
+              leave-to-class="opacity-0 -translate-y-2"
+            >
+              <div
+                v-if="showNotifications"
+                role="dialog"
+                aria-label="Notifications"
+                class="w-80 bg-theme-900 border border-theme-700 rounded-xl shadow-2xl overflow-hidden z-200"
+                :style="notifPopoverStyle"
+                @click.stop
+              >
+                <!-- Header -->
+                <div class="flex items-center justify-between px-3 py-2.5 border-b border-theme-800">
+                  <span class="text-xs font-semibold text-theme-200">Notifications</span>
+                  <div class="flex items-center gap-1">
+                    <RouterLink
+                      to="/notifications"
+                      class="text-[10px] text-accent-400 hover:text-accent-300 transition-colors px-1.5 py-0.5"
+                      @click="showNotifications = false"
+                    >
+                      View all
+                    </RouterLink>
+                    <button
+                      v-if="notificationStore.unreadCount > 0"
+                      class="text-[10px] text-accent-400 hover:text-accent-300 transition-colors px-1.5 py-0.5"
+                      @click.stop="notificationStore.markAllRead()"
+                    >
+                      Mark all read
+                    </button>
+                    <button
+                      v-if="notificationStore.notifications.length > 0"
+                      class="text-[10px] text-theme-500 hover:text-theme-300 transition-colors px-1.5 py-0.5"
+                      @click.stop="notificationStore.removeAll()"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Notifications list -->
+                <div class="max-h-72 overflow-y-auto">
+                  <div
+                    v-if="notificationStore.notifications.length === 0"
+                    class="px-3 py-6 text-center text-xs text-theme-500"
+                  >
+                    No notifications yet
+                  </div>
+                  <div
+                    v-for="notif in notificationStore.notifications"
+                    :key="notif.id"
+                    role="button"
+                    tabindex="0"
+                    class="w-full text-left px-3 py-2.5 hover:bg-theme-800/60 transition-colors border-b border-theme-800/50 last:border-0 flex gap-2.5 cursor-pointer"
+                    :class="{ 'bg-theme-800/30': !notif.read }"
+                    @click="navigateToNotification(notif)"
+                    @keydown.enter.prevent="navigateToNotification(notif)"
+                    @keydown.space.prevent="navigateToNotification(notif)"
+                  >
+                    <!-- Priority indicator -->
+                    <div class="mt-1 shrink-0">
+                      <Icon
+                        :icon="notificationPriorityIcon(notif.priority)"
+                        class="w-3.5 h-3.5"
+                        :class="{
+                          'text-red-400': notif.priority === 'alert',
+                          'text-amber-400': notif.priority === 'action',
+                          'text-accent-400': notif.priority === 'notice',
+                        }"
+                      />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-1.5">
+                        <span
+                          v-if="!notif.read"
+                          class="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0"
+                        />
+                        <span class="text-xs font-medium text-theme-200 truncate">{{ notif.title }}</span>
+                      </div>
+                      <p class="text-[11px] text-theme-500 mt-0.5 line-clamp-2">
+                        {{ notif.body }}
+                      </p>
+                      <div class="flex items-center gap-2 mt-1">
+                        <span class="text-[10px] text-theme-600">
+                          {{ agentDefs.get(notif.agentId)?.name || "Agent" }}
+                        </span>
+                        <span class="text-[10px] text-theme-600">·</span>
+                        <span class="text-[10px] text-theme-600">{{
+                          formatTimeAgo(notificationTime(notif))
+                        }}</span>
+                      </div>
+                    </div>
+                    <!-- Delete button -->
+                    <button
+                      type="button"
+                      class="mt-1 shrink-0 text-theme-600 hover:text-theme-300 transition-colors"
+                      :aria-label="`Dismiss ${notif.title}`"
+                      @click.stop="notificationStore.remove(notif.id)"
+                    >
+                      <Icon
+                        icon="lucide:x"
+                        class="w-3 h-3"
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+
+            <!-- Click-outside backdrop -->
             <div
               v-if="showNotifications"
-              class="w-80 bg-theme-900 border border-theme-700 rounded-xl shadow-2xl overflow-hidden z-200"
-              :style="notifPopoverStyle"
-              @click.stop
-            >
-              <!-- Header -->
-              <div class="flex items-center justify-between px-3 py-2.5 border-b border-theme-800">
-                <span class="text-xs font-semibold text-theme-200">Notifications</span>
-                <div class="flex items-center gap-1">
-                  <RouterLink
-                    to="/notifications"
-                    class="text-[10px] text-accent-400 hover:text-accent-300 transition-colors px-1.5 py-0.5"
-                    @click="showNotifications = false"
-                  >
-                    View all
-                  </RouterLink>
-                  <button
-                    v-if="notificationStore.unreadCount > 0"
-                    class="text-[10px] text-accent-400 hover:text-accent-300 transition-colors px-1.5 py-0.5"
-                    @click.stop="notificationStore.markAllRead()"
-                  >
-                    Mark all read
-                  </button>
-                  <button
-                    v-if="notificationStore.notifications.length > 0"
-                    class="text-[10px] text-theme-500 hover:text-theme-300 transition-colors px-1.5 py-0.5"
-                    @click.stop="notificationStore.removeAll()"
-                  >
-                    Clear all
-                  </button>
-                </div>
-              </div>
+              class="fixed inset-0 z-199"
+              @click="showNotifications = false"
+            />
+          </Teleport>
+        </div>
 
-              <!-- Notifications list -->
-              <div class="max-h-72 overflow-y-auto">
-                <div
-                  v-if="notificationStore.notifications.length === 0"
-                  class="px-3 py-6 text-center text-xs text-theme-500"
-                >
-                  No notifications yet
-                </div>
-                <div
-                  v-for="notif in notificationStore.notifications"
-                  :key="notif.id"
-                  role="button"
-                  tabindex="0"
-                  class="w-full text-left px-3 py-2.5 hover:bg-theme-800/60 transition-colors border-b border-theme-800/50 last:border-0 flex gap-2.5 cursor-pointer"
-                  :class="{ 'bg-theme-800/30': !notif.read }"
-                  @click="navigateToNotification(notif)"
-                >
-                  <!-- Priority indicator -->
-                  <div class="mt-1 shrink-0">
-                    <Icon
-                      :icon="notificationPriorityIcon(notif.priority)"
-                      class="w-3.5 h-3.5"
-                      :class="{
-                        'text-red-400': notif.priority === 'alert',
-                        'text-amber-400': notif.priority === 'action',
-                        'text-accent-400': notif.priority === 'notice',
-                      }"
-                    />
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-1.5">
-                      <span
-                        v-if="!notif.read"
-                        class="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0"
-                      />
-                      <span class="text-xs font-medium text-theme-200 truncate">{{ notif.title }}</span>
-                    </div>
-                    <p class="text-[11px] text-theme-500 mt-0.5 line-clamp-2">
-                      {{ notif.body }}
-                    </p>
-                    <div class="flex items-center gap-2 mt-1">
-                      <span class="text-[10px] text-theme-600">
-                        {{ agentDefs.get(notif.agentId)?.name || "Agent" }}
-                      </span>
-                      <span class="text-[10px] text-theme-600">·</span>
-                      <span class="text-[10px] text-theme-600">{{
-                        formatTimeAgo(notificationTime(notif))
-                      }}</span>
-                    </div>
-                  </div>
-                  <!-- Delete button -->
-                  <button
-                    class="mt-1 shrink-0 text-theme-600 hover:text-theme-300 transition-colors"
-                    @click.stop="notificationStore.remove(notif.id)"
-                  >
-                    <Icon
-                      icon="lucide:x"
-                      class="w-3 h-3"
-                    />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </Transition>
-
-          <!-- Click-outside backdrop -->
-          <div
-            v-if="showNotifications"
-            class="fixed inset-0 z-199"
-            @click="showNotifications = false"
+        <!-- Collapse toggle (desktop only) -->
+        <button
+          type="button"
+          class="collapse-toggle-btn hidden md:flex p-1.5 rounded-lg text-theme-500 hover:text-theme-300 hover:bg-theme-800 transition-colors"
+          :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          :aria-expanded="!sidebarCollapsed"
+          @click="toggleCollapse"
+        >
+          <Icon
+            icon="lucide:menu"
+            class="w-4 h-4"
           />
-        </Teleport>
-      </div>
-
-      <!-- Collapse toggle (desktop only) -->
-      <button
-        class="collapse-toggle-btn hidden md:flex p-1.5 rounded-lg text-theme-500 hover:text-theme-300 hover:bg-theme-800 transition-colors"
-        :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-        @click="toggleCollapse"
-      >
-        <Icon
-          icon="lucide:menu"
-          class="w-4 h-4"
-        />
-      </button>
+        </button>
       </div>
     </div>
 

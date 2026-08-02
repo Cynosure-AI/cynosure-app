@@ -94,6 +94,7 @@ function removeMissing() {
         </div>
         <ToggleSwitch
           :model-value="agent.autoToolRouting"
+          label="Auto-select tools"
           size="md"
           color="accent"
           @update:model-value="emit('update', 'autoToolRouting', $event)"

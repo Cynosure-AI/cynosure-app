@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 
-defineProps<{
+const props = defineProps<{
   /** Controls visibility */
   show: boolean
   /** Title shown in header */
@@ -23,6 +24,68 @@ defineProps<{
 const emit = defineEmits<{
   close: []
 }>()
+
+const panelRef = ref<HTMLElement | null>(null)
+const titleId = `dialog-title-${useId()}`
+let previouslyFocused: HTMLElement | null = null
+
+const focusableSelector = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',')
+
+function close(): void {
+  emit('close')
+}
+
+function handleKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    close()
+    return
+  }
+  if (event.key !== 'Tab' || !panelRef.value) return
+
+  const focusable = [...panelRef.value.querySelectorAll<HTMLElement>(focusableSelector)]
+    .filter((element) => !element.hidden && element.getClientRects().length > 0)
+  if (!focusable.length) {
+    event.preventDefault()
+    panelRef.value.focus()
+    return
+  }
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+watch(() => props.show, async (show) => {
+  if (show) {
+    previouslyFocused = document.activeElement as HTMLElement | null
+    await nextTick()
+    const first = panelRef.value?.querySelector<HTMLElement>(focusableSelector)
+    ;(first || panelRef.value)?.focus()
+    document.addEventListener('keydown', handleKeydown)
+  } else {
+    document.removeEventListener('keydown', handleKeydown)
+    previouslyFocused?.focus()
+    previouslyFocused = null
+  }
+}, { immediate: true })
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <template>
@@ -30,10 +93,15 @@ const emit = defineEmits<{
     <div
       v-if="show"
       class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      @click.self="emit('close')"
+      @click.self="close"
     >
       <div
+        ref="panelRef"
         v-bind="$attrs"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="titleId"
+        tabindex="-1"
         class="bg-theme-900 border border-theme-800 rounded-2xl shadow-2xl w-full flex flex-col"
         :class="[
           maxWidth || 'max-w-md',
@@ -60,7 +128,10 @@ const emit = defineEmits<{
                 class="w-6 h-6"
               />
             </div>
-            <h3 class="text-lg font-semibold text-theme-100">
+            <h3
+              :id="titleId"
+              class="text-lg font-semibold text-theme-100"
+            >
               {{ title }}
             </h3>
           </div>

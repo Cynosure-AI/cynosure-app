@@ -19,6 +19,7 @@ import csharp from 'highlight.js/lib/languages/csharp'
 import php from 'highlight.js/lib/languages/php'
 import ruby from 'highlight.js/lib/languages/ruby'
 import plaintext from 'highlight.js/lib/languages/plaintext'
+import DOMPurify from 'dompurify'
 
 hljs.registerLanguage('javascript', javascript)
 hljs.registerLanguage('js', javascript)
@@ -122,9 +123,23 @@ function rewriteLocalFilePaths(html: string): string {
 export function renderMarkdown(text: string): string {
     try {
         const html = marked.parse(text) as string
-        return rewriteLocalFilePaths(html)
+        // Assistant and tool output is untrusted. Marked intentionally preserves raw
+        // HTML, so rendering its output directly would allow event handlers and unsafe
+        // URL schemes to execute in the application origin.
+        return DOMPurify.sanitize(rewriteLocalFilePaths(html), {
+            USE_PROFILES: { html: true, svg: true },
+            ADD_ATTR: ['target'],
+            FORBID_TAGS: ['form', 'input', 'textarea', 'select', 'option', 'style'],
+            FORBID_ATTR: ['style'],
+        })
     } catch {
+        // The fallback is also rendered with v-html, so it must be escaped.
         return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
     }
 }
 

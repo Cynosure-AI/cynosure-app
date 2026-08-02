@@ -152,6 +152,11 @@ const router = createRouter({
     {
       path: '/settings/speech-to-text',
       redirect: { name: 'settings', query: { category: 'speech-to-text' } }
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/views/NotFoundView.vue')
     }
   ]
 })

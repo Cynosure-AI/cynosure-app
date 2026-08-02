@@ -435,6 +435,7 @@ onUnmounted(() => {
             <div class="flex items-center justify-center">
               <ToggleSwitch
                 :model-value="job.enabled"
+                :label="job.enabled ? `Pause ${job.name}` : `Enable ${job.name}`"
                 size="sm"
                 color="emerald"
                 :title="job.enabled ? 'Pause cron job' : 'Enable cron job'"

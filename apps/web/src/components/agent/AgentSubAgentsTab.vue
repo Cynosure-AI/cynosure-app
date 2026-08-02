@@ -7,7 +7,6 @@ import AgentSelect from '../shared/AgentSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import DataTable from '../shared/DataTable.vue'
 import type { Column } from '../shared/DataTable.vue'
-import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()

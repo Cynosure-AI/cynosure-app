@@ -7,8 +7,10 @@ const props = withDefaults(
     /** Toggle size. 'sm' = compact list rows, 'md' = dialogs, 'lg' = settings cards */
     size?: 'sm' | 'md' | 'lg'
     disabled?: boolean
+    /** Accessible name announced by screen readers. */
+    label?: string
   }>(),
-  { color: 'accent', size: 'lg', disabled: false },
+  { color: 'accent', size: 'lg', disabled: false, label: 'Toggle setting' },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
@@ -46,6 +48,9 @@ const offColors: Record<string, string> = {
   <button
     v-if="size === 'sm'"
     type="button"
+    role="switch"
+    :aria-checked="modelValue"
+    :aria-label="label"
     :class="[
       'relative w-9 h-5 rounded-full transition-colors shrink-0',
       modelValue ? onColors[color] : offColors[size],
@@ -66,6 +71,9 @@ const offColors: Record<string, string> = {
   <button
     v-else-if="size === 'md'"
     type="button"
+    role="switch"
+    :aria-checked="modelValue"
+    :aria-label="label"
     :class="[
       'relative inline-flex items-center w-10 h-5 rounded-full transition-colors shrink-0',
       modelValue ? onColors[color] : offColors[size],
@@ -86,6 +94,9 @@ const offColors: Record<string, string> = {
   <button
     v-else
     type="button"
+    role="switch"
+    :aria-checked="modelValue"
+    :aria-label="label"
     :class="[
       'relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0',
       modelValue ? onColors[color] : offColors[size],

@@ -122,6 +122,7 @@ function onMaxCtxSliderInput(event: Event) {
         </div>
         <ToggleSwitch
           :model-value="agent.autoApproveTools"
+          label="Auto-approve all tools"
           color="amber"
           class="mt-0.5"
           @update:model-value="emit('update', 'autoApproveTools', $event)"
@@ -181,6 +182,7 @@ function onMaxCtxSliderInput(event: Event) {
         </div>
         <ToggleSwitch
           :model-value="agent.thinkingEnabled !== false"
+          label="Enable thinking mode"
           color="indigo"
           class="mt-0.5"
           @update:model-value="emit('update', 'thinkingEnabled', $event)"
@@ -261,6 +263,7 @@ function onMaxCtxSliderInput(event: Event) {
         </div>
         <ToggleSwitch
           :model-value="maxCtxEnabled"
+          label="Limit context window"
           color="amber"
           class="mt-0.5"
           @update:model-value="onMaxCtxToggle"

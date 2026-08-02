@@ -156,7 +156,10 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
             </p>
           </div>
         </div>
-        <ToggleSwitch v-model="prefs.autoExpandSteps" />
+        <ToggleSwitch
+          v-model="prefs.autoExpandSteps"
+          label="Auto-expand thinking"
+        />
       </div>
     </BaseCard>
 
@@ -182,7 +185,10 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
             </p>
           </div>
         </div>
-        <ToggleSwitch v-model="prefs.autoExpandToolCalls" />
+        <ToggleSwitch
+          v-model="prefs.autoExpandToolCalls"
+          label="Auto-expand tool calls"
+        />
       </div>
     </BaseCard>
 
@@ -208,7 +214,10 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
             </p>
           </div>
         </div>
-        <ToggleSwitch v-model="prefs.showInternalToolCalls" />
+        <ToggleSwitch
+          v-model="prefs.showInternalToolCalls"
+          label="Show internal tool calls"
+        />
       </div>
     </BaseCard>
 

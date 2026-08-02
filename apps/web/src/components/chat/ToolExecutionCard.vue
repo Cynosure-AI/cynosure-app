@@ -180,7 +180,9 @@ function memoryCallMetadata(call: ToolCall): string {
   const parsed = parseArgs(call.arguments)
   if (!parsed) return call.arguments
 
-  const { content: _content, contextPhase: _contextPhase, ...metadata } = parsed
+  const metadata = { ...parsed }
+  delete metadata.content
+  delete metadata.contextPhase
   return Object.keys(metadata).length ? JSON.stringify(metadata, null, 2) : ''
 }
 

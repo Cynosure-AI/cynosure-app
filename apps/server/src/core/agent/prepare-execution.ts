@@ -171,8 +171,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         gateway,
         resolvedProviderId: taskContextRouter.providerId,
         resolvedModel: taskContextRouter.model,
-        providerOverride,
-        modelOverride,
         userQuery: toolRoutingQuery,
         recentMessages: routingMessages,
         usedToolNames: input.usedToolNames,

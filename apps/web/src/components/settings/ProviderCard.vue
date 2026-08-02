@@ -97,7 +97,9 @@ function getProviderIcon(type: string): string {
         Edit
       </button>
       <button
+        type="button"
         class="p-1 text-theme-500 hover:text-red-400 transition-colors"
+        :aria-label="`Remove ${provider.name}`"
         @click="emit('remove', provider.id)"
       >
         <svg

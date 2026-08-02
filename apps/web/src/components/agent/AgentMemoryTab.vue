@@ -196,6 +196,7 @@ onMounted(() => loadSpaces())
         </div>
         <ToggleSwitch
           :model-value="agent.autoMemory === true"
+          label="Automatically retrieve memory"
           color="accent"
           class="mt-0.5"
           @update:model-value="emit('update', 'autoMemory', $event)"

@@ -231,7 +231,11 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
             />
             <!-- Chevron: always rendered to keep all rows aligned -->
             <button
+              type="button"
               class="p-0.5 shrink-0 text-theme-500 hover:text-theme-200 transition-colors"
+              :aria-label="isCollapsed(space) ? `Expand ${space.name}` : `Collapse ${space.name}`"
+              :tabindex="space.isDefault || !hasChildren(space) ? -1 : 0"
+              :aria-hidden="space.isDefault || !hasChildren(space)"
               :class="{
                 'invisible pointer-events-none': space.isDefault || !hasChildren(space),
               }"

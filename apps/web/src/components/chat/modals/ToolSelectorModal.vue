@@ -99,6 +99,7 @@ function onAutoRoutingUpdate(enabled: boolean): void {
         </div>
         <ToggleSwitch
           :model-value="chatStore.sessionAutoToolRouting"
+          label="Auto Tool Mode"
           size="md"
           color="accent"
           @update:model-value="onAutoRoutingUpdate"

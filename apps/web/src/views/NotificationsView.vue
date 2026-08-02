@@ -175,7 +175,8 @@ function priorityClass(priority: string): string {
           role="button"
           tabindex="0"
           @click="openNotification(n)"
-          @keydown.enter="openNotification(n)"
+          @keydown.enter.prevent="openNotification(n)"
+          @keydown.space.prevent="openNotification(n)"
         >
           <div class="card-left">
             <div class="priority-icon">
@@ -224,8 +225,10 @@ function priorityClass(priority: string): string {
             </div>
           </div>
           <button
+            type="button"
             class="card-dismiss"
             title="Dismiss"
+            :aria-label="`Dismiss ${n.title}`"
             @click.stop="notificationStore.remove(n.id)"
           >
             <Icon
@@ -476,6 +479,7 @@ function priorityClass(priority: string): string {
   margin: 0 0 0.5rem;
   line-height: 1.4;
   display: -webkit-box;
+  line-clamp: 5;
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;

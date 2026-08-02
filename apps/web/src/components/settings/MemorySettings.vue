@@ -478,6 +478,7 @@ function cancelDrop() {
         </div>
         <ToggleSwitch
           v-model="rerankEnabled"
+          label="Enable memory reranking"
           :disabled="rerankSaving"
           class="shrink-0 ml-4"
         />
@@ -684,6 +685,7 @@ function cancelDrop() {
         </div>
         <ToggleSwitch
           :model-value="ocrEnabled"
+          label="Enable document image OCR"
           :disabled="ocrSaving"
           class="shrink-0 ml-4"
           @update:model-value="toggleOcr"

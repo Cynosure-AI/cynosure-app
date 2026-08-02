@@ -161,6 +161,7 @@ function toggleAutoMemory(enabled: boolean) {
       </div>
       <ToggleSwitch
         :model-value="chatStore.sessionAutoMemory"
+        label="Automatically retrieve relevant memory"
         class="mt-0.5 shrink-0"
         @update:model-value="toggleAutoMemory"
       />

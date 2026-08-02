@@ -182,7 +182,10 @@ onMounted(async () => {
             </p>
           </div>
         </div>
-        <ToggleSwitch v-model="prefs.generateTitle" />
+        <ToggleSwitch
+          v-model="prefs.generateTitle"
+          label="Generate conversation titles"
+        />
       </div>
 
       <div
