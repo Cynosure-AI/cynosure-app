@@ -124,6 +124,9 @@ export const api = {
       ),
     cancelStream: (streamId: string, conversationId?: string) => post<void>('/api/chat/cancel', { streamId: streamId || undefined, conversationId: conversationId || undefined }),
     subscribeLiveConversations: (conversationIds: string[]) => subscribeWsConversations(conversationIds),
+    onChannelConversationState: (
+      cb: (data: { conversationId: string; agentId: string; running: boolean }) => void
+    ) => onWsEvent('channel:conversation-state', cb as WsHandler),
 
     // Stream event listeners — via WebSocket
     onStreamStart: (cb: (data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }) => void) =>

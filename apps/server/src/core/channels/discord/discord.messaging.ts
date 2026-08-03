@@ -16,6 +16,12 @@ import { handleCommand } from './discord.commands.js'
 import { sendLongMessage, dataUrlToBuffer, extractAttachments, type DiscordSendChannel } from './discord.api.js'
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js'
 import type { Message, Interaction } from 'discord.js'
+import {
+    applyChannelContextLimit, beginChannelExecution, buildChannelHistory, finishChannelExecution,
+    materializeChannelInputImages, persistChannelAssistantMessage, persistChannelExecutionConfig,
+    updateChannelExecution,
+    channelImageDataUrl,
+} from '../channel-execution.js'
 
 export async function handleMessage(ctx: DiscordCtx, msg: Message): Promise<void> {
     if (msg.author.id === ctx.client.user?.id) return
@@ -117,12 +123,13 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
 
     const db = getDb()
     const now = Date.now()
+    const storedImageUrls = await materializeChannelInputImages(imageDataUrls, conversationId)
     const userMsgId = nanoid()
     db.prepare(
         'INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).run(
         userMsgId, conversationId, 'user', userText || '(attached media)',
-        imageDataUrls.length ? JSON.stringify(imageDataUrls) : null,
+        storedImageUrls.length ? JSON.stringify(storedImageUrls) : null,
         audioDataUrls.length ? JSON.stringify(audioDataUrls) : null,
         now
     )
@@ -139,16 +146,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         }
     })
 
-    const historyRows = db
-        .prepare('SELECT role, content, tool_calls_json, tool_call_id FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
-        .all(conversationId) as { role: string; content: string; tool_calls_json: string | null; tool_call_id: string | null }[]
-
-    let messages: ChatMessage[] = historyRows.map((row) => ({
-        role: row.role as ChatMessage['role'],
-        content: row.content,
-        toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
-        toolCallId: row.tool_call_id || undefined
-    }))
+    let messages: ChatMessage[] = buildChannelHistory(conversationId, effectiveAgentId).messages
 
     if (hasAttachments && messages.length > 0) {
         const lastIdx = messages.length - 1
@@ -162,52 +160,39 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         return
     }
 
-    const planned = await planExecution({
-        resolvedAgent,
-        conversationId,
-        broadcast: ctx.broadcast,
-        abortSignal: AbortSignal.timeout(300_000),
-        gateway: getGateway(),
-        toolRegistry: getToolRegistry(),
-        messages,
-        userText,
-        run: {
-            memorySpaceOverrides: getAssignedOrDefaultSpaces(resolvedAgent.id),
-            autoMemory: resolvedAgent.autoMemory === true,
-            thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
-        },
+    const unsubs: Array<() => void> = []
+    const { streamId, controller: execAbort } = beginChannelExecution({
+        executions: ctx.activeExecutions, channelId: ctx.channelId, agent: resolvedAgent,
+        conversationId, broadcast: ctx.broadcast,
     })
-    messages = planned.messages
-
-    const streamId = nanoid()
-    const execAbort = new AbortController()
-    ctx.activeExecutions.set(streamId, {
-        exec: { id: streamId, channelId: ctx.channelId, agentId: effectiveAgentId, conversationId, startedAt: Date.now() },
-        controller: execAbort
-    })
-
-    const executor = new AgentExecutor({
-        gateway: getGateway(),
-        tools: planned.tools,
-        conversationId,
-        broadcast: ctx.broadcast,
-        providerId: planned.providerId,
-        model: planned.responseModel,
-        hitl: !resolvedAgent.autoApproveTools,
-        maxRounds: MAIN_AGENT_MAX_ROUNDS,
-        thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
-        reasoningEffort: resolvedAgent.reasoningEffort,
-        streamMode: 'single',
-        signal: execAbort.signal,
-        streamId,
-        agentId: effectiveAgentId,
-        agentName: resolvedAgent.name,
-        agentIconUrl: resolvedAgent.iconUrl || null,
-        planningRunId: planned.planningRunId,
-    })
+    let planned: Awaited<ReturnType<typeof planExecution>> | undefined
+    try {
+        planned = await planExecution({
+            resolvedAgent, conversationId, broadcast: ctx.broadcast, abortSignal: execAbort.signal,
+            gateway: getGateway(), toolRegistry: getToolRegistry(), messages, userText,
+            run: {
+                memorySpaceOverrides: getAssignedOrDefaultSpaces(resolvedAgent.id),
+                autoMemory: resolvedAgent.autoMemory === true,
+                thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
+            },
+        })
+        updateChannelExecution(ctx.activeExecutions, streamId, { model: planned.responseModel, planningRunId: planned.planningRunId })
+        if (execAbort.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
+        persistChannelExecutionConfig(conversationId, resolvedAgent, planned)
+        const context = await applyChannelContextLimit({ gateway: getGateway(), planned, agent: resolvedAgent, messages: planned.messages })
+        messages = context.messages
+        const executor = new AgentExecutor({
+            gateway: getGateway(), tools: planned.tools, conversationId, broadcast: ctx.broadcast,
+            providerId: planned.providerId, model: planned.responseModel, hitl: !resolvedAgent.autoApproveTools,
+            maxRounds: MAIN_AGENT_MAX_ROUNDS, thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
+            reasoningEffort: resolvedAgent.reasoningEffort, streamMode: 'single', signal: execAbort.signal,
+            streamId, agentId: effectiveAgentId, agentName: resolvedAgent.name,
+            agentIconUrl: resolvedAgent.iconUrl || null, planningRunId: planned.planningRunId,
+            contextWindow: context.contextWindow, initialContextEstimate: context.initialContextEstimate,
+            contextStrategy: 'sliding-window', isPrimaryExecutor: true,
+        })
 
     const eventBus = getEventBus()
-    const unsubs: Array<() => void> = []
     // Thinking display is disabled
     // let accumulatedThinking = ''
     // let thinkingEditQueued = false
@@ -341,7 +326,6 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         }
     }))
 
-    try {
         const result = await executor.run(messages)
         if (planned.planningRunId) {
             closePlanningRun(planned.planningRunId, 'completed', { summary: result.content.slice(0, 500) })
@@ -371,18 +355,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
             }
         }
 
-        const assistantMsgId = nanoid()
-        db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, thinking, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).run(
-            assistantMsgId, conversationId, 'assistant', result.content,
-            result.thinking || null, effectiveAgentId,
-            planned.providerId || null, planned.responseModel || null,
-            result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null,
-            result.contextTokens ?? null,
-            Date.now() - now, Date.now()
-        )
+        persistChannelAssistantMessage({ conversationId, agentId: effectiveAgentId, planned, result, startedAt: now })
 
         const convMeta = db.prepare("SELECT json_extract(metadata_json, '$.titleGenerated') as tg FROM conversations WHERE id = ?")
             .get(conversationId) as { tg: number | null } | undefined
@@ -417,16 +390,20 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         }
 
         if (result.images?.length && 'send' in msg.channel) {
-            const files = result.images.map((dataUrl, i) => {
+            const files = result.images.flatMap((image, i) => {
+                const dataUrl = channelImageDataUrl(image)
+                if (!dataUrl) return []
                 const { buffer, ext } = dataUrlToBuffer(dataUrl)
-                return { attachment: buffer, name: `image_${i + 1}.${ext}` }
+                return [{ attachment: buffer, name: `image_${i + 1}.${ext}` }]
             })
-            await (msg.channel as DiscordSendChannel).send({ files }).catch((e: Error) =>
-                console.warn('[Discord] Failed to send images:', e.message)
-            )
+            if (files.length) {
+                await (msg.channel as DiscordSendChannel).send({ files }).catch((e: Error) =>
+                    console.warn('[Discord] Failed to send images:', e.message)
+                )
+            }
         }
     } catch (err) {
-        if (planned.planningRunId) {
+        if (planned?.planningRunId) {
             closePlanningRun(
                 planned.planningRunId,
                 (err as Error).name === 'AbortError' ? 'cancelled' : 'error',
@@ -436,13 +413,15 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
         const errorMsg = (err as Error).message || 'Unknown error'
         console.error(`[Discord] Agent execution error: ${errorMsg}`)
+        getEventBus().emit('task:error', { conversationId, error: execAbort.signal.aborted ? 'Cancelled' : errorMsg })
+        if (!execAbort.signal.aborted) ctx.broadcast('chat:stream-error', { streamId, conversationId, error: errorMsg })
         if (thinkingMsg) {
-            await thinkingMsg.edit(`⚠️ Error: ${errorMsg.slice(0, 1900)}`).catch(() => { })
+            await thinkingMsg.edit(execAbort.signal.aborted ? '⏹ Stopped.' : `⚠️ Error: ${errorMsg.slice(0, 1900)}`).catch(() => { })
         } else {
             await msg.reply(`⚠️ Error: ${errorMsg.slice(0, 1900)}`).catch(() => { })
         }
     } finally {
-        ctx.activeExecutions.delete(streamId)
+        finishChannelExecution({ executions: ctx.activeExecutions, executionId: streamId, conversationId, agentId: effectiveAgentId, broadcast: ctx.broadcast })
         for (const unsub of unsubs) unsub()
     }
 }

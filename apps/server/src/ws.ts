@@ -25,6 +25,9 @@ const globalEventNames = new Set([
   'notification:created',
   'mcp-auth-needed',
   'mcp-auth-complete',
+  // Carries only execution discovery metadata so clients can subscribe to a
+  // remotely-created channel conversation before its scoped stream events.
+  'channel:conversation-state',
 ])
 
 export function addClient(ws: WebSocket): void {

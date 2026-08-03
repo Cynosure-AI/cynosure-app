@@ -88,6 +88,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             preferredToolNames: preferredToolNames.length ? new Set(preferredToolNames) : undefined,
             usedToolNames,
             eventMeta,
+            signal,
         }) as RegistryAwareToolDefinition[]
     } else {
         emitAutoToolRoutingSkipped(conversationId, 'disabled', eventMeta)

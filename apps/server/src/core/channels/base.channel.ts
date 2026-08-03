@@ -24,7 +24,14 @@ export interface ActiveChannelExecution {
     channelId: string
     agentId: string
     conversationId: string
+    model: string | null
+    planningRunId?: string
     startedAt: number
+}
+
+export interface ActiveChannelExecutionEntry {
+    exec: ActiveChannelExecution
+    controller: AbortController
 }
 
 /**

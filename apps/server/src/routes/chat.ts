@@ -800,6 +800,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     if (conversationId) {
       clearPendingHITLForConversation(conversationId)
       cancelChatExecutionByConversation(conversationId)
+      getChannelManager().cancelExecutionByConversation(conversationId)
       cancelPostActions(conversationId)
     }
     return { success: true }
