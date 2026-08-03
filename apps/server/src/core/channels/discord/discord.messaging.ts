@@ -114,9 +114,10 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
     const effectiveAgentId = ctx.channelAgentOverride.get(discordChannelId) || ctx.agentId
     let thinkingMsg: Message | null = null
     try {
-        thinkingMsg = await msg.reply('🤔 Thinking...')
+        thinkingMsg = await msg.reply('🧭 Preparing context...')
     } catch { }
     let thinkingSeconds = 0
+    let thinkingPhase = 'Preparing context'
     let thinkingTimer: ReturnType<typeof setInterval> | null = null
     const conversationId = getOrCreateConversation(ctx, discordChannelId, senderName, effectiveAgentId)
     ctx.conversationToChannel.set(conversationId, discordChannelId)
@@ -159,6 +160,13 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         else await msg.reply('⚠️ Agent not found.').catch(() => { })
         return
     }
+    if (thinkingMsg) {
+        thinkingTimer = setInterval(() => {
+            thinkingSeconds++
+            const icon = thinkingPhase === 'Preparing context' ? '🧭' : '🤔'
+            thinkingMsg!.edit(`${icon} ${thinkingPhase} (${thinkingSeconds}s)`).catch(() => { })
+        }, 1000)
+    }
 
     const unsubs: Array<() => void> = []
     const { streamId, controller: execAbort } = beginChannelExecution({
@@ -181,6 +189,8 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
         persistChannelExecutionConfig(conversationId, resolvedAgent, planned)
         const context = await applyChannelContextLimit({ gateway: getGateway(), planned, agent: resolvedAgent, messages: planned.messages })
         messages = context.messages
+        thinkingPhase = 'Thinking'
+        if (thinkingMsg) await thinkingMsg.edit(`🤔 Thinking (${thinkingSeconds}s)`).catch(() => { })
         const executor = new AgentExecutor({
             gateway: getGateway(), tools: planned.tools, conversationId, broadcast: ctx.broadcast,
             providerId: planned.providerId, model: planned.responseModel, hitl: !resolvedAgent.autoApproveTools,
@@ -205,10 +215,6 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
     ctx.conversationSendQueue.set(conversationId, enqueueSend)
 
     if (thinkingMsg) {
-        thinkingTimer = setInterval(() => {
-            thinkingSeconds++
-            thinkingMsg!.edit(`🤔 Thinking (${thinkingSeconds}s)`).catch(() => { })
-        }, 1000)
         unsubs.push(() => { if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null } })
 
         // Thinking display is disabled — live thinking updates are omitted
