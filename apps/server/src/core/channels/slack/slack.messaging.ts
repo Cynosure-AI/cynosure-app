@@ -120,7 +120,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
     try {
         const thinkingResult = await client.chat.postMessage({
             channel: slackChannelId,
-            text: '🤔 Thinking...',
+            text: '🧭 Preparing context...',
             thread_ts: msg.ts
         })
         thinkingTs = thinkingResult.ts || null
@@ -128,6 +128,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         // ignore failures posting thinking indicator
     }
     let thinkingSeconds = 0
+    let thinkingPhase = 'Preparing context'
     let thinkingTimer: ReturnType<typeof setInterval> | null = null
 
     const conversationId = getOrCreateConversation(ctx, slackChannelId, senderName, effectiveAgentId)
@@ -173,6 +174,13 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         await postOrUpdate(client, slackChannelId, thinkingTs, '⚠️ Agent not found.', msg.ts)
         return
     }
+    if (thinkingTs) {
+        thinkingTimer = setInterval(() => {
+            thinkingSeconds++
+            const icon = thinkingPhase === 'Preparing context' ? '🧭' : '🤔'
+            client.chat.update({ channel: slackChannelId, ts: thinkingTs!, text: `${icon} ${thinkingPhase} (${thinkingSeconds}s)` }).catch(() => { })
+        }, 1000)
+    }
 
     const unsubs: Array<() => void> = []
     const { streamId, controller: execAbort } = beginChannelExecution({
@@ -195,6 +203,10 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         persistChannelExecutionConfig(conversationId, resolvedAgent, planned)
         const context = await applyChannelContextLimit({ gateway: getGateway(), planned, agent: resolvedAgent, messages: planned.messages })
         messages = context.messages
+        thinkingPhase = 'Thinking'
+        if (thinkingTs) {
+            await client.chat.update({ channel: slackChannelId, ts: thinkingTs, text: `🤔 Thinking (${thinkingSeconds}s)` }).catch(() => { })
+        }
         const executor = new AgentExecutor({
             gateway: getGateway(), tools: planned.tools, conversationId, broadcast: ctx.broadcast,
             providerId: planned.providerId, model: planned.responseModel, hitl: !resolvedAgent.autoApproveTools,
@@ -220,10 +232,6 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
     ctx.conversationSendQueue.set(conversationId, enqueueSend)
 
     if (thinkingTs) {
-        thinkingTimer = setInterval(() => {
-            thinkingSeconds++
-            client.chat.update({ channel: slackChannelId, ts: thinkingTs!, text: `🤔 Thinking (${thinkingSeconds}s)` }).catch(() => { })
-        }, 1000)
         unsubs.push(() => { if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null } })
     }
 

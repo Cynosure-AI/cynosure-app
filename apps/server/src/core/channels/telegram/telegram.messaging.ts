@@ -123,8 +123,9 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
     }
 
     const effectiveAgentId = ctx.chatAgentOverride.get(chatId) || ctx.agentId
-    const thinkingMsgId = await sendMessageReturningId(ctx, chatId, '🤔 Thinking...')
+    const thinkingMsgId = await sendMessageReturningId(ctx, chatId, '🧭 Preparing context...')
     let thinkingSeconds = 0
+    let thinkingPhase = 'Preparing context'
     let thinkingTimer: ReturnType<typeof setInterval> | null = null
     const conversationId = getOrCreateConversation(ctx, chatId, senderName, effectiveAgentId)
     ctx.conversationToChat.set(conversationId, chatId)
@@ -171,6 +172,13 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
         else await sendMessage(ctx, chatId, '⚠️ Agent not found.')
         return
     }
+    if (thinkingMsgId) {
+        thinkingTimer = setInterval(() => {
+            thinkingSeconds++
+            const icon = thinkingPhase === 'Preparing context' ? '🧭' : '🤔'
+            editMessage(ctx, chatId, thinkingMsgId, `${icon} ${thinkingPhase} (${thinkingSeconds}s)`).catch(() => { })
+        }, 1000)
+    }
 
     const { streamId, controller: execAbort } = beginChannelExecution({
         executions: ctx.activeExecutions,
@@ -207,6 +215,10 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
             gateway: getGateway(), planned, agent: resolvedAgent, messages: planned.messages,
         })
         messages = context.messages
+        thinkingPhase = 'Thinking'
+        if (thinkingMsgId) {
+            await editMessage(ctx, chatId, thinkingMsgId, `🤔 Thinking (${thinkingSeconds}s)`).catch(() => { })
+        }
 
         const executor = new AgentExecutor({
             gateway: getGateway(),
@@ -246,10 +258,6 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
     ctx.conversationSendQueue.set(conversationId, enqueueSend)
 
     if (thinkingMsgId) {
-        thinkingTimer = setInterval(() => {
-            thinkingSeconds++
-            editMessage(ctx, chatId, thinkingMsgId!, `🤔 Thinking (${thinkingSeconds}s)`).catch(() => { })
-        }, 1000)
         unsubs.push(() => { if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null } })
 
         // Thinking display is disabled — live thinking updates are omitted
