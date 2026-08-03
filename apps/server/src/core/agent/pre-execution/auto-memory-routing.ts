@@ -23,6 +23,7 @@ export interface ApplyAutoMemoryRoutingInput {
     memorySpaceIds?: string[]
     /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
+    signal?: AbortSignal
 }
 
 interface MemoryContextSelection {
@@ -42,6 +43,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         agentId,
         memorySpaceIds,
         eventMeta,
+        signal,
     } = input
 
     if (!shouldRouteMemory(userQuery, { enabled })) {
@@ -57,6 +59,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
     const aggregator = getMemoryAggregator()
 
     try {
+        signal?.throwIfAborted()
         emitMemoryRoutingStatus(conversationId, taskId, eventMeta)
         const primaryQuery = userQuery?.trim() || ''
         const contextualQuery = buildRouterQuery(primaryQuery, recentMessages)
@@ -65,6 +68,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             spaceIds: memorySpaceIds,
             permanentTopK: AUTO_MEMORY_RETRIEVAL_COUNT,
         }), primaryQuery)
+        signal?.throwIfAborted()
         if (!candidates.permanent.length && !candidates.graph?.edges.length && contextualQuery !== primaryQuery) {
             candidates = filterAutoMemoryCandidates(await aggregator.aggregate(contextualQuery, {
                 agentId,
@@ -93,6 +97,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             recentMessages,
             candidates: candidates.permanent,
             hasGraph: Boolean(candidates.graph?.edges.length),
+            signal,
         })
         const selectedPermanent = selection
             ? resolveSelectedMemories(candidates.permanent, selection.memoryIds)
@@ -113,6 +118,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         const formatted = aggregator.format(selectedMemory)
         return formatted || null
     } catch (err) {
+        if ((err as Error).name === 'AbortError' || signal?.aborted) throw err
         console.warn('[memory-router] Routing failed, continuing without auto-memory:', err)
         emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'routing-failed')
         return null
@@ -140,6 +146,7 @@ async function selectMemoryContext(input: {
     recentMessages: ChatMessage[]
     candidates: RetrievedChunk[]
     hasGraph: boolean
+    signal?: AbortSignal
 }): Promise<MemoryContextSelection | null> {
     if (!input.candidates.length) return null
 
@@ -177,11 +184,13 @@ async function selectMemoryContext(input: {
             tools: [buildMemoryContextSelectionTool(candidateIds, input.hasGraph)],
             toolChoice: { type: 'function', name: MEMORY_CONTEXT_SELECTION_TOOL_NAME },
             thinkingEnabled: false,
+            signal: input.signal,
         }, input.providerId)
 
         const selectionCall = result.toolCalls?.find((call) => call.function.name === MEMORY_CONTEXT_SELECTION_TOOL_NAME)
         return selectionCall ? parseMemoryContextSelection(selectionCall.function.arguments, candidateIds, input.hasGraph) : null
     } catch (err) {
+        if ((err as Error).name === 'AbortError' || input.signal?.aborted) throw err
         console.warn('[memory-router] Memory context curation failed, using top ranked memories:', err)
         return null
     }

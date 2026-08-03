@@ -1,4 +1,5 @@
-import type { ChannelProvider, ChannelStatus, ActiveChannelExecution } from '../base.channel.js'
+import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
+import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
 import type { TelegramConfig, TelegramUpdate, PendingHITL, BroadcastFn } from './telegram.types.js'
 import { TELEGRAM_API } from './telegram.types.js'
 import { registerBotCommands } from './telegram.commands.js'
@@ -13,7 +14,7 @@ export class TelegramChannel implements ChannelProvider {
     broadcast: BroadcastFn
     allowedAgentIds: string[]
     allowedUserIds: ReadonlySet<string>
-    activeExecutions = new Map<string, { exec: ActiveChannelExecution; controller: AbortController }>()
+    activeExecutions = new Map<string, ActiveChannelExecutionEntry>()
     chatAgentOverride = new Map<number, string>()
     chatLastUsedAgent = new Map<number, string>()
     pendingHITL = new Map<string, PendingHITL>()
@@ -80,6 +81,7 @@ export class TelegramChannel implements ChannelProvider {
             this.abortController.abort()
             this.abortController = null
         }
+        cancelChannelExecutionsWhere(this.activeExecutions, () => true)
         this.conversationToChat.clear()
         this.conversationToUser.clear()
         this.chatLocks.clear()
@@ -98,13 +100,7 @@ export class TelegramChannel implements ChannelProvider {
     }
 
     cancelExecution(executionId: string): boolean {
-        const entry = this.activeExecutions.get(executionId)
-        if (entry) {
-            entry.controller.abort()
-            this.activeExecutions.delete(executionId)
-            return true
-        }
-        return false
+        return cancelChannelExecution(this.activeExecutions, executionId)
     }
 
     async test(): Promise<{ success: boolean; username?: string; error?: string }> {

@@ -26,6 +26,7 @@ export interface ApplyAutoToolRoutingInput {
     usedToolNames?: Set<string>
     /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
+    signal?: AbortSignal
 }
 
 interface ToolContextSelection {
@@ -46,6 +47,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         preferredToolNames,
         usedToolNames,
         eventMeta,
+        signal,
     } = input
 
     if (!shouldRouteTools(tools, userQuery, { enabled })) {
@@ -59,6 +61,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
 
     const taskId = `router_${nanoid()}`
     try {
+        signal?.throwIfAborted()
         emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Gathering tool context...', eventMeta)
         const routedTools = await routeTools({
             userQuery: userQuery || '',
@@ -69,6 +72,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             usedToolNames,
             onStatus: (status, message) => emitToolRoutingStatus(conversationId, taskId, status, message, eventMeta),
         })
+        signal?.throwIfAborted()
         emitToolRoutingSelection(
             conversationId,
             taskId,
@@ -87,6 +91,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             routedTools,
             preferredToolNames,
             usedToolNames,
+            signal,
         })
         emitToolRoutingSelection(
             conversationId,
@@ -98,6 +103,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         )
         return curatedTools
     } catch (err) {
+        if ((err as Error).name === 'AbortError' || signal?.aborted) throw err
         console.warn('[tool-router] Routing failed, using local tool list:', err)
         const fallbackTools = tools.filter((tool) => !tool.namespaceId?.startsWith('mcp:'))
         emitToolRoutingSelection(
@@ -130,6 +136,7 @@ async function curateRoutedTools(input: {
     routedTools: RoutedToolDefinition[]
     preferredToolNames?: Set<string>
     usedToolNames?: Set<string>
+    signal?: AbortSignal
 }): Promise<RoutedToolDefinition[]> {
     const protectedNames = collectProtectedToolNames(input.recentMessages, input.preferredToolNames, input.usedToolNames)
     const curatableTools = input.routedTools.filter((tool) => !protectedNames.has(tool.name))
@@ -167,6 +174,7 @@ async function curateRoutedTools(input: {
             tools: [buildToolContextSelectionTool(candidateIds)],
             toolChoice: { type: 'function', name: TOOL_CONTEXT_SELECTION_TOOL_NAME },
             thinkingEnabled: false,
+            signal: input.signal,
         }, input.providerId)
 
         const selectionCall = result.toolCalls?.find((call) => call.function.name === TOOL_CONTEXT_SELECTION_TOOL_NAME)
@@ -176,6 +184,7 @@ async function curateRoutedTools(input: {
         const selectedNames = new Set(resolveSelectedTools(curatableTools, selection.toolIds).map((tool) => tool.name))
         return input.routedTools.filter((tool) => protectedNames.has(tool.name) || selectedNames.has(tool.name))
     } catch (err) {
+        if ((err as Error).name === 'AbortError' || input.signal?.aborted) throw err
         console.warn('[tool-router] Tool context curation failed, using routed tools:', err)
         return input.routedTools
     }

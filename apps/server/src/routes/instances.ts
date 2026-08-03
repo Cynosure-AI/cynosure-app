@@ -93,7 +93,7 @@ export function listActiveInstances(): ActiveInstance[] {
             agentId: exec.agentId,
             agentName: agent?.name || 'Unknown',
             agentIconUrl: agent?.iconUrl || null,
-            model: agent?.model || null,
+            model: exec.model || agent?.model || null,
             conversationId: exec.conversationId,
             startedAt: exec.startedAt,
             intervalMinutes: 0,

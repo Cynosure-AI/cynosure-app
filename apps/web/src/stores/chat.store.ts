@@ -145,6 +145,18 @@ export const useChatStore = defineStore('chat', () => {
     )
   }
 
+  async function handleChannelConversationState(data: {
+    conversationId: string
+    agentId: string
+    running: boolean
+  }): Promise<void> {
+    agentStore.setConversationExecutionState(data.conversationId, data.running)
+    await loadConversations()
+    if (activeConversationId.value === data.conversationId) {
+      await syncConversationRunState(data.conversationId)
+    }
+  }
+
   async function setActiveAgent(id: string | null): Promise<void> {
     if (!memorySpaces.value.length) await loadMemorySpaces()
     await agentConfig.setActiveAgent(id)
@@ -635,6 +647,7 @@ export const useChatStore = defineStore('chat', () => {
     handleCompactEvent: streaming.handleCompactEvent,
     handleCompactStart: streaming.handleCompactStart,
     handleCompactError: streaming.handleCompactError,
+    handleChannelConversationState,
 
     // Messages (delegated)
     sendMessage,

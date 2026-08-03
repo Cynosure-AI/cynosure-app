@@ -2,6 +2,7 @@ import { getAgent, listAgents } from '../../agents/agent-store.js'
 import { getDb } from '../../../db/database.js'
 import type { WebClient } from '@slack/web-api'
 import type { SlackCtx } from './slack.types.js'
+import { cancelChannelExecutionsWhere } from '../channel-execution.js'
 
 export function getAvailableAgents(ctx: SlackCtx) {
     const all = listAgents()
@@ -20,12 +21,7 @@ export async function handleCommand(
     const command = text.slice(1).split(/\s/)[0].toLowerCase()
 
     if (command === 'stop') {
-        let cancelled = 0
-        for (const [id, entry] of ctx.activeExecutions) {
-            entry.controller.abort()
-            ctx.activeExecutions.delete(id)
-            cancelled++
-        }
+        const cancelled = cancelExecutionsForChannel(ctx, slackChannelId)
         const reply = cancelled > 0
             ? `⏹ Stopped ${cancelled} running execution(s).`
             : '✅ No executions are currently running.'
@@ -90,14 +86,11 @@ Starting a fresh conversation.` }).catch(() => { })
     return false
 }
 
-export function cancelExecutionsForChannel(ctx: SlackCtx, slackChannelId: string): void {
-    for (const [id, entry] of ctx.activeExecutions) {
+export function cancelExecutionsForChannel(ctx: SlackCtx, slackChannelId: string): number {
+    return cancelChannelExecutionsWhere(ctx.activeExecutions, (entry) => {
         const execChannelId = ctx.conversationToChannel.get(entry.exec.conversationId)
-        if (execChannelId === slackChannelId) {
-            entry.controller.abort()
-            ctx.activeExecutions.delete(id)
-        }
-    }
+        return execChannelId === slackChannelId
+    })
 }
 
 export function archiveConversation(ctx: SlackCtx, slackChannelId: string, agentId: string): void {

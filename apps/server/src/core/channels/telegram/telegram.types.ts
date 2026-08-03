@@ -1,4 +1,4 @@
-import type { ActiveChannelExecution } from '../base.channel.js'
+import type { ActiveChannelExecutionEntry } from '../base.channel.js'
 
 export const TELEGRAM_API = 'https://api.telegram.org'
 
@@ -51,7 +51,7 @@ export interface TelegramCtx {
     broadcast: BroadcastFn
     allowedAgentIds: string[]
     allowedUserIds: ReadonlySet<string>
-    activeExecutions: Map<string, { exec: ActiveChannelExecution; controller: AbortController }>
+    activeExecutions: Map<string, ActiveChannelExecutionEntry>
     chatAgentOverride: Map<number, string>
     chatLastUsedAgent: Map<number, string>
     pendingHITL: Map<string, PendingHITL>

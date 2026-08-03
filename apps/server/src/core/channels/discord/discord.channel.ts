@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits, Events, TextChannel } from 'discord.js'
-import type { ChannelProvider, ChannelStatus, ActiveChannelExecution } from '../base.channel.js'
+import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
+import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
 import type { DiscordConfig, DiscordCtx, PendingHITL } from './discord.types.js'
 import { handleMessage, handleInteraction, subscribeToHITL } from './discord.messaging.js'
 import { sendLongMessage } from './discord.api.js'
@@ -11,7 +12,7 @@ export class DiscordChannel implements ChannelProvider {
     channelId: string
     broadcast: DiscordCtx['broadcast']
     allowedAgentIds: string[]
-    activeExecutions = new Map<string, { exec: ActiveChannelExecution; controller: AbortController }>()
+    activeExecutions = new Map<string, ActiveChannelExecutionEntry>()
     channelAgentOverride = new Map<string, string>()
     channelLastUsedAgent = new Map<string, string>()
     pendingHITL = new Map<string, PendingHITL>()
@@ -80,10 +81,7 @@ export class DiscordChannel implements ChannelProvider {
         this.connected = false
         this.hitlUnsub?.()
         this.hitlUnsub = undefined
-        for (const [id, entry] of this.activeExecutions) {
-            entry.controller.abort()
-            this.activeExecutions.delete(id)
-        }
+        cancelChannelExecutionsWhere(this.activeExecutions, () => true)
         this.conversationToChannel.clear()
         this.channelLocks.clear()
         try { this.client.destroy() } catch { }
@@ -102,13 +100,7 @@ export class DiscordChannel implements ChannelProvider {
     }
 
     cancelExecution(executionId: string): boolean {
-        const entry = this.activeExecutions.get(executionId)
-        if (entry) {
-            entry.controller.abort()
-            this.activeExecutions.delete(executionId)
-            return true
-        }
-        return false
+        return cancelChannelExecution(this.activeExecutions, executionId)
     }
 
     async test(): Promise<{ success: boolean; username?: string; error?: string }> {

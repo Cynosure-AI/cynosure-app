@@ -24,6 +24,7 @@ export interface BuildTaskContextInput {
         memories: boolean
     }
     eventMeta?: Record<string, unknown>
+    signal?: AbortSignal
 }
 
 export async function buildTaskContext(input: BuildTaskContextInput): Promise<TaskContext | null> {
@@ -65,6 +66,7 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
             tools: [buildTaskContextTool(input.enabledModes)],
             toolChoice: { type: 'function', name: TASK_CONTEXT_TOOL_NAME },
             thinkingEnabled: false,
+            signal: input.signal,
         }, input.providerId)
 
         const contextCall = result.toolCalls?.find((call) => call.function.name === TASK_CONTEXT_TOOL_NAME)
@@ -72,6 +74,7 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
         emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta, parsed ? undefined : 'none-generated')
         return parsed
     } catch (err) {
+        if ((err as Error).name === 'AbortError' || input.signal?.aborted) throw err
         console.warn('[auto-router] Task context build failed, using original request in downstream routers:', err)
         emitTaskContextSelection(input.conversationId, taskId, null, input.eventMeta, 'routing-failed')
         return null

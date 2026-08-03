@@ -1,4 +1,4 @@
-import type { ActiveChannelExecution } from '../base.channel.js'
+import type { ActiveChannelExecutionEntry } from '../base.channel.js'
 import type { App } from '@slack/bolt'
 
 export interface SlackConfig {
@@ -25,7 +25,7 @@ export interface SlackCtx {
     broadcast: BroadcastFn
     allowedAgentIds: string[]
     botUserId?: string
-    activeExecutions: Map<string, { exec: ActiveChannelExecution; controller: AbortController }>
+    activeExecutions: Map<string, ActiveChannelExecutionEntry>
     channelAgentOverride: Map<string, string>
     channelLastUsedAgent: Map<string, string>
     pendingHITL: Map<string, PendingHITL>

@@ -1,4 +1,4 @@
-import type { ActiveChannelExecution } from '../base.channel.js'
+import type { ActiveChannelExecutionEntry } from '../base.channel.js'
 import type { Client } from 'discord.js'
 
 export const DISCORD_API_BASE = 'https://discord.com/api'
@@ -24,7 +24,7 @@ export interface DiscordCtx {
     channelId: string
     broadcast: BroadcastFn
     allowedAgentIds: string[]
-    activeExecutions: Map<string, { exec: ActiveChannelExecution; controller: AbortController }>
+    activeExecutions: Map<string, ActiveChannelExecutionEntry>
     channelAgentOverride: Map<string, string>
     channelLastUsedAgent: Map<string, string>
     pendingHITL: Map<string, PendingHITL>

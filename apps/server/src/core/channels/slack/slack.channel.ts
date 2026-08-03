@@ -1,5 +1,6 @@
 import { App } from '@slack/bolt'
-import type { ChannelProvider, ChannelStatus, ActiveChannelExecution } from '../base.channel.js'
+import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
+import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
 import type { SlackConfig, BroadcastFn, SlackCtx, PendingHITL } from './slack.types.js'
 import { handleMessage, handleHITLAction, subscribeToHITL } from './slack.messaging.js'
 import { sendLongSlackMessage } from './slack.api.js'
@@ -13,7 +14,7 @@ export class SlackChannel implements ChannelProvider {
     broadcast: BroadcastFn
     allowedAgentIds: string[]
     botUserId?: string
-    activeExecutions = new Map<string, { exec: ActiveChannelExecution; controller: AbortController }>()
+    activeExecutions = new Map<string, ActiveChannelExecutionEntry>()
     channelAgentOverride = new Map<string, string>()
     channelLastUsedAgent = new Map<string, string>()
     pendingHITL = new Map<string, PendingHITL>()
@@ -89,10 +90,7 @@ export class SlackChannel implements ChannelProvider {
         this.connected = false
         this.hitlUnsub?.()
         this.hitlUnsub = undefined
-        for (const [id, entry] of this.activeExecutions) {
-            entry.controller.abort()
-            this.activeExecutions.delete(id)
-        }
+        cancelChannelExecutionsWhere(this.activeExecutions, () => true)
         this.conversationToChannel.clear()
         this.channelLocks.clear()
         try { await this.app.stop() } catch { }
@@ -111,13 +109,7 @@ export class SlackChannel implements ChannelProvider {
     }
 
     cancelExecution(executionId: string): boolean {
-        const entry = this.activeExecutions.get(executionId)
-        if (entry) {
-            entry.controller.abort()
-            this.activeExecutions.delete(executionId)
-            return true
-        }
-        return false
+        return cancelChannelExecution(this.activeExecutions, executionId)
     }
 
     async test(): Promise<{ success: boolean; username?: string; error?: string }> {

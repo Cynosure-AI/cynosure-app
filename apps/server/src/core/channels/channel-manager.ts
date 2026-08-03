@@ -90,6 +90,19 @@ class ChannelManager {
         return false
     }
 
+    /** Cancel channel executions when the UI only knows the conversation ID
+     * (notably during pre-execution, before chat:stream-start publishes a stream ID). */
+    cancelExecutionByConversation(conversationId: string): boolean {
+        let cancelled = false
+        for (const provider of this.providers.values()) {
+            for (const execution of provider.getActiveExecutions()) {
+                if (execution.conversationId !== conversationId) continue
+                cancelled = provider.cancelExecution(execution.id) || cancelled
+            }
+        }
+        return cancelled
+    }
+
     /** Re-register platform commands on all running channels (e.g. after agent rename). */
     async refreshAllCommands(): Promise<void> {
         for (const provider of this.providers.values()) {

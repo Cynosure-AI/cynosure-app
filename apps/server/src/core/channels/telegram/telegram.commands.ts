@@ -3,6 +3,7 @@ import { getDb } from '../../../db/database.js'
 import type { TelegramCtx } from './telegram.types.js'
 import { TELEGRAM_API } from './telegram.types.js'
 import { sendMessage } from './telegram.api.js'
+import { cancelChannelExecutionsWhere } from '../channel-execution.js'
 
 /** Return the list of agents available for this channel (filtered by allowedAgentIds). */
 export function getAvailableAgents(ctx: TelegramCtx) {
@@ -102,16 +103,10 @@ export async function handleCommand(ctx: TelegramCtx, chatId: number, text: stri
 
 /** Cancel all active executions whose conversationId maps to the given Telegram chatId. */
 export function cancelExecutionsForChat(ctx: TelegramCtx, chatId: number): number {
-    let cancelled = 0
-    for (const [id, entry] of ctx.activeExecutions) {
+    return cancelChannelExecutionsWhere(ctx.activeExecutions, (entry) => {
         const execChatId = ctx.conversationToChat.get(entry.exec.conversationId)
-        if (execChatId === chatId) {
-            entry.controller.abort()
-            ctx.activeExecutions.delete(id)
-            cancelled++
-        }
-    }
-    return cancelled
+        return execChatId === chatId
+    })
 }
 
 /** Archive the active conversation for a Telegram chat so a fresh one is created next time. */

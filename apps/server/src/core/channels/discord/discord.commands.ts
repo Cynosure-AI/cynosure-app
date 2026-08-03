@@ -1,6 +1,7 @@
 import { getAgent, listAgents } from '../../agents/agent-store.js'
 import { getDb } from '../../../db/database.js'
 import type { DiscordCtx } from './discord.types.js'
+import { cancelChannelExecutionsWhere } from '../channel-execution.js'
 
 export function getAvailableAgents(ctx: DiscordCtx) {
     const all = listAgents()
@@ -14,12 +15,7 @@ export async function handleCommand(ctx: DiscordCtx, msg: import('discord.js').M
     const discordChannelId = msg.channel.id
 
     if (command === 'stop') {
-        let cancelled = 0
-        for (const [id, entry] of ctx.activeExecutions) {
-            entry.controller.abort()
-            ctx.activeExecutions.delete(id)
-            cancelled++
-        }
+        const cancelled = cancelExecutionsForChannel(ctx, discordChannelId)
         if (cancelled > 0) {
             await msg.reply(`⏹ Stopped ${cancelled} running execution(s).`).catch(() => { })
         } else {
@@ -79,14 +75,11 @@ export async function handleCommand(ctx: DiscordCtx, msg: import('discord.js').M
     return false
 }
 
-export function cancelExecutionsForChannel(ctx: DiscordCtx, discordChannelId: string): void {
-    for (const [id, entry] of ctx.activeExecutions) {
+export function cancelExecutionsForChannel(ctx: DiscordCtx, discordChannelId: string): number {
+    return cancelChannelExecutionsWhere(ctx.activeExecutions, (entry) => {
         const execChannelId = ctx.conversationToChannel.get(entry.exec.conversationId)
-        if (execChannelId === discordChannelId) {
-            entry.controller.abort()
-            ctx.activeExecutions.delete(id)
-        }
-    }
+        return execChannelId === discordChannelId
+    })
 }
 
 export function archiveConversation(ctx: DiscordCtx, discordChannelId: string, agentId: string): void {

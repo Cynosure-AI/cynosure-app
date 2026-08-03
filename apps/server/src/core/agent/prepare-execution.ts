@@ -150,6 +150,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         recentMessages: input.recentMessages,
         enabledModes: autoModes,
         eventMeta: input.eventMeta,
+        signal: input.signal,
     })
     const toolRoutingQuery = taskContext?.toolQuery || input.userQuery
     const memoryRoutingQuery = taskContext?.memoryQuery || input.userQuery
@@ -214,6 +215,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             userQuery: memoryRoutingQuery,
             recentMessages: routingMessages,
             eventMeta: input.eventMeta,
+            signal: input.signal,
         }),
     ]
 
