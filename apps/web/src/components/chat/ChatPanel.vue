@@ -654,7 +654,7 @@ onMounted(() => {
         </p>
       </template>
       <template v-else>
-        <h2 class="text-3xl font-semibold text-theme-200 tracking-tight">
+        <h2 class="text-3xl font-semibold text-theme-200 tracking-tight text-center">
           {{ greeting }}
         </h2>
         <p class="text-sm mt-2 text-theme-500 max-w-sm text-center">
