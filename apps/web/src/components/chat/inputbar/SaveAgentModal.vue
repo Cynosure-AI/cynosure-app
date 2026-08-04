@@ -15,6 +15,7 @@ const router = useRouter()
 const hasOverrides = computed(() => chatStore.hasAgentOverrides)
 
 const showModal = ref(false)
+const showPopover = ref(false)
 const newAgentName = ref('')
 const newAgentDescription = ref('')
 const savingAgent = ref(false)
@@ -28,11 +29,22 @@ const canSaveAsAgent = computed(() => {
   )
 })
 
+const hasCustomConfig = computed(() => hasOverrides.value || (
+  !chatStore.activeAgentId && (chatStore.hasFreeChatOverrides || canSaveAsAgent.value)
+))
+
 function openModal() {
   const currentAgent = chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null
   newAgentName.value = currentAgent ? `${currentAgent.name} (copy)` : ''
   newAgentDescription.value = currentAgent?.description || ''
   showModal.value = true
+  showPopover.value = false
+}
+
+function resetConfig() {
+  if (chatStore.activeAgentId) chatStore.resetAgentOverrides()
+  else chatStore.resetToDefaults()
+  showPopover.value = false
 }
 
 async function saveAsNewAgent() {
@@ -74,67 +86,82 @@ async function saveAsNewAgent() {
 </script>
 
 <template>
-  <!-- Agent override bar: apply / reset -->
   <div
-    v-if="hasOverrides"
-    class="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5"
+    v-if="hasCustomConfig"
+    class="relative shrink-0"
   >
-    <Icon
-      icon="lucide:info"
-      class="w-3.5 h-3.5 text-amber-400 shrink-0"
-    />
-    <span class="text-[11px] text-amber-300 flex-1">Agent config overridden for this session</span>
     <button
-      class="text-[11px] px-2 py-0.5 rounded bg-theme-700 text-theme-300 hover:bg-theme-600 transition-colors"
-      title="Discard overrides and reset to agent defaults"
-      @click="chatStore.resetAgentOverrides()"
-    >
-      Reset
-    </button>
-    <button
-      class="text-[11px] px-2 py-0.5 rounded bg-amber-600 text-white hover:bg-amber-500 transition-colors"
-      title="Save these changes to the agent definition permanently"
-      @click="chatStore.applyOverridesToAgent()"
-    >
-      Apply to Agent
-    </button>
-    <button
-      class="text-[11px] px-2 py-0.5 rounded bg-accent-600 text-white hover:bg-accent-500 transition-colors"
-      title="Create a new agent from the current session configuration"
-      @click="openModal"
-    >
-      Save as New Agent
-    </button>
-  </div>
-
-  <!-- Free chat: save as agent hint -->
-  <div
-    v-else-if="!chatStore.activeAgentId && (chatStore.hasFreeChatOverrides || canSaveAsAgent)"
-    class="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg border border-theme-700/50 bg-theme-800/40"
-  >
-    <Icon
-      icon="lucide:bot"
-      class="w-3.5 h-3.5 text-theme-400 shrink-0"
-    />
-    <span class="text-[11px] text-theme-400 flex-1">Session has custom configuration</span>
-    <button
-      class="text-[11px] px-2 py-0.5 rounded bg-theme-700 text-theme-300 hover:bg-theme-600 transition-colors"
-      title="Reset to default chat configuration"
-      @click="chatStore.resetToDefaults()"
-    >
-      Reset
-    </button>
-    <button
-      class="text-[11px] px-2 py-0.5 rounded bg-accent-600 text-white hover:bg-accent-500 transition-colors flex items-center gap-1"
-      title="Create a new agent from the current session configuration"
-      @click="openModal"
+      type="button"
+      class="relative rounded-lg bg-amber-500/10 p-1.5 text-amber-400 transition-colors hover:bg-amber-500/20 hover:text-amber-300"
+      title="Session configuration differs from defaults"
+      aria-label="Open session configuration status"
+      aria-haspopup="dialog"
+      :aria-expanded="showPopover"
+      @click.stop="showPopover = !showPopover"
     >
       <Icon
-        icon="lucide:save"
-        class="w-3 h-3"
+        icon="lucide:info"
+        class="h-4 w-4"
       />
-      Save as Agent
+      <span class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-amber-400" />
     </button>
+
+    <div
+      v-if="showPopover"
+      role="dialog"
+      aria-label="Session configuration status"
+      class="absolute right-0 top-full z-50 mt-2 w-[min(22rem,calc(100vw-1.5rem))] rounded-xl border border-theme-700 bg-theme-950 p-3 shadow-2xl shadow-black/40"
+      @click.stop
+    >
+      <div class="flex items-start gap-2.5">
+        <Icon
+          icon="lucide:info"
+          class="mt-0.5 h-4 w-4 shrink-0 text-amber-400"
+        />
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-medium text-theme-200">
+            {{ hasOverrides ? 'Agent config overridden for this session' : 'Session has custom configuration' }}
+          </p>
+          <p
+            v-if="hasOverrides && chatStore.agentOverrideFields.length"
+            class="mt-1 text-[11px] leading-relaxed text-theme-500"
+          >
+            Changed: {{ chatStore.agentOverrideFields.join(', ') }}
+          </p>
+        </div>
+      </div>
+      <div class="mt-3 flex flex-wrap justify-end gap-2">
+        <button
+          class="rounded bg-theme-700 px-2 py-1 text-[11px] text-theme-300 transition-colors hover:bg-theme-600"
+          :title="hasOverrides ? 'Discard overrides and reset to current agent defaults' : 'Reset to default chat configuration'"
+          @click="resetConfig"
+        >
+          Reset
+        </button>
+        <button
+          v-if="hasOverrides"
+          class="rounded bg-amber-600 px-2 py-1 text-[11px] text-white transition-colors hover:bg-amber-500"
+          title="Save these changes to the agent definition permanently"
+          @click="chatStore.applyOverridesToAgent(); showPopover = false"
+        >
+          Apply to Agent
+        </button>
+        <button
+          class="rounded bg-accent-600 px-2 py-1 text-[11px] text-white transition-colors hover:bg-accent-500"
+          title="Create a new agent from the current session configuration"
+          @click="openModal"
+        >
+          {{ hasOverrides ? 'Save as New Agent' : 'Save as Agent' }}
+        </button>
+      </div>
+    </div>
+
+    <div
+      v-if="showPopover"
+      class="fixed inset-0 z-40"
+      aria-hidden="true"
+      @click="showPopover = false"
+    />
   </div>
 
   <!-- Save as Agent modal -->

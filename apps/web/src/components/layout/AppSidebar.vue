@@ -143,6 +143,7 @@ const triggerItems: NavItem[] = [
 const settingsItems: NavItem[] = [
   { to: "/settings", icon: "lucide:settings", label: "Settings", exact: true },
   { to: "/settings/mcp", icon: "lucide:plug", label: "MCP Servers" },
+  { to: "/tools-policy", icon: "lucide:wrench", label: "Tools Policy" },
 ];
 
 const chatRoute = computed(() =>
@@ -484,27 +485,6 @@ const chatRoute = computed(() =>
           Memory Folders
         </template>
       </HoverTooltip>
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/tools-policy"
-          class="nav-item"
-          :class="{ active: isActive('/tools-policy') }"
-        >
-          <Icon
-            icon="lucide:wrench"
-            class="w-4.5 h-4.5"
-          />
-          <span>Tools Policy</span>
-        </RouterLink>
-        <template #content>
-          Tools Policy
-        </template>
-      </HoverTooltip>
-
       <!-- Activity -->
       <div class="section-separator" />
       <div class="section-label">

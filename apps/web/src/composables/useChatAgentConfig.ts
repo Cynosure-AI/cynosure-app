@@ -37,6 +37,7 @@ export interface ChatAgentConfigApi {
     agentOriginalMemorySpaceIds: Ref<string[]>
     freeChatMemorySelectionInitialized: Ref<boolean>
     hasAgentOverrides: ComputedRef<boolean>
+    agentOverrideFields: ComputedRef<string[]>
     hasFreeChatOverrides: ComputedRef<boolean>
     markOverridesModified(): void
     setSelectedToolNames(names: string[]): void
@@ -223,7 +224,7 @@ export function useChatAgentConfig(
         const agent = agentDefs.get(id)
         return {
             preset: {
-                tools: agent?.tools?.length ? [...agent.tools] : [],
+                tools: agent?.tools?.length ? comparableAgentTools(agent.tools) : [],
                 subAgentIds: agent?.subAgents?.map(s => s.agentId) ?? [],
                 memorySpaceIds: agent?.memorySpaces?.length ? [...agent.memorySpaces] : [],
                 systemPrompt: agent?.systemPrompt || '',
@@ -293,21 +294,26 @@ export function useChatAgentConfig(
         }
     }
 
-    const hasAgentOverrides = computed(() => {
-        if (!activeAgentId.value) return false
-        return (
-            !arraysEqual(selectedToolNames.value, agentOriginalTools.value) ||
-            !arraysEqual(freeChatSubAgentIds.value, agentOriginalSubAgentIds.value) ||
-            !arraysEqual(freeChatMemorySpaceIds.value, agentOriginalMemorySpaceIds.value) ||
-            sessionSystemPrompt.value !== agentOriginalSystemPrompt.value ||
-            sessionThinkingEnabled.value !== agentOriginalThinkingEnabled.value ||
-            sessionReasoningEffort.value !== agentOriginalReasoningEffort.value ||
-            sessionAutoToolRouting.value !== agentOriginalAutoToolRouting.value ||
-            sessionAutoMemory.value !== agentOriginalAutoMemory.value ||
-            sessionProviderOverride.value !== agentOriginalProviderOverride.value ||
-            sessionModelOverride.value !== agentOriginalModelOverride.value
-        )
+    const agentOverrideFields = computed(() => {
+        if (!activeAgentId.value) return []
+        const { preset, model, providerId } = agentPreset(activeAgentId.value)
+        const fields: string[] = []
+        if (!arraysEqual(selectedToolNames.value, preset.tools)) fields.push('Tools')
+        if (!arraysEqual(freeChatSubAgentIds.value, preset.subAgentIds)) fields.push('Sub-agents')
+        if (!arraysEqual(freeChatMemorySpaceIds.value, preset.memorySpaceIds)) fields.push('Memory folders')
+        if (sessionSystemPrompt.value !== preset.systemPrompt) fields.push('System prompt')
+        if (sessionThinkingEnabled.value !== preset.thinkingEnabled) fields.push('Thinking mode')
+        if (sessionReasoningEffort.value !== preset.reasoningEffort) fields.push('Reasoning effort')
+        if (sessionAutoToolRouting.value !== preset.autoToolRouting) fields.push('Automatic tool routing')
+        if (sessionAutoMemory.value !== preset.autoMemory) fields.push('Automatic memory')
+
+        const effectiveProvider = sessionProviderOverride.value ?? providerId
+        const effectiveModel = sessionModelOverride.value ?? model
+        if (effectiveProvider !== providerId || effectiveModel !== model) fields.push('Model / provider')
+        return fields
     })
+
+    const hasAgentOverrides = computed(() => agentOverrideFields.value.length > 0)
 
     const hasFreeChatOverrides = computed(() => {
         if (activeAgentId.value) return false
@@ -319,18 +325,10 @@ export function useChatAgentConfig(
     }
 
     function resetAgentOverrides(): void {
-        applyPreset({
-            tools: [...agentOriginalTools.value],
-            subAgentIds: [...agentOriginalSubAgentIds.value],
-            memorySpaceIds: [...agentOriginalMemorySpaceIds.value],
-            systemPrompt: agentOriginalSystemPrompt.value,
-            thinkingEnabled: agentOriginalThinkingEnabled.value,
-            reasoningEffort: agentOriginalReasoningEffort.value,
-            autoToolRouting: agentOriginalAutoToolRouting.value,
-            autoMemory: agentOriginalAutoMemory.value,
-            modelOverride: agentOriginalModelOverride.value,
-            providerOverride: agentOriginalProviderOverride.value,
-        })
+        if (!activeAgentId.value) return
+        const { preset } = agentPreset(activeAgentId.value)
+        applyPreset(preset)
+        setAgentBaseline(preset)
     }
 
     function resetToDefaults(): void {
@@ -377,7 +375,10 @@ export function useChatAgentConfig(
             updates.model = nextModel
         }
 
-        if (Object.keys(updates).length === 0) return
+        if (Object.keys(updates).length === 0) {
+            resetAgentOverrides()
+            return
+        }
         await agentDefs.update(activeAgentId.value, updates)
         applyAgentSelection(activeAgentId.value)
     }
@@ -438,6 +439,16 @@ export function useChatAgentConfig(
         return normalized
     }
 
+    function comparableAgentTools(names: string[]): string[] {
+        if (!agentStore.availableTools.length) return [...new Set(names)]
+        const selectableKeys = new Set(
+            agentStore.availableTools
+                .filter((tool) => !(tool.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(tool.name)))
+                .map((tool) => tool.key)
+        )
+        return normalizeToolKeys(names).filter((name) => selectableKeys.has(name))
+    }
+
     function isEmptyLegacyExecutionConfig(config: ConversationExecutionConfig): boolean {
         return !config.allowedTools.length &&
             !config.subAgents.length &&
@@ -485,15 +496,17 @@ export function useChatAgentConfig(
     }
 
     function setSessionModel(model: string | null, providerId?: string | null): void {
-        sessionModelOverride.value = model || null
         if (activeAgentId.value) {
             const agentDefs = useAgentDefinitionsStore()
             const activeAgent = agentDefs.get(activeAgentId.value)
-            sessionProviderOverride.value = providerId && providerId !== activeAgent?.providerId ? providerId : null
+            const nextProviderId = providerId || activeAgent?.providerId || null
+            sessionProviderOverride.value = nextProviderId !== (activeAgent?.providerId || null) ? nextProviderId : null
+            sessionModelOverride.value = (model || null) !== (activeAgent?.model || null) ? (model || null) : null
             markOverridesModified()
             return
         }
 
+        sessionModelOverride.value = model || null
         sessionProviderOverride.value = providerId || null
         freeChatModelOverride.value = sessionModelOverride.value
         freeChatProviderOverride.value = sessionProviderOverride.value
@@ -536,6 +549,7 @@ export function useChatAgentConfig(
         agentOriginalSubAgentIds,
         agentOriginalMemorySpaceIds,
         hasAgentOverrides,
+        agentOverrideFields,
         hasFreeChatOverrides,
         markOverridesModified,
         setSelectedToolNames,
