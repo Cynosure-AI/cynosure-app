@@ -8,13 +8,16 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatSidebar } from '../../composables/useSidebar'
 import { useChatStore } from '../../stores/chat.store'
+import { useAgentStore } from '../../stores/agent-runtime.store'
 
 const { chatSidebarOpen, toggle } = useChatSidebar()
 const chatStore = useChatStore()
+const agentStore = useAgentStore()
 const route = useRoute()
 const router = useRouter()
 const inputBarRef = ref<InstanceType<typeof InputBar> | null>(null)
 const isDragOver = ref(false)
+const taskListOpen = ref(false)
 let dragCounter = 0
 let syncingFromRoute = false
 
@@ -28,6 +31,16 @@ const showCenteredComposer = computed(() => {
     !chatStore.loadingMessages &&
     chatStore.messages.length === 0
 })
+
+const hasPlanningTasks = computed(() => Boolean(agentStore.planningState?.items.length))
+
+watch(
+  () => agentStore.planningState?.runId,
+  (runId) => {
+    taskListOpen.value = Boolean(runId)
+  },
+  { immediate: true }
+)
 
 function onDragEnter(e: DragEvent) {
   e.preventDefault()
@@ -98,7 +111,12 @@ watch(
 <template>
   <div class="flex flex-col h-full overflow-hidden">
     <!-- Header bar (full width) -->
-    <ChatHeaderBar />
+    <ChatHeaderBar
+      :has-planning-tasks="hasPlanningTasks"
+      :task-list-open="taskListOpen"
+      :planning-task-count="agentStore.planningState?.items.length ?? 0"
+      @toggle-task-list="taskListOpen = !taskListOpen"
+    />
 
     <!-- Main content area: sidebar + chat column -->
     <div class="flex flex-1 min-h-0 relative">
@@ -134,6 +152,11 @@ watch(
         >
           <ChatPanel />
 
+          <PlanningTaskList
+            v-if="taskListOpen"
+            @close="taskListOpen = false"
+          />
+
           <div
             v-if="isDragOver"
             class="absolute inset-0 z-50 flex items-center justify-center bg-theme-900/80 border-2 border-dashed border-accent-500 rounded-lg pointer-events-none"
@@ -151,8 +174,6 @@ watch(
             </div>
           </div>
         </div>
-
-        <PlanningTaskList />
 
         <!-- Input bar (full width of chat column) -->
         <InputBar

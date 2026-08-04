@@ -3,7 +3,6 @@ import { computed, ref, watch, nextTick } from 'vue'
 import { useChatStore } from '../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import InputToolbar from './inputbar/InputToolbar.vue'
-import SaveAgentModal from './inputbar/SaveAgentModal.vue'
 import ContextRing from './inputbar/ContextRing.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 
@@ -304,9 +303,6 @@ defineExpose({ processFiles })
           </button>
         </div>
       </div>
-
-      <!-- Agent override / save-as-agent bars -->
-      <SaveAgentModal />
 
       <!-- Input area: textarea + bottom bar inside a unified container -->
       <div

@@ -6,6 +6,15 @@ import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { Icon } from "@iconify/vue";
 import AgentSelect from "../shared/AgentSelect.vue";
 import { useChatSidebar } from "../../composables/useSidebar";
+import SaveAgentModal from "./inputbar/SaveAgentModal.vue";
+
+defineProps<{
+  hasPlanningTasks: boolean;
+  taskListOpen: boolean;
+  planningTaskCount: number;
+}>();
+
+defineEmits<{ toggleTaskList: [] }>();
 
 const chatStore = useChatStore();
 const providerStore = useProviderStore();
@@ -118,8 +127,8 @@ function onTitleKeydown(e: KeyboardEvent): void {
       />
     </div>
 
-    <!-- Centered conversation title + origin badge -->
-    <div class="flex-1 min-w-0 flex items-center justify-center gap-2">
+    <!-- Centered conversation title + origin badge (hidden on mobile) -->
+    <div class="hidden sm:flex flex-1 min-w-0 items-center justify-center gap-2">
       <input
         v-if="isEditingTitle"
         ref="titleInputRef"
@@ -148,6 +157,35 @@ function onTitleKeydown(e: KeyboardEvent): void {
         {{ activeOrigin.label }}
       </span>
     </div>
+
+    <div class="flex-1 sm:hidden" />
+
+    <SaveAgentModal />
+
+    <!-- Planning task list toggle -->
+    <button
+      type="button"
+      class="relative shrink-0 rounded-lg p-1.5 transition-colors"
+      :class="taskListOpen
+        ? 'bg-accent-500/15 text-accent-300'
+        : hasPlanningTasks ? 'text-theme-300 hover:bg-theme-800' : 'text-theme-600 hover:bg-theme-800 hover:text-theme-400'"
+      :title="hasPlanningTasks ? (taskListOpen ? 'Hide tasks' : 'Show tasks') : 'No planning tasks'"
+      :aria-label="hasPlanningTasks ? (taskListOpen ? 'Hide planning tasks' : 'Show planning tasks') : 'No planning tasks'"
+      :aria-expanded="taskListOpen"
+      :disabled="!hasPlanningTasks"
+      @click="$emit('toggleTaskList')"
+    >
+      <Icon
+        icon="lucide:list-checks"
+        class="h-4 w-4"
+      />
+      <span
+        v-if="hasPlanningTasks"
+        class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-600 px-1 text-[9px] font-semibold leading-none text-white"
+      >
+        {{ planningTaskCount > 9 ? '9+' : planningTaskCount }}
+      </span>
+    </button>
 
     <!-- New Chat button -->
     <button
