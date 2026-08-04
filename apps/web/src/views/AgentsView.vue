@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useProviderStore } from '../stores/provider.store'
@@ -11,6 +11,7 @@ import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import ProviderModelSelect from '../components/shared/ProviderModelSelect.vue'
 import TagInput from '../components/shared/TagInput.vue'
 import MultiSelect from '../components/shared/MultiSelect.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import type { MultiSelectOption } from '../components/shared/MultiSelect.vue'
 import { useProviderLogos } from '../composables/useProviderLogos'
 import type { AgentDefinition } from '../api/types'
@@ -33,13 +34,18 @@ const pendingDeleteName = ref('')
 
 const searchQuery = ref('')
 const selectedTags = ref<string[]>([])
+type AgentSortKey = 'name' | 'tags' | 'model'
+const agentSortKey = ref<AgentSortKey | null>(null)
+const agentSortDirection = ref<'asc' | 'desc'>('asc')
 
 const bulkSelectionIds = ref<string[]>([])
 const bulkProviderId = ref('')
 const bulkModel = ref('')
 const bulkTags = ref<string[]>([])
-const hasBulkProviderModelSelection = ref(false)
-const hasBulkTagsSelection = ref(false)
+const bulkModelEnabled = ref(false)
+const bulkTagsEnabled = ref(false)
+const bulkTagOperation = ref<'add' | 'remove' | 'replace'>('add')
+const bulkTagOperations = ['add', 'remove', 'replace'] as const
 
 const dragReorderId = ref<string | null>(null)
 const dropTargetId = ref<string | null>(null)
@@ -62,9 +68,49 @@ const tagFilterOptions = computed<MultiSelectOption[]>(() =>
   allTags.value.map(tag => ({ value: tag, label: tag }))
 )
 
+const agentCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+function agentSortValue(agent: AgentDefinition, key: AgentSortKey): string {
+  if (key === 'name') return agent.name
+  if (key === 'tags') return [...(agent.tags || [])].sort(agentCollator.compare).join(', ')
+  return `${getModelDisplayName(agent)}\u0000${getProviderName(agent)}`
+}
+
 function agentSort(a: AgentDefinition, b: AgentDefinition): number {
   if (a.favorite !== b.favorite) return a.favorite ? -1 : 1
+  if (agentSortKey.value) {
+    const result = agentCollator.compare(
+      agentSortValue(a, agentSortKey.value),
+      agentSortValue(b, agentSortKey.value)
+    )
+    if (result !== 0) return agentSortDirection.value === 'asc' ? result : -result
+    return agentCollator.compare(a.name, b.name)
+  }
   return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)
+}
+
+function toggleAgentSort(key: AgentSortKey): void {
+  onReorderDragEnd()
+  if (agentSortKey.value !== key) {
+    agentSortKey.value = key
+    agentSortDirection.value = 'asc'
+  } else if (agentSortDirection.value === 'asc') {
+    agentSortDirection.value = 'desc'
+  } else {
+    agentSortKey.value = null
+    agentSortDirection.value = 'asc'
+  }
+}
+
+function agentSortIcon(key: AgentSortKey): string {
+  if (agentSortKey.value !== key) return 'lucide:chevrons-up-down'
+  return agentSortDirection.value === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down'
+}
+
+function agentSortLabel(key: AgentSortKey): string {
+  if (agentSortKey.value !== key) return `Sort by ${key}`
+  if (agentSortDirection.value === 'asc') return `Sort by ${key} descending`
+  return 'Restore custom order'
 }
 
 function matchesSearch(agent: AgentDefinition): boolean {
@@ -117,6 +163,49 @@ const selectedBulkAgents = computed(() => {
   return agentDefs.agents.filter(agent => selectedIds.has(agent.id))
 })
 
+const selectedModelContext = computed(() => {
+  const agents = selectedBulkAgents.value
+  if (!agents.length) return ''
+  const selections = new Set(agents.map(agent => `${agent.providerId}\u0000${agent.model}`))
+  if (selections.size > 1) return `${selections.size} different model configurations`
+  const agent = agents[0]
+  return `Currently ${getModelDisplayName(agent)} · ${getProviderName(agent)}`
+})
+
+const selectedTagContext = computed(() => {
+  const agents = selectedBulkAgents.value
+  if (!agents.length) return ''
+  const tagSets = new Set(agents.map(agent =>
+    [...(agent.tags || [])].map(tag => tag.toLowerCase()).sort().join('\u0000')
+  ))
+  if (tagSets.size === 1) {
+    const tags = agents[0].tags || []
+    return tags.length ? `Currently ${tags.join(', ')}` : 'Currently no tags'
+  }
+  const commonTags = (agents[0].tags || []).filter(tag =>
+    agents.every(agent => (agent.tags || []).some(item => item.toLowerCase() === tag.toLowerCase()))
+  )
+  return commonTags.length
+    ? `Mixed tags · shared: ${commonTags.join(', ')}`
+    : 'Mixed tags · no tags shared by every selected agent'
+})
+
+const hasValidBulkModelChange = computed(() => bulkModelEnabled.value && Boolean(bulkProviderId.value))
+const hasValidBulkTagChange = computed(() =>
+  bulkTagsEnabled.value && (bulkTagOperation.value === 'replace' || bulkTags.value.length > 0)
+)
+const canApplyBulkChanges = computed(() => hasValidBulkModelChange.value || hasValidBulkTagChange.value)
+const bulkApplySummary = computed(() => {
+  const operations: string[] = []
+  if (hasValidBulkModelChange.value) operations.push('change the model')
+  if (hasValidBulkTagChange.value) {
+    if (bulkTagOperation.value === 'replace' && bulkTags.value.length === 0) operations.push('clear all tags')
+    else operations.push(`${bulkTagOperation.value} ${bulkTags.value.length} tag${bulkTags.value.length === 1 ? '' : 's'}`)
+  }
+  if (!operations.length) return 'Choose at least one change'
+  return `${operations.join(' and ')} for ${selectedAgentCount.value} agent${selectedAgentCount.value === 1 ? '' : 's'}`
+})
+
 function isAgentSelected(agentId: string): boolean {
   return bulkSelectionIds.value.includes(agentId)
 }
@@ -143,26 +232,10 @@ function clearBulkSelection(): void {
   bulkProviderId.value = ''
   bulkModel.value = ''
   bulkTags.value = []
-  hasBulkProviderModelSelection.value = false
-  hasBulkTagsSelection.value = false
+  bulkModelEnabled.value = false
+  bulkTagsEnabled.value = false
+  bulkTagOperation.value = 'add'
 }
-
-function tagsForSelectedAgents(): string[] {
-  const tagMap = new Map<string, string>()
-  for (const agent of selectedBulkAgents.value) {
-    for (const tag of agent.tags || []) {
-      const key = tag.toLowerCase()
-      if (!tagMap.has(key)) tagMap.set(key, tag)
-    }
-  }
-  return [...tagMap.values()].sort((a, b) => a.localeCompare(b))
-}
-
-watch(bulkSelectionIds, () => {
-  if (!hasBulkTagsSelection.value) {
-    bulkTags.value = tagsForSelectedAgents()
-  }
-})
 
 function toggleAgentSelection(agentId: string, selected?: boolean): void {
   const current = new Set(bulkSelectionIds.value)
@@ -198,16 +271,18 @@ function clearFilters(): void {
 }
 
 async function applyBulkChanges(): Promise<void> {
-  if (!isBulkMode.value || (!hasBulkProviderModelSelection.value && !hasBulkTagsSelection.value)) return
+  if (!isBulkMode.value || !canApplyBulkChanges.value) return
   const ids = [...bulkSelectionIds.value]
   await Promise.all(ids.map(id => {
+    const agent = agentDefs.get(id)
+    if (!agent) return Promise.resolve()
     const updates: Partial<Omit<AgentDefinition, 'id' | 'createdAt' | 'updatedAt'>> = {}
-    if (hasBulkProviderModelSelection.value) {
+    if (hasValidBulkModelChange.value) {
       updates.providerId = bulkProviderId.value
       updates.model = bulkModel.value
     }
-    if (hasBulkTagsSelection.value) {
-      updates.tags = [...bulkTags.value]
+    if (hasValidBulkTagChange.value) {
+      updates.tags = applyTagOperation(agent.tags || [], bulkTags.value, bulkTagOperation.value)
     }
     return agentDefs.update(id, updates)
   }))
@@ -216,7 +291,27 @@ async function applyBulkChanges(): Promise<void> {
 
 function updateBulkTags(tags: string[]): void {
   bulkTags.value = tags
-  hasBulkTagsSelection.value = true
+}
+
+function applyTagOperation(
+  currentTags: string[],
+  selected: string[],
+  operation: 'add' | 'remove' | 'replace'
+): string[] {
+  if (operation === 'replace') return [...selected]
+  const selectedKeys = new Set(selected.map(tag => tag.toLowerCase()))
+  if (operation === 'remove') {
+    return currentTags.filter(tag => !selectedKeys.has(tag.toLowerCase()))
+  }
+  const result = [...currentTags]
+  const resultKeys = new Set(result.map(tag => tag.toLowerCase()))
+  for (const tag of selected) {
+    if (!resultKeys.has(tag.toLowerCase())) {
+      result.push(tag)
+      resultKeys.add(tag.toLowerCase())
+    }
+  }
+  return result
 }
 
 async function createAgent() {
@@ -266,6 +361,7 @@ async function toggleFavorite(agent: AgentDefinition): Promise<void> {
 }
 
 function onReorderDragStart(e: DragEvent, agentId: string) {
+  if (agentSortKey.value) return
   dragReorderId.value = agentId
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move'
@@ -274,6 +370,7 @@ function onReorderDragStart(e: DragEvent, agentId: string) {
 }
 
 function onReorderDragOver(e: DragEvent, targetId: string) {
+  if (agentSortKey.value) return
   e.preventDefault()
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
   if (!dragReorderId.value || dragReorderId.value === targetId) {
@@ -416,48 +513,172 @@ function formatDate(ts: number): string {
 
       <div
         v-if="isBulkMode"
-        class="mb-5 flex flex-col gap-3 rounded-xl border border-accent-500/30 bg-accent-500/8 px-4 py-3 md:flex-row md:items-start md:justify-between"
+        class="mb-5 rounded-xl border border-accent-500/30 bg-accent-500/8 p-4"
       >
-        <div class="text-sm text-theme-200">
-          {{ selectedAgentCount }} agent{{ selectedAgentCount === 1 ? '' : 's' }} selected
+        <div class="mb-3 flex items-center gap-3">
+          <div class="text-sm font-medium text-theme-200">
+            {{ selectedAgentCount }} agent{{ selectedAgentCount === 1 ? '' : 's' }} selected
+          </div>
         </div>
-        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-end md:flex-1">
-          <div class="min-w-0 md:min-w-72">
-            <TagInput
-              :model-value="bulkTags"
-              :suggestions="allTags"
-              placeholder="Set tags for selected agents"
-              input-class="py-1.5"
-              @update:model-value="updateBulkTags"
-            />
-          </div>
-          <div class="min-w-0 md:min-w-80">
-            <ProviderModelSelect
-              :provider-id="bulkProviderId"
-              :model-value="bulkModel"
-              :providers="providerStore.providers"
-              :model-types="['llm', 'image', 'video', 'transcription']"
-              placeholder="Set model for selected agents"
-              size="sm"
-              dropdown-width="w-[28rem]"
-              @update:provider-id="bulkProviderId = $event"
-              @update:model-value="bulkModel = $event"
-              @change="hasBulkProviderModelSelection = Boolean($event.providerId)"
-            />
-          </div>
-          <div class="flex items-center gap-2">
+
+        <div class="grid gap-3 lg:grid-cols-2">
+          <section
+            class="rounded-lg border p-3 transition-colors"
+            :class="bulkModelEnabled ? 'border-accent-500/40 bg-theme-900/70' : 'border-theme-800 bg-theme-900/35'"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 text-sm font-medium text-theme-200">
+                  <Icon
+                    icon="lucide:cpu"
+                    class="h-4 w-4 text-theme-500"
+                  />
+                  Change model
+                </div>
+                <p
+                  class="mt-1 truncate text-[11px] text-theme-500"
+                  :title="selectedModelContext"
+                >
+                  {{ selectedModelContext }}
+                </p>
+              </div>
+              <ToggleSwitch
+                v-model="bulkModelEnabled"
+                size="sm"
+                label="Change model for selected agents"
+              />
+            </div>
+            <div
+              v-if="bulkModelEnabled"
+              class="mt-3"
+            >
+              <ProviderModelSelect
+                :provider-id="bulkProviderId"
+                :model-value="bulkModel"
+                :providers="providerStore.providers"
+                :model-types="['llm', 'image', 'video', 'transcription']"
+                placeholder="Choose the new model"
+                size="sm"
+                dropdown-width="w-[28rem]"
+                @update:provider-id="bulkProviderId = $event"
+                @update:model-value="bulkModel = $event"
+              />
+              <p
+                v-if="!bulkProviderId"
+                class="mt-1.5 text-[11px] text-amber-400/80"
+              >
+                Select a model before applying.
+              </p>
+            </div>
+            <p
+              v-else
+              class="mt-3 text-xs text-theme-600"
+            >
+              Models will remain unchanged.
+            </p>
+          </section>
+
+          <section
+            class="rounded-lg border p-3 transition-colors"
+            :class="bulkTagsEnabled ? 'border-accent-500/40 bg-theme-900/70' : 'border-theme-800 bg-theme-900/35'"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 text-sm font-medium text-theme-200">
+                  <Icon
+                    icon="lucide:tags"
+                    class="h-4 w-4 text-theme-500"
+                  />
+                  Change tags
+                </div>
+                <p
+                  class="mt-1 truncate text-[11px] text-theme-500"
+                  :title="selectedTagContext"
+                >
+                  {{ selectedTagContext }}
+                </p>
+              </div>
+              <ToggleSwitch
+                v-model="bulkTagsEnabled"
+                size="sm"
+                label="Change tags for selected agents"
+              />
+            </div>
+
+            <div
+              v-if="bulkTagsEnabled"
+              class="mt-3"
+            >
+              <div
+                class="mb-3 grid grid-cols-3 rounded-lg bg-theme-950/70 p-1"
+                role="group"
+                aria-label="Tag operation"
+              >
+                <button
+                  v-for="operation in bulkTagOperations"
+                  :key="operation"
+                  type="button"
+                  class="rounded-md px-2 py-1.5 text-xs capitalize transition-colors"
+                  :class="bulkTagOperation === operation
+                    ? 'bg-theme-700 text-theme-100 shadow-sm'
+                    : 'text-theme-500 hover:text-theme-300'"
+                  :aria-pressed="bulkTagOperation === operation"
+                  @click="bulkTagOperation = operation"
+                >
+                  {{ operation }}
+                </button>
+              </div>
+              <TagInput
+                :model-value="bulkTags"
+                :suggestions="allTags"
+                :placeholder="bulkTagOperation === 'add'
+                  ? 'Tags to add'
+                  : bulkTagOperation === 'remove' ? 'Tags to remove' : 'Replacement tags'"
+                input-class="py-1.5"
+                @update:model-value="updateBulkTags"
+              />
+              <p
+                v-if="bulkTagOperation === 'replace' && bulkTags.length === 0"
+                class="mt-1.5 text-[11px] text-amber-400/80"
+              >
+                Applying this will clear all tags from the selected agents.
+              </p>
+              <p
+                v-else-if="bulkTags.length === 0"
+                class="mt-1.5 text-[11px] text-amber-400/80"
+              >
+                Choose at least one tag before applying.
+              </p>
+            </div>
+            <p
+              v-else
+              class="mt-3 text-xs text-theme-600"
+            >
+              Tags will remain unchanged.
+            </p>
+          </section>
+        </div>
+
+        <div class="mt-3 flex flex-col gap-2 border-t border-theme-800/80 pt-3 sm:flex-row sm:items-center sm:justify-between">
+          <p
+            class="text-xs"
+            :class="canApplyBulkChanges ? 'text-theme-400' : 'text-theme-600'"
+          >
+            {{ bulkApplySummary }}
+          </p>
+          <div class="flex items-center gap-2 self-end sm:self-auto">
             <button
-              class="px-3 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
-              :disabled="!hasBulkProviderModelSelection && !hasBulkTagsSelection"
+              class="rounded-lg bg-accent-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="!canApplyBulkChanges"
               @click="applyBulkChanges"
             >
-              Apply
+              Apply changes
             </button>
             <button
-              class="px-3 py-2 rounded-lg bg-theme-800 hover:bg-theme-700 text-theme-300 text-sm font-medium transition-colors"
+              class="rounded-lg bg-theme-800 px-3 py-2 text-sm font-medium text-theme-300 transition-colors hover:bg-theme-700"
               @click="clearBulkSelection"
             >
-              Clear
+              Cancel
             </button>
           </div>
         </div>
@@ -469,12 +690,61 @@ function formatDate(ts: number): string {
       >
         <div class="agent-grid bg-theme-900/70 border-b border-theme-800 px-5 py-3 text-[11px] tracking-wider uppercase text-theme-400">
           <div class="flex items-center" />
-          <div>Name</div>
-          <div class="hidden md:block">
-            Tags
+          <div
+            role="columnheader"
+            :aria-sort="agentSortKey === 'name' ? (agentSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
+          >
+            <button
+              type="button"
+              class="flex items-center gap-1.5 transition-colors hover:text-theme-200"
+              :class="{ 'text-accent-300': agentSortKey === 'name' }"
+              :aria-label="agentSortLabel('name')"
+              @click="toggleAgentSort('name')"
+            >
+              Name
+              <Icon
+                :icon="agentSortIcon('name')"
+                class="h-3.5 w-3.5"
+              />
+            </button>
           </div>
-          <div class="hidden lg:block">
-            Model/Provider
+          <div
+            class="hidden md:block"
+            role="columnheader"
+            :aria-sort="agentSortKey === 'tags' ? (agentSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
+          >
+            <button
+              type="button"
+              class="flex items-center gap-1.5 transition-colors hover:text-theme-200"
+              :class="{ 'text-accent-300': agentSortKey === 'tags' }"
+              :aria-label="agentSortLabel('tags')"
+              @click="toggleAgentSort('tags')"
+            >
+              Tags
+              <Icon
+                :icon="agentSortIcon('tags')"
+                class="h-3.5 w-3.5"
+              />
+            </button>
+          </div>
+          <div
+            class="hidden lg:block"
+            role="columnheader"
+            :aria-sort="agentSortKey === 'model' ? (agentSortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
+          >
+            <button
+              type="button"
+              class="flex items-center gap-1.5 transition-colors hover:text-theme-200"
+              :class="{ 'text-accent-300': agentSortKey === 'model' }"
+              :aria-label="agentSortLabel('model')"
+              @click="toggleAgentSort('model')"
+            >
+              Model/Provider
+              <Icon
+                :icon="agentSortIcon('model')"
+                class="h-3.5 w-3.5"
+              />
+            </button>
           </div>
           <div class="hidden xl:block">
             Info
@@ -515,12 +785,15 @@ function formatDate(ts: number): string {
           </div>
 
           <div
-            class="flex items-start gap-3 min-w-0 cursor-grab active:cursor-grabbing"
+            class="flex items-start gap-3 min-w-0"
             :class="{
+              'cursor-grab active:cursor-grabbing': !agentSortKey,
+              'cursor-pointer': agentSortKey,
               'opacity-60': dragReorderId === item.id,
               'ring-1 ring-accent-500/70 ring-inset rounded-lg': dropTargetId === item.id,
             }"
-            draggable="true"
+            :draggable="!agentSortKey"
+            :title="agentSortKey ? 'Clear column sorting to drag-reorder agents' : undefined"
             @dragstart="onReorderDragStart($event, item.id)"
             @dragover="onReorderDragOver($event, item.id)"
             @dragleave="onReorderDragLeave($event, item.id)"
