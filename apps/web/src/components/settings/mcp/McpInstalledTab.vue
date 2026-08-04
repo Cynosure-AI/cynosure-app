@@ -267,10 +267,16 @@ async function saveEditing(id: string): Promise<void> {
 }
 
 async function toggleServer(id: string): Promise<void> {
-  const result = await api.mcp.toggleServer(id)
-  if (result.error) actionError.value[id] = result.error
-  else delete actionError.value[id]
-  await refreshAll()
+  if (isLoading(id)) return
+  setLoading(id, true)
+  try {
+    const result = await api.mcp.toggleServer(id)
+    if (result.error) actionError.value[id] = result.error
+    else delete actionError.value[id]
+    await refreshAll()
+  } finally {
+    setLoading(id, false)
+  }
 }
 
 async function reconnectServer(id: string): Promise<void> {
@@ -467,6 +473,7 @@ defineExpose({ loadServers })
       :columns="tableColumns"
       initial-sort-key="enable"
       initial-sort-direction="desc"
+      :initial-sort-once="true"
       empty-message="No servers found"
     >
       <!-- Server column -->
@@ -644,11 +651,13 @@ defineExpose({ loadServers })
         <ToggleSwitch
           v-if="!editingId || editingId !== server.id"
           :model-value="server.enabled"
+          :disabled="isLoading(server.id)"
           :label="server.enabled ? `Disable ${server.name}` : `Enable ${server.name}`"
           size="sm"
           color="green"
           :title="server.enabled ? 'Disable' : 'Enable'"
           @update:model-value="toggleServer(server.id)"
+          @click.stop
         />
       </template>
 

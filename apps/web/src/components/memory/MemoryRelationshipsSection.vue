@@ -24,7 +24,8 @@ const emit = defineEmits<{
 
 const PAGE_SIZE = 30;
 const selectedIds = ref<string[]>([]);
-const currentPage = ref(1);
+const currentPage = ref(0);
+const visibleEdges = ref<EntityGraphEdge[]>([]);
 
 const columns: Column<EntityGraphEdge>[] = [
   { key: "fromName", label: "From", width: "minmax(0, 1.5fr)", sortable: true },
@@ -72,18 +73,11 @@ const filteredEdges = computed(() =>
   (props.graph?.edges || []).filter((edge) => edgeMatchesQuery(edge, props.graphQuery)),
 );
 
-const pageCount = computed(() => Math.max(1, Math.ceil(filteredEdges.value.length / PAGE_SIZE)));
-
-const pagedEdges = computed(() => {
-  const start = (currentPage.value - 1) * PAGE_SIZE;
-  return filteredEdges.value.slice(start, start + PAGE_SIZE);
-});
-
-const pageStart = computed(() => filteredEdges.value.length ? (currentPage.value - 1) * PAGE_SIZE + 1 : 0);
-const pageEnd = computed(() => Math.min(currentPage.value * PAGE_SIZE, filteredEdges.value.length));
+const pageStart = computed(() => filteredEdges.value.length ? currentPage.value * PAGE_SIZE + 1 : 0);
+const pageEnd = computed(() => Math.min((currentPage.value + 1) * PAGE_SIZE, filteredEdges.value.length));
 
 const selectedPageCount = computed(() =>
-  pagedEdges.value.filter((edge) => selectedIds.value.includes(edge.id)).length,
+  visibleEdges.value.filter((edge) => selectedIds.value.includes(edge.id)).length,
 );
 
 const selectedFilteredCount = computed(() =>
@@ -91,11 +85,7 @@ const selectedFilteredCount = computed(() =>
 );
 
 watch(() => props.graphQuery, () => {
-  currentPage.value = 1;
-});
-
-watch(filteredEdges, () => {
-  if (currentPage.value > pageCount.value) currentPage.value = pageCount.value;
+  currentPage.value = 0;
 });
 
 function mergeSelection(ids: string[]) {
@@ -103,7 +93,7 @@ function mergeSelection(ids: string[]) {
 }
 
 function selectPage() {
-  mergeSelection(pagedEdges.value.map((edge) => edge.id));
+  mergeSelection(visibleEdges.value.map((edge) => edge.id));
 }
 
 function selectAllFiltered() {
@@ -225,7 +215,7 @@ function handleBulkDelete() {
           <button
             type="button"
             class="inline-flex items-center gap-1.5 rounded-md border border-theme-700 px-3 py-1 text-xs text-theme-300 hover:bg-theme-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="pagedEdges.length === 0 || selectedPageCount === pagedEdges.length"
+            :disabled="visibleEdges.length === 0 || selectedPageCount === visibleEdges.length"
             @click="selectPage"
           >
             <Icon
@@ -271,12 +261,16 @@ function handleBulkDelete() {
 
       <DataTable
         v-model:selected-ids="selectedIds"
-        :items="pagedEdges"
+        v-model:page="currentPage"
+        :items="filteredEdges"
         :columns="columns"
         :selectable="true"
+        :pagination="true"
+        :page-size="PAGE_SIZE"
         initial-sort-key="lastSeenAt"
         initial-sort-direction="desc"
         :empty-message="graphQuery.trim() ? 'No relationships match this search.' : 'No relationships have been extracted yet.'"
+        @visible-items-change="visibleEdges = $event"
       >
         <template #col-fromName="{ item }">
           <span class="font-medium text-theme-100">{{ item.fromName }}</span>
@@ -346,39 +340,6 @@ function handleBulkDelete() {
           </div>
         </template>
       </DataTable>
-
-      <div
-        v-if="filteredEdges.length > PAGE_SIZE"
-        class="mt-4 flex flex-col gap-2 text-sm text-theme-400 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <span>Page {{ currentPage }} of {{ pageCount }}</span>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700 px-3 py-1.5 text-xs text-theme-300 hover:bg-theme-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="currentPage <= 1"
-            @click="currentPage--"
-          >
-            <Icon
-              icon="lucide:chevron-left"
-              class="w-3.5 h-3.5"
-            />
-            Previous
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700 px-3 py-1.5 text-xs text-theme-300 hover:bg-theme-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="currentPage >= pageCount"
-            @click="currentPage++"
-          >
-            Next
-            <Icon
-              icon="lucide:chevron-right"
-              class="w-3.5 h-3.5"
-            />
-          </button>
-        </div>
-      </div>
     </template>
   </div>
 </template>

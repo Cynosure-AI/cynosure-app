@@ -53,6 +53,7 @@ const uploadResults = ref<{ fileName: string; chunks: number; error?: string }[]
 // Search + pagination
 const searchQuery = ref("");
 const page = ref(0);
+const visibleDocumentRows = ref<DocumentRow[]>([]);
 
 const currentSpace = computed(() => props.spaces.find((s) => s.id === props.spaceId));
 
@@ -63,13 +64,6 @@ const filteredFiles = computed(() => {
 });
 
 const documentRows = computed<DocumentRow[]>(() => filteredFiles.value.map((file) => ({ ...file, id: file.fileName })));
-
-const totalPages = computed(() => Math.max(1, Math.ceil(documentRows.value.length / FILES_PAGE_SIZE)));
-
-const pagedFiles = computed<DocumentRow[]>(() => {
-  const start = page.value * FILES_PAGE_SIZE;
-  return documentRows.value.slice(start, start + FILES_PAGE_SIZE);
-});
 
 const selectedFileIds = computed({
   get: () => Array.from(selectedFiles.value),
@@ -84,7 +78,7 @@ const columns: Column<DocumentRow>[] = [
   { key: "chunkCount", label: "Chunks", width: "96px", sortable: true, sortValue: (file) => file.chunkCount || 0 },
   { key: "entityIndexed", label: "Graph", width: "88px", sortable: true, sortValue: (file) => file.entityIndexed },
   { key: "status", label: "Status", width: "140px", sortable: true, sortValue: (file) => file.status },
-  { key: "actions", label: "Actions", width: "190px" },
+  { key: "actions", label: "Actions", width: "190px", class: "text-right" },
 ];
 
 const allFilteredSelected = computed(
@@ -188,7 +182,7 @@ function stopJobsPolling() {
 }
 
 function selectAllOnPage() {
-  selectedFiles.value = new Set(pagedFiles.value.filter((f) => f.supported).map((f) => f.fileName));
+  selectedFiles.value = new Set(visibleDocumentRows.value.filter((f) => f.supported).map((f) => f.fileName));
 }
 
 function selectAll() {
@@ -436,10 +430,6 @@ watch(
   },
   { immediate: true },
 );
-
-watch(documentRows, () => {
-  if (page.value > totalPages.value - 1) page.value = totalPages.value - 1;
-});
 
 onUnmounted(() => {
   stopJobsPolling();
@@ -713,6 +703,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       :columns="columns"
       :selectable="true"
       :row-selectable="(file) => file.supported"
+      :row-clickable="true"
       :row-draggable="true"
       :row-class="(file) => !file.supported ? 'opacity-50' : file.textDirect ? 'cursor-pointer' : undefined"
       :pagination="true"
@@ -723,6 +714,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       :empty-message="searchQuery.trim() ? `No files matching '${searchQuery.trim()}'` : 'No files in this folder yet.'"
       @row-click="(file) => openEditorModal(file.fileName)"
       @row-dragstart="(file, event) => startDocumentDrag(event, file.fileName)"
+      @visible-items-change="visibleDocumentRows = $event"
     >
       <template #col-fileName="{ item: file }">
         <div class="flex min-w-0 items-center gap-3">

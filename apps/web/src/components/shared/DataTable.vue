@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T extends { id: string }">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 
 export interface Column<TItem = unknown> {
@@ -24,10 +24,12 @@ interface Props<TItem> {
   selectedIds?: string[]
   initialSortKey?: string | null
   initialSortDirection?: 'asc' | 'desc'
+  initialSortOnce?: boolean
   showHeader?: boolean
   emptyMessage?: string
   loading?: boolean
   rowClass?: (item: TItem) => string | undefined
+  rowClickable?: boolean
   rowDraggable?: boolean | ((item: TItem) => boolean)
   pagination?: boolean
   page?: number
@@ -41,11 +43,13 @@ const props = withDefaults(defineProps<Props<T>>(), {
   selectedIds: () => [],
   initialSortKey: null,
   initialSortDirection: 'asc',
+  initialSortOnce: false,
   selectionColumn: () => ({
     width: '40px',
   }),
   rowClass: undefined,
   rowSelectable: undefined,
+  rowClickable: false,
   rowDraggable: false,
   pagination: false,
   page: 0,
@@ -60,10 +64,11 @@ const emit = defineEmits<{
   'row-dragstart': [item: T, event: DragEvent]
   'selection-change': [value: string[]]
   'page-change': [value: number]
+  'visible-items-change': [value: T[]]
 }>()
 
 const showSelectableColumn = computed(() => Boolean(props.selectable))
-const sortColumnKey = ref<string | null>(props.initialSortKey)
+const sortColumnKey = ref<string | null>(props.initialSortOnce ? null : props.initialSortKey)
 const sortDirection = ref<'asc' | 'desc'>(props.initialSortDirection)
 
 // Ensure fr-based column widths have a minimum so they don't collapse to 0
@@ -82,6 +87,26 @@ const gridColsTemplate = computed(() => {
     .join(' ')
   const selectionWidth = props.selectionColumn?.width || '40px'
   return showSelectableColumn.value ? `${selectionWidth} ${columnWidths}` : columnWidths
+})
+
+function minimumWidthPx(width: string, fallback = 150): number {
+  const value = withFrMinimum(width).trim()
+  const fixed = value.match(/^(\d*\.?\d+)px$/)
+  if (fixed) return Number(fixed[1])
+  const minmax = value.match(/^minmax\(\s*(\d*\.?\d+)px\s*,/)
+  return minmax ? Number(minmax[1]) : fallback
+}
+
+// Row borders live outside the grid itself. Give their shared wrapper the same
+// minimum width as the columns so separators and expanded rows span overflow.
+const gridMinWidth = computed(() => {
+  const widths = props.columns.map(column => minimumWidthPx(column.width || 'minmax(0, 1fr)'))
+  if (showSelectableColumn.value) {
+    widths.unshift(minimumWidthPx(props.selectionColumn?.width || '40px', 40))
+  }
+  const gaps = Math.max(0, widths.length - 1) * 16
+  const horizontalPadding = 40
+  return `${widths.reduce((total, width) => total + width, 0) + gaps + horizontalPadding}px`
 })
 
 function toggleSelection(id: string) {
@@ -113,9 +138,17 @@ function toggleSelectAll() {
 }
 
 function handleRowClick(item: T, event: MouseEvent) {
+  if (!props.rowClickable) return
   // Don't trigger row click if clicking on checkbox
   const target = event.target as HTMLElement
   if ((target as HTMLInputElement).type === 'checkbox') return
+  emit('row-click', item)
+}
+
+function handleRowKeydown(item: T, event: KeyboardEvent) {
+  if (!props.rowClickable || event.key !== 'Enter') return
+  const target = event.target as HTMLElement
+  if (target !== event.currentTarget) return
   emit('row-click', item)
 }
 
@@ -165,32 +198,64 @@ function valueForSort(item: T, column: Column<T>): string | number | boolean | n
 }
 
 function compareValues(a: string | number | boolean | null | undefined, b: string | number | boolean | null | undefined): number {
-  if (a == null && b == null) return 0
-  if (a == null) return 1
-  if (b == null) return -1
   if (typeof a === 'number' && typeof b === 'number') return a - b
   if (typeof a === 'boolean' && typeof b === 'boolean') return Number(a) - Number(b)
   return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
 }
 
+function compareForSort(
+  a: string | number | boolean | null | undefined,
+  b: string | number | boolean | null | undefined,
+  direction: 1 | -1,
+): number {
+  // Missing values stay at the end in either direction.
+  if (a == null && b == null) return 0
+  if (a == null) return 1
+  if (b == null) return -1
+  return compareValues(a, b) * direction
+}
+
+const initialOrderById = new Map<string, number>()
+if (props.initialSortOnce && props.initialSortKey) {
+  const column = props.columns.find(col => col.key === props.initialSortKey)
+  if (column?.sortable) {
+    const direction = props.initialSortDirection === 'asc' ? 1 : -1
+    const initiallySorted = [...props.items].sort(
+      (a, b) => compareForSort(valueForSort(a, column), valueForSort(b, column), direction),
+    )
+    initiallySorted.forEach((item, index) => initialOrderById.set(item.id, index))
+  }
+}
+
 const sortedItems = computed(() => {
-  if (!sortColumnKey.value) return props.items
+  const baseItems = [...props.items]
+  if (initialOrderById.size) {
+    baseItems.sort((a, b) => {
+      const aRank = initialOrderById.get(a.id) ?? Number.MAX_SAFE_INTEGER
+      const bRank = initialOrderById.get(b.id) ?? Number.MAX_SAFE_INTEGER
+      return aRank - bRank
+    })
+  }
+
+  if (!sortColumnKey.value) return baseItems
 
   const column = props.columns.find(col => col.key === sortColumnKey.value)
-  if (!column?.sortable) return props.items
+  if (!column?.sortable) return baseItems
 
   const direction = sortDirection.value === 'asc' ? 1 : -1
-  return [...props.items].sort((a, b) => compareValues(valueForSort(a, column), valueForSort(b, column)) * direction)
+  return baseItems.sort((a, b) => compareForSort(valueForSort(a, column), valueForSort(b, column), direction))
 })
 
-const pageCount = computed(() => Math.max(1, Math.ceil(sortedItems.value.length / props.pageSize)))
+const normalizedPageSize = computed(() => Math.max(1, Math.floor(props.pageSize)))
+const pageCount = computed(() => Math.max(1, Math.ceil(sortedItems.value.length / normalizedPageSize.value)))
 const currentPage = computed(() => Math.min(Math.max(0, props.page), pageCount.value - 1))
 const visibleItems = computed(() => {
   if (!props.pagination) return sortedItems.value
-  const start = currentPage.value * props.pageSize
-  return sortedItems.value.slice(start, start + props.pageSize)
+  const start = currentPage.value * normalizedPageSize.value
+  return sortedItems.value.slice(start, start + normalizedPageSize.value)
 })
-const showPagination = computed(() => props.pagination && sortedItems.value.length > props.pageSize)
+watch(visibleItems, items => emit('visible-items-change', items), { immediate: true })
+const showPagination = computed(() => props.pagination && sortedItems.value.length > normalizedPageSize.value)
 const showTopPagination = computed(() => showPagination.value && (props.paginationPosition === 'top' || props.paginationPosition === 'both'))
 const showBottomPagination = computed(() => showPagination.value && (props.paginationPosition === 'bottom' || props.paginationPosition === 'both'))
 
@@ -199,6 +264,10 @@ function setPage(nextPage: number) {
   emit('update:page', normalized)
   emit('page-change', normalized)
 }
+
+watch([pageCount, () => props.page], () => {
+  if (props.page !== currentPage.value) setPage(currentPage.value)
+}, { immediate: true })
 
 const selectableVisibleItems = computed(() => visibleItems.value.filter(isSelectable))
 const pageSelectedCount = computed(() => selectableVisibleItems.value.filter((item) => props.selectedIds.includes(item.id)).length)
@@ -235,111 +304,118 @@ const anySelected = computed(() => props.selectedIds.length > 0)
       </button>
     </div>
 
-    <!-- Header Row -->
     <div
-      v-if="showHeader"
-      class="grid gap-4 px-5 py-3 text-[11px] tracking-wider uppercase text-theme-400 bg-theme-900/70 border-b border-theme-800 dt-grid items-start"
-      :style="{ '--dt-cols': gridColsTemplate }"
+      class="dt-content"
+      :style="{ '--dt-min-width': gridMinWidth }"
     >
-      <!-- Select All Checkbox -->
+      <!-- Header Row -->
       <div
-        v-if="showSelectableColumn"
-        class="flex items-center"
+        v-if="showHeader"
+        class="grid gap-4 px-5 py-3 text-[11px] tracking-wider uppercase text-theme-400 bg-theme-900/70 border-b border-theme-800 dt-grid items-start"
+        :style="{ '--dt-cols': gridColsTemplate }"
       >
-        <input
-          type="checkbox"
-          class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer"
-          :checked="allSelected"
-          :indeterminate="someSelected"
-          @change="toggleSelectAll"
-        >
-      </div>
-
-      <!-- Column Headers -->
-      <div
-        v-for="col in columns"
-        :key="col.key"
-        :class="col.class"
-      >
-        <button
-          v-if="col.sortable"
-          type="button"
-          class="inline-flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-theme-200"
-          :aria-sort="sortColumnKey === col.key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
-          @click="toggleSort(col)"
-        >
-          <span class="truncate">{{ col.label }}</span>
-          <Icon
-            :icon="sortIcon(col)"
-            class="h-3.5 w-3.5 shrink-0"
-            :class="sortColumnKey === col.key ? 'text-accent-400' : 'text-theme-600'"
-          />
-        </button>
-        <template v-else>
-          {{ col.label }}
-        </template>
-      </div>
-    </div>
-
-    <!-- Data Rows -->
-    <div>
-      <div
-        v-for="item in visibleItems"
-        :key="item.id"
-        class="group border-b border-theme-800/70 last:border-b-0 cursor-pointer hover:bg-theme-800/30 transition-colors"
-        :class="rowClass?.(item)"
-        :draggable="isDraggable(item)"
-        @click="handleRowClick(item, $event)"
-        @dragstart.stop="handleDragStart(item, $event)"
-      >
+        <!-- Select All Checkbox -->
         <div
-          class="grid gap-4 px-5 py-4 items-start dt-grid"
-          :style="{ '--dt-cols': gridColsTemplate }"
+          v-if="showSelectableColumn"
+          class="flex items-center"
         >
-          <!-- Selection Checkbox -->
-          <div
-            v-if="showSelectableColumn"
-            class="flex items-center pt-1"
-            @click.stop
+          <input
+            type="checkbox"
+            class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer"
+            :checked="allSelected"
+            :indeterminate="someSelected"
+            @change="toggleSelectAll"
           >
-            <input
-              v-if="isSelectable(item)"
-              type="checkbox"
-              class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-              :class="{ 'opacity-100': anySelected || isSelected(item.id) }"
-              :checked="isSelected(item.id)"
-              @change="toggleSelection(item.id)"
-            >
-            <span
-              v-else
-              class="h-4 w-4"
-            />
-          </div>
+        </div>
 
-          <!-- Column Content (via slots) -->
-          <template
-            v-for="col in columns"
-            :key="col.key"
+        <!-- Column Headers -->
+        <div
+          v-for="col in columns"
+          :key="col.key"
+          :class="col.class"
+        >
+          <button
+            v-if="col.sortable"
+            type="button"
+            class="inline-flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-theme-200"
+            :aria-sort="sortColumnKey === col.key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
+            @click="toggleSort(col)"
           >
-            <div>
-              <slot
-                :name="`col-${col.key}`"
-                :item="item"
-                :column="col"
-              >
-                <!-- Fallback: render simple text if no slot provided -->
-                <div :class="col.class">
-                  {{ (item as Record<string, unknown>)[col.key] }}
-                </div>
-              </slot>
-            </div>
+            <span class="truncate">{{ col.label }}</span>
+            <Icon
+              :icon="sortIcon(col)"
+              class="h-3.5 w-3.5 shrink-0"
+              :class="sortColumnKey === col.key ? 'text-accent-400' : 'text-theme-600'"
+            />
+          </button>
+          <template v-else>
+            {{ col.label }}
           </template>
         </div>
-        <!-- Full-width expandable section below grid row -->
-        <slot
-          name="row-expand"
-          :item="item"
-        />
+      </div>
+
+      <!-- Data Rows -->
+      <div>
+        <div
+          v-for="item in visibleItems"
+          :key="item.id"
+          class="group border-b border-theme-800/70 last:border-b-0 hover:bg-theme-800/30 transition-colors"
+          :class="[rowClass?.(item), { 'cursor-pointer': rowClickable }]"
+          :draggable="isDraggable(item)"
+          :tabindex="rowClickable ? 0 : undefined"
+          @click="handleRowClick(item, $event)"
+          @keydown="handleRowKeydown(item, $event)"
+          @dragstart.stop="handleDragStart(item, $event)"
+        >
+          <div
+            class="grid gap-4 px-5 py-4 items-start dt-grid"
+            :style="{ '--dt-cols': gridColsTemplate }"
+          >
+            <!-- Selection Checkbox -->
+            <div
+              v-if="showSelectableColumn"
+              class="flex items-center pt-1"
+              @click.stop
+            >
+              <input
+                v-if="isSelectable(item)"
+                type="checkbox"
+                class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                :class="{ 'opacity-100': anySelected || isSelected(item.id) }"
+                :checked="isSelected(item.id)"
+                @change="toggleSelection(item.id)"
+              >
+              <span
+                v-else
+                class="h-4 w-4"
+              />
+            </div>
+
+            <!-- Column Content (via slots) -->
+            <template
+              v-for="col in columns"
+              :key="col.key"
+            >
+              <div :class="col.class">
+                <slot
+                  :name="`col-${col.key}`"
+                  :item="item"
+                  :column="col"
+                >
+                  <!-- Fallback: render simple text if no slot provided -->
+                  <div>
+                    {{ (item as Record<string, unknown>)[col.key] }}
+                  </div>
+                </slot>
+              </div>
+            </template>
+          </div>
+          <!-- Full-width expandable section below grid row -->
+          <slot
+            name="row-expand"
+            :item="item"
+          />
+        </div>
       </div>
     </div>
 
@@ -369,6 +445,17 @@ const anySelected = computed(() => props.selectedIds.length > 0)
 
   <!-- Empty State -->
   <div
+    v-else-if="loading"
+    class="flex items-center justify-center gap-2 py-10 text-sm text-theme-500"
+  >
+    <Icon
+      icon="lucide:loader-2"
+      class="h-4 w-4 animate-spin"
+    />
+    Loading…
+  </div>
+
+  <div
     v-else-if="!loading"
     class="text-center py-10 text-theme-500"
   >
@@ -379,9 +466,10 @@ const anySelected = computed(() => props.selectedIds.length > 0)
 <style scoped>
 .dt-grid {
   grid-template-columns: var(--dt-cols);
-  /* min-content respects minmax() minimums, triggering overflow-x scroll
-     when column minimums sum to more than the viewport width. */
-  min-width: min-content;
   width: 100%;
+}
+
+.dt-content {
+  min-width: var(--dt-min-width);
 }
 </style>

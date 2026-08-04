@@ -344,6 +344,7 @@ onMounted(loadPolicyTools)
           :items="groupedTools"
           :columns="columns"
           :loading="loading"
+          :row-clickable="true"
           empty-message="No tools found"
           :row-class="(group) => isExpanded(group.id) ? 'bg-theme-800/30' : undefined"
           @row-click="toggleExpanded"

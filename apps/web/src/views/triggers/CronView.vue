@@ -296,6 +296,7 @@ onUnmounted(() => {
           v-else
           :items="filteredCronJobs"
           :columns="tableColumns"
+          :row-clickable="true"
           :empty-message="cronFilter.trim() ? 'No jobs match the current filter' : 'No cron jobs'"
           @row-click="openCronJob"
         >
