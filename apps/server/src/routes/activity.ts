@@ -26,6 +26,8 @@ interface ActivityItem {
     severity?: string
     sourceId?: string
     sourceLabel?: string
+    instanceType?: 'chat' | 'multi-agent' | 'cron' | 'channel'
+    model?: string | null
     artifacts?: ActivityArtifact[]
 }
 
@@ -236,7 +238,42 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         const queryLimit = searchQuery ? -1 : Math.max(limit + offset, limit)
         const typeFilter = parseTypeFilter(req.query.types)
         const items: ActivityItem[] = []
-        const activeInstances = listActiveInstances()
+        const activeInstancesByIdentity = new Map<string, ReturnType<typeof listActiveInstances>[number]>()
+        for (const instance of listActiveInstances()) {
+            const identity = instance.conversationId ? `conversation:${instance.conversationId}` : `instance:${instance.id}`
+            const existing = activeInstancesByIdentity.get(identity)
+            if (!existing || instance.status === 'awaiting-approval') {
+                activeInstancesByIdentity.set(identity, instance)
+            }
+        }
+        const activeInstances = [...activeInstancesByIdentity.values()]
+        const activeConversationIds = new Set(
+            activeInstances
+                .filter((instance) => instance.conversationId)
+                .map((instance) => instance.conversationId!)
+        )
+
+        for (const instance of activeInstances) {
+            const typeLabel = instance.type === 'multi-agent'
+                ? 'Multi-agent'
+                : instance.type.charAt(0).toUpperCase() + instance.type.slice(1)
+            items.push({
+                id: `instance:${instance.id}`,
+                kind: 'instance',
+                title: instance.agentName,
+                description: instance.model || 'Model unknown',
+                createdAt: instance.startedAt,
+                agentId: instance.agentId || null,
+                agentName: instance.agentName,
+                agentIconUrl: instance.agentIconUrl,
+                conversationId: instance.conversationId,
+                status: instance.status,
+                sourceId: instance.id,
+                sourceLabel: `${typeLabel} instance`,
+                instanceType: instance.type,
+                model: instance.model,
+            })
+        }
 
         const notificationRows = db.prepare('SELECT id, agent_id, conversation_id, title, body, severity, read, created_at FROM notifications ORDER BY created_at DESC LIMIT ?').all(queryLimit) as {
             id: string
@@ -265,40 +302,29 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             })
         }
 
-        const activeCronRunsByConversation = new Map(
-            activeInstances
-                .filter((instance) => instance.type === 'cron' && instance.conversationId)
-                .map((instance) => [instance.conversationId!, instance])
-        )
         const cronRows = db.prepare(
             "SELECT id, title, agent_id, created_at, updated_at FROM conversations WHERE origin = 'cron' ORDER BY updated_at DESC LIMIT ?"
         ).all(queryLimit) as { id: string; title: string | null; agent_id: string | null; created_at: number; updated_at: number }[]
         for (const row of cronRows) {
-            const activeRun = activeCronRunsByConversation.get(row.id)
-            const isRunning = Boolean(activeRun)
+            if (activeConversationIds.has(row.id)) continue
             const title = row.title && row.title !== 'New Chat'
                 ? row.title
-                : (isRunning ? 'Scheduled cron run' : 'Cron job finished')
+                : 'Cron job finished'
             items.push({
                 id: `cron:${row.id}`,
                 kind: 'cron',
                 title,
-                description: isRunning ? 'Scheduled run is running' : 'Scheduled run completed',
-                createdAt: isRunning ? (activeRun?.startedAt || row.created_at) : row.updated_at,
+                description: 'Scheduled run completed',
+                createdAt: row.updated_at,
                 agentId: row.agent_id,
                 ...agentInfo(row.agent_id),
                 conversationId: row.id,
-                status: isRunning ? activeRun?.status || 'running' : 'completed',
+                status: 'completed',
                 sourceId: row.id,
                 sourceLabel: 'Cron',
             })
         }
 
-        const activeChatConversationIds = new Set(
-            activeInstances
-                .filter((instance) => instance.conversationId)
-                .map((instance) => instance.conversationId!)
-        )
         const chatRows = db.prepare(
             `SELECT c.id, c.title, c.agent_id, c.created_at, c.updated_at,
                     (SELECT SUBSTR(m.content, 1, 220)
@@ -320,7 +346,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }[]
 
         for (const row of chatRows) {
-            if (activeChatConversationIds.has(row.id)) continue
+            if (activeConversationIds.has(row.id)) continue
             const title = row.title && row.title !== 'New Chat' ? row.title : 'Chat message'
             items.push({
                 id: `chat:${row.id}`,
@@ -358,6 +384,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }[]
 
         for (const row of channelRows) {
+            if (activeConversationIds.has(row.id)) continue
             const title = row.title && row.title !== 'New Chat' ? row.title : 'Channel message'
             items.push({
                 id: `channels:${row.id}`,

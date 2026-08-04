@@ -18,14 +18,18 @@ const hasMore = ref(false);
 const totalItems = ref(0);
 const searchQuery = ref("");
 const now = ref(Date.now());
+const stoppingIds = ref<Set<string>>(new Set());
 const PAGE_SIZE = 30;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let unsubNotification: (() => void) | undefined;
 let unsubMemoryJobUpdate: (() => void) | undefined;
+let unsubHITLRequest: (() => void) | undefined;
+let unsubExecutionUpdate: (() => void) | undefined;
 
 const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
+  { value: "instance", label: "Active", icon: "lucide:square-activity" },
   { value: "artifact", label: "Artifacts", icon: "lucide:file-output" },
   { value: "chat", label: "Chats", icon: "lucide:message-circle" },
   { value: "channels", label: "Channels", icon: "lucide:radio" },
@@ -34,7 +38,9 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "memory", label: "Memory", icon: "lucide:brain" },
 ];
 
-const defaultSelectedKinds: ActivityKind[] = ["artifact", "channels", "notification", "cron", "memory"];
+const defaultSelectedKinds: ActivityKind[] = filterOptions.map((option) => option.value);
+const legacyDefaultSelectedKinds: ActivityKind[] = ["artifact", "channels", "notification", "cron", "memory"];
+const previousDefaultSelectedKinds: ActivityKind[] = ["instance", ...legacyDefaultSelectedKinds];
 const selectableKinds = new Set<ActivityKind>(filterOptions.map((option) => option.value));
 const selectedKinds = ref<ActivityKind[]>(readSelectedKinds());
 
@@ -47,7 +53,11 @@ function readSelectedKinds(): ActivityKind[] {
     const validKinds = parsed.filter((value): value is ActivityKind =>
       typeof value === "string" && selectableKinds.has(value as ActivityKind),
     );
-    return [...new Set(validKinds)];
+    const uniqueKinds = [...new Set(validKinds)];
+    const matchesPriorDefault = [legacyDefaultSelectedKinds, previousDefaultSelectedKinds].some((defaults) =>
+      uniqueKinds.length === defaults.length && defaults.every((kind) => uniqueKinds.includes(kind)),
+    );
+    return matchesPriorDefault ? [...defaultSelectedKinds] : uniqueKinds;
   } catch {
     return [...defaultSelectedKinds];
   }
@@ -197,7 +207,9 @@ function formatClock(ts: number): string {
 
 const groupedItems = computed(() => {
   const groups: { label: string; items: ActivityItem[] }[] = [];
-  for (const item of filteredItems.value) {
+  const activeItems = filteredItems.value.filter(isActiveInstance);
+  if (activeItems.length) groups.push({ label: "Active now", items: activeItems });
+  for (const item of filteredItems.value.filter((entry) => !isActiveInstance(entry))) {
     const label = formatDateLabel(item.createdAt);
     const last = groups[groups.length - 1];
     if (last?.label === label) last.items.push(item);
@@ -208,6 +220,8 @@ const groupedItems = computed(() => {
 
 function kindIcon(kind: ActivityKind): string {
   switch (kind) {
+    case "instance":
+      return "lucide:square-activity";
     case "artifact":
       return "lucide:file-output";
     case "notification":
@@ -226,6 +240,7 @@ function kindIcon(kind: ActivityKind): string {
 }
 
 function kindClass(item: ActivityItem): string {
+  if (item.kind === "instance") return "activity-instance";
   if (item.kind === "notification") return "activity-notification";
   if (item.kind === "artifact") return "activity-artifact";
   if (item.kind === "cron") return "activity-cron";
@@ -249,6 +264,22 @@ async function openItem(item: ActivityItem) {
   }
 }
 
+function isActiveInstance(item: ActivityItem): boolean {
+  return item.kind === "instance" && (item.status === "running" || item.status === "awaiting-approval");
+}
+
+async function stopInstance(item: ActivityItem, event: Event): Promise<void> {
+  event.stopPropagation();
+  if (!item.sourceId || stoppingIds.value.has(item.sourceId)) return;
+  stoppingIds.value.add(item.sourceId);
+  try {
+    await api.instances.stop(item.sourceId);
+  } finally {
+    stoppingIds.value.delete(item.sourceId);
+    await loadActivity();
+  }
+}
+
 function artifactIcon(kind: string): string {
   if (kind === "image") return "lucide:image";
   if (kind === "video") return "lucide:film";
@@ -267,12 +298,19 @@ function isImageArtifact(kind: string): boolean {
 
 onMounted(() => {
   void loadActivity();
-  refreshTimer = setInterval(() => void loadActivity(), 15_000);
+  refreshTimer = setInterval(() => void loadActivity(), 5_000);
   tickTimer = setInterval(() => {
     now.value = Date.now();
   }, 30_000);
   unsubNotification = api.notifications.onCreated(() => void loadActivity());
   unsubMemoryJobUpdate = api.memorySpaces.onJobUpdated(() => void loadActivity());
+  unsubHITLRequest = api.agent.onHITLRequest(() => void loadActivity());
+  unsubExecutionUpdate = api.agent.onExecutionUpdate((data: unknown) => {
+    const payload = data as { event?: string };
+    if (payload.event === "step:status" || payload.event === "task:completed" || payload.event === "step:executed") {
+      void loadActivity();
+    }
+  });
 });
 
 onUnmounted(() => {
@@ -281,6 +319,8 @@ onUnmounted(() => {
   clearTimeout(searchTimer);
   unsubNotification?.();
   unsubMemoryJobUpdate?.();
+  unsubHITLRequest?.();
+  unsubExecutionUpdate?.();
 });
 
 watch(selectedKinds, () => {
@@ -305,7 +345,7 @@ watch(searchQuery, () => {
           Activity Log
         </h1>
         <p class="mt-1 max-w-3xl text-sm text-theme-500">
-          A timeline for memory indexing, with optional passive history for artifacts, chats, channel messages, notifications, and cron runs.
+          Active work and a timeline of completed chats, cron runs, memory indexing, artifacts, channels, and notifications.
         </p>
       </div>
       <button
@@ -488,6 +528,7 @@ watch(searchQuery, () => {
             class="grid grid-cols-[2rem_minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-[4.2rem_2rem_minmax(0,1fr)]"
             :class="[kindClass(item), {
               'cursor-pointer': item.conversationId || item.agentId,
+              'activity-requires-attention': item.status === 'awaiting-approval',
             }]"
             @click="openItem(item)"
           >
@@ -521,9 +562,24 @@ watch(searchQuery, () => {
                 </div>
 
                 <div class="flex gap-2">
+                  <button
+                    v-if="isActiveInstance(item)"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-red-400/35 bg-red-400/10 px-2.5 py-1 text-[11px] font-semibold text-red-300 transition hover:border-red-300/50 hover:bg-red-400/20 hover:text-red-200 disabled:cursor-wait disabled:opacity-60"
+                    :disabled="Boolean(item.sourceId && stoppingIds.has(item.sourceId))"
+                    @click="stopInstance(item, $event)"
+                  >
+                    <Icon
+                      :icon="item.sourceId && stoppingIds.has(item.sourceId) ? 'lucide:loader-2' : 'lucide:square'"
+                      class="h-3 w-3"
+                      :class="{ 'animate-spin': item.sourceId && stoppingIds.has(item.sourceId) }"
+                    />
+                    Stop
+                  </button>
                   <span
                     v-if="item.status"
                     class="status-pill shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
+                    :class="{ 'attention-pill': item.status === 'awaiting-approval' }"
                   >
                     {{ item.status }}
                   </span>
@@ -679,9 +735,9 @@ article.cursor-pointer:hover .activity-card {
 }
 
 .attention-pill {
-  color: #fee2e2;
-  background: color-mix(in srgb, #f87171 22%, transparent);
-  border: 1px solid color-mix(in srgb, #f87171 42%, transparent);
+  color: #fde68a;
+  background: color-mix(in srgb, #fbbf24 18%, transparent);
+  border: 1px solid color-mix(in srgb, #fbbf24 44%, transparent);
 }
 
 .artifact-link {
@@ -690,6 +746,7 @@ article.cursor-pointer:hover .activity-card {
 }
 
 .activity-info,
+.activity-instance,
 .activity-artifact,
 .activity-notification,
 .activity-cron,
@@ -701,6 +758,19 @@ article.cursor-pointer:hover .activity-card {
   --activity-color: var(--color-accent-400);
   --activity-bg: color-mix(in srgb, var(--color-accent-500) 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, var(--color-accent-500) 35%, var(--color-theme-800));
+}
+
+.activity-instance {
+  --activity-color: #f87171;
+  --activity-bg: color-mix(in srgb, #f87171 15%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #f87171 42%, var(--color-theme-800));
+}
+
+.activity-instance .activity-card {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, #f87171 12%, transparent), transparent 42%),
+    var(--color-theme-950);
+  box-shadow: 0 0 0 1px color-mix(in srgb, #f87171 12%, transparent);
 }
 
 .activity-cron {

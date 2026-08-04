@@ -299,6 +299,8 @@ export interface ActivityItem {
     severity?: string
     sourceId?: string
     sourceLabel?: string
+    instanceType?: AgentInstance['type']
+    model?: string | null
     artifacts?: ActivityArtifact[]
 }
 
