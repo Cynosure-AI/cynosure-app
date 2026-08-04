@@ -282,32 +282,32 @@ const anySelected = computed(() => props.selectedIds.length > 0)
     class="rounded-xl border border-theme-800 overflow-x-auto bg-theme-950/45"
   >
     <div
-      v-if="showTopPagination"
-      class="flex items-center justify-center gap-2 px-4 py-2 border-b border-theme-800/70 bg-theme-900/40"
-    >
-      <button
-        type="button"
-        :disabled="currentPage === 0"
-        class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
-        @click="setPage(currentPage - 1)"
-      >
-        Prev
-      </button>
-      <span class="text-xs text-theme-500">{{ currentPage + 1 }} / {{ pageCount }}</span>
-      <button
-        type="button"
-        :disabled="currentPage >= pageCount - 1"
-        class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
-        @click="setPage(currentPage + 1)"
-      >
-        Next
-      </button>
-    </div>
-
-    <div
       class="dt-content"
       :style="{ '--dt-min-width': gridMinWidth }"
     >
+      <div
+        v-if="showTopPagination"
+        class="flex items-center justify-center gap-2 px-4 py-2 border-b border-theme-800/70 bg-theme-900/40"
+      >
+        <button
+          type="button"
+          :disabled="currentPage === 0"
+          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          @click="setPage(currentPage - 1)"
+        >
+          Prev
+        </button>
+        <span class="text-xs text-theme-500">{{ currentPage + 1 }} / {{ pageCount }}</span>
+        <button
+          type="button"
+          :disabled="currentPage >= pageCount - 1"
+          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          @click="setPage(currentPage + 1)"
+        >
+          Next
+        </button>
+      </div>
+
       <!-- Header Row -->
       <div
         v-if="showHeader"
@@ -417,29 +417,29 @@ const anySelected = computed(() => props.selectedIds.length > 0)
           />
         </div>
       </div>
-    </div>
 
-    <div
-      v-if="showBottomPagination"
-      class="flex items-center justify-center gap-2 px-4 py-2 border-t border-theme-800/70 bg-theme-900/40"
-    >
-      <button
-        type="button"
-        :disabled="currentPage === 0"
-        class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
-        @click="setPage(currentPage - 1)"
+      <div
+        v-if="showBottomPagination"
+        class="flex items-center justify-center gap-2 px-4 py-2 border-t border-theme-800/70 bg-theme-900/40"
       >
-        Prev
-      </button>
-      <span class="text-xs text-theme-500">{{ currentPage + 1 }} / {{ pageCount }}</span>
-      <button
-        type="button"
-        :disabled="currentPage >= pageCount - 1"
-        class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
-        @click="setPage(currentPage + 1)"
-      >
-        Next
-      </button>
+        <button
+          type="button"
+          :disabled="currentPage === 0"
+          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          @click="setPage(currentPage - 1)"
+        >
+          Prev
+        </button>
+        <span class="text-xs text-theme-500">{{ currentPage + 1 }} / {{ pageCount }}</span>
+        <button
+          type="button"
+          :disabled="currentPage >= pageCount - 1"
+          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          @click="setPage(currentPage + 1)"
+        >
+          Next
+        </button>
+      </div>
     </div>
   </div>
 
