@@ -3,15 +3,18 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { api } from "../api/client";
-import type { ActivityItem, ActivityKind, ActivityTotalsByKind } from "../api/types";
+import type { ActivityItem, ActivityKind, ActivityTotalsByKind, AgentInstance, MemoryIndexJob } from "../api/types";
 import { useAgentDefinitionsStore } from "../stores/agent-definitions.store";
+import { useMemoryJobsStore } from "../stores/memory-jobs.store";
 import { SK_ACTIVITY_LOG_FILTERS } from "../utils/storage-keys";
 import HoverMenu from "../components/shared/HoverMenu.vue";
 
 const router = useRouter();
 const agentDefs = useAgentDefinitionsStore();
+const memoryJobsStore = useMemoryJobsStore();
 
 const items = ref<ActivityItem[]>([]);
+const activeInstances = ref<AgentInstance[]>([]);
 const loading = ref(true);
 const loadingMore = ref(false);
 const hasMore = ref(false);
@@ -19,6 +22,7 @@ const totalItems = ref(0);
 const searchQuery = ref("");
 const now = ref(Date.now());
 const stoppingIds = ref<Set<string>>(new Set());
+const cancellingJobIds = ref<Set<string>>(new Set());
 const PAGE_SIZE = 30;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
@@ -83,10 +87,95 @@ function emptyTotalsByKind(): ActivityTotalsByKind {
   };
 }
 
-const totalByKind = ref<ActivityTotalsByKind>(emptyTotalsByKind());
+const serverTotalsByKind = ref<ActivityTotalsByKind>(emptyTotalsByKind());
+const totalByKind = computed(() => totalsWithLiveWork(serverTotalsByKind.value));
+
+function instanceIdentity(item: Pick<ActivityItem, "id" | "conversationId" | "sourceId">): string {
+  return item.conversationId ? `conversation:${item.conversationId}` : `instance:${item.sourceId || item.id}`;
+}
+
+function instanceActivityItem(instance: AgentInstance): ActivityItem {
+  const typeLabel = instance.type === "multi-agent"
+    ? "Multi-agent"
+    : instance.type.charAt(0).toUpperCase() + instance.type.slice(1);
+  return {
+    id: `live-instance:${instance.id}`,
+    kind: "instance",
+    title: instance.agentName,
+    description: instance.model || "Model unknown",
+    createdAt: instance.startedAt,
+    agentId: instance.agentId || null,
+    agentName: instance.agentName,
+    agentIconUrl: instance.agentIconUrl,
+    conversationId: instance.conversationId,
+    status: instance.status,
+    sourceId: instance.id,
+    sourceLabel: `${typeLabel} instance`,
+    instanceType: instance.type,
+    model: instance.model,
+  };
+}
+
+function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
+  const entityJob = job.kind === "entity-index";
+  return {
+    id: `live-memory:${job.id}`,
+    kind: "memory",
+    title: `${entityJob ? "Extracting entities from" : "Indexing"} ${job.fileName}`,
+    description: job.fileName,
+    createdAt: job.createdAt,
+    agentId: null,
+    agentName: null,
+    agentIconUrl: null,
+    conversationId: null,
+    status: job.status,
+    sourceId: job.id,
+    sourceLabel: entityJob ? "Entity extraction" : "Memory indexing",
+  };
+}
+
+function matchesLiveFilters(item: ActivityItem): boolean {
+  if (!selectedKinds.value.includes(item.kind)) return false;
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) return true;
+  return [item.kind, item.title, item.description, item.agentName, item.status, item.sourceLabel]
+    .filter((value): value is string => typeof value === "string")
+    .some((value) => value.toLowerCase().includes(query));
+}
+
+const liveItems = computed<ActivityItem[]>(() => {
+  const byIdentity = new Map<string, ActivityItem>();
+  for (const instance of activeInstances.value) {
+    const item = instanceActivityItem(instance);
+    const identity = instanceIdentity(item);
+    const existing = byIdentity.get(identity);
+    if (!existing || item.status === "awaiting-approval") byIdentity.set(identity, item);
+  }
+  return [
+    ...byIdentity.values(),
+    ...memoryJobsStore.activeJobs.map(memoryJobActivityItem),
+  ].filter(matchesLiveFilters);
+});
 
 const filteredItems = computed(() => {
-  return items.value;
+  const liveInstanceIdentities = new Set(
+    liveItems.value.filter((item) => item.kind === "instance").map(instanceIdentity),
+  );
+  const activeConversationIds = new Set(
+    liveItems.value
+      .filter((item) => item.kind === "instance" && item.conversationId)
+      .map((item) => item.conversationId!),
+  );
+  const history = items.value.filter((item) => {
+    if (item.kind === "instance") return !liveInstanceIdentities.has(instanceIdentity(item));
+    if (
+      item.conversationId
+      && activeConversationIds.has(item.conversationId)
+      && (item.kind === "chat" || item.kind === "cron" || item.kind === "channels")
+    ) return false;
+    return true;
+  });
+  return [...liveItems.value, ...history];
 });
 
 const allKindsSelected = computed(() => selectedKinds.value.length === filterOptions.length);
@@ -133,6 +222,19 @@ function activityRequestOptions(offset = 0) {
   };
 }
 
+function totalsWithLiveWork(totals: ActivityTotalsByKind): ActivityTotalsByKind {
+  const uniqueInstances = new Set(
+    activeInstances.value.map((instance) =>
+      instance.conversationId ? `conversation:${instance.conversationId}` : `instance:${instance.id}`,
+    ),
+  );
+  return {
+    ...totals,
+    instance: uniqueInstances.size,
+    memory: totals.memory + memoryJobsStore.activeJobs.length,
+  };
+}
+
 async function loadActivity() {
   if (selectedKinds.value.length === 0) {
     items.value = [];
@@ -143,11 +245,21 @@ async function loadActivity() {
   }
   try {
     loading.value = true;
-    const response = await api.activity.list(activityRequestOptions(0));
-    items.value = response.items;
-    hasMore.value = Boolean(response.hasMore);
-    totalItems.value = response.total ?? response.items.length;
-    totalByKind.value = response.totalsByKind ?? emptyTotalsByKind();
+    const [activityResult, instancesResult] = await Promise.allSettled([
+      api.activity.list(activityRequestOptions(0)),
+      api.instances.list(),
+      memoryJobsStore.refresh(),
+    ]);
+    if (instancesResult.status === "fulfilled") activeInstances.value = instancesResult.value;
+    if (activityResult.status === "fulfilled") {
+      const response = activityResult.value;
+      items.value = response.items;
+      hasMore.value = Boolean(response.hasMore);
+      totalItems.value = response.total ?? response.items.length;
+    }
+    if (activityResult.status === "fulfilled") {
+      serverTotalsByKind.value = activityResult.value.totalsByKind ?? emptyTotalsByKind();
+    }
   } finally {
     loading.value = false;
   }
@@ -161,7 +273,7 @@ async function loadMoreActivity() {
     items.value = [...items.value, ...response.items];
     hasMore.value = Boolean(response.hasMore);
     totalItems.value = response.total ?? items.value.length;
-    totalByKind.value = response.totalsByKind ?? totalByKind.value;
+    if (response.totalsByKind) serverTotalsByKind.value = response.totalsByKind;
   } finally {
     loadingMore.value = false;
   }
@@ -207,9 +319,9 @@ function formatClock(ts: number): string {
 
 const groupedItems = computed(() => {
   const groups: { label: string; items: ActivityItem[] }[] = [];
-  const activeItems = filteredItems.value.filter(isActiveInstance);
+  const activeItems = filteredItems.value.filter(isActiveWork);
   if (activeItems.length) groups.push({ label: "Active now", items: activeItems });
-  for (const item of filteredItems.value.filter((entry) => !isActiveInstance(entry))) {
+  for (const item of filteredItems.value.filter((entry) => !isActiveWork(entry))) {
     const label = formatDateLabel(item.createdAt);
     const last = groups[groups.length - 1];
     if (last?.label === label) last.items.push(item);
@@ -257,6 +369,10 @@ function agentLabel(item: ActivityItem): string {
 }
 
 async function openItem(item: ActivityItem) {
+  if (isActiveMemoryJob(item)) {
+    router.push("/memory-spaces/documents");
+    return;
+  }
   if (item.conversationId) {
     router.push(`/triggers/chat/${item.conversationId}`);
   } else if (item.agentId) {
@@ -268,6 +384,14 @@ function isActiveInstance(item: ActivityItem): boolean {
   return item.kind === "instance" && (item.status === "running" || item.status === "awaiting-approval");
 }
 
+function isActiveMemoryJob(item: ActivityItem): boolean {
+  return item.id.startsWith("live-memory:") && (item.status === "running" || item.status === "queued");
+}
+
+function isActiveWork(item: ActivityItem): boolean {
+  return isActiveInstance(item) || isActiveMemoryJob(item);
+}
+
 async function stopInstance(item: ActivityItem, event: Event): Promise<void> {
   event.stopPropagation();
   if (!item.sourceId || stoppingIds.value.has(item.sourceId)) return;
@@ -276,6 +400,18 @@ async function stopInstance(item: ActivityItem, event: Event): Promise<void> {
     await api.instances.stop(item.sourceId);
   } finally {
     stoppingIds.value.delete(item.sourceId);
+    await loadActivity();
+  }
+}
+
+async function cancelMemoryJob(item: ActivityItem, event: Event): Promise<void> {
+  event.stopPropagation();
+  if (!item.sourceId || cancellingJobIds.value.has(item.sourceId)) return;
+  cancellingJobIds.value.add(item.sourceId);
+  try {
+    await memoryJobsStore.cancelJob(item.sourceId);
+  } finally {
+    cancellingJobIds.value.delete(item.sourceId);
     await loadActivity();
   }
 }
@@ -527,7 +663,7 @@ watch(searchQuery, () => {
             :key="item.id"
             class="grid grid-cols-[2rem_minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-[4.2rem_2rem_minmax(0,1fr)]"
             :class="[kindClass(item), {
-              'cursor-pointer': item.conversationId || item.agentId,
+              'cursor-pointer': item.conversationId || item.agentId || isActiveMemoryJob(item),
               'activity-requires-attention': item.status === 'awaiting-approval',
             }]"
             @click="openItem(item)"
@@ -575,6 +711,20 @@ watch(searchQuery, () => {
                       :class="{ 'animate-spin': item.sourceId && stoppingIds.has(item.sourceId) }"
                     />
                     Stop
+                  </button>
+                  <button
+                    v-else-if="isActiveMemoryJob(item)"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-purple-400/35 bg-purple-400/10 px-2.5 py-1 text-[11px] font-semibold text-purple-300 transition hover:border-purple-300/50 hover:bg-purple-400/20 hover:text-purple-200 disabled:cursor-wait disabled:opacity-60"
+                    :disabled="Boolean(item.sourceId && cancellingJobIds.has(item.sourceId))"
+                    @click="cancelMemoryJob(item, $event)"
+                  >
+                    <Icon
+                      :icon="item.sourceId && cancellingJobIds.has(item.sourceId) ? 'lucide:loader-2' : 'lucide:x'"
+                      class="h-3 w-3"
+                      :class="{ 'animate-spin': item.sourceId && cancellingJobIds.has(item.sourceId) }"
+                    />
+                    Cancel
                   </button>
                   <span
                     v-if="item.status"
