@@ -177,11 +177,13 @@ const subAgentColumns: Column<SubAgentItem>[] = [
       </template>
 
       <template #col-internalName="{ item }">
-        <span class="px-2.5 py-1.5 text-xs text-theme-200 font-mono">{{ getAgentInternalName(item.agentId) }}</span>
+        <span class="text-xs text-theme-200 font-mono">{{ getAgentInternalName(item.agentId) }}</span>
       </template>
 
       <template #col-description="{ item }">
-        <span class="px-2.5 py-1.5 text-xs text-theme-200">{{ getAgentDescription(item.agentId) || '—' }}</span>
+        <p class="text-xs leading-relaxed text-theme-200">
+          {{ getAgentDescription(item.agentId) || '—' }}
+        </p>
       </template>
 
       <template #col-actions="{ item }">

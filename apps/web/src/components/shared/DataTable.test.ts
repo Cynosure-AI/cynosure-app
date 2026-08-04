@@ -66,6 +66,8 @@ describe('DataTable', () => {
     })
 
     expect(renderedNames(wrapper)).toEqual(['Alpha', 'Bravo'])
+    expect(wrapper.get('.dt-content').text()).toContain('Prev')
+    expect(wrapper.get('.dt-content').text()).toContain('1 / 2')
   })
 
   test('applies column classes to slotted cells and spans the column minimum width', () => {
