@@ -497,14 +497,14 @@ const chatRoute = computed(() =>
         :disabled="!sidebarCollapsed"
       >
         <RouterLink
-          to="/instances"
+          to="/activity"
           class="nav-item"
-          :class="{ active: isActive('/instances') }"
-          :aria-label="hasAwaitingApproval ? 'Instances — approval required' : 'Instances'"
+          :class="{ active: isActive('/activity') }"
+          :aria-label="hasAwaitingApproval ? 'Activity Log — approval required' : 'Activity Log'"
         >
           <span class="relative inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center">
             <Icon
-              icon="lucide:activity"
+              icon="lucide:list-tree"
               class="w-4.5 h-4.5"
             />
             <span
@@ -516,42 +516,22 @@ const chatRoute = computed(() =>
               <span class="relative h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-theme-950" />
             </span>
           </span>
-          <span>Instances</span>
+          <span>Activity Log</span>
           <span
             v-if="hasAwaitingApproval"
-            class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse ml-1 shrink-0"
+            class="ml-1 h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-amber-400"
           />
           <div
             v-if="activeWorkCount"
-            class="rounded-full flex justify-center items-center bg-accent-400 text-xs text-white w-5 h-5 ml-2"
+            class="ml-2 flex h-5 w-5 items-center justify-center rounded-full text-xs text-white"
+            :class="hasAwaitingApproval ? 'bg-amber-500' : 'bg-red-500'"
           >
             <span v-if="activeWorkCount > 9">9+</span>
             <span v-else>{{ activeWorkCount }}</span>
           </div>
         </RouterLink>
         <template #content>
-          {{ hasAwaitingApproval ? "Instances — approval required" : "Instances" }}
-        </template>
-      </HoverTooltip>
-
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/activity"
-          class="nav-item"
-          :class="{ active: isActive('/activity') }"
-        >
-          <Icon
-            icon="lucide:list-tree"
-            class="w-4.5 h-4.5"
-          />
-          <span>Activity Log</span>
-        </RouterLink>
-        <template #content>
-          Activity Log
+          {{ hasAwaitingApproval ? "Activity Log — approval required" : "Activity Log" }}
         </template>
       </HoverTooltip>
 

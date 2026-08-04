@@ -51,8 +51,7 @@ const router = createRouter({
     },
     {
       path: '/instances',
-      name: 'instances',
-      component: () => import('@/views/InstancesView.vue')
+      redirect: { name: 'activity' }
     },
     // Activity
     {
