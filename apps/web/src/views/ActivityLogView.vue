@@ -697,11 +697,11 @@ watch(searchQuery, () => {
                   </h2>
                 </div>
 
-                <div class="flex gap-2">
+                <div class="flex shrink-0 items-center gap-2 pl-2">
                   <button
                     v-if="isActiveInstance(item)"
                     type="button"
-                    class="inline-flex items-center gap-1.5 rounded-lg border border-red-400/35 bg-red-400/10 px-2.5 py-1 text-[11px] font-semibold text-red-300 transition hover:border-red-300/50 hover:bg-red-400/20 hover:text-red-200 disabled:cursor-wait disabled:opacity-60"
+                    class="inline-flex min-h-7 items-center justify-center gap-1.5 rounded-lg border border-red-400/35 bg-red-400/10 px-3 py-1.5 text-[11px] font-semibold leading-none text-red-300 transition hover:border-red-300/50 hover:bg-red-400/20 hover:text-red-200 disabled:cursor-wait disabled:opacity-60"
                     :disabled="Boolean(item.sourceId && stoppingIds.has(item.sourceId))"
                     @click="stopInstance(item, $event)"
                   >

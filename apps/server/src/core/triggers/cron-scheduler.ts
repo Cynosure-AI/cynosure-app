@@ -8,7 +8,8 @@ import { getChannelManager } from '../channels/channel-manager.js'
 import { enqueueCoalescedTrigger } from './trigger-queue.js'
 import { resolveChannelTarget } from './channel-target-resolver.js'
 import { getGateway } from '../gateway/gateway.js'
-import { generateTitle } from '../agent/post-execution.js'
+import { cancelPostActions, generateTitle } from '../agent/post-execution.js'
+import { getEventBus } from '../telemetry/event-bus.js'
 import type { AgentExecutorResult } from '../agent/agent-executor.js'
 
 type CronNotificationMode = 'always' | 'conditional'
@@ -376,8 +377,12 @@ export function triggerCronJobNow(jobId: string): void {
 export function cancelCronRun(jobId: string): boolean {
     const controller = activeCronAbortControllers.get(jobId)
     if (controller) {
+        const run = activeCronRuns.get(jobId)
+        if (run?.conversationId) {
+            getEventBus().emit('hitl:clear-conversation', { conversationId: run.conversationId })
+            cancelPostActions(run.conversationId)
+        }
         controller.abort()
-        activeCronAbortControllers.delete(jobId)
         return true
     }
     return false

@@ -325,12 +325,12 @@ export class McpManager {
             description: t.description || t.name,
             parameters: (t.inputSchema as Record<string, unknown>) || { type: 'object', properties: {} },
             timeout: 60000,
-            execute: async (params: unknown): Promise<ToolResult> => {
+            execute: async (params: unknown, signal?: AbortSignal): Promise<ToolResult> => {
                 try {
                     const result = await client.callTool({
                         name: t.name,
                         arguments: (params as Record<string, unknown>) || {}
-                    })
+                    }, undefined, { signal })
 
                     const parts = result.content as Array<{
                         type: string

@@ -163,6 +163,11 @@ function toolDisplayName(name = 'Tool'): string {
   return isSubAgentSpawnCall(name) ? 'Spawn sub-agent' : name
 }
 
+function memoryFileName(call?: ToolCall | null): string | null {
+  if (!call || !isMemoryCall(call)) return null
+  return visibleText(parseArgs(call.arguments)?.sourceFile)
+}
+
 function scoreForCall(call?: ToolCall | null): string | null {
   if (!call) return null
   const parsed = parseArgs(call.arguments)
@@ -501,14 +506,16 @@ const toolExecutions = computed(() => buildExecutions(toolCallArgs.value, result
 const latestContextSection = computed(() => [...mergedContextSections.value].reverse()[0])
 const headerToolNames = computed(() => {
   if (latestContextSection.value?.phase === 'gathered-context') {
-    // Memory source names belong to the expanded retrieval details. Showing them
-    // as summary chips repeats the memory-space label and crowds the header.
-    if (latestContextSection.value.kind === 'memory') return []
-
-    return latestContextSection.value.rows
+    const selectedRows = latestContextSection.value.rows
       .filter((row) => row.state !== 'candidate')
-      .map((row) => row.call?.name || row.result?.name)
+
+    const names = latestContextSection.value.kind === 'memory'
+      ? selectedRows.map((row) => memoryFileName(row.call))
+      : selectedRows.map((row) => row.call?.name || row.result?.name)
+
+    return [...new Set(names
       .filter((name): name is string => Boolean(name))
+    )]
   }
 
   return toolNames.value

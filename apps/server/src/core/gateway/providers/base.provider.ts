@@ -42,7 +42,7 @@ export interface ToolDefinition {
   description: string
   parameters: Record<string, unknown> // JSON Schema
   timeout: number
-  execute: (params: unknown) => Promise<ToolResult>
+  execute: (params: unknown, signal?: AbortSignal) => Promise<ToolResult>
 }
 
 export interface RegistryToolMetadata {

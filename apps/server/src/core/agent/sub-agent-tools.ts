@@ -105,6 +105,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 autoMemory: agentData.autoMemory === true,
                 memorySpaceOverrides: getAssignedOrDefaultSpaces(agentData.id),
                 eventMeta,
+                signal,
             })
             const gateway = getGateway()
             const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id
