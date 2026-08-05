@@ -90,7 +90,7 @@ export interface PreparedExecution {
     providerId: string | undefined
     /** Resolved model name */
     model: string
-    /** System messages to prepend to conversation history (order: system prompt, then memory context) */
+    /** Prepared context messages to prepend to conversation history (trusted prompts, then untrusted retrieved evidence). */
     systemMessages: ChatMessage[]
     /** Whether sub-agent delegation tools were added */
     hasSubAgents: boolean
@@ -100,7 +100,7 @@ export interface PreparedExecution {
  * Prepare all shared pre-action state for agent execution.
  *
  * Returns resolved tools (with hydration + sub-agents), provider/model,
- * and system messages (prompt + appended execution context).
+ * and prepared context messages (trusted prompt + lower-authority evidence).
  *
  * The caller is responsible for:
  * - Building conversation messages (history or fresh)
@@ -154,17 +154,21 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     })
     const toolRoutingQuery = taskContext?.toolQuery || input.userQuery
     const memoryRoutingQuery = taskContext?.memoryQuery || input.userQuery
-    const routingMessages = taskContext ? [] : input.recentMessages
+    // Query rewriting complements recent conversational context; it does not
+    // replace it. Follow-ups and pronouns still need the original turns.
+    const routingMessages = input.recentMessages
 
-    if (input.inlineAttachmentTextLimit !== undefined) {
-        await ensureOversizedAttachmentsIndexed({
+    const attachmentPreparation = input.inlineAttachmentTextLimit !== undefined
+        ? ensureOversizedAttachmentsIndexed({
             conversationId,
             inlineAttachmentTextLimit: input.inlineAttachmentTextLimit,
             eventMeta: input.eventMeta,
         })
-    }
+        : Promise.resolve()
 
-    const toolLayer = await resolveExecutionTools({
+    // Once routing queries are available, tool selection, memory retrieval,
+    // and attachment indexing are independent and should not add serial latency.
+    const [toolLayer, memoryMessages] = await Promise.all([resolveExecutionTools({
         preset,
         conversationId,
         broadcast,
@@ -184,7 +188,19 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         memorySpaceOverrides,
         hydrationAgentId: input.hydrationAgentId,
         eventMeta: input.eventMeta,
-    })
+    }), resolveMemorySystemMessages({
+        preset,
+        conversationId,
+        gateway,
+        providerId: taskContextRouter.providerId,
+        model: taskContextRouter.model,
+        autoMemory: input.autoMemory,
+        memorySpaceOverrides,
+        userQuery: memoryRoutingQuery,
+        recentMessages: routingMessages,
+        eventMeta: input.eventMeta,
+        signal: input.signal,
+    }), attachmentPreparation])
 
     const promptMessages = await resolveSystemPromptMessages({
         basePrompt: preset.systemPrompt,
@@ -204,19 +220,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     const systemMessages = [
         ...promptMessages,
-        ...await resolveMemorySystemMessages({
-            preset,
-            conversationId,
-            gateway,
-            providerId: taskContextRouter.providerId,
-            model: taskContextRouter.model,
-            autoMemory: input.autoMemory,
-            memorySpaceOverrides,
-            userQuery: memoryRoutingQuery,
-            recentMessages: routingMessages,
-            eventMeta: input.eventMeta,
-            signal: input.signal,
-        }),
+        ...memoryMessages,
     ]
 
     return {

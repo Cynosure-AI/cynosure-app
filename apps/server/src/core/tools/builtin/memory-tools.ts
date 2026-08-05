@@ -1,12 +1,13 @@
-import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
+import type { ToolDefinition, ToolResult } from '../../gateway/providers/base.provider.js'
+import { createHash } from 'node:crypto'
 import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getMemorySpaceFolderPath, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import { relativePathForFolder } from '../../memory/memory-space-folders.js'
-import { readTextFile, writeTextFile, fileExists, backupToRevisions, resolveUniqueFileName } from '../../memory/memory-file-manager.js'
+import { readTextFile, writeTextFile, fileExists, backupToRevisions, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
 import { getEntityGraphStore, type EntityEdge, type EntityNode, type EntityType } from '../../memory/entity-graph.js'
 import { deleteMemoryGraphSource, legacyMemoryGraphSourceId, memoryGraphSourceId } from '../../memory/memory-entity-indexer.js'
-import { cancelMemoryIndexJobsForFile, startMemoryIndexJob } from '../../memory/memory-index-jobs.js'
+import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
 
 function abortPendingMemoryIndexJobs(spaceId: string, fileName: string): void {
     cancelMemoryIndexJobsForFile(spaceId, fileName)
@@ -16,23 +17,38 @@ function clearMemoryGraphSource(spaceId: string, fileName: string): void {
     deleteMemoryGraphSource(spaceId, fileName)
 }
 
-function scheduleMemoryReindexJob(
+const memoryDocumentMutationTails = new Map<string, Promise<void>>()
+
+async function withMemoryDocumentLock<T>(documentId: string, signal: AbortSignal | undefined, operation: () => Promise<T>): Promise<T> {
+    const key = documentId.trim()
+    const prior = memoryDocumentMutationTails.get(key) ?? Promise.resolve()
+    let release!: () => void
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const tail = prior.catch(() => undefined).then(() => held)
+    memoryDocumentMutationTails.set(key, tail)
+    await prior.catch(() => undefined)
+    try {
+        signal?.throwIfAborted()
+        return await operation()
+    } finally {
+        release()
+        if (memoryDocumentMutationTails.get(key) === tail) memoryDocumentMutationTails.delete(key)
+    }
+}
+
+async function reindexMemoryFile(
     spaceId: string,
     fileName: string,
-): void {
+    signal?: AbortSignal,
+): Promise<{ chunkCount: number; revision: string; documentId: string }> {
     const folderPath = getMemorySpaceFolderPath(spaceId)
+    if (!folderPath) throw new Error('Memory folder has no folder configured')
     cancelMemoryIndexJobsForFile(spaceId, fileName)
-    startMemoryIndexJob({
-        kind: 'reindex',
-        spaceId,
-        fileName,
-        replaceExisting: true,
-        run: async (signal) => {
-            if (!folderPath) throw new Error('Memory folder has no folder configured')
-            const result = await getAgentMemory().reindexFile(folderPath, fileName, spaceId, { signal })
-            return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
-        },
-    })
+    const memory = getAgentMemory()
+    const result = await memory.reindexFile(folderPath, fileName, spaceId, { signal })
+    const ref = memory.getDocumentReference(spaceId, result.fileName)
+    if (!ref) throw new Error('Memory was indexed but its document reference could not be loaded')
+    return { chunkCount: result.chunkCount, revision: ref.revision, documentId: ref.documentId }
 }
 
 export const MEMORY_READ_TOOL_NAMES = [
@@ -43,8 +59,11 @@ export const MEMORY_READ_TOOL_NAMES = [
 
 export const MEMORY_WRITE_TOOL_NAMES = [
     'memory_create',
-    'memory_update',
-    'memory_remove',
+    'memory_append',
+    'memory_replace_range',
+    'memory_replace_all',
+    'memory_remove_all',
+    'memory_remove_range',
 ] as const
 
 export const MEMORY_TOOL_NAMES = [
@@ -57,11 +76,13 @@ export const RELATIONSHIP_GRAPH_TOOL_NAMES = [
     'relationship_graph_assert',
     'relationship_graph_delete',
 ] as const
+export const RELATIONSHIP_GRAPH_READ_TOOL_NAMES = ['relationship_graph_search'] as const
 
 export type MemoryReadToolName = (typeof MEMORY_READ_TOOL_NAMES)[number]
 export type MemoryWriteToolName = (typeof MEMORY_WRITE_TOOL_NAMES)[number]
 export type MemoryToolName = (typeof MEMORY_TOOL_NAMES)[number]
 export type RelationshipGraphToolName = (typeof RELATIONSHIP_GRAPH_TOOL_NAMES)[number]
+export type RelationshipGraphReadToolName = (typeof RELATIONSHIP_GRAPH_READ_TOOL_NAMES)[number]
 
 export function isMemoryToolName(toolName: string): toolName is MemoryToolName {
     return (MEMORY_TOOL_NAMES as readonly string[]).includes(toolName)
@@ -73,6 +94,10 @@ export function isMemoryReadToolName(toolName: string): toolName is MemoryReadTo
 
 export function isRelationshipGraphToolName(toolName: string): toolName is RelationshipGraphToolName {
     return (RELATIONSHIP_GRAPH_TOOL_NAMES as readonly string[]).includes(toolName)
+}
+
+export function isRelationshipGraphReadToolName(toolName: string): toolName is RelationshipGraphReadToolName {
+    return (RELATIONSHIP_GRAPH_READ_TOOL_NAMES as readonly string[]).includes(toolName)
 }
 
 export interface MemoryToolOptions {
@@ -432,68 +457,99 @@ async function resolveTargetSpace(
     }
 }
 
-async function resolveExistingMemorySpace(
+interface ResolvedMemoryDocument {
+    documentId: string
+    revision: string
+    spaceId: string
+    spaceName: string
+    fileName: string
+    folderPath: string
+}
+
+function resolveMemoryDocumentById(
+    documentId: string,
     assignedSpaces: MemorySpaceRef[],
-    title: string,
-    folderParam?: string,
-    getKnownSpaces: () => MemorySpaceRef[] = getKnownMemorySpaces,
-): Promise<{ spaceId: string; spaceName: string; fileName: string; indexedCount: number; existsOnDisk: boolean; folderPath?: string } | { error: string }> {
-    const fileName = title.endsWith('.md') ? title : `${title}.md`
-    const mem = getAgentMemory()
-
-    const inspectSpace = async (space: MemorySpaceRef) => {
-        const folderPath = getMemorySpaceFolderPath(space.id)
-        const existsOnDisk = Boolean(folderPath && fileExists(folderPath, fileName))
-        const indexedCount = await mem.countChunks(fileName, buildScopeFilter([{ id: space.id }]))
-        return { space, folderPath, existsOnDisk, indexedCount }
+    getKnownSpaces: () => MemorySpaceRef[],
+): ResolvedMemoryDocument | { error: string } {
+    const ref = getAgentMemory().getDocumentReferenceById(documentId.trim())
+    if (!ref) return { error: `No memory document found with documentId="${documentId}". Search or list memories again to get a current documentId.` }
+    if (assignedSpaces.length > 0 && !assignedSpaces.some((space) => space.id === ref.spaceId)) {
+        return { error: `Memory document "${documentId}" is outside the selected memory-folder scope.` }
     }
-
-    if (folderParam?.trim()) {
-        const wanted = folderParam.trim()
-        const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownSpaces()
-        const match = findSpaceByIdOrName(candidates, wanted)
-        if (!match) {
-            const scopeLabel = assignedSpaces.length > 0 ? 'selected memory folders' : 'existing memory folders'
-            return { error: `Memory folder "${wanted}" not found in ${scopeLabel}.\n${formatSpaces(candidates.length > 0 ? candidates : getKnownSpaces())}` }
-        }
-
-        const inspected = await inspectSpace(match)
-        if (inspected.indexedCount === 0 && !inspected.existsOnDisk) {
-            return { error: `No memory entry found with title "${title}" in "${match.name}".` }
-        }
-
-        return {
-            spaceId: match.id,
-            spaceName: match.name,
-            fileName,
-            indexedCount: inspected.indexedCount,
-            existsOnDisk: inspected.existsOnDisk,
-            folderPath: inspected.folderPath,
-        }
+    const space = [...assignedSpaces, ...getKnownSpaces()].find((candidate) => candidate.id === ref.spaceId)
+    const folderPath = getMemorySpaceFolderPath(ref.spaceId)
+    if (!space || !folderPath) return { error: `The memory folder for document "${documentId}" is unavailable.` }
+    if (!fileExists(folderPath, ref.fileName)) return { error: `The source file for memory document "${documentId}" no longer exists.` }
+    return {
+        documentId: ref.documentId,
+        revision: ref.revision,
+        spaceId: ref.spaceId,
+        spaceName: space.name,
+        fileName: ref.fileName,
+        folderPath,
     }
+}
 
-    const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownSpaces()
-    const inspected = await Promise.all(candidates.map(inspectSpace))
-    const matches = inspected.filter((item) => item.indexedCount > 0 || item.existsOnDisk)
+function verifyExpectedRevision(content: string, expectedRevision: string): string | undefined {
+    const actualRevision = createHash('sha256').update(content).digest('hex')
+    return actualRevision === expectedRevision
+        ? undefined
+        : `Memory changed since it was retrieved (expected revision ${expectedRevision}, current revision ${actualRevision}). Retrieve it again before retrying the update.`
+}
 
-    if (matches.length === 1) {
-        const match = matches[0]
-        return {
-            spaceId: match.space.id,
-            spaceName: match.space.name,
-            fileName,
-            indexedCount: match.indexedCount,
-            existsOnDisk: match.existsOnDisk,
-            folderPath: match.folderPath,
+async function commitMemoryMutation(
+    resolved: ResolvedMemoryDocument,
+    previousContent: string,
+    nextContent: string,
+    signal?: AbortSignal,
+): Promise<{ chunkCount: number; revision: string; documentId: string }> {
+    backupToRevisions(resolved.folderPath, resolved.fileName)
+    writeTextFile(resolved.folderPath, resolved.fileName, nextContent)
+    let indexed: Awaited<ReturnType<typeof reindexMemoryFile>>
+    try {
+        indexed = await reindexMemoryFile(resolved.spaceId, resolved.fileName, signal)
+    } catch (err) {
+        // Restore source and retrieval index together; a failed embedding call
+        // must not leave disk and search representing different revisions.
+        writeTextFile(resolved.folderPath, resolved.fileName, previousContent)
+        await reindexMemoryFile(resolved.spaceId, resolved.fileName).catch(() => undefined)
+        throw new Error(`Memory update failed and the previous revision was restored: ${(err as Error).message}`)
+    }
+    // Graph data is derived and must not make the authoritative file/vector
+    // commit fail after both have reached the new revision.
+    try {
+        clearMemoryGraphSource(resolved.spaceId, resolved.fileName)
+    } catch (err) {
+        console.warn('[memory-tools] Failed to invalidate derived graph data after memory update:', err)
+    }
+    return indexed
+}
+
+async function commitMemoryRemoval(
+    resolved: ResolvedMemoryDocument,
+    previousContent: string,
+): Promise<{ deletedChunks: number; deletedEdges: number }> {
+    backupToRevisions(resolved.folderPath, resolved.fileName)
+    abortPendingMemoryIndexJobs(resolved.spaceId, resolved.fileName)
+    let deletedChunks: number
+    try {
+        deletedChunks = await getAgentMemory().deleteSourceFile(resolved.fileName, resolved.spaceId)
+    } catch (err) {
+        // A vector-store failure or filesystem failure must not leave only one
+        // side removed. Recreate the source if needed, then rebuild its index.
+        if (!fileExists(resolved.folderPath, resolved.fileName)) {
+            writeTextFile(resolved.folderPath, resolved.fileName, previousContent)
         }
+        await reindexMemoryFile(resolved.spaceId, resolved.fileName).catch(() => undefined)
+        throw new Error(`Memory removal failed and the previous revision was restored: ${(err as Error).message}`)
     }
-
-    if (matches.length > 1) {
-        const listing = matches.map(({ space }) => `  - "${space.name}" (id: ${space.id})`).join('\n')
-        return { error: `Memory entry "${title}" exists in multiple folders. Please specify which to forget using the 'folder' parameter:\n${listing}` }
+    try {
+        const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
+        return { deletedChunks, deletedEdges: edgesDeleted }
+    } catch (err) {
+        console.warn('[memory-tools] Failed to remove derived graph data after memory removal:', err)
+        return { deletedChunks, deletedEdges: 0 }
     }
-
-    return { error: `No memory entry found with title "${title}". Use memory_list_documents or memory_semantic_search to find the exact memory first.` }
 }
 
 /**
@@ -505,6 +561,7 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_list_documents',
+        execution: { readOnly: true },
         description:
             'List memorised documents (source files) stored in your knowledge base. ' +
             'Returns document names, chunk counts, and ingestion dates. Paginated — max 100 per page. ' +
@@ -514,6 +571,7 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
             makeScopeSummary(assignedSpaces),
         parameters: {
             type: 'object',
+            additionalProperties: false,
             properties: {
                 pageIndex: { type: 'number', description: 'Zero-based page index (default: 0). Each page returns up to 100 documents.' },
                 folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the listing. Without this, lists all selected folders.' },
@@ -545,9 +603,13 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
                 return { success: false, output: `Page ${page + 1} is out of range. Total pages: ${totalPages} (${allFiles.length} documents).` }
             }
 
-            const lines = pageFiles.map(f =>
-                `- ${f.sourceFile} (${f.chunkCount} chunk${f.chunkCount !== 1 ? 's' : ''})`
-            )
+            const spaceMap = buildSpaceMap(assignedSpaces, getKnownSpaces())
+            const lines = pageFiles.map((file) => {
+                const ref = file.spaceId ? mem.getDocumentReference(file.spaceId, file.sourceFile) : undefined
+                const location = file.spaceId ? `, folder=${spaceMap.get(file.spaceId) || file.spaceId}` : ''
+                const identity = ref ? `, documentId=${ref.documentId}, revision=${ref.revision}` : ''
+                return `- ${file.sourceFile} (${file.chunkCount} chunk${file.chunkCount !== 1 ? 's' : ''}${location}${identity})`
+            })
 
             const scope = resolvedScope.space ? ` in "${resolvedScope.space.name}"` : ''
             const header = allFiles.length <= PAGE_SIZE
@@ -571,6 +633,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_retrieve_chunks',
+        execution: { readOnly: true },
         description:
             'Retrieve additional chunks from a stored document by source file and part number range. ' +
             'Very useful to gather more detail of a section (e.g. "Part 4 - 6" when Part 5 matches). ' +
@@ -625,6 +688,8 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
 
             const total = await mem.countChunks(sourceFile, resolvedScope.filter)
             const spaceMap = buildSpaceMap(assignedSpaces, getKnownSpaces())
+            const resolvedSpaceId = distinctSpaces.length === 1 ? distinctSpaces[0] : resolvedScope.space?.id
+            const documentRef = resolvedSpaceId ? mem.getDocumentReference(resolvedSpaceId, sourceFile) : undefined
             const formatted = chunks.map(c => {
                 const location = c.spaceId && !resolvedScope.space
                     ? `[${spaceMap.get(c.spaceId) || c.spaceId} · Part ${c.chunkIndex + 1}/${total}]`
@@ -635,7 +700,10 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
             const capNote = wasCapped
                 ? `\n\n(Showing Parts ${requestedMinIndex + 1}-${cappedMax + 1} of requested Parts ${requestedMinIndex + 1}-${requestedMaxIndex + 1}; capped at 20 chunks per call. Call again with a later range to continue.)`
                 : ''
-            return { success: true, output: formatted + capNote }
+            const identity = documentRef
+                ? `[Document: documentId=${documentRef.documentId}, revision=${documentRef.revision}]\n\n`
+                : ''
+            return { success: true, output: identity + formatted + capNote }
         }
     }
 }
@@ -649,6 +717,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_semantic_search',
+        execution: { readOnly: true },
         description:
             'Search through stored RAG memories using a semantic query. ' +
             'Use this to get a rough starting point for memories, which can then be refined or expanded using other tools. ' +
@@ -701,6 +770,8 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             const formatted = results.map(r => {
                 const parts: string[] = []
                 const spaceName = r.spaceId ? spaceMap.get(r.spaceId) || r.spaceId : undefined
+                const ref = r.sourceFile && r.spaceId ? mem.getDocumentReference(r.spaceId, r.sourceFile) : undefined
+                if (ref) parts.push(`[documentId=${ref.documentId}, revision=${ref.revision}]`)
                 if (r.sourceFile) {
                     const total = countMap.get(`${r.sourceFile}\u0000${r.spaceId || ''}`)
                     const label = spaceName ? `${spaceName} · ${r.sourceFile}` : r.sourceFile
@@ -750,6 +821,7 @@ function memoryGraphSourceIdsForChunks(chunks: Array<{ sourceFile?: string; spac
 export function makeRelationshipGraphSearchTool(): ToolDefinition {
     return {
         name: 'relationship_graph_search',
+        execution: { readOnly: true },
         description:
             'Search and inspect the durable relationship graph extracted from conversations and memory use. ' +
             'Use this to look up known people, organizations, projects, technologies, concepts, or relationships. ' +
@@ -976,8 +1048,8 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
             },
             required: ['title', 'content']
         },
-        timeout: 30_000,
-        execute: async (params: unknown) => {
+        timeout: 120_000,
+        execute: async (params: unknown, signal?: AbortSignal) => {
             const { title, content, folder } = params as { title: string; content: string; folder?: string }
 
             const resolved = await resolveTargetSpace(assignedSpaces, folder, undefined, getKnownSpaces)
@@ -993,274 +1065,215 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
             const uniqueName = resolveUniqueFileName(folderPath, fileName)
             writeTextFile(folderPath, uniqueName, content)
 
-            scheduleMemoryReindexJob(resolved.spaceId, uniqueName)
-
-            return {
-                success: true,
-                output: `Memory "${uniqueName}" created in "${resolved.spaceName}". Memory indexing is running in the background.`
-            }
-        }
-    }
-}
-
-/**
- * Create a `memory_update` tool that lets the LLM update an existing memory file.
- * Supports full replacement or targeted replacement by indexed chunk range.
- */
-export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
-    const { assignedSpaces = [] } = opts
-    const getKnownSpaces = createKnownMemorySpacesLoader()
-    return {
-        name: 'memory_update',
-        description:
-            'Update an existing memory file. Auto-matches the title to find the file; if multiple folders contain the same title, folder parameter is required. ' +
-            'If exactly one memory folder is selected, omit "folder" to update there when the title is not found elsewhere in the selected scope. ' +
-            'mode is required: "replace_all" replaces the whole file, "replace_range" replaces a Part range, and "append" adds content to the end without touching existing text. ' +
-            'For partial updates, first inspect the relevant parts with memory_retrieve_chunks, then call with mode="replace_range" and partStart/partEnd. ' +
-            'The replacement content should contain the complete desired text for that Part range.',
-        parameters: {
-            type: 'object',
-            properties: {
-                title: { type: 'string', description: 'The title (file name without .md) of the memory entry to update.' },
-                mode: {
-                    type: 'string',
-                    enum: ['replace_all', 'replace_range', 'append'],
-                    description: '"replace_all" replaces the full file, "replace_range" replaces partStart through partEnd, and "append" adds content to the end of the file.',
-                },
-                content: { type: 'string', description: 'For replace_all: the full replacement text. For replace_range: the full replacement text for that Part range. For append: the text to add at the end.' },
-                folder: { type: 'string', description: 'Memory folder name, relative path (e.g. "projects/acme"), or ID. Required only when the title exists in multiple folders; otherwise auto-selected, including the only selected folder.' },
-                partStart: { type: 'number', description: 'Required only with mode="replace_range". First 1-based Part number to replace, as shown by memory_retrieve_chunks or semantic search.' },
-                partEnd: { type: 'number', description: 'Required only with mode="replace_range". Last 1-based Part number to replace, inclusive.' },
-            },
-            required: ['title', 'mode', 'content']
-        },
-        timeout: 30_000,
-        execute: async (params: unknown) => {
-            const { title, mode: rawMode, operation, content, folder, partStart, partEnd, chunkStartIndex: legacyChunkStartIndex, chunkEndIndex: legacyChunkEndIndex, sectionHeading } = params as {
-                title: string; mode?: string; operation?: string; content: string; folder?: string; partStart?: number; partEnd?: number; chunkStartIndex?: number; chunkEndIndex?: number; sectionHeading?: string
-            }
-
-            if (sectionHeading?.trim()) {
-                return {
-                    success: false,
-                    output: 'Section-heading updates are no longer supported because memories may come from non-Markdown documents. Use memory_retrieve_chunks, then retry memory_update with mode="replace_range" and partStart/partEnd.',
-                }
-            }
-
-            const mode = rawMode ?? (operation === 'append' ? 'append' : operation === 'set' && (legacyChunkStartIndex !== undefined || legacyChunkEndIndex !== undefined) ? 'replace_range' : operation === 'set' ? 'replace_all' : undefined)
-            if (mode !== 'replace_all' && mode !== 'replace_range' && mode !== 'append') {
-                return { success: false, output: 'mode is required and must be "replace_all", "replace_range", or "append".' }
-            }
-
-            if (mode === 'append' && (partStart !== undefined || partEnd !== undefined || legacyChunkStartIndex !== undefined || legacyChunkEndIndex !== undefined)) {
-                return { success: false, output: 'partStart/partEnd only apply to mode="replace_range". Omit them for mode="append".' }
-            }
-            if (mode === 'replace_all' && (partStart !== undefined || partEnd !== undefined || legacyChunkStartIndex !== undefined || legacyChunkEndIndex !== undefined)) {
-                return { success: false, output: 'partStart/partEnd only apply to mode="replace_range". Omit them for mode="replace_all".' }
-            }
-
-            const resolved = await resolveTargetSpace(assignedSpaces, folder, title, getKnownSpaces)
-            if ('error' in resolved) return { success: false, output: resolved.error }
-
-            const mem = getAgentMemory()
-            const targetFilter = buildScopeFilter([{ id: resolved.spaceId }])
-            const fileName = title.endsWith('.md') ? title : `${title}.md`
-            const existingCount = await mem.countChunks(fileName, targetFilter)
-
-            const folderPath = getMemorySpaceFolderPath(resolved.spaceId)
-            if (!folderPath) {
-                return { success: false, output: `Memory folder "${resolved.spaceName}" has no folder configured. Cannot update memory.` }
-            }
-            const existsOnDisk = fileExists(folderPath, fileName)
-
-            if (existingCount === 0 && !existsOnDisk) {
-                return { success: false, output: `No memory entry found with title "${title}" in "${resolved.spaceName}". Use memory_create to create a new entry.` }
-            }
-
-            if (mode === 'append') {
-                if (!existsOnDisk) {
-                    return { success: false, output: `Cannot append: file "${fileName}" was not found on disk.` }
-                }
-
-                let fileContent: string
-                try {
-                    fileContent = readTextFile(folderPath, fileName)
-                } catch {
-                    return { success: false, output: `Could not read file "${fileName}" from memory folder.` }
-                }
-
-                backupToRevisions(folderPath, fileName)
-                writeTextFile(folderPath, fileName, fileContent.trimEnd() + '\n\n' + content.trim() + '\n')
-                clearMemoryGraphSource(resolved.spaceId, fileName)
-                scheduleMemoryReindexJob(resolved.spaceId, fileName)
-
-                return {
-                    success: true,
-                    output: `Content appended to "${fileName}" in "${resolved.spaceName}". Memory indexing is running in the background.`
-                }
-            }
-
-            if (mode === 'replace_all') {
-                if (existsOnDisk) backupToRevisions(folderPath, fileName)
-                writeTextFile(folderPath, fileName, content)
-                clearMemoryGraphSource(resolved.spaceId, fileName)
-                scheduleMemoryReindexJob(resolved.spaceId, fileName)
-
-                return {
-                    success: true,
-                    output: `Memory "${fileName}" fully replaced in "${resolved.spaceName}". Memory indexing is running in the background.`
-                }
-            }
-
-            const chunkStartIndex = partStart !== undefined ? toPartIndex(partStart) : legacyChunkStartIndex
-            const chunkEndIndex = partEnd !== undefined ? toPartIndex(partEnd) : legacyChunkEndIndex
-            if (!Number.isInteger(chunkStartIndex) || !Number.isInteger(chunkEndIndex)) {
-                return { success: false, output: 'mode="replace_range" requires integer partStart and partEnd values.' }
-            }
-            if (chunkStartIndex! < 0 || chunkEndIndex! < chunkStartIndex!) {
-                return { success: false, output: 'Invalid Part range. partEnd must be greater than or equal to partStart, and Part numbers start at 1.' }
-            }
-            if (!existsOnDisk) {
-                return { success: false, output: `Part replacement requires the file "${fileName}" to exist on disk. Use mode="replace_all" instead.` }
-            }
-
-            let fileContent: string
+            let indexed: Awaited<ReturnType<typeof reindexMemoryFile>>
             try {
-                fileContent = readTextFile(folderPath, fileName)
-            } catch {
-                return { success: false, output: `Could not read file "${fileName}" from memory folder.` }
+                indexed = await reindexMemoryFile(resolved.spaceId, uniqueName, signal)
+            } catch (err) {
+                deleteFile(folderPath, uniqueName)
+                throw new Error(`Memory creation failed; the unindexed source file was removed: ${(err as Error).message}`)
             }
-
-            const chunks = await mem.getChunksByRange(fileName, chunkStartIndex!, chunkEndIndex!, targetFilter)
-            if (chunks.length === 0) {
-                return {
-                    success: false,
-                    output: `No parts found for "${fileName}" in Part range ${chunkStartIndex! + 1}-${chunkEndIndex! + 1}. Retrieve the current parts and retry with a valid range, or use mode="append" to add new content at the end.`,
-                }
-            }
-
-            const replaced = replaceChunkRangeInText(fileContent, chunks, content)
-            if ('error' in replaced) return { success: false, output: replaced.error }
-
-            backupToRevisions(folderPath, fileName)
-            writeTextFile(folderPath, fileName, replaced.content)
-            clearMemoryGraphSource(resolved.spaceId, fileName)
-            scheduleMemoryReindexJob(resolved.spaceId, fileName)
 
             return {
                 success: true,
-                output: `Parts ${replaced.startIndex + 1}-${replaced.endIndex + 1} in "${fileName}" updated in "${resolved.spaceName}". Memory indexing is running in the background.`
+                output: `Memory "${uniqueName}" created and indexed in "${resolved.spaceName}" (documentId=${indexed.documentId}, revision=${indexed.revision}, chunks=${indexed.chunkCount}).`
             }
         }
     }
 }
 
-/**
- * Create a `memory_remove` tool that lets the LLM remove obsolete memory.
- * Supports full source-file removal or targeted removal by indexed chunk range.
- */
-export function makeForgetMemoryTool(opts: MemoryToolOptions): ToolDefinition {
+function memoryMutationSchema(extra: Record<string, unknown> = {}, extraRequired: string[] = []): Record<string, unknown> {
+    return {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+            documentId: { type: 'string', description: 'Stable document ID returned by memory search, listing, retrieval, or creation.' },
+            expectedRevision: { type: 'string', description: 'Exact revision returned by the most recent memory read. Prevents overwriting a newer edit.' },
+            content: { type: 'string', description: 'Content to write.' },
+            ...extra,
+        },
+        required: ['documentId', 'expectedRevision', 'content', ...extraRequired],
+    }
+}
+
+async function prepareMemoryMutation(
+    params: { documentId: string; expectedRevision: string },
+    assignedSpaces: MemorySpaceRef[],
+    getKnownSpaces: () => MemorySpaceRef[],
+): Promise<{ resolved: ResolvedMemoryDocument; fileContent: string } | { error: string }> {
+    const resolved = resolveMemoryDocumentById(params.documentId, assignedSpaces, getKnownSpaces)
+    if ('error' in resolved) return resolved
+    let fileContent: string
+    try {
+        fileContent = readTextFile(resolved.folderPath, resolved.fileName)
+    } catch {
+        return { error: `Could not read file "${resolved.fileName}" from memory folder.` }
+    }
+    const revisionError = verifyExpectedRevision(fileContent, params.expectedRevision)
+    return revisionError ? { error: revisionError } : { resolved, fileContent }
+}
+
+async function runPreparedMemoryMutation(
+    params: { documentId: string; expectedRevision: string },
+    assignedSpaces: MemorySpaceRef[],
+    getKnownSpaces: () => MemorySpaceRef[],
+    signal: AbortSignal | undefined,
+    operation: (prepared: { resolved: ResolvedMemoryDocument; fileContent: string }) => Promise<ToolResult>,
+): Promise<ToolResult> {
+    return withMemoryDocumentLock(params.documentId, signal, async () => {
+        const prepared = await prepareMemoryMutation(params, assignedSpaces, getKnownSpaces)
+        if ('error' in prepared) return { success: false, output: prepared.error }
+        return operation(prepared)
+    })
+}
+
+export function makeMemoryAppendTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedSpaces = [] } = opts
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
-        name: 'memory_remove',
-        description:
-            'Remove an obsolete or incorrect memory entry. Auto-matches the title to find the file; if multiple folders contain the same title, folder parameter is required. ' +
-            'By default, forgets the whole memory by moving the source file to revisions and deleting its indexed chunks. ' +
-            'To forget only part of a memory, first inspect the relevant parts with memory_retrieve_chunks, then provide partStart and partEnd. ' +
-            'Use this only when information is no longer relevant, should no longer be remembered, or conflicts with newer information.',
-        parameters: {
-            type: 'object',
-            properties: {
-                title: { type: 'string', description: 'The title (file name without .md) of the memory entry to remove.' },
-                folder: { type: 'string', description: 'Memory folder name, relative path (e.g. "projects/acme"), or ID. Required only when the title exists in multiple folders.' },
-                partStart: { type: 'number', description: 'Optional first 1-based Part number to forget, as shown by memory_retrieve_chunks or semantic search.' },
-                partEnd: { type: 'number', description: 'Optional last 1-based Part number to forget, inclusive. Required when partStart is provided.' },
-            },
-            required: ['title']
+        name: 'memory_append',
+        description: 'Append content to an existing memory document without modifying its current text. Read the document first and pass its latest revision.',
+        parameters: memoryMutationSchema(),
+        timeout: 120_000,
+        execute: async (params: unknown, signal?: AbortSignal) => {
+            const input = params as { documentId: string; expectedRevision: string; content: string }
+            return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
+                const indexed = await commitMemoryMutation(
+                    resolved,
+                    fileContent,
+                    fileContent.trimEnd() + '\n\n' + input.content.trim() + '\n',
+                    signal,
+                )
+                return { success: true, output: `Content appended to "${resolved.fileName}" in "${resolved.spaceName}" and indexed (documentId=${indexed.documentId}, revision=${indexed.revision}, chunks=${indexed.chunkCount}).` }
+            })
         },
-        timeout: 30_000,
-        execute: async (params: unknown) => {
-            const { title, folder, partStart, partEnd, chunkStartIndex: legacyChunkStartIndex, chunkEndIndex: legacyChunkEndIndex } = params as {
-                title: string; folder?: string; partStart?: number; partEnd?: number; chunkStartIndex?: number; chunkEndIndex?: number
+    }
+}
+
+export function makeMemoryReplaceAllTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedSpaces = [] } = opts
+    const getKnownSpaces = createKnownMemorySpacesLoader()
+    return {
+        name: 'memory_replace_all',
+        description: 'Replace an entire existing memory document. Read it first and pass its latest revision to prevent overwriting concurrent changes.',
+        parameters: memoryMutationSchema(),
+        timeout: 120_000,
+        execute: async (params: unknown, signal?: AbortSignal) => {
+            const input = params as { documentId: string; expectedRevision: string; content: string }
+            return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
+                const indexed = await commitMemoryMutation(resolved, fileContent, input.content, signal)
+                return { success: true, output: `Memory "${resolved.fileName}" fully replaced in "${resolved.spaceName}" and indexed (documentId=${indexed.documentId}, revision=${indexed.revision}, chunks=${indexed.chunkCount}).` }
+            })
+        },
+    }
+}
+
+export function makeMemoryReplaceRangeTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedSpaces = [] } = opts
+    const getKnownSpaces = createKnownMemorySpacesLoader()
+    return {
+        name: 'memory_replace_range',
+        description: 'Replace a contiguous Part range in an existing memory document. First retrieve the current parts and pass the returned documentId and revision.',
+        parameters: memoryMutationSchema({
+            partStart: { type: 'integer', minimum: 1, description: 'First 1-based Part number to replace.' },
+            partEnd: { type: 'integer', minimum: 1, description: 'Last 1-based Part number to replace, inclusive.' },
+        }, ['partStart', 'partEnd']),
+        timeout: 120_000,
+        execute: async (params: unknown, signal?: AbortSignal) => {
+            const input = params as { documentId: string; expectedRevision: string; content: string; partStart: number; partEnd: number }
+            if (!Number.isInteger(input.partStart) || !Number.isInteger(input.partEnd) || input.partStart < 1 || input.partEnd < input.partStart) {
+                return { success: false, output: 'partStart and partEnd must be valid 1-based integers with partEnd greater than or equal to partStart.' }
             }
-            if (!title?.trim()) return { success: false, output: 'Title is required.' }
-
-            const resolved = await resolveExistingMemorySpace(assignedSpaces, title.trim(), folder, getKnownSpaces)
-            if ('error' in resolved) return { success: false, output: resolved.error }
-
-            const mem = getAgentMemory()
-            const chunkStartIndex = partStart !== undefined ? toPartIndex(partStart) : legacyChunkStartIndex
-            const chunkEndIndex = partEnd !== undefined ? toPartIndex(partEnd) : legacyChunkEndIndex
-            const hasChunkRange = chunkStartIndex !== undefined || chunkEndIndex !== undefined
-
-            if (hasChunkRange) {
-                if (!Number.isInteger(chunkStartIndex) || !Number.isInteger(chunkEndIndex)) {
-                    return { success: false, output: 'Partial memory removal requires integer partStart and partEnd values.' }
+            return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
+                const startIndex = toPartIndex(input.partStart)!
+                const endIndex = toPartIndex(input.partEnd)!
+                const chunks = await getAgentMemory().getChunksByRange(
+                    resolved.fileName,
+                    startIndex,
+                    endIndex,
+                    buildScopeFilter([{ id: resolved.spaceId }]),
+                )
+                if (chunks.length !== endIndex - startIndex + 1) {
+                    return { success: false, output: `The requested Part range is stale or incomplete. Retrieve "${resolved.fileName}" again and retry.` }
                 }
-                if (chunkStartIndex! < 0 || chunkEndIndex! < chunkStartIndex!) {
-                    return { success: false, output: 'Invalid Part range. partEnd must be greater than or equal to partStart, and Part numbers start at 1.' }
-                }
-                if (!resolved.folderPath || !resolved.existsOnDisk) {
-                    return { success: false, output: `Part removal requires the file "${resolved.fileName}" to exist on disk.` }
-                }
+                const replaced = replaceChunkRangeInText(fileContent, chunks, input.content)
+                if ('error' in replaced) return { success: false, output: replaced.error }
+                const indexed = await commitMemoryMutation(resolved, fileContent, replaced.content, signal)
+                return { success: true, output: `Parts ${replaced.startIndex + 1}-${replaced.endIndex + 1} in "${resolved.fileName}" replaced and indexed (documentId=${indexed.documentId}, revision=${indexed.revision}, chunks=${indexed.chunkCount}).` }
+            })
+        },
+    }
+}
 
-                let fileContent: string
-                try {
-                    fileContent = readTextFile(resolved.folderPath, resolved.fileName)
-                } catch {
-                    return { success: false, output: `Could not read file "${resolved.fileName}" from memory folder.` }
-                }
+function memoryRemovalSchema(withRange: boolean): Record<string, unknown> {
+    return {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+            documentId: { type: 'string', description: 'Stable document ID returned by a current memory read.' },
+            expectedRevision: { type: 'string', description: 'Exact revision returned by the most recent memory read.' },
+            ...(withRange ? {
+                partStart: { type: 'integer', minimum: 1, description: 'First 1-based Part number to remove.' },
+                partEnd: { type: 'integer', minimum: 1, description: 'Last 1-based Part number to remove, inclusive.' },
+            } : {}),
+        },
+        required: withRange
+            ? ['documentId', 'expectedRevision', 'partStart', 'partEnd']
+            : ['documentId', 'expectedRevision'],
+    }
+}
 
-                const targetFilter = buildScopeFilter([{ id: resolved.spaceId }])
-                const chunks = await mem.getChunksByRange(resolved.fileName, chunkStartIndex!, chunkEndIndex!, targetFilter)
-                const expectedCount = chunkEndIndex! - chunkStartIndex! + 1
-                if (chunks.length !== expectedCount) {
-                    return {
-                        success: false,
-                        output: `Found ${chunks.length}/${expectedCount} parts for "${resolved.fileName}" in Part range ${chunkStartIndex! + 1}-${chunkEndIndex! + 1}. Retrieve the current parts and retry with a valid range.`,
-                    }
-                }
+export function makeMemoryRemoveAllTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedSpaces = [] } = opts
+    const getKnownSpaces = createKnownMemorySpacesLoader()
+    return {
+        name: 'memory_remove_all',
+        description: 'Forget an entire memory document. Read it first and pass its latest revision. This moves the source to revisions and removes its retrieval and graph indexes.',
+        parameters: memoryRemovalSchema(false),
+        timeout: 30_000,
+        execute: async (params: unknown, signal?: AbortSignal) => {
+            const input = params as { documentId: string; expectedRevision: string }
+            return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
+                const removed = await commitMemoryRemoval(resolved, fileContent)
+                return { success: true, output: `Memory "${resolved.fileName}" forgotten from "${resolved.spaceName}" (${removed.deletedChunks} indexed chunks and ${removed.deletedEdges} graph edges removed).` }
+            })
+        },
+    }
+}
 
+export function makeMemoryRemoveRangeTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedSpaces = [] } = opts
+    const getKnownSpaces = createKnownMemorySpacesLoader()
+    return {
+        name: 'memory_remove_range',
+        description: 'Forget a contiguous Part range from a memory document. Retrieve the current parts first and pass the returned documentId and revision.',
+        parameters: memoryRemovalSchema(true),
+        timeout: 120_000,
+        execute: async (params: unknown, signal?: AbortSignal) => {
+            const input = params as { documentId: string; expectedRevision: string; partStart: number; partEnd: number }
+            if (!Number.isInteger(input.partStart) || !Number.isInteger(input.partEnd) || input.partStart < 1 || input.partEnd < input.partStart) {
+                return { success: false, output: 'partStart and partEnd must be valid 1-based integers with partEnd greater than or equal to partStart.' }
+            }
+            return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
+                const startIndex = toPartIndex(input.partStart)!
+                const endIndex = toPartIndex(input.partEnd)!
+                const chunks = await getAgentMemory().getChunksByRange(
+                    resolved.fileName,
+                    startIndex,
+                    endIndex,
+                    buildScopeFilter([{ id: resolved.spaceId }]),
+                )
+                if (chunks.length !== endIndex - startIndex + 1) {
+                    return { success: false, output: `The requested Part range is stale or incomplete. Retrieve "${resolved.fileName}" again and retry.` }
+                }
                 const removed = removeChunkRangeFromText(fileContent, chunks)
                 if ('error' in removed) return { success: false, output: removed.error }
-
-                backupToRevisions(resolved.folderPath, resolved.fileName)
-
                 if (!removed.content.trim()) {
-                    abortPendingMemoryIndexJobs(resolved.spaceId, resolved.fileName)
-                    const deleted = await mem.deleteSourceFile(resolved.fileName, resolved.spaceId)
-                    // Remove all entity graph edges sourced from this memory file
-                    const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
-                    return {
-                        success: true,
-                        output: `Parts ${removed.startIndex + 1}-${removed.endIndex + 1} removed; "${resolved.fileName}" is now empty and was forgotten from "${resolved.spaceName}" (${deleted} indexed chunk${deleted !== 1 ? 's' : ''} deleted, ${edgesDeleted} graph edge${edgesDeleted !== 1 ? 's' : ''} removed).`
-                    }
+                    const deleted = await commitMemoryRemoval(resolved, fileContent)
+                    return { success: true, output: `Parts ${input.partStart}-${input.partEnd} removed; the empty memory was forgotten (${deleted.deletedChunks} indexed chunks and ${deleted.deletedEdges} graph edges removed).` }
                 }
-
-                writeTextFile(resolved.folderPath, resolved.fileName, removed.content)
-                clearMemoryGraphSource(resolved.spaceId, resolved.fileName)
-
-                scheduleMemoryReindexJob(resolved.spaceId, resolved.fileName)
-
-                return {
-                    success: true,
-                    output: `Parts ${removed.startIndex + 1}-${removed.endIndex + 1} removed from "${resolved.fileName}" in "${resolved.spaceName}". Memory indexing is running in the background.`
-                }
-            }
-
-            if (resolved.folderPath && resolved.existsOnDisk) {
-                backupToRevisions(resolved.folderPath, resolved.fileName)
-            }
-
-            const deleted = await mem.deleteSourceFile(resolved.fileName, resolved.spaceId)
-            // Remove all entity graph edges sourced from this memory file
-            abortPendingMemoryIndexJobs(resolved.spaceId, resolved.fileName)
-            const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
-            return {
-                success: true,
-                output: `Memory "${resolved.fileName}" forgotten from "${resolved.spaceName}" (${deleted} indexed chunk${deleted !== 1 ? 's' : ''} deleted, ${edgesDeleted} graph edge${edgesDeleted !== 1 ? 's' : ''} removed).`
-            }
-        }
+                const indexed = await commitMemoryMutation(resolved, fileContent, removed.content, signal)
+                return { success: true, output: `Parts ${input.partStart}-${input.partEnd} removed and indexed (documentId=${indexed.documentId}, revision=${indexed.revision}, chunks=${indexed.chunkCount}).` }
+            })
+        },
     }
 }

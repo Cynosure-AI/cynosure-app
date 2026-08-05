@@ -9,6 +9,8 @@ const AUTO_MEMORY_RETRIEVAL_COUNT = 12
 const MAX_SELECTED_MEMORIES = 5
 const TURN_CHAR_LIMIT = 200
 const CANDIDATE_CHAR_LIMIT = 1_200
+const MIN_RELATIVE_MEMORY_SCORE = 0.65
+const MIN_MEMORY_CANDIDATES = 3
 const MEMORY_CONTEXT_SELECTION_TOOL_NAME = 'select_memory_context'
 
 export interface ApplyAutoMemoryRoutingInput {
@@ -164,7 +166,7 @@ async function selectMemoryContext(input: {
                         'Return an empty list if none of the candidates are useful.',
                         input.hasGraph
                             ? 'Set includeGraph to true only if the related entity graph is likely useful context.'
-                            : 'Set includeGraph to false.',
+                            : '',
                         'Do not answer the user. Do not include rationale. /no_think',
                     ].join('\n'),
                 },
@@ -197,6 +199,22 @@ async function selectMemoryContext(input: {
 }
 
 function buildMemoryContextSelectionTool(candidateIds: string[], hasGraph: boolean): ToolDefinition {
+    const properties: Record<string, unknown> = {
+        memoryIds: {
+            type: 'array',
+            description: 'Candidate IDs to include in context, ordered by usefulness.',
+            items: { type: 'string', enum: candidateIds },
+            maxItems: MAX_SELECTED_MEMORIES,
+        },
+    }
+    const required = ['memoryIds']
+    if (hasGraph) {
+        properties.includeGraph = {
+            type: 'boolean',
+            description: 'Whether the related entity graph should also be included.',
+        }
+        required.push('includeGraph')
+    }
     return {
         name: MEMORY_CONTEXT_SELECTION_TOOL_NAME,
         description: 'Select the retrieved memory candidates that should be injected into the main assistant context.',
@@ -204,21 +222,8 @@ function buildMemoryContextSelectionTool(candidateIds: string[], hasGraph: boole
         parameters: {
             type: 'object',
             additionalProperties: false,
-            properties: {
-                memoryIds: {
-                    type: 'array',
-                    description: 'Candidate IDs to include in context, ordered by usefulness.',
-                    items: { type: 'string', enum: candidateIds },
-                    maxItems: MAX_SELECTED_MEMORIES,
-                },
-                includeGraph: {
-                    type: 'boolean',
-                    description: hasGraph
-                        ? 'Whether the related entity graph should also be included.'
-                        : 'Must be false because no related entity graph was retrieved.',
-                },
-            },
-            required: ['memoryIds', 'includeGraph'],
+            properties,
+            required,
         },
         execute: async () => ({ success: true, output: 'ok' }),
     }
@@ -314,10 +319,25 @@ function messageContentForRouter(content: string | ContentPart[]): string {
 }
 
 function filterAutoMemoryCandidates(memory: AggregatedMemory, query: string): AggregatedMemory {
+    const permanent = filterWeakRelativeMatches(memory.permanent)
     return {
-        permanent: memory.permanent,
-        graph: memory.permanent.length > 0 || graphSeedMatchesQuery(memory.graph, query) ? memory.graph : undefined,
+        permanent,
+        graph: permanent.length > 0 || graphSeedMatchesQuery(memory.graph, query) ? memory.graph : undefined,
     }
+}
+
+/**
+ * Dense, RRF, and external-reranker scores have different scales, so an
+ * absolute cross-mode cutoff is invalid. Remove only the weak tail relative
+ * to the best result while retaining a small recall floor for LLM curation.
+ */
+function filterWeakRelativeMatches(candidates: RetrievedChunk[]): RetrievedChunk[] {
+    if (candidates.length <= MIN_MEMORY_CANDIDATES) return candidates
+    const scores = candidates.map((candidate) => candidate.rerankerScore ?? candidate.score)
+    const best = Math.max(...scores.filter((score) => Number.isFinite(score) && score > 0))
+    if (!Number.isFinite(best)) return candidates
+    const threshold = best * MIN_RELATIVE_MEMORY_SCORE
+    return candidates.filter((_, index) => index < MIN_MEMORY_CANDIDATES || (Number.isFinite(scores[index]) && scores[index] >= threshold))
 }
 
 function graphSeedMatchesQuery(graph: AggregatedMemory['graph'], query: string): boolean {

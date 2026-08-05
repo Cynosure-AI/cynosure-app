@@ -111,16 +111,12 @@ hybridSearch(queryText):
     2. Determine candidateCount:
          - If LLM reranker enabled: max(topK, configured candidateCount)
          - Otherwise: topK
-    3. Run TWO queries CONCURRENTLY:
-       a. Hybrid query: vector + FTS + RRF reranker
+    3. Run a native hybrid query:
+       a. vector + FTS + RRF reranker
             → LanceDB native hybrid (cosine + BM25 merged via RRF)
             → Returns topK results
-       b. Vector-only query: cosine distance only
-            → Returns topK*3 results (used ONLY for score extraction
-               because hybrid query doesn't expose individual scores)
-    4. Score each hybrid result using the vector-only distance score:
-         score = 1 - cosine_distance
-    5. Optionally pass through LLM reranker
+    4. Preserve the RRF relevance score that produced the hybrid rank
+    5. Optionally pass through an external reranker
     6. Return topK ranked chunks
 ```
 
@@ -164,13 +160,15 @@ Each `RetrievedChunk` contains:
   id: string           // nanoid
   text: string         // The chunk content
   source: string       // Always "permanent"
-  score: number        // Cosine similarity (0..1, higher = better)
+  score: number        // Score that produced the rank (RRF fusion or reranker)
   rerankerScore?: number // If LLM reranker was used
   sourceFile?: string  // Filename in the memory space
   chunkIndex?: number  // Sequential index within the file
   spaceId?: string     // UUID of the memory space
   spaceName?: string   // Resolved human-readable name
   totalChunks?: number // Total chunks for this source file (enriched by aggregator)
+  documentId?: string  // Stable source identity (enriched by aggregator)
+  revision?: string    // SHA-256 revision of the indexed source
 }
 ```
 
@@ -381,9 +379,9 @@ When formatted for prompt injection via `formatWalk()`, it produces:
 The coupling is **loose but intentional**:
 
 1. **Semantic search runs first** — retrieves up to `permanentTopK` (default 3, auto-routing uses 12) chunks from LanceDB
-2. **Deduplication**: chunks with identical first-100-characters are collapsed
-3. **Chunk enrichment**: totalChunks per source file is computed
-4. **Entity graph enrichment**: the aggregator calls:
+2. **Deduplication**: chunks with the same content hash (or fully normalized text) are collapsed
+3. **Chunk enrichment**: totalChunks, stable documentId, and the indexed source revision are added
+4. **Optional entity graph enrichment**: only callers that explicitly set `includeGraph: true` run:
 
    ```
    graph.findSeedNodes(query, chunkTexts, 8) → seed nodes
@@ -403,9 +401,9 @@ The coupling is **loose but intentional**:
 - Graph results only (semantic query returned nothing but entities matched — **not possible** in current code since graph enrichment requires semantic results first)
 - Both combined (normal case)
 
-### Formatting for prompt injection
+### Formatting for model context
 
-`format(memory)` produces a string suitable for injecting into the agent's system prompt:
+`format(memory)` produces evidence with source, Part, documentId, and revision metadata. Pre-execution wraps this in a lower-authority user-context message explicitly marked as untrusted data; retrieved documents are never promoted to system instructions.
 
 ```
 ## Relevant Knowledge
@@ -426,8 +424,20 @@ The `auto-memory-routing.ts` module decides **whether** and **how** to retrieve 
 2. **Primary retrieval**: aggregate with `permanentTopK=12` using the user's query
 3. **Fallback retrieval**: if primary returned nothing AND there's contextual history, retry with a built contextual query
 4. **Selection**: from the 12 candidates, select up to 5 most relevant chunks (via LLM call)
-5. **Chunk expansion**: if a selected chunk references a multi-chunk file, fetch adjacent chunks
-6. **Format & inject**: the selected/formatted memory is prepended to the system message
+5. **Graph policy**: automatic semantic retrieval does not expand the entity graph; agents use `relationship_graph_search` explicitly when needed
+6. **Format & inject**: selected evidence is added below system authority and marked as untrusted
+
+### Mutation consistency
+
+Mutation operations are exposed as separate tools rather than a mode-switching schema:
+
+- `memory_append`
+- `memory_replace_range`
+- `memory_replace_all`
+- `memory_remove_range`
+- `memory_remove_all`
+
+Reads return a stable `documentId` and a content revision. Every mutation requires the expected revision, is serialized per document across concurrent runs, rejects stale writes, creates a recoverable revision, and waits for the replacement retrieval index to become active before reporting success. If indexing fails, the previous source and index are restored.
 
 ---
 

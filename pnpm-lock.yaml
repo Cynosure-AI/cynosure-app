@@ -99,6 +99,9 @@ importers:
       adm-zip:
         specifier: ^0.5.16
         version: 0.5.17
+      ajv:
+        specifier: ^8.18.0
+        version: 8.18.0
       apache-arrow:
         specifier: ^18.1.0
         version: 18.1.0

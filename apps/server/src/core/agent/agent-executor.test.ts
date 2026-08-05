@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { AgentExecutor } from './agent-executor.js'
+import { AgentExecutor, MaxToolRoundsExceededError } from './agent-executor.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { StreamChunk, ToolDefinition } from '../gateway/providers/base.provider.js'
 
@@ -53,5 +53,95 @@ describe('AgentExecutor cancellation', () => {
     await expect(run).rejects.toMatchObject({ name: 'AbortError' })
     expect(toolSignal?.aborted).toBe(true)
     expect(streamComplete).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AgentExecutor tool-loop safety', () => {
+  test('validates tool arguments before execution', async () => {
+    const execute = vi.fn(async () => ({ success: true, output: 'unexpected' }))
+    const tool: ToolDefinition = {
+      name: 'strict_tool',
+      description: 'Requires a value',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { value: { type: 'string' } },
+        required: ['value'],
+      },
+      timeout: 1_000,
+      execute,
+    }
+    let call = 0
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      if (call++ === 0) {
+        yield { toolCalls: [{ id: 'bad', type: 'function', function: { name: 'strict_tool', arguments: '{"extra":true}' } }], done: true }
+      } else {
+        yield { content: 'recovered', done: true }
+      }
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [tool], conversationId: 'validation', broadcast: vi.fn(), model: 'test',
+      saveMessages: false, emitEvents: false,
+    })
+
+    const result = await executor.run([{ role: 'user', content: 'go' }])
+    expect(result.content).toBe('recovered')
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  test('runs read-only calls concurrently but waits before a mutating call', async () => {
+    const events: string[] = []
+    const makeRead = (name: string): ToolDefinition => ({
+      name, description: name, parameters: { type: 'object', properties: {} }, timeout: 1_000,
+      execution: { readOnly: true },
+      execute: async () => {
+        events.push(`${name}:start`)
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        events.push(`${name}:end`)
+        return { success: true, output: name }
+      },
+    })
+    const write: ToolDefinition = {
+      name: 'write', description: 'write', parameters: { type: 'object', properties: {} }, timeout: 1_000,
+      execution: { readOnly: false },
+      execute: async () => { events.push('write:start'); return { success: true, output: 'written' } },
+    }
+    let call = 0
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      if (call++ === 0) {
+        yield {
+          toolCalls: ['read_a', 'read_b', 'write'].map((name) => ({ id: name, type: 'function' as const, function: { name, arguments: '{}' } })),
+          done: true,
+        }
+      } else yield { content: 'done', done: true }
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [makeRead('read_a'), makeRead('read_b'), write], conversationId: 'schedule', broadcast: vi.fn(), model: 'test',
+      saveMessages: false, emitEvents: false,
+    })
+
+    await executor.run([{ role: 'user', content: 'go' }])
+    expect(events.slice(0, 2)).toEqual(['read_a:start', 'read_b:start'])
+    expect(events.indexOf('write:start')).toBeGreaterThan(events.indexOf('read_a:end'))
+    expect(events.indexOf('write:start')).toBeGreaterThan(events.indexOf('read_b:end'))
+  })
+
+  test('throws a distinct error when tool rounds are exhausted', async () => {
+    const tool: ToolDefinition = {
+      name: 'again', description: 'again', parameters: { type: 'object', properties: {} }, timeout: 1_000,
+      execute: async () => ({ success: true, output: 'again' }),
+    }
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      yield { toolCalls: [{ id: String(Math.random()), type: 'function', function: { name: 'again', arguments: '{}' } }], done: true }
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [tool], conversationId: 'max-rounds', broadcast: vi.fn(), model: 'test', maxRounds: 1,
+      saveMessages: false, emitEvents: false,
+    })
+
+    await expect(executor.run([{ role: 'user', content: 'loop' }])).rejects.toBeInstanceOf(MaxToolRoundsExceededError)
   })
 })

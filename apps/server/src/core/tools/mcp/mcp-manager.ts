@@ -316,7 +316,7 @@ export class McpManager {
 
     /** Build ToolDefinition wrappers from raw MCP tool descriptors. */
     private buildToolDefinitions(
-        mcpTools: Array<{ name: string; description?: string; inputSchema?: unknown }>,
+        mcpTools: Array<{ name: string; description?: string; inputSchema?: unknown; annotations?: { readOnlyHint?: boolean } }>,
         client: Client,
         _config: McpServerConfig
     ): ToolDefinition[] {
@@ -325,6 +325,7 @@ export class McpManager {
             description: t.description || t.name,
             parameters: (t.inputSchema as Record<string, unknown>) || { type: 'object', properties: {} },
             timeout: 60000,
+            execution: { readOnly: t.annotations?.readOnlyHint === true },
             execute: async (params: unknown, signal?: AbortSignal): Promise<ToolResult> => {
                 try {
                     const result = await client.callTool({

@@ -12,9 +12,17 @@ import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../artifa
 import { isPlanningToolName } from '../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
 import { reconcilePlanningAfterToolBatch } from './planning-state.js'
+import { validateToolArguments } from '../tools/tool-argument-validator.js'
 
 /** Maximum tool-use rounds for the main (orchestrator) agent per request. */
 export const MAIN_AGENT_MAX_ROUNDS = 50
+
+export class MaxToolRoundsExceededError extends Error {
+    constructor(maxRounds: number) {
+        super(`Agent exceeded the maximum of ${maxRounds} tool-calling rounds before producing a final response.`)
+        this.name = 'MaxToolRoundsExceededError'
+    }
+}
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -33,7 +41,7 @@ export interface AgentExecutorConfig {
     model?: string
     /** Whether to require HITL approval for tool calls (default: false) */
     hitl?: boolean
-    /** Maximum number of tool-calling rounds (default: 15) */
+    /** Maximum number of tool-calling rounds (default: 50) */
     maxRounds?: number
     /** LLM temperature (default: provider default) */
     temperature?: number
@@ -236,6 +244,7 @@ export class AgentExecutor {
         this.emit('task:started', { taskId, conversationId })
 
         const hitlGate = this.config.hitl ? getHITLGate() : null
+        let loopCompleted = false
 
         try {
             for (let round = 0; round < this.config.maxRounds && pendingToolCalls?.length; round++) {
@@ -338,13 +347,18 @@ export class AgentExecutor {
 
                 this.publishContextUsage(conversationId, usage, contextTokens)
             }
+            this.config.signal?.throwIfAborted()
+            if (pendingToolCalls?.length) {
+                throw new MaxToolRoundsExceededError(this.config.maxRounds)
+            }
+            loopCompleted = true
         } finally {
             // Guarantee stream-end is always sent even if an error escapes the loop
             this.broadcastStreamEnd(activeStreamId, {
                 usage, model: this.config.model, contextTokens,
                 images: collectedImages.length ? collectedImages : undefined,
             })
-            this.emit('task:completed', { taskId, conversationId })
+            if (loopCompleted) this.emit('task:completed', { taskId, conversationId })
         }
 
         return this.buildResult(fullContent || '(completed)', lastRoundThinking, usage, contextTokens, toolRounds, collectedImages)
@@ -662,10 +676,12 @@ export class AgentExecutor {
         })
     }
 
-    /** Execute an array of tool calls concurrently and return results in original order. */
+    /**
+     * Execute explicitly read-only calls concurrently while preserving model
+     * order around planning, writes, and tools with unknown side effects.
+     */
     private async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolCallResult[]> {
         const results = new Array<ToolCallResult>(toolCalls.length)
-        const concurrentToolCalls: Array<{ index: number; toolCall: ToolCall }> = []
 
         for (const tc of toolCalls) {
             if (isVisibleExecutionTool(tc.function.name)) {
@@ -673,18 +689,25 @@ export class AgentExecutor {
             }
         }
 
-        for (const [index, toolCall] of toolCalls.entries()) {
-            if (isPlanningToolName(toolCall.function.name)) {
-                results[index] = await this.executeSingleToolCall(toolCall)
-            } else {
-                concurrentToolCalls.push({ index, toolCall })
-            }
+        let readBatch: Array<{ index: number; toolCall: ToolCall }> = []
+        const flushReadBatch = async () => {
+            const batch = readBatch
+            readBatch = []
+            const batchResults = await Promise.all(batch.map(({ toolCall }) => this.executeSingleToolCall(toolCall)))
+            batchResults.forEach((result, index) => { results[batch[index].index] = result })
         }
 
-        const concurrentResults = await Promise.all(concurrentToolCalls.map(({ toolCall }) => this.executeSingleToolCall(toolCall)))
-        for (const [resultIndex, result] of concurrentResults.entries()) {
-            results[concurrentToolCalls[resultIndex].index] = result
+        for (const [index, toolCall] of toolCalls.entries()) {
+            const tool = this.findToolForCall(toolCall.function.name)
+            const canRunConcurrently = !isPlanningToolName(toolCall.function.name) && tool?.execution?.readOnly === true
+            if (canRunConcurrently) {
+                readBatch.push({ index, toolCall })
+                continue
+            }
+            await flushReadBatch()
+            results[index] = await this.executeSingleToolCall(toolCall)
         }
+        await flushReadBatch()
 
         return results
     }
@@ -697,6 +720,16 @@ export class AgentExecutor {
 
             if (!tool) {
                 return { toolCallId: tc.id, name: tc.function.name, output: `Error: Unknown tool "${tc.function.name}"`, success: false }
+            }
+
+            const validation = validateToolArguments(args, tool.parameters)
+            if (!validation.valid) {
+                return {
+                    toolCallId: tc.id,
+                    name: tc.function.name,
+                    output: `Invalid tool arguments: ${validation.errors.join('; ')}`,
+                    success: false,
+                }
             }
 
             const timeoutSignal = AbortSignal.timeout(tool.timeout)

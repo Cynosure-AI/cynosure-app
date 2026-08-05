@@ -171,7 +171,7 @@ function stateClass(state: 'all' | 'none' | 'partial'): string {
 function toolCategory(tool: ToolInfo): string {
   const name = tool.name
   if (tool.namespace.id.startsWith('mcp:')) return 'MCP'
-  if (name.startsWith('memory_') || name === 'memory_remove') return 'Memory'
+  if (name.startsWith('memory_')) return 'Memory'
   if (name.startsWith('relationship_graph_')) return 'Relationships'
   if (name.startsWith('todo_')) return 'Planning'
   if (name.startsWith('attachment_')) return 'Attachment'

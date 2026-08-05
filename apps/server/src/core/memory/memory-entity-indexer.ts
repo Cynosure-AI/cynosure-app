@@ -57,8 +57,8 @@ export function legacyMemoryGraphSourceId(fileName: string): string {
 
 export function markMemoryFileEntityIndexed(spaceId: string, fileName: string, indexedAt = Date.now()): void {
   getDb().prepare(`
-    INSERT INTO memory_file_index (space_id, file_name, entity_indexed_at, created_at)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO memory_file_index (document_id, space_id, file_name, entity_indexed_at, created_at)
+    VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?)
     ON CONFLICT(space_id, file_name) DO UPDATE SET
       entity_indexed_at = excluded.entity_indexed_at
   `).run(spaceId, fileName, indexedAt, indexedAt)
