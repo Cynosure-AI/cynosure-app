@@ -183,6 +183,8 @@ export class AgentExecutor {
         const { conversationId } = this.config
         const taskId = nanoid()
 
+        this.config.signal?.throwIfAborted()
+
         let currentMessages = [...messages]
         let fullContent = ''
         let fullThinking = ''
@@ -283,6 +285,7 @@ export class AgentExecutor {
                 }
 
                 const toolResults = await this.executeToolCalls(pendingToolCalls)
+                this.config.signal?.throwIfAborted()
 
                 for (const tr of toolResults) {
                     if (tr.images?.length) collectedImages.push(...tr.images)
@@ -542,6 +545,7 @@ export class AgentExecutor {
 
         try {
             for await (const chunk of stream) {
+                this.config.signal?.throwIfAborted()
                 if (chunk.content) {
                     content += chunk.content
                     broadcast(`${this._sp}-chunk`, { streamId, conversationId, content: chunk.content })
@@ -695,9 +699,9 @@ export class AgentExecutor {
                 return { toolCallId: tc.id, name: tc.function.name, output: `Error: Unknown tool "${tc.function.name}"`, success: false }
             }
 
-            let execPromise = tool.execute(args)
             const timeoutSignal = AbortSignal.timeout(tool.timeout)
             const combined = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+            let execPromise = tool.execute(args, combined)
             execPromise = Promise.race([
                 execPromise,
                 new Promise<never>((_, reject) => {
