@@ -32,6 +32,8 @@ export class MemoryAggregator {
       agentId?: string
       spaceIds?: string[]
       permanentTopK?: number
+      /** Graph expansion is opt-in; relationship tools are preferred for on-demand graph reads. */
+      includeGraph?: boolean
     }
   ): Promise<AggregatedMemory> {
     const permanentMem = getAgentMemory()
@@ -75,11 +77,12 @@ export class MemoryAggregator {
 
     const permanent = await permanentMem.recall(query, opts?.permanentTopK ?? 3, spaceFilter).catch(() => [])
 
-    // Deduplicate by text similarity (exact match)
+    // Deduplicate exact normalized chunks. Prefix-only deduplication can merge
+    // unrelated chunks that happen to begin with the same heading/template.
     const seen = new Set<string>()
     const dedup = (chunks: RetrievedChunk[]): RetrievedChunk[] =>
       chunks.filter((c) => {
-        const key = c.text.slice(0, 100)
+        const key = c.contentHash || c.text.replace(/\s+/g, ' ').trim()
         if (seen.has(key)) return false
         seen.add(key)
         return true
@@ -121,29 +124,37 @@ export class MemoryAggregator {
     for (const chunk of dedupedPermanent) {
       if (chunk.spaceId) {
         chunk.spaceName = spaceNameMap.get(chunk.spaceId)
+        if (chunk.sourceFile) {
+          const ref = permanentMem.getDocumentReference(chunk.spaceId, chunk.sourceFile)
+          chunk.documentId = ref?.documentId
+          chunk.revision = ref?.revision
+        }
       }
     }
 
     let graphWalk: GraphWalkResult | undefined
-    try {
-      const graph = getEntityGraphStore()
-      const seedNodes = graph.findSeedNodes(query, dedupedPermanent.map((chunk) => chunk.text), 8)
-      const graphSourceIds = memoryGraphSourceIdsForChunks(dedupedPermanent)
-      graphWalk = seedNodes.length > 0
-        ? graph.walk(seedNodes.map((node) => node.id), 2, 32, 0, {
-          sourceIds: graphSourceIds,
-          contextText: [query, ...dedupedPermanent.map((chunk) => chunk.text)].join(' '),
-        })
-        : undefined
-    } catch (err) {
-      console.warn('[memory-aggregator] Entity graph enrichment failed; returning semantic memory only:', err)
+    if (opts?.includeGraph === true) {
+      try {
+        const graph = getEntityGraphStore()
+        const seedNodes = graph.findSeedNodes(query, dedupedPermanent.map((chunk) => chunk.text), 8)
+        const graphSourceIds = memoryGraphSourceIdsForChunks(dedupedPermanent)
+        graphWalk = seedNodes.length > 0
+          ? graph.walk(seedNodes.map((node) => node.id), 2, 32, 0, {
+            sourceIds: graphSourceIds,
+            contextText: [query, ...dedupedPermanent.map((chunk) => chunk.text)].join(' '),
+          })
+          : undefined
+      } catch (err) {
+        console.warn('[memory-aggregator] Entity graph enrichment failed; returning semantic memory only:', err)
+      }
     }
 
     return { permanent: dedupedPermanent, graph: graphWalk }
   }
 
   /**
-   * Format aggregated memory into a string for injection into system prompt.
+   * Format aggregated memory as evidence. The caller must place it below
+   * system authority and mark it as untrusted data.
    * Includes chunk index information so the LLM can request more context.
    */
   format(memory: AggregatedMemory): string {
@@ -167,6 +178,9 @@ export class MemoryAggregator {
             }
             if (c.sectionPath && c.sectionPath !== c.documentTitle) {
               parts.push(`[Section: ${c.sectionPath}]`)
+            }
+            if (c.documentId && c.revision) {
+              parts.push(`[documentId=${c.documentId}, revision=${c.revision}]`)
             }
           } else if (c.spaceName) {
             parts.push(`[${c.spaceName}]`)

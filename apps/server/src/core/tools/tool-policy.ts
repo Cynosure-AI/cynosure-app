@@ -1,6 +1,6 @@
 import { isPlanningToolName } from './builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from './builtin/expand-available-toolset.js'
-import { isMemoryReadToolName, isRelationshipGraphToolName } from './builtin/memory-tools.js'
+import { isMemoryReadToolName, isRelationshipGraphReadToolName } from './builtin/memory-tools.js'
 import { isAttachmentToolName } from '../artifacts/attachment-tools.js'
 
 /**
@@ -19,7 +19,7 @@ export function isInternalTool(toolName: string): boolean {
     toolName === 'spawn_subagent' ||
     isPlanningToolName(toolName) ||
     isMemoryReadToolName(toolName) ||
-    isRelationshipGraphToolName(toolName) ||
+    isRelationshipGraphReadToolName(toolName) ||
     isAttachmentToolName(toolName)
   )
 }

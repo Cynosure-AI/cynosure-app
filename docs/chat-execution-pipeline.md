@@ -128,7 +128,7 @@ planExecution(request)
   ├─ Build execution preset from agent or agentless config
   │   └─ presetFromAgent() or presetFromAgentless()
   │
-  ├─ Call prepareAgentExecution() — resolves all layers in parallel
+  ├─ Call prepareAgentExecution() — rewrites routing queries, then resolves independent layers in parallel
   │
   ├─ Check if model supports tool calls
   │   └─ gateway.modelSupportsToolCalls()
@@ -148,7 +148,7 @@ planExecution(request)
 
 **File:** `core/agent/prepare-execution.ts`
 
-This is a thin assembler that calls all four pre-execution layers in a coordinated sequence.
+This is a thin assembler. Task-query rewriting runs first; once those queries are available, tool routing, memory retrieval, and oversized-attachment indexing run concurrently.
 
 ```typescript
 prepareAgentExecution(input)
@@ -161,27 +161,24 @@ prepareAgentExecution(input)
   │   └─ Determines which provider/model to use for the auto-routing passes
   │
   ├─ buildTaskContext()
-  │   └─ Uses an LLM call to build a compact task context including:
-  │       ├─ toolQuery / memoryQuery
-  │       ├─ systemContext (concise facts & intent)
-  │       └─ focusAreas (capability labels)
+  │   └─ Uses an LLM call to build toolQuery / memoryQuery when their auto modes are enabled
   │
-  ├─ resolveExecutionTools()
+  ├─ In parallel:
+  │   ├─ resolveExecutionTools()
   │   ├─ Gets configured tools OR all available tools
   │   ├─ Applies auto-tool-routing (if enabled)
   │   ├─ Adds built-in memory tools (if runtime memory enabled)
   │   └─ Adds sub-agent delegation tools (if sub-agents configured)
-  │
-  ├─ appendTaskContextSystemMessage()
-  │   └─ Injects task context as a system message
+  │   ├─ resolveMemorySystemMessages()
+  │   │   └─ Retrieves and curates semantic memory evidence
+  │   └─ ensureOversizedAttachmentsIndexed()
   │
   ├─ resolveSystemPromptMessages()
   │   ├─ Base system prompt (or override)
   │   ├─ Appends sub-agent prompt (if sub-agents present)
   │   └─ Appends system prompt suffix
   │
-  └─ resolveMemorySystemMessages()
-      └─ Applies auto-memory-routing (if enabled), returns memory context as system message
+  └─ Prepend trusted prompt messages followed by lower-authority, explicitly untrusted memory evidence
 ```
 
 ### 2.3 Provider/Model Resolution
@@ -230,8 +227,9 @@ resolveExecutionTools(input)
   │   ├─ memory_list_documents
   │   ├─ memory_retrieve_chunks
   │   ├─ memory_semantic_search
-  │   ├─ memory_create / memory_update
-  │   ├─ memory_remove
+  │   ├─ memory_create / memory_append
+  │   ├─ memory_replace_range / memory_replace_all
+  │   ├─ memory_remove_range / memory_remove_all
   │   ├─ relationship_graph_search / relationship_graph_assert / relationship_graph_delete
   │
   ├─ Inject sub-agent delegation tools (if sub-agents configured):
@@ -346,8 +344,9 @@ During execution, the agent can interact with memory via built-in tools:
 - `memory_list_documents` — List files in memory spaces
 - `memory_retrieve_chunks` — Get specific chunks by file reference
 - `memory_semantic_search` — Query by semantic similarity
-- `memory_create` / `memory_update` — Add or modify memory
-- `memory_remove` — Delete memories
+- `memory_create` / `memory_append` — Create or append memory
+- `memory_replace_range` / `memory_replace_all` — Replace current memory using document revision checks
+- `memory_remove_range` / `memory_remove_all` — Forget current memory using document revision checks
 - `relationship_graph_search` — Find related relationships via graph traversal
 - `relationship_graph_assert` / `relationship_graph_delete` — Manage relationships
 
@@ -357,7 +356,7 @@ During execution, the agent can interact with memory via built-in tools:
 
 **File:** `core/agent/pre-execution/task-context.ts`
 
-Before execution begins, if any auto-routing mode is enabled, a lightweight "task context" LLM call builds a compact context summary. This LLM call uses a `set_task_context` tool to produce:
+Before execution begins, if any auto-routing mode is enabled, a lightweight "task context" LLM call builds subsystem-specific routing queries. This LLM call uses a `set_task_context` tool to produce:
 
 | Field         | Purpose                                     |
 | ------------- | ------------------------------------------- |
@@ -422,7 +421,8 @@ AgentExecutor.run(messages)
        │
        ├─ Emit: step:status ('executing')
        │
-       ├─ Execute tool calls in parallel
+       ├─ Execute consecutive read-only calls in parallel
+       │   └─ Planning, writes, and tools with unknown side effects run serially in model order
        │   ├─ Built-in tools: memory, notifications, planning
        │   ├─ MCP tools (via tool registry)
        │   ├─ Sub-agent delegation (spawns inner AgentExecutor)
@@ -696,7 +696,7 @@ Cron jobs use `runTriggerExecution()` which:
 ┌────────────────────────────────────────────────────────────────────┐
 │  PREPARE AGENT EXECUTION (prepare-execution.ts)                    │
 │  ┌─────────────────────────────────────────────────────────────┐   │
-│  │  ALL RESOLVED IN PARALLEL (or coordinated sequence):        │   │
+│  │  TASK CONTEXT FIRST; INDEPENDENT PREPARATION IN PARALLEL:   │   │
 │  │                                                              │   │
 │  │  ┌─────────────────────┐   ┌─────────────────────┐          │   │
 │  │  │  Provider/Model     │   │  Task Context       │          │   │
@@ -705,12 +705,12 @@ Cron jobs use `runTriggerExecution()` which:
 │  │  │   resolvers.ts)     │   │  ┌───────────────┐  │          │   │
 │  │  └─────────────────────┘   │  │ Router LLM    │  │          │   │
 │  │                            │  │ → toolQuery   │  │          │   │
-│  │  ┌─────────────────────┐   │  │ → skillQuery  │  │          │   │
-│  │  │  Tool Resolution    │   │  │ → memoryQuery │  │          │   │
-│  │  │  (execution-        │   │  │ → systemCtx   │  │          │   │
-│  │  │   tools.ts)         │   │  │ → focusAreas  │  │          │   │
-│  │  │  ├─ Registry lookup │   │  └───────────────┘  │          │   │
-│  │  │  ├─ Auto routing    │   └─────────────────────┘          │   │
+│  │  ┌─────────────────────┐   │  │ → memoryQuery │  │          │   │
+│  │  │  Tool Resolution    │   │  └───────────────┘  │          │   │
+│  │  │  (execution-        │   └─────────────────────┘          │   │
+│  │  │   tools.ts)         │                                     │   │
+│  │  │  ├─ Registry lookup │                                     │   │
+│  │  │  ├─ Auto routing    │                                     │   │
 │  │  │  │  (embed→LLM)    │                                     │   │
 │  │  │  ├─ Memory tools    │   ┌─────────────────────┐          │   │
 │  │  │  └─ Sub-agent tools│                                     │   │
@@ -721,13 +721,12 @@ Cron jobs use `runTriggerExecution()` which:
 │  │  │   memory.ts)        │                                     │   │
 │  │  │  ├─ MemoryAggregator│                                     │   │
 │  │  │  │  → LanceDB RAG   │   ┌─────────────────────┐          │   │
-│  │  │  │  → Entity Graph  │   │  Prompt Assembly    │          │   │
+│  │  │  │  (graph opt-in)  │   │  Prompt Assembly    │          │   │
 │  │  │  └─ Format context  │   │  (execution-        │          │   │
 │  │  └─────────────────────┘   │   prompts.ts)       │          │   │
 │  │                            │  ├─ System prompt   │          │   │
 │  │                            │  ├─ Sub-agent info  │          │   │
-│  │                            │  ├─ Task context    │          │   │
-│  │                            │  └─ Memory context  │          │   │
+│  │                            │  └─ Prompt suffix   │          │   │
 │  │                            └─────────────────────┘          │   │
 │  └─────────────────────────────────────────────────────────────┘   │
 └───────────────────────────┬─────────────────────────────────────────┘
@@ -774,7 +773,8 @@ Cron jobs use `runTriggerExecution()` which:
 │  │  for each round:                                            │   │
 │  │   ├─ [HITL] Await human approval (if enabled)                │   │
 │  │   ├─ Save assistant message to DB                            │   │
-│  │   ├─ executeToolCalls(pendingToolCalls)  ── in parallel     │   │
+│  │   ├─ executeToolCalls(pendingToolCalls)                      │   │
+│  │   │    read-only batches parallel; writes/unknown serial     │   │
 │  │   │   ├─ Built-in tools (memory, notifications, etc.)       │   │
 │  │   │   ├─ MCP tools (via registry)                           │   │
 │  │   │   ├─ Sub-agent delegation (new AgentExecutor)            │   │

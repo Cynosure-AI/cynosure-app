@@ -9,15 +9,19 @@ export const AUTO_MEMORY_TOOL_NAMES = [
   'memory_retrieve_chunks',
   'memory_semantic_search',
   'memory_create',
-  'memory_update',
-  'memory_remove',
+  'memory_append',
+  'memory_replace_range',
+  'memory_replace_all',
+  'memory_remove_all',
+  'memory_remove_range',
 ] as const
 
 export type AutoMemoryToolName = (typeof AUTO_MEMORY_TOOL_NAMES)[number]
 
 const INTERNAL_TOOL_NAMES = new Set([
   'expand_available_toolset',
-  'memory_remove',
+  'memory_remove_all',
+  'memory_remove_range',
   'spawn_subagent',
 ])
 
@@ -29,7 +33,8 @@ const AUTO_MANAGED_BUILT_IN_TOOL_PREFIXES = [
 
 const AUTO_MANAGED_BUILT_IN_TOOL_NAMES = new Set([
   'expand_available_toolset',
-  'memory_remove',
+  'memory_remove_all',
+  'memory_remove_range',
   'spawn_subagent',
 ])
 

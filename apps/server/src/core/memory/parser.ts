@@ -30,6 +30,8 @@ export interface RetrievedChunk {
   documentTitle?: string
   sectionPath?: string
   contentHash?: string
+  documentId?: string
+  revision?: string
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

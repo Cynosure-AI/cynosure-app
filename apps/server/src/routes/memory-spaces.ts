@@ -755,8 +755,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         for (const sf of sourceFiles) {
             const uniqueName = await mem.resolveUniqueSourceFile(sf, target.id)
             if (uniqueName !== sf) renamedCount++
-            const existingIndex = db.prepare('SELECT content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
-                .get(source.id, sf) as { content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number; created_at: number } | undefined
+            const existingIndex = db.prepare('SELECT document_id, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
+                .get(source.id, sf) as { document_id: string; content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number; created_at: number } | undefined
 
             // Move physical file if both spaces have folders
             if (source.folder_path && target.folder_path) {
@@ -787,9 +787,10 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             if (existingIndex) {
                 db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?').run(source.id, sf)
                 db.prepare(`
-                    INSERT OR REPLACE INTO memory_file_index (space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO memory_file_index (document_id, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 `).run(
+                    existingIndex.document_id,
                     target.id,
                     uniqueName,
                     existingIndex.content_hash,

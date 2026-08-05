@@ -12,8 +12,11 @@ import {
     makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
     makeMemoryCreateTool,
-    makeMemoryUpdateTool,
-    makeForgetMemoryTool,
+    makeMemoryAppendTool,
+    makeMemoryReplaceRangeTool,
+    makeMemoryReplaceAllTool,
+    makeMemoryRemoveAllTool,
+    makeMemoryRemoveRangeTool,
     makeRelationshipGraphSearchTool,
     makeRelationshipGraphAssertTool,
     makeRelationshipGraphDeleteTool,
@@ -26,8 +29,11 @@ export {
     makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
     makeMemoryCreateTool,
-    makeMemoryUpdateTool,
-    makeForgetMemoryTool,
+    makeMemoryAppendTool,
+    makeMemoryReplaceRangeTool,
+    makeMemoryReplaceAllTool,
+    makeMemoryRemoveAllTool,
+    makeMemoryRemoveRangeTool,
     makeRelationshipGraphSearchTool,
     makeRelationshipGraphAssertTool,
     makeRelationshipGraphDeleteTool,
@@ -39,6 +45,7 @@ export {
     MEMORY_READ_TOOL_NAMES,
     MEMORY_WRITE_TOOL_NAMES,
     isRelationshipGraphToolName,
+    isRelationshipGraphReadToolName,
     isMemoryToolName,
     isMemoryReadToolName,
     type MemoryToolOptions,
@@ -90,10 +97,19 @@ const BUILTIN_TOOL_HYDRATORS = {
     memory_create: (ctx: BuiltInHydrationContext) => makeMemoryCreateTool({
         assignedSpaces: ctx.assignedSpaces,
     }),
-    memory_update: (ctx: BuiltInHydrationContext) => makeMemoryUpdateTool({
+    memory_append: (ctx: BuiltInHydrationContext) => makeMemoryAppendTool({
         assignedSpaces: ctx.assignedSpaces,
     }),
-    memory_remove: (ctx: BuiltInHydrationContext) => makeForgetMemoryTool({
+    memory_replace_range: (ctx: BuiltInHydrationContext) => makeMemoryReplaceRangeTool({
+        assignedSpaces: ctx.assignedSpaces,
+    }),
+    memory_replace_all: (ctx: BuiltInHydrationContext) => makeMemoryReplaceAllTool({
+        assignedSpaces: ctx.assignedSpaces,
+    }),
+    memory_remove_all: (ctx: BuiltInHydrationContext) => makeMemoryRemoveAllTool({
+        assignedSpaces: ctx.assignedSpaces,
+    }),
+    memory_remove_range: (ctx: BuiltInHydrationContext) => makeMemoryRemoveRangeTool({
         assignedSpaces: ctx.assignedSpaces,
     }),
     relationship_graph_search: () => makeRelationshipGraphSearchTool(),

@@ -537,7 +537,8 @@ export class RAGStore {
   /** List all documents (excluding vectors) with optional filter. */
   async listDocuments(
     tableName: string,
-    filter?: string
+    filter?: string,
+    opts: { throwOnError?: boolean } = {},
   ): Promise<Omit<VectorDocument, 'vector'>[]> {
     if (!this.db) return []
     try {
@@ -576,6 +577,7 @@ export class RAGStore {
         }))
     } catch (err) {
       console.error('[rag] listDocuments error:', (err as Error).message)
+      if (opts.throwOnError) throw err
       return []
     }
   }
@@ -626,12 +628,22 @@ export class RAGStore {
   }
 
   /** Delete all chunks for a given source file. */
-  async deleteBySource(tableName: string, sourceFile: string, filter?: string): Promise<number> {
-    return this.deleteBySources(tableName, [sourceFile], filter)
+  async deleteBySource(
+    tableName: string,
+    sourceFile: string,
+    filter?: string,
+    opts: { rebuildFts?: boolean; throwOnError?: boolean } = {},
+  ): Promise<number> {
+    return this.deleteBySources(tableName, [sourceFile], filter, opts)
   }
 
   /** Delete all chunks for multiple source files. */
-  async deleteBySources(tableName: string, sourceFiles: string[], filter?: string, opts: { rebuildFts?: boolean } = {}): Promise<number> {
+  async deleteBySources(
+    tableName: string,
+    sourceFiles: string[],
+    filter?: string,
+    opts: { rebuildFts?: boolean; throwOnError?: boolean } = {},
+  ): Promise<number> {
     if (!this.db || sourceFiles.length === 0) return 0
     try {
       const table = await this.openExistingTable(tableName)
@@ -646,7 +658,8 @@ export class RAGStore {
         await this.rebuildFtsIndex(tableName)
       }
       return deletedCount
-    } catch {
+    } catch (err) {
+      if (opts.throwOnError) throw err
       return 0
     }
   }

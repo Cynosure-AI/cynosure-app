@@ -309,6 +309,7 @@ function createTables(db: Database.Database): void {
     );
 
     CREATE TABLE IF NOT EXISTS memory_file_index (
+      document_id TEXT NOT NULL DEFAULT '',
       space_id TEXT NOT NULL,
       file_name TEXT NOT NULL,
       content_hash TEXT NOT NULL DEFAULT '',
@@ -411,6 +412,34 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('entity_graph_nodes', 'importance', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('entity_graph_edges', 'importance', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('memory_file_index', 'entity_indexed_at', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('memory_file_index', 'document_id', "TEXT NOT NULL DEFAULT ''")
+  db.prepare("UPDATE memory_file_index SET document_id = lower(hex(randomblob(16))) WHERE document_id = ''").run()
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_mfi_document_id ON memory_file_index(document_id)')
+
+  // Migrate persisted selections from the former mode-switching memory tools
+  // to the operation-specific contracts. Preserve order and remove duplicates.
+  const agentToolRows = db.prepare('SELECT id, tools_json FROM agents').all() as { id: string; tools_json: string }[]
+  const updateAgentTools = db.prepare('UPDATE agents SET tools_json = ? WHERE id = ?')
+  for (const row of agentToolRows) {
+    try {
+      const current = JSON.parse(row.tools_json || '[]') as unknown[]
+      if (!Array.isArray(current)) continue
+      const migrated = current.flatMap((key) => {
+        if (key === 'builtin::memory_update') return [
+          'builtin::memory_append',
+          'builtin::memory_replace_range',
+          'builtin::memory_replace_all',
+        ]
+        if (key === 'builtin::memory_remove') return [
+          'builtin::memory_remove_range',
+          'builtin::memory_remove_all',
+        ]
+        return typeof key === 'string' ? [key] : []
+      })
+      const deduped = Array.from(new Set(migrated))
+      if (JSON.stringify(deduped) !== JSON.stringify(current)) updateAgentTools.run(JSON.stringify(deduped), row.id)
+    } catch { /* keep malformed legacy values untouched */ }
+  }
 
   // Preserve the legacy edge source as its first evidence observation. New
   // assertions are stored one-per-source instead of overwriting provenance.

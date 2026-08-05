@@ -42,6 +42,10 @@ export interface ToolDefinition {
   description: string
   parameters: Record<string, unknown> // JSON Schema
   timeout: number
+  /** Execution scheduling hints. Unknown tools are treated as mutating and run serially. */
+  execution?: {
+    readOnly: boolean
+  }
   execute: (params: unknown, signal?: AbortSignal) => Promise<ToolResult>
 }
 
