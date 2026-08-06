@@ -67,6 +67,7 @@ function itemClass(item: PlanningTaskItem): string {
         v-for="item in state.items"
         :key="item.id"
         class="h-8 flex items-center gap-2 min-w-0 rounded-md px-1"
+        :title="item.note ? `${item.title} — ${item.note}` : item.title"
       >
         <Icon
           :icon="statusMeta[item.status].icon"
