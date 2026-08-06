@@ -112,7 +112,7 @@ function onTitleKeydown(e: KeyboardEvent): void {
     </button>
 
     <!-- Agent selector -->
-    <div class="w-34 sm:w-44 md:w-64 shrink-0">
+    <div class="sm:w-44 md:w-64 shrink-0">
       <AgentSelect
         :model-value="agentDropdownValue"
         :agents="agentDefs.agents"
