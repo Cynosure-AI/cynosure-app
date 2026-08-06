@@ -87,6 +87,8 @@ const listRef = ref<HTMLElement | null>(null);
 const filterInputRef = ref<HTMLInputElement | null>(null);
 /** Which option is keyboard-focused (by value) */
 const focusedValue = ref<string>("");
+/** True when the last focus change came from keyboard navigation (not mouse hover) */
+const keyboardNav = ref(false);
 const filterQuery = ref("");
 
 const allOptions = computed(() => props.groups.flatMap((g) => g.options));
@@ -206,11 +208,13 @@ function handleKeydown(e: KeyboardEvent): void {
   switch (e.key) {
     case "ArrowDown":
       e.preventDefault();
+      keyboardNav.value = true;
       focusedValue.value =
         nextEnabledOption(opts, idx, 1)?.value || focusedValue.value;
       break;
     case "ArrowUp":
       e.preventDefault();
+      keyboardNav.value = true;
       focusedValue.value =
         nextEnabledOption(opts, idx, -1)?.value || focusedValue.value;
       break;
@@ -256,8 +260,9 @@ watch(filterQuery, () => {
   }
 });
 
-/** Scroll keyboard-focused item into view */
+/** Scroll keyboard-focused item into view (only for keyboard nav, not mouse hover) */
 watch(focusedValue, (val) => {
+  if (!keyboardNav.value) return;
   nextTick(() => {
     const el = listRef.value?.querySelector(
       `[data-value="${CSS.escape(val)}"]`,
@@ -431,7 +436,7 @@ onBeforeUnmount(() =>
                     : 'hover:bg-theme-800',
             ]"
             @click="selectOption(opt.value)"
-            @mouseenter="!opt.disabled && (focusedValue = opt.value)"
+            @mouseenter="!opt.disabled && (keyboardNav = false, focusedValue = opt.value)"
           >
             <!-- Icon / image -->
             <span
