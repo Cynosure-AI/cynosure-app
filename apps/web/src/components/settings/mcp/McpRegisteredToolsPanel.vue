@@ -4,6 +4,7 @@ import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../../store
 import { Icon } from '@iconify/vue'
 import CollapsibleSection from '../../shared/CollapsibleSection.vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
+import ToolBehaviorBadges from '../../shared/ToolBehaviorBadges.vue'
 
 const agentStore = useAgentStore()
 
@@ -261,6 +262,10 @@ function setNamespaceExpanded(nsId: string, expanded: boolean): void {
                   <!-- Tool info -->
                   <div class="min-w-0">
                     <span class="text-xs text-theme-200 font-medium block">{{ displayName(tool) }}</span>
+                    <ToolBehaviorBadges
+                      :annotations="tool.annotations"
+                      class="mt-1"
+                    />
                     <p class="text-[10px] text-theme-500 leading-snug">
                       {{ displayDescription(tool) }}
                     </p>

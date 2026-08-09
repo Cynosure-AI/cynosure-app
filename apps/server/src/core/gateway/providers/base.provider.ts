@@ -37,11 +37,30 @@ export interface ToolCall {
   thoughtSignature?: string
 }
 
+/**
+ * Server-declared MCP behavior hints. These describe likely side effects but
+ * are not trusted authorization decisions; explicit user policy still wins.
+ */
+export interface ToolBehaviorAnnotations {
+  /** Human-readable title supplied by the tool provider. */
+  title?: string
+  /** True when the tool does not modify its environment. Defaults to false in MCP. */
+  readOnlyHint?: boolean
+  /** True when a mutating tool may perform destructive updates. Defaults to true in MCP. */
+  destructiveHint?: boolean
+  /** True when repeating a mutating call has no additional effect. Defaults to false in MCP. */
+  idempotentHint?: boolean
+  /** True when the tool may interact with external entities. Defaults to true in MCP. */
+  openWorldHint?: boolean
+}
+
 export interface ToolDefinition {
   name: string
   description: string
   parameters: Record<string, unknown> // JSON Schema
   timeout: number
+  /** Advisory behavior metadata declared by the tool provider. */
+  annotations?: ToolBehaviorAnnotations
   /** Execution scheduling hints. Unknown tools are treated as mutating and run serially. */
   execution?: {
     readOnly: boolean

@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import { useAgentStore, type ToolInfo, type ToolNamespace } from '../stores/agent-runtime.store.ts'
 import DataTable, { type Column } from '../components/shared/DataTable.vue'
 import HoverTooltip from '../components/shared/HoverTooltip.vue'
+import ToolBehaviorBadges from '../components/shared/ToolBehaviorBadges.vue'
 
 interface NamespaceGroup {
   id: string
@@ -416,6 +417,7 @@ onMounted(loadPolicyTools)
                         <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-theme-500">
                           {{ toolCategory(tool) }}
                         </span>
+                        <ToolBehaviorBadges :annotations="tool.annotations" />
                       </div>
                       <p class="mt-1 text-xs leading-relaxed text-theme-500">
                         {{ displayDescription(tool) }}

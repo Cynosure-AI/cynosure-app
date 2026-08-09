@@ -4,6 +4,7 @@ import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../stores/a
 import { Icon } from '@iconify/vue'
 import CollapsibleSection from './CollapsibleSection.vue'
 import HoverTooltip from './HoverTooltip.vue'
+import ToolBehaviorBadges from './ToolBehaviorBadges.vue'
 import { isAutoManagedBuiltInToolName } from '../../utils/internal-tools'
 
 const props = withDefaults(
@@ -348,6 +349,10 @@ onBeforeUnmount(() => {
                             {{ automaticToolBadge(tool) }}
                           </span>
                         </p>
+                        <ToolBehaviorBadges
+                          :annotations="tool.annotations"
+                          class="mt-1"
+                        />
                       </div>
                       <template #content>
                         <div

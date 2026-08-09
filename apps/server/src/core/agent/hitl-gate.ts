@@ -1,7 +1,7 @@
-import type { ToolCall } from '../gateway/providers/base.provider.js'
+import type { ToolBehaviorAnnotations, ToolCall, ToolDefinition } from '../gateway/providers/base.provider.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getDb } from '../../db/database.js'
-import { isSystemAutoApprovedTool } from '../tools/tool-policy.js'
+import { isAnnotationAutoApprovedTool, isSystemAutoApprovedTool } from '../tools/tool-policy.js'
 
 export interface ApprovalResult {
   approved: boolean
@@ -31,12 +31,13 @@ export class HITLGate {
     return taskIds
   }
 
-  /** Returns true if the given tool is auto-approved (whitelisted). */
-  isAutoApproved(toolName: string): boolean {
+  /** Returns the effective approval state: system, explicit user choice, then annotation default. */
+  isAutoApproved(toolName: string, annotations?: ToolBehaviorAnnotations): boolean {
     if (isSystemAutoApprovedTool(toolName)) return true
     const db = getDb()
     const row = db.prepare('SELECT auto_approve FROM tool_approvals WHERE tool_name = ?').get(toolName) as { auto_approve: number } | undefined
-    return row?.auto_approve === 1
+    if (row) return row.auto_approve === 1
+    return isAnnotationAutoApprovedTool(annotations)
   }
 
   /** Set auto-approve for a specific tool. */
@@ -76,14 +77,16 @@ export class HITLGate {
     taskId: string,
     toolCalls: ToolCall[],
     signal?: AbortSignal,
-    conversationId?: string
+    conversationId?: string,
+    tools: ToolDefinition[] = []
   ): Promise<ApprovalResult> {
     // Only ask for approval on user-visible tool actions that are not already
     // allowed by system policy, saved user preferences, or this conversation.
     const sessionSet = conversationId ? this.getSessionApprovals(conversationId) : undefined
+    const annotationsByName = new Map(tools.map((tool) => [tool.name, tool.annotations]))
     const needsApproval = toolCalls.filter(
       (tc) => !isSystemAutoApprovedTool(tc.function.name)
-        && !this.isAutoApproved(tc.function.name)
+        && !this.isAutoApproved(tc.function.name, annotationsByName.get(tc.function.name))
         && !sessionSet?.has(this.allToolsApproval)
         && !sessionSet?.has(tc.function.name)
     )

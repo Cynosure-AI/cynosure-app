@@ -3,6 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
+import type { Tool as McpTool } from '@modelcontextprotocol/sdk/types.js'
 import type { ToolDefinition, ToolResult } from '../../gateway/providers/base.provider.js'
 import { McpOAuthProvider } from './oauth-provider.js'
 import { existsSync, readdirSync, unlinkSync, rmSync } from 'fs'
@@ -316,7 +317,7 @@ export class McpManager {
 
     /** Build ToolDefinition wrappers from raw MCP tool descriptors. */
     private buildToolDefinitions(
-        mcpTools: Array<{ name: string; description?: string; inputSchema?: unknown; annotations?: { readOnlyHint?: boolean } }>,
+        mcpTools: McpTool[],
         client: Client,
         _config: McpServerConfig
     ): ToolDefinition[] {
@@ -325,6 +326,7 @@ export class McpManager {
             description: t.description || t.name,
             parameters: (t.inputSchema as Record<string, unknown>) || { type: 'object', properties: {} },
             timeout: 60000,
+            annotations: t.annotations,
             execution: { readOnly: t.annotations?.readOnlyHint === true },
             execute: async (params: unknown, signal?: AbortSignal): Promise<ToolResult> => {
                 try {

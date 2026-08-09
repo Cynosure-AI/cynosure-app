@@ -496,7 +496,7 @@ export class AgentExecutor {
 
         this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'awaiting-approval', message: 'Checking tool approvals...' })
 
-        const approval = await hitlGate.requestApproval(taskId, pendingToolCalls, signal, conversationId)
+        const approval = await hitlGate.requestApproval(taskId, pendingToolCalls, signal, conversationId, this.config.tools)
         if (approval.approved) return null
 
         this.emit('step:hitl-denied', { taskId, conversationId, iteration: round + 1, reason: approval.reason })
