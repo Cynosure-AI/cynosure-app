@@ -2,6 +2,7 @@ import { isPlanningToolName } from './builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from './builtin/expand-available-toolset.js'
 import { isMemoryReadToolName, isRelationshipGraphReadToolName } from './builtin/memory-tools.js'
 import { isAttachmentToolName } from '../artifacts/attachment-tools.js'
+import type { ToolBehaviorAnnotations } from '../gateway/providers/base.provider.js'
 
 /**
  * Tool policy lives here so approval and UI visibility decisions use the same
@@ -26,6 +27,15 @@ export function isInternalTool(toolName: string): boolean {
 
 export function isSystemAutoApprovedTool(toolName: string): boolean {
   return isInternalTool(toolName)
+}
+
+/**
+ * MCP behavior hints provide the default only when the user has not saved an
+ * explicit choice. A read-only declaration is accepted unless the server also
+ * marks the tool destructive, which is treated conservatively as conflicting.
+ */
+export function isAnnotationAutoApprovedTool(annotations?: ToolBehaviorAnnotations): boolean {
+  return annotations?.readOnlyHint === true && annotations.destructiveHint !== true
 }
 
 export function isVisibleExecutionTool(toolName: string): boolean {

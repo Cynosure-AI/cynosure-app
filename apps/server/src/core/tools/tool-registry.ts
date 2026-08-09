@@ -1,4 +1,4 @@
-import type { RegisteredToolDefinition, RegistryAwareToolDefinition, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
+import type { RegisteredToolDefinition, RegistryAwareToolDefinition, ToolBehaviorAnnotations, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { normalizeToolDescription } from './tool-description.js'
 
 export interface LLMToolSchema {
@@ -29,6 +29,8 @@ export interface RegisteredToolInfo {
   executionName: string
   description: string
   parameters: Record<string, unknown>
+  /** Advisory behavior metadata declared by the tool provider. */
+  annotations?: ToolBehaviorAnnotations
   namespace: ToolNamespace
   ambiguous: boolean
 }
@@ -214,6 +216,7 @@ export class ToolRegistry {
       executionName: this.executionNameFor(entry),
       description: entry.tool.description,
       parameters: entry.tool.parameters,
+      annotations: entry.tool.annotations,
       namespace: entry.namespace,
       ambiguous: (this.nameIndex.get(entry.tool.name)?.size ?? 0) > 1,
     }))
