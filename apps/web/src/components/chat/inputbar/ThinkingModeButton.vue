@@ -104,7 +104,7 @@ function selectLevel(level: ReasoningLevel, close: () => void): void {
             Reasoning level
           </div>
           <div class="mt-0.5 text-[10px] leading-relaxed text-theme-500">
-            Higher levels may improve complex answers, but take longer and use more tokens.
+            Higher levels may improve complex answers, but take longer and use more tokens. Reasoning also enables planning tool usage.
           </div>
         </div>
 
