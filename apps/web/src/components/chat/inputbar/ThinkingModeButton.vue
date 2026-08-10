@@ -22,9 +22,15 @@ const levels: Array<{
     description: 'Plain model mode. Reasoning and planning tools are disabled.',
   },
   {
+    value: 'minimal',
+    label: 'Minimal',
+    shortLabel: 'XS',
+    description: 'Minimal reasoning for the lowest latency and token use.',
+  },
+  {
     value: 'low',
     label: 'Low',
-    shortLabel: 'L',
+    shortLabel: 'S',
     description: 'Quick reasoning for straightforward tasks.',
   },
   {
@@ -36,8 +42,20 @@ const levels: Array<{
   {
     value: 'high',
     label: 'High',
-    shortLabel: 'H',
-    description: 'Maximum reasoning for complex tasks.',
+    shortLabel: 'L',
+    description: 'Deep reasoning for complex tasks.',
+  },
+  {
+    value: 'xhigh',
+    label: 'Extra high',
+    shortLabel: 'XL',
+    description: 'Extra reasoning for especially difficult tasks.',
+  },
+  {
+    value: 'max',
+    label: 'Maximum',
+    shortLabel: 'MAX',
+    description: 'The provider\'s maximum available reasoning effort.',
   },
 ]
 

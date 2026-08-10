@@ -8,7 +8,7 @@ vi.mock('../../../stores/chat.store', async () => {
   const store = reactive({
     sessionThinkingEnabled: true,
     sessionReasoningEffort: 'medium',
-    setSessionReasoningEffort(effort: 'off' | 'low' | 'medium' | 'high') {
+    setSessionReasoningEffort(effort: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') {
       store.sessionThinkingEnabled = effort !== 'off'
       if (effort !== 'off') store.sessionReasoningEffort = effort
     },
@@ -45,10 +45,10 @@ describe('ThinkingModeButton', () => {
     expect(chatStore.sessionThinkingEnabled).toBe(false)
     expect(document.body.textContent).toContain('Planning off')
 
-    await new DOMWrapper(slider!).setValue('3')
+    await new DOMWrapper(slider!).setValue('6')
     expect(chatStore.sessionThinkingEnabled).toBe(true)
-    expect(chatStore.sessionReasoningEffort).toBe('high')
-    expect(document.body.textContent).toContain('Maximum reasoning')
+    expect(chatStore.sessionReasoningEffort).toBe('max')
+    expect(document.body.textContent).toContain('maximum available reasoning effort')
 
     wrapper.unmount()
   })

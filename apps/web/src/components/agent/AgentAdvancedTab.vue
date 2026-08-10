@@ -17,7 +17,7 @@ const MIN_CONTEXT_TOKENS = 2048;
 const DEFAULT_CONTEXT_TOKENS = 30720;
 const CONTEXT_TOKEN_STEP = 2048;
 const DEFAULT_MAX_CONTEXT_TOKENS = 262144;
-const REASONING_LEVELS = ["low", "medium", "high"] as const;
+const REASONING_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 const autoRouterLeadingSelections = [
   {
@@ -190,7 +190,7 @@ function onMaxCtxSliderInput(event: Event) {
       </div>
       <div
         v-if="agent.thinkingEnabled !== false"
-        class="mt-4 flex items-center gap-1 rounded-lg border border-theme-700 bg-theme-900/50 p-1"
+        class="mt-4 grid grid-cols-3 gap-1 rounded-lg border border-theme-700 bg-theme-900/50 p-1 sm:grid-cols-6"
         aria-label="Default reasoning level"
       >
         <button
