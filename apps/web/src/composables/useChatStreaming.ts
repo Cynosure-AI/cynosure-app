@@ -798,6 +798,7 @@ export function useChatStreaming(
             imageDataUrls?: string[]
             videoDataUrls?: string[]
             audioDataUrls?: string[]
+            structuredContent?: unknown
             fileAttachments?: { name: string }[]
             agentId?: string
             agentName?: string
@@ -826,6 +827,7 @@ export function useChatStreaming(
                     imageDataUrls: data.message.imageDataUrls,
                     videoDataUrls: data.message.videoDataUrls,
                     audioDataUrls: data.message.audioDataUrls,
+                    structuredContent: data.message.structuredContent,
                     fileAttachments: data.message.fileAttachments,
                     agentId: data.message.agentId,
                     agentName: data.message.agentName,
