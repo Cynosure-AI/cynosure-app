@@ -21,6 +21,7 @@ const allConversationsLoading = ref(false)
 const allConversationsError = ref<string | null>(null)
 const allConversationsQuery = ref('')
 const allConversationsRequestToken = ref(0)
+const historyMenuOpen = ref(false)
 const openConversationMenuId = ref<string | null>(null)
 const editingConversationId = ref<string | null>(null)
 const editingTitle = ref('')
@@ -48,6 +49,21 @@ const clearLabel = computed(() => {
   }
   return 'Default'
 })
+
+const currentHistoryLabel = computed(() => (
+  chatStore.activeAgentId ? 'This Agent' : 'Free Chat'
+))
+
+const markReadLabel = computed(() => {
+  if (showAllConversations.value) return 'Mark all chats as read'
+  return chatStore.activeAgentId ? "Mark this agent's chats as read" : 'Mark Free Chat as read'
+})
+
+const clearHistoryLabel = computed(() => {
+  if (showAllConversations.value) return 'Clear all chat history'
+  return chatStore.activeAgentId ? "Clear this agent's history" : 'Clear Free Chat history'
+})
+
 async function selectChat(conv: Conversation): Promise<void> {
   await chatStore.selectConversation(conv.id, conv.agentId ?? null)
   conv.lastReadAt = Math.max(Date.now(), conv.updatedAt, conv.lastReadAt || 0)
@@ -82,10 +98,18 @@ async function togglePin(id: string, pinned: boolean, event: Event): Promise<voi
 
 function toggleConversationMenu(id: string, event: Event): void {
   event.stopPropagation()
+  historyMenuOpen.value = false
   openConversationMenuId.value = openConversationMenuId.value === id ? null : id
 }
 
-function closeConversationMenu(): void {
+function toggleHistoryMenu(event: Event): void {
+  event.stopPropagation()
+  openConversationMenuId.value = null
+  historyMenuOpen.value = !historyMenuOpen.value
+}
+
+function closeMenus(): void {
+  historyMenuOpen.value = false
   openConversationMenuId.value = null
 }
 
@@ -124,13 +148,13 @@ function onRenameKeydown(event: KeyboardEvent, conv: Conversation): void {
 
 function onConversationMenuKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
-    closeConversationMenu()
+    closeMenus()
   }
 }
 
 function markVisibleConversationsRead(event?: Event): void {
   event?.stopPropagation()
-  openConversationMenuId.value = null
+  closeMenus()
 
   if (!showAllConversations.value) {
     chatStore.markAllAsRead()
@@ -146,7 +170,7 @@ function markVisibleConversationsRead(event?: Event): void {
 
 function confirmClearHistory(event?: Event): void {
   event?.stopPropagation()
-  openConversationMenuId.value = null
+  closeMenus()
   showClearConfirm.value = true
 }
 
@@ -338,13 +362,13 @@ watch(searchQuery, (query) => {
 
 onBeforeUnmount(() => {
   clearPendingSearchLoad()
-  document.removeEventListener('click', closeConversationMenu)
+  document.removeEventListener('click', closeMenus)
   document.removeEventListener('keydown', onConversationMenuKeydown)
   allConversationsRequestToken.value += 1
 })
 
 onMounted(() => {
-  document.addEventListener('click', closeConversationMenu)
+  document.addEventListener('click', closeMenus)
   document.addEventListener('keydown', onConversationMenuKeydown)
 })
 </script>
@@ -352,8 +376,56 @@ onMounted(() => {
 <template>
   <div class="w-64 bg-theme-900 md:bg-theme-950/60 bg-sidebar-chat border-r border-theme-800/60 flex flex-col shrink-0 h-full">
     <!-- Header -->
-    <div class="px-3 py-2.5 border-b border-theme-800/60 flex items-center justify-between">
+    <div class="group relative px-3 py-2.5 border-b border-theme-800/60 flex items-center justify-between">
       <span class="text-xs font-medium text-theme-500 uppercase tracking-wider">Chat History</span>
+      <button
+        type="button"
+        class="rounded-md p-1 text-theme-500 opacity-0 transition-all hover:bg-theme-800 hover:text-theme-200 focus-visible:opacity-100 group-hover:opacity-100"
+        :class="{ 'bg-theme-800 text-theme-200 opacity-100': historyMenuOpen }"
+        title="Chat history options"
+        aria-label="Chat history options"
+        :aria-expanded="historyMenuOpen"
+        @click="toggleHistoryMenu"
+      >
+        <Icon
+          icon="lucide:ellipsis"
+          class="h-4 w-4"
+        />
+      </button>
+
+      <div
+        v-if="historyMenuOpen"
+        class="absolute right-2 top-9 z-40 min-w-48 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl shadow-black/30"
+        @click.stop
+      >
+        <button
+          type="button"
+          class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100 disabled:pointer-events-none disabled:opacity-40"
+          :disabled="!hasUnread"
+          @click="markVisibleConversationsRead($event)"
+        >
+          <Icon
+            icon="lucide:check-check"
+            class="h-3.5 w-3.5 text-accent-400"
+          />
+          {{ markReadLabel }}
+        </button>
+
+        <div class="my-1 border-t border-theme-700/70" />
+
+        <button
+          type="button"
+          class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200 disabled:pointer-events-none disabled:opacity-40"
+          :disabled="!hasConversations"
+          @click="confirmClearHistory($event)"
+        >
+          <Icon
+            icon="lucide:trash-2"
+            class="h-3.5 w-3.5"
+          />
+          {{ clearHistoryLabel }}
+        </button>
+      </div>
     </div>
 
     <!-- Search -->
@@ -361,21 +433,21 @@ onMounted(() => {
       <button
         class="w-full mb-2 rounded-lg border border-theme-800 bg-theme-900/70 p-0.5 grid grid-cols-2 text-[11px]"
         type="button"
-        :aria-label="showAllConversations ? 'Showing all conversations' : 'Showing current conversations'"
+        :aria-label="showAllConversations ? 'Showing all chats' : `Showing ${currentHistoryLabel}`"
       >
         <span
           class="rounded-md px-2 py-1 transition-colors"
           :class="showAllConversations ? 'text-theme-500 hover:text-theme-300' : 'bg-theme-700 text-theme-100'"
           @click="showAllConversations = false"
         >
-          Current
+          {{ currentHistoryLabel }}
         </span>
         <span
           class="rounded-md px-2 py-1 transition-colors"
           :class="showAllConversations ? 'bg-theme-700 text-theme-100' : 'text-theme-500 hover:text-theme-300'"
           @click="showAllConversations = true"
         >
-          All
+          All Chats
         </span>
       </button>
 
@@ -520,21 +592,6 @@ onMounted(() => {
               />
               Rename
             </button>
-
-
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100 disabled:opacity-40 disabled:pointer-events-none"
-              :disabled="!hasUnread"
-              @click="markVisibleConversationsRead($event)"
-            >
-              <Icon
-                icon="lucide:check-check"
-                class="h-3.5 w-3.5 text-accent-400"
-              />
-              Read all
-            </button>
-
             <!-- Divider -->
             <div class="my-1 border-t border-theme-700/70" />
 
@@ -548,19 +605,6 @@ onMounted(() => {
                 class="h-3.5 w-3.5"
               />
               Delete
-            </button>
-
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200 disabled:opacity-40 disabled:pointer-events-none"
-              :disabled="!hasConversations"
-              @click="confirmClearHistory($event)"
-            >
-              <Icon
-                icon="lucide:trash-2"
-                class="h-3.5 w-3.5"
-              />
-              Delete all
             </button>
           </div>
         </div>
