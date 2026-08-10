@@ -142,6 +142,16 @@ interface AgentRow {
     updated_at: number
 }
 
+const REASONING_EFFORTS = new Set<ReasoningEffort>([
+    'minimal', 'low', 'medium', 'high', 'xhigh', 'max',
+])
+
+function parseReasoningEffort(value: unknown): ReasoningEffort {
+    return typeof value === 'string' && REASONING_EFFORTS.has(value as ReasoningEffort)
+        ? value as ReasoningEffort
+        : 'medium'
+}
+
 function rowToAgentData(row: AgentRow): AgentData {
     const hasIcon = row.icon_data !== null || (row.icon_url !== null && row.icon_url !== '')
     return {
@@ -163,9 +173,7 @@ function rowToAgentData(row: AgentRow): AgentData {
         autoRouterProviderId: row.auto_router_provider_id || '',
         autoRouterModel: row.auto_router_model || '',
         thinkingEnabled: row.thinking_enabled !== 0,
-        reasoningEffort: row.reasoning_effort === 'low' || row.reasoning_effort === 'high'
-            ? row.reasoning_effort
-            : 'medium',
+        reasoningEffort: parseReasoningEffort(row.reasoning_effort),
         maxContextTokens: typeof row.max_context_tokens === 'number' ? row.max_context_tokens : null,
         sortOrder: typeof row.sort_order === 'number' ? row.sort_order : 0,
         tags: parseTags(row.tags_json),
@@ -305,11 +313,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     const updatedAutoRouterProviderId = input.autoRouterProviderId !== undefined ? (input.autoRouterProviderId || '') : (existing.auto_router_provider_id || '')
     const updatedAutoRouterModel = input.autoRouterModel !== undefined ? (input.autoRouterModel || '') : (existing.auto_router_model || '')
     const updatedThinkingEnabled = input.thinkingEnabled !== undefined ? input.thinkingEnabled : (existing.thinking_enabled !== 0)
-    const updatedReasoningEffort = input.reasoningEffort ?? (
-        existing.reasoning_effort === 'low' || existing.reasoning_effort === 'high'
-            ? existing.reasoning_effort
-            : 'medium'
-    )
+    const updatedReasoningEffort = input.reasoningEffort ?? parseReasoningEffort(existing.reasoning_effort)
     const updatedMaxContextTokens = input.maxContextTokens !== undefined
         ? (typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null)
         : existing.max_context_tokens

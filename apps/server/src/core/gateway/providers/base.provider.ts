@@ -227,7 +227,7 @@ export interface CompletionRequest {
   /** Enable reasoning/thinking tokens (default: true) */
   thinkingEnabled?: boolean
   /** Amount of reasoning work requested when thinking is enabled. */
-  reasoningEffort?: 'low' | 'medium' | 'high'
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 }
 
 export interface CompletionResponse {
