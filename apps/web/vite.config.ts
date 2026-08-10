@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 const apiProxyTarget = process.env.CYNOSURE_API_PROXY_TARGET || 'http://localhost:3099'
 const wsProxyTarget = process.env.CYNOSURE_WS_PROXY_TARGET || apiProxyTarget.replace(/^http/, 'ws')
+const hasNodeWebStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage') !== undefined
 
 export default defineConfig({
   plugins: [tailwindcss(), vue()],
@@ -25,6 +26,9 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
+    // Node 25 enables its own global Web Storage implementation. Disable it in
+    // test workers so Happy DOM can install its isolated local/session storage.
+    execArgv: hasNodeWebStorage ? ['--no-experimental-webstorage'] : [],
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.ts'],
     restoreMocks: true,

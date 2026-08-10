@@ -29,6 +29,7 @@ export interface DisplayMessage {
   imageDataUrls?: string[]
   videoDataUrls?: string[]
   audioDataUrls?: string[]
+  structuredContent?: unknown
   fileAttachments?: { name: string }[]
   agentId?: string
   agentName?: string
@@ -250,6 +251,7 @@ export const useChatStore = defineStore('chat', () => {
           imageDataUrls: r.imageDataUrls || undefined,
           videoDataUrls: r.videoDataUrls || undefined,
           audioDataUrls: r.audioDataUrls || undefined,
+          structuredContent: r.structuredContent,
           fileAttachments: r.fileAttachments || undefined,
           agentId: r.agentId || undefined,
           agentName: r.agentName || undefined,

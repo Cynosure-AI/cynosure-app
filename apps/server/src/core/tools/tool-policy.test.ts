@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { isSystemAutoApprovedTool } from './tool-policy.js'
+import { isAnnotationAutoApprovedTool, isSystemAutoApprovedTool } from './tool-policy.js'
 
 describe('tool approval policy', () => {
     test('auto-approves memory and graph reads, but not writes', () => {
@@ -9,5 +9,19 @@ describe('tool approval policy', () => {
         expect(isSystemAutoApprovedTool('memory_remove_all')).toBe(false)
         expect(isSystemAutoApprovedTool('relationship_graph_assert')).toBe(false)
         expect(isSystemAutoApprovedTool('relationship_graph_delete')).toBe(false)
+    })
+
+    test('uses safe MCP read-only hints as an auto-approval default', () => {
+        expect(isAnnotationAutoApprovedTool({ readOnlyHint: true })).toBe(true)
+        expect(isAnnotationAutoApprovedTool({ readOnlyHint: true, destructiveHint: false })).toBe(true)
+        expect(isAnnotationAutoApprovedTool({ readOnlyHint: true, openWorldHint: true })).toBe(true)
+    })
+
+    test('requires approval for writes, missing hints, and conflicting destructive hints', () => {
+        expect(isAnnotationAutoApprovedTool()).toBe(false)
+        expect(isAnnotationAutoApprovedTool({})).toBe(false)
+        expect(isAnnotationAutoApprovedTool({ readOnlyHint: false, destructiveHint: false })).toBe(false)
+        expect(isAnnotationAutoApprovedTool({ readOnlyHint: false, idempotentHint: true })).toBe(false)
+        expect(isAnnotationAutoApprovedTool({ readOnlyHint: true, destructiveHint: true })).toBe(false)
     })
 })

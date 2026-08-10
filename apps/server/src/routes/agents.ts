@@ -19,6 +19,7 @@ import { makePlanningTools } from '../core/tools/builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
 import { getDefaultMemorySpace } from '../core/memory/memory-space-scope.js'
+import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
 
 function defaultMemorySpaceIds(db = getDb()): string[] {
     const row = db
@@ -134,7 +135,11 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     // GET /api/agents/tool-approvals — get all tool approval states
     app.get('/tool-approvals', async () => {
         const gate = getHITLGate()
-        return gate.getAllApprovals()
+        const effectiveApprovals = gate.getAllApprovals()
+        for (const tool of getToolRegistry().listRegisteredTools()) {
+            effectiveApprovals[tool.executionName] = gate.isAutoApproved(tool.executionName, tool.annotations)
+        }
+        return effectiveApprovals
     })
 
     // PUT /api/agents/tool-approvals — bulk-set tool approval states
@@ -167,7 +172,6 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     app.get('/tools', async () => {
         const registry = getToolRegistry()
         const gate = getHITLGate()
-        const approvals = gate.getAllApprovals()
         const items = registry.listRegisteredTools()
         const dynamicBuiltIns = [
             ...makePlanningTools('').map((tool) => ({
@@ -210,15 +214,19 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
             },
         ]
 
-        return [...items, ...dynamicBuiltIns].map((tool) => ({
-            key: tool.key,
-            name: tool.name,
-            executionName: tool.executionName,
-            description: tool.description,
-            parameters: tool.parameters,
-            autoApprove: approvals[tool.executionName] ?? false,
-            namespace: tool.namespace,
-            ambiguous: tool.ambiguous,
-        }))
+        return [...items, ...dynamicBuiltIns].map((tool) => {
+            const annotations = ('annotations' in tool ? tool.annotations : undefined) as ToolBehaviorAnnotations | undefined
+            return {
+                key: tool.key,
+                name: tool.name,
+                executionName: tool.executionName,
+                description: tool.description,
+                parameters: tool.parameters,
+                annotations,
+                autoApprove: gate.isAutoApproved(tool.executionName, annotations),
+                namespace: tool.namespace,
+                ambiguous: tool.ambiguous,
+            }
+        })
     })
 }

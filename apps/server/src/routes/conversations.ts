@@ -143,6 +143,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 memory_sources_json: string | null
                 thinking: string | null
                 audio_urls_json: string | null
+                structured_content_json: string | null
                 context_tokens: number | null
                 created_at: number
             }[]
@@ -153,8 +154,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     id, conversation_id, role, content, tool_calls_json, tool_call_id,
                     provider, model, prompt_tokens, completion_tokens, latency_ms,
                     image_urls_json, video_urls_json, agent_id, memory_sources_json, thinking,
-                    audio_urls_json, context_tokens, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    audio_urls_json, structured_content_json, context_tokens, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `)
 
             for (const row of messageRows) {
@@ -197,6 +198,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     row.memory_sources_json,
                     row.thinking,
                     row.audio_urls_json,
+                    row.structured_content_json,
                     row.context_tokens,
                     row.created_at,
                 )
@@ -380,6 +382,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 image_urls_json: string | null
                 video_urls_json: string | null
                 audio_urls_json: string | null
+                structured_content_json: string | null
                 agent_id: string | null
                 ma_codename: string | null
                 ma_agent_name: string | null
@@ -437,6 +440,10 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 try {
                     videoDataUrls = row.video_urls_json ? JSON.parse(row.video_urls_json) : undefined
                 } catch { /* malformed JSON — ignore */ }
+                let structuredContent: unknown | undefined
+                try {
+                    structuredContent = row.structured_content_json ? JSON.parse(row.structured_content_json) : undefined
+                } catch { /* malformed JSON - ignore */ }
                 const fileAttachments = attachmentsByMessage.get(row.id)
                 return {
                     id: row.id,
@@ -449,6 +456,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     imageDataUrls,
                     videoDataUrls,
                     audioDataUrls,
+                    structuredContent,
                     fileAttachments,
                     agentId: row.agent_id || undefined,
                     agentName,
