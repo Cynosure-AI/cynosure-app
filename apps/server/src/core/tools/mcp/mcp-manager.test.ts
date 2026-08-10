@@ -4,8 +4,8 @@ import { describe, expect, test } from 'vitest'
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
 import { McpManager, type McpServerConfig } from './mcp-manager.js'
 
-describe('McpManager tool annotations', () => {
-  test('copies all behavioral hints into registered tool definitions', () => {
+describe('McpManager tool metadata', () => {
+  test('copies behavior hints and rich metadata into registered tool definitions', () => {
     const manager = new McpManager()
     const annotations = {
       readOnlyHint: true,
@@ -16,7 +16,11 @@ describe('McpManager tool annotations', () => {
     const descriptor: McpTool = {
       name: 'inspect_workspace',
       description: 'Inspect a workspace',
+      title: 'Workspace inspector',
       inputSchema: { type: 'object', properties: {} },
+      outputSchema: { type: 'object', properties: { files: { type: 'array' } } },
+      icons: [{ src: 'https://example.test/tool.png', mimeType: 'image/png' }],
+      _meta: { vendor: 'test' },
       annotations,
     }
     const config: McpServerConfig = {
@@ -34,5 +38,9 @@ describe('McpManager tool annotations', () => {
 
     expect(tool.annotations).toEqual(annotations)
     expect(tool.execution).toEqual({ readOnly: true })
+    expect(tool.title).toBe('Workspace inspector')
+    expect(tool.outputSchema).toEqual(descriptor.outputSchema)
+    expect(tool.icons).toEqual(descriptor.icons)
+    expect(tool.providerMetadata).toEqual({ vendor: 'test' })
   })
 })
