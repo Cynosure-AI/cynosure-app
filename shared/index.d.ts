@@ -2,7 +2,7 @@ export type ChatRole = 'user' | 'assistant' | 'system' | 'tool'
 
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 
-export type ReasoningEffort = 'low' | 'medium' | 'high'
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export interface SubAgentAssignmentDto {
   agentId: string

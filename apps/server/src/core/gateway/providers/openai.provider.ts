@@ -19,6 +19,15 @@ export class OpenAIProvider extends BaseLLMProvider {
   protected get defaultBaseUrl(): string { return 'https://api.openai.com/v1' }
   protected get allowsCustomBaseUrl(): boolean { return false }
 
+  /** Map the common effort scale to values accepted by this provider. */
+  protected normalizeReasoningEffort(
+    effort: NonNullable<CompletionRequest['reasoningEffort']>,
+    _model: string
+  ): Exclude<NonNullable<CompletionRequest['reasoningEffort']>, 'max'> {
+    // OpenAI's highest native value is xhigh.
+    return effort === 'max' ? 'xhigh' : effort
+  }
+
   constructor(config: LLMProviderConfig) {
     super()
     const baseUrl = this.allowsCustomBaseUrl
@@ -197,7 +206,10 @@ export class OpenAIProvider extends BaseLLMProvider {
       }
     }
     if (request.thinkingEnabled) {
-      params.reasoning = { effort: request.reasoningEffort ?? 'medium', summary: 'auto' }
+      params.reasoning = {
+        effort: this.normalizeReasoningEffort(request.reasoningEffort ?? 'medium', model),
+        summary: 'auto'
+      }
     }
 
     type ResponsesCreate = (
@@ -275,7 +287,10 @@ export class OpenAIProvider extends BaseLLMProvider {
       }
     }
     if (request.thinkingEnabled) {
-      params.reasoning = { effort: request.reasoningEffort ?? 'medium', summary: 'auto' }
+      params.reasoning = {
+        effort: this.normalizeReasoningEffort(request.reasoningEffort ?? 'medium', model),
+        summary: 'auto'
+      }
     }
 
     const stream = (this.client.responses as unknown as {
