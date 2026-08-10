@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
@@ -22,6 +22,9 @@ const allConversationsError = ref<string | null>(null)
 const allConversationsQuery = ref('')
 const allConversationsRequestToken = ref(0)
 const openConversationMenuId = ref<string | null>(null)
+const editingConversationId = ref<string | null>(null)
+const editingTitle = ref('')
+const titleInputRef = ref<HTMLInputElement | null>(null)
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const ALL_PAGE_SIZE = 50
@@ -84,6 +87,39 @@ function toggleConversationMenu(id: string, event: Event): void {
 
 function closeConversationMenu(): void {
   openConversationMenuId.value = null
+}
+
+function startRename(conv: Conversation, event: Event): void {
+  event.stopPropagation()
+  openConversationMenuId.value = null
+  editingConversationId.value = conv.id
+  editingTitle.value = conv.title
+  void nextTick(() => titleInputRef.value?.select())
+}
+
+async function commitRename(conv: Conversation): Promise<void> {
+  if (editingConversationId.value !== conv.id) return
+
+  const title = editingTitle.value.trim()
+  editingConversationId.value = null
+  if (!title || title === conv.title) return
+
+  await chatStore.renameConversation(conv.id, title)
+  conv.title = title
+}
+
+function cancelRename(): void {
+  editingConversationId.value = null
+}
+
+function onRenameKeydown(event: KeyboardEvent, conv: Conversation): void {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    void commitRename(conv)
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
+    cancelRename()
+  }
 }
 
 function onConversationMenuKeydown(event: KeyboardEvent): void {
@@ -391,11 +427,26 @@ onMounted(() => {
               icon="lucide:pin"
               class="w-3 h-3 shrink-0 text-amber-400"
             />
+            <input
+              v-if="editingConversationId === conv.id"
+              ref="titleInputRef"
+              v-model="editingTitle"
+              type="text"
+              class="min-w-0 flex-1 rounded border border-theme-600 bg-theme-900 px-1.5 py-0.5 text-xs text-theme-100 focus:border-accent-500 focus:outline-none"
+              aria-label="Conversation title"
+              @click.stop
+              @dblclick.stop
+              @blur="commitRename(conv)"
+              @keydown="onRenameKeydown($event, conv)"
+            >
             <span
+              v-else
               class="text-xs truncate"
               :class="
                 conv.id === chatStore.activeConversationId ? 'text-theme-100' : 'text-theme-400'
               "
+              title="Double-click to rename"
+              @dblclick="startRename(conv, $event)"
             >
               {{ displayTitle(conv) }}
             </span>
@@ -456,6 +507,18 @@ onMounted(() => {
                 class="h-3.5 w-3.5 text-amber-400"
               />
               {{ conv.pinned ? 'Unpin' : 'Pin' }}
+            </button>
+
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100"
+              @click="startRename(conv, $event)"
+            >
+              <Icon
+                icon="lucide:pencil"
+                class="h-3.5 w-3.5"
+              />
+              Rename
             </button>
 
 

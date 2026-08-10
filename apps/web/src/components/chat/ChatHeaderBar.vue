@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, nextTick } from "vue";
+import { computed } from "vue";
 import { useChatStore } from "../../stores/chat.store";
 import { useProviderStore } from "../../stores/provider.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
@@ -60,37 +60,6 @@ async function newChat(): Promise<void> {
   await chatStore.startNewChat();
 }
 
-// ── Inline title editing ──
-const isEditingTitle = ref(false);
-const editingTitleValue = ref("");
-const titleInputRef = ref<HTMLInputElement | null>(null);
-
-function startEditTitle(): void {
-  if (!chatStore.activeConversation) return;
-  editingTitleValue.value = chatStore.activeConversation.title;
-  isEditingTitle.value = true;
-  nextTick(() => {
-    titleInputRef.value?.select();
-  });
-}
-
-async function commitTitleEdit(): Promise<void> {
-  if (!isEditingTitle.value) return;
-  isEditingTitle.value = false;
-  const id = chatStore.activeConversationId;
-  if (id && editingTitleValue.value.trim()) {
-    await chatStore.renameConversation(id, editingTitleValue.value);
-  }
-}
-
-function cancelTitleEdit(): void {
-  isEditingTitle.value = false;
-}
-
-function onTitleKeydown(e: KeyboardEvent): void {
-  if (e.key === "Enter") commitTitleEdit();
-  else if (e.key === "Escape") cancelTitleEdit();
-}
 </script>
 
 <template>
@@ -129,19 +98,9 @@ function onTitleKeydown(e: KeyboardEvent): void {
 
     <!-- Centered conversation title + origin badge (hidden on mobile) -->
     <div class="hidden sm:flex flex-1 min-w-0 items-center justify-center gap-2">
-      <input
-        v-if="isEditingTitle"
-        ref="titleInputRef"
-        v-model="editingTitleValue"
-        class="text-sm font-medium text-theme-300 bg-theme-800 border border-theme-600 rounded px-2 py-0.5 max-w-xs w-full focus:outline-none focus:border-accent-500"
-        @blur="commitTitleEdit"
-        @keydown="onTitleKeydown"
-      >
       <span
-        v-else-if="conversationTitle"
-        class="text-sm font-medium text-theme-300 truncate select-none cursor-pointer"
-        title="Double-click to rename"
-        @dblclick="startEditTitle"
+        v-if="conversationTitle"
+        class="text-sm font-medium text-theme-300 truncate select-none"
       >
         {{ conversationTitle }}
       </span>
