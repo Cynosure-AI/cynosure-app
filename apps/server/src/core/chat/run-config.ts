@@ -27,6 +27,16 @@ export interface PersistedChatConfigInput {
     autoMemory: boolean
 }
 
+const REASONING_EFFORTS = new Set<ReasoningEffort>([
+    'minimal', 'low', 'medium', 'high', 'xhigh', 'max',
+])
+
+function parseReasoningEffort(value: unknown): ReasoningEffort {
+    return typeof value === 'string' && REASONING_EFFORTS.has(value as ReasoningEffort)
+        ? value as ReasoningEffort
+        : 'medium'
+}
+
 export function resolveToolSelection(
     toolRegistry: ToolRegistry,
     allowedTools?: string[],
@@ -120,9 +130,7 @@ export function parseExecutionConfig(raw: string | null | undefined): Conversati
         model: typeof parsed.model === 'string' ? parsed.model : '',
         providerId: typeof parsed.providerId === 'string' ? parsed.providerId : '',
         thinkingEnabled: parsed.thinkingEnabled !== false,
-        reasoningEffort: parsed.reasoningEffort === 'low' || parsed.reasoningEffort === 'high'
-            ? parsed.reasoningEffort
-            : 'medium',
+        reasoningEffort: parseReasoningEffort(parsed.reasoningEffort),
         autoToolRouting: parsed.autoToolRouting === true,
         autoMemory: parsed.autoMemory === true,
     }
