@@ -203,6 +203,18 @@ Tools are stored with composite keys: `namespaceId::toolName`. The registry:
 - Generates disambiguated execution names on collisions
 - Provides `resolveForExecution(toolKeys)` to hydrate tool definitions
 - Provides `listRegisteredTools()` and `getNamespaceMetadataForTools()`
+- Preserves MCP behavioral annotations (`readOnlyHint`, `destructiveHint`,
+  `idempotentHint`, and `openWorldHint`) through aliases and tool listings
+
+MCP behavioral annotations are server-declared hints. When no explicit user
+policy exists, a consistently declared `readOnlyHint: true` tool defaults to
+auto-confirm; tools that write, declare destructive behavior, provide
+conflicting hints, or provide no hints default to ask. A persisted per-tool
+user choice overrides this annotation-derived default. The Tools policy UI
+displays the declared hints next to those permission controls.
+
+`readOnlyHint: true` is also used as an execution scheduling hint; tools that
+write or have unknown side effects remain serial.
 
 ### 3.2 Execution Tools
 

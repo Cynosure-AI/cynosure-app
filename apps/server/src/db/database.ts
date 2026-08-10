@@ -95,6 +95,7 @@ function createTables(db: Database.Database): void {
       memory_sources_json TEXT,
       thinking TEXT,
       audio_urls_json TEXT,
+      structured_content_json TEXT,
       context_tokens INTEGER,
       created_at INTEGER NOT NULL
     );
@@ -398,6 +399,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('messages', 'ma_codename', 'TEXT')
   addColumnIfMissing('messages', 'ma_agent_name', 'TEXT')
   addColumnIfMissing('messages', 'ma_invocation_id', 'TEXT')
+  addColumnIfMissing('messages', 'structured_content_json', 'TEXT')
   addColumnIfMissing('execution_steps', 'ma_invocation_id', 'TEXT')
   addColumnIfMissing('notifications', 'scheduled_at', 'INTEGER')
   addColumnIfMissing('notifications', 'delivered_at', 'INTEGER')

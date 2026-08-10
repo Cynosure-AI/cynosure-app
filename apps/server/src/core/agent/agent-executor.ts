@@ -6,7 +6,7 @@ import { getEventBus } from '../telemetry/event-bus.js'
 import { getHITLGate } from './hitl-gate.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import type { ChatMessage, ToolCall, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, ToolCall, ToolDefinition, ToolResult, ToolResultContent } from '../gateway/providers/base.provider.js'
 import type { ReasoningEffort } from '@shared/types'
 import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 import { isPlanningToolName } from '../tools/builtin/planning-tools.js'
@@ -120,6 +120,11 @@ interface ToolCallResult {
     images?: string[]
     /** Base64 data-URL images for LLM vision */
     imageDataUrls?: string[]
+    /** Base64 data-URL audio for multimodal models and UI playback. */
+    audioDataUrls?: string[]
+    /** Original MCP result values retained for structured consumers. */
+    structuredContent?: unknown
+    content?: ToolResultContent[]
 }
 
 type Usage = AgentExecutorResult['usage']
@@ -304,7 +309,15 @@ export class AgentExecutor {
                 if (visibleToolResults.length) {
                     this.emit('step:executed', {
                         taskId, conversationId, iteration: round + 1,
-                        results: visibleToolResults.map(tr => ({ name: tr.name, success: tr.success, output: tr.output, images: tr.images, imageDataUrls: tr.imageDataUrls }))
+                        results: visibleToolResults.map(tr => ({
+                            name: tr.name,
+                            success: tr.success,
+                            output: tr.output,
+                            images: tr.images,
+                            imageDataUrls: tr.imageDataUrls,
+                            audioDataUrls: tr.audioDataUrls,
+                            structuredContent: tr.structuredContent,
+                        }))
                     })
                     if (!hasPlanningUpdate) {
                         this.reconcilePlanningProgress(visibleToolResults)
@@ -320,10 +333,11 @@ export class AgentExecutor {
                 for (const tr of toolResults) {
                     currentMessages.push({
                         role: 'tool' as const,
-                        content: tr.imageDataUrls?.length
+                        content: tr.imageDataUrls?.length || tr.audioDataUrls?.length
                             ? [
                                 { type: 'text' as const, text: tr.output },
-                                ...tr.imageDataUrls.map(url => ({ type: 'image_url' as const, image_url: { url } })),
+                                ...(tr.imageDataUrls || []).map(url => ({ type: 'image_url' as const, image_url: { url } })),
+                                ...(tr.audioDataUrls || []).map(url => ({ type: 'audio_url' as const, audio_url: { url } })),
                             ]
                             : tr.output,
                         toolCallId: tr.toolCallId,
@@ -496,7 +510,7 @@ export class AgentExecutor {
 
         this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'awaiting-approval', message: 'Checking tool approvals...' })
 
-        const approval = await hitlGate.requestApproval(taskId, pendingToolCalls, signal, conversationId)
+        const approval = await hitlGate.requestApproval(taskId, pendingToolCalls, signal, conversationId, this.config.tools)
         if (approval.approved) return null
 
         this.emit('step:hitl-denied', { taskId, conversationId, iteration: round + 1, reason: approval.reason })
@@ -766,6 +780,9 @@ export class AgentExecutor {
                 success: res?.success !== false,
                 images,
                 imageDataUrls,
+                audioDataUrls: res?.audioDataUrls,
+                structuredContent: res?.structuredContent,
+                content: res?.content,
             }
         } catch (err) {
             return { toolCallId: tc.id, name: tc.function.name, output: `Error: ${(err as Error).message}`, success: false }
@@ -889,12 +906,17 @@ export class AgentExecutor {
             const now = Date.now()
             db.prepare(
                 `INSERT INTO messages (
-                    id, conversation_id, role, content, tool_call_id, image_urls_json, agent_id,
+                    id, conversation_id, role, content, tool_call_id, image_urls_json, audio_urls_json,
+                    structured_content_json, agent_id,
                     ma_codename, ma_agent_name, ma_invocation_id,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
-                toolMsgId, conversationId, 'tool', tr.output, tr.toolCallId, tr.images?.length ? JSON.stringify(tr.images) : null, agentId || null,
+                toolMsgId, conversationId, 'tool', tr.output, tr.toolCallId,
+                tr.images?.length ? JSON.stringify(tr.images) : null,
+                tr.audioDataUrls?.length ? JSON.stringify(tr.audioDataUrls) : null,
+                tr.structuredContent === undefined ? null : JSON.stringify(tr.structuredContent),
+                agentId || null,
                 (meta?.maCodename as string) || null,
                 (meta?.maAgentName as string) || null,
                 (meta?.maInvocationId as string) || null,
@@ -910,6 +932,8 @@ export class AgentExecutor {
                     maAgentName: meta?.maAgentName,
                     maInvocationId: meta?.maInvocationId,
                     imageDataUrls: tr.images,
+                    audioDataUrls: tr.audioDataUrls,
+                    structuredContent: tr.structuredContent,
                     createdAt: now,
                 },
             })

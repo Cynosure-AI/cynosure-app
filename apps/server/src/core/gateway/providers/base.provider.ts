@@ -37,11 +37,81 @@ export interface ToolCall {
   thoughtSignature?: string
 }
 
+/**
+ * Server-declared MCP behavior hints. These describe likely side effects but
+ * are not trusted authorization decisions; explicit user policy still wins.
+ */
+export interface ToolBehaviorAnnotations {
+  /** Human-readable title supplied by the tool provider. */
+  title?: string
+  /** True when the tool does not modify its environment. Defaults to false in MCP. */
+  readOnlyHint?: boolean
+  /** True when a mutating tool may perform destructive updates. Defaults to true in MCP. */
+  destructiveHint?: boolean
+  /** True when repeating a mutating call has no additional effect. Defaults to false in MCP. */
+  idempotentHint?: boolean
+  /** True when the tool may interact with external entities. Defaults to true in MCP. */
+  openWorldHint?: boolean
+}
+
+/** Audience and presentation hints attached to MCP result content. */
+export interface ToolContentAnnotations {
+  audience?: Array<'user' | 'assistant'>
+  priority?: number
+  lastModified?: string
+}
+
+export interface ToolIcon {
+  src: string
+  mimeType?: string
+  sizes?: string[]
+  theme?: 'light' | 'dark'
+}
+
+export type ToolResultContent =
+  | { type: 'text'; text: string; annotations?: ToolContentAnnotations; _meta?: Record<string, unknown> }
+  | { type: 'image'; data: string; mimeType: string; annotations?: ToolContentAnnotations; _meta?: Record<string, unknown> }
+  | { type: 'audio'; data: string; mimeType: string; annotations?: ToolContentAnnotations; _meta?: Record<string, unknown> }
+  | {
+      type: 'resource_link'
+      uri: string
+      name: string
+      title?: string
+      description?: string
+      mimeType?: string
+      size?: number
+      icons?: ToolIcon[]
+      annotations?: ToolContentAnnotations
+      _meta?: Record<string, unknown>
+    }
+  | {
+      type: 'resource'
+      resource: {
+        uri: string
+        mimeType?: string
+        text?: string
+        blob?: string
+        annotations?: ToolContentAnnotations
+        _meta?: Record<string, unknown>
+      }
+      annotations?: ToolContentAnnotations
+      _meta?: Record<string, unknown>
+    }
+
 export interface ToolDefinition {
   name: string
+  /** Human-readable display name supplied independently of the callable name. */
+  title?: string
   description: string
   parameters: Record<string, unknown> // JSON Schema
+  /** MCP schema for structuredContent returned by this tool. */
+  outputSchema?: Record<string, unknown>
+  icons?: ToolIcon[]
+  /** Opaque provider metadata. It must not be treated as trusted policy. */
+  providerMetadata?: Record<string, unknown>
   timeout: number
+  /** Advisory behavior metadata declared by the tool provider. */
+  annotations?: ToolBehaviorAnnotations
   /** Execution scheduling hints. Unknown tools are treated as mutating and run serially. */
   execution?: {
     readOnly: boolean
@@ -67,14 +137,23 @@ export type RegisteredToolDefinition = ToolDefinition & RegistryToolMetadata
 
 export interface ToolResult {
   success: boolean
+  /** Canonical, de-duplicated representation passed to the model and shown in transcript. */
   output: string
   error?: string
+  /** Original MCP content blocks, retained for rich clients and content annotations. */
+  content?: ToolResultContent[]
+  /** Original machine-readable result. Exact JSON duplicates in content are omitted from output. */
+  structuredContent?: unknown
+  /** Opaque MCP result metadata. It is retained but not sent to the model. */
+  providerMetadata?: Record<string, unknown>
   /** Internal-only: additional tools to expose on subsequent LLM rounds. */
   loadedTools?: ToolDefinition[]
   /** Image sources for UI display. AgentExecutor materializes these into artifact URLs before persistence. */
   images?: string[]
   /** Base64 data-URL images for LLM vision (e.g. data:image/png;base64,...) */
   imageDataUrls?: string[]
+  /** Base64 data-URL audio returned by a tool. */
+  audioDataUrls?: string[]
 }
 
 export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker' | 'transcription'

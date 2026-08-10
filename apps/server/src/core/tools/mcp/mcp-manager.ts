@@ -3,8 +3,10 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
+import type { Tool as McpTool } from '@modelcontextprotocol/sdk/types.js'
 import type { ToolDefinition, ToolResult } from '../../gateway/providers/base.provider.js'
 import { McpOAuthProvider } from './oauth-provider.js'
+import { normalizeMcpToolResult } from './mcp-result.js'
 import { existsSync, readdirSync, unlinkSync, rmSync } from 'fs'
 import { join } from 'path'
 import { createHash } from 'crypto'
@@ -316,15 +318,20 @@ export class McpManager {
 
     /** Build ToolDefinition wrappers from raw MCP tool descriptors. */
     private buildToolDefinitions(
-        mcpTools: Array<{ name: string; description?: string; inputSchema?: unknown; annotations?: { readOnlyHint?: boolean } }>,
+        mcpTools: McpTool[],
         client: Client,
         _config: McpServerConfig
     ): ToolDefinition[] {
         return mcpTools.map((t) => ({
             name: t.name,
-            description: t.description || t.name,
+            title: t.title || t.annotations?.title,
+            description: t.description || t.title || t.annotations?.title || t.name,
             parameters: (t.inputSchema as Record<string, unknown>) || { type: 'object', properties: {} },
+            outputSchema: t.outputSchema as Record<string, unknown> | undefined,
+            icons: t.icons,
+            providerMetadata: t._meta,
             timeout: 60000,
+            annotations: t.annotations,
             execution: { readOnly: t.annotations?.readOnlyHint === true },
             execute: async (params: unknown, signal?: AbortSignal): Promise<ToolResult> => {
                 try {
@@ -332,41 +339,22 @@ export class McpManager {
                         name: t.name,
                         arguments: (params as Record<string, unknown>) || {}
                     }, undefined, { signal })
-
-                    const parts = result.content as Array<{
-                        type: string
-                        text?: string
-                        data?: string
-                        mimeType?: string
-                    }>
-
-                    const textOutput = parts
-                        .filter((c) => c.type === 'text')
-                        .map((c) => c.text || '')
-                        .join('\n')
-
-                    // Return inline image content as sources; the AgentExecutor
-                    // materializes them into durable conversation artifacts.
-                    const imageSources: string[] = []
-                    const imageDataUrls: string[] = []
-                    for (const c of parts) {
-                        if (c.type === 'image' && c.data && c.mimeType) {
-                            const dataUrl = `data:${c.mimeType};base64,${c.data}`
-                            imageSources.push(dataUrl)
-                            imageDataUrls.push(dataUrl)
-                        }
-                    }
+                    const normalized = normalizeMcpToolResult(result)
 
                     // Rewrite local file paths in tool text output to API URLs
                     // so the LLM sees usable HTTP URLs instead of filesystem paths
-                    const rewrittenOutput = rewriteFilePathsInText(textOutput)
+                    const rewrittenOutput = rewriteFilePathsInText(normalized.output)
 
                     return {
                         success: !result.isError,
-                        output: rewrittenOutput || (imageSources.length ? `(${imageSources.length} image(s) returned)` : '(no output)'),
+                        output: rewrittenOutput,
                         error: result.isError ? rewrittenOutput : undefined,
-                        images: imageSources.length ? imageSources : undefined,
-                        imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined
+                        content: normalized.content,
+                        structuredContent: normalized.structuredContent,
+                        providerMetadata: normalized.providerMetadata,
+                        images: normalized.imageDataUrls,
+                        imageDataUrls: normalized.imageDataUrls,
+                        audioDataUrls: normalized.audioDataUrls,
                     }
                 } catch (err) {
                     return {

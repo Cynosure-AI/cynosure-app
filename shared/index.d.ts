@@ -97,6 +97,7 @@ export interface StoredMessageDto {
   imageDataUrls?: string[]
   videoDataUrls?: string[]
   audioDataUrls?: string[]
+  structuredContent?: unknown
   fileAttachments?: { name: string }[]
   agentId?: string
   agentName?: string

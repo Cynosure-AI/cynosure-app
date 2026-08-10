@@ -9,12 +9,21 @@ export interface ToolNamespace {
   label: string
 }
 
+export interface ToolBehaviorAnnotations {
+  title?: string
+  readOnlyHint?: boolean
+  destructiveHint?: boolean
+  idempotentHint?: boolean
+  openWorldHint?: boolean
+}
+
 export interface ToolInfo {
   key: string
   name: string
   executionName: string
   description: string
   parameters: Record<string, unknown>
+  annotations?: ToolBehaviorAnnotations
   autoApprove: boolean
   namespace: ToolNamespace
   ambiguous: boolean
