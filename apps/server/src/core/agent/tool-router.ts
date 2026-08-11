@@ -18,7 +18,7 @@ export const MCP_CANDIDATE_COUNT = 8 // Top-K MCP tool groups selected by embedd
 export const CONTEXT_WINDOW_TURNS = 5 // Recent turns included in routing query context
 
 const TURN_CHAR_LIMIT = 200 // Max characters taken from each conversation turn when building the router query
-const MAX_ROUTED_TOOLS = 16 // Upper bound for automatically selected tools after individual ranking
+export const MAX_AUTO_DISCOVERED_TOOLS = 16 // Pinned, sticky, and runtime-required tools do not count toward this discovery budget
 const MIN_RELATIVE_TOOL_SCORE = 0.72 // Keep near-matches when their embedding score is close to the best hit
 
 interface McpToolGroup {
@@ -70,9 +70,7 @@ export function shouldRouteTools(
     userQuery?: string,
     opts: { enabled?: boolean } = {},
 ): boolean {
-    const hasMcpTools = tools.some(isMcpTool)
-
-    return opts.enabled === true && Boolean(userQuery?.trim()) && hasMcpTools
+    return opts.enabled === true && Boolean(userQuery?.trim()) && tools.length > 0
 }
 
 export async function embeddingPreFilter(
@@ -81,14 +79,12 @@ export async function embeddingPreFilter(
     topK = MCP_CANDIDATE_COUNT,
     onStatus?: RouteToolsInput['onStatus'],
 ): Promise<{ groupIds: string[]; queryVector: number[] }> {
-    if (mcpGroups.length <= topK) {
-        const embedder = getEmbeddingProvider()
-        const { vector: queryVector } = await embedder.embed(query)
-        return { groupIds: mcpGroups.map(({ id }) => id), queryVector }
-    }
-
     try {
         const embedder = getEmbeddingProvider()
+        if (mcpGroups.length <= topK) {
+            const { vector: queryVector } = await embedder.embed(query)
+            return { groupIds: mcpGroups.map(({ id }) => id), queryVector }
+        }
         const scope = getRouterEmbeddingScope(embedder)
         const hashes = new Map(mcpGroups.map((group) => [group.id, groupContentHash(group)]))
         const cachedVectors = loadCachedRouterEmbeddings(mcpGroups.map(({ id }) => id), hashes, scope)
@@ -128,10 +124,7 @@ export async function embeddingPreFilter(
         return { groupIds, queryVector }
     } catch (err) {
         console.warn('[tool-router] Embedding pre-filter failed, using lexical fallback:', err)
-        const embedder = getEmbeddingProvider()
-        onStatus?.('indexing-tools', 'Indexing tool search query...')
-        const { vector: queryVector } = await embedder.embed(query)
-        return { groupIds: lexicalPreFilter(query, mcpGroups, topK), queryVector }
+        return { groupIds: lexicalPreFilter(query, mcpGroups, topK), queryVector: [] }
     }
 }
 
@@ -144,14 +137,13 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
         preferredToolNames,
         usedToolNames,
         topK = MCP_CANDIDATE_COUNT,
-        maxTools = MAX_ROUTED_TOOLS,
+        maxTools = MAX_AUTO_DISCOVERED_TOOLS,
         contextWindowTurns = CONTEXT_WINDOW_TURNS,
         onStatus,
     } = input
 
     const localTools = allTools.filter((tool) => !isMcpTool(tool))
     const mcpTools = allTools.filter(isMcpTool)
-    if (!mcpTools.length) return allTools
 
     const query = buildRouterQuery(userQuery, recentMessages, contextWindowTurns)
     const groups = buildMcpGroups(mcpTools, mcpMetadata)
@@ -201,6 +193,11 @@ async function rankCandidateTools(
     onStatus?: RouteToolsInput['onStatus'],
 ): Promise<RoutedToolDefinition[]> {
     const rankable = tools.filter(({ name }) => !protectedNames.has(name))
+
+    if (queryVector.length === 0) {
+        onStatus?.('finding-tools', 'Finding required tools with lexical matching...')
+        return lexicalToolRank(query, rankable, limit)
+    }
 
     try {
         const embedder = getEmbeddingProvider()
@@ -253,6 +250,45 @@ async function rankCandidateTools(
         console.warn('[tool-router] Tool ranking failed, using lexical fallback:', err)
         return lexicalToolRank(query, rankable, limit)
     }
+}
+
+/** Deterministic degraded-mode routing that never calls an embedding or LLM provider. */
+export function routeToolsLexically(input: RouteToolsInput): RoutedToolDefinition[] {
+    const {
+        userQuery,
+        recentMessages = [],
+        allTools,
+        mcpMetadata = [],
+        preferredToolNames,
+        usedToolNames,
+        topK = MCP_CANDIDATE_COUNT,
+        maxTools = MAX_AUTO_DISCOVERED_TOOLS,
+        contextWindowTurns = CONTEXT_WINDOW_TURNS,
+    } = input
+    const query = buildRouterQuery(userQuery, recentMessages, contextWindowTurns)
+    const localTools = allTools.filter((tool) => !isMcpTool(tool))
+    const mcpGroups = buildMcpGroups(allTools.filter(isMcpTool), mcpMetadata)
+    const candidateGroupIds = new Set(lexicalPreFilter(query, mcpGroups, topK))
+    const candidateMcpTools = mcpGroups
+        .filter(({ id }) => candidateGroupIds.has(id))
+        .flatMap(({ tools }) => tools)
+    const fixedTools = preferredToolNames?.size
+        ? allTools.filter(({ name }) => preferredToolNames.has(name))
+        : []
+    const stickyNames = collectStickyToolNames(recentMessages, usedToolNames)
+    const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
+    const protectedNames = new Set([...fixedTools, ...stickyTools].map(({ name }) => name))
+    const candidates = dedupeTools([...localTools, ...candidateMcpTools])
+        .filter(({ name }) => !protectedNames.has(name))
+    const discovered = lexicalToolRank(query, candidates, maxTools)
+
+    let routedTools: RoutedToolDefinition[] = []
+    const searchTool = makeSearchAvailableMcpToolsTool({
+        allTools,
+        getLoadedToolNames: () => new Set(routedTools.map(({ name }) => name)),
+    })
+    routedTools = dedupeTools([...fixedTools, ...discovered, ...stickyTools, searchTool])
+    return routedTools
 }
 
 function messageContentForRouter(content: string | ContentPart[]): string {

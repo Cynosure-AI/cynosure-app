@@ -809,7 +809,7 @@ function memoryGraphSourceIdsForChunks(chunks: Array<{ sourceFile?: string; spac
     for (const chunk of chunks) {
         if (!chunk.sourceFile) continue
         if (chunk.spaceId) sourceIds.add(memoryGraphSourceId(chunk.spaceId, chunk.sourceFile))
-        sourceIds.add(legacyMemoryGraphSourceId(chunk.sourceFile))
+        else sourceIds.add(legacyMemoryGraphSourceId(chunk.sourceFile))
     }
     return Array.from(sourceIds)
 }
@@ -818,7 +818,31 @@ function memoryGraphSourceIdsForChunks(chunks: Array<{ sourceFile?: string; spac
  * Create a `relationship_graph_search` tool that lets the LLM inspect known
  * relationships and their connected entities.
  */
-export function makeRelationshipGraphSearchTool(): ToolDefinition {
+function relationshipGraphSourcePrefixes(assignedSpaces: MemorySpaceRef[]): string[] {
+    return assignedSpaces.flatMap((space) => [
+        `memory:${space.id}:`,
+        `memory-space:${space.id}:`,
+    ])
+}
+
+function resolveRelationshipGraphSpace(
+    assignedSpaces: MemorySpaceRef[],
+    folder?: string,
+): MemorySpaceRef | { error: string } {
+    if (assignedSpaces.length === 0) {
+        return { error: 'No memory folder is selected for relationship graph access.' }
+    }
+    if (folder?.trim()) {
+        const match = findSpaceByIdOrName(assignedSpaces, folder.trim())
+        return match || { error: `Memory folder "${folder.trim()}" is not in the selected relationship graph scope.` }
+    }
+    if (assignedSpaces.length === 1) return assignedSpaces[0]
+    return { error: `Multiple memory folders are selected. Specify the target using the "folder" parameter.\n${formatSpaces(assignedSpaces)}` }
+}
+
+export function makeRelationshipGraphSearchTool(opts: MemoryToolOptions = {}): ToolDefinition {
+    const assignedSpaces = opts.assignedSpaces || []
+    const sourceIdPrefixes = relationshipGraphSourcePrefixes(assignedSpaces)
     return {
         name: 'relationship_graph_search',
         execution: { readOnly: true },
@@ -836,6 +860,9 @@ export function makeRelationshipGraphSearchTool(): ToolDefinition {
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
+            if (sourceIdPrefixes.length === 0) {
+                return { success: false, output: 'No memory folder is selected for relationship graph access.' }
+            }
             const query = pickToolString(params, ['query', 'entity', 'name', 'search_query', 'searchQuery'])
             const { depth, limit } = (params || {}) as { depth?: number; limit?: number }
             const graph = getEntityGraphStore()
@@ -848,7 +875,10 @@ export function makeRelationshipGraphSearchTool(): ToolDefinition {
                 }
 
                 const walkDepth = Math.floor(clampToolNumber(depth, 1, 1, 3))
-                const walk = graph.focusedWalk(seedNodes.map((node) => node.id), query, walkDepth, cappedLimit)
+                const walk = graph.focusedWalk(seedNodes.map((node) => node.id), query, walkDepth, cappedLimit, 0, { sourceIdPrefixes })
+                if (walk.edges.length === 0) {
+                    return { success: false, output: `No relationship graph entries in the selected memory folders matched "${query}".` }
+                }
                 const nodeLines = walk.nodes.slice(0, cappedLimit).map(formatEntityNode)
                 const edgeLines = walk.edges.slice(0, cappedLimit).map(formatEntityEdge)
                 const sections = [
@@ -859,9 +889,9 @@ export function makeRelationshipGraphSearchTool(): ToolDefinition {
                 return { success: true, output: sections.join('\n\n') }
             }
 
-            const snapshot = graph.list(cappedLimit)
+            const snapshot = graph.list(cappedLimit, 0, sourceIdPrefixes)
             if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {
-                return { success: false, output: 'The relationship graph is empty.' }
+                return { success: false, output: 'No relationship graph entries are available in the selected memory folders.' }
             }
 
             const nodeLines = snapshot.nodes.map(formatEntityNode)
@@ -882,7 +912,8 @@ export function makeRelationshipGraphSearchTool(): ToolDefinition {
  * Create a `relationship_graph_assert` tool that lets the LLM actively record
  * or correct a relationship in the relationship graph.
  */
-export function makeRelationshipGraphAssertTool(): ToolDefinition {
+export function makeRelationshipGraphAssertTool(opts: MemoryToolOptions = {}): ToolDefinition {
+    const assignedSpaces = opts.assignedSpaces || []
     return {
         name: 'relationship_graph_assert',
         description:
@@ -916,14 +947,17 @@ export function makeRelationshipGraphAssertTool(): ToolDefinition {
                 confidence: { type: 'number', description: 'Confidence from 0.1 to 1.0 (default: 0.9 for explicit user-provided facts).' },
                 importance: { type: 'string', enum: IMPORTANCE_LABELS, description: 'Importance: temporary, minor, useful (durable fact), or core.' },
                 evidence: { type: 'string', description: 'Short evidence phrase explaining why this relationship is true.' },
+                folder: { type: 'string', description: 'Target memory folder name or ID. Required when multiple memory folders are selected.' },
             },
             required: ['from', 'relation', 'to'],
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { from, relation, to, confidence, importance, evidence } = (params || {}) as {
-                from?: unknown; relation?: unknown; to?: unknown; confidence?: unknown; importance?: unknown; evidence?: unknown
+            const { from, relation, to, confidence, importance, evidence, folder } = (params || {}) as {
+                from?: unknown; relation?: unknown; to?: unknown; confidence?: unknown; importance?: unknown; evidence?: unknown; folder?: string
             }
+            const targetSpace = resolveRelationshipGraphSpace(assignedSpaces, folder)
+            if ('error' in targetSpace) return { success: false, output: targetSpace.error }
             const fromEntity = toEntityInput(from)
             if ('error' in fromEntity) return { success: false, output: `Invalid from entity: ${fromEntity.error}` }
             const toEntity = toEntityInput(to)
@@ -942,7 +976,7 @@ export function makeRelationshipGraphAssertTool(): ToolDefinition {
                 confidence: clampToolNumber(confidence, 0.9, 0.1, 1),
                 importance: toImportanceValue(importance),
                 evidence: typeof evidence === 'string' ? evidence.replace(/\s+/g, ' ').trim().slice(0, 280) : '',
-            }, 'tool', 'relationship_graph_assert')
+            }, 'tool', `memory-space:${targetSpace.id}:relationship-assertions`)
 
             if (!edge) return { success: false, output: 'No relationship was created.' }
             return { success: true, output: `Relationship asserted:\n${formatEntityEdge(edge)}` }
@@ -954,7 +988,9 @@ export function makeRelationshipGraphAssertTool(): ToolDefinition {
  * Create a `relationship_graph_delete` tool that lets the LLM remove an
  * incorrect relationship by ID or by exact relationship triple.
  */
-export function makeRelationshipGraphDeleteTool(): ToolDefinition {
+export function makeRelationshipGraphDeleteTool(opts: MemoryToolOptions = {}): ToolDefinition {
+    const assignedSpaces = opts.assignedSpaces || []
+    const sourceIdPrefixes = relationshipGraphSourcePrefixes(assignedSpaces)
     return {
         name: 'relationship_graph_delete',
         description:
@@ -985,6 +1021,9 @@ export function makeRelationshipGraphDeleteTool(): ToolDefinition {
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
+            if (sourceIdPrefixes.length === 0) {
+                return { success: false, output: 'No memory folder is selected for relationship graph access.' }
+            }
             const { edgeId, from, relation, to } = (params || {}) as {
                 edgeId?: string; from?: unknown; relation?: unknown; to?: unknown
             }
@@ -993,7 +1032,7 @@ export function makeRelationshipGraphDeleteTool(): ToolDefinition {
             if (edgeId?.trim()) {
                 const resolvedEdgeId = resolveEntityGraphEdgeId(edgeId)
                 if ('error' in resolvedEdgeId) return { success: false, output: resolvedEdgeId.error }
-                const result = graph.deleteEdge(resolvedEdgeId.id)
+                const result = graph.deleteEdgeEvidenceBySourcePrefixes(resolvedEdgeId.id, sourceIdPrefixes)
                 return result.edgeDeleted
                     ? { success: true, output: formatRelationshipGraphDeleteOutput(`Deleted relationship graph edge ${edgeId.trim()}.`, result.orphanedNodeIds.length) }
                     : { success: false, output: `No relationship found with id ${edgeId.trim()}.` }
@@ -1006,12 +1045,12 @@ export function makeRelationshipGraphDeleteTool(): ToolDefinition {
             const rel = cleanRelationName(relation)
             if (!rel) return { success: false, output: 'Provide edgeId, or a valid from/relation/to triple to delete.' }
 
-            const result = graph.deleteMatchingEdge({
+            const result = graph.deleteMatchingEdgeBySourcePrefixes({
                 action: 'delete',
                 from: fromEntity,
                 relation: rel,
                 to: toEntity,
-            })
+            }, sourceIdPrefixes)
             return result.edgeDeleted
                 ? { success: true, output: formatRelationshipGraphDeleteOutput('Deleted 1 matching relationship graph edge.', result.orphanedNodeIds.length) }
                 : { success: false, output: 'No matching relationship graph edge was found.' }

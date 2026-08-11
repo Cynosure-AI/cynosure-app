@@ -177,7 +177,7 @@ onMounted(() => loadSpaces())
 
 <template>
   <div class="space-y-4">
-    <!-- Auto Memories -->
+    <!-- Automatic Memory Retrieval -->
     <BaseCard class="p-5">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
@@ -187,11 +187,11 @@ onMounted(() => loadSpaces())
               class="w-4 h-4 text-accent-400"
             />
             <h3 class="text-sm font-medium text-theme-200">
-              Auto Memories
+              Automatic memory retrieval
             </h3>
           </div>
           <p class="text-xs text-theme-500 leading-relaxed">
-            Automatically retrieve and inject relevant memory snippets before this agent responds.
+            Retrieve and inject relevant document snippets before this agent responds. Relationship tools use the same selected-folder scope on demand.
           </p>
         </div>
         <ToggleSwitch
@@ -249,7 +249,7 @@ onMounted(() => loadSpaces())
         class="mb-3 rounded-lg border border-theme-800 bg-theme-900/50 p-3 flex items-center justify-between gap-3"
       >
         <div class="min-w-0">
-          <div class="texExistst-theme-200">
+          <div class="text-theme-200">
             Create Memory Space for Agent
           </div>
           <div class="text-[11px] text-theme-500 truncate">

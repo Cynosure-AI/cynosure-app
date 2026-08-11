@@ -2,13 +2,12 @@ import { nanoid } from 'nanoid'
 import { getEventBus } from '../../telemetry/event-bus.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
 import { compactToolDescription } from '../../tools/tool-description.js'
-import { routeTools, shouldRouteTools, type RoutedToolDefinition } from './../tool-router.js'
+import { MAX_AUTO_DISCOVERED_TOOLS, routeTools, routeToolsLexically, shouldRouteTools, type RoutedToolDefinition } from './../tool-router.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../../tools/tool-registry.js'
 
 const TOOL_CONTEXT_SELECTION_TOOL_NAME = 'select_tool_context'
-const MAX_CURATED_TOOLS = 16
 const TOOL_DESCRIPTION_CHAR_LIMIT = 800
 
 export interface ApplyAutoToolRoutingInput {
@@ -104,8 +103,15 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         return curatedTools
     } catch (err) {
         if ((err as Error).name === 'AbortError' || signal?.aborted) throw err
-        console.warn('[tool-router] Routing failed, using local tool list:', err)
-        const fallbackTools = tools.filter((tool) => !tool.namespaceId?.startsWith('mcp:'))
+        console.warn('[tool-router] Routing failed, using deterministic lexical routing:', err)
+        const fallbackTools = routeToolsLexically({
+            userQuery: userQuery || '',
+            recentMessages: recentMessages || [],
+            allTools: tools,
+            mcpMetadata,
+            preferredToolNames,
+            usedToolNames,
+        })
         emitToolRoutingSelection(
             conversationId,
             taskId,
@@ -151,7 +157,7 @@ async function curateRoutedTools(input: {
                     content: [
                         'You curate routed tool candidates before the main assistant run.',
                         'Given the current request, recent conversation, and candidate tools, call select_tool_context with only the tool IDs that are useful for this next assistant turn.',
-                        `Select at most ${MAX_CURATED_TOOLS} tool IDs.`,
+                        `Select at most ${MAX_AUTO_DISCOVERED_TOOLS} tool IDs.`,
                         'Prefer the smallest sufficient tool set. Keep broad or expensive capabilities out unless they are likely needed.',
                         'Return an empty list if none of the candidates are useful.',
                         'Some explicitly selected, recently used, or search-expansion tools are protected and will be kept automatically; they are not listed here.',
@@ -203,7 +209,7 @@ function buildToolContextSelectionTool(candidateIds: string[]): ToolDefinition {
                     type: 'array',
                     description: 'Candidate IDs to expose to the main assistant, ordered by usefulness.',
                     items: { type: 'string', enum: candidateIds },
-                    maxItems: MAX_CURATED_TOOLS,
+                    maxItems: MAX_AUTO_DISCOVERED_TOOLS,
                 },
             },
             required: ['toolIds'],
@@ -222,7 +228,7 @@ function parseToolContextSelection(raw: string, candidateIds: string[]): ToolCon
         const toolIds = requestedIds
             .filter((id) => allowed.has(id))
             .filter((id, index, arr) => arr.indexOf(id) === index)
-            .slice(0, MAX_CURATED_TOOLS)
+            .slice(0, MAX_AUTO_DISCOVERED_TOOLS)
         if (requestedIds.length > 0 && toolIds.length === 0) return null
 
         return { toolIds }

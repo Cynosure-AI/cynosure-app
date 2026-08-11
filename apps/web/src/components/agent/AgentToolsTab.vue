@@ -85,16 +85,16 @@ function removeMissing() {
               class="h-4 w-4 text-accent-400"
             />
             <p class="text-sm font-medium text-theme-200">
-              Auto-select tools
+              Automatic tool discovery
             </p>
           </div>
           <p class="mt-1 text-xs text-theme-500">
-            Let this agent route each request through the tools selected below. Non-chosen tools are automatically omitted from the agent context. If none are selected, it will automatically choose from all available tools.
+            Discover a compact set of relevant registered tools for each request. Tools selected below are pinned and always kept; required internal tools are added separately.
           </p>
         </div>
         <ToggleSwitch
           :model-value="agent.autoToolRouting"
-          label="Auto-select tools"
+          label="Automatic tool discovery"
           size="md"
           color="accent"
           @update:model-value="emit('update', 'autoToolRouting', $event)"

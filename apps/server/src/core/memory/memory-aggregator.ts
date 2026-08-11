@@ -213,7 +213,7 @@ function memoryGraphSourceIdsForChunks(chunks: RetrievedChunk[]): string[] {
   for (const chunk of chunks) {
     if (!chunk.sourceFile) continue
     if (chunk.spaceId) sourceIds.add(memoryGraphSourceId(chunk.spaceId, chunk.sourceFile))
-    sourceIds.add(legacyMemoryGraphSourceId(chunk.sourceFile))
+    else sourceIds.add(legacyMemoryGraphSourceId(chunk.sourceFile))
   }
   return Array.from(sourceIds)
 }

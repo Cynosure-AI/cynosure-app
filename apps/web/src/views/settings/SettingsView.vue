@@ -134,9 +134,9 @@ const sections: SettingsSection[] = [
   {
     id: 'auto-router',
     categoryId: 'chat',
-    label: 'Auto Router',
-    description: 'Choose the model that prepares task context for automatic tools and memories.',
-    terms: ['auto router', 'router', 'task context', 'auto tools', 'auto memory', 'automatic routing']
+    label: 'Context Routing Model',
+    description: 'Choose the default model that prepares context for automatic tool discovery and memory retrieval.',
+    terms: ['context routing', 'auto router', 'router', 'task context', 'automatic tools', 'automatic memory']
   },
   {
     id: 'generated-titles',
