@@ -156,18 +156,6 @@ export const recommendedServers: RegistryServerEntry[] = [
         'mcp-claude-code-terminal',
     ),
     cynosureMcp(
-        '@cynosure-mcp/cynosure',
-        'Cynosure',
-        'Manage Cynosure agents, conversations, memory, providers, MCP servers, and settings.',
-        'mcp-cynosure',
-        [{
-            name: 'CYNOSURE_URL',
-            description: 'Base URL of the Cynosure server, for example http://localhost:3000.',
-            isRequired: true,
-            format: 'string',
-        }],
-    ),
-    cynosureMcp(
         '@cynosure-mcp/defuddle',
         'Defuddle',
         'Extract clean content and metadata from web pages, including YouTube transcripts.',

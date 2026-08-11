@@ -5,8 +5,7 @@
         Add MCP Tools
       </h2>
       <p class="text-sm text-theme-500 mt-1">
-        Extend your agents with installable tools. The official Cynosure MCP is pinned first;
-        everything here is optional and can also be added later in
+        Extend your agents with installable tools. Everything here is optional and can also be added later in
         <strong class="text-theme-400">Settings → MCPs</strong>.
       </p>
     </div>
@@ -26,7 +25,7 @@
       v-if="registryError && !registryLoading"
       class="mb-3 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3"
     >
-      Recommended tools could not be loaded: {{ registryError }}. The Cynosure MCP is still available below.
+      Recommended tools could not be loaded: {{ registryError }}.
     </div>
 
     <div
@@ -214,21 +213,6 @@ interface McpOption {
 }
 
 const mcpOptions = ref<McpOption[]>([])
-const cynosureMcp: McpOption = {
-  id: 'cynosure',
-  name: 'Cynosure MCP',
-  description: 'Manage Cynosure agents, conversations, memory, providers, MCP servers, and settings.',
-  packageId: '@cynosure-mcp/cynosure@latest',
-  icon: 'lucide:sparkles',
-  iconBg: 'bg-accent-500/10',
-  iconColor: 'text-accent-400',
-  badge: 'Recommended',
-  badgeClass: 'bg-accent-500/20 text-accent-400',
-  command: 'npx',
-  args: ['-y', '@cynosure-mcp/cynosure@latest'],
-  argEnvNames: new Set(),
-  installId: '@cynosure-mcp/cynosure',
-}
 
 const iconByName: Record<string, Pick<McpOption, 'icon' | 'iconBg' | 'iconColor'>> = {
   time: { icon: 'lucide:clock', iconBg: 'bg-cyan-500/10', iconColor: 'text-cyan-400' },
@@ -309,10 +293,9 @@ async function loadRecommendedMcps() {
     const recommended = data.servers
       .map(getInstallOption)
       .filter((mcp): mcp is McpOption => Boolean(mcp))
-      .filter((mcp) => !mcp.installId?.includes('@cynosure-mcp/cynosure'))
-    mcpOptions.value = [cynosureMcp, ...recommended]
+    mcpOptions.value = recommended
   } catch (e) {
-    mcpOptions.value = [cynosureMcp]
+    mcpOptions.value = []
     registryError.value = e instanceof Error ? e.message : 'Could not load recommended MCP servers'
   } finally {
     registryLoading.value = false
