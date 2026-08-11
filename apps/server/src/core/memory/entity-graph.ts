@@ -61,6 +61,8 @@ export interface GraphWalkResult {
 
 export interface GraphWalkOptions {
   sourceIds?: string[]
+  /** Strict provenance boundary. Only edges with evidence from one of these source prefixes are returned. */
+  sourceIdPrefixes?: string[]
   contextText?: string
 }
 
@@ -93,6 +95,15 @@ interface ExtractedRelation {
 const ENTITY_TYPES = new Set<EntityType>(['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'])
 const RESERVED_ENTITY_NAMES = new Set(['user', 'assistant', 'system', 'tool'])
 const MAX_SEED_SEARCH_TERMS = 32
+const RELATION_ALIASES: Record<string, string> = {
+  employed_by: 'works_at',
+  works_for: 'works_at',
+  employed_at: 'works_at',
+  member_of: 'belongs_to',
+  utilizes: 'uses',
+  relies_on: 'depends_on',
+  based_at: 'located_in',
+}
 function normalizeName(name: unknown): string {
   if (typeof name !== 'string') return ''
   return name
@@ -131,12 +142,17 @@ export function splitEntityExtractionContent(content: string, maxChars = 8_000):
 
 function normalizeRelation(relation: unknown): string {
   if (typeof relation !== 'string') return 'related_to'
-  return relation
+  const normalized = relation
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 64) || 'related_to'
+  return RELATION_ALIASES[normalized] || normalized
+}
+
+function compatibleEntityType(rowType: unknown, incomingType: EntityType): boolean {
+  return rowType === incomingType || rowType === 'other' || incomingType === 'other'
 }
 
 function cleanName(name: string): string {
@@ -223,6 +239,24 @@ function toEntity(value: unknown): ExtractedEntity | null {
 
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`)
+}
+
+function graphEvidenceScopeClause(sourceIdPrefixes: string[], sourceIds: string[] = []): { sql: string; args: string[] } {
+  const prefixes = Array.from(new Set(sourceIdPrefixes.map((value) => value.trim()).filter(Boolean)))
+  const exactIds = Array.from(new Set(sourceIds.map((value) => value.trim()).filter(Boolean)))
+  if (prefixes.length === 0 && exactIds.length === 0) return { sql: '', args: [] }
+  const conditions = [
+    exactIds.length ? `scoped_ev.source_id IN (${exactIds.map(() => '?').join(', ')})` : '',
+    ...prefixes.map(() => `scoped_ev.source_id LIKE ? ESCAPE '\\'`),
+  ].filter(Boolean)
+  return {
+    sql: `AND EXISTS (
+      SELECT 1 FROM entity_graph_edge_evidence scoped_ev
+      WHERE scoped_ev.edge_id = e.id
+        AND (${conditions.join(' OR ')})
+    )`,
+    args: [...exactIds, ...prefixes.map((prefix) => `${escapeLike(prefix)}%`)],
+  }
 }
 
 function clampConfidence(value: unknown): number {
@@ -433,6 +467,36 @@ function edgeSearchScore(edge: EntityEdge, query: string): number {
 }
 
 export class EntityGraphStore {
+  private scopeEdges(edges: EntityEdge[], sourceIdPrefixes: string[], sourceIds: string[] = []): EntityEdge[] {
+    const prefixes = Array.from(new Set(sourceIdPrefixes.map((value) => value.trim()).filter(Boolean)))
+    const exactIds = Array.from(new Set(sourceIds.map((value) => value.trim()).filter(Boolean)))
+    if ((prefixes.length === 0 && exactIds.length === 0) || edges.length === 0) return edges
+    const db = getDb()
+    const where = [
+      exactIds.length ? `source_id IN (${exactIds.map(() => '?').join(', ')})` : '',
+      ...prefixes.map(() => `source_id LIKE ? ESCAPE '\\'`),
+    ].filter(Boolean).join(' OR ')
+    const args = [...exactIds, ...prefixes.map((prefix) => `${escapeLike(prefix)}%`)]
+    return edges.flatMap((edge) => {
+      const evidenceRows = db.prepare(`
+        SELECT * FROM entity_graph_edge_evidence
+        WHERE edge_id = ? AND (${where})
+        ORDER BY last_seen_at DESC, confidence DESC
+      `).all(edge.id, ...args) as Record<string, unknown>[]
+      const representative = evidenceRows[0]
+      if (!representative) return []
+      return [{
+        ...edge,
+        evidence: representative.evidence as string || '',
+        confidence: clampConfidence(representative.confidence),
+        sourceKind: representative.source_kind as string,
+        sourceId: representative.source_id as string,
+        sourceIds: evidenceRows.map((row) => row.source_id as string),
+        mentionCount: evidenceRows.reduce((sum, row) => sum + Number(row.mention_count || 0), 0),
+      }]
+    })
+  }
+
   upsertNode(entity: ExtractedEntity, sourceId: string, now = Date.now()): EntityNode {
     const db = getDb()
     const name = cleanName(entity.name)
@@ -441,9 +505,11 @@ export class EntityGraphStore {
     const aliases = Array.from(new Set((entity.aliases || []).map(cleanName).filter(Boolean)))
     const lookupNames = Array.from(new Set([name, ...aliases].map(normalizeName).filter(Boolean)))
     const matchingRows = this.findNodeRowsByNames(lookupNames)
+      .filter((row) => compatibleEntityType(row.type, type as EntityType))
     if (matchingRows.length > 1) this.mergeDuplicateNameNodes(matchingRows, now)
 
-    const existing = this.findNodeRowsByNames(lookupNames)[0]
+    const existing = this.findNodeRowsByNames(lookupNames)
+      .find((row) => compatibleEntityType(row.type, type as EntityType))
 
     if (!existing) {
       const id = nanoid()
@@ -451,7 +517,7 @@ export class EntityGraphStore {
         INSERT INTO entity_graph_nodes (id, name, normalized_name, type, aliases_json, mention_count, source_count, first_seen_at, last_seen_at)
         VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)
       `).run(id, name, normalizedName, type, JSON.stringify(aliases), now, now)
-      return this.mergeNodeIdentityCollisions([name, ...aliases], now) || this.getNode(id)!
+      return this.mergeNodeIdentityCollisions([name, ...aliases], now, type as EntityType) || this.getNode(id)!
     }
 
     const existingAliases = rowAliases(existing)
@@ -469,7 +535,7 @@ export class EntityGraphStore {
           last_seen_at = ?
       WHERE id = ?
     `).run(displayName, type, type, JSON.stringify(mergedAliases), sourceIncrement, now, existing.id)
-    return this.mergeNodeIdentityCollisions([displayName, ...mergedAliases], now) || this.getNode(existing.id as string)!
+    return this.mergeNodeIdentityCollisions([displayName, ...mergedAliases], now, type as EntityType) || this.getNode(existing.id as string)!
   }
 
   upsertEdge(relation: ExtractedRelation, sourceKind: string, sourceId: string, now = Date.now()): EntityEdge | null {
@@ -602,7 +668,7 @@ export class EntityGraphStore {
       WHERE id = ?
     `).run(name, normalizedName, type, JSON.stringify(aliases), importance, now, id)
 
-    return this.mergeNodeIdentityCollisions([name, ...aliases], now) || this.getNode(id)
+    return this.mergeNodeIdentityCollisions([name, ...aliases], now, type) || this.getNode(id)
   }
 
   updateEdge(
@@ -708,6 +774,46 @@ export class EntityGraphStore {
     return this.deleteEdge(row.id)
   }
 
+  deleteEdgeEvidenceBySourcePrefixes(id: string, sourceIdPrefixes: string[]): DeleteEdgeResult {
+    const prefixes = Array.from(new Set(sourceIdPrefixes.map((value) => value.trim()).filter(Boolean)))
+    if (prefixes.length === 0) return { edgeDeleted: false, orphanedNodeIds: [] }
+    const edge = this.getEdge(id)
+    if (!edge) return { edgeDeleted: false, orphanedNodeIds: [] }
+    const db = getDb()
+    const where = prefixes.map(() => `source_id LIKE ? ESCAPE '\\'`).join(' OR ')
+    const args = prefixes.map((prefix) => `${escapeLike(prefix)}%`)
+    const removed = db.prepare(`DELETE FROM entity_graph_edge_evidence WHERE edge_id = ? AND (${where})`)
+      .run(id, ...args).changes
+    if (removed === 0) return { edgeDeleted: false, orphanedNodeIds: [] }
+
+    const remaining = db.prepare('SELECT * FROM entity_graph_edge_evidence WHERE edge_id = ? ORDER BY last_seen_at DESC LIMIT 1')
+      .get(id) as Record<string, unknown> | undefined
+    if (remaining) {
+      db.prepare(`
+        UPDATE entity_graph_edges
+        SET evidence = ?, confidence = ?, source_kind = ?, source_id = ?, last_seen_at = ?
+        WHERE id = ?
+      `).run(remaining.evidence, remaining.confidence, remaining.source_kind, remaining.source_id, remaining.last_seen_at, id)
+      this.refreshNodeSourceCount(edge.fromNodeId)
+      this.refreshNodeSourceCount(edge.toNodeId)
+      return { edgeDeleted: true, orphanedNodeIds: [] }
+    }
+    return this.deleteEdge(id)
+  }
+
+  deleteMatchingEdgeBySourcePrefixes(relation: ExtractedRelation, sourceIdPrefixes: string[]): DeleteEdgeResult {
+    const from = this.findNodeByEntity(relation.from)
+    const to = this.findNodeByEntity(relation.to)
+    if (!from || !to) return { edgeDeleted: false, orphanedNodeIds: [] }
+    const row = getDb().prepare(`
+      SELECT id FROM entity_graph_edges
+      WHERE from_node_id = ? AND relation = ? AND to_node_id = ?
+    `).get(from.id, normalizeRelation(relation.relation), to.id) as { id: string } | undefined
+    return row
+      ? this.deleteEdgeEvidenceBySourcePrefixes(row.id, sourceIdPrefixes)
+      : { edgeDeleted: false, orphanedNodeIds: [] }
+  }
+
   deleteAll(): { nodesDeleted: number; edgesDeleted: number } {
     const db = getDb()
     const edgesDeleted = db.prepare('DELETE FROM entity_graph_edges').run().changes
@@ -755,12 +861,14 @@ export class EntityGraphStore {
     })
   }
 
-  private mergeNodeIdentityCollisions(names: string[], now = Date.now()): EntityNode | null {
+  private mergeNodeIdentityCollisions(names: string[], now = Date.now(), type?: EntityType): EntityNode | null {
     const normalizedNames = Array.from(new Set(names.map(normalizeName).filter(Boolean)))
     if (normalizedNames.length === 0) return null
     const rows = this.findNodeRowsByNames(normalizedNames)
+      .filter((row) => !type || compatibleEntityType(row.type, type))
     if (rows.length > 1) this.mergeDuplicateNameNodes(rows, now)
-    const row = this.findNodeRowsByNames(normalizedNames)[0]
+    const row = this.findNodeRowsByNames(normalizedNames)
+      .find((candidate) => !type || compatibleEntityType(candidate.type, type))
     return row ? rowToNode(row) : null
   }
 
@@ -860,10 +968,11 @@ export class EntityGraphStore {
     merge()
   }
 
-  list(limit = 80, minImportance: ImportanceLevel = 0): GraphSnapshot {
+  list(limit = 80, minImportance: ImportanceLevel = 0, sourceIdPrefixes: string[] = []): GraphSnapshot {
     const db = getDb()
     const edgeLimit = limit
     const now = Date.now()
+    const scopeClause = graphEvidenceScopeClause(sourceIdPrefixes)
     const edgeRows = db.prepare(`
       WITH node_degrees AS (
         SELECT n.id AS id, COUNT(e.id) AS degree
@@ -883,10 +992,11 @@ export class EntityGraphStore {
       JOIN node_degrees fd ON fd.id = e.from_node_id
       JOIN node_degrees td ON td.id = e.to_node_id
       WHERE e.importance >= ?
+        ${scopeClause.sql}
       ORDER BY overview_score DESC, e.last_seen_at DESC
       LIMIT ?
-    `).all(now, now - 24 * 60 * 60 * 1000, minImportance, edgeLimit) as Record<string, unknown>[]
-    const edges = edgeRows.map(rowToEdge)
+    `).all(now, now - 24 * 60 * 60 * 1000, minImportance, ...scopeClause.args, edgeLimit) as Record<string, unknown>[]
+    const edges = this.scopeEdges(edgeRows.map(rowToEdge), sourceIdPrefixes)
     const nodeIds = Array.from(new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId])))
 
     if (nodeIds.length === 0) {
@@ -1105,6 +1215,7 @@ export class EntityGraphStore {
     const edgeMap = new Map<string, EntityEdge>()
     const seedIdSet = new Set(seedIds)
     const sourceIds = new Set((opts.sourceIds || []).filter(Boolean))
+    const sourceScope = graphEvidenceScopeClause(opts.sourceIdPrefixes || [], opts.sourceIds || [])
     const contextText = normalizeName(opts.contextText || '')
     const contextTokens = tokenizeEntityQuery(opts.contextText || '').slice(0, MAX_SEED_SEARCH_TERMS)
     const shouldRankByContext = sourceIds.size > 0 || contextText.length > 0
@@ -1130,11 +1241,12 @@ export class EntityGraphStore {
         JOIN entity_graph_nodes tn ON tn.id = e.to_node_id
         WHERE (e.from_node_id IN (${placeholders}) OR e.to_node_id IN (${placeholders}))
           AND e.importance >= ?
+          ${sourceScope.sql}
         ORDER BY e.confidence DESC, e.mention_count DESC, e.last_seen_at DESC
         LIMIT ?
-      `).all(...frontier, ...frontier, minImportance, candidateLimit) as Record<string, unknown>[]
+      `).all(...frontier, ...frontier, minImportance, ...sourceScope.args, candidateLimit) as Record<string, unknown>[]
 
-      const rankedEdges = rows.map(rowToEdge)
+      const rankedEdges = this.scopeEdges(rows.map(rowToEdge), opts.sourceIdPrefixes || [], opts.sourceIds || [])
         .map((edge, index) => ({
           edge,
           index,
@@ -1179,8 +1291,8 @@ export class EntityGraphStore {
     return { seedNodes, nodes, edges: Array.from(edgeMap.values()) }
   }
 
-  focusedWalk(seedNodeIds: string[], query: string, depth = 1, edgeLimit = 40, minImportance: ImportanceLevel = 0): GraphWalkResult {
-    const walk = this.walk(seedNodeIds, depth, Math.max(edgeLimit * 3, edgeLimit), minImportance)
+  focusedWalk(seedNodeIds: string[], query: string, depth = 1, edgeLimit = 40, minImportance: ImportanceLevel = 0, opts: GraphWalkOptions = {}): GraphWalkResult {
+    const walk = this.walk(seedNodeIds, depth, Math.max(edgeLimit * 3, edgeLimit), minImportance, opts)
     if (walk.edges.length === 0) return walk
 
     const scoredEdges = walk.edges

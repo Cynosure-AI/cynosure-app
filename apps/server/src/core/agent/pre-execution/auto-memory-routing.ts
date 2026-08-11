@@ -30,7 +30,6 @@ export interface ApplyAutoMemoryRoutingInput {
 
 interface MemoryContextSelection {
     memoryIds: string[]
-    includeGraph: boolean
 }
 
 export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput): Promise<string | null> {
@@ -69,24 +68,19 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             agentId,
             spaceIds: memorySpaceIds,
             permanentTopK: AUTO_MEMORY_RETRIEVAL_COUNT,
-        }), primaryQuery)
+        }))
         signal?.throwIfAborted()
-        if (!candidates.permanent.length && !candidates.graph?.edges.length && contextualQuery !== primaryQuery) {
+        if (!candidates.permanent.length && contextualQuery !== primaryQuery) {
             candidates = filterAutoMemoryCandidates(await aggregator.aggregate(contextualQuery, {
                 agentId,
                 spaceIds: memorySpaceIds,
                 permanentTopK: AUTO_MEMORY_RETRIEVAL_COUNT,
-            }), contextualQuery)
+            }))
         }
 
-        if (!candidates.permanent.length && !candidates.graph?.edges.length) {
+        if (!candidates.permanent.length) {
             emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'none-found')
             return null
-        }
-
-        if (!candidates.permanent.length && candidates.graph?.edges.length) {
-            emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'graph-only')
-            return aggregator.format({ permanent: [], graph: candidates.graph }) || null
         }
 
         emitMemoryRoutingSelection(conversationId, taskId, candidates.permanent, 'gathered-results', eventMeta)
@@ -98,7 +92,6 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             query: primaryQuery,
             recentMessages,
             candidates: candidates.permanent,
-            hasGraph: Boolean(candidates.graph?.edges.length),
             signal,
         })
         const selectedPermanent = selection
@@ -106,7 +99,6 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             : candidates.permanent.slice(0, MAX_SELECTED_MEMORIES)
         const selectedMemory: AggregatedMemory = {
             permanent: selectedPermanent,
-            graph: selection?.includeGraph === false ? undefined : candidates.graph,
         }
 
         emitMemoryRoutingSelection(
@@ -147,7 +139,6 @@ async function selectMemoryContext(input: {
     query: string
     recentMessages: ChatMessage[]
     candidates: RetrievedChunk[]
-    hasGraph: boolean
     signal?: AbortSignal
 }): Promise<MemoryContextSelection | null> {
     if (!input.candidates.length) return null
@@ -164,9 +155,6 @@ async function selectMemoryContext(input: {
                         `Select at most ${MAX_SELECTED_MEMORIES} memory IDs.`,
                         'Prefer precise, directly useful memories over broadly related ones.',
                         'Return an empty list if none of the candidates are useful.',
-                        input.hasGraph
-                            ? 'Set includeGraph to true only if the related entity graph is likely useful context.'
-                            : '',
                         'Do not answer the user. Do not include rationale. /no_think',
                     ].join('\n'),
                 },
@@ -183,14 +171,14 @@ async function selectMemoryContext(input: {
             ],
             model: input.model,
             maxTokens: 300,
-            tools: [buildMemoryContextSelectionTool(candidateIds, input.hasGraph)],
+            tools: [buildMemoryContextSelectionTool(candidateIds)],
             toolChoice: { type: 'function', name: MEMORY_CONTEXT_SELECTION_TOOL_NAME },
             thinkingEnabled: false,
             signal: input.signal,
         }, input.providerId)
 
         const selectionCall = result.toolCalls?.find((call) => call.function.name === MEMORY_CONTEXT_SELECTION_TOOL_NAME)
-        return selectionCall ? parseMemoryContextSelection(selectionCall.function.arguments, candidateIds, input.hasGraph) : null
+        return selectionCall ? parseMemoryContextSelection(selectionCall.function.arguments, candidateIds) : null
     } catch (err) {
         if ((err as Error).name === 'AbortError' || input.signal?.aborted) throw err
         console.warn('[memory-router] Memory context curation failed, using top ranked memories:', err)
@@ -198,7 +186,7 @@ async function selectMemoryContext(input: {
     }
 }
 
-function buildMemoryContextSelectionTool(candidateIds: string[], hasGraph: boolean): ToolDefinition {
+function buildMemoryContextSelectionTool(candidateIds: string[]): ToolDefinition {
     const properties: Record<string, unknown> = {
         memoryIds: {
             type: 'array',
@@ -206,14 +194,6 @@ function buildMemoryContextSelectionTool(candidateIds: string[], hasGraph: boole
             items: { type: 'string', enum: candidateIds },
             maxItems: MAX_SELECTED_MEMORIES,
         },
-    }
-    const required = ['memoryIds']
-    if (hasGraph) {
-        properties.includeGraph = {
-            type: 'boolean',
-            description: 'Whether the related entity graph should also be included.',
-        }
-        required.push('includeGraph')
     }
     return {
         name: MEMORY_CONTEXT_SELECTION_TOOL_NAME,
@@ -223,15 +203,15 @@ function buildMemoryContextSelectionTool(candidateIds: string[], hasGraph: boole
             type: 'object',
             additionalProperties: false,
             properties,
-            required,
+            required: ['memoryIds'],
         },
         execute: async () => ({ success: true, output: 'ok' }),
     }
 }
 
-function parseMemoryContextSelection(raw: string, candidateIds: string[], hasGraph: boolean): MemoryContextSelection | null {
+function parseMemoryContextSelection(raw: string, candidateIds: string[]): MemoryContextSelection | null {
     try {
-        const parsed = JSON.parse(raw) as { memoryIds?: unknown; includeGraph?: unknown }
+        const parsed = JSON.parse(raw) as { memoryIds?: unknown }
         if (!Array.isArray(parsed.memoryIds)) return null
 
         const allowed = new Set(candidateIds)
@@ -242,10 +222,7 @@ function parseMemoryContextSelection(raw: string, candidateIds: string[], hasGra
             .slice(0, MAX_SELECTED_MEMORIES)
         if (requestedIds.length > 0 && memoryIds.length === 0) return null
 
-        return {
-            memoryIds,
-            includeGraph: hasGraph && parsed.includeGraph === true,
-        }
+        return { memoryIds }
     } catch {
         return null
     }
@@ -318,12 +295,9 @@ function messageContentForRouter(content: string | ContentPart[]): string {
     return text || '[multipart content]'
 }
 
-function filterAutoMemoryCandidates(memory: AggregatedMemory, query: string): AggregatedMemory {
+function filterAutoMemoryCandidates(memory: AggregatedMemory): AggregatedMemory {
     const permanent = filterWeakRelativeMatches(memory.permanent)
-    return {
-        permanent,
-        graph: permanent.length > 0 || graphSeedMatchesQuery(memory.graph, query) ? memory.graph : undefined,
-    }
+    return { permanent }
 }
 
 /**
@@ -338,23 +312,6 @@ function filterWeakRelativeMatches(candidates: RetrievedChunk[]): RetrievedChunk
     if (!Number.isFinite(best)) return candidates
     const threshold = best * MIN_RELATIVE_MEMORY_SCORE
     return candidates.filter((_, index) => index < MIN_MEMORY_CANDIDATES || (Number.isFinite(scores[index]) && scores[index] >= threshold))
-}
-
-function graphSeedMatchesQuery(graph: AggregatedMemory['graph'], query: string): boolean {
-    if (!graph?.edges.length || !graph.seedNodes.length) return false
-    const haystack = normalizeForKeywordMatch(query)
-    return graph.seedNodes.some((node) => {
-        const names = [node.name, ...node.aliases].map(normalizeForKeywordMatch).filter(Boolean)
-        return names.some((name) => name.length >= 3 && haystack.includes(name))
-    })
-}
-
-function normalizeForKeywordMatch(value: string): string {
-    return value
-        .toLowerCase()
-        .replace(/[^\p{L}\p{N}]+/gu, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
 }
 
 function memoryLabel(chunk: RetrievedChunk): string {
@@ -395,7 +352,7 @@ function emitMemoryRoutingSelection(
     memories: RetrievedChunk[],
     contextPhase: 'gathered-results' | 'gathered-context' = 'gathered-context',
     eventMeta?: Record<string, unknown>,
-    emptyReason?: 'none-found' | 'none-relevant' | 'graph-only' | 'routing-failed' | 'disabled' | 'empty-scope' | 'no-query',
+    emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed' | 'disabled' | 'empty-scope' | 'no-query',
 ): void {
     getEventBus().emit('step:tools-chosen', {
         conversationId,
@@ -429,7 +386,6 @@ function memoryEmptyLabel(reason?: string): string {
     switch (reason) {
         case 'none-found': return 'No memories found'
         case 'none-relevant': return 'No relevant memories'
-        case 'graph-only': return 'Memory graph matched'
         case 'routing-failed': return 'Memory routing skipped'
         case 'disabled': return 'Auto memory disabled'
         case 'empty-scope': return 'No memory folders selected'
@@ -441,11 +397,9 @@ function memoryEmptyLabel(reason?: string): string {
 function memoryEmptyContent(reason?: string): string {
     switch (reason) {
         case 'none-found':
-            return 'Auto memory ran, but no memory snippets or graph relationships matched this turn.'
+            return 'Automatic memory retrieval ran, but no document snippets matched this turn.'
         case 'none-relevant':
             return 'Auto memory found candidates, but the curation step selected none as useful for this turn.'
-        case 'graph-only':
-            return 'Auto memory found related graph context, but no permanent memory snippets matched.'
         case 'routing-failed':
             return 'Auto memory routing failed; the turn continued without injected memory.'
         case 'disabled':

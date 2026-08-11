@@ -65,7 +65,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
           icon="lucide:brain-circuit"
           class="w-3 h-3"
         />
-        Auto Memories off
+        Automatic retrieval off
       </div>
       <template v-if="selectedMemorySpaces.length">
         <div

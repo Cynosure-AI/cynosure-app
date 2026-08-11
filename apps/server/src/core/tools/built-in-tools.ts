@@ -112,9 +112,9 @@ const BUILTIN_TOOL_HYDRATORS = {
     memory_remove_range: (ctx: BuiltInHydrationContext) => makeMemoryRemoveRangeTool({
         assignedSpaces: ctx.assignedSpaces,
     }),
-    relationship_graph_search: () => makeRelationshipGraphSearchTool(),
-    relationship_graph_assert: () => makeRelationshipGraphAssertTool(),
-    relationship_graph_delete: () => makeRelationshipGraphDeleteTool(),
+    relationship_graph_search: (ctx: BuiltInHydrationContext) => makeRelationshipGraphSearchTool({ assignedSpaces: ctx.assignedSpaces }),
+    relationship_graph_assert: (ctx: BuiltInHydrationContext) => makeRelationshipGraphAssertTool({ assignedSpaces: ctx.assignedSpaces }),
+    relationship_graph_delete: (ctx: BuiltInHydrationContext) => makeRelationshipGraphDeleteTool({ assignedSpaces: ctx.assignedSpaces }),
 } as const satisfies Record<string, (ctx: BuiltInHydrationContext) => ToolDefinition>;
 
 export const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_HYDRATORS);

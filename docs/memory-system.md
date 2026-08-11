@@ -227,6 +227,10 @@ Importance is **auto-inferred** if not explicitly provided by the LLM:
 
 Node importance is **derived from edges**: a node's importance is the maximum importance of all edges connected to it.
 
+Entity identities are canonical across the graph, but relationship claims retain per-source evidence. Agent-facing relationship tools enforce the selected memory-folder boundary against that evidence: an edge is visible or mutable only when at least one supporting source belongs to an allowed folder. This preserves cross-document identity without exposing claims from unrelated memory scopes. Manual relationship assertions are owned by a selected memory folder as well.
+
+Common relation synonyms are normalized (for example, `works_for` and `employed_by` become `works_at`), and same-named entities with incompatible types are kept separate to reduce accidental identity merging.
+
 ### Entity extraction
 
 Entity extraction is done by an **LLM call** (not by the embedding model). The pipeline:

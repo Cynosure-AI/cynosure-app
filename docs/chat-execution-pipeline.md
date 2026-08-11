@@ -269,7 +269,7 @@ When `autoToolRouting` is enabled, the system intelligently selects which tools 
 **Key constants:**
 
 - `MCP_CANDIDATE_COUNT = 8` — Top K MCP groups by embedding similarity
-- `MAX_ROUTED_TOOLS = 16` — Upper bound for selected tools
+- `MAX_AUTO_DISCOVERED_TOOLS = 16` — Budget for automatically discovered tools; pinned, sticky, and runtime-required tools are additional
 - `MIN_RELATIVE_TOOL_SCORE = 0.72` — Near-match threshold
 
 ### 3.4 Attachment Tools
