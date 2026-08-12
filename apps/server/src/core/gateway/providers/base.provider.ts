@@ -177,7 +177,7 @@ export interface ModelPricing {
   inputCacheRead?: number
   /** Cost in $ per cached input token write. */
   inputCacheWrite?: number
-  /** Provider-specific video or media pricing SKUs. Values are in USD unless the key says cents. */
+  /** Provider-specific endpoint pricing SKUs. Values are in USD unless the key says cents. */
   skus?: Record<string, number>
 }
 

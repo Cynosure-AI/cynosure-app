@@ -146,6 +146,23 @@ export function modelPricingSummary(model: PricingModel): PricingSummary {
 }
 
 export function compactPricingTag(model: PricingModel): string | undefined {
+  const pricing = model.pricing;
+  const prices = pricing
+    ? [
+        pricing.prompt,
+        pricing.completion,
+        pricing.request,
+        pricing.image,
+        pricing.audio,
+        pricing.webSearch,
+        pricing.internalReasoning,
+        pricing.inputCacheRead,
+        pricing.inputCacheWrite,
+        ...Object.values(pricing.skus ?? {}),
+      ].filter((value): value is number => value != null && Number.isFinite(value))
+    : [];
+  if (prices.length && prices.every((value) => value === 0)) return "Free";
+
   const summary = modelPricingSummary(model);
   const first = summary.tokenRows[0] ?? summary.mediaRows[0] ?? summary.skuRows[0] ?? summary.extraRows[0];
   if (!first) return undefined;

@@ -23,6 +23,21 @@ import { ensurePricingLoaded, getModelOutputModalities, modelSupportsOutputModal
 
 const MODEL_CACHE_TTL_MS = 10 * 60 * 1000
 
+/**
+ * OpenRouter's models endpoint currently reports reranker prompt/completion
+ * pricing as zero even when the model is billed using rerank-specific units.
+ * Keep the billing SKUs that OpenRouter publishes on its model pages here so
+ * model pickers can show the actual price instead of only a "Rerank" badge.
+ */
+const RERANKER_PRICING_SKUS: Record<string, Record<string, number>> = {
+    'cohere/rerank-v3.5': { per_search: 0.001 },
+    'cohere/rerank-4-fast': { per_search: 0.002 },
+    'cohere/rerank-4-pro': { per_search: 0.0025 },
+    'nvidia/llama-nemotron-rerank-vl-1b-v2:free': { input_tokens: 0 },
+    'voyageai/rerank-2.5': { input_tokens: 0.00000005 },
+    'voyageai/rerank-2.5-lite': { input_tokens: 0.00000002 }
+}
+
 interface OpenRouterModel {
     id: string
     context_length?: number
@@ -197,13 +212,25 @@ export class OpenRouterProvider extends BaseLLMProvider {
     private toModelListItem(model: OpenRouterModel): ModelListItem {
         const inputModalities = this.getInputModalities(model)
         const outputModalities = this.getOutputModalities(model)
+        const pricing = this.getPricing(model.pricing)
+        const rerankerSkus = outputModalities.includes('rerank')
+            ? RERANKER_PRICING_SKUS[model.id]
+            : undefined
         return {
             id: model.id,
             name: model.name,
             contextLength: model.context_length || undefined,
             inputModalities: inputModalities.length ? inputModalities : undefined,
             outputModalities: outputModalities.length ? outputModalities : undefined,
-            pricing: this.getPricing(model.pricing)
+            pricing: pricing || rerankerSkus
+                ? {
+                    ...pricing,
+                    skus: {
+                        ...pricing?.skus,
+                        ...rerankerSkus
+                    }
+                }
+                : undefined
         }
     }
 
