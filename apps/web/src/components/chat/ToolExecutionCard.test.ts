@@ -43,4 +43,38 @@ describe('ToolExecutionCard', () => {
     expect(summary).not.toContain('Default')
     expect(summary.match(/Communication Personality Analysis\.md/g)).toHaveLength(1)
   })
+
+  test('surfaces entity graph evidence included in gathered memory context', async () => {
+    const graphContext = [
+      '## Entity Graph Context',
+      '- [core] Cynosure -> uses -> entity memory. Evidence: Project architecture.',
+    ].join('\n')
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1,
+        isActive: false,
+        steps: [{
+          iteration: 1,
+          status: 'curating-memory',
+          timestamp: Date.now(),
+          toolCalls: [{
+            name: 'Entity Graph Context',
+            arguments: JSON.stringify({
+              type: 'memory',
+              memoryKind: 'entity-graph',
+              contextPhase: 'gathered-context',
+              content: graphContext,
+            }),
+          }],
+        }],
+      },
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+
+    expect(wrapper.get('button').text()).toContain('Entity Graph Context')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain(graphContext)
+  })
 })

@@ -102,13 +102,23 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             graph: candidates.graph,
         }
 
+        // Keep the visible context-gathering event in lockstep with the
+        // evidence formatted for the main model. The graph supplement is not
+        // part of `permanent`, so omitting it here makes injected context
+        // invisible to users (and incorrectly reports an empty selection for
+        // graph-only results).
+        const graphContext = selectedMemory.graph?.edges.length
+            ? aggregator.format({ permanent: [], graph: selectedMemory.graph })
+            : ''
+
         emitMemoryRoutingSelection(
             conversationId,
             taskId,
             selectedMemory.permanent,
             'gathered-context',
             eventMeta,
-            selectedMemory.permanent.length ? undefined : 'none-relevant',
+            selectedMemory.permanent.length || graphContext ? undefined : 'none-relevant',
+            graphContext,
         )
         const formatted = aggregator.format(selectedMemory)
         return formatted || null
@@ -400,24 +410,39 @@ function emitMemoryRoutingSelection(
     contextPhase: 'gathered-results' | 'gathered-context' = 'gathered-context',
     eventMeta?: Record<string, unknown>,
     emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed' | 'disabled' | 'empty-scope' | 'no-query',
+    graphContext?: string,
 ): void {
+    const toolCalls = memories.map((memory) => ({
+        name: memoryLabel(memory),
+        arguments: JSON.stringify({
+            type: 'memory',
+            contextPhase,
+            sourceFile: memory.sourceFile,
+            folderPath: memory.spaceName,
+            chunkIndex: memory.chunkIndex,
+            content: memory.text,
+            rerankerScore: memory.rerankerScore,
+        }),
+    }))
+
+    if (graphContext) {
+        toolCalls.push({
+            name: 'Entity Graph Context',
+            arguments: JSON.stringify({
+                type: 'memory',
+                memoryKind: 'entity-graph',
+                contextPhase,
+                content: graphContext,
+            }),
+        })
+    }
+
     getEventBus().emit('step:tools-chosen', {
         conversationId,
         taskId,
         iteration: 0,
         ...eventMeta,
-        toolCalls: memories.length ? memories.map((memory) => ({
-            name: memoryLabel(memory),
-            arguments: JSON.stringify({
-                type: 'memory',
-                contextPhase,
-                sourceFile: memory.sourceFile,
-                folderPath: memory.spaceName,
-                chunkIndex: memory.chunkIndex,
-                content: memory.text,
-                rerankerScore: memory.rerankerScore,
-            }),
-        })) : [{
+        toolCalls: toolCalls.length ? toolCalls : [{
             name: memoryEmptyLabel(emptyReason),
             arguments: JSON.stringify({
                 type: 'memory',
