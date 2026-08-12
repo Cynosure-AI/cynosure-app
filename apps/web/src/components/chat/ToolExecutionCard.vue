@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
+import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
 import { isInternalToolName } from '../../utils/internal-tools'
 
@@ -165,7 +166,8 @@ function toolDisplayName(name = 'Tool'): string {
 
 function memoryFileName(call?: ToolCall | null): string | null {
   if (!call || !isMemoryCall(call)) return null
-  return visibleText(parseArgs(call.arguments)?.sourceFile)
+  const parsed = parseArgs(call.arguments)
+  return visibleText(parsed?.sourceFile) ?? (parsed?.memoryKind === 'entity-graph' ? call.name : null)
 }
 
 function scoreForCall(call?: ToolCall | null): string | null {
@@ -857,29 +859,8 @@ const hasDisplayableActivity = computed(() =>
     </div>
   </div>
 
-  <Teleport to="body">
-    <div
-      v-if="lightboxSrc"
-      class="fixed inset-0 z-100 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-      tabindex="0"
-      @click.self="lightboxSrc = null"
-      @keydown.escape="lightboxSrc = null"
-    >
-      <button
-        class="absolute top-4 right-4 p-2 rounded-full bg-theme-800/80 text-theme-300 hover:text-white hover:bg-theme-700 transition-colors z-10"
-        title="Close"
-        @click="lightboxSrc = null"
-      >
-        <Icon
-          icon="mdi:close"
-          class="w-5 h-5"
-        />
-      </button>
-      <img
-        :src="lightboxSrc"
-        class="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl object-contain"
-        @click.stop
-      >
-    </div>
-  </Teleport>
+  <ArtifactImageModal
+    :src="lightboxSrc"
+    @close="lightboxSrc = null"
+  />
 </template>

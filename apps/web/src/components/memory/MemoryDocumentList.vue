@@ -232,7 +232,7 @@ async function cancelJob(job?: MemoryIndexJob) {
   }
 }
 
-// --- Bulk delete ---
+// --- Bulk archive ---
 async function deleteSelectedFiles() {
   if (selectedFiles.value.size === 0) return;
   deleting.value = true;
@@ -620,6 +620,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           <button
             :disabled="deleting"
             class="flex items-center gap-1 px-2 py-1 text-xs bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded transition-colors"
+            title="Move the selected source files to hidden trash and remove their indexes"
             @click="deleteSelectedFiles"
           >
             <Icon
@@ -627,7 +628,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
               class="w-3.5 h-3.5"
               :class="{ 'animate-spin': deleting }"
             />
-            Delete {{ selectedFiles.size }}
+            Archive {{ selectedFiles.size }}
           </button>
         </template>
         <template v-else-if="files.length > 0">

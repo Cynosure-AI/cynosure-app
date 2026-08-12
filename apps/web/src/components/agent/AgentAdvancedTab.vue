@@ -130,7 +130,7 @@ function onMaxCtxSliderInput(event: Event) {
       </div>
     </div>
 
-    <!-- Auto Router -->
+    <!-- Context Routing -->
     <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
       <div class="flex items-center gap-2 mb-1">
         <Icon
@@ -138,13 +138,13 @@ function onMaxCtxSliderInput(event: Event) {
           class="w-4 h-4 text-accent-400"
         />
         <h3 class="text-sm font-medium text-theme-200">
-          Auto Router Model
+          Context Routing Model
         </h3>
       </div>
       <p class="text-xs text-theme-500 leading-relaxed">
-        Override the provider and model this agent uses to prepare task context
-        for automatic tools and memories. Leave blank to use the global auto router settings
-        from Preferences.
+        Override the provider and model used to prepare context for automatic tool discovery
+        and memory retrieval. Those features are enabled independently in the Tools and Memory tabs.
+        Leave blank to use the global context routing model from Preferences.
       </p>
 
       <div class="mt-4">
@@ -154,7 +154,7 @@ function onMaxCtxSliderInput(event: Event) {
           :model-value="agent.autoRouterModel || ''"
           :providers="providerStore.providers"
           :leading-selections="autoRouterLeadingSelections"
-          placeholder="Use global auto router"
+          placeholder="Use global routing model"
           @change="onAutoRouterSelection"
         />
       </div>

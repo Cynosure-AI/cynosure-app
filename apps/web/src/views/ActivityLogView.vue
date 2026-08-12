@@ -924,9 +924,9 @@ article.cursor-pointer:hover .activity-card {
 }
 
 .activity-cron {
-  --activity-color: #38bdf8;
-  --activity-bg: color-mix(in srgb, #38bdf8 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #38bdf8 35%, var(--color-theme-800));
+  --activity-color: #f472b6;
+  --activity-bg: color-mix(in srgb, #f472b6 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #f472b6 35%, var(--color-theme-800));
 }
 
 .activity-artifact {

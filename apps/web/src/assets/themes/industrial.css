@@ -1,0 +1,137 @@
+/* ==========================================================================
+   Industrial Theme - charcoal machinery, oxidized steel, and amber signals
+   ========================================================================== */
+
+[data-theme="industrial"] {
+  --color-theme-950: #100e0b;
+  --color-theme-900: #181510;
+  --color-theme-800: #211c16;
+  --color-theme-700: #393126;
+  --color-theme-600: #554936;
+  --color-theme-500: #786b55;
+  --color-theme-400: #a3977f;
+  --color-theme-300: #c7bdab;
+  --color-theme-200: #ded6c7;
+  --color-theme-100: #eee7d9;
+
+  --color-accent-50: #fffbeb;
+  --color-accent-100: #fef3c7;
+  --color-accent-200: #fde68a;
+  --color-accent-300: #fcd34d;
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d97706;
+  --color-accent-700: #b45309;
+  --color-accent-800: #92400e;
+  --color-accent-900: #78350f;
+  --color-accent-950: #451a03;
+
+  --in-amber: #f59e0b;
+  --in-copper: #c66a2b;
+  --in-steel: #8c867b;
+  --in-line: rgba(245, 158, 11, 0.2);
+  --theme-glow: 0 0 12px rgba(245, 158, 11, 0.12);
+  --theme-glow-strong: 0 0 0 1px rgba(245, 158, 11, 0.3), 0 0 24px rgba(245, 158, 11, 0.14);
+  --theme-accent-rgb: 245, 158, 11;
+
+  --radius-xs: 0px;
+  --radius-sm: 1px;
+  --radius-md: 2px;
+  --radius-lg: 3px;
+  --radius-xl: 3px;
+  --radius-2xl: 4px;
+  --radius-3xl: 4px;
+  --radius-4xl: 4px;
+
+  font-family: "Barlow", "Arial Narrow", sans-serif;
+  letter-spacing: 0.012em;
+  color-scheme: dark;
+}
+
+[data-theme="industrial"] body {
+  background:
+    linear-gradient(115deg, rgba(198, 106, 43, 0.035), transparent 32rem),
+    var(--color-theme-950);
+}
+
+[data-theme="industrial"] :is(button, a):focus-visible {
+  box-shadow: var(--theme-glow-strong);
+  outline: 1px solid rgba(245, 158, 11, 0.34);
+}
+
+[data-theme="industrial"] .rounded-xl,
+[data-theme="industrial"] .rounded-lg {
+  border-color: rgba(163, 151, 127, 0.19);
+}
+
+[data-theme="industrial"] h1,
+[data-theme="industrial"] h2 {
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(245, 158, 11, 0.1);
+}
+
+[data-theme="industrial"] label,
+[data-theme="industrial"] .text-theme-400 {
+  color: #aa9b7e;
+}
+
+[data-theme="industrial"] input:focus,
+[data-theme="industrial"] textarea:focus,
+[data-theme="industrial"] select:focus {
+  border-color: rgba(245, 158, 11, 0.52) !important;
+  box-shadow: inset 3px 0 0 var(--in-amber), 0 0 14px rgba(245, 158, 11, 0.08);
+  outline: none;
+}
+
+[data-theme="industrial"] button.bg-accent-600,
+[data-theme="industrial"] button.bg-accent-500,
+[data-theme="industrial"] .bg-accent-600,
+[data-theme="industrial"] .bg-accent-500 {
+  background-image: linear-gradient(135deg, #fbbf24, #d97706);
+  color: #171008;
+  border-bottom: 2px solid #8b3d0a;
+  box-shadow: 0 8px 24px rgba(120, 53, 15, 0.2);
+}
+
+[data-theme="industrial"] :is(.bg-accent-600, .bg-accent-500) .text-white,
+[data-theme="industrial"] :is(.text-white.bg-accent-600, .text-white.bg-accent-500) {
+  color: #171008;
+}
+
+[data-theme="industrial"] .nav-item.active,
+[data-theme="industrial"] nav a.router-link-active,
+[data-theme="industrial"] nav [data-active="true"] {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.15), rgba(198, 106, 43, 0.04)) !important;
+  border-left: 3px solid var(--in-amber);
+  box-shadow: inset 6px 0 14px rgba(245, 158, 11, 0.07);
+}
+
+[data-theme="industrial"] .msg-markdown a {
+  color: #fbbf24;
+}
+
+[data-theme="industrial"] .msg-markdown :not(pre) > code {
+  background: rgba(245, 158, 11, 0.09);
+  border: 1px solid var(--in-line);
+  color: #fcd34d;
+}
+
+[data-theme="industrial"] ::selection {
+  background: rgba(245, 158, 11, 0.3);
+  color: #fff7e8;
+}
+
+[data-theme="industrial"] ::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+[data-theme="industrial"] ::-webkit-scrollbar-track {
+  background: #100e0b;
+}
+
+[data-theme="industrial"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #a66b18, #70451a);
+  border: 1px solid rgba(245, 158, 11, 0.18);
+}

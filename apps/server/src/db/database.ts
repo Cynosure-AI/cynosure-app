@@ -372,6 +372,9 @@ function createTables(db: Database.Database): void {
       edge_id TEXT NOT NULL REFERENCES entity_graph_edges(id) ON DELETE CASCADE,
       source_kind TEXT NOT NULL DEFAULT 'conversation',
       source_id TEXT NOT NULL DEFAULT '',
+      source_document_id TEXT NOT NULL DEFAULT '',
+      source_content_hash TEXT NOT NULL DEFAULT '',
+      source_chunk_index INTEGER,
       evidence TEXT NOT NULL DEFAULT '',
       confidence REAL NOT NULL DEFAULT 0.7,
       mention_count INTEGER NOT NULL DEFAULT 1,
@@ -413,6 +416,9 @@ function createTables(db: Database.Database): void {
   // Entity graph: add importance column for LLM-assigned importance scores
   addColumnIfMissing('entity_graph_nodes', 'importance', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('entity_graph_edges', 'importance', 'INTEGER NOT NULL DEFAULT 1')
+  addColumnIfMissing('entity_graph_edge_evidence', 'source_document_id', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('entity_graph_edge_evidence', 'source_content_hash', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('entity_graph_edge_evidence', 'source_chunk_index', 'INTEGER')
   addColumnIfMissing('memory_file_index', 'entity_indexed_at', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('memory_file_index', 'document_id', "TEXT NOT NULL DEFAULT ''")
   db.prepare("UPDATE memory_file_index SET document_id = lower(hex(randomblob(16))) WHERE document_id = ''").run()
@@ -451,6 +457,23 @@ function createTables(db: Database.Database): void {
     SELECT lower(hex(randomblob(16))), id, source_kind, source_id, evidence, confidence,
            mention_count, first_seen_at, last_seen_at
     FROM entity_graph_edges
+  `)
+  // Pre-provenance memory claims remain stored but cannot be trusted as model
+  // context. Mark their documents for a one-time entity re-index in the UI.
+  db.exec(`
+    UPDATE memory_file_index AS m
+    SET entity_indexed_at = 0
+    WHERE EXISTS (
+      SELECT 1
+      FROM entity_graph_edge_evidence ev
+      WHERE ev.source_kind = 'memory'
+        AND ev.source_document_id = ''
+        AND ev.source_content_hash = ''
+        AND (
+          ev.source_id = 'memory:' || m.space_id || ':' || m.file_name
+          OR ev.source_id = 'memory:' || m.file_name
+        )
+    )
   `)
   db.exec(`
     UPDATE entity_graph_nodes

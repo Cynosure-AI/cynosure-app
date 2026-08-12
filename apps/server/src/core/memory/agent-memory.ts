@@ -3,22 +3,25 @@ import { getRAGStore } from './rag.js'
 import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getMemorySpaceFolderPath } from './memory-space-scope.js'
 import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
-import { moveMemoryGraphSource } from './memory-entity-indexer.js'
+import {
+    deleteMemoryGraphSource,
+    indexMemoryContentIntoEntityGraph,
+    moveMemoryGraphSource,
+} from './memory-entity-indexer.js'
 import {
     ensureFolder,
     writeTextFile,
     readTextFile,
-    deleteFile,
     computeFileHash,
     resolveUniqueFileName,
     PLAIN_TEXT_EXTENSIONS,
-    moveToRevisions,
+    archiveFile,
     toMarkdownFileName,
 } from './memory-file-manager.js'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
-import { cancelMemoryIndexJobsForFile } from './memory-index-jobs.js'
+import { cancelMemoryIndexJobsForFile, startMemoryIndexJob } from './memory-index-jobs.js'
 import { getActivePermanentMemoryTableName } from './memory-index-manifest.js'
 
 export interface ReindexFileResult {
@@ -93,6 +96,43 @@ interface FileIndexMoveCandidate {
 export class AgentMemory {
     private parser = getMemoryParser()
 
+    /**
+     * The graph is a rebuildable derivative of the indexed document. Remove
+     * stale claims first, then repopulate best-effort. A provider failure must
+     * never make the source document unavailable to RAG.
+     */
+    private scheduleDerivedGraphRefresh(
+        content: string,
+        fileName: string,
+        spaceId: string,
+        replacedSourceFiles: string[] = [fileName],
+    ): void {
+        try {
+            for (const priorFileName of Array.from(new Set(replacedSourceFiles.filter(Boolean)))) {
+                deleteMemoryGraphSource(spaceId, priorFileName)
+            }
+            getDb().prepare(`
+                UPDATE memory_file_index SET entity_indexed_at = 0
+                WHERE space_id = ? AND file_name = ?
+            `).run(spaceId, fileName)
+            startMemoryIndexJob({
+                kind: 'entity-index',
+                spaceId,
+                fileName,
+                replaceExisting: true,
+                run: (jobSignal) => indexMemoryContentIntoEntityGraph({
+                    content,
+                    spaceId,
+                    fileName,
+                    replaceExisting: true,
+                    signal: jobSignal,
+                }),
+            })
+        } catch (err) {
+            console.warn(`[memory] Document indexed, but graph derivation could not be scheduled for ${spaceId}/${fileName}:`, err)
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Core: ingest text into LanceDB (low-level, no file I/O)
     // -----------------------------------------------------------------------
@@ -144,8 +184,8 @@ export class AgentMemory {
                 await ragStore.deleteByIds(tableName, oldIds, { throwOnError: true })
             }
         } catch (err) {
-            // The new rows are a staging revision until the old IDs are
-            // removed. Roll them back on cancellation or swap failure.
+            // The new rows stay staged until the old IDs are removed. Roll
+            // them back on cancellation or swap failure.
             if (stagedIds.length > 0) {
                 await ragStore.deleteByIds(tableName, stagedIds, { throwOnError: true }).catch((rollbackError) => {
                     console.error('[memory] Failed to roll back staged replacement chunks:', rollbackError)
@@ -182,6 +222,7 @@ export class AgentMemory {
         const hash = computeFileHash(filePath)
         const count = await this.ingestText(content, uniqueName, spaceId)
         upsertFileIndex(spaceId, uniqueName, hash, count)
+        this.scheduleDerivedGraphRefresh(content, uniqueName, spaceId)
         return { fileName: uniqueName, chunkCount: count }
     }
 
@@ -212,14 +253,13 @@ export class AgentMemory {
             const mdName = resolveUniqueFileName(folderPath, toMarkdownFileName(fileName))
             const mdPath = writeTextFile(folderPath, mdName, text)
 
-            moveToRevisions(folderPath, fileName)
-
             const count = await this.replaceIndexedText(text, mdName, spaceId, [fileName, mdName], opts?.signal)
             throwIfAborted(opts?.signal)
-            moveToRevisions(folderPath, fileName)
+            archiveFile(folderPath, fileName)
             removeFileIndex(spaceId, fileName)
             const hash = computeFileHash(mdPath)
             upsertFileIndex(spaceId, mdName, hash, count)
+            this.scheduleDerivedGraphRefresh(text, mdName, spaceId, [fileName, mdName])
             return { fileName: mdName, chunkCount: count }
         } else {
             throw new Error(`Unsupported file type: ${ext}`)
@@ -229,6 +269,7 @@ export class AgentMemory {
         throwIfAborted(opts?.signal)
         const hash = computeFileHash(filePath)
         upsertFileIndex(spaceId, fileName, hash, count)
+        this.scheduleDerivedGraphRefresh(text, fileName, spaceId)
         return { fileName, chunkCount: count }
     }
 
@@ -253,6 +294,7 @@ export class AgentMemory {
         await ragStore.deleteBySource(getActivePermanentMemoryTableName(), uniqueName, buildMemorySpaceFilter([{ id: spaceId }]))
         const count = await this.ingestText(parsedContent, uniqueName, spaceId)
         upsertFileIndex(spaceId, uniqueName, hash, count)
+        this.scheduleDerivedGraphRefresh(parsedContent, uniqueName, spaceId)
         return { fileName: uniqueName, chunkCount: count }
     }
 
@@ -341,8 +383,8 @@ export class AgentMemory {
     // -----------------------------------------------------------------------
 
     /**
-     * Delete all vectors for a source file, and also delete the physical file
-     * from the space folder if it exists there.
+     * Delete all vectors for a source file and archive its physical source in
+     * the space's hidden trash folder if it still exists.
      */
     async deleteSourceFile(sourceFile: string, spaceId: string): Promise<number> {
         const ragStore = getRAGStore()
@@ -356,7 +398,7 @@ export class AgentMemory {
 
         const folderPath = getMemorySpaceFolderPath(spaceId)
         if (folderPath) {
-            deleteFile(folderPath, sourceFile)
+            archiveFile(folderPath, sourceFile)
         }
         removeFileIndex(spaceId, sourceFile)
         return deleted
