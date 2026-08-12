@@ -1,6 +1,6 @@
 import type { ModelListItem, ModelPricing } from "../api/types";
 
-type PricingModel = Pick<ModelListItem, "id" | "name" | "inputModalities" | "outputModalities"> & {
+type PricingModel = Pick<ModelListItem, "id" | "name" | "inputModalities" | "outputModalities" | "supportsToolCalls"> & {
   pricing?: ModelPricing | null;
 };
 
@@ -188,6 +188,7 @@ export function pricingTooltipLines(model: PricingModel): string[] {
   const output = model.outputModalities?.length ? `Output: ${model.outputModalities.join(", ")}` : "";
   if (input) lines.push(input);
   if (output) lines.push(output);
+  if (model.supportsToolCalls === true) lines.push("Tools: Supported");
 
   return lines;
 }
