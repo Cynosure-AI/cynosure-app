@@ -165,7 +165,8 @@ function toolDisplayName(name = 'Tool'): string {
 
 function memoryFileName(call?: ToolCall | null): string | null {
   if (!call || !isMemoryCall(call)) return null
-  return visibleText(parseArgs(call.arguments)?.sourceFile)
+  const parsed = parseArgs(call.arguments)
+  return visibleText(parsed?.sourceFile) ?? (parsed?.memoryKind === 'entity-graph' ? call.name : null)
 }
 
 function scoreForCall(call?: ToolCall | null): string | null {
