@@ -1578,10 +1578,7 @@ export class EntityGraphStore {
       const relation = edge.relation.replace(/_/g, ' ')
       const evidence = edge.evidence ? ` Evidence: ${edge.evidence}` : ''
       const part = edge.sourceChunkIndex !== undefined ? `, part ${edge.sourceChunkIndex + 1}` : ''
-      const coordinate = edge.sourceDocumentId
-        ? ` [documentId=${edge.sourceDocumentId}${edge.sourceContentHash ? `, revision=${edge.sourceContentHash}` : ''}]`
-        : ''
-      const source = edge.sourceId ? ` Source: ${sourceLabel(edge.sourceKind, edge.sourceId)}${part}.${coordinate}` : ''
+      const source = edge.sourceId ? ` Source: ${sourceLabel(edge.sourceKind, edge.sourceId)}${part}.` : ''
       return `- [${importanceLabel(edge.importance)}] ${edge.fromName} -> ${relation} -> ${edge.toName}.${evidence}${source}`
     }).join('\n')
   }

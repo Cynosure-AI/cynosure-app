@@ -28,11 +28,10 @@ describe('memory mutation tool contracts', () => {
         }
     })
 
-    test('requires stable identity, revision, and both range boundaries', () => {
+    test('requires one opaque document reference and both range boundaries', () => {
         const tool = makeMemoryReplaceRangeTool({})
         expect(tool.parameters.required).toEqual([
-            'documentId',
-            'expectedRevision',
+            'documentRef',
             'content',
             'partStart',
             'partEnd',
