@@ -368,13 +368,13 @@ export const api = {
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}`
       ),
     getFileContent: (spaceId: string, fileName: string) =>
-      get<{ fileName: string; content: string }>(
+      get<{ fileName: string; content: string; revision: string }>(
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/content`
       ),
-    updateFileContent: (spaceId: string, fileName: string, content: string) =>
-      put<{ success: boolean; chunksStored: number; fileName: string }>(
+    updateFileContent: (spaceId: string, fileName: string, content: string, expectedRevision?: string) =>
+      put<{ success: boolean; chunksStored: number; fileName: string; revision: string }>(
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/content`,
-        { content }
+        { content, expectedRevision }
       ),
     renameFile: (spaceId: string, fileName: string, nextFileName: string) =>
       put<{ success: boolean; fileName: string }>(

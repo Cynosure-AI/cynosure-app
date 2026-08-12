@@ -191,7 +191,7 @@ Scoping is enforced via LanceDB `WHERE spaceId IN (...)` filters. The aggregator
 
 ## Entity Graph
 
-The entity graph stores **structured facts** as nodes (entities) and edges (relationships) in SQLite tables `entity_graph_nodes` and `entity_graph_edges`.
+The entity graph stores **derived, source-grounded claims** as nodes (entities) and edges (relationships) in SQLite. Markdown documents are authoritative; the graph is a rebuildable index used to connect facts across documents.
 
 ### Entity types
 
@@ -236,13 +236,14 @@ Common relation synonyms are normalized (for example, `works_for` and `employed_
 Entity extraction is done by an **LLM call** (not by the embedding model). The pipeline:
 
 ```
-Memory file or chat turn
+Tagged structural chunks from an indexed memory document
     │
     ▼
 LLM call via Gateway ────► System prompt instructs JSON output format
     │                          │ Extract named entities + relationships
     │                          │ Return array of { action, from, relation, to,
-    │                          │   importance, confidence, evidence }
+    │                          │   importance, confidence, evidence,
+    │                          │   source_chunk_index }
     │                          │ action: "assert" or "delete"
     │                          ▼
     │                   Raw LLM response (up to 4096 tokens)
@@ -266,11 +267,15 @@ For each relation:
 
 Extraction sources:
 
-- **Memory files**: triggered by `indexMemoryContentIntoEntityGraph()` via `memory-entity-indexer.ts`
-- **Conversation turns**: triggered by `extractFromTurn()` via chat processing pipeline
+- **Memory files**: automatically queued after the document and its RAG chunks have been indexed; the explicit entity-index routes remain available as repair/retry controls
+- **Conversation turns**: are not automatically extracted into the document graph
 - **Configuration**: provider/model configurable via DB setting `'memoryEntityExtraction'`
 
-Content is truncated to **8000 characters** sent to the LLM.
+The graph uses the same structural chunks as RAG. Several tagged chunks are batched into extraction windows of at most about **8000 characters**, so large files need neither truncation nor one LLM call per small chunk. Every new evidence record stores the stable document ID, exact document content hash, and supporting chunk index. The hash is checked again when claims are published; stale claims are also suppressed at retrieval time.
+
+Graph derivation is best-effort. A failed extraction never makes the authoritative document or its RAG chunks unavailable, and previously derived claims are invalidated before a changed document is re-extracted.
+
+Legacy memory claims that lack document-version provenance are retained in storage but are not returned as model context. Re-index existing memory documents once after upgrading to rebuild those claims with grounded provenance.
 
 ### Graph storage & deduplication
 
@@ -385,15 +390,17 @@ The coupling is **loose but intentional**:
 1. **Semantic search runs first** — retrieves up to `permanentTopK` (default 3, auto-routing uses 12) chunks from LanceDB
 2. **Deduplication**: chunks with the same content hash (or fully normalized text) are collapsed
 3. **Chunk enrichment**: totalChunks, stable documentId, and the indexed source revision are added
-4. **Optional entity graph enrichment**: only callers that explicitly set `includeGraph: true` run:
+4. **Optional entity graph enrichment**: callers that set `includeGraph: true` (including automatic memory routing) run:
 
    ```
    graph.findSeedNodes(query, chunkTexts, 8) → seed nodes
    if seedNodes.length > 0:
-       graph.walk(seedNodeIds, depth=2, edgeLimit=32) → full walk
+       graph.focusedWalk(seedNodeIds, depth=1, edgeLimit=8) → bounded key facts
    ```
 
    - The seed search uses **both** the original query AND the retrieved chunk texts
+   - The walk may cross into another document, but only inside the caller's authorized memory spaces
+   - Each returned claim retains a source document and part number
    - If no seed nodes match, `graph` is `undefined` — the aggregator still returns semantic results
    - If the graph walk fails (e.g., DB error), it's caught and logged as a warning; semantic results are still returned
 
@@ -402,7 +409,7 @@ The coupling is **loose but intentional**:
 **Important**: The entity graph enriches semantic memory, but does NOT replace it. You can have:
 
 - Semantic results only (no entities matched)
-- Graph results only (semantic query returned nothing but entities matched — **not possible** in current code since graph enrichment requires semantic results first)
+- Graph results only (a query directly names a known entity even when no passage clears retrieval)
 - Both combined (normal case)
 
 ### Formatting for model context
@@ -425,11 +432,10 @@ The coupling is **loose but intentional**:
 The `auto-memory-routing.ts` module decides **whether** and **how** to retrieve memory during a conversation turn.
 
 1. **Gate check**: `shouldRouteMemory()` — currently always returns `true` if the feature is enabled
-2. **Primary retrieval**: aggregate with `permanentTopK=12` using the user's query
-3. **Fallback retrieval**: if primary returned nothing AND there's contextual history, retry with a built contextual query
-4. **Selection**: from the 12 candidates, select up to 5 most relevant chunks (via LLM call)
-5. **Graph policy**: automatic semantic retrieval does not expand the entity graph; agents use `relationship_graph_search` explicitly when needed
-6. **Format & inject**: selected evidence is added below system authority and marked as untrusted
+2. **Multi-query retrieval**: search with both the immediate user query and a recent-conversation-aware query (when they differ), then combine ranks with reciprocal-rank fusion
+3. **Selection**: from the fused candidates, select up to 5 most relevant chunks (via LLM call)
+4. **Graph supplement**: attach at most 8 focused, source-grounded one-hop claims from the selected memory spaces; agents can use `relationship_graph_search` for deeper inspection
+5. **Format & inject**: selected evidence is added below system authority and marked as untrusted
 
 ### Mutation consistency
 

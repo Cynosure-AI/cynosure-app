@@ -66,6 +66,7 @@ const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
 const loadedMarkdown = ref("");
+const loadedRevision = ref("");
 const editableTitle = ref("");
 const currentFileName = ref("");
 const editorTick = ref(0);
@@ -153,6 +154,7 @@ async function loadContent() {
   try {
     const res = await api.memorySpaces.getFileContent(props.spaceId, props.sourceFile);
     loadedMarkdown.value = res.content;
+    loadedRevision.value = res.revision;
     editor.value.commands.setContent(markdownToHtml(res.content), { emitUpdate: false });
     editorTick.value++;
   } catch (err) {
@@ -177,17 +179,23 @@ async function saveContent() {
   saving.value = true;
   error.value = "";
   try {
-    const fileName = await applyRename();
     const markdown = editorToMarkdown();
+    let chunksStored = 0;
     if (hasChanges.value) {
-      const res = await api.memorySpaces.updateFileContent(props.spaceId, fileName, markdown);
+      const res = await api.memorySpaces.updateFileContent(
+        props.spaceId,
+        currentFileName.value,
+        markdown,
+        loadedRevision.value,
+      );
       loadedMarkdown.value = markdown;
+      loadedRevision.value = res.revision;
       currentFileName.value = res.fileName;
-      editableTitle.value = splitFileName(res.fileName).stem;
-      emit("saved", { fileName: res.fileName, chunksStored: res.chunksStored });
-    } else {
-      emit("saved", { fileName, chunksStored: 0 });
+      chunksStored = res.chunksStored;
     }
+    const fileName = await applyRename();
+    editableTitle.value = splitFileName(fileName).stem;
+    emit("saved", { fileName, chunksStored });
   } catch (err) {
     error.value = (err as Error).message || "Failed to save memory";
   } finally {

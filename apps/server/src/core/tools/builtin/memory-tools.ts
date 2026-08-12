@@ -6,15 +6,11 @@ import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getM
 import { relativePathForFolder } from '../../memory/memory-space-folders.js'
 import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
 import { getEntityGraphStore, type EntityEdge, type EntityNode, type EntityType } from '../../memory/entity-graph.js'
-import { deleteMemoryGraphSource, legacyMemoryGraphSourceId, memoryGraphSourceId } from '../../memory/memory-entity-indexer.js'
+import { deleteMemoryGraphSource } from '../../memory/memory-entity-indexer.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
 
 function abortPendingMemoryIndexJobs(spaceId: string, fileName: string): void {
     cancelMemoryIndexJobsForFile(spaceId, fileName)
-}
-
-function clearMemoryGraphSource(spaceId: string, fileName: string): void {
-    deleteMemoryGraphSource(spaceId, fileName)
 }
 
 const memoryDocumentMutationTails = new Map<string, Promise<void>>()
@@ -143,7 +139,11 @@ function formatEntityNode(node: EntityNode): string {
 function formatEntityEdge(edge: EntityEdge): string {
     const importanceLabel = IMPORTANCE_LABELS[edge.importance] ?? 'minor'
     const evidence = edge.evidence ? ` Evidence: ${edge.evidence}` : ''
-    return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${shortEntityGraphId('e', edge.id)}, confidence=${edge.confidence.toFixed(2)}, mentions=${edge.mentionCount}).${evidence}`
+    const part = edge.sourceChunkIndex !== undefined ? `, part=${edge.sourceChunkIndex + 1}` : ''
+    const source = edge.sourceDocumentId
+        ? ` Source: documentId=${edge.sourceDocumentId}${part}${edge.sourceContentHash ? `, revision=${edge.sourceContentHash}` : ''}.`
+        : ''
+    return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${shortEntityGraphId('e', edge.id)}, confidence=${edge.confidence.toFixed(2)}, mentions=${edge.mentionCount}).${evidence}${source}`
 }
 
 function normalizeEntityType(value: unknown): EntityType {
@@ -514,13 +514,6 @@ async function commitMemoryMutation(
         await reindexMemoryFile(resolved.spaceId, resolved.fileName).catch(() => undefined)
         throw new Error(`Memory update failed and the previous content was restored: ${(err as Error).message}`)
     }
-    // Graph data is derived and must not make the authoritative file/vector
-    // commit fail after both have reached the new revision.
-    try {
-        clearMemoryGraphSource(resolved.spaceId, resolved.fileName)
-    } catch (err) {
-        console.warn('[memory-tools] Failed to invalidate derived graph data after memory update:', err)
-    }
     return indexed
 }
 
@@ -788,10 +781,12 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
 
             const graph = getEntityGraphStore()
             const seedNodes = graph.findSeedNodes(query, results.map((r) => r.text), 8)
-            const graphSourceIds = memoryGraphSourceIdsForChunks(results)
-            const graphContext = seedNodes.length > 0
-                ? graph.formatWalk(graph.walk(seedNodes.map((node) => node.id), 2, 24, 0, {
-                    sourceIds: graphSourceIds,
+            const graphSpaces = resolvedScope.space
+                ? [resolvedScope.space]
+                : (assignedSpaces.length > 0 ? assignedSpaces : getKnownSpaces())
+            const graphContext = seedNodes.length > 0 && graphSpaces.length > 0
+                ? graph.formatWalk(graph.focusedWalk(seedNodes.map((node) => node.id), query, 1, 8, 0, {
+                    sourceIdPrefixes: graphSpaces.map((space) => `memory:${space.id}:`),
                     contextText: [query, ...results.map((r) => r.text)].join(' '),
                 }))
                 : ''
@@ -800,16 +795,6 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             return { success: true, output: `Showing ${results.length} result${results.length !== 1 ? 's' : ''}${resolvedScope.space ? ` from "${resolvedScope.space.name}"` : ''}:\n\n${formatted}${graphSection}` }
         }
     }
-}
-
-function memoryGraphSourceIdsForChunks(chunks: Array<{ sourceFile?: string; spaceId?: string }>): string[] {
-    const sourceIds = new Set<string>()
-    for (const chunk of chunks) {
-        if (!chunk.sourceFile) continue
-        if (chunk.spaceId) sourceIds.add(memoryGraphSourceId(chunk.spaceId, chunk.sourceFile))
-        else sourceIds.add(legacyMemoryGraphSourceId(chunk.sourceFile))
-    }
-    return Array.from(sourceIds)
 }
 
 /**
@@ -845,7 +830,7 @@ export function makeRelationshipGraphSearchTool(opts: MemoryToolOptions = {}): T
         name: 'relationship_graph_search',
         execution: { readOnly: true },
         description:
-            'Search and inspect the durable relationship graph extracted from conversations and memory use. ' +
+            'Search and inspect source-grounded relationships derived from memory documents, plus explicitly approved manual assertions. ' +
             'Use this to look up known people, organizations, projects, technologies, concepts, or relationships. ' +
             'Provide a query to find matching entities and walk nearby relationships, or omit query to list recent graph entries.',
         parameters: {
