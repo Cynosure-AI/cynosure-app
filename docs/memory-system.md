@@ -281,7 +281,7 @@ The graph uses the same structural chunks as RAG. Several tagged chunks are batc
 
 Graph derivation is best-effort. A failed extraction never makes the authoritative document or its RAG chunks unavailable, and previously derived claims are invalidated before a changed document is re-extracted.
 
-Legacy memory claims that lack document-version provenance are retained in storage but are not returned as model context. Re-index existing memory documents once after upgrading to rebuild those claims with grounded provenance.
+Legacy memory claims that lack document/content-hash provenance are retained in storage but are not returned as model context. Re-index existing memory documents once after upgrading to rebuild those claims with grounded provenance.
 
 ### Graph storage & deduplication
 
@@ -395,7 +395,7 @@ The coupling is **loose but intentional**:
 
 1. **Semantic search runs first** — retrieves up to `permanentTopK` (default 3; auto-routing uses the configurable retrieval count, default 10) chunks from LanceDB
 2. **Deduplication**: chunks with the same content hash (or fully normalized text) are collapsed
-3. **Chunk enrichment**: totalChunks, stable documentId, and the indexed source revision are added
+3. **Chunk enrichment**: totalChunks, stable internal document ID, and the indexed source content hash are added
 4. **Optional entity graph enrichment**: callers that set `includeGraph: true` (including automatic memory routing) run:
 
    ```
@@ -420,7 +420,7 @@ The coupling is **loose but intentional**:
 
 ### Formatting for model context
 
-`format(memory)` produces evidence with source, Part, documentId, and revision metadata. Pre-execution wraps this in a lower-authority user-context message explicitly marked as untrusted data; retrieved documents are never promoted to system instructions.
+`format(memory)` produces evidence with source and Part metadata, plus one opaque model-facing `documentRef` when the source may be edited. The model passes this reference back unchanged and never handles document IDs or content hashes separately. Entity-graph-only context omits the reference because graph operations do not need it. Pre-execution wraps retrieved evidence in a lower-authority user-context message explicitly marked as untrusted data; retrieved documents are never promoted to system instructions.
 
 ```
 ## Relevant Knowledge
@@ -453,7 +453,7 @@ Mutation operations are exposed as separate tools rather than a mode-switching s
 - `memory_remove_range`
 - `memory_remove_all`
 
-Reads return a stable `documentId` and a SHA-256 content revision. Every mutation requires the expected revision, is serialized per document across concurrent runs, rejects stale writes, and waits for the replacement retrieval index to become active before reporting success. The Markdown file is the sole authoritative version; no edit history is created. If indexing fails, the previous source and index are restored from the in-flight mutation state. Whole-document deletion archives the source in the memory folder's hidden `.trash` directory.
+Reads return one opaque `documentRef`. Internally it resolves to a stable document ID and a prefix of the SHA-256 hash calculated from the file state that was read. Every mutation passes this reference back unchanged; the server serializes writes per document and rejects the operation if the authoritative file has changed. The Markdown file remains the sole authoritative document, and no edit history or stored document version is created. If indexing fails, the previous source and index are restored from the in-flight mutation state. Whole-document deletion archives the source in the memory folder's hidden `.trash` directory.
 
 ---
 
