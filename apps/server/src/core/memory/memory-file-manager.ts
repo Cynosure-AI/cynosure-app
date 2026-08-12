@@ -5,7 +5,7 @@
  * on disk. Markdown files in the folder are the source-of-truth for content.
  * SQLite + LanceDB serve only as the retrieval index.
  */
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkSync, copyFileSync, renameSync } from 'fs'
 import { basename, join, extname } from 'path'
 
@@ -96,7 +96,14 @@ export function computeFileHash(filePath: string): string {
 export function writeTextFile(folderPath: string, fileName: string, content: string): string {
     ensureFolder(folderPath)
     const filePath = join(folderPath, fileName)
-    writeFileSync(filePath, content, 'utf-8')
+    const temporaryPath = join(folderPath, `.${basename(fileName)}.${randomUUID()}.tmp`)
+    try {
+        writeFileSync(temporaryPath, content, 'utf-8')
+        renameSync(temporaryPath, filePath)
+    } catch (err) {
+        if (existsSync(temporaryPath)) unlinkSync(temporaryPath)
+        throw err
+    }
     return filePath
 }
 

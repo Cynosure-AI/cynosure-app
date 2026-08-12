@@ -476,14 +476,18 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         }
 
         try {
-            return { fileName, content: readTextFile(row.folder_path, fileName) }
+            return {
+                fileName,
+                content: readTextFile(row.folder_path, fileName),
+                revision: computeFileHash(join(row.folder_path, fileName)),
+            }
         } catch {
             return reply.status(404).send({ error: 'File not found' })
         }
     })
 
     // PUT /api/memory-spaces/:id/files/:fileName/content — update editable file content and refresh vectors
-    app.put<{ Params: { id: string; fileName: string }; Body: { content: string } }>('/:id/files/:fileName/content', async (req, reply) => {
+    app.put<{ Params: { id: string; fileName: string }; Body: { content: string; expectedRevision?: string } }>('/:id/files/:fileName/content', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
@@ -497,11 +501,22 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         }
 
         const previousContent = readTextFile(row.folder_path, fileName)
+        const currentRevision = computeFileHash(join(row.folder_path, fileName))
+        if (req.body.expectedRevision && req.body.expectedRevision !== currentRevision) {
+            return reply.status(409).send({
+                error: 'Memory changed since it was opened. Reload it before saving your changes.',
+                revision: currentRevision,
+            })
+        }
         try {
             writeTextFile(row.folder_path, fileName, req.body.content)
             const result = await getAgentMemory().reindexFile(row.folder_path, fileName, row.id)
-            deleteMemoryGraphSource(row.id, fileName)
-            return { success: true, fileName: result.fileName, chunksStored: result.chunkCount }
+            return {
+                success: true,
+                fileName: result.fileName,
+                chunksStored: result.chunkCount,
+                revision: computeFileHash(join(row.folder_path, result.fileName)),
+            }
         } catch (err) {
             writeTextFile(row.folder_path, fileName, previousContent)
             await getAgentMemory().reindexFile(row.folder_path, fileName, row.id).catch(() => undefined)

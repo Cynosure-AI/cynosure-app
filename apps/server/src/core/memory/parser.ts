@@ -34,6 +34,15 @@ export interface RetrievedChunk {
   revision?: string
 }
 
+export interface PreparedMemoryChunk {
+  text: string
+  searchText: string
+  chunkIndex: number
+  documentTitle: string
+  sectionPath: string
+  contentHash: string
+}
+
 function throwIfAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) return
   const err = new Error('Cancelled')
@@ -96,7 +105,7 @@ export class MemoryParser {
     opts?: { signal?: AbortSignal }
   ): Promise<number> {
     throwIfAborted(opts?.signal)
-    const chunks = await this.chunk(text)
+    const chunks = await this.prepareChunks(text, meta.sourceFile)
     throwIfAborted(opts?.signal)
     if (chunks.length === 0) return 0
 
@@ -117,19 +126,10 @@ export class MemoryParser {
       for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
         throwIfAborted(opts?.signal)
         const batch = chunks.slice(i, i + BATCH_SIZE)
-        const enrichedBatch = batch.map((chunk) => {
-          const sectionPath = inferSectionPath(chunk, documentTitle)
-          const searchText = [
-            documentTitle ? `Document: ${documentTitle}` : '',
-            sectionPath && sectionPath !== documentTitle ? `Section: ${sectionPath}` : '',
-            chunk,
-          ].filter(Boolean).join('\n')
-          return { chunk, sectionPath, searchText }
-        })
 
         // Start embedding current batch immediately so it runs concurrently
         // with the previous batch's LanceDB write (sliding-window pipeline).
-        const embedPromise = MemoryParser.withRetry(() => embedder.embedBatch(enrichedBatch.map((item) => item.searchText)))
+        const embedPromise = MemoryParser.withRetry(() => embedder.embedBatch(batch.map((item) => item.searchText)))
 
         // Wait for the previous write to finish, then count it.
         const completedWrite = pendingWrite
@@ -147,19 +147,19 @@ export class MemoryParser {
         if (dimensions === undefined) dimensions = embeddings[0].dimensions
         const dims = dimensions as number
 
-        const docs: VectorDocument[] = enrichedBatch.map((item, j) => ({
+        const docs: VectorDocument[] = batch.map((item, j) => ({
           id: nanoid(),
-          text: item.chunk,
+          text: item.text,
           searchText: item.searchText,
           vector: embeddings[j].vector,
           source: meta.source,
           sourceFile: meta.sourceFile || '',
-          chunkIndex: i + j,
+          chunkIndex: item.chunkIndex,
           spaceId: meta.spaceId || '',
           createdAt: Date.now(),
           documentTitle,
           sectionPath: item.sectionPath,
-          contentHash: createHash('sha256').update(item.chunk).digest('hex'),
+          contentHash: item.contentHash,
           embeddingModel: embeddings[j].model
         }))
 
@@ -284,6 +284,36 @@ export class MemoryParser {
   }
 
   /**
+   * Produce the canonical structural chunks shared by vector indexing and
+   * document-grounded claim extraction. Keeping one chunking pass gives graph
+   * evidence stable, directly retrievable chunk coordinates.
+   */
+  async prepareChunks(text: string, sourceFile?: string): Promise<PreparedMemoryChunk[]> {
+    const chunks = await this.chunk(text)
+    const documentTitle = inferDocumentTitle(text, sourceFile)
+    let inheritedSection = documentTitle
+
+    return chunks.map((chunk, chunkIndex) => {
+      const explicitSection = inferExplicitSectionPath(chunk)
+      if (explicitSection) inheritedSection = explicitSection
+      const sectionPath = inheritedSection || documentTitle
+      const searchText = [
+        documentTitle ? `Document: ${documentTitle}` : '',
+        sectionPath && sectionPath !== documentTitle ? `Section: ${sectionPath}` : '',
+        chunk,
+      ].filter(Boolean).join('\n')
+      return {
+        text: chunk,
+        searchText,
+        chunkIndex,
+        documentTitle,
+        sectionPath,
+        contentHash: createHash('sha256').update(chunk).digest('hex'),
+      }
+    })
+  }
+
+  /**
    * Merge heading-only chunks (lines that are all `#…`) forward into the next
    * content chunk. This prevents isolated header chunks with no retrievable
    * content while ensuring each content chunk carries its heading context.
@@ -336,10 +366,14 @@ export function inferDocumentTitle(text: string, sourceFile?: string): string {
 }
 
 export function inferSectionPath(chunk: string, documentTitle: string): string {
+  return inferExplicitSectionPath(chunk) || documentTitle
+}
+
+function inferExplicitSectionPath(chunk: string): string {
   const headings = Array.from(chunk.matchAll(/^\s*#{1,6}\s+(.+?)\s*$/gm))
     .map((match) => match[1].trim())
     .filter(Boolean)
-  return (headings.at(-1) || documentTitle).slice(0, 500)
+  return (headings.at(-1) || '').slice(0, 500)
 }
 
 let parserInstance: MemoryParser | null = null

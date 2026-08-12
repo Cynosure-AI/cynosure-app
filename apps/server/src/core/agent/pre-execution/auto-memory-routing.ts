@@ -64,41 +64,42 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         emitMemoryRoutingStatus(conversationId, taskId, eventMeta)
         const primaryQuery = userQuery?.trim() || ''
         const contextualQuery = buildRouterQuery(primaryQuery, recentMessages)
-        let candidates = filterAutoMemoryCandidates(await aggregator.aggregate(primaryQuery, {
-            agentId,
-            spaceIds: memorySpaceIds,
-            permanentTopK: AUTO_MEMORY_RETRIEVAL_COUNT,
-        }))
-        signal?.throwIfAborted()
-        if (!candidates.permanent.length && contextualQuery !== primaryQuery) {
-            candidates = filterAutoMemoryCandidates(await aggregator.aggregate(contextualQuery, {
+        const retrievalQueries = Array.from(new Set([primaryQuery, contextualQuery].filter(Boolean)))
+        const candidates = filterAutoMemoryCandidates(fuseAutoMemoryResults(await Promise.all(
+            retrievalQueries.map((query) => aggregator.aggregate(query, {
                 agentId,
                 spaceIds: memorySpaceIds,
                 permanentTopK: AUTO_MEMORY_RETRIEVAL_COUNT,
-            }))
-        }
+                includeGraph: true,
+            })),
+        )))
+        signal?.throwIfAborted()
 
-        if (!candidates.permanent.length) {
+        if (!candidates.permanent.length && !candidates.graph?.edges.length) {
             emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'none-found')
             return null
         }
 
         emitMemoryRoutingSelection(conversationId, taskId, candidates.permanent, 'gathered-results', eventMeta)
-        emitMemoryCurationStatus(conversationId, taskId, eventMeta)
-        const selection = await selectMemoryContext({
-            gateway,
-            providerId,
-            model,
-            query: primaryQuery,
-            recentMessages,
-            candidates: candidates.permanent,
-            signal,
-        })
-        const selectedPermanent = selection
-            ? resolveSelectedMemories(candidates.permanent, selection.memoryIds)
-            : candidates.permanent.slice(0, MAX_SELECTED_MEMORIES)
+        let selectedPermanent: RetrievedChunk[] = []
+        if (candidates.permanent.length > 0) {
+            emitMemoryCurationStatus(conversationId, taskId, eventMeta)
+            const selection = await selectMemoryContext({
+                gateway,
+                providerId,
+                model,
+                query: primaryQuery,
+                recentMessages,
+                candidates: candidates.permanent,
+                signal,
+            })
+            selectedPermanent = selection
+                ? resolveSelectedMemories(candidates.permanent, selection.memoryIds)
+                : candidates.permanent.slice(0, MAX_SELECTED_MEMORIES)
+        }
         const selectedMemory: AggregatedMemory = {
             permanent: selectedPermanent,
+            graph: candidates.graph,
         }
 
         emitMemoryRoutingSelection(
@@ -297,7 +298,53 @@ function messageContentForRouter(content: string | ContentPart[]): string {
 
 function filterAutoMemoryCandidates(memory: AggregatedMemory): AggregatedMemory {
     const permanent = filterWeakRelativeMatches(memory.permanent)
-    return { permanent }
+    return { permanent, graph: memory.graph }
+}
+
+/** Reciprocal-rank fusion makes short-turn and conversation-aware retrieval
+ * complementary without comparing dense, hybrid, and reranker score scales. */
+function fuseAutoMemoryResults(results: AggregatedMemory[]): AggregatedMemory {
+    if (results.length <= 1) return results[0] || { permanent: [] }
+    const ranked = new Map<string, { chunk: RetrievedChunk; score: number }>()
+    for (const result of results) {
+        result.permanent.forEach((chunk, index) => {
+            const key = chunk.id || [chunk.spaceId, chunk.sourceFile, chunk.chunkIndex].join('\u0000')
+            const existing = ranked.get(key)
+            const score = 1 / (60 + index + 1)
+            if (existing) existing.score += score
+            else ranked.set(key, { chunk, score })
+        })
+    }
+    const sorted = [...ranked.values()].sort((a, b) => b.score - a.score)
+    const best = sorted[0]?.score || 1
+    const permanent = sorted.map(({ chunk, score }) => ({
+        ...chunk,
+        score: score / best,
+        rerankerScore: undefined,
+        fusionScore: score,
+        scoreType: 'fusion' as const,
+    }))
+
+    const edgeMap = new Map<string, NonNullable<AggregatedMemory['graph']>['edges'][number]>()
+    const nodeMap = new Map<string, NonNullable<AggregatedMemory['graph']>['nodes'][number]>()
+    const seedMap = new Map<string, NonNullable<AggregatedMemory['graph']>['seedNodes'][number]>()
+    for (const graph of results.map((result) => result.graph).filter(Boolean)) {
+        for (const edge of graph!.edges) edgeMap.set(edge.id, edge)
+        for (const node of graph!.nodes) nodeMap.set(node.id, node)
+        for (const seed of graph!.seedNodes) seedMap.set(seed.id, seed)
+    }
+    const edges = [...edgeMap.values()]
+        .sort((a, b) => b.importance - a.importance || b.confidence - a.confidence || b.lastSeenAt - a.lastSeenAt)
+        .slice(0, 8)
+    const includedNodeIds = new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId]))
+    const graph = edges.length > 0
+        ? {
+            seedNodes: [...seedMap.values()].filter((node) => includedNodeIds.has(node.id)),
+            nodes: [...nodeMap.values()].filter((node) => includedNodeIds.has(node.id)),
+            edges,
+        }
+        : undefined
+    return { permanent, graph }
 }
 
 /**

@@ -3,7 +3,6 @@ import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces, getAssignedOrDefaultSpaces } from './memory-space-scope.js'
 import type { RetrievedChunk } from './parser.js'
 import { getEntityGraphStore, type GraphWalkResult } from './entity-graph.js'
-import { legacyMemoryGraphSourceId, memoryGraphSourceId } from './memory-entity-indexer.js'
 
 export interface AggregatedMemory {
   permanent: RetrievedChunk[]
@@ -32,7 +31,7 @@ export class MemoryAggregator {
       agentId?: string
       spaceIds?: string[]
       permanentTopK?: number
-      /** Graph expansion is opt-in; relationship tools are preferred for on-demand graph reads. */
+      /** Add a small, source-grounded relationship supplement to RAG passages. */
       includeGraph?: boolean
     }
   ): Promise<AggregatedMemory> {
@@ -133,14 +132,15 @@ export class MemoryAggregator {
     }
 
     let graphWalk: GraphWalkResult | undefined
-    if (opts?.includeGraph === true) {
+    if (opts?.includeGraph === true && scopedSpaces.length > 0) {
       try {
         const graph = getEntityGraphStore()
         const seedNodes = graph.findSeedNodes(query, dedupedPermanent.map((chunk) => chunk.text), 8)
-        const graphSourceIds = memoryGraphSourceIdsForChunks(dedupedPermanent)
         graphWalk = seedNodes.length > 0
-          ? graph.walk(seedNodes.map((node) => node.id), 2, 32, 0, {
-            sourceIds: graphSourceIds,
+          ? graph.focusedWalk(seedNodes.map((node) => node.id), query, 1, 8, 0, {
+            // The graph may bridge from a retrieved document to another
+            // document, but never outside the caller's memory-space boundary.
+            sourceIdPrefixes: scopedSpaces.map((space) => `memory:${space.id}:`),
             contextText: [query, ...dedupedPermanent.map((chunk) => chunk.text)].join(' '),
           })
           : undefined
@@ -206,16 +206,6 @@ export function hasExactMemorySpaceScope(
   const requested = new Set(requestedIds.map((id) => id.trim()).filter(Boolean))
   const resolved = new Set(resolvedSpaces.map((space) => space.id))
   return requested.size === resolved.size && Array.from(requested).every((id) => resolved.has(id))
-}
-
-function memoryGraphSourceIdsForChunks(chunks: RetrievedChunk[]): string[] {
-  const sourceIds = new Set<string>()
-  for (const chunk of chunks) {
-    if (!chunk.sourceFile) continue
-    if (chunk.spaceId) sourceIds.add(memoryGraphSourceId(chunk.spaceId, chunk.sourceFile))
-    else sourceIds.add(legacyMemoryGraphSourceId(chunk.sourceFile))
-  }
-  return Array.from(sourceIds)
 }
 
 let aggregatorInstance: MemoryAggregator | null = null
