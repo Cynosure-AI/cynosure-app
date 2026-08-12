@@ -6,6 +6,7 @@ import {
   type StreamChunk,
   type ModelInfo,
   type ModelListItem,
+  type ModelPricing,
   type ModelListType,
   type TranscriptionRequest,
   type TranscriptionResponse,
@@ -16,10 +17,7 @@ import {
 } from './providers/base.provider.js'
 import {
   ensurePricingLoaded,
-  getModelContextLength,
-  getModelInputModalities,
-  getModelOutputModalities,
-  getModelCost
+  getModelMetadata
 } from '../model-dev-fetcher.js'
 import { OpenAIProvider } from './providers/openai.provider.js'
 import { AnthropicProvider } from './providers/anthropic.provider.js'
@@ -141,31 +139,26 @@ export class LLMGateway {
     if (!provider) throw new Error(`Provider not found`)
 
     const models = await provider.listModelItems(type)
-    if (
-      (type !== 'embedding' && type !== 'reranker') ||
-      provider.config.type === 'ollama' ||
-      provider.config.type === 'lmstudio' ||
-      models.every((model) => model.pricing)
-    ) {
+    if (provider.config.type === 'ollama' || provider.config.type === 'lmstudio') {
       return models
     }
 
-    // Provider model-list endpoints are the richest pricing source when they
-    // expose it (for example OpenRouter). Fill only missing token prices from
-    // models.dev so embedding/reranker selectors get the same cost badges as
-    // regular chat models across providers.
+    // Keep native provider metadata authoritative (OpenRouter is especially
+    // rich), then fill every missing field from the shared models.dev index.
+    // All selector types use this path, so favorites and ordinary rows receive
+    // the same normalized metadata.
     await ensurePricingLoaded().catch(() => { /* pricing is best-effort */ })
     return models.map((model) => {
-      const cost = getModelCost(provider.config.type, model.id)
-      if (!cost) return model
+      const metadata = getModelMetadata(provider.config.type, model.id)
+      if (!metadata) return model
 
       return {
         ...model,
-        pricing: {
-          prompt: cost.input / 1_000_000,
-          completion: cost.output / 1_000_000,
-          ...model.pricing
-        }
+        contextLength: model.contextLength ?? metadata.contextLength,
+        inputModalities: model.inputModalities?.length ? model.inputModalities : metadata.inputModalities,
+        outputModalities: model.outputModalities?.length ? model.outputModalities : metadata.outputModalities,
+        supportsToolCalls: model.supportsToolCalls ?? metadata.supportsToolCalls,
+        pricing: mergePricing(metadata.cost ? pricingFromCost(metadata.cost) : undefined, model.pricing)
       }
     })
   }
@@ -288,42 +281,14 @@ export class LLMGateway {
       }
     }
 
-    // Fallback: if provider didn't return contextLength, try models.dev
-    if (!info.contextLength) {
-      await ensurePricingLoaded()
-      const providerType = provider.config.type
-      const ctxLen = getModelContextLength(providerType, modelId)
-      if (ctxLen) {
-        info.contextLength = ctxLen
-      }
-    }
-
-    if (!info.inputModalities?.length || !info.outputModalities?.length) {
-      await ensurePricingLoaded()
-      const providerType = provider.config.type
-      if (!info.inputModalities?.length) {
-        const inputModalities = getModelInputModalities(providerType, modelId)
-        if (inputModalities?.length) {
-          info.inputModalities = inputModalities
-        }
-      }
-      if (!info.outputModalities?.length) {
-        const outputModalities = getModelOutputModalities(providerType, modelId)
-        if (outputModalities?.length) {
-          info.outputModalities = outputModalities
-        }
-      }
-    }
-
-    // Fallback: cost from models.dev
-    if (!info.cost) {
-      await ensurePricingLoaded()
-      const providerType = provider.config.type
-      const cost = getModelCost(providerType, modelId)
-      if (cost) {
-        info.cost = cost
-      }
-    }
+    await ensurePricingLoaded().catch(() => { /* metadata is best-effort */ })
+    const metadata = getModelMetadata(provider.config.type, modelId)
+    info.contextLength ??= metadata?.contextLength
+    if (!info.inputModalities?.length) info.inputModalities = metadata?.inputModalities
+    if (!info.outputModalities?.length) info.outputModalities = metadata?.outputModalities
+    info.supportsToolCalls ??= metadata?.supportsToolCalls
+    info.cost ??= metadata?.cost
+    info.pricing = mergePricing(metadata?.cost ? pricingFromCost(metadata.cost) : undefined, info.pricing)
 
     if (!info.cost && info.pricing && (info.pricing.prompt != null || info.pricing.completion != null)) {
       info.cost = {
@@ -357,6 +322,33 @@ export class LLMGateway {
     const provider = this.providers.get(providerId)
     if (!provider) return false
     return provider.testConnection()
+  }
+}
+
+function pricingFromCost(cost: NonNullable<ReturnType<typeof getModelMetadata>>['cost']): ModelPricing {
+  if (!cost) return {}
+  return {
+    prompt: cost.input / 1_000_000,
+    completion: cost.output / 1_000_000,
+    ...(cost.cacheRead != null ? { inputCacheRead: cost.cacheRead / 1_000_000 } : {}),
+    ...(cost.cacheWrite != null ? { inputCacheWrite: cost.cacheWrite / 1_000_000 } : {}),
+    ...(cost.reasoning != null ? { internalReasoning: cost.reasoning / 1_000_000 } : {}),
+    ...((cost.inputAudio != null || cost.outputAudio != null) ? {
+      skus: {
+        ...(cost.inputAudio != null ? { input_audio_tokens: cost.inputAudio / 1_000_000 } : {}),
+        ...(cost.outputAudio != null ? { output_audio_tokens: cost.outputAudio / 1_000_000 } : {})
+      }
+    } : {})
+  }
+}
+
+function mergePricing(fallback?: ModelPricing, native?: ModelPricing): ModelPricing | undefined {
+  if (!fallback && !native) return undefined
+  const skus = { ...fallback?.skus, ...native?.skus }
+  return {
+    ...fallback,
+    ...native,
+    ...(Object.keys(skus).length ? { skus } : {})
   }
 }
 
