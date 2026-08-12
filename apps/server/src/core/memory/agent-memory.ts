@@ -8,11 +8,10 @@ import {
     ensureFolder,
     writeTextFile,
     readTextFile,
-    deleteFile,
     computeFileHash,
     resolveUniqueFileName,
     PLAIN_TEXT_EXTENSIONS,
-    moveToRevisions,
+    archiveFile,
     toMarkdownFileName,
 } from './memory-file-manager.js'
 import { join } from 'path'
@@ -144,8 +143,8 @@ export class AgentMemory {
                 await ragStore.deleteByIds(tableName, oldIds, { throwOnError: true })
             }
         } catch (err) {
-            // The new rows are a staging revision until the old IDs are
-            // removed. Roll them back on cancellation or swap failure.
+            // The new rows stay staged until the old IDs are removed. Roll
+            // them back on cancellation or swap failure.
             if (stagedIds.length > 0) {
                 await ragStore.deleteByIds(tableName, stagedIds, { throwOnError: true }).catch((rollbackError) => {
                     console.error('[memory] Failed to roll back staged replacement chunks:', rollbackError)
@@ -212,11 +211,9 @@ export class AgentMemory {
             const mdName = resolveUniqueFileName(folderPath, toMarkdownFileName(fileName))
             const mdPath = writeTextFile(folderPath, mdName, text)
 
-            moveToRevisions(folderPath, fileName)
-
             const count = await this.replaceIndexedText(text, mdName, spaceId, [fileName, mdName], opts?.signal)
             throwIfAborted(opts?.signal)
-            moveToRevisions(folderPath, fileName)
+            archiveFile(folderPath, fileName)
             removeFileIndex(spaceId, fileName)
             const hash = computeFileHash(mdPath)
             upsertFileIndex(spaceId, mdName, hash, count)
@@ -341,8 +338,8 @@ export class AgentMemory {
     // -----------------------------------------------------------------------
 
     /**
-     * Delete all vectors for a source file, and also delete the physical file
-     * from the space folder if it exists there.
+     * Delete all vectors for a source file and archive its physical source in
+     * the space's hidden trash folder if it still exists.
      */
     async deleteSourceFile(sourceFile: string, spaceId: string): Promise<number> {
         const ragStore = getRAGStore()
@@ -356,7 +353,7 @@ export class AgentMemory {
 
         const folderPath = getMemorySpaceFolderPath(spaceId)
         if (folderPath) {
-            deleteFile(folderPath, sourceFile)
+            archiveFile(folderPath, sourceFile)
         }
         removeFileIndex(spaceId, sourceFile)
         return deleted

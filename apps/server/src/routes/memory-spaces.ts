@@ -10,9 +10,6 @@ import {
     computeFileHash,
     copyFileToFolder,
     deleteFile as deletePhysicalFile,
-    backupToRevisions,
-    listFileRevisions,
-    readFileRevision,
     readTextFile,
     writeTextFile,
     PLAIN_TEXT_EXTENSIONS,
@@ -454,7 +451,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         })
     })
 
-    // DELETE /api/memory-spaces/:id/files/:fileName — delete a file from the space
+    // DELETE /api/memory-spaces/:id/files/:fileName — archive a file and remove its indexes
     app.delete<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
@@ -485,46 +482,6 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         }
     })
 
-    // GET /api/memory-spaces/:id/files/:fileName/revisions — list hidden saved versions
-    app.get<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/revisions', async (req, reply) => {
-        const row = loadSpaceRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Space not found' })
-        if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
-
-        let fileName: string
-        try {
-            fileName = validateEditableFileName(req.params.fileName)
-        } catch (err) {
-            return reply.status(400).send({ error: (err as Error).message })
-        }
-
-        return { revisions: listFileRevisions(row.folder_path, fileName) }
-    })
-
-    // GET /api/memory-spaces/:id/files/:fileName/revisions/:revisionName/content — read one saved version
-    app.get<{ Params: { id: string; fileName: string; revisionName: string } }>('/:id/files/:fileName/revisions/:revisionName/content', async (req, reply) => {
-        const row = loadSpaceRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Space not found' })
-        if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
-
-        let fileName: string
-        try {
-            fileName = validateEditableFileName(req.params.fileName)
-        } catch (err) {
-            return reply.status(400).send({ error: (err as Error).message })
-        }
-
-        try {
-            return {
-                fileName,
-                revisionName: basename(req.params.revisionName || ''),
-                content: readFileRevision(row.folder_path, fileName, req.params.revisionName),
-            }
-        } catch {
-            return reply.status(404).send({ error: 'Revision not found' })
-        }
-    })
-
     // PUT /api/memory-spaces/:id/files/:fileName/content — update editable file content and refresh vectors
     app.put<{ Params: { id: string; fileName: string }; Body: { content: string } }>('/:id/files/:fileName/content', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
@@ -539,13 +496,15 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             return reply.status(400).send({ error: (err as Error).message })
         }
 
+        const previousContent = readTextFile(row.folder_path, fileName)
         try {
-            backupToRevisions(row.folder_path, fileName)
             writeTextFile(row.folder_path, fileName, req.body.content)
-            deleteMemoryGraphSource(row.id, fileName)
             const result = await getAgentMemory().reindexFile(row.folder_path, fileName, row.id)
+            deleteMemoryGraphSource(row.id, fileName)
             return { success: true, fileName: result.fileName, chunksStored: result.chunkCount }
         } catch (err) {
+            writeTextFile(row.folder_path, fileName, previousContent)
+            await getAgentMemory().reindexFile(row.folder_path, fileName, row.id).catch(() => undefined)
             return reply.status(500).send({ error: (err as Error).message || 'Failed to update file' })
         }
     })
@@ -694,7 +653,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         })
     })
 
-    // POST /api/memory-spaces/:id/delete-groups — delete files from a space
+    // POST /api/memory-spaces/:id/delete-groups — archive files and remove their indexes
     app.post<{ Params: { id: string }; Body: { sourceFiles: string[] } }>('/:id/delete-groups', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
