@@ -101,6 +101,12 @@ Store ────► RAGStore.addDocuments() into LanceDB table "permanent_memo
 | `chunkSize`    | 512     | Target tokens per chunk               |
 | `chunkOverlap` | 64      | Token overlap between adjacent chunks |
 
+**Automatic retrieval setting** (via `settings` table, key `'memoryRetrieval'`):
+
+| Setting       | Default | Description                                                        |
+| ------------- | ------- | ------------------------------------------------------------------ |
+| `resultCount` | 10      | Ranked memory chunks returned per automatic routing query (1–50). |
+
 ### Hybrid Search
 
 Retrieval from LanceDB uses a **hybrid** approach combining two signals:
@@ -136,13 +142,13 @@ The `MemoryReranker` can optionally improve ranking via an OpenRouter-compatible
 | ---------------- | ---------------------- | ---------------------------------------------------------------------- |
 | `enabled`        | false                  | Whether to use LLM reranking                                           |
 | `model`          | `cohere/rerank-4-fast` | Allowed: cohere/rerank-v3.5, cohere/rerank-4-fast, cohere/rerank-4-pro |
-| `candidateCount` | 30                     | How many hybrid results to fetch before reranking (min 3, max 50)      |
+| `candidateCount` | 50                     | How many hybrid results to fetch before reranking (min 3, max 100)     |
 | `providerId`     | —                      | OpenRouter provider ID for reranking                                   |
 
 When enabled, the pipeline is:
 
 ```
-hybridSearch(topK=30) → rerank(query, 30 results) → return topK=5
+hybridSearch(topK=max(resultCount, candidateCount)) → rerank(query, candidates) → return resultCount
 ```
 
 If reranking fails, it logs a warning and falls back to the raw hybrid ranking.
@@ -151,7 +157,7 @@ If reranking fails, it logs a warning and falls back to the raw hybrid ranking.
 
 **Default `topK = 3`** is used by `AgentMemory.recall()`, which is called by `MemoryAggregator.aggregate()`.
 
-The `MemoryAggregator` allows callers to override via `permanentTopK` (e.g., auto-routing uses 12).
+The `MemoryAggregator` allows callers to override via `permanentTopK`. Automatic routing uses the configurable `resultCount` (default 10) for each direct or contextual retrieval query, deduplicates the combined results, and selects up to 5 chunks for chat context.
 
 Each `RetrievedChunk` contains:
 
@@ -387,7 +393,7 @@ When formatted for prompt injection via `formatWalk()`, it produces:
 
 The coupling is **loose but intentional**:
 
-1. **Semantic search runs first** — retrieves up to `permanentTopK` (default 3, auto-routing uses 12) chunks from LanceDB
+1. **Semantic search runs first** — retrieves up to `permanentTopK` (default 3; auto-routing uses the configurable retrieval count, default 10) chunks from LanceDB
 2. **Deduplication**: chunks with the same content hash (or fully normalized text) are collapsed
 3. **Chunk enrichment**: totalChunks, stable documentId, and the indexed source revision are added
 4. **Optional entity graph enrichment**: callers that set `includeGraph: true` (including automatic memory routing) run:
