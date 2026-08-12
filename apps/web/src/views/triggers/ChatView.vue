@@ -139,40 +139,21 @@ watch(
 
       <!-- Chat column: panel + input bar -->
       <div
-        class="chat-column flex flex-col flex-1 min-w-0"
+        class="chat-column relative flex flex-col flex-1 min-w-0"
         :class="{ 'chat-column--empty': showCenteredComposer }"
+        @dragenter="onDragEnter"
+        @dragleave="onDragLeave"
+        @dragover="onDragOver"
+        @drop="onDrop"
       >
         <!-- Chat area -->
-        <div
-          class="flex flex-col flex-1 min-h-0 relative"
-          @dragenter="onDragEnter"
-          @dragleave="onDragLeave"
-          @dragover="onDragOver"
-          @drop="onDrop"
-        >
+        <div class="flex flex-col flex-1 min-h-0 relative">
           <ChatPanel />
 
           <PlanningTaskList
             v-if="taskListOpen"
             @close="taskListOpen = false"
           />
-
-          <div
-            v-if="isDragOver"
-            class="absolute inset-0 z-50 flex items-center justify-center bg-theme-900/80 border-2 border-dashed border-accent-500 rounded-lg pointer-events-none"
-          >
-            <div class="text-center">
-              <div class="text-4xl mb-2">
-                📎
-              </div>
-              <div class="text-accent-400 text-sm font-medium">
-                Drop files here
-              </div>
-              <div class="text-theme-500 text-xs mt-1">
-                Images &amp; text files supported
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- Input bar (full width of chat column) -->
@@ -185,6 +166,23 @@ watch(
           class="composer-spacer"
           aria-hidden="true"
         />
+
+        <div
+          v-if="isDragOver"
+          class="absolute inset-0 z-50 flex items-center justify-center bg-theme-900/80 border-2 border-dashed border-accent-500 rounded-lg pointer-events-none"
+        >
+          <div class="text-center">
+            <div class="text-4xl mb-2">
+              📎
+            </div>
+            <div class="text-accent-400 text-sm font-medium">
+              Drop files here
+            </div>
+            <div class="text-theme-500 text-xs mt-1">
+              Images &amp; text files supported
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
