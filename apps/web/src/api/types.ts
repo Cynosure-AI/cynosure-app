@@ -34,6 +34,7 @@ export interface ModelListItem {
     contextLength?: number
     inputModalities?: string[]
     outputModalities?: string[]
+    supportsToolCalls?: boolean
     pricing?: ModelPricing
 }
 

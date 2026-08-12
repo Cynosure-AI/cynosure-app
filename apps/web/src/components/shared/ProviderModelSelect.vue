@@ -154,6 +154,7 @@ function mergeModelItems(existing: ModelListItem, incoming: ModelListItem): Mode
     ...incoming,
     inputModalities: incoming.inputModalities?.length ? incoming.inputModalities : existing.inputModalities,
     outputModalities: incoming.outputModalities?.length ? incoming.outputModalities : existing.outputModalities,
+    supportsToolCalls: incoming.supportsToolCalls ?? existing.supportsToolCalls,
     pricing: {
       ...existing.pricing,
       ...incoming.pricing,
@@ -344,10 +345,18 @@ const groups = computed((): SelectOptionGroup[] => {
     )
     .map((favorite) => {
       const provider = providerById.get(favorite.providerId);
+      const model = (providerModels.value[favorite.providerId] || []).find(
+        (item) => item.id === favorite.model,
+      );
+      const capabilityTag = model ? outputCapabilityTag(model) : undefined;
+      const costTag = model ? pricingTag(model) : undefined;
       return {
         value: encode(favorite.providerId, favorite.model),
         label: favorite.model,
         imgSrc: provider ? logoUrl(provider.type) : favorite.imgSrc,
+        tag: capabilityTag || costTag,
+        tagVariant: capabilityTag ? "cyan" as const : "default" as const,
+        tooltip: model ? pricingTooltip(model) : favorite.tooltip,
         ...favoriteAction(favorite.providerId, favorite.model),
       };
     });
