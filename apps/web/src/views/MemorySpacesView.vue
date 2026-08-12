@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { MarkerType, useVueFlow, type Edge, type Node } from "@vue-flow/core";
 import { Icon } from "@iconify/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { api } from "../api/client";
 import type { EntityGraphEdge, EntityGraphNode, EntityGraphNodeType, EntityGraphResponse, MemorySpace } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
+import TabBar, { type TabDef } from "../components/shared/TabBar.vue";
 import MemoryDocumentsSection from "../components/memory/MemoryDocumentsSection.vue";
 import MemoryRelationshipsSection from "../components/memory/MemoryRelationshipsSection.vue";
 import MemoryVisualGraphSection from "../components/memory/MemoryVisualGraphSection.vue";
@@ -67,6 +68,12 @@ const memorySections = [
   },
 ] as const;
 
+const memoryTabs: TabDef<MemoryPanel>[] = memorySections.map((section) => ({
+  value: section.id,
+  label: section.label,
+  icon: section.icon,
+}));
+
 const spaces = ref<MemorySpace[]>([]);
 const spacesLoading = ref(false);
 const selectedSpaceId = ref<string | null>(null);
@@ -106,6 +113,7 @@ const graphEdgePathType = useLocalStorage<GraphEdgePathType>(SK_MEMORY_GRAPH_EDG
 const focusedGraphNodeId = ref<string | null>(null);
 
 const route = useRoute();
+const router = useRouter();
 const { fitView } = useVueFlow(ENTITY_FLOW_ID);
 let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk-api").default>> | null = null;
 let graphSuggestionTimer: number | null = null;
@@ -700,6 +708,11 @@ async function deleteEdges(ids: string[]) {
   await loadGraph();
 }
 
+function selectPanel(panel: MemoryPanel) {
+  const section = memorySections.find((candidate) => candidate.id === panel);
+  if (section && route.path !== section.path) void router.push(section.path);
+}
+
 watch(
   () => route.params.section,
   async (sectionParam) => {
@@ -719,72 +732,53 @@ onMounted(() => loadSpaces());
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto relative">
-    <div class="flex min-h-full flex-col lg:flex-row">
-      <aside class="shrink-0 border-b border-theme-800 bg-theme-950/60 lg:w-72 lg:border-b-0 lg:border-r">
-        <header class="p-4">
-          <h1 class="text-2xl font-bold text-theme-100">
-            Memory
-          </h1>
-          <p class="mt-1 text-sm leading-relaxed text-theme-500">
-            Manage documents, extracted relationships, and the entity graph.
-          </p>
-        </header>
-        <nav class="flex gap-1 overflow-x-auto px-3 py-3 lg:block lg:space-y-1 lg:overflow-x-visible lg:p-4">
-          <RouterLink
-            v-for="section in memorySections"
-            :key="section.id"
-            :to="section.path"
-            class="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all lg:w-full"
-            :class="activePanel === section.id ? 'bg-theme-800 text-theme-100 shadow-[inset_3px_0_0_var(--color-accent-500,#3b82f6)]' : 'text-theme-400 hover:bg-theme-800/70 hover:text-theme-200'"
-          >
-            <Icon
-              :icon="section.icon"
-              class="h-4.5 w-4.5 shrink-0"
-            />
-            <span class="whitespace-nowrap">{{ section.label }}</span>
-          </RouterLink>
-        </nav>
-      </aside>
-
-      <main class="min-w-0 flex-1 overflow-y-auto flex-col flex h-full">
-        <div class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 backdrop-blur-sm px-4 py-3 sm:px-6 lg:px-8">
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 class="text-xl font-semibold text-theme-100">
-                {{ activeSection.label }}
-              </h2>
-              <p class="text-sm text-theme-500 mt-1">
+  <div class="relative h-full min-w-0 overflow-y-auto">
+    <div class="min-h-full min-w-0">
+      <main class="flex min-h-full min-w-0 flex-col">
+        <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 px-4 pt-4 backdrop-blur-sm sm:px-6 sm:pt-5 lg:px-8">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <h1 class="text-2xl font-bold text-theme-100">
+                Memory
+              </h1>
+              <p class="mt-1 text-sm leading-relaxed text-theme-500">
                 {{ activeSection.description }}
               </p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex shrink-0 items-center gap-2 self-start">
               <button
                 v-if="activePanel === 'documents'"
-                class="px-3 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                class="flex items-center gap-2 rounded-lg bg-accent-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500"
                 @click="openCreateDialog()"
               >
                 <Icon
                   icon="lucide:folder-plus"
-                  class="w-4 h-4"
+                  class="h-4 w-4"
                 />
                 New Folder
               </button>
               <button
                 v-if="activePanel === 'relationships' || activePanel === 'visual'"
-                class="p-2 text-theme-500 hover:text-theme-200 transition-colors"
+                class="p-2 text-theme-500 transition-colors hover:text-theme-200"
                 title="Refresh entity graph"
                 @click="loadGraph()"
               >
                 <Icon
                   icon="lucide:refresh-cw"
-                  class="w-4 h-4"
+                  class="h-4 w-4"
                   :class="{ 'animate-spin': graphLoading }"
                 />
               </button>
             </div>
           </div>
-        </div>
+
+          <TabBar
+            :model-value="activePanel"
+            :tabs="memoryTabs"
+            class="mt-4"
+            @update:model-value="selectPanel"
+          />
+        </header>
 
         <div
           v-if="spacesLoading && spaces.length === 0"

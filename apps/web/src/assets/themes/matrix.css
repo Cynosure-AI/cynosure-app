@@ -4,17 +4,17 @@
 
 /* ── Variable overrides ── */
 [data-theme="matrix"] {
-  /* Base: near-black with faint green undertone */
-  --color-theme-950: #030705;
-  --color-theme-900: #0a120e;
-  --color-theme-800: #111f18;
-  --color-theme-700: #1a2e23;
-  --color-theme-600: #24402f;
-  --color-theme-500: #3a5c48;
-  --color-theme-400: #5a8068;
-  --color-theme-300: #84a890;
-  --color-theme-200: #b0ccb8;
-  --color-theme-100: #d8eed8;
+  /* Base: readable neutral graphite; green is reserved for terminal signals */
+  --color-theme-950: #050706;
+  --color-theme-900: #0d100e;
+  --color-theme-800: #171b18;
+  --color-theme-700: #293029;
+  --color-theme-600: #3e4840;
+  --color-theme-500: #68736a;
+  --color-theme-400: #929d94;
+  --color-theme-300: #b8c1ba;
+  --color-theme-200: #d7ddd8;
+  --color-theme-100: #f0f3f0;
 
   /* Accent: phosphor green for buttons, links, active states */
   --color-accent-50: #ecfdf5;
@@ -53,10 +53,8 @@
   --theme-accent-rgb: 0, 255, 65;
 
   /* Monospace terminal font */
-  font-family:
-    "JetBrains Mono", "Fira Code", "Cascadia Code", "SF Mono", "Consolas",
-    monospace;
-  letter-spacing: 0.02em;
+  font-family: "IBM Plex Mono", "Cascadia Code", "SF Mono", "Consolas", monospace;
+  letter-spacing: 0.01em;
 
   color-scheme: dark;
 }
@@ -104,7 +102,7 @@
 /* ── Muted green-tinted secondary text ── */
 [data-theme="matrix"] label,
 [data-theme="matrix"] .text-theme-400 {
-  color: #5a8068;
+  color: #929d94;
 }
 
 /* ── Section dividers: green accent lines ── */
@@ -200,7 +198,7 @@
 /* ── Text selection ── */
 [data-theme="matrix"] ::selection {
   background: rgba(0, 255, 65, 0.25);
-  color: #d8eed8;
+  color: #f0f3f0;
 }
 
 /* ── Subtle CRT vignette effect ── */
@@ -228,7 +226,7 @@
 [data-theme="matrix"] code {
   background: #050a07 !important;
   border: 1px solid var(--mx-green-dim);
-  color: #84a890;
+  color: #c5cec7;
 }
 
 /* ── Active sidebar nav item: terminal-style highlight ── */

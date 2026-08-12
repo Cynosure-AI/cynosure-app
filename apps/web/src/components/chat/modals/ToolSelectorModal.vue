@@ -85,7 +85,7 @@ function onAutoRoutingUpdate(enabled: boolean): void {
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
-            <span class="text-xs font-medium text-theme-200">Auto Tool Mode</span>
+            <span class="text-xs font-medium text-theme-200">Automatic tool discovery</span>
             <span
               v-if="chatStore.sessionAutoToolRouting"
               class="text-[10px] px-1.5 py-0.5 rounded bg-accent-500/10 text-accent-300"
@@ -94,12 +94,12 @@ function onAutoRoutingUpdate(enabled: boolean): void {
             </span>
           </div>
           <p class="mt-1 text-[11px] text-theme-500">
-            Uses recent context to automatically choose a fitting tool collection. Selected tools are preferred in the decision-making. Model settings are configured in Preferences.
+            Uses recent context to discover a compact tool set. Selected tools are pinned and always retained. The routing model is configured in Preferences.
           </p>
         </div>
         <ToggleSwitch
           :model-value="chatStore.sessionAutoToolRouting"
-          label="Auto Tool Mode"
+          label="Automatic tool discovery"
           size="md"
           color="accent"
           @update:model-value="onAutoRoutingUpdate"

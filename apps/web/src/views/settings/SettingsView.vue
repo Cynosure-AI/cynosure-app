@@ -134,9 +134,9 @@ const sections: SettingsSection[] = [
   {
     id: 'auto-router',
     categoryId: 'chat',
-    label: 'Auto Router',
-    description: 'Choose the model that prepares task context for automatic tools and memories.',
-    terms: ['auto router', 'router', 'task context', 'auto tools', 'auto memory', 'automatic routing']
+    label: 'Context Routing Model',
+    description: 'Choose the default model that prepares context for automatic tool discovery and memory retrieval.',
+    terms: ['context routing', 'auto router', 'router', 'task context', 'automatic tools', 'automatic memory']
   },
   {
     id: 'generated-titles',
@@ -227,7 +227,7 @@ const sections: SettingsSection[] = [
     categoryId: 'appearance',
     label: 'Theme',
     description: 'Choose your visual style.',
-    terms: ['theme', 'themes', 'visual style', 'dark', 'light', 'arasaka', 'galaxy', 'cyberpunk', 'palette', 'appearance']
+    terms: ['theme', 'themes', 'visual style', 'dark', 'light', 'arasaka', 'galaxy', 'cyberpunk', 'matrix', 'sakura', 'industrial', 'amber', 'arctic', 'ice', 'monochrome', 'palette', 'appearance']
   },
   {
     id: 'auto-expand-thinking',

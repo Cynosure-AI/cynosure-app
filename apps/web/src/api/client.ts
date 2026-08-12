@@ -1,7 +1,7 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
   LLMProviderConfig, McpServerInfo, McpRegistryResponse,
-  AgentDefinition, AppNotification, MemorySpace, MemoryFileRevision, MemoryFileStatus, MemoryIndexJob,
+  AgentDefinition, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob,
   AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
   MetricsSummary, PlanningState,
   ModelListType,
@@ -368,21 +368,13 @@ export const api = {
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}`
       ),
     getFileContent: (spaceId: string, fileName: string) =>
-      get<{ fileName: string; content: string }>(
+      get<{ fileName: string; content: string; revision: string }>(
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/content`
       ),
-    listFileRevisions: (spaceId: string, fileName: string) =>
-      get<{ revisions: MemoryFileRevision[] }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/revisions`
-      ),
-    getFileRevisionContent: (spaceId: string, fileName: string, revisionName: string) =>
-      get<{ fileName: string; revisionName: string; content: string }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/revisions/${encodeURIComponent(revisionName)}/content`
-      ),
-    updateFileContent: (spaceId: string, fileName: string, content: string) =>
-      put<{ success: boolean; chunksStored: number; fileName: string }>(
+    updateFileContent: (spaceId: string, fileName: string, content: string, expectedRevision?: string) =>
+      put<{ success: boolean; chunksStored: number; fileName: string; revision: string }>(
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/content`,
-        { content }
+        { content, expectedRevision }
       ),
     renameFile: (spaceId: string, fileName: string, nextFileName: string) =>
       put<{ success: boolean; fileName: string }>(

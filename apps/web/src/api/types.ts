@@ -350,13 +350,6 @@ export interface MemoryIndexJob<T = unknown> {
     error?: string
 }
 
-export interface MemoryFileRevision {
-    fileName: string
-    revisionName: string
-    size: number
-    createdAt: number
-}
-
 export interface EntityGraphNode {
     id: string
     name: string

@@ -269,7 +269,7 @@ When `autoToolRouting` is enabled, the system intelligently selects which tools 
 **Key constants:**
 
 - `MCP_CANDIDATE_COUNT = 8` — Top K MCP groups by embedding similarity
-- `MAX_ROUTED_TOOLS = 16` — Upper bound for selected tools
+- `MAX_AUTO_DISCOVERED_TOOLS = 16` — Budget for automatically discovered tools; pinned, sticky, and runtime-required tools are additional
 - `MIN_RELATIVE_TOOL_SCORE = 0.72` — Near-match threshold
 
 ### 3.4 Attachment Tools
@@ -338,10 +338,10 @@ The `MemoryAggregator` combines results from two memory stores:
 
 A background indexing pipeline that:
 
-- Watches memory folders for changes
-- Extracts named entities from file content via LLM
-- Updates the entity graph with new edges and relationships
-- Syncs vector representations to LanceDB
+- Runs after a memory document and its canonical chunks are indexed
+- Extracts source-grounded relationships from tagged chunk windows via an LLM
+- Records the supporting document ID, document hash, and chunk index per claim
+- Keeps graph failure non-fatal because the source document and RAG index remain authoritative
 
 ### 4.4 Memory Scope
 

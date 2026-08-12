@@ -1102,6 +1102,9 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             edge_id: edge.id,
                             source_kind: edge.source_kind,
                             source_id: edge.source_id,
+                            source_document_id: '',
+                            source_content_hash: '',
+                            source_chunk_index: null,
                             evidence: edge.evidence,
                             confidence: edge.confidence,
                             mention_count: edge.mention_count,
@@ -1112,13 +1115,17 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         try {
                             db.prepare(`
                                 INSERT OR REPLACE INTO entity_graph_edge_evidence
-                                    (id, edge_id, source_kind, source_id, evidence, confidence, mention_count, first_seen_at, last_seen_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    (id, edge_id, source_kind, source_id, source_document_id, source_content_hash,
+                                     source_chunk_index, evidence, confidence, mention_count, first_seen_at, last_seen_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             `).run(
                                 evidence.id,
                                 evidence.edge_id,
                                 evidence.source_kind || 'conversation',
                                 evidence.source_id || '',
+                                evidence.source_document_id || '',
+                                evidence.source_content_hash || '',
+                                evidence.source_chunk_index ?? null,
                                 evidence.evidence || '',
                                 evidence.confidence ?? 0.7,
                                 evidence.mention_count ?? 1,

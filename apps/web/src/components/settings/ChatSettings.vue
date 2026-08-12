@@ -116,7 +116,7 @@ onMounted(async () => {
       label="Automation"
     />
 
-    <!-- Auto Router -->
+    <!-- Context Routing Model -->
     <BaseCard
       v-if="showSection('auto-router')"
       class="p-5 space-y-4"
@@ -132,10 +132,10 @@ onMounted(async () => {
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
-            Auto Router
+            Context Routing Model
           </h3>
           <p class="text-xs text-theme-500 mt-0.5">
-            Provider and model used to prepare task context for automatic tools and memories
+            Default provider and model used to prepare tool and memory routing context
           </p>
         </div>
       </div>
@@ -152,8 +152,8 @@ onMounted(async () => {
           @change="onAutoRouterSelection"
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          Builds the task context used by auto routing before the main execution starts.
-          Defaults to the current chat model when not set.
+          Used only when automatic tool discovery or automatic memory retrieval is enabled.
+          Defaults to the current chat model when not set; routing behavior is configured per agent or conversation.
         </p>
       </div>
     </BaseCard>
