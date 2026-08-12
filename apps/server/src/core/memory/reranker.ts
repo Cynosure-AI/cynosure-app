@@ -23,7 +23,7 @@ export const MEMORY_MIN_MATCH_THRESHOLD = 0.3
 const DEFAULT_CONFIG: MemoryRerankerConfig = {
   enabled: false,
   model: '',
-  candidateCount: 40,
+  candidateCount: 50,
   minMatchThreshold: MEMORY_MIN_MATCH_THRESHOLD
 }
 

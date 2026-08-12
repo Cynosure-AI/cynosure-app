@@ -5,6 +5,7 @@ import { getHistoryStore } from '../core/memory/history.js'
 import { EmbeddingProvider, getEmbeddingProvider } from '../core/memory/embedding.js'
 import { getMemoryParser } from '../core/memory/parser.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
+import { getMemoryRetrievalConfig, saveMemoryRetrievalConfig, type MemoryRetrievalConfig } from '../core/memory/retrieval-config.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
 import { getEntityGraphStore, type EntityType, type ImportanceLevel } from '../core/memory/entity-graph.js'
@@ -91,6 +92,17 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       graph: memory.graph,
       formatted: aggregator.format(memory)
     }
+  })
+
+  // GET /api/memory/retrieval/config — get automatic memory retrieval limits
+  app.get('/retrieval/config', async () => {
+    return getMemoryRetrievalConfig()
+  })
+
+  // POST /api/memory/retrieval/configure — configure automatic memory retrieval limits
+  app.post<{ Body: Partial<MemoryRetrievalConfig> }>('/retrieval/configure', async (req) => {
+    const config = saveMemoryRetrievalConfig(req.body)
+    return { success: true, ...config }
   })
 
   // GET /api/memory/graph — inspect the lightweight entity graph
