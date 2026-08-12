@@ -441,7 +441,7 @@ Mutation operations are exposed as separate tools rather than a mode-switching s
 - `memory_remove_range`
 - `memory_remove_all`
 
-Reads return a stable `documentId` and a content revision. Every mutation requires the expected revision, is serialized per document across concurrent runs, rejects stale writes, creates a recoverable revision, and waits for the replacement retrieval index to become active before reporting success. If indexing fails, the previous source and index are restored.
+Reads return a stable `documentId` and a SHA-256 content revision. Every mutation requires the expected revision, is serialized per document across concurrent runs, rejects stale writes, and waits for the replacement retrieval index to become active before reporting success. The Markdown file is the sole authoritative version; no edit history is created. If indexing fails, the previous source and index are restored from the in-flight mutation state. Whole-document deletion archives the source in the memory folder's hidden `.trash` directory.
 
 ---
 

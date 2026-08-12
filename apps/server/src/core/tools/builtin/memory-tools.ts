@@ -4,7 +4,7 @@ import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getMemorySpaceFolderPath, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import { relativePathForFolder } from '../../memory/memory-space-folders.js'
-import { readTextFile, writeTextFile, fileExists, backupToRevisions, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
+import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
 import { getEntityGraphStore, type EntityEdge, type EntityNode, type EntityType } from '../../memory/entity-graph.js'
 import { deleteMemoryGraphSource, legacyMemoryGraphSourceId, memoryGraphSourceId } from '../../memory/memory-entity-indexer.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
@@ -503,7 +503,6 @@ async function commitMemoryMutation(
     nextContent: string,
     signal?: AbortSignal,
 ): Promise<{ chunkCount: number; revision: string; documentId: string }> {
-    backupToRevisions(resolved.folderPath, resolved.fileName)
     writeTextFile(resolved.folderPath, resolved.fileName, nextContent)
     let indexed: Awaited<ReturnType<typeof reindexMemoryFile>>
     try {
@@ -513,7 +512,7 @@ async function commitMemoryMutation(
         // must not leave disk and search representing different revisions.
         writeTextFile(resolved.folderPath, resolved.fileName, previousContent)
         await reindexMemoryFile(resolved.spaceId, resolved.fileName).catch(() => undefined)
-        throw new Error(`Memory update failed and the previous revision was restored: ${(err as Error).message}`)
+        throw new Error(`Memory update failed and the previous content was restored: ${(err as Error).message}`)
     }
     // Graph data is derived and must not make the authoritative file/vector
     // commit fail after both have reached the new revision.
@@ -529,7 +528,6 @@ async function commitMemoryRemoval(
     resolved: ResolvedMemoryDocument,
     previousContent: string,
 ): Promise<{ deletedChunks: number; deletedEdges: number }> {
-    backupToRevisions(resolved.folderPath, resolved.fileName)
     abortPendingMemoryIndexJobs(resolved.spaceId, resolved.fileName)
     let deletedChunks: number
     try {
@@ -541,7 +539,7 @@ async function commitMemoryRemoval(
             writeTextFile(resolved.folderPath, resolved.fileName, previousContent)
         }
         await reindexMemoryFile(resolved.spaceId, resolved.fileName).catch(() => undefined)
-        throw new Error(`Memory removal failed and the previous revision was restored: ${(err as Error).message}`)
+        throw new Error(`Memory removal failed and the previous source was restored: ${(err as Error).message}`)
     }
     try {
         const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
@@ -1266,7 +1264,7 @@ export function makeMemoryRemoveAllTool(opts: MemoryToolOptions): ToolDefinition
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_remove_all',
-        description: 'Forget an entire memory document. Read it first and pass its latest revision. This moves the source to revisions and removes its retrieval and graph indexes.',
+        description: 'Forget an entire memory document. Read it first and pass its latest revision. This archives the source in hidden trash and removes its retrieval and graph indexes.',
         parameters: memoryRemovalSchema(false),
         timeout: 30_000,
         execute: async (params: unknown, signal?: AbortSignal) => {

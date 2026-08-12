@@ -6,7 +6,7 @@
  * SQLite + LanceDB serve only as the retrieval index.
  */
 import { createHash } from 'crypto'
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkSync, copyFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkSync, copyFileSync, renameSync } from 'fs'
 import { basename, join, extname } from 'path'
 
 // ---------------------------------------------------------------------------
@@ -43,13 +43,6 @@ export interface MemoryFileInfo {
     supported: boolean
     /** File can be read directly as text (no parsing step needed) */
     textDirect: boolean
-}
-
-export interface MemoryFileRevisionInfo {
-    fileName: string
-    revisionName: string
-    size: number
-    createdAt: number
 }
 
 // ---------------------------------------------------------------------------
@@ -112,44 +105,6 @@ export function readTextFile(folderPath: string, fileName: string): string {
     return readFileSync(join(folderPath, fileName), 'utf-8')
 }
 
-export function listFileRevisions(folderPath: string, fileName: string): MemoryFileRevisionInfo[] {
-    const cleanName = basename(fileName)
-    const revisionsFolder = join(folderPath, '.revisions')
-    if (!cleanName || !existsSync(revisionsFolder)) return []
-
-    const dotIdx = cleanName.lastIndexOf('.')
-    const base = dotIdx > 0 ? cleanName.slice(0, dotIdx) : cleanName
-    const ext = dotIdx > 0 ? cleanName.slice(dotIdx) : ''
-    const revisionPattern = new RegExp(`^${escapeRegExp(base)}-\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}${escapeRegExp(ext)}$`)
-
-    try {
-        return readdirSync(revisionsFolder, { withFileTypes: true })
-            .filter((entry) => entry.isFile() && revisionPattern.test(entry.name))
-            .map((entry) => {
-                const filePath = join(revisionsFolder, entry.name)
-                const stat = statSync(filePath)
-                return {
-                    fileName: cleanName,
-                    revisionName: entry.name,
-                    size: stat.size,
-                    createdAt: stat.mtimeMs,
-                }
-            })
-            .sort((a, b) => b.createdAt - a.createdAt || b.revisionName.localeCompare(a.revisionName))
-    } catch {
-        return []
-    }
-}
-
-export function readFileRevision(folderPath: string, fileName: string, revisionName: string): string {
-    const revision = basename(revisionName || '')
-    const match = listFileRevisions(folderPath, fileName).some((item) => item.revisionName === revision)
-    if (!revision || !match) {
-        throw new Error('Revision not found')
-    }
-    return readFileSync(join(folderPath, '.revisions', revision), 'utf-8')
-}
-
 /** Delete a file from a folder. Returns true if the file existed. */
 export function deleteFile(folderPath: string, fileName: string): boolean {
     const filePath = join(folderPath, fileName)
@@ -166,44 +121,27 @@ export function copyFileToFolder(sourcePath: string, targetFolder: string, targe
     return dest
 }
 
-/**
- * Back up a file to a `revisions/` subfolder before overwriting it.
- * The backup is named `<base>-<YYYY-MM-DD_HH-MM-SS>.<ext>`.
- * Returns the backup file path, or undefined if the source did not exist.
- */
-export function backupToRevisions(folderPath: string, fileName: string): string | undefined {
-    const sourcePath = join(folderPath, fileName)
+/** Move a removed source file into the space's hidden trash folder. */
+export function archiveFile(folderPath: string, fileName: string): string | undefined {
+    const cleanName = basename(fileName)
+    if (!cleanName || cleanName !== fileName) throw new Error('Invalid memory file name')
+    const sourcePath = join(folderPath, cleanName)
     if (!existsSync(sourcePath)) return undefined
 
-    const dotIdx = fileName.lastIndexOf('.')
-    const base = dotIdx > 0 ? fileName.slice(0, dotIdx) : fileName
-    const ext = dotIdx > 0 ? fileName.slice(dotIdx) : ''
-
-    const now = new Date()
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
-    const backupName = `${base}-${timestamp}${ext}`
-
-    const revisionsFolder = join(folderPath, '.revisions')
-    ensureFolder(revisionsFolder)
-    const dest = join(revisionsFolder, backupName)
-    copyFileSync(sourcePath, dest)
+    const trashFolder = join(folderPath, '.trash')
+    ensureFolder(trashFolder)
+    const dotIdx = cleanName.lastIndexOf('.')
+    const base = dotIdx > 0 ? cleanName.slice(0, dotIdx) : cleanName
+    const ext = dotIdx > 0 ? cleanName.slice(dotIdx) : ''
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    let dest = join(trashFolder, `${base}-${stamp}${ext}`)
+    let suffix = 2
+    while (existsSync(dest)) {
+        dest = join(trashFolder, `${base}-${stamp}-${suffix}${ext}`)
+        suffix++
+    }
+    renameSync(sourcePath, dest)
     return dest
-}
-
-/**
- * Move a file to the `revisions/` subfolder.
- * Used when imported binary/source documents are converted to canonical Markdown.
- */
-export function moveToRevisions(folderPath: string, fileName: string): string | undefined {
-    const sourcePath = join(folderPath, fileName)
-    if (!existsSync(sourcePath)) return undefined
-
-    const backupPath = backupToRevisions(folderPath, fileName)
-    if (!backupPath) return undefined
-
-    unlinkSync(sourcePath)
-    return backupPath
 }
 
 export function toMarkdownFileName(fileName: string): string {
@@ -233,10 +171,6 @@ export function resolveUniqueFileName(folderPath: string, fileName: string): str
         candidate = `${base} (${counter})${ext}`
     }
     return candidate
-}
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 // ---------------------------------------------------------------------------
