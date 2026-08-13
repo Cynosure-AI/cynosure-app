@@ -77,4 +77,58 @@ describe('ToolExecutionCard', () => {
     await wrapper.get('button').trigger('click')
     expect(wrapper.text()).toContain(graphContext)
   })
+
+  test('shows the memory match score supplied by fused retrieval', async () => {
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1,
+        isActive: false,
+        steps: [{
+          iteration: 1,
+          status: 'curating-memory',
+          timestamp: Date.now(),
+          toolCalls: [{
+            name: 'Default - deployment.md - part 1/1',
+            arguments: JSON.stringify({
+              type: 'memory',
+              contextPhase: 'gathered-context',
+              sourceFile: 'deployment.md',
+              content: 'Deployment memory',
+              matchScore: 0.84,
+              scoreType: 'fusion',
+            }),
+          }],
+        }],
+      },
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain('84%')
+    expect(wrapper.find('[title="Relative retrieval match (combined query ranks)"]').exists()).toBe(true)
+  })
+
+  test('uses animated feedback while a pre-turn routing phase is pending', async () => {
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 0,
+        isActive: true,
+        steps: [{
+          iteration: 0,
+          status: 'routing-tools',
+          message: 'Gathering tool context...',
+          timestamp: Date.now(),
+        }],
+      },
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+
+    expect(wrapper.get('button icon-stub').attributes('icon')).toBe('svg-spinners:ring-resize')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.findAll('icon-stub').filter((icon) => icon.attributes('icon') === 'svg-spinners:ring-resize')).toHaveLength(2)
+  })
 })

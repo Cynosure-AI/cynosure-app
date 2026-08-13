@@ -45,6 +45,7 @@ type ExecutionSection = {
   iconClass?: string
   rows: (ToolExecution | ContextRow)[]
   compactContext?: boolean
+  isLoading?: boolean
 }
 
 const props = defineProps<{
@@ -173,9 +174,20 @@ function memoryFileName(call?: ToolCall | null): string | null {
 function scoreForCall(call?: ToolCall | null): string | null {
   if (!call) return null
   const parsed = parseArgs(call.arguments)
-  if (isMemoryCall(call)) return normalizeScore(parsed?.rerankerScore)
+  if (isMemoryCall(call)) return normalizeScore(parsed?.matchScore ?? parsed?.rerankerScore)
   if (isToolRouterCall(call)) return normalizeScore(parsed?.routerScore)
   return null
+}
+
+function scoreTitleForCall(call: ToolCall): string {
+  if (isToolRouterCall(call)) return 'Tool match score'
+
+  const parsed = parseArgs(call.arguments)
+  const scoreType = visibleText(parsed?.scoreType)
+  if (scoreType === 'fusion') return 'Relative retrieval match (combined query ranks)'
+  if (scoreType === 'dense') return 'Semantic retrieval match'
+  if (scoreType === 'reranker' || typeof parsed?.rerankerScore === 'number') return 'Reranker match score'
+  return 'Memory match score'
 }
 
 function callContent(call?: ToolCall | null): string | null {
@@ -439,7 +451,14 @@ const isRoutingStatus = computed(() => isTaskContext.value || isAttachmentIndexi
 const routingStatusSteps = computed(() => {
   const seen = new Set<string>()
   return props.steps
-    .filter((step) => ['routing-tools', 'indexing-tools', 'finding-tools', 'curating-tools'].includes(step.status))
+    .filter((step) => [
+      'routing-tools',
+      'indexing-tools',
+      'finding-tools',
+      'curating-tools',
+      'routing-memory',
+      'curating-memory',
+    ].includes(step.status))
     .filter((step) => {
       const key = `${step.status}:${step.message || ''}`
       if (seen.has(key)) return false
@@ -506,6 +525,18 @@ const contextSections = computed<ContextSection[]>(() => props.steps
 const mergedContextSections = computed(() => mergeContextSections(contextSections.value))
 const toolExecutions = computed(() => buildExecutions(toolCallArgs.value, results.value))
 const latestContextSection = computed(() => [...mergedContextSections.value].reverse()[0])
+const hasFinalContext = computed(() => latestContextSection.value?.phase === 'gathered-context')
+const isRoutingWorkPending = computed(() => {
+  if (!props.isActive || !isRoutingStatus.value) return false
+  if (isTaskContext.value) return !rawToolCallArgs.value.some(isTaskContextCall)
+  if (isAttachmentIndexing.value) return !rawToolCallArgs.value.some(isAttachmentIndexCall)
+  return !hasFinalContext.value
+})
+
+function isRoutingStepLoading(step: ToolExecStep): boolean {
+  return isRoutingWorkPending.value && routingStatusSteps.value.at(-1) === step
+}
+
 const headerToolNames = computed(() => {
   if (latestContextSection.value?.phase === 'gathered-context') {
     const selectedRows = latestContextSection.value.rows
@@ -535,6 +566,7 @@ const executionSections = computed<ExecutionSection[]>(() => {
       iconClass: contextSectionIconClass(section),
       rows: section.rows,
       compactContext: true,
+      isLoading: props.isActive && index === mergedContextSections.value.length - 1 && section.phase === 'gathered-results',
     }))
   }
 
@@ -552,6 +584,7 @@ const headerLabel = computed(() => {
 
 const headerIcon = computed(() => {
   if (currentPhase.value.label === 'Denied') return 'lucide:shield-x'
+  if (isRoutingWorkPending.value) return 'svg-spinners:ring-resize'
   if (isRoutingStatus.value) return currentPhase.value.icon
   if (headerToolNames.value.length && !results.value.length) return props.isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash'
   if (allSuccess.value) return 'lucide:check-circle'
@@ -561,6 +594,7 @@ const headerIcon = computed(() => {
 
 const headerIconClass = computed(() => {
   if (currentPhase.value.label === 'Denied') return 'text-red-500 dark:text-red-400'
+  if (isRoutingWorkPending.value) return 'text-accent-500 dark:text-accent-300'
   if (isTaskContext.value) return 'text-cyan-600 dark:text-cyan-300'
   if (isRoutingStatus.value) return 'text-accent-500 dark:text-accent-300'
   if (headerToolNames.value.length && !results.value.length) return props.isActive ? 'text-accent-500 dark:text-accent-400' : 'text-theme-500'
@@ -685,7 +719,7 @@ const hasDisplayableActivity = computed(() =>
 
         <div class="mt-1.5 ml-3 space-y-2">
           <div
-            v-if="routingStatusSteps.length && (isToolRouting || mergedContextSections.length)"
+            v-if="routingStatusSteps.length && (isToolRouting || isMemoryRouting || mergedContextSections.length)"
             class="rounded-lg border border-sky-400/25 bg-sky-500/5 px-2.5 py-2 dark:border-sky-500/20 dark:bg-sky-500/5"
           >
             <div
@@ -694,7 +728,7 @@ const hasDisplayableActivity = computed(() =>
               class="flex items-center gap-2 py-1 text-[11px]"
             >
               <Icon
-                :icon="meta(step.status).icon"
+                :icon="isRoutingStepLoading(step) ? 'svg-spinners:ring-resize' : meta(step.status).icon"
                 class="h-3 w-3 shrink-0"
                 :class="meta(step.status).color"
               />
@@ -754,7 +788,7 @@ const hasDisplayableActivity = computed(() =>
               class="mb-1.5 flex items-center gap-1.5"
             >
               <Icon
-                :icon="section.icon || 'lucide:terminal'"
+                :icon="section.isLoading ? 'svg-spinners:ring-resize' : section.icon || 'lucide:terminal'"
                 class="h-3 w-3"
                 :class="section.iconClass"
               />
@@ -783,7 +817,7 @@ const hasDisplayableActivity = computed(() =>
                     v-if="execution.call && scoreForCall(execution.call)"
                     class="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1"
                     :class="scoreBadgeClass(execution)"
-                    :title="isMemoryCall(execution.call) ? 'Reranker match score' : 'Tool match score'"
+                    :title="scoreTitleForCall(execution.call)"
                   >
                     <Icon
                       icon="lucide:percent"

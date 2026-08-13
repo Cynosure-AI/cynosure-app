@@ -422,7 +422,11 @@ function emitMemoryRoutingSelection(
             folderPath: memory.spaceName,
             chunkIndex: memory.chunkIndex,
             content: memory.text,
-            rerankerScore: memory.rerankerScore,
+            // Multi-query retrieval is combined with reciprocal-rank fusion,
+            // which intentionally replaces incomparable reranker/dense scores.
+            // Send the score that actually produced the displayed rank.
+            matchScore: memory.rerankerScore ?? memory.score,
+            scoreType: memory.rerankerScore !== undefined ? 'reranker' : memory.scoreType,
         }),
     }))
 
