@@ -22,6 +22,20 @@ const copied = ref(false)
 
 const activeRound = computed(() => snapshot.value?.rounds[selectedRound.value] ?? null)
 const rawJson = computed(() => snapshot.value ? JSON.stringify(snapshot.value, null, 2) : '')
+const assistantResponse = computed(() => {
+  const response = activeRound.value?.response
+  if (!response) return null
+  return {
+    role: 'assistant',
+    content: response.content,
+    ...(response.thinking ? { thinking: response.thinking } : {}),
+    ...(response.toolCalls?.length ? { toolCalls: response.toolCalls } : {}),
+    ...(response.images?.length ? { images: response.images } : {}),
+    ...(response.usage ? { usage: response.usage } : {}),
+    ...(response.error ? { error: response.error } : {}),
+    completedAt: response.completedAt,
+  }
+})
 
 function close(): void {
   emit('update:modelValue', false)
@@ -194,20 +208,17 @@ watch(
           </button>
         </div>
 
-        <div
-          v-if="activeRound"
-          class="grid min-h-0 gap-4 lg:grid-cols-2"
-        >
+        <div v-if="activeRound">
           <section class="space-y-3">
             <h4 class="flex items-center gap-2 text-sm font-medium text-theme-200">
               <Icon
                 icon="lucide:arrow-up-to-line"
                 class="h-4 w-4 text-sky-400"
               />
-              Model input · {{ activeRound.request.messages.length }} messages · {{ activeRound.request.tools.length }} tools
+              Context sequence · {{ activeRound.request.messages.length }} input messages · {{ activeRound.request.tools.length }} tools
             </h4>
 
-            <div class="max-h-[48vh] space-y-2 overflow-y-auto pr-1">
+            <div class="max-h-[58vh] space-y-2 overflow-y-auto pr-1">
               <details
                 v-for="(message, index) in activeRound.request.messages"
                 :key="index"
@@ -219,6 +230,25 @@ watch(
                 </summary>
                 <pre class="debug-pre border-t border-theme-700 p-3">{{ pretty(message) }}</pre>
               </details>
+
+              <details
+                v-if="assistantResponse"
+                open
+                class="rounded-lg border border-emerald-500/30 bg-emerald-500/5"
+              >
+                <summary class="cursor-pointer px-3 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-400">
+                  {{ activeRound.request.messages.length + 1 }} · assistant response
+                  <span class="ml-1 normal-case font-normal text-theme-500">· returned after this input</span>
+                </summary>
+                <pre class="debug-pre border-t border-emerald-500/20 p-3">{{ pretty(assistantResponse) }}</pre>
+              </details>
+
+              <div
+                v-else
+                class="rounded-lg border border-dashed border-theme-700 p-5 text-center text-xs text-theme-500"
+              >
+                This round is still running. Refresh to append the assistant response.
+              </div>
 
               <details class="rounded-lg border border-theme-700 bg-theme-850">
                 <summary class="cursor-pointer px-3 py-2 text-xs font-semibold text-theme-400">
@@ -233,57 +263,6 @@ watch(
                 </summary>
                 <pre class="debug-pre border-t border-theme-700 p-3">{{ pretty({ model: activeRound.request.model, temperature: activeRound.request.temperature, maxTokens: activeRound.request.maxTokens, thinkingEnabled: activeRound.request.thinkingEnabled, reasoningEffort: activeRound.request.reasoningEffort }) }}</pre>
               </details>
-            </div>
-          </section>
-
-          <section class="space-y-3">
-            <h4 class="flex items-center gap-2 text-sm font-medium text-theme-200">
-              <Icon
-                icon="lucide:arrow-down-to-line"
-                class="h-4 w-4 text-emerald-400"
-              />
-              Provider output
-            </h4>
-            <div
-              v-if="activeRound.response"
-              class="max-h-[48vh] space-y-2 overflow-y-auto pr-1"
-            >
-              <details
-                open
-                class="rounded-lg border border-theme-700 bg-theme-850"
-              >
-                <summary class="cursor-pointer px-3 py-2 text-xs font-semibold text-theme-400">
-                  Assistant output
-                </summary>
-                <pre class="debug-pre border-t border-theme-700 p-3">{{ activeRound.response.content || '(empty)' }}</pre>
-              </details>
-              <details
-                open
-                class="rounded-lg border border-theme-700 bg-theme-850"
-              >
-                <summary class="cursor-pointer px-3 py-2 text-xs font-semibold text-theme-400">
-                  Provider-exposed thinking
-                </summary>
-                <pre class="debug-pre border-t border-theme-700 p-3">{{ activeRound.response.thinking || '(not returned)' }}</pre>
-              </details>
-              <details class="rounded-lg border border-theme-700 bg-theme-850">
-                <summary class="cursor-pointer px-3 py-2 text-xs font-semibold text-theme-400">
-                  Tool calls
-                </summary>
-                <pre class="debug-pre border-t border-theme-700 p-3">{{ pretty(activeRound.response.toolCalls || []) }}</pre>
-              </details>
-              <details class="rounded-lg border border-theme-700 bg-theme-850">
-                <summary class="cursor-pointer px-3 py-2 text-xs font-semibold text-theme-400">
-                  Usage and response metadata
-                </summary>
-                <pre class="debug-pre border-t border-theme-700 p-3">{{ pretty({ usage: activeRound.response.usage, images: activeRound.response.images, error: activeRound.response.error, completedAt: activeRound.response.completedAt }) }}</pre>
-              </details>
-            </div>
-            <div
-              v-else
-              class="rounded-lg border border-dashed border-theme-700 p-8 text-center text-xs text-theme-500"
-            >
-              This round is still running. Refresh to load provider output.
             </div>
           </section>
         </div>
