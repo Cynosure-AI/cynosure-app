@@ -70,6 +70,11 @@ describe('entity graph identity and provenance scope', () => {
             sourceContentHash: 'hash-1',
             sourceChunkIndex: 2,
         })
+        const formatted = graph.formatWalk(current)
+        expect(formatted).toContain('Source: people.md, part 3.')
+        expect(formatted).not.toContain('documentId=')
+        expect(formatted).not.toContain('revision=')
+        expect(formatted).not.toContain('hash-1')
 
         testDb.prepare("UPDATE memory_file_index SET content_hash = 'hash-2' WHERE document_id = 'doc-1'").run()
         const stale = graph.walk([edge.fromNodeId], 1, 5, 0, { sourceIdPrefixes: ['memory:space-a:'] })

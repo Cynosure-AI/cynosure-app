@@ -285,6 +285,10 @@ export const api = {
       get<{ ocrEnabled: boolean; ocrLanguage: string }>('/api/memory/parser/config'),
     configureParser: (opts: { ocrEnabled: boolean; ocrLanguage?: string }) =>
       post<{ success: boolean; ocrEnabled: boolean; ocrLanguage: string }>('/api/memory/parser/configure', opts),
+    getRetrievalConfig: () =>
+      get<{ resultCount: number }>('/api/memory/retrieval/config'),
+    configureRetrieval: (opts: { resultCount: number }) =>
+      post<{ success: boolean; resultCount: number }>('/api/memory/retrieval/configure', opts),
     getRerankerConfig: () =>
       get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number; minMatchThreshold: number }>('/api/memory/reranker/config'),
     configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number; minMatchThreshold: number }) =>

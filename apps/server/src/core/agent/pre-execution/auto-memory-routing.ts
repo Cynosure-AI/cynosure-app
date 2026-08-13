@@ -4,8 +4,8 @@ import { getMemoryAggregator, type AggregatedMemory } from '../../memory/memory-
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { RetrievedChunk } from '../../memory/parser.js'
+import { getMemoryRetrievalConfig } from '../../memory/retrieval-config.js'
 
-const AUTO_MEMORY_RETRIEVAL_COUNT = 12
 const MAX_SELECTED_MEMORIES = 5
 const TURN_CHAR_LIMIT = 200
 const CANDIDATE_CHAR_LIMIT = 1_200
@@ -65,11 +65,12 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         const primaryQuery = userQuery?.trim() || ''
         const contextualQuery = buildRouterQuery(primaryQuery, recentMessages)
         const retrievalQueries = Array.from(new Set([primaryQuery, contextualQuery].filter(Boolean)))
+        const retrievalCount = getMemoryRetrievalConfig().resultCount
         const candidates = filterAutoMemoryCandidates(fuseAutoMemoryResults(await Promise.all(
             retrievalQueries.map((query) => aggregator.aggregate(query, {
                 agentId,
                 spaceIds: memorySpaceIds,
-                permanentTopK: AUTO_MEMORY_RETRIEVAL_COUNT,
+                permanentTopK: retrievalCount,
                 includeGraph: true,
             })),
         )))
@@ -421,7 +422,11 @@ function emitMemoryRoutingSelection(
             folderPath: memory.spaceName,
             chunkIndex: memory.chunkIndex,
             content: memory.text,
-            rerankerScore: memory.rerankerScore,
+            // Multi-query retrieval is combined with reciprocal-rank fusion,
+            // which intentionally replaces incomparable reranker/dense scores.
+            // Send the score that actually produced the displayed rank.
+            matchScore: memory.rerankerScore ?? memory.score,
+            scoreType: memory.rerankerScore !== undefined ? 'reranker' : memory.scoreType,
         }),
     }))
 

@@ -52,11 +52,15 @@ const ocrEnabled = ref(false)
 const ocrLanguage = ref('eng')
 const ocrSaving = ref(false)
 
+// Retrieval state
+const retrievalResultCount = ref(10)
+const retrievalSaving = ref(false)
+
 // Reranker state
 const rerankEnabled = ref(false)
 const rerankProviderId = ref('')
 const rerankModel = ref('')
-const rerankCandidateCount = ref(40)
+const rerankCandidateCount = ref(50)
 const minMatchThresholdPercent = ref(30)
 const rerankSaving = ref(false)
 
@@ -142,6 +146,7 @@ onMounted(async () => {
   await loadEntityExtractionConfig()
   await loadChunkingConfig()
   await loadParserConfig()
+  await loadRetrievalConfig()
   await loadRerankerConfig()
 })
 
@@ -202,6 +207,22 @@ async function loadRerankerConfig() {
   } catch {
     rerankProviderId.value = openRouterProviders.value[0]?.id || ''
   }
+}
+
+async function loadRetrievalConfig() {
+  try {
+    const config = await api.memory.getRetrievalConfig()
+    retrievalResultCount.value = config.resultCount
+  } catch { /* defaults */ }
+}
+
+async function saveRetrieval() {
+  retrievalSaving.value = true
+  try {
+    const config = await api.memory.configureRetrieval({ resultCount: retrievalResultCount.value })
+    retrievalResultCount.value = config.resultCount
+  } catch { /* error handling */ }
+  retrievalSaving.value = false
 }
 
 async function loadEntityExtractionConfig() {
@@ -364,7 +385,7 @@ function cancelDrop() {
 <template>
   <div class="space-y-4">
     <SettingsSubheading
-      v-if="showAnySection(['embedding-model', 'entity-graph-extraction', 'reranker'])"
+      v-if="showAnySection(['embedding-model', 'retrieval', 'entity-graph-extraction', 'reranker'])"
       label="Retrieval"
     />
 
@@ -453,6 +474,53 @@ function cancelDrop() {
       </button>
     </BaseCard>
 
+    <!-- Automatic Retrieval -->
+    <BaseCard
+      v-if="showSection('retrieval')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
+          <Icon
+            icon="lucide:search"
+            class="w-5 h-5 text-theme-400"
+          />
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-theme-200">
+            Automatic Memory Retrieval
+          </h3>
+          <p class="text-xs text-theme-500 mt-0.5">
+            Control how many ranked memories each automatic retrieval query returns before context selection.
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs text-theme-400 mb-1">Results per Query</label>
+        <input
+          v-model.number="retrievalResultCount"
+          type="number"
+          min="1"
+          max="50"
+          step="1"
+          class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+        >
+        <p class="text-xs text-theme-500 mt-1">
+          Automatic routing may run both direct and contextual queries, deduplicate their results, then select up to 5 memories for chat context.
+        </p>
+      </div>
+
+      <button
+        :disabled="retrievalSaving"
+        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+        @click="saveRetrieval"
+      >
+        <span v-if="retrievalSaving">Saving...</span>
+        <span v-else>Save Retrieval Config</span>
+      </button>
+    </BaseCard>
+
     <!-- Reranking -->
     <BaseCard
       v-if="showSection('reranker')"
@@ -517,7 +585,7 @@ function cancelDrop() {
             class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
           >
           <p class="text-xs text-theme-500 mt-1">
-            More candidates can improve recall but increase rerank latency.
+            Candidates fetched before reranking. Keep this above Results per Query to give the reranker a wider pool; lower values are automatically raised to the requested result count.
           </p>
         </div>
 
