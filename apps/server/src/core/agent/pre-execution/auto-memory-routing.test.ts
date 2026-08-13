@@ -71,4 +71,52 @@ describe('automatic memory routing visibility', () => {
             expect.objectContaining({ permanentTopK: 18 }),
         )
     })
+
+    test('emits the fused retrieval score used for the visible memory match', async () => {
+        const candidate = {
+            id: 'memory-1',
+            text: 'Deployment uses the blue environment.',
+            source: 'memory',
+            sourceFile: 'deployment.md',
+            spaceName: 'Default',
+            chunkIndex: 0,
+            score: 0.72,
+            rerankerScore: 0.72,
+            scoreType: 'reranker' as const,
+        }
+        memoryMocks.aggregate.mockResolvedValue({ permanent: [candidate], graph: undefined })
+        memoryMocks.format.mockReturnValue('formatted memory')
+        const gateway = {
+            complete: vi.fn().mockResolvedValue({
+                toolCalls: [{
+                    function: {
+                        name: 'select_memory_context',
+                        arguments: JSON.stringify({ memoryIds: ['m1'] }),
+                    },
+                }],
+            }),
+        } as unknown as LLMGateway
+        const events: Array<Record<string, unknown>> = []
+        getEventBus().on('step:tools-chosen', (event) => events.push(event as Record<string, unknown>))
+
+        await applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-3',
+            userQuery: 'How do we deploy?',
+            recentMessages: [{ role: 'user', content: 'Continue the deployment setup.' }],
+            gateway,
+        })
+
+        const gathered = events.find((event) => {
+            const call = (event.toolCalls as Array<{ arguments: string }> | undefined)?.[0]
+            return call && JSON.parse(call.arguments).contextPhase === 'gathered-results'
+        })
+        const args = JSON.parse((gathered!.toolCalls as Array<{ arguments: string }>)[0].arguments)
+        expect(args).toMatchObject({
+            type: 'memory',
+            matchScore: 1,
+            scoreType: 'fusion',
+        })
+        expect(args).not.toHaveProperty('rerankerScore')
+    })
 })
