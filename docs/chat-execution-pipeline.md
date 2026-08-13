@@ -357,8 +357,8 @@ During execution, the agent can interact with memory via built-in tools:
 - `memory_retrieve_chunks` — Get specific chunks by file reference
 - `memory_semantic_search` — Query by semantic similarity
 - `memory_create` / `memory_append` — Create or append memory
-- `memory_replace_range` / `memory_replace_all` — Replace current memory using document revision checks
-- `memory_remove_range` / `memory_remove_all` — Forget current memory using document revision checks
+- `memory_replace_range` / `memory_replace_all` — Replace current memory using an opaque document reference
+- `memory_remove_range` / `memory_remove_all` — Forget current memory using an opaque document reference
 - `relationship_graph_search` — Find related relationships via graph traversal
 - `relationship_graph_assert` / `relationship_graph_delete` — Manage relationships
 

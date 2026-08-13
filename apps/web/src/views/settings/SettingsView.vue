@@ -111,6 +111,13 @@ const sections: SettingsSection[] = [
     terms: ['embedding', 'embeddings', 'embedding model', 'embedding provider', 'dimensions', 'detect dimensions', 'vector', 'mxbai', 're embed', 'drop vectors']
   },
   {
+    id: 'retrieval',
+    categoryId: 'memory',
+    label: 'Automatic Memory Retrieval',
+    description: 'Configure how many ranked memories automatic retrieval returns per query.',
+    terms: ['memory retrieval', 'automatic memory', 'results per query', 'top k', 'retrieval count', 'memory limit']
+  },
+  {
     id: 'reranker',
     categoryId: 'memory',
     label: 'Retrieval Reranker',
