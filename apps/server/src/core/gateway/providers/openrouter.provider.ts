@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import {
     BaseLLMProvider,
+    IncompleteModelResponseError,
     type LLMProviderConfig,
     type CompletionRequest,
     type CompletionResponse,
@@ -345,6 +346,11 @@ export class OpenRouterProvider extends BaseLLMProvider {
         return /support tool use|tool use|tools?/i.test(message) && /no endpoints?|unsupported|not support/i.test(message)
     }
 
+    private assertCompleteFinishReason(reason: string | null | undefined): void {
+        if (reason === 'stop' || reason === 'tool_calls' || reason === 'function_call') return
+        throw new IncompleteModelResponseError(reason || 'missing_finish_reason')
+    }
+
     /** Convert internal messages to OpenAI Chat Completions format */
     private formatMessages(
         messages: ChatMessage[]
@@ -494,6 +500,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
 
         const choice = response.choices[0]
+        this.assertCompleteFinishReason(choice?.finish_reason)
         const msg = choice?.message as unknown as Record<string, unknown> | undefined
         const rawContent = (msg?.content as string) || ''
         const { text, thinking: tagThinking } = this.separateThinking(rawContent)
@@ -615,6 +622,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
         // Track finish state — usage may arrive in a separate chunk AFTER
         // the finish_reason chunk (OpenAI-compatible streaming protocol).
         let finished = false
+        let terminalFinishReason: string | null = null
         let finishedUsage: StreamChunk['usage']
         const streamedImages = new Set<string>()
 
@@ -734,6 +742,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
             const finishReason = chunk.choices?.[0]?.finish_reason
             if (finishReason) {
                 finished = true
+                terminalFinishReason = finishReason
                 // Flush remaining tag buffer
                 if (tagBuffer) {
                     if (insideThink) {
@@ -748,6 +757,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
         // Yield done after the stream ends so we capture usage from post-finish chunks
         if (finished) {
+            this.assertCompleteFinishReason(terminalFinishReason)
             const completedToolCalls: ToolCall[] = Array.from(
                 toolCallAccumulator.values()
             ).map((tc) => ({
@@ -761,6 +771,8 @@ export class OpenRouterProvider extends BaseLLMProvider {
                 toolCalls: completedToolCalls.length > 0 ? completedToolCalls : undefined,
                 usage: finishedUsage
             }
+        } else {
+            throw new Error('Model stream ended before a finish reason was received.')
         }
     }
 

@@ -392,7 +392,7 @@ The `AgentExecutor` class implements the core tool-calling loop. It is used by c
 | `gateway`           | required                       | LLM gateway instance                                        |
 | `tools`             | required                       | Tool definitions available to the agent                     |
 | `hitl`              | `false`                        | Require human approval for tool calls                       |
-| `maxRounds`         | `50` (main) / `30` (sub-agent) | Maximum tool-calling rounds                                 |
+| `maxRounds`         | `50` (main chat/triggers), `30` (sub-agent) | Maximum tool-calling rounds                    |
 | `thinkingEnabled`   | `true`                         | Enable reasoning tokens                                     |
 | `saveMessages`      | `true`                         | Persist messages to DB                                      |
 | `streamMode`        | `'single'`                     | `'single'` (one streamId) or `'per-round'` (new per round)  |
@@ -412,13 +412,16 @@ AgentExecutor.run(messages)
   ├─ Broadcast: chat:stream-start
   │
   ├─ consumeStream(createStream(messages))
-  │   └─ Streams the LLM response (content + thinking + tool calls)
+  │   ├─ Streams the LLM response (content + thinking + tool calls)
+  │   └─ Requires an explicit terminal completion event; unexpected EOF fails the run
   │
   ├─ Collect: fullContent, fullThinking, toolCalls, usage
   │
   ├─ Broadcast: chat:stream-end (with usage, model, contextTokens)
   │
-  ├─ If no tool calls → return result immediately
+  ├─ If no tool calls and a durable plan is still open → one recovery continuation
+  ├─ If the plan remains open → fail as incomplete
+  ├─ If no tool calls and no plan work remains → return result immediately
   │
   ╔══════════════════════════════════════════════════════╗
   ║ PHASE 2: TOOL-CALLING LOOP (max maxRounds iterations)║
@@ -451,8 +454,13 @@ AgentExecutor.run(messages)
        │   └─ Applies sliding-window or compact strategy
        │
        ├─ Stream next LLM round with tool results
+       │   └─ Retry one model-only continuation after a transport interruption;
+       │      already-executed tools are not repeated
        │
        ├─ Collect: new content, thinking, toolCalls, usage
+       │
+       ├─ If no tool calls but plan work remains → one recovery continuation
+       │   └─ Fail as incomplete if the recovery also leaves work open
        │
        └─ [loop if new tool calls returned]
   │
