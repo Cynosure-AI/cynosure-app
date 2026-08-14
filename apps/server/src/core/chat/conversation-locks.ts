@@ -8,10 +8,11 @@ export function withConversationLock<T>(conversationId: string, fn: () => Promis
     const prev = conversationLocks.get(conversationId) ?? Promise.resolve()
     const next = prev.then(fn, fn)
     conversationLocks.set(conversationId, next)
-    next.finally(() => {
+    const release = () => {
         if (conversationLocks.get(conversationId) === next) {
             conversationLocks.delete(conversationId)
         }
-    })
+    }
+    void next.then(release, release)
     return next
 }
