@@ -310,6 +310,21 @@ export interface CompletionRequest {
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 }
 
+/**
+ * Raised when a provider returns a terminal response that is not a complete
+ * generation (for example a token limit or content filter). Callers should not
+ * present partial output as a successful assistant turn.
+ */
+export class IncompleteModelResponseError extends Error {
+  readonly reason: string
+
+  constructor(reason: string, detail?: string) {
+    super(detail ? `Model response incomplete (${reason}): ${detail}` : `Model response incomplete (${reason}).`)
+    this.name = 'IncompleteModelResponseError'
+    this.reason = reason
+  }
+}
+
 export interface CompletionResponse {
   id: string
   content: string

@@ -6,6 +6,7 @@ import {
 } from '@google/genai'
 import {
   BaseLLMProvider,
+  IncompleteModelResponseError,
   type LLMProviderConfig,
   type CompletionRequest,
   type CompletionResponse,
@@ -134,6 +135,11 @@ export class GoogleProvider extends BaseLLMProvider {
     return { systemInstruction, contents }
   }
 
+  private assertCompleteFinishReason(reason: string | undefined): void {
+    if (!reason || reason === 'STOP') return
+    throw new IncompleteModelResponseError(reason.toLowerCase())
+  }
+
   private formatTools(tools: ToolDefinition[]): FunctionDeclaration[] {
     return tools.map((t) => ({
       name: t.name,
@@ -180,6 +186,10 @@ export class GoogleProvider extends BaseLLMProvider {
       contents,
       config
     })
+
+    for (const candidate of response.candidates || []) {
+      this.assertCompleteFinishReason(candidate.finishReason)
+    }
 
     let content = ''
     const toolCalls: CompletionResponse['toolCalls'] = []
@@ -263,8 +273,11 @@ export class GoogleProvider extends BaseLLMProvider {
     const toolCalls: CompletionResponse['toolCalls'] = []
     let lastUsage: StreamChunk['usage']
     const images: string[] = []
+    let finishReason: string | undefined
 
     for await (const chunk of stream) {
+      const chunkFinishReason = chunk.candidates?.[0]?.finishReason
+      if (chunkFinishReason) finishReason = chunkFinishReason
       for (const part of chunk.candidates?.[0]?.content?.parts || []) {
         if (part.thought && part.text) {
           yield { thinking: part.text, done: false }
@@ -299,6 +312,8 @@ export class GoogleProvider extends BaseLLMProvider {
         }
       }
     }
+
+    this.assertCompleteFinishReason(finishReason)
 
     yield {
       done: true,

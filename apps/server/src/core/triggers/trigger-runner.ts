@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { getEventBus } from '../telemetry/event-bus.js'
-import { AgentExecutor, type AgentExecutorResult } from '../agent/agent-executor.js'
+import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS, type AgentExecutorResult } from '../agent/agent-executor.js'
 import { planExecution } from '../agent/pre-execution/execution-planner.js'
 import { closePlanningRun } from '../agent/planning-state.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
@@ -114,7 +114,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         broadcast,
         providerId: planned.providerId,
         model: planned.responseModel,
-        maxRounds: 10,
+        maxRounds: MAIN_AGENT_MAX_ROUNDS,
         thinkingEnabled: agent.thinkingEnabled !== false,
         reasoningEffort: agent.reasoningEffort,
         streamMode: 'per-round',
@@ -124,6 +124,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         agentIconUrl: agent.iconUrl || null,
         signal,
         planningRunId: planned.planningRunId,
+        isPrimaryExecutor: true,
     })
 
     const startMs = Date.now()

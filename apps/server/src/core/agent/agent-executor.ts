@@ -6,21 +6,32 @@ import { getEventBus } from '../telemetry/event-bus.js'
 import { getHITLGate } from './hitl-gate.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import type { ChatMessage, ToolCall, ToolDefinition, ToolResult, ToolResultContent } from '../gateway/providers/base.provider.js'
+import { IncompleteModelResponseError, type ChatMessage, type ToolCall, type ToolDefinition, type ToolResult, type ToolResultContent } from '../gateway/providers/base.provider.js'
 import type { ReasoningEffort } from '@shared/types'
 import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 import { isPlanningToolName } from '../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
-import { reconcilePlanningAfterToolBatch } from './planning-state.js'
+import { getPlanningState, reconcilePlanningAfterToolBatch } from './planning-state.js'
 import { validateToolArguments } from '../tools/tool-argument-validator.js'
 
 /** Maximum tool-use rounds for the main (orchestrator) agent per request. */
 export const MAIN_AGENT_MAX_ROUNDS = 50
 
+/** One retry for model-only continuation rounds after tools have already run. */
+const MODEL_ROUND_MAX_ATTEMPTS = 2
+const OPEN_PLAN_RECOVERY_ATTEMPTS = 1
+
 export class MaxToolRoundsExceededError extends Error {
     constructor(maxRounds: number) {
         super(`Agent exceeded the maximum of ${maxRounds} tool-calling rounds before producing a final response.`)
         this.name = 'MaxToolRoundsExceededError'
+    }
+}
+
+export class IncompletePlanningRunError extends Error {
+    constructor() {
+        super('Agent stopped while its planning task list still contained unfinished work.')
+        this.name = 'IncompletePlanningRunError'
     }
 }
 
@@ -207,6 +218,7 @@ export class AgentExecutor {
         let contextTokens = this.config.initialContextEstimate
         let pendingToolCalls: ToolCall[] | undefined
         let toolRounds = 0
+        let openPlanRecoveryAttempts = 0
 
         const primaryStreamId = this._streamId
         let activeStreamId = primaryStreamId
@@ -234,6 +246,31 @@ export class AgentExecutor {
         usage = initialResult.usage
         contextTokens = maxTokens(contextTokens, usage?.totalTokens)
         this.publishContextUsage(conversationId, usage, contextTokens)
+
+        if (!pendingToolCalls?.length && this.hasOpenPlanningItems()) {
+            openPlanRecoveryAttempts++
+            currentMessages = this.withOpenPlanRecoveryPrompt(currentMessages, fullContent)
+            let recoveryResult: Awaited<ReturnType<AgentExecutor['streamLLMRound']>>
+            try {
+                recoveryResult = await this.streamLLMRound(currentMessages, activeStreamId)
+            } catch (err) {
+                this.broadcastStreamEnd(activeStreamId, { usage, model: this.config.model, contextTokens })
+                throw err
+            }
+            fullContent = recoveryResult.content
+            fullThinking += recoveryResult.thinking
+            lastRoundThinking = recoveryResult.thinking
+            collectedImages.push(...recoveryResult.images)
+            pendingToolCalls = recoveryResult.toolCalls
+            contextTokens = maxTokens(contextTokens, recoveryResult.usage?.totalTokens)
+            usage = accumulateUsage(usage, recoveryResult.usage)
+            if (this.config.streamMode === 'per-round') activeStreamId = recoveryResult.streamId
+            this.publishContextUsage(conversationId, usage, contextTokens)
+            if (!pendingToolCalls?.length && this.hasOpenPlanningItems()) {
+                this.broadcastStreamEnd(activeStreamId, { usage, model: this.config.model, contextTokens })
+                throw new IncompletePlanningRunError()
+            }
+        }
 
         // No tool calls → done
         if (!pendingToolCalls?.length) {
@@ -360,6 +397,25 @@ export class AgentExecutor {
                 if (this.config.streamMode === 'per-round') activeStreamId = roundResult.streamId
 
                 this.publishContextUsage(conversationId, usage, contextTokens)
+
+                while (!pendingToolCalls?.length && this.hasOpenPlanningItems()) {
+                    if (openPlanRecoveryAttempts >= OPEN_PLAN_RECOVERY_ATTEMPTS) {
+                        throw new IncompletePlanningRunError()
+                    }
+                    openPlanRecoveryAttempts++
+                    currentMessages = this.withOpenPlanRecoveryPrompt(currentMessages, fullContent)
+
+                    const recoveryResult = await this.streamLLMRound(currentMessages, activeStreamId)
+                    fullContent = recoveryResult.content
+                    fullThinking += recoveryResult.thinking
+                    lastRoundThinking = recoveryResult.thinking
+                    collectedImages.push(...recoveryResult.images)
+                    pendingToolCalls = recoveryResult.toolCalls
+                    contextTokens = maxTokens(contextTokens, recoveryResult.usage?.totalTokens)
+                    usage = accumulateUsage(usage, recoveryResult.usage)
+                    if (this.config.streamMode === 'per-round') activeStreamId = recoveryResult.streamId
+                    this.publishContextUsage(conversationId, usage, contextTokens)
+                }
             }
             this.config.signal?.throwIfAborted()
             if (pendingToolCalls?.length) {
@@ -550,8 +606,8 @@ export class AgentExecutor {
 
     /**
      * Consume a streaming LLM response, broadcasting chunks and accumulating results.
-     * Returns partial state on error (via `error` field) so callers can handle
-     * errors differently (Phase 1 re-throws, tool rounds recover gracefully).
+     * Returns partial state on error (via `error` field) so callers can close the
+     * active stream and either retry a model-only continuation or fail the run.
      */
     private async consumeStream(
         stream: AsyncIterable<import('../gateway/providers/base.provider.js').StreamChunk>,
@@ -570,6 +626,7 @@ export class AgentExecutor {
         const images: string[] = []
         let toolCalls: ToolCall[] | undefined
         let usage: Usage
+        let completed = false
 
         try {
             for await (const chunk of stream) {
@@ -597,10 +654,24 @@ export class AgentExecutor {
                 }
                 if (chunk.toolCalls?.length) toolCalls = chunk.toolCalls
                 if (chunk.usage) usage = chunk.usage
-                if (chunk.done) break
+                if (chunk.done) {
+                    completed = true
+                    break
+                }
             }
         } catch (err) {
             return { content, thinking, images, toolCalls, usage, error: err as Error }
+        }
+
+        if (!completed) {
+            return {
+                content,
+                thinking,
+                images,
+                toolCalls,
+                usage,
+                error: new Error('Model stream ended before a terminal completion event.'),
+            }
         }
 
         return { content, thinking, images, toolCalls, usage }
@@ -625,31 +696,54 @@ export class AgentExecutor {
         const { conversationId } = this.config
 
         let streamId = currentStreamId
-        if (this.config.streamMode === 'per-round') {
-            streamId = nanoid()
-            this.broadcastStreamStart(streamId)
-        } else {
-            this.config.broadcast(`${this._sp}-reset`, { streamId, conversationId })
-        }
+        let lastError: Error | undefined
 
-        const result = await this.consumeStream(this.createStream(messages), streamId)
+        for (let attempt = 1; attempt <= MODEL_ROUND_MAX_ATTEMPTS; attempt++) {
+            if (this.config.streamMode === 'per-round') {
+                streamId = nanoid()
+                this.broadcastStreamStart(streamId)
+            } else {
+                this.config.broadcast(`${this._sp}-reset`, { streamId, conversationId })
+            }
 
-        if (result.error) {
-            if (this.config.signal?.aborted) {
+            const result = await this.consumeStream(this.createStream(messages), streamId)
+
+            if (!result.error) {
                 if (this.config.streamMode === 'per-round') {
-                    this.broadcastStreamEnd(streamId, { cancelled: true })
+                    this.broadcastStreamEnd(streamId)
                 }
+                return {
+                    content: result.content,
+                    thinking: result.thinking,
+                    images: result.images,
+                    toolCalls: result.toolCalls,
+                    usage: result.usage,
+                    streamId,
+                }
+            }
+
+            lastError = result.error
+            const cancelled = this.config.signal?.aborted === true
+            if (this.config.streamMode === 'per-round') {
+                this.broadcastStreamEnd(streamId, { cancelled })
+            }
+            if (cancelled) throw result.error
+
+            // Deterministic provider terminal states will not improve if the exact
+            // request is repeated. Transport failures may be routed successfully on
+            // one fresh model-only attempt; already-executed tools are not repeated.
+            if (result.error instanceof IncompleteModelResponseError) {
                 throw result.error
             }
-            // Transient stream failure — return partial content so the loop exits gracefully
-            if (!result.content) result.content = `[Stream interrupted: ${result.error.message}]`
+            if (attempt < MODEL_ROUND_MAX_ATTEMPTS) {
+                console.warn(
+                    `[agent] Model continuation interrupted; retrying (${attempt}/${MODEL_ROUND_MAX_ATTEMPTS - 1}):`,
+                    result.error.message,
+                )
+            }
         }
 
-        if (this.config.streamMode === 'per-round') {
-            this.broadcastStreamEnd(streamId)
-        }
-
-        return { content: result.content, thinking: result.thinking, images: result.images, toolCalls: result.toolCalls, usage: result.usage, streamId }
+        throw lastError ?? new Error('Model continuation failed without an error.')
     }
 
     /**
@@ -867,6 +961,31 @@ export class AgentExecutor {
             success,
             note: success ? undefined : failed?.output,
         })
+    }
+
+    private hasOpenPlanningItems(): boolean {
+        const runId = this.config.planningRunId
+        if (!runId || !this.config.isPrimaryExecutor) return false
+        const state = getPlanningState(runId)
+        if (!state || state.status !== 'running') return false
+        return state.items.some((item) => item.status === 'pending' || item.status === 'in_progress')
+    }
+
+    private withOpenPlanRecoveryPrompt(messages: ChatMessage[], assistantContent: string): ChatMessage[] {
+        return this.maybeTrimContext([
+            ...messages,
+            { role: 'assistant', content: assistantContent || '' },
+            {
+                role: 'user',
+                content: [
+                    '[Orchestrator recovery]',
+                    'Your durable task list still contains pending or in-progress work.',
+                    'Continue the task now. Use the available tools for any remaining work.',
+                    'Before giving the final response, mark every task completed, blocked, or cancelled.',
+                    'Do not merely describe what you will do next.',
+                ].join('\n'),
+            },
+        ])
     }
 
     /** Save the assistant's tool-calling message (thinking + content + tool_calls) to DB. */

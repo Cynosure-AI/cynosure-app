@@ -334,7 +334,7 @@ export function reconcilePlanningAfterToolBatch(
   return state
 }
 
-function getPlanningState(runId: string): PlanningState | null {
+export function getPlanningState(runId: string): PlanningState | null {
   const row = getDb().prepare(
     `SELECT id, conversation_id, status, definition_json, result_json, iterations, created_at, updated_at, completed_at
      FROM tasks WHERE id = ?`
