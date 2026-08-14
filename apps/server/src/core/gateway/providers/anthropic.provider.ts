@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import {
   BaseLLMProvider,
+  IncompleteModelResponseError,
   type LLMProviderConfig,
   type CompletionRequest,
   type CompletionResponse,
@@ -145,6 +146,11 @@ export class AnthropicProvider extends BaseLLMProvider {
     return { system, messages: formatted }
   }
 
+  private assertCompleteStopReason(reason: Anthropic.Messages.StopReason | null): void {
+    if (reason === 'end_turn' || reason === 'tool_use' || reason === 'stop_sequence') return
+    throw new IncompleteModelResponseError(reason || 'missing_stop_reason')
+  }
+
   private formatTools(
     tools: import('./base.provider.js').ToolDefinition[]
   ): Anthropic.Tool[] {
@@ -178,6 +184,7 @@ export class AnthropicProvider extends BaseLLMProvider {
     }
 
     const response = await this.client.messages.create(params)
+    this.assertCompleteStopReason(response.stop_reason)
 
     let content = ''
     let thinking = ''
@@ -246,6 +253,7 @@ export class AnthropicProvider extends BaseLLMProvider {
 
     let inputTokens = 0
     let outputTokens = 0
+    let stopReason: Anthropic.Messages.StopReason | null = null
 
     for await (const event of stream) {
       if (event.type === 'message_start') {
@@ -278,9 +286,11 @@ export class AnthropicProvider extends BaseLLMProvider {
 
       if (event.type === 'message_delta') {
         outputTokens = event.usage.output_tokens
+        stopReason = event.delta.stop_reason
       }
 
       if (event.type === 'message_stop') {
+        this.assertCompleteStopReason(stopReason)
         const toolCalls =
           toolCallBuffers.size > 0
             ? Array.from(toolCallBuffers.values()).map((buf) => ({

@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import { AgentExecutor, MaxToolRoundsExceededError } from './agent-executor.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import type { StreamChunk, ToolDefinition } from '../gateway/providers/base.provider.js'
+import { IncompleteModelResponseError, type StreamChunk, type ToolDefinition } from '../gateway/providers/base.provider.js'
 
 describe('AgentExecutor cancellation', () => {
   test('passes cancellation to an in-flight tool and stops before another model round', async () => {
@@ -57,6 +57,134 @@ describe('AgentExecutor cancellation', () => {
 })
 
 describe('AgentExecutor tool-loop safety', () => {
+  test('keeps the completed placeholder for a successful empty post-tool response', async () => {
+    const tool: ToolDefinition = {
+      name: 'check', description: 'check', parameters: { type: 'object', properties: {} }, timeout: 1_000,
+      execute: async () => ({ success: true, output: 'no notification needed' }),
+    }
+    let call = 0
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      if (call++ === 0) {
+        yield { toolCalls: [{ id: 'check-1', type: 'function', function: { name: 'check', arguments: '{}' } }], done: true }
+        return
+      }
+      yield { done: true }
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [tool], conversationId: 'empty-success', broadcast: vi.fn(), model: 'test',
+      saveMessages: false, emitEvents: false,
+    })
+
+    const result = await executor.run([{ role: 'user', content: 'check quietly' }])
+
+    expect(result.content).toBe('(completed)')
+  })
+
+  test('retries an interrupted post-tool model round without repeating the tool', async () => {
+    const execute = vi.fn(async () => ({ success: true, output: 'tool result' }))
+    const tool: ToolDefinition = {
+      name: 'lookup', description: 'lookup', parameters: { type: 'object', properties: {} }, timeout: 1_000,
+      execute,
+    }
+    let call = 0
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      call++
+      if (call === 1) {
+        yield { toolCalls: [{ id: 'lookup-1', type: 'function', function: { name: 'lookup', arguments: '{}' } }], done: true }
+        return
+      }
+      if (call === 2) {
+        yield { content: 'partial response', done: false }
+        throw new Error('Upstream idle timeout exceeded')
+      }
+      yield { content: 'finished after retry', done: true }
+    })())
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [tool], conversationId: 'retry-round', broadcast: vi.fn(), model: 'test',
+      saveMessages: false, emitEvents: false,
+    })
+
+    const result = await executor.run([{ role: 'user', content: 'go' }])
+
+    expect(result.content).toBe('finished after retry')
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect(streamComplete).toHaveBeenCalledTimes(3)
+    expect(warn).toHaveBeenCalledOnce()
+    warn.mockRestore()
+  })
+
+  test('fails after repeated post-tool stream interruption instead of completing', async () => {
+    const execute = vi.fn(async () => ({ success: true, output: 'tool result' }))
+    const tool: ToolDefinition = {
+      name: 'lookup', description: 'lookup', parameters: { type: 'object', properties: {} }, timeout: 1_000,
+      execute,
+    }
+    let call = 0
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      if (call++ === 0) {
+        yield { toolCalls: [{ id: 'lookup-1', type: 'function', function: { name: 'lookup', arguments: '{}' } }], done: true }
+        return
+      }
+      throw new Error('Upstream idle timeout exceeded')
+    })())
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [tool], conversationId: 'failed-retry', broadcast: vi.fn(), model: 'test',
+      saveMessages: false, emitEvents: false,
+    })
+
+    await expect(executor.run([{ role: 'user', content: 'go' }]))
+      .rejects.toThrow('Upstream idle timeout exceeded')
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect(streamComplete).toHaveBeenCalledTimes(3)
+    warn.mockRestore()
+  })
+
+  test('does not retry a deterministic incomplete provider response', async () => {
+    const execute = vi.fn(async () => ({ success: true, output: 'tool result' }))
+    const tool: ToolDefinition = {
+      name: 'lookup', description: 'lookup', parameters: { type: 'object', properties: {} }, timeout: 1_000,
+      execute,
+    }
+    let call = 0
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      if (call++ === 0) {
+        yield { toolCalls: [{ id: 'lookup-1', type: 'function', function: { name: 'lookup', arguments: '{}' } }], done: true }
+        return
+      }
+      throw new IncompleteModelResponseError('max_tokens')
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [tool], conversationId: 'incomplete', broadcast: vi.fn(), model: 'test',
+      saveMessages: false, emitEvents: false,
+    })
+
+    await expect(executor.run([{ role: 'user', content: 'go' }]))
+      .rejects.toBeInstanceOf(IncompleteModelResponseError)
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect(streamComplete).toHaveBeenCalledTimes(2)
+  })
+
+  test('rejects an initial stream that ends without a terminal event', async () => {
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      yield { content: 'partial', done: false }
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [], conversationId: 'unexpected-eof', broadcast: vi.fn(), model: 'test',
+      saveMessages: false, emitEvents: false,
+    })
+
+    await expect(executor.run([{ role: 'user', content: 'go' }]))
+      .rejects.toThrow('before a terminal completion event')
+    expect(streamComplete).toHaveBeenCalledOnce()
+  })
+
   test('validates tool arguments before execution', async () => {
     const execute = vi.fn(async () => ({ success: true, output: 'unexpected' }))
     const tool: ToolDefinition = {

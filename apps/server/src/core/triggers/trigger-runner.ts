@@ -124,6 +124,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         agentIconUrl: agent.iconUrl || null,
         signal,
         planningRunId: planned.planningRunId,
+        isPrimaryExecutor: true,
     })
 
     const startMs = Date.now()
