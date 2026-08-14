@@ -412,13 +412,16 @@ AgentExecutor.run(messages)
   ├─ Broadcast: chat:stream-start
   │
   ├─ consumeStream(createStream(messages))
-  │   └─ Streams the LLM response (content + thinking + tool calls)
+  │   ├─ Streams the LLM response (content + thinking + tool calls)
+  │   └─ Requires an explicit terminal completion event; unexpected EOF fails the run
   │
   ├─ Collect: fullContent, fullThinking, toolCalls, usage
   │
   ├─ Broadcast: chat:stream-end (with usage, model, contextTokens)
   │
-  ├─ If no tool calls → return result immediately
+  ├─ If no tool calls and a durable plan is still open → one recovery continuation
+  ├─ If the plan remains open → fail as incomplete
+  ├─ If no tool calls and no plan work remains → return result immediately
   │
   ╔══════════════════════════════════════════════════════╗
   ║ PHASE 2: TOOL-CALLING LOOP (max maxRounds iterations)║
@@ -451,8 +454,13 @@ AgentExecutor.run(messages)
        │   └─ Applies sliding-window or compact strategy
        │
        ├─ Stream next LLM round with tool results
+       │   └─ Retry one model-only continuation after a transport interruption;
+       │      already-executed tools are not repeated
        │
        ├─ Collect: new content, thinking, toolCalls, usage
+       │
+       ├─ If no tool calls but plan work remains → one recovery continuation
+       │   └─ Fail as incomplete if the recovery also leaves work open
        │
        └─ [loop if new tool calls returned]
   │

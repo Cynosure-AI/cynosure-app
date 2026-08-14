@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import {
   BaseLLMProvider,
+  IncompleteModelResponseError,
   type LLMProviderConfig,
   type CompletionRequest,
   type CompletionResponse,
@@ -217,15 +218,23 @@ export class OpenAIProvider extends BaseLLMProvider {
       options: { signal?: AbortSignal }
     ) => Promise<{
       id: string
+      status?: 'completed' | 'failed' | 'in_progress' | 'cancelled' | 'queued' | 'incomplete'
       output_text: string
       output: Array<{ type: string; call_id?: string; name?: string; arguments?: string; result?: string | null; id?: string }>
       model: string
+      error?: { message?: string } | null
+      incomplete_details?: { reason?: string } | null
       usage?: { input_tokens: number; output_tokens: number; total_tokens: number }
     }>
 
     const response = await (this.client.responses.create as ResponsesCreate)(params, {
       signal: request.signal
     })
+
+    if (response.status && response.status !== 'completed') {
+      const reason = response.incomplete_details?.reason || response.status
+      throw new IncompleteModelResponseError(reason, response.error?.message)
+    }
 
     const content = response.output_text || ''
     const toolCalls: ToolCall[] = []
@@ -300,9 +309,13 @@ export class OpenAIProvider extends BaseLLMProvider {
         item_id?: string
         item?: { type: string; call_id?: string; name?: string; arguments?: string; result?: string | null; id?: string }
         response?: {
+          status?: 'completed' | 'failed' | 'in_progress' | 'cancelled' | 'queued' | 'incomplete'
           usage?: { input_tokens: number; output_tokens: number; total_tokens: number }
           error?: { message?: string }
+          incomplete_details?: { reason?: string } | null
         }
+        error?: { message?: string }
+        message?: string
       }>
     }).stream(params, { signal: request.signal })
 
@@ -417,6 +430,15 @@ export class OpenAIProvider extends BaseLLMProvider {
         case 'response.failed': {
           const errMsg = event.response?.error?.message || 'Response generation failed'
           throw new Error(errMsg)
+        }
+
+        case 'response.incomplete': {
+          const reason = event.response?.incomplete_details?.reason || 'incomplete'
+          throw new IncompleteModelResponseError(reason, event.response?.error?.message)
+        }
+
+        case 'error': {
+          throw new Error(event.error?.message || event.message || 'Response stream failed')
         }
       }
     }
