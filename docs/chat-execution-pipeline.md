@@ -392,7 +392,7 @@ The `AgentExecutor` class implements the core tool-calling loop. It is used by c
 | `gateway`           | required                       | LLM gateway instance                                        |
 | `tools`             | required                       | Tool definitions available to the agent                     |
 | `hitl`              | `false`                        | Require human approval for tool calls                       |
-| `maxRounds`         | `50` (main) / `30` (sub-agent) | Maximum tool-calling rounds                                 |
+| `maxRounds`         | `50` (main chat/triggers), `30` (sub-agent) | Maximum tool-calling rounds                    |
 | `thinkingEnabled`   | `true`                         | Enable reasoning tokens                                     |
 | `saveMessages`      | `true`                         | Persist messages to DB                                      |
 | `streamMode`        | `'single'`                     | `'single'` (one streamId) or `'per-round'` (new per round)  |
