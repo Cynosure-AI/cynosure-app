@@ -5,7 +5,7 @@ import { COMPACT_EVENT_PREFIX } from '../agent/context-compactor.js'
 import { extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
 import { listConversationFileAttachmentsByMessage } from '../artifacts/attachment-rag.js'
 import { readFileAttachmentText, type FileAttachmentArtifact } from '../artifacts/file-artifacts.js'
-import type { ChatMessage, ContentPart } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, ContentPart, ToolCall } from '../gateway/providers/base.provider.js'
 
 export interface ChatHistoryRow {
     id: string
@@ -127,7 +127,7 @@ export function buildConversationHistory(input: {
     const messages = filteredRows.map((row) => ({
         role: row.role as ChatMessage['role'],
         content: buildHistoryContent(row, inlineAttachmentTextLimit, attachmentsByMessage.get(row.id) || []),
-        toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
+        toolCalls: parseToolCalls(row.tool_calls_json),
         toolCallId: row.tool_call_id || undefined
     }))
 
@@ -212,5 +212,15 @@ function parseJsonArray<T>(json: string | null): T[] {
         return Array.isArray(parsed) ? parsed : []
     } catch {
         return []
+    }
+}
+
+function parseToolCalls(json: string | null): ToolCall[] | undefined {
+    if (!json) return undefined
+    try {
+        const parsed = JSON.parse(json) as unknown
+        return Array.isArray(parsed) ? parsed as ToolCall[] : undefined
+    } catch {
+        return undefined
     }
 }

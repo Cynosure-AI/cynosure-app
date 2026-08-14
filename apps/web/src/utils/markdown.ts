@@ -105,7 +105,7 @@ function rewriteLocalFilePaths(html: string): string {
       .replace(
         /(<img\s[^>]*\bsrc=["'])((?:file:\/\/)?\/[^"']+)(["'])/gi,
         (_match, before, src, after) => {
-            const cleanPath = src.replace(/^file:\/\//, '')
+            const cleanPath = decodeUrlPath(src.replace(/^file:\/\//, ''))
             if (cleanPath.startsWith('/api/') || cleanPath.startsWith('/ws')) return _match
             return `${before}/api/files?path=${encodeURIComponent(cleanPath)}${after}`
         }
@@ -113,11 +113,19 @@ function rewriteLocalFilePaths(html: string): string {
       .replace(
         /(<a\s[^>]*\bhref=["'])((?:file:\/\/)?\/[^"']+\.(?:pdf|docx?|odt|rtf|txt|md))(["'])/gi,
         (_match, before, href, after) => {
-            const cleanPath = href.replace(/^file:\/\//, '')
+            const cleanPath = decodeUrlPath(href.replace(/^file:\/\//, ''))
             if (cleanPath.startsWith('/api/') || cleanPath.startsWith('/ws')) return _match
             return `${before}/api/files?path=${encodeURIComponent(cleanPath)}${after}`
         }
       )
+}
+
+function decodeUrlPath(path: string): string {
+    try {
+        return decodeURIComponent(path)
+    } catch {
+        return path
+    }
 }
 
 export function renderMarkdown(text: string): string {
@@ -126,12 +134,13 @@ export function renderMarkdown(text: string): string {
         // Assistant and tool output is untrusted. Marked intentionally preserves raw
         // HTML, so rendering its output directly would allow event handlers and unsafe
         // URL schemes to execute in the application origin.
-        return DOMPurify.sanitize(rewriteLocalFilePaths(html), {
+        const sanitized = DOMPurify.sanitize(rewriteLocalFilePaths(html), {
             USE_PROFILES: { html: true, svg: true },
             ADD_ATTR: ['target'],
             FORBID_TAGS: ['form', 'input', 'textarea', 'select', 'option', 'style'],
             FORBID_ATTR: ['style'],
         })
+        return hardenSanitizedHtml(sanitized)
     } catch {
         // The fallback is also rendered with v-html, so it must be escaped.
         return text
@@ -141,6 +150,35 @@ export function renderMarkdown(text: string): string {
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;')
     }
+}
+
+/**
+ * Keep output inert even in runtimes where DOMPurify cannot enable its full
+ * DOM feature set (for example, lightweight webviews and test DOMs).
+ */
+function hardenSanitizedHtml(html: string): string {
+    const template = document.createElement('template')
+    template.innerHTML = html
+    template.content.querySelectorAll('script, form, input, textarea, select, option, style, iframe, object, embed')
+        .forEach((element) => element.remove())
+
+    for (const element of template.content.querySelectorAll('*')) {
+        for (const attribute of Array.from(element.attributes)) {
+            const name = attribute.name.toLowerCase()
+            if (name.startsWith('on') || name === 'style' || name === 'srcdoc') {
+                element.removeAttribute(attribute.name)
+                continue
+            }
+            if (name === 'href' || name === 'src' || name === 'xlink:href') {
+                const normalized = attribute.value.replace(/[\u0000-\u0020]+/g, '').toLowerCase()
+                if (/^(?:javascript|vbscript|data:text\/html):/.test(normalized)) {
+                    element.removeAttribute(attribute.name)
+                }
+            }
+        }
+    }
+
+    return template.innerHTML
 }
 
 export function handleMarkdownClick(e: MouseEvent): void {
