@@ -31,6 +31,10 @@ let unsubNotification: (() => void) | undefined;
 let unsubMemoryJobUpdate: (() => void) | undefined;
 let unsubHITLRequest: (() => void) | undefined;
 let unsubExecutionUpdate: (() => void) | undefined;
+let activityLoadPromise: Promise<void> | undefined;
+let liveWorkRefreshPromise: Promise<void> | undefined;
+let activityLoadQueued = false;
+let activityLoadGeneration = 0;
 
 const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "instance", label: "Active", icon: "lucide:square-activity" },
@@ -235,7 +239,24 @@ function totalsWithLiveWork(totals: ActivityTotalsByKind): ActivityTotalsByKind 
   };
 }
 
-async function loadActivity() {
+async function refreshLiveWork(): Promise<void> {
+  if (liveWorkRefreshPromise) return liveWorkRefreshPromise;
+
+  const requests: Promise<unknown>[] = [
+    api.instances.list().then((instances) => {
+      activeInstances.value = instances;
+    }),
+    memoryJobsStore.refresh(),
+  ];
+
+  const refresh = Promise.allSettled(requests).then(() => undefined).finally(() => {
+    if (liveWorkRefreshPromise === refresh) liveWorkRefreshPromise = undefined;
+  });
+  liveWorkRefreshPromise = refresh;
+  return refresh;
+}
+
+async function performActivityLoad(generation: number): Promise<void> {
   if (selectedKinds.value.length === 0) {
     items.value = [];
     hasMore.value = false;
@@ -243,26 +264,40 @@ async function loadActivity() {
     loading.value = false;
     return;
   }
+
+  // Live-work requests enrich the timeline but should not hold up its first paint.
+  void refreshLiveWork();
   try {
     loading.value = true;
-    const [activityResult, instancesResult] = await Promise.allSettled([
-      api.activity.list(activityRequestOptions(0)),
-      api.instances.list(),
-      memoryJobsStore.refresh(),
-    ]);
-    if (instancesResult.status === "fulfilled") activeInstances.value = instancesResult.value;
-    if (activityResult.status === "fulfilled") {
-      const response = activityResult.value;
-      items.value = response.items;
-      hasMore.value = Boolean(response.hasMore);
-      totalItems.value = response.total ?? response.items.length;
-    }
-    if (activityResult.status === "fulfilled") {
-      serverTotalsByKind.value = activityResult.value.totalsByKind ?? emptyTotalsByKind();
-    }
+    const response = await api.activity.list(activityRequestOptions(0));
+    if (generation !== activityLoadGeneration) return;
+    items.value = response.items;
+    hasMore.value = Boolean(response.hasMore);
+    totalItems.value = response.total ?? response.items.length;
+    serverTotalsByKind.value = response.totalsByKind ?? emptyTotalsByKind();
+  } catch {
+    // Keep the last successful page visible during a transient refresh failure.
   } finally {
-    loading.value = false;
+    if (generation === activityLoadGeneration) loading.value = false;
   }
+}
+
+function loadActivity(): Promise<void> {
+  const generation = ++activityLoadGeneration;
+  if (activityLoadPromise) {
+    activityLoadQueued = true;
+    return activityLoadPromise;
+  }
+
+  const load = performActivityLoad(generation).finally(() => {
+    if (activityLoadPromise === load) activityLoadPromise = undefined;
+    if (activityLoadQueued) {
+      activityLoadQueued = false;
+      void loadActivity();
+    }
+  });
+  activityLoadPromise = load;
+  return load;
 }
 
 async function loadMoreActivity() {
@@ -645,63 +680,63 @@ watch(searchQuery, () => {
 
     <div
       v-else
-      class="mx-auto max-w-6xl "
+      class="mx-auto max-w-6xl"
     >
       <section
         v-for="group in groupedItems"
         :key="group.label"
-        class="mb-6"
+        class="mb-3"
       >
-        <div class="sticky -top-6 z-[5]   flex items-center gap-3 bg-theme-900 py-4 text-[11px] font-bold uppercase tracking-[0.065em] text-theme-500">
-          <span class="text-lg">{{ group.label }}</span>
+        <div class="sticky -top-6 z-[5] flex items-center gap-2 bg-theme-900 py-2.5 text-[10px] font-bold uppercase tracking-[0.065em] text-theme-500">
+          <span class="text-[15px]">{{ group.label }}</span>
           <span class="font-semibold text-theme-600">{{ group.items.length }} events</span>
         </div>
 
-        <div class="flex flex-col gap-2">
+        <div class="flex flex-col gap-1.5">
           <article
             v-for="item in group.items"
             :key="item.id"
-            class="grid grid-cols-[2rem_minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-[4.2rem_2rem_minmax(0,1fr)]"
+            class="activity-row grid grid-cols-[1.75rem_minmax(0,1fr)] items-stretch gap-2.5 sm:grid-cols-[3.8rem_1.75rem_minmax(0,1fr)]"
             :class="[kindClass(item), {
               'cursor-pointer': item.conversationId || item.agentId || isActiveMemoryJob(item),
               'activity-requires-attention': item.status === 'awaiting-approval',
             }]"
             @click="openItem(item)"
           >
-            <div class="hidden pt-3.5 text-right text-xs tabular-nums text-theme-500 sm:block">
+            <div class="hidden pt-2.5 text-right text-[11px] tabular-nums text-theme-500 sm:block">
               <span>{{ formatClock(item.createdAt) }}</span>
-              <small class="mt-0.5 block text-[10px] text-theme-700">{{ formatTimeAgo(item.createdAt) }}</small>
+              <small class="block text-[9px] text-theme-700">{{ formatTimeAgo(item.createdAt) }}</small>
             </div>
 
-            <div class="relative mt-2.5 flex h-8 w-8 items-center justify-center rounded-full border text-[var(--activity-color)] activity-marker">
+            <div class="relative mt-2 flex h-7 w-7 items-center justify-center rounded-full border text-[var(--activity-color)] activity-marker">
               <Icon
                 :icon="kindIcon(item.kind)"
-                class="relative w-4 h-4"
+                class="relative h-3.5 w-3.5"
               />
             </div>
 
-            <div class="activity-card min-w-0 rounded-xl border border-theme-800 bg-theme-950 px-4 py-3 transition">
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <div class="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] text-theme-600">
+            <div class="activity-card min-w-0 rounded-lg border border-theme-800 bg-theme-950 px-3 py-2 transition">
+              <div class="flex items-start justify-between gap-2">
+                <div class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <div class="flex shrink-0 items-center gap-1 text-[10px] text-theme-600">
                     <span class="font-bold uppercase tracking-[0.055em] text-[var(--activity-color)]">
                       {{ item.kind }}
                     </span>
-                    <span v-if="item.sourceLabel">
+                    <span v-if="item.sourceLabel && item.sourceLabel.toLowerCase() !== item.kind">
                       {{ item.sourceLabel }}
                     </span>
                   </div>
 
-                  <h2 class="text-[15px] font-bold leading-snug text-theme-100">
+                  <h2 class="min-w-0 text-[14px] font-bold leading-snug text-theme-100">
                     {{ item.title }}
                   </h2>
                 </div>
 
-                <div class="flex shrink-0 items-center gap-2 pl-2">
+                <div class="flex shrink-0 items-center gap-1.5 pl-1">
                   <button
                     v-if="isActiveInstance(item)"
                     type="button"
-                    class="inline-flex min-h-7 items-center justify-center gap-1.5 rounded-lg border border-red-400/35 bg-red-400/10 px-3 py-1.5 text-[11px] font-semibold leading-none text-red-300 transition hover:border-red-300/50 hover:bg-red-400/20 hover:text-red-200 disabled:cursor-wait disabled:opacity-60"
+                    class="inline-flex min-h-6 items-center justify-center gap-1 rounded-md border border-red-400/35 bg-red-400/10 px-2 py-1 text-[10px] font-semibold leading-none text-red-300 transition hover:border-red-300/50 hover:bg-red-400/20 hover:text-red-200 disabled:cursor-wait disabled:opacity-60"
                     :disabled="Boolean(item.sourceId && stoppingIds.has(item.sourceId))"
                     @click="stopInstance(item, $event)"
                   >
@@ -715,7 +750,7 @@ watch(searchQuery, () => {
                   <button
                     v-else-if="isActiveMemoryJob(item)"
                     type="button"
-                    class="inline-flex items-center gap-1.5 rounded-lg border border-purple-400/35 bg-purple-400/10 px-2.5 py-1 text-[11px] font-semibold text-purple-300 transition hover:border-purple-300/50 hover:bg-purple-400/20 hover:text-purple-200 disabled:cursor-wait disabled:opacity-60"
+                    class="inline-flex items-center gap-1 rounded-md border border-purple-400/35 bg-purple-400/10 px-2 py-1 text-[10px] font-semibold text-purple-300 transition hover:border-purple-300/50 hover:bg-purple-400/20 hover:text-purple-200 disabled:cursor-wait disabled:opacity-60"
                     :disabled="Boolean(item.sourceId && cancellingJobIds.has(item.sourceId))"
                     @click="cancelMemoryJob(item, $event)"
                   >
@@ -728,7 +763,7 @@ watch(searchQuery, () => {
                   </button>
                   <span
                     v-if="item.status"
-                    class="status-pill shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold lowercase"
+                    class="status-pill shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold lowercase"
                     :class="{ 'attention-pill': item.status === 'awaiting-approval' }"
                   >
                     {{ item.status }}
@@ -738,14 +773,14 @@ watch(searchQuery, () => {
 
               <p
                 v-if="item.description"
-                class="mt-1.5 text-[13px] leading-relaxed text-theme-400 wrap-break-word"
+                class="mt-1 line-clamp-1 text-[12px] leading-5 text-theme-400 wrap-break-word"
               >
                 {{ item.description }}
               </p>
 
               <div
                 v-if="item.artifacts?.length"
-                class="mt-3 flex flex-wrap gap-2"
+                class="mt-2 flex flex-wrap gap-1.5"
               >
                 <a
                   v-for="artifact in item.artifacts"
@@ -775,7 +810,7 @@ watch(searchQuery, () => {
                 </a>
               </div>
 
-              <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-theme-500">
+              <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-theme-500">
                 <span class="inline-flex items-center gap-1">
                   <Icon
                     icon="lucide:user-round"
@@ -845,7 +880,12 @@ watch(searchQuery, () => {
 .activity-marker {
   background: var(--activity-bg);
   border: 1px solid var(--activity-border);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--activity-color) 5%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--activity-color) 5%, transparent);
+}
+
+.activity-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 78px;
 }
 
 .activity-card {
