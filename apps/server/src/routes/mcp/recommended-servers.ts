@@ -11,10 +11,7 @@ type EnvironmentVariable = {
     isSecret?: boolean
 }
 
-const CYNOSURE_MCP_REPOSITORY = {
-    url: 'https://github.com/andreasjhagen/Cynosure-MCPs',
-    source: 'github',
-}
+const CYNOSURE_MCP_ORGANIZATION = 'Cynosure-MCP-Collection'
 
 function withLatestTag(identifier: string): string {
     const versionAtIndex = identifier.indexOf('@', identifier.startsWith('@') ? 1 : 0)
@@ -57,14 +54,17 @@ function cynosureMcp(
     packageName: string,
     title: string,
     description: string,
-    subfolder: string,
+    repositoryName: string,
     environmentVariables?: EnvironmentVariable[],
 ): RegistryServerEntry {
     return npmServer(packageName, title, description, {
         environmentVariables,
-        repository: { ...CYNOSURE_MCP_REPOSITORY, subfolder },
+        repository: {
+            url: `https://github.com/${CYNOSURE_MCP_ORGANIZATION}/${repositoryName}`,
+            source: 'github',
+        },
         icons: [{
-            src: `https://raw.githubusercontent.com/andreasjhagen/Cynosure-MCPs/main/${subfolder}/icon.png`,
+            src: `https://unpkg.com/${packageName}@latest/icon.png`,
             mimeType: 'image/png',
         }],
     })
@@ -244,6 +244,23 @@ export const recommendedServers: RegistryServerEntry[] = [
             isRequired: false,
             format: 'string',
         }],
+    ),
+    cynosureMcp(
+        '@cynosure-mcp/sftp-ssh',
+        'SFTP & SSH',
+        'Browse and modify remote files over SFTP, and execute non-interactive commands over SSH.',
+        'mcp-sftp-ssh',
+        [
+            { name: 'SFTP_HOST', description: 'Remote SSH/SFTP host name or IP address.', isRequired: true, format: 'string' },
+            { name: 'SFTP_PORT', description: 'Remote SSH/SFTP port. Defaults to 22.', isRequired: false, format: 'number' },
+            { name: 'SFTP_USERNAME', description: 'Remote SSH/SFTP user name.', isRequired: true, format: 'string' },
+            { name: 'SFTP_PASSWORD', description: 'Password authentication. Omit when using a private key.', isRequired: false, format: 'password', isSecret: true },
+            { name: 'SFTP_PRIVATE_KEY_PATH', description: 'Local path to an SSH private key.', isRequired: false, format: 'string', isSecret: true },
+            { name: 'SFTP_PRIVATE_KEY', description: 'Inline SSH private key. Literal \\n sequences are converted to newlines.', isRequired: false, format: 'password', isSecret: true },
+            { name: 'SFTP_PRIVATE_KEY_PASSPHRASE', description: 'Optional private-key passphrase.', isRequired: false, format: 'password', isSecret: true },
+            { name: 'SFTP_ROOT', description: 'Remote path exposed as the MCP root. Defaults to /.', isRequired: false, format: 'string' },
+            { name: 'SSH_HOST_FINGERPRINT', description: 'Optional SHA-256 host-key fingerprint.', isRequired: false, format: 'string' },
+        ],
     ),
     cynosureMcp(
         '@cynosure-mcp/stability-ai',
