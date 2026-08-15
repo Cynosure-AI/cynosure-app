@@ -44,6 +44,43 @@ describe('ToolExecutionCard', () => {
     expect(summary.match(/Communication Personality Analysis\.md/g)).toHaveLength(1)
   })
 
+  test('shows only unique memory titles in the header while gathering context', () => {
+    const memoryArguments = (sourceFile: string, chunkIndex: number) => JSON.stringify({
+      type: 'memory',
+      contextPhase: 'gathered-results',
+      sourceFile,
+      folderPath: 'Product Research',
+      chunkIndex,
+      content: `Memory chunk ${chunkIndex}`,
+    })
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 0,
+        isActive: true,
+        steps: [{
+          iteration: 0,
+          status: 'routing-memory',
+          timestamp: Date.now(),
+          toolCalls: [
+            { name: 'Product Research - Roadmap.md - part 1/2', arguments: memoryArguments('Roadmap.md', 0) },
+            { name: 'Product Research - Roadmap.md - part 2/2', arguments: memoryArguments('Roadmap.md', 1) },
+            { name: 'Product Research - Interviews.md - part 1/1', arguments: memoryArguments('Interviews.md', 0) },
+          ],
+        }],
+      },
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+
+    const summary = wrapper.get('button').text()
+    expect(summary).toContain('Gathering Memory Context')
+    expect(summary).toContain('Roadmap.md')
+    expect(summary).toContain('Interviews.md')
+    expect(summary).not.toContain('Product Research')
+    expect(summary.match(/Roadmap\.md/g)).toHaveLength(1)
+  })
+
   test('surfaces entity graph evidence included in gathered memory context', async () => {
     const graphContext = [
       '## Entity Graph Context',

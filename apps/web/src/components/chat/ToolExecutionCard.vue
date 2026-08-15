@@ -538,13 +538,21 @@ function isRoutingStepLoading(step: ToolExecStep): boolean {
 }
 
 const headerToolNames = computed(() => {
-  if (latestContextSection.value?.phase === 'gathered-context') {
-    const selectedRows = latestContextSection.value.rows
-      .filter((row) => row.state !== 'candidate')
+  if (latestContextSection.value?.kind === 'memory') {
+    const visibleRows = latestContextSection.value.phase === 'gathered-context'
+      ? latestContextSection.value.rows.filter((row) => row.state !== 'candidate')
+      : latestContextSection.value.rows
 
-    const names = latestContextSection.value.kind === 'memory'
-      ? selectedRows.map((row) => memoryFileName(row.call))
-      : selectedRows.map((row) => row.call?.name || row.result?.name)
+    return [...new Set(visibleRows
+      .map((row) => memoryFileName(row.call))
+      .filter((name): name is string => Boolean(name))
+    )]
+  }
+
+  if (latestContextSection.value?.phase === 'gathered-context') {
+    const selectedRows = latestContextSection.value.rows.filter((row) => row.state !== 'candidate')
+
+    const names = selectedRows.map((row) => row.call?.name || row.result?.name)
 
     return [...new Set(names
       .filter((name): name is string => Boolean(name))
