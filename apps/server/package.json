@@ -1,6 +1,6 @@
 {
   "name": "cynosure-server",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "Cynosure server – LLM orchestrator with tools, agents, and memory",
   "type": "module",
   "main": "dist/index.js",
