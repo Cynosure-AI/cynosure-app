@@ -571,12 +571,13 @@ export function useChatStreaming(
                 if (data.images?.length) {
                     appendUniqueImages(streamMsg, data.images)
                 }
-                if (data.cancelled && !streamMsg.content && !streamMsg.thinking && !streamMsg.imageDataUrls?.length && !streamMsg.videoDataUrls?.length) {
+                if (!hasVisibleContent(streamMsg)) {
+                    // A completed round may contain only tool calls. Those calls
+                    // are rendered in the execution timeline, so the assistant
+                    // placeholder has nothing useful to show. Actual failures
+                    // arrive separately through handleStreamError.
                     const idx = messages.value.indexOf(streamMsg)
                     if (idx !== -1) messages.value.splice(idx, 1)
-                } else if (!data.cancelled && !streamMsg.content && !streamMsg.thinking && !streamMsg.imageDataUrls?.length && !streamMsg.videoDataUrls?.length) {
-                    streamMsg.isError = true
-                    streamMsg.content = 'No response received from the model.'
                 }
             }
 
