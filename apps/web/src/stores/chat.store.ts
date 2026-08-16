@@ -9,6 +9,7 @@ import { useProviderStore } from './provider.store'
 import { useChatStreaming } from '../composables/useChatStreaming'
 import { useChatMessages } from '../composables/useChatMessages'
 import { useChatAgentConfig } from '../composables/useChatAgentConfig'
+import { resolveEffectiveProviderModel } from '../utils/model-selection'
 
 export interface Conversation {
   id: string
@@ -66,6 +67,7 @@ export const useChatStore = defineStore('chat', () => {
   const modelCost = ref<{ input: number; output: number } | null>(null)
   const modelPricing = ref<ModelPricing | null>(null)
   const modelModalities = ref<{ input: string[]; output: string[] } | null>(null)
+  const modelInfoStatus = ref<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
   let modelInfoRequestId = 0
   const memorySpaces = ref<MemorySpace[]>([])
   const postActionsMap = new Map<string, Set<string>>()
@@ -355,10 +357,26 @@ export const useChatStore = defineStore('chat', () => {
     modelCost.value = null
     modelPricing.value = null
     modelModalities.value = null
+    modelInfoStatus.value = 'loading'
 
-    api.provider.getModelInfo(providerId, model)
+    const load = (attempt: number): void => {
+      api.provider.getModelInfo(providerId, model)
       .then(info => {
         if (requestId !== modelInfoRequestId) return
+        const hasMetadata = Boolean(
+          info.contextLength ||
+          info.cost ||
+          info.pricing ||
+          info.inputModalities?.length ||
+          info.outputModalities?.length ||
+          typeof info.supportsToolCalls === 'boolean'
+        )
+        if (!hasMetadata && attempt < 2) {
+          window.setTimeout(() => {
+            if (requestId === modelInfoRequestId) load(attempt + 1)
+          }, 750 * (attempt + 1))
+          return
+        }
         if (info.contextLength) {
           contextWindow.value = info.contextLength
         } else {
@@ -372,14 +390,25 @@ export const useChatStore = defineStore('chat', () => {
             output: info.outputModalities ?? []
           }
           : null
+        modelInfoStatus.value = hasMetadata ? 'ready' : 'unavailable'
       })
       .catch(() => {
         if (requestId !== modelInfoRequestId) return
+        if (attempt < 2) {
+          window.setTimeout(() => {
+            if (requestId === modelInfoRequestId) load(attempt + 1)
+          }, 750 * (attempt + 1))
+          return
+        }
         contextWindow.value = null
         modelCost.value = null
         modelPricing.value = null
         modelModalities.value = null
+        modelInfoStatus.value = 'unavailable'
       })
+    }
+
+    load(0)
   }
 
   /**
@@ -387,37 +416,16 @@ export const useChatStore = defineStore('chat', () => {
    * Priority: session override > agent config > provider store defaults.
    */
   const resolvedModelProvider = computed(() => {
-    // Resolve base model + provider from agent config or provider store
-    let model: string | undefined
-    let providerId: string | undefined
-
-    if (agentConfig.activeAgentId.value) {
-      const agent = agentDefs.get(agentConfig.activeAgentId.value)
-      if (agent?.model && agent?.providerId) {
-        model = agent.model
-        providerId = agent.providerId
-      }
-    }
-    if (!model || !providerId) {
-      const active = providerStore.lastUsedProvider
-      if (active) {
-        model = active.defaultModel
-        providerId = active.id
-      }
-    }
-
-    // Apply session overrides on top
-    if (agentConfig.sessionProviderOverride.value) {
-      providerId = agentConfig.sessionProviderOverride.value
-    }
-    if (agentConfig.sessionModelOverride.value) {
-      model = agentConfig.sessionModelOverride.value
-    }
-
-    if (model && providerId) {
-      return { model, providerId }
-    }
-    return null
+    const agent = agentConfig.activeAgentId.value
+      ? agentDefs.get(agentConfig.activeAgentId.value)
+      : null
+    return resolveEffectiveProviderModel({
+      providers: providerStore.providers,
+      lastUsedProviderId: providerStore.lastUsedProviderId,
+      agent,
+      providerOverride: agentConfig.sessionProviderOverride.value,
+      modelOverride: agentConfig.sessionModelOverride.value,
+    })
   })
 
   // Watch resolved model/provider and auto-fetch context window
@@ -430,6 +438,7 @@ export const useChatStore = defineStore('chat', () => {
       modelCost.value = null
       modelPricing.value = null
       modelModalities.value = null
+      modelInfoStatus.value = 'idle'
     }
   }, { immediate: true })
 
@@ -618,6 +627,8 @@ export const useChatStore = defineStore('chat', () => {
     modelCost,
     modelPricing,
     modelModalities,
+    modelInfoStatus,
+    resolvedModelProvider,
     handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
       streaming.handleStreamStart(data)
       agentStore.setConversationExecutionState(data.conversationId, true)

@@ -66,6 +66,44 @@ describe('OpenRouter reranker model pricing', () => {
     })
 })
 
+describe('OpenRouter model metadata', () => {
+    test('keeps tool support, pricing tiers and explicit transcription units', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+            data: [
+                {
+                    id: 'openai/whisper-large-v3',
+                    architecture: { input_modalities: ['audio'], output_modalities: ['transcription'] },
+                    supported_parameters: [],
+                    pricing: { prompt: '0.0000075', completion: '0' }
+                },
+                {
+                    id: 'test/tiered',
+                    architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+                    supported_parameters: ['tools'],
+                    pricing: {
+                        prompt: '0.000001',
+                        completion: '0.000002',
+                        overrides: [{ min_prompt_tokens: 200000, prompt: '0.000002', completion: '0.000004' }]
+                    }
+                }
+            ]
+        }), { status: 200 })))
+
+        const models = await new OpenRouterProvider(config).listModelItems('llm')
+        expect(models.find((model) => model.id === 'test/tiered')).toMatchObject({
+            supportsToolCalls: true,
+            pricing: {
+                tiers: [{ minPromptTokens: 200000, prompt: 0.000002, completion: 0.000004 }]
+            }
+        })
+        expect(models.find((model) => model.id === 'openai/whisper-large-v3')?.pricing).toMatchObject({
+            prompt: 0,
+            completion: 0,
+            skus: { per_audio_minute: 0.0015 }
+        })
+    })
+})
+
 describe('OpenRouter completion termination', () => {
     test('accepts a natural stop as a completed stream', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 })))

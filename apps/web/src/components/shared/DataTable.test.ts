@@ -92,4 +92,48 @@ describe('DataTable', () => {
 
     expect(wrapper.text()).toContain('Loading')
   })
+
+  test('additively selects a visible range with shift-click', async () => {
+    const items: Item[] = [
+      { id: 'a', name: 'Alpha', enabled: true },
+      { id: 'b', name: 'Bravo', enabled: true },
+      { id: 'c', name: 'Charlie', enabled: true },
+      { id: 'd', name: 'Delta', enabled: true },
+    ]
+    const wrapper = mount(DataTable<Item>, {
+      props: { items, columns, selectable: true, selectedIds: ['d'] },
+    })
+    const rowCheckboxes = () => wrapper.findAll('input[type="checkbox"]').slice(1)
+
+    await rowCheckboxes()[0].trigger('click')
+    expect(wrapper.emitted('update:selectedIds')?.at(-1)?.[0]).toEqual(['d', 'a'])
+    await wrapper.setProps({ selectedIds: ['d', 'a'] })
+
+    await rowCheckboxes()[2].trigger('click', { shiftKey: true })
+    expect(wrapper.emitted('update:selectedIds')?.at(-1)?.[0]).toEqual(['d', 'a', 'b', 'c'])
+  })
+
+  test('skips non-selectable rows in a shift-click range', async () => {
+    const items: Item[] = [
+      { id: 'a', name: 'Alpha', enabled: true },
+      { id: 'b', name: 'Bravo', enabled: false },
+      { id: 'c', name: 'Charlie', enabled: true },
+    ]
+    const wrapper = mount(DataTable<Item>, {
+      props: {
+        items,
+        columns,
+        selectable: true,
+        selectedIds: [],
+        rowSelectable: item => item.enabled,
+      },
+    })
+    const rowCheckboxes = () => wrapper.findAll('input[type="checkbox"]').slice(1)
+
+    await rowCheckboxes()[0].trigger('click')
+    await wrapper.setProps({ selectedIds: ['a'] })
+    await rowCheckboxes()[1].trigger('click', { shiftKey: true })
+
+    expect(wrapper.emitted('update:selectedIds')?.at(-1)?.[0]).toEqual(['a', 'c'])
+  })
 })

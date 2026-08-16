@@ -38,4 +38,24 @@ describe('models.dev metadata normalization', () => {
         expect(metadata.getModelCost('openai', 'gpt-free')).toEqual({ input: 0, output: 0 })
         expect(metadata.getModelCost('ollama', 'gpt-test')).toBeNull()
     })
+
+    test('does not borrow metadata from an ambiguous model id on another host', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+            'host-a': {
+                id: 'host-a',
+                models: { shared: { cost: { input: 1, output: 2 } } },
+            },
+            'host-b': {
+                id: 'host-b',
+                models: { shared: { cost: { input: 10, output: 20 } } },
+            },
+        }))))
+
+        const metadata = await import('./model-dev-fetcher.js')
+        await metadata.ensurePricingLoaded()
+
+        expect(metadata.getModelCost('host-a', 'shared')).toEqual({ input: 1, output: 2 })
+        expect(metadata.getModelCost('host-b', 'shared')).toEqual({ input: 10, output: 20 })
+        expect(metadata.getModelCost('unrelated-host', 'shared')).toBeNull()
+    })
 })

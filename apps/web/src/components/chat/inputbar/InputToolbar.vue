@@ -73,10 +73,6 @@ const selectedModelForSelector = computed(() =>
     : chatStore.sessionModelOverride || "",
 );
 
-const currentProvider = computed(() =>
-  providerStore.providers.find((p) => p.id === currentProviderId.value),
-);
-
 function formatModalityName(modality: string): string {
   return modality
     .split(/[-_\s]+/)
@@ -86,7 +82,9 @@ function formatModalityName(modality: string): string {
 }
 
 function formatModalities(modalities?: string[]): string {
-  if (!modalities?.length) return "Unknown";
+  if (!modalities?.length) {
+    return chatStore.modelInfoStatus === "loading" ? "Loading…" : "Unavailable";
+  }
   return modalities.map(formatModalityName).join(", ");
 }
 
@@ -98,16 +96,7 @@ const formattedOutputModalities = computed(() =>
   formatModalities(chatStore.modelModalities?.output),
 );
 
-const currentModelId = computed(() => {
-  const override = chatStore.sessionModelOverride;
-  if (override) return override;
-  const agentModel = selectedAgent.value?.model;
-  const providerDefault = currentProvider.value?.defaultModel;
-  const isProviderOverridden =
-    chatStore.sessionProviderOverride &&
-    chatStore.sessionProviderOverride !== selectedAgent.value?.providerId;
-  return isProviderOverridden ? providerDefault || "" : agentModel || providerDefault || "";
-});
+const currentModelId = computed(() => chatStore.resolvedModelProvider?.model || "");
 
 const pricingSummary = computed(() =>
   modelPricingSummary({
@@ -124,19 +113,7 @@ const formattedExtraCosts = computed(() => pricingSummary.value.extraRows);
 const formattedSkuCosts = computed(() => pricingSummary.value.skuRows);
 
 const mobileModelLabel = computed(() => {
-  const override = chatStore.sessionModelOverride;
-  if (override) {
-    return override;
-  }
-  const agentModel = selectedAgent.value?.model;
-  const providerDefault = currentProvider.value?.defaultModel;
-  const isProviderOverridden =
-    chatStore.sessionProviderOverride &&
-    chatStore.sessionProviderOverride !== selectedAgent.value?.providerId;
-  const effectiveDefault = isProviderOverridden
-    ? providerDefault
-    : agentModel || providerDefault;
-  return effectiveDefault || "Default";
+  return chatStore.resolvedModelProvider?.model || "Default";
 });
 
 const hasPendingHITLForActiveConversation = computed(() => {

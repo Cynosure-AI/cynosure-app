@@ -287,17 +287,22 @@ export class LLMGateway {
     if (!info.inputModalities?.length) info.inputModalities = metadata?.inputModalities
     if (!info.outputModalities?.length) info.outputModalities = metadata?.outputModalities
     info.supportsToolCalls ??= metadata?.supportsToolCalls
-    info.cost ??= metadata?.cost
     info.pricing = mergePricing(metadata?.cost ? pricingFromCost(metadata.cost) : undefined, info.pricing)
 
-    if (!info.cost && info.pricing && (info.pricing.prompt != null || info.pricing.completion != null)) {
+    if (info.pricing && (info.pricing.prompt != null || info.pricing.completion != null)) {
       info.cost = {
         input: (info.pricing.prompt ?? 0) * 1_000_000,
         output: (info.pricing.completion ?? 0) * 1_000_000
       }
+    } else {
+      info.cost ??= metadata?.cost
     }
 
-    this.modelInfoCache.set(cacheKey, { info, ts: Date.now() })
+    // Do not turn a transient upstream/models.dev failure into ten minutes of
+    // empty metadata. Meaningful partial information is still safe to cache.
+    if (hasUsefulModelInfo(info)) {
+      this.modelInfoCache.set(cacheKey, { info, ts: Date.now() })
+    }
     return info
   }
 
@@ -325,6 +330,17 @@ export class LLMGateway {
   }
 }
 
+function hasUsefulModelInfo(info: ModelInfo): boolean {
+  return Boolean(
+    info.contextLength ||
+    info.inputModalities?.length ||
+    info.outputModalities?.length ||
+    typeof info.supportsToolCalls === 'boolean' ||
+    info.cost ||
+    info.pricing
+  )
+}
+
 function pricingFromCost(cost: NonNullable<ReturnType<typeof getModelMetadata>>['cost']): ModelPricing {
   if (!cost) return {}
   return {
@@ -338,6 +354,15 @@ function pricingFromCost(cost: NonNullable<ReturnType<typeof getModelMetadata>>[
         ...(cost.inputAudio != null ? { input_audio_tokens: cost.inputAudio / 1_000_000 } : {}),
         ...(cost.outputAudio != null ? { output_audio_tokens: cost.outputAudio / 1_000_000 } : {})
       }
+    } : {}),
+    ...(cost.tiers?.length ? {
+      tiers: cost.tiers.map((tier) => ({
+        prompt: tier.input / 1_000_000,
+        completion: tier.output / 1_000_000,
+        ...(tier.cacheRead != null ? { inputCacheRead: tier.cacheRead / 1_000_000 } : {}),
+        ...(tier.cacheWrite != null ? { inputCacheWrite: tier.cacheWrite / 1_000_000 } : {}),
+        ...(tier.minInputTokens != null ? { minPromptTokens: tier.minInputTokens } : {})
+      }))
     } : {})
   }
 }

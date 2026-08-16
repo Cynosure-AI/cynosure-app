@@ -53,7 +53,6 @@ function isMediaOnlyOutput(model: PricingModel): boolean {
 function transcriptionDurationUnit(model: PricingModel): "hour" | "minute" | null {
   const id = modelIdentity(model);
   if (id.includes("mai-transcribe")) return "hour";
-  if (/(?:^|[/\s-])whisper|voxtral|chirp|parakeet/.test(id)) return "minute";
   return null;
 }
 
@@ -70,7 +69,12 @@ export function formatSkuCost(key: string, value: number): string {
   }
 
   const normalizedKey = key.toLowerCase().replace(/-/g, "_");
-  if (/(^|_)tokens?($|_)/.test(normalizedKey)) {
+  if (
+    /(^|_)tokens?($|_)/.test(normalizedKey) ||
+    normalizedKey === "input_audio_cache" ||
+    normalizedKey === "audio_output" ||
+    normalizedKey.startsWith("input_cache_")
+  ) {
     return `${formatMoney(value * 1_000_000)} / 1M ${humanizePricingKey(key).toLowerCase()}`;
   }
   if (
@@ -107,6 +111,14 @@ export function modelPricingSummary(model: PricingModel): PricingSummary {
       label: "Audio duration",
       value: `${formatMoney(prompt)} / audio ${transcriptionUnit}`,
     });
+  } else if (isTranscriptionModel(model) && prompt != null && prompt > 0 && (completion ?? 0) === 0) {
+    // Some provider catalogs overload the prompt field with a duration or
+    // provider-specific audio unit. Do not claim it is a token or minute rate
+    // unless the provider supplied an explicit SKU/unit.
+    mediaRows.push({
+      label: "Provider input rate",
+      value: `${formatMoney(prompt)} / reported input unit`,
+    });
   } else if (shouldShowTokenPair(model, prompt, completion)) {
     const label = isTranscriptionModel(model) ? "Audio tokens" : "Input / Output";
     tokenRows.push({
@@ -136,6 +148,20 @@ export function modelPricingSummary(model: PricingModel): PricingSummary {
   }
   if (pricing.inputCacheWrite != null && pricing.inputCacheWrite > 0) {
     extraRows.push({ label: "Cache write", value: `${formatMoney(pricing.inputCacheWrite * 1_000_000)} / 1M tokens` });
+  }
+
+  for (const tier of pricing.tiers ?? []) {
+    const threshold = tier.minPromptTokens != null
+      ? `≥ ${new Intl.NumberFormat("en", { notation: "compact" }).format(tier.minPromptTokens)} input tokens`
+      : tier.utcStart != null || tier.utcEnd != null
+        ? `${tier.utcStart ?? 0}:00–${tier.utcEnd ?? 24}:00 UTC`
+        : "Alternate tier";
+    if (tier.prompt != null || tier.completion != null) {
+      extraRows.push({
+        label: threshold,
+        value: `${formatMoney((tier.prompt ?? 0) * 1_000_000)} / ${formatMoney((tier.completion ?? 0) * 1_000_000)} per 1M tokens`,
+      });
+    }
   }
 
   for (const [key, value] of Object.entries(pricing.skus ?? {}).filter(([, value]) => Number.isFinite(value)).slice(0, 6)) {
