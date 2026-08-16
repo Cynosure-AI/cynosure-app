@@ -84,9 +84,13 @@ const emit = defineEmits<{
 const providerStore = useProviderStore();
 const { logoUrl } = useProviderLogos();
 
-const sharedModelCache = new Map<string, ModelListItem[]>();
+const sharedModelCache = new Map<string, {
+  models: ModelListItem[];
+  types: Record<string, ModelListType[]>;
+}>();
 
 const providerModels = ref<Record<string, ModelListItem[]>>({});
+const providerModelTypes = ref<Record<string, Record<string, ModelListType[]>>>({});
 const loadingByProvider = ref<Record<string, boolean>>({});
 const favoriteModels = ref<ProviderModelSelection[]>(loadFavoriteModels());
 
@@ -149,20 +153,23 @@ function outputCapabilityTag(model: ModelListItem): string | undefined {
 }
 
 function mergeModelItems(existing: ModelListItem, incoming: ModelListItem): ModelListItem {
+  const pricing = existing.pricing || incoming.pricing
+    ? {
+        ...existing.pricing,
+        ...incoming.pricing,
+        skus: {
+          ...existing.pricing?.skus,
+          ...incoming.pricing?.skus,
+        },
+      }
+    : undefined;
   return {
     ...existing,
     ...incoming,
     inputModalities: incoming.inputModalities?.length ? incoming.inputModalities : existing.inputModalities,
     outputModalities: incoming.outputModalities?.length ? incoming.outputModalities : existing.outputModalities,
     supportsToolCalls: incoming.supportsToolCalls ?? existing.supportsToolCalls,
-    pricing: {
-      ...existing.pricing,
-      ...incoming.pricing,
-      skus: {
-        ...existing.pricing?.skus,
-        ...incoming.pricing?.skus,
-      },
-    },
+    pricing,
   };
 }
 
@@ -185,37 +192,46 @@ function persistFavoriteModels(): void {
   );
 }
 
-function isFavorite(providerId: string, model: string): boolean {
+function isFavorite(providerId: string, model: string, modelType = props.modelType): boolean {
   return favoriteModels.value.some(
     (favorite) =>
       favorite.providerId === providerId &&
       favorite.model === model &&
-      (favorite.modelType || "llm") === props.modelType,
+      (favorite.modelType || "llm") === modelType,
   );
 }
 
 function favoriteAction(
   providerId: string,
   model: string,
+  modelType = props.modelType,
 ): Pick<
   SelectOption,
-  "actionIconName" | "actionActiveIconName" | "actionActive" | "actionLabel"
+  "actionIconName" | "actionActiveIconName" | "actionActive" | "actionLabel" | "actionData"
 > {
-  const active = isFavorite(providerId, model);
+  const active = isFavorite(providerId, model, modelType);
   return {
     actionIconName: "lucide:star",
     actionActiveIconName: "lucide:star",
     actionActive: active,
     actionLabel: active ? "Remove from favorites" : "Add to favorites",
+    actionData: { modelType },
   };
+}
+
+function optionModelType(providerId: string, model: string): ModelListType {
+  const types = providerModelTypes.value[providerId]?.[model] || [];
+  return types.includes(props.modelType) ? props.modelType : types[0] || props.modelType;
 }
 
 function toggleFavorite(option: SelectOption): void {
   const selection = decode(option.value);
   if (!selection.providerId || !selection.model) return;
 
-  const key = favoriteKey(selection.providerId, selection.model);
-  if (isFavorite(selection.providerId, selection.model)) {
+  const actionData = option.actionData as { modelType?: ModelListType } | undefined;
+  const modelType = actionData?.modelType || optionModelType(selection.providerId, selection.model);
+  const key = favoriteKey(selection.providerId, selection.model, modelType);
+  if (isFavorite(selection.providerId, selection.model, modelType)) {
     favoriteModels.value = favoriteModels.value.filter(
       (favorite) =>
         favoriteKey(favorite.providerId, favorite.model, favorite.modelType) !==
@@ -228,7 +244,7 @@ function toggleFavorite(option: SelectOption): void {
       {
         providerId: selection.providerId,
         model: selection.model,
-        modelType: props.modelType,
+        modelType,
         label: selection.model,
         imgSrc: provider ? logoUrl(provider.type) : null,
       },
@@ -242,10 +258,12 @@ async function ensureProviderModels(providerId: string): Promise<void> {
   if (!providerId) return;
   const key = cacheKey(providerId);
   if (sharedModelCache.has(key)) {
+    const cached = sharedModelCache.get(key)!;
     providerModels.value = {
       ...providerModels.value,
-      [providerId]: sharedModelCache.get(key) || [],
+      [providerId]: cached.models,
     };
+    providerModelTypes.value = { ...providerModelTypes.value, [providerId]: cached.types };
     return;
   }
   if (loadingByProvider.value[providerId]) return;
@@ -255,21 +273,31 @@ async function ensureProviderModels(providerId: string): Promise<void> {
     const results = await Promise.all(
       activeModelTypes.value.map(async (type) => {
         try {
-          return await providerStore.listModelItems(providerId, type);
+          return { type, models: await providerStore.listModelItems(providerId, type) };
         } catch {
           const models = await providerStore.listModels(providerId, type);
-          return models.map((id) => ({ id }));
+          return { type, models: models.map((id) => ({ id })) };
         }
       }),
     );
     const modelMap = new Map<string, ModelListItem>();
-    for (const model of results.flat()) {
-      const existing = modelMap.get(model.id);
-      modelMap.set(model.id, existing ? mergeModelItems(existing, model) : model);
+    const typeMap: Record<string, ModelListType[]> = {};
+    for (const result of results) {
+      for (const model of result.models) {
+        const existing = modelMap.get(model.id);
+        modelMap.set(model.id, existing ? mergeModelItems(existing, model) : model);
+        const types = typeMap[model.id] || [];
+        if (!types.includes(result.type)) typeMap[model.id] = [...types, result.type];
+      }
     }
     const models = Array.from(modelMap.values()).sort((a, b) => a.id.localeCompare(b.id));
-    sharedModelCache.set(key, models);
+    const provider = props.providers.find((item) => item.id === providerId);
+    const hasMetadata = models.some(modelHasMetadata);
+    if (hasMetadata || provider?.type === 'ollama' || provider?.type === 'lmstudio') {
+      sharedModelCache.set(key, { models, types: typeMap });
+    }
     providerModels.value = { ...providerModels.value, [providerId]: models };
+    providerModelTypes.value = { ...providerModelTypes.value, [providerId]: typeMap };
   } catch {
     providerModels.value = { ...providerModels.value, [providerId]: [] };
   } finally {
@@ -277,6 +305,27 @@ async function ensureProviderModels(providerId: string): Promise<void> {
       ...loadingByProvider.value,
       [providerId]: false,
     };
+  }
+}
+
+function modelHasMetadata(model: ModelListItem): boolean {
+  return Boolean(
+    model.name ||
+    model.contextLength ||
+    model.inputModalities?.length ||
+    model.outputModalities?.length ||
+    typeof model.supportsToolCalls === 'boolean' ||
+    model.pricing
+  );
+}
+
+function refreshIncompleteModels(): void {
+  for (const provider of props.providers) {
+    const models = providerModels.value[provider.id] || [];
+    if (!models.length || !models.some(modelHasMetadata)) {
+      sharedModelCache.delete(cacheKey(provider.id));
+      void ensureProviderModels(provider.id);
+    }
   }
 }
 
@@ -357,7 +406,7 @@ const groups = computed((): SelectOptionGroup[] => {
         tag: capabilityTag || costTag,
         tagVariant: capabilityTag ? "cyan" as const : "default" as const,
         tooltip: model ? pricingTooltip(model) : favorite.tooltip,
-        ...favoriteAction(favorite.providerId, favorite.model),
+        ...favoriteAction(favorite.providerId, favorite.model, favorite.modelType || "llm"),
       };
     });
 
@@ -413,6 +462,7 @@ const groups = computed((): SelectOptionGroup[] => {
           (type) => type === "embedding" || type === "reranker",
         );
         for (const model of models) {
+          const modelType = optionModelType(provider.id, model.id);
           const capabilityTag = outputCapabilityTag(model);
           const costTag = pricingTag(model);
           const tag = preferCostTag
@@ -425,7 +475,7 @@ const groups = computed((): SelectOptionGroup[] => {
             tag,
             tagVariant: tag === capabilityTag ? 'cyan' : 'default',
             tooltip: pricingTooltip(model),
-            ...favoriteAction(provider.id, model.id),
+            ...favoriteAction(provider.id, model.id, modelType),
           });
         }
       }
@@ -466,5 +516,6 @@ function onSelectionChange(value: string): void {
     :sticky-group-headers="true"
     @update:model-value="onSelectionChange"
     @option-action="toggleFavorite"
+    @open="refreshIncompleteModels"
   />
 </template>

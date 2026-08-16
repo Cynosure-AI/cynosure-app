@@ -46,6 +46,7 @@ const bulkModelEnabled = ref(false)
 const bulkTagsEnabled = ref(false)
 const bulkTagOperation = ref<'add' | 'remove' | 'replace'>('add')
 const bulkTagOperations = ['add', 'remove', 'replace'] as const
+const selectionAnchorId = ref<string | null>(null)
 
 const dragReorderId = ref<string | null>(null)
 const dropTargetId = ref<string | null>(null)
@@ -229,6 +230,7 @@ function getProviderLogoUrl(agent: AgentDefinition): string | null {
 
 function clearBulkSelection(): void {
   bulkSelectionIds.value = []
+  selectionAnchorId.value = null
   bulkProviderId.value = ''
   bulkModel.value = ''
   bulkTags.value = []
@@ -237,18 +239,35 @@ function clearBulkSelection(): void {
   bulkTagOperation.value = 'add'
 }
 
-function toggleAgentSelection(agentId: string, selected?: boolean): void {
+function toggleAgentSelection(agentId: string, selected?: boolean, shiftKey = false): void {
   const current = new Set(bulkSelectionIds.value)
-  const shouldSelect = selected ?? !current.has(agentId)
-  if (shouldSelect) current.add(agentId)
-  else current.delete(agentId)
+  const anchorIndex = selectionAnchorId.value
+    ? visibleAgents.value.findIndex(agent => agent.id === selectionAnchorId.value)
+    : -1
+  const clickedIndex = visibleAgents.value.findIndex(agent => agent.id === agentId)
+
+  if (shiftKey && anchorIndex >= 0 && clickedIndex >= 0) {
+    const start = Math.min(anchorIndex, clickedIndex)
+    const end = Math.max(anchorIndex, clickedIndex)
+    for (const agent of visibleAgents.value.slice(start, end + 1)) current.add(agent.id)
+  } else {
+    const shouldSelect = selected ?? !current.has(agentId)
+    if (shouldSelect) current.add(agentId)
+    else current.delete(agentId)
+    selectionAnchorId.value = agentId
+  }
+
   bulkSelectionIds.value = [...current]
   if (bulkSelectionIds.value.length === 0) clearBulkSelection()
 }
 
-function onRowClick(agentId: string): void {
+function onAgentCheckboxClick(agentId: string, event: MouseEvent): void {
+  toggleAgentSelection(agentId, (event.target as HTMLInputElement).checked, event.shiftKey)
+}
+
+function onRowClick(agentId: string, event: MouseEvent): void {
   if (isBulkMode.value) {
-    toggleAgentSelection(agentId)
+    toggleAgentSelection(agentId, undefined, event.shiftKey)
     return
   }
   router.push(`/agents/${agentId}`)
@@ -758,7 +777,7 @@ function formatDate(ts: number): string {
           v-for="item in visibleAgents"
           :key="item.id"
           class="agent-grid group border-b border-theme-800/70 last:border-b-0 cursor-pointer hover:bg-theme-800/30 transition-colors px-5 py-4"
-          @click="onRowClick(item.id)"
+          @click="onRowClick(item.id, $event)"
         >
           <div
             class="flex items-center gap-2 pt-1"
@@ -769,7 +788,7 @@ function formatDate(ts: number): string {
               class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
               :class="{ 'opacity-100': isBulkMode || isAgentSelected(item.id) }"
               :checked="isAgentSelected(item.id)"
-              @change="toggleAgentSelection(item.id, ($event.target as HTMLInputElement).checked)"
+              @click="onAgentCheckboxClick(item.id, $event)"
             >
             <button
               class="rounded-md p-1 transition-colors"

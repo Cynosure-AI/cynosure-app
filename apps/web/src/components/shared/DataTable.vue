@@ -70,6 +70,7 @@ const emit = defineEmits<{
 const showSelectableColumn = computed(() => Boolean(props.selectable))
 const sortColumnKey = ref<string | null>(props.initialSortOnce ? null : props.initialSortKey)
 const sortDirection = ref<'asc' | 'desc'>(props.initialSortDirection)
+const selectionAnchorId = ref<string | null>(null)
 
 // Ensure fr-based column widths have a minimum so they don't collapse to 0
 // when the grid overflows its container (min-width: max-content doesn't expand fr units).
@@ -109,16 +110,29 @@ const gridMinWidth = computed(() => {
   return `${widths.reduce((total, width) => total + width, 0) + gaps + horizontalPadding}px`
 })
 
-function toggleSelection(id: string) {
+function toggleSelection(id: string, event?: MouseEvent) {
   const item = props.items.find(candidate => candidate.id === id)
   if (item && !isSelectable(item)) return
 
   const current = new Set(props.selectedIds)
-  if (current.has(id)) {
+  const anchorIndex = selectionAnchorId.value
+    ? visibleItems.value.findIndex(candidate => candidate.id === selectionAnchorId.value)
+    : -1
+  const clickedIndex = visibleItems.value.findIndex(candidate => candidate.id === id)
+
+  if (event?.shiftKey && anchorIndex >= 0 && clickedIndex >= 0) {
+    const start = Math.min(anchorIndex, clickedIndex)
+    const end = Math.max(anchorIndex, clickedIndex)
+    for (const rangeItem of visibleItems.value.slice(start, end + 1)) {
+      if (isSelectable(rangeItem)) current.add(rangeItem.id)
+    }
+  } else if (current.has(id)) {
     current.delete(id)
   } else {
     current.add(id)
   }
+
+  if (!event?.shiftKey || anchorIndex < 0) selectionAnchorId.value = id
   const updated = [...current]
   emit('update:selectedIds', updated)
   emit('selection-change', updated)
@@ -255,6 +269,9 @@ const visibleItems = computed(() => {
   return sortedItems.value.slice(start, start + normalizedPageSize.value)
 })
 watch(visibleItems, items => emit('visible-items-change', items), { immediate: true })
+watch(() => props.selectedIds, selectedIds => {
+  if (selectedIds.length === 0) selectionAnchorId.value = null
+})
 const showPagination = computed(() => props.pagination && sortedItems.value.length > normalizedPageSize.value)
 const showTopPagination = computed(() => showPagination.value && (props.paginationPosition === 'top' || props.paginationPosition === 'both'))
 const showBottomPagination = computed(() => showPagination.value && (props.paginationPosition === 'bottom' || props.paginationPosition === 'both'))
@@ -383,7 +400,7 @@ const anySelected = computed(() => props.selectedIds.length > 0)
                 class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
                 :class="{ 'opacity-100': anySelected || isSelected(item.id) }"
                 :checked="isSelected(item.id)"
-                @change="toggleSelection(item.id)"
+                @click.stop="toggleSelection(item.id, $event)"
               >
               <span
                 v-else

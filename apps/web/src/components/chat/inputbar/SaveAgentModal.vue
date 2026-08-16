@@ -54,7 +54,9 @@ async function saveAsNewAgent() {
     const lastUsedProvider = providerStore.lastUsedProvider
     const currentAgent = chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null
     const providerId = chatStore.sessionProviderOverride || currentAgent?.providerId || lastUsedProvider?.id || ''
-    const model = chatStore.sessionModelOverride || currentAgent?.model || lastUsedProvider?.defaultModel || ''
+    const model = chatStore.sessionProviderOverride && !chatStore.sessionModelOverride
+      ? ''
+      : chatStore.sessionModelOverride || currentAgent?.model || lastUsedProvider?.defaultModel || ''
 
     const subAgents = chatStore.freeChatSubAgentIds.map(id => {
       const def = agentDefs.get(id)

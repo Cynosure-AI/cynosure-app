@@ -26,6 +26,17 @@ export interface ModelPricing {
     inputCacheRead?: number
     inputCacheWrite?: number
     skus?: Record<string, number>
+    tiers?: ModelPricingTier[]
+}
+
+export interface ModelPricingTier {
+    prompt?: number
+    completion?: number
+    inputCacheRead?: number
+    inputCacheWrite?: number
+    minPromptTokens?: number
+    utcStart?: number
+    utcEnd?: number
 }
 
 export interface ModelListItem {

@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
-import { ensurePricingLoaded, getModelCost } from '../core/model-dev-fetcher.js'
+import { ensurePricingLoaded, getModelCost, type ModelCost } from '../core/model-dev-fetcher.js'
+import { getGateway } from '../core/gateway/gateway.js'
+import type { ModelPricing } from '../core/gateway/providers/base.provider.js'
 
 interface ModelUsage {
     provider: string
@@ -142,6 +144,50 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             total_completion_tokens: number
         }[]
 
+        // Keep per-request token counts for tier-aware cost calculation. A
+        // grouped average can cross a long-context threshold incorrectly.
+        const assistantCostRows = db.prepare(`
+            SELECT
+                COALESCE(provider, 'unknown') as provider,
+                COALESCE(model, 'unknown') as model,
+                COALESCE(prompt_tokens, 0) as prompt_tokens,
+                COALESCE(completion_tokens, 0) as completion_tokens
+            FROM messages
+            WHERE role = 'assistant' AND created_at >= ?
+        `).all(sinceMs) as {
+            provider: string
+            model: string
+            prompt_tokens: number
+            completion_tokens: number
+        }[]
+        const nativeOpenRouterCosts = new Map<string, ModelCost | null>()
+        const gateway = getGateway()
+        for (const row of assistantCostRows) {
+            const providerInfo = providerInfoMap.get(row.provider)
+            const key = `${row.provider}\u0000${row.model}`
+            if (providerInfo?.type !== 'openrouter' || nativeOpenRouterCosts.has(key)) continue
+            try {
+                const info = await gateway.getModelInfo(row.model, row.provider)
+                nativeOpenRouterCosts.set(key, modelCostFromPricing(info.pricing))
+            } catch {
+                nativeOpenRouterCosts.set(key, null)
+            }
+        }
+        const modelCostTotals = new Map<string, number>()
+        for (const row of assistantCostRows) {
+            const providerType = providerTypeMap.get(row.provider) ?? row.provider
+            const nativeKey = `${row.provider}\u0000${row.model}`
+            const pricing = nativeOpenRouterCosts.has(nativeKey)
+                ? nativeOpenRouterCosts.get(nativeKey)
+                : getModelCost(providerType, row.model)
+            if (!pricing) continue
+            const key = `${row.provider}\u0000${row.model}`
+            modelCostTotals.set(
+                key,
+                (modelCostTotals.get(key) ?? 0) + estimateTokenCost(pricing, row.prompt_tokens, row.completion_tokens)
+            )
+        }
+
         const auxiliaryUsage = db.prepare(`
             SELECT
                 kind,
@@ -234,13 +280,12 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
                 DATE(created_at / 1000, 'unixepoch') as date,
                 COALESCE(provider, '') as provider,
                 model,
-                COUNT(*) as messages,
-                COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
-                COALESCE(SUM(completion_tokens), 0) as completion_tokens
+                1 as messages,
+                COALESCE(prompt_tokens, 0) as prompt_tokens,
+                COALESCE(completion_tokens, 0) as completion_tokens
             FROM messages
-            WHERE created_at >= ? AND model IS NOT NULL
-            GROUP BY date, provider, model
-            ORDER BY date ASC, messages DESC
+            WHERE role = 'assistant' AND created_at >= ? AND model IS NOT NULL
+            ORDER BY date ASC, created_at ASC
         `).all(sinceMs) as {
             date: string
             provider: string
@@ -259,9 +304,12 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             const totalTokens = row.prompt_tokens + row.completion_tokens
 
             const providerType = providerTypeMap.get(row.provider) ?? row.provider
-            const pricing = getModelCost(providerType, row.model)
+            const nativeKey = `${row.provider}\u0000${row.model}`
+            const pricing = nativeOpenRouterCosts.has(nativeKey)
+                ? nativeOpenRouterCosts.get(nativeKey)
+                : getModelCost(providerType, row.model)
             const cost = pricing
-                ? (row.prompt_tokens * pricing.input + row.completion_tokens * pricing.output) / 1_000_000
+                ? estimateTokenCost(pricing, row.prompt_tokens, row.completion_tokens)
                 : null
 
             if (cost !== null) {
@@ -329,21 +377,13 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
 
         // ── Assemble response ───────────────────────────────────────────────
 
-        // Calculate per-model estimated costs using models.dev pricing
+        // Calculate per-model estimates using native OpenRouter prices when
+        // available and models.dev for the remaining providers.
         const modelUsageWithCost = modelUsage.map(m => {
             const providerInfo = providerInfoMap.get(m.provider)
-            // Use the type string (e.g. 'groq', 'openrouter') for pricing lookup;
-            // fall back to the stored value in case it was already a type string.
-            const providerType = providerInfo?.type ?? m.provider
             // Use the human-readable name for display; fall back to the type / stored value.
             const providerDisplay = providerInfo?.name ?? providerInfo?.type ?? m.provider
-            const pricing = getModelCost(providerType, m.model)
-            let estimatedCost: number | null = null
-            if (pricing) {
-                estimatedCost =
-                    (m.total_prompt_tokens * pricing.input +
-                        m.total_completion_tokens * pricing.output) / 1_000_000
-            }
+            const estimatedCost = modelCostTotals.get(`${m.provider}\u0000${m.model}`) ?? null
             return {
                 provider: providerDisplay,
                 model: m.model,
@@ -413,4 +453,38 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
 
         return response
     })
+}
+
+function estimateTokenCost(pricing: ModelCost, promptTokens: number, completionTokens: number): number {
+    const tier = [...(pricing.tiers ?? [])]
+        .filter((candidate) => candidate.minInputTokens != null && promptTokens >= candidate.minInputTokens)
+        .sort((a, b) => (b.minInputTokens ?? 0) - (a.minInputTokens ?? 0))[0]
+    const input = tier?.input ?? pricing.input
+    const output = tier?.output ?? pricing.output
+    return (promptTokens * input + completionTokens * output) / 1_000_000
+}
+
+function modelCostFromPricing(pricing: ModelPricing | undefined): ModelCost | null {
+    if (pricing?.prompt == null && pricing?.completion == null) return null
+    // Unit-billed media models cannot be estimated from message token counts.
+    if (
+        (pricing.prompt ?? 0) === 0 &&
+        (pricing.completion ?? 0) === 0 &&
+        Object.values(pricing.skus ?? {}).some((value) => value > 0)
+    ) return null
+    return {
+        input: (pricing.prompt ?? 0) * 1_000_000,
+        output: (pricing.completion ?? 0) * 1_000_000,
+        ...(pricing.tiers?.length ? {
+            tiers: pricing.tiers.flatMap((tier) =>
+                tier.prompt == null && tier.completion == null
+                    ? []
+                    : [{
+                        input: (tier.prompt ?? pricing.prompt ?? 0) * 1_000_000,
+                        output: (tier.completion ?? pricing.completion ?? 0) * 1_000_000,
+                        ...(tier.minPromptTokens != null ? { minInputTokens: tier.minPromptTokens } : {})
+                    }]
+            )
+        } : {})
+    }
 }

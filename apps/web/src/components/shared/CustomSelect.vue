@@ -26,6 +26,8 @@ export interface SelectOption {
   actionActiveIconName?: string;
   actionActive?: boolean;
   actionLabel?: string;
+  /** Opaque metadata returned with option-action events. */
+  actionData?: unknown;
 }
 
 export interface SelectOptionGroup {
@@ -79,6 +81,7 @@ const emit = defineEmits<{
   "update:modelValue": [value: string];
   change: [value: string];
   "option-action": [option: SelectOption];
+  open: [];
 }>();
 
 const isOpen = ref(false);
@@ -169,6 +172,7 @@ const currentSizeClasses = computed(() => sizeClasses[props.size]);
 function open(): void {
   filterQuery.value = "";
   isOpen.value = true;
+  emit("open");
   focusedValue.value = props.modelValue;
   if (props.filterable) {
     nextTick(() => filterInputRef.value?.focus());

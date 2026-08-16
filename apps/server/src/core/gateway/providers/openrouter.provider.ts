@@ -39,6 +39,16 @@ const RERANKER_PRICING_SKUS: Record<string, Record<string, number>> = {
     'voyageai/rerank-2.5-lite': { input_tokens: 0.00000002 }
 }
 
+/**
+ * The generic models endpoint encodes some duration-billed transcription
+ * models in token-like prompt fields. Prefer the public headline billing unit
+ * when OpenRouter publishes one, so the UI never labels that raw field as a
+ * per-minute price.
+ */
+const TRANSCRIPTION_PRICING_SKUS: Record<string, Record<string, number>> = {
+    'openai/whisper-large-v3': { per_audio_minute: 0.0015 }
+}
+
 interface OpenRouterModel {
     id: string
     context_length?: number
@@ -179,6 +189,8 @@ export class OpenRouterProvider extends BaseLLMProvider {
         if (internalReasoning !== undefined) result.internalReasoning = internalReasoning
         if (inputCacheRead !== undefined) result.inputCacheRead = inputCacheRead
         if (inputCacheWrite !== undefined) result.inputCacheWrite = inputCacheWrite
+        const tiers = this.getPricingTiers(pricing.overrides)
+        if (tiers.length) result.tiers = tiers
         const knownPricingKeys = new Set([
             'prompt',
             'completion',
@@ -188,7 +200,8 @@ export class OpenRouterProvider extends BaseLLMProvider {
             'web_search',
             'internal_reasoning',
             'input_cache_read',
-            'input_cache_write'
+            'input_cache_write',
+            'overrides'
         ])
         const skus: Record<string, number> = {}
         for (const [key, value] of Object.entries(pricing)) {
@@ -198,6 +211,34 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
         if (Object.keys(skus).length) result.skus = skus
         return Object.keys(result).length ? result : undefined
+    }
+
+    private getPricingTiers(raw: unknown): NonNullable<ModelPricing['tiers']> {
+        if (!Array.isArray(raw)) return []
+        return raw.flatMap((item): NonNullable<ModelPricing['tiers']> => {
+            if (!item || typeof item !== 'object') return []
+            const value = item as Record<string, unknown>
+            const prompt = this.parsePrice(value.prompt)
+            const completion = this.parsePrice(value.completion)
+            const inputCacheRead = this.parsePrice(value.input_cache_read)
+            const inputCacheWrite = this.parsePrice(value.input_cache_write)
+            const minPromptTokens = this.parsePrice(value.min_prompt_tokens)
+            const utcStart = this.parsePrice(value.utc_start)
+            const utcEnd = this.parsePrice(value.utc_end)
+            if (
+                prompt == null && completion == null && inputCacheRead == null &&
+                inputCacheWrite == null
+            ) return []
+            return [{
+                ...(prompt != null ? { prompt } : {}),
+                ...(completion != null ? { completion } : {}),
+                ...(inputCacheRead != null ? { inputCacheRead } : {}),
+                ...(inputCacheWrite != null ? { inputCacheWrite } : {}),
+                ...(minPromptTokens != null ? { minPromptTokens } : {}),
+                ...(utcStart != null ? { utcStart } : {}),
+                ...(utcEnd != null ? { utcEnd } : {})
+            }]
+        })
     }
 
     private getSkuPricing(skus: Record<string, string> | null | undefined): Record<string, number> | undefined {
@@ -217,18 +258,25 @@ export class OpenRouterProvider extends BaseLLMProvider {
         const rerankerSkus = outputModalities.includes('rerank')
             ? RERANKER_PRICING_SKUS[model.id]
             : undefined
+        const transcriptionSkus = outputModalities.includes('transcription')
+            ? TRANSCRIPTION_PRICING_SKUS[model.id]
+            : undefined
+        const durationBilledTranscription = Boolean(transcriptionSkus)
         return {
             id: model.id,
             name: model.name,
             contextLength: model.context_length || undefined,
             inputModalities: inputModalities.length ? inputModalities : undefined,
             outputModalities: outputModalities.length ? outputModalities : undefined,
-            pricing: pricing || rerankerSkus
+            supportsToolCalls: this.modelSupportsToolCalls(model),
+            pricing: pricing || rerankerSkus || transcriptionSkus
                 ? {
                     ...pricing,
+                    ...(durationBilledTranscription ? { prompt: 0, completion: 0 } : {}),
                     skus: {
                         ...pricing?.skus,
-                        ...rerankerSkus
+                        ...rerankerSkus,
+                        ...transcriptionSkus
                     }
                 }
                 : undefined
@@ -936,6 +984,17 @@ export class OpenRouterProvider extends BaseLLMProvider {
             const inputModalities = this.getInputModalities(model)
             const outputModalities = this.getOutputModalities(model)
             let pricing = this.getPricing(model?.pricing)
+            const transcriptionSkus = outputModalities.includes('transcription')
+                ? TRANSCRIPTION_PRICING_SKUS[modelId]
+                : undefined
+            if (transcriptionSkus) {
+                pricing = {
+                    ...pricing,
+                    prompt: 0,
+                    completion: 0,
+                    skus: { ...pricing?.skus, ...transcriptionSkus }
+                }
+            }
             if (outputModalities.includes('video')) {
                 const videoModel = (await this.listVideoModels().catch(() => []))
                     .find((item) => item.id === modelId)

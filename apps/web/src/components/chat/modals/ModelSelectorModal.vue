@@ -47,20 +47,8 @@ const selectedModelForSelector = computed(() =>
     : chatStore.sessionModelOverride || "",
 );
 
-const currentProvider = computed(() =>
-  providerStore.providers.find((p) => p.id === currentProviderId.value),
-);
-
 const defaultModelLabel = computed(() => {
-  const agentModel = selectedAgent.value?.model;
-  const providerDefault = currentProvider.value?.defaultModel;
-  const isProviderOverridden =
-    chatStore.sessionProviderOverride &&
-    chatStore.sessionProviderOverride !== selectedAgent.value?.providerId;
-  const effectiveDefault = isProviderOverridden
-    ? providerDefault
-    : agentModel || providerDefault;
-  return effectiveDefault || (selectedAgent.value ? "Agent defaults" : "Provider default");
+  return chatStore.resolvedModelProvider?.model || (selectedAgent.value ? "Agent defaults" : "Provider default");
 });
 
 function onSelectionChange(selection: {

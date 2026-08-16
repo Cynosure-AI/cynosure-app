@@ -308,7 +308,9 @@ export function useChatAgentConfig(
         if (sessionAutoMemory.value !== preset.autoMemory) fields.push('Automatic memory')
 
         const effectiveProvider = sessionProviderOverride.value ?? providerId
-        const effectiveModel = sessionModelOverride.value ?? model
+        const effectiveModel = sessionProviderOverride.value && !sessionModelOverride.value
+            ? null
+            : sessionModelOverride.value ?? model
         if (effectiveProvider !== providerId || effectiveModel !== model) fields.push('Model / provider')
         return fields
     })
@@ -367,7 +369,12 @@ export function useChatAgentConfig(
         if (sessionAutoMemory.value !== actualPreset.autoMemory) updates.autoMemory = sessionAutoMemory.value
 
         const nextProviderId = sessionProviderOverride.value ?? actualProviderId
-        const nextModel = sessionModelOverride.value ?? actualModel
+        // A provider-only override deliberately means "use that provider's
+        // default". Persist an empty model instead of pairing the new provider
+        // with the agent's previous model.
+        const nextModel = sessionProviderOverride.value && !sessionModelOverride.value
+            ? ''
+            : sessionModelOverride.value ?? actualModel
         if (nextProviderId !== actualProviderId) {
             updates.providerId = nextProviderId
             updates.model = nextModel
@@ -499,6 +506,14 @@ export function useChatAgentConfig(
         if (activeAgentId.value) {
             const agentDefs = useAgentDefinitionsStore()
             const activeAgent = agentDefs.get(activeAgentId.value)
+            if (!model && providerId) {
+                // Preserve a provider-only override even when it is the same
+                // provider as the agent. This is distinct from agent default.
+                sessionProviderOverride.value = providerId
+                sessionModelOverride.value = null
+                markOverridesModified()
+                return
+            }
             const nextProviderId = providerId || activeAgent?.providerId || null
             sessionProviderOverride.value = nextProviderId !== (activeAgent?.providerId || null) ? nextProviderId : null
             sessionModelOverride.value = (model || null) !== (activeAgent?.model || null) ? (model || null) : null

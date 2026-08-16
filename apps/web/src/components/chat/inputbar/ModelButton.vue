@@ -1,41 +1,17 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
-import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
-import { useProviderStore } from '../../../stores/provider.store'
 import { Icon } from '@iconify/vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
 import ModelSelectorModal from '../modals/ModelSelectorModal.vue'
 
 const chatStore = useChatStore()
-const agentDefs = useAgentDefinitionsStore()
-const providerStore = useProviderStore()
-
 const showModal = ref(false)
 
-const selectedAgent = computed(() =>
-  chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null
-)
-
-const currentProviderId = computed(() =>
-  chatStore.sessionProviderOverride || selectedAgent.value?.providerId || providerStore.lastUsedProviderId
-)
-
-const currentProvider = computed(() =>
-  providerStore.providers.find(p => p.id === currentProviderId.value)
-)
+const currentProviderId = computed(() => chatStore.resolvedModelProvider?.providerId || '')
 
 const displayModel = computed(() => {
-  const override = chatStore.sessionModelOverride
-  if (override) {
-    // Truncate long model names for display
-    return override.length > 16 ? override.substring(0, 14) + '…' : override
-  }
-  const agentModel = selectedAgent.value?.model
-  const providerDefault = currentProvider.value?.defaultModel
-  const isProviderOverridden = chatStore.sessionProviderOverride &&
-    chatStore.sessionProviderOverride !== selectedAgent.value?.providerId
-  const effectiveDefault = isProviderOverridden ? providerDefault : (agentModel || providerDefault)
+  const effectiveDefault = chatStore.resolvedModelProvider?.model
   if (effectiveDefault) {
     return effectiveDefault.length > 16 ? effectiveDefault.substring(0, 14) + '…' : effectiveDefault
   }

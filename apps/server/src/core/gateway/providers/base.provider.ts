@@ -179,6 +179,18 @@ export interface ModelPricing {
   inputCacheWrite?: number
   /** Provider-specific endpoint pricing SKUs. Values are in USD unless the key says cents. */
   skus?: Record<string, number>
+  /** Alternate token rates selected by context size or another provider rule. */
+  tiers?: ModelPricingTier[]
+}
+
+export interface ModelPricingTier {
+  prompt?: number
+  completion?: number
+  inputCacheRead?: number
+  inputCacheWrite?: number
+  minPromptTokens?: number
+  utcStart?: number
+  utcEnd?: number
 }
 
 export interface ModelListItem {

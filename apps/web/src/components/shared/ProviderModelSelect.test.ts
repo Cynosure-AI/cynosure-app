@@ -46,4 +46,31 @@ describe('ProviderModelSelect favorites', () => {
     expect(matchingRows[0].attributes('title')).toContain('Input / Output: $2.50 / $10.00 per 1M tokens')
     expect(matchingRows[0].text()).toContain('$2.50 / $10.00/M')
   })
+
+  test('persists the actual media model type from a combined selector', async () => {
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockImplementation(async (_providerId, type) =>
+      type === 'transcription'
+        ? [{ id: 'speech/model', outputModalities: ['transcription'], pricing: { prompt: 0.001 } }]
+        : []
+    )
+
+    const wrapper = mount(ProviderModelSelect, {
+      props: {
+        providerId: 'openrouter-1',
+        modelValue: '',
+        providers: [{ id: 'openrouter-1', name: 'OpenRouter', type: 'openrouter', defaultModel: 'text/model' }],
+        modelTypes: ['llm', 'image', 'video', 'transcription'],
+      },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+    await wrapper.get('[role="combobox"]').trigger('click')
+    const row = wrapper.findAll('[role="option"]').find((option) => option.text().includes('speech/model'))!
+    await row.get('[aria-label="Add to favorites"]').trigger('click')
+
+    expect(JSON.parse(localStorage.getItem(SK_PROVIDER_MODEL_FAVORITES) || '[]')).toMatchObject([
+      { providerId: 'openrouter-1', model: 'speech/model', modelType: 'transcription' },
+    ])
+  })
 })

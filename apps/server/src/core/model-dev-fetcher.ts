@@ -11,6 +11,15 @@ export interface ModelCost {
     reasoning?: number
     inputAudio?: number
     outputAudio?: number
+    tiers?: ModelCostTier[]
+}
+
+export interface ModelCostTier {
+    input: number
+    output: number
+    cacheRead?: number
+    cacheWrite?: number
+    minInputTokens?: number
 }
 
 export interface ModelMetadata {
@@ -32,6 +41,13 @@ interface ModelsDevProvider {
             reasoning?: number
             input_audio?: number
             output_audio?: number
+            tiers?: Array<{
+                input?: number
+                output?: number
+                cache_read?: number
+                cache_write?: number
+                tier?: { type?: string; size?: number }
+            }>
         }
         limit?: { context?: number }
         modalities?: { input?: string[]; output?: string[] }
@@ -159,6 +175,7 @@ async function fetchPricing(): Promise<void> {
 function buildLookups(data: ModelsDevData): void {
     const newExact = new Map<string, ModelMetadata>()
     const newModelOnly = new Map<string, ModelMetadata>()
+    const ambiguousModelIds = new Set<string>()
 
     for (const [providerKey, provider] of Object.entries(data)) {
         if (!provider?.models || typeof provider.models !== 'object') continue
@@ -167,6 +184,7 @@ function buildLookups(data: ModelsDevData): void {
             const metadata: ModelMetadata = {}
             const cost = modelInfo?.cost
             if (cost && typeof cost.input === 'number' && typeof cost.output === 'number') {
+                const tiers = normalizeCostTiers(cost.tiers)
                 metadata.cost = {
                     input: cost.input,
                     output: cost.output,
@@ -175,6 +193,7 @@ function buildLookups(data: ModelsDevData): void {
                     ...(numeric(cost.reasoning) != null ? { reasoning: numeric(cost.reasoning) } : {}),
                     ...(numeric(cost.input_audio) != null ? { inputAudio: numeric(cost.input_audio) } : {}),
                     ...(numeric(cost.output_audio) != null ? { outputAudio: numeric(cost.output_audio) } : {}),
+                    ...(tiers.length ? { tiers } : {}),
                 }
             }
 
@@ -192,12 +211,46 @@ function buildLookups(data: ModelsDevData): void {
             if (!Object.keys(metadata).length) continue
             const normalizedProvider = normaliseProvider(providerKey)
             newExact.set(`${normalizedProvider}/${modelId}`, metadata)
-            if (!newModelOnly.has(modelId)) newModelOnly.set(modelId, metadata)
+            // A bare model id is only safe as a fallback when it occurs once in
+            // the catalog. The same model can have materially different prices
+            // and limits across hosts, so "first provider wins" is unsafe.
+            if (ambiguousModelIds.has(modelId)) continue
+            if (newModelOnly.has(modelId)) {
+                newModelOnly.delete(modelId)
+                ambiguousModelIds.add(modelId)
+            } else {
+                newModelOnly.set(modelId, metadata)
+            }
         }
     }
 
     exactLookup = newExact
     modelOnlyLookup = newModelOnly
+}
+
+function normalizeCostTiers(raw: unknown): ModelCostTier[] {
+    if (!Array.isArray(raw)) return []
+    return raw.flatMap((item): ModelCostTier[] => {
+        if (!item || typeof item !== 'object') return []
+        const tier = item as {
+            input?: unknown
+            output?: unknown
+            cache_read?: unknown
+            cache_write?: unknown
+            tier?: { type?: unknown; size?: unknown }
+        }
+        const input = numeric(tier.input)
+        const output = numeric(tier.output)
+        if (input == null || output == null) return []
+        const minInputTokens = tier.tier?.type === 'context' ? numeric(tier.tier.size) : undefined
+        return [{
+            input,
+            output,
+            ...(numeric(tier.cache_read) != null ? { cacheRead: numeric(tier.cache_read) } : {}),
+            ...(numeric(tier.cache_write) != null ? { cacheWrite: numeric(tier.cache_write) } : {}),
+            ...(minInputTokens != null ? { minInputTokens } : {})
+        }]
+    }).sort((a, b) => (a.minInputTokens ?? 0) - (b.minInputTokens ?? 0))
 }
 
 function normalizeModalities(raw: unknown): string[] | undefined {

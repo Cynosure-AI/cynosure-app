@@ -39,3 +39,24 @@ describe('reranker model pricing', () => {
     })).toBe('Free')
   })
 })
+
+describe('extended model pricing', () => {
+  test('formats explicit audio-duration SKUs without treating them as tokens', () => {
+    expect(compactPricingTag({
+      id: 'openai/whisper-large-v3',
+      outputModalities: ['transcription'],
+      pricing: { prompt: 0, completion: 0, skus: { per_audio_minute: 0.0015 } },
+    })).toBe('$0.0015/min')
+  })
+
+  test('shows context pricing tiers', () => {
+    expect(pricingTooltipLines({
+      id: 'tiered-model',
+      pricing: {
+        prompt: 0.000001,
+        completion: 0.000002,
+        tiers: [{ minPromptTokens: 200_000, prompt: 0.000002, completion: 0.000004 }],
+      },
+    })).toContain('≥ 200K input tokens: $2.00 / $4.00 per 1M tokens')
+  })
+})

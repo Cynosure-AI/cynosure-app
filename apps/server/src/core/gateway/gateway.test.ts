@@ -66,4 +66,21 @@ describe('LLMGateway model metadata enrichment', () => {
             inputCacheRead: 0.00000025,
         })
     })
+
+    test('does not cache an empty metadata response', async () => {
+        metadataMocks.getModelMetadata.mockReturnValue(null)
+        const gateway = new LLMGateway()
+        const getModelInfo = vi.fn().mockResolvedValue({ id: 'missing-model' })
+        const provider = {
+            config: { id: 'provider-1', type: 'openai' },
+            getModelInfo,
+            listModelItems: vi.fn().mockResolvedValue([]),
+        } as unknown as BaseLLMProvider
+        gateway.getAllProviders().set('provider-1', provider)
+
+        await gateway.getModelInfo('missing-model', 'provider-1')
+        await gateway.getModelInfo('missing-model', 'provider-1')
+
+        expect(getModelInfo).toHaveBeenCalledTimes(2)
+    })
 })
