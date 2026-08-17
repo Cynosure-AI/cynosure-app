@@ -48,7 +48,7 @@ function showAnySection(ids: string[]): boolean {
           </p>
         </div>
       </div>
-      <div class="pt-1 border-t border-theme-700">
+      <div class="pt-4 border-t border-theme-700">
         <BackupExport />
       </div>
     </BaseCard>
@@ -74,7 +74,7 @@ function showAnySection(ids: string[]): boolean {
           </p>
         </div>
       </div>
-      <div class="pt-1 border-t border-theme-700">
+      <div class="pt-4 border-t border-theme-700">
         <BackupImport />
       </div>
     </BaseCard>

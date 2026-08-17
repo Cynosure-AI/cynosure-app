@@ -102,6 +102,12 @@ function toggleConversationMenu(id: string, event: Event): void {
   openConversationMenuId.value = openConversationMenuId.value === id ? null : id
 }
 
+function openConversationMenu(id: string, event: MouseEvent): void {
+  event.stopPropagation()
+  historyMenuOpen.value = false
+  openConversationMenuId.value = id
+}
+
 function toggleHistoryMenu(event: Event): void {
   event.stopPropagation()
   openConversationMenuId.value = null
@@ -486,6 +492,7 @@ onMounted(() => {
         class="group relative flex items-center px-3 py-2.5 mx-2 my-0.5 rounded-lg cursor-pointer transition-colors hover:bg-theme-800/60"
         :class="{ 'bg-theme-800': conv.id === chatStore.activeConversationId }"
         @click="selectChat(conv)"
+        @contextmenu.prevent="openConversationMenu(conv.id, $event)"
       >
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">

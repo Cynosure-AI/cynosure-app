@@ -2,7 +2,6 @@
 import { ref, reactive } from 'vue'
 import { api } from '../../api/client'
 import { Icon } from '@iconify/vue'
-import BaseCard from '../shared/BaseCard.vue'
 
 const exportModules = reactive({
   agents: true,
@@ -57,7 +56,7 @@ async function doExport(): Promise<void> {
 </script>
 
 <template>
-  <BaseCard class="p-4 space-y-4">
+  <div class="space-y-4">
     <p class="text-xs text-theme-500">
       Select which modules to include in the backup file.
     </p>
@@ -111,5 +110,5 @@ async function doExport(): Promise<void> {
       />
       {{ exporting ? 'Exporting...' : 'Download Backup' }}
     </button>
-  </BaseCard>
+  </div>
 </template>
