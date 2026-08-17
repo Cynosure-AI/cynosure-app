@@ -20,7 +20,8 @@
             />
             <!-- Step circle -->
             <button
-              class="flex flex-col items-center gap-1 group"
+              class="flex flex-col items-center gap-1 group disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="advancing"
               @click="jumpToStep(step.globalIndex)"
             >
               <div
@@ -56,7 +57,8 @@
         <!-- Dismiss button -->
         <button
           v-if="currentStep !== STEP_DONE && serverReady"
-          class="text-xs text-theme-600 hover:text-theme-400 transition-colors flex items-center gap-1 ml-auto"
+          class="text-xs text-theme-600 hover:text-theme-400 transition-colors flex items-center gap-1 ml-auto disabled:cursor-not-allowed disabled:opacity-60"
+          :disabled="advancing"
           @click="dismiss"
         >
           Skip setup
@@ -110,6 +112,13 @@
           <!-- MCP tools -->
           <OnboardingPopularMcps v-else-if="currentStep === STEP_MCPS" />
 
+          <!-- First agent -->
+          <OnboardingAgent
+            v-else-if="currentStep === STEP_AGENT"
+            ref="agentStepRef"
+            @draft-change="agentDraftState = $event"
+          />
+
           <!-- Done -->
           <div
             v-else-if="currentStep === STEP_DONE"
@@ -141,7 +150,8 @@
         <!-- Back -->
         <button
           v-if="currentStep > STEP_WELCOME && currentStep < STEP_DONE"
-          class="flex items-center gap-1.5 px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors rounded-lg hover:bg-theme-800/60"
+          class="flex items-center gap-1.5 px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors rounded-lg hover:bg-theme-800/60 disabled:cursor-not-allowed disabled:opacity-60"
+          :disabled="advancing"
           @click="goBack"
         >
           <Icon
@@ -186,17 +196,30 @@
             Add a provider first
           </span>
 
+          <span
+            v-if="serverReady && currentStep === STEP_AGENT && agentDraftState.hasDraft && !agentDraftState.valid"
+            class="text-xs text-amber-400/80 hidden sm:block"
+          >
+            Add an agent name
+          </span>
+
           <button
             v-if="serverReady && currentStep < STEP_DONE"
             class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-lg transition-colors"
             :class="canContinue
               ? 'bg-accent-600 hover:bg-accent-500 text-white'
               : 'bg-theme-800 text-theme-500 cursor-not-allowed'"
-            :disabled="!canContinue"
+            :disabled="!canContinue || advancing"
             @click="goNext"
           >
-            {{ currentStep === STEP_MCPS ? 'Finish' : 'Continue' }}
             <Icon
+              v-if="advancing"
+              icon="lucide:loader-2"
+              class="w-4 h-4 animate-spin"
+            />
+            {{ nextButtonLabel }}
+            <Icon
+              v-if="!advancing"
               icon="lucide:arrow-right"
               class="w-4 h-4"
             />
@@ -230,6 +253,11 @@ import OnboardingWelcome from '../components/onboarding/OnboardingWelcome.vue'
 import OnboardingProvider from '../components/onboarding/OnboardingProvider.vue'
 import OnboardingMemory from '../components/onboarding/OnboardingMemory.vue'
 import OnboardingPopularMcps from '../components/onboarding/OnboardingPopularMcps.vue'
+import OnboardingAgent from '../components/onboarding/OnboardingAgent.vue'
+
+interface OnboardingAgentHandle {
+  createAgent: () => Promise<boolean>
+}
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
@@ -240,14 +268,18 @@ const STEP_WELCOME = 0
 const STEP_PROVIDER = 1
 const STEP_MEMORY = 2
 const STEP_MCPS = 3
-const STEP_DONE = 4
+const STEP_AGENT = 4
+const STEP_DONE = 5
 
-const totalSteps = STEP_DONE + 1 // 0..4
+const totalSteps = STEP_DONE + 1 // 0..5
 
 // ── Navigation state ──────────────────────────────────────────────
 const currentStep = ref(STEP_WELCOME)
 const direction = ref<'forward' | 'backward'>('forward')
 const serverReady = ref(false)
+const advancing = ref(false)
+const agentStepRef = ref<OnboardingAgentHandle | null>(null)
+const agentDraftState = ref({ hasDraft: false, valid: true })
 let readinessPoll: ReturnType<typeof setInterval> | null = null
 
 const transitionName = computed(() =>
@@ -259,15 +291,16 @@ const breadcrumbSteps = [
   { id: 'provider', label: 'AI Provider', globalIndex: STEP_PROVIDER },
   { id: 'memory', label: 'Memory', globalIndex: STEP_MEMORY },
   { id: 'mcps', label: 'MCP Tools', globalIndex: STEP_MCPS },
+  { id: 'agent', label: 'First Agent', globalIndex: STEP_AGENT },
 ]
 
 // Which breadcrumb index is active (0-based within breadcrumbSteps)
 const breadcrumbStepIndex = computed(() =>
-  Math.max(0, currentStep.value - 1) // steps 1-3 map to breadcrumb 0-2
+  Math.max(0, currentStep.value - 1) // steps 1-4 map to breadcrumb 0-3
 )
 
 const showBreadcrumb = computed(() =>
-  currentStep.value >= STEP_PROVIDER && currentStep.value <= STEP_MCPS
+  currentStep.value >= STEP_PROVIDER && currentStep.value <= STEP_AGENT
 )
 
 function stepCircleClass(bIndex: number): string {
@@ -285,13 +318,32 @@ const canContinue = computed(() => {
   if (currentStep.value === STEP_PROVIDER) {
     return providerStore.providers.length > 0
   }
+  if (currentStep.value === STEP_AGENT) {
+    return agentDraftState.value.valid
+  }
   return true
 })
 
+const nextButtonLabel = computed(() => {
+  if (advancing.value) return 'Creating…'
+  if (currentStep.value === STEP_AGENT) {
+    return agentDraftState.value.hasDraft ? 'Create agent' : 'Skip for now'
+  }
+  return 'Continue'
+})
+
 // ── Navigation actions ─────────────────────────────────────────────
-function goNext() {
-  if (!canContinue.value) return
+async function goNext() {
+  if (!canContinue.value || advancing.value) return
   if (currentStep.value >= STEP_DONE) return
+
+  if (currentStep.value === STEP_AGENT && agentDraftState.value.hasDraft) {
+    advancing.value = true
+    const created = await agentStepRef.value?.createAgent()
+    advancing.value = false
+    if (!created) return
+  }
+
   direction.value = 'forward'
   currentStep.value++
   if (currentStep.value === STEP_DONE) {
@@ -300,18 +352,19 @@ function goNext() {
 }
 
 function goBack() {
-  if (currentStep.value <= STEP_WELCOME) return
+  if (advancing.value || currentStep.value <= STEP_WELCOME) return
   direction.value = 'backward'
   currentStep.value--
 }
 
 function jumpToStep(index: number) {
-  if (index === currentStep.value) return
+  if (advancing.value || index === currentStep.value) return
   direction.value = index > currentStep.value ? 'forward' : 'backward'
   currentStep.value = index
 }
 
 function dismiss() {
+  if (advancing.value) return
   onboardingStore.finish()
   router.push('/chat')
 }
