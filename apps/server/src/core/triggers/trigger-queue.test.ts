@@ -62,4 +62,26 @@ describe('coalesced trigger queue', () => {
         expect(recovered).toHaveBeenCalledOnce()
         errorSpy.mockRestore()
     })
+
+    test('runs pending work after the in-flight runner fails', async () => {
+        const gate = deferred()
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+        const recovered = vi.fn()
+
+        enqueueCoalescedTrigger('recover-pending', async () => {
+            await gate.promise
+            throw new Error('first run failed')
+        })
+        enqueueCoalescedTrigger('recover-pending', recovered)
+
+        gate.resolve()
+        await flushQueue()
+
+        expect(recovered).toHaveBeenCalledOnce()
+        expect(errorSpy).toHaveBeenCalledWith(
+            '[trigger-queue] Unhandled queue error for recover-pending:',
+            expect.objectContaining({ message: 'first run failed' }),
+        )
+        errorSpy.mockRestore()
+    })
 })

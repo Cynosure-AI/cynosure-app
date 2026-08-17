@@ -115,8 +115,12 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     })
 
     // DELETE /api/agents/:id — delete
-    app.delete<{ Params: { id: string } }>('/:id', async (req) => {
+    app.delete<{ Params: { id: string } }>('/:id', async (req, reply) => {
         const { id } = req.params
+        if (!getAgent(id)) {
+            reply.code(404)
+            return { error: 'Agent not found' }
+        }
         const db = getDb()
         db.prepare('UPDATE conversations SET agent_id = NULL WHERE agent_id = ?').run(id)
         // Unschedule and delete all cron jobs for this agent
@@ -126,7 +130,7 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
         }
         db.prepare('DELETE FROM cron_jobs WHERE agent_id = ?').run(id)
         deleteAgent(id)
-        getChannelManager().refreshAllCommands()
+        await getChannelManager().refreshAllCommands()
         return { success: true }
     })
 

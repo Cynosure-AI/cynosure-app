@@ -551,7 +551,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       for (const cleanup of stepPersistenceCleanups) {
         cleanup()
       }
-      stopCronScheduler()
+      await stopCronScheduler()
       await getChannelManager().stopAll()
       await stopAllMemorySpaceWatchers()
 

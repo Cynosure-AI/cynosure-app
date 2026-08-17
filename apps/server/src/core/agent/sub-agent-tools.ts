@@ -69,7 +69,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             required: ['internalName', 'instructions']
         },
         timeout: SUB_AGENT_TIMEOUT_MS,
-        execute: async (params: unknown): Promise<ToolResult> => {
+        execute: async (params: unknown, executionSignal?: AbortSignal): Promise<ToolResult> => {
             const { internalName, instructions, context } = params as { internalName: string; instructions: string; context?: string }
             const selected = availableSubAgents.find(({ agentData }) => agentData.internalName === internalName)
 
@@ -105,7 +105,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 autoMemory: agentData.autoMemory === true,
                 memorySpaceOverrides: getAssignedOrDefaultSpaces(agentData.id),
                 eventMeta,
-                signal,
+                signal: executionSignal ?? signal,
             })
             const gateway = getGateway()
             const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id
@@ -129,7 +129,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 maxRounds: SUB_AGENT_MAX_ROUNDS,
                 thinkingEnabled: agentData.thinkingEnabled !== false,
                 reasoningEffort: agentData.reasoningEffort,
-                signal,
+                signal: executionSignal ?? signal,
                 streamMode: 'per-round',
                 streamEventPrefix: 'chat:subagent-stream',
                 saveMessages: true,

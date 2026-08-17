@@ -54,6 +54,10 @@ class ChannelManager {
 
     /** Stop all channels. */
     async stopAll(): Promise<void> {
+        // Let already-accepted proactive messages settle while their providers
+        // are still connected. New sends cannot be created once cron shutdown
+        // has completed.
+        await Promise.allSettled(Array.from(this.notificationQueues.values()))
         for (const [id] of this.providers) {
             await this.stopChannel(id)
         }
@@ -117,15 +121,15 @@ class ChannelManager {
      * @param target     Platform-specific target (Telegram chat ID, Discord/Slack channel ID).
      * @param text       Message text to send.
      */
-    queueNotification(channelId: string, target: string, text: string): void {
+    queueNotification(channelId: string, target: string, text: string): Promise<boolean> {
         const provider = this.providers.get(channelId)
         if (!provider) {
             console.warn(`[ChannelManager] Cannot send notification for channel ${channelId}: channel is not running`)
-            return
+            return Promise.resolve(false)
         }
         if (!provider.sendNotification) {
             console.warn(`[ChannelManager] Cannot send notification for channel ${channelId}: provider does not support notifications`)
-            return
+            return Promise.resolve(false)
         }
 
         const prev = this.notificationQueues.get(channelId) ?? Promise.resolve()
@@ -133,14 +137,19 @@ class ChannelManager {
             .then(() => provider.sendNotification!(target, text))
             .catch((err) => {
                 console.error(`[ChannelManager] Notification failed for channel ${channelId}: ${(err as Error).message}`)
+                throw err
             })
-        this.notificationQueues.set(channelId, next)
+        // Store a settled chain so one delivery failure does not poison later
+        // notifications for the channel.
+        this.notificationQueues.set(channelId, next.catch(() => undefined))
         // Clean up the queue entry once the chain settles
-        next.finally(() => {
-            if (this.notificationQueues.get(channelId) === next) {
+        const settled = this.notificationQueues.get(channelId)!
+        void settled.then(() => {
+            if (this.notificationQueues.get(channelId) === settled) {
                 this.notificationQueues.delete(channelId)
             }
         })
+        return next.then(() => true, () => false)
     }
 
     // ─── DB helpers ───────────────────────────────────────────

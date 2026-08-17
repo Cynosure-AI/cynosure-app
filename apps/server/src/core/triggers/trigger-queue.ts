@@ -23,9 +23,7 @@ export function enqueueCoalescedTrigger(key: string, runner: () => Promise<void>
 
     const state: QueueState = { running: false, pending: false, runner }
     queues.set(key, state)
-    runQueue(key, state).catch((err) => {
-        console.error(`[trigger-queue] Unhandled queue error for ${key}:`, err)
-    })
+    void runQueue(key, state)
 }
 
 async function runQueue(key: string, state: QueueState): Promise<void> {
@@ -33,7 +31,14 @@ async function runQueue(key: string, state: QueueState): Promise<void> {
     try {
         do {
             state.pending = false
-            await state.runner()
+            try {
+                await state.runner()
+            } catch (err) {
+                // A failed run must not discard work that arrived while it was
+                // in flight. Log the failure and let the coalesced pending run
+                // proceed with the latest runner.
+                console.error(`[trigger-queue] Unhandled queue error for ${key}:`, err)
+            }
         } while (state.pending)
     } finally {
         queues.delete(key)

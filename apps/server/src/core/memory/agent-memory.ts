@@ -9,7 +9,6 @@ import {
     moveMemoryGraphSource,
 } from './memory-entity-indexer.js'
 import {
-    ensureFolder,
     writeTextFile,
     readTextFile,
     computeFileHash,
@@ -196,36 +195,6 @@ export class AgentMemory {
         return count
     }
 
-    // -----------------------------------------------------------------------
-    // File-backed operations (write file + index)
-    // -----------------------------------------------------------------------
-
-    /**
-     * Write a markdown file to the space folder and index it.
-     * If folderPath is not provided, only indexes without writing.
-     */
-    async storeAsFile(
-        content: string,
-        fileName: string,
-        spaceId: string,
-    ): Promise<{ fileName: string; chunkCount: number }> {
-        const folderPath = getMemorySpaceFolderPath(spaceId)
-        if (!folderPath) {
-            // Fallback: index without writing to disk
-            const count = await this.ingestText(content, fileName, spaceId)
-            return { fileName, chunkCount: count }
-        }
-
-        ensureFolder(folderPath)
-        const uniqueName = resolveUniqueFileName(folderPath, fileName)
-        const filePath = writeTextFile(folderPath, uniqueName, content)
-        const hash = computeFileHash(filePath)
-        const count = await this.ingestText(content, uniqueName, spaceId)
-        upsertFileIndex(spaceId, uniqueName, hash, count)
-        this.scheduleDerivedGraphRefresh(content, uniqueName, spaceId)
-        return { fileName: uniqueName, chunkCount: count }
-    }
-
     /**
      * Re-index an existing file in a space folder (delete old vectors, re-ingest).
      * The file must already exist on disk at folderPath/fileName.
@@ -271,40 +240,6 @@ export class AgentMemory {
         upsertFileIndex(spaceId, fileName, hash, count)
         this.scheduleDerivedGraphRefresh(text, fileName, spaceId)
         return { fileName, chunkCount: count }
-    }
-
-    /**
-     * Copy an external file into the space folder, then index it.
-     * The content is provided as a string (already parsed/extracted).
-     */
-    async ingestExternalFile(
-        parsedContent: string,
-        fileName: string,
-        spaceId: string,
-        folderPath: string,
-    ): Promise<{ fileName: string; chunkCount: number }> {
-        ensureFolder(folderPath)
-        // Always save as .md regardless of the original extension
-        const mdName = toMarkdownFileName(fileName)
-        const uniqueName = resolveUniqueFileName(folderPath, mdName)
-        const filePath = writeTextFile(folderPath, uniqueName, parsedContent)
-        const hash = computeFileHash(filePath)
-
-        const ragStore = getRAGStore()
-        await ragStore.deleteBySource(getActivePermanentMemoryTableName(), uniqueName, buildMemorySpaceFilter([{ id: spaceId }]))
-        const count = await this.ingestText(parsedContent, uniqueName, spaceId)
-        upsertFileIndex(spaceId, uniqueName, hash, count)
-        this.scheduleDerivedGraphRefresh(parsedContent, uniqueName, spaceId)
-        return { fileName: uniqueName, chunkCount: count }
-    }
-
-    // -----------------------------------------------------------------------
-    // Legacy: store text (for backwards-compat paths that don't pass folderPath)
-    // -----------------------------------------------------------------------
-
-    /** @deprecated Prefer storeAsFile which also writes to disk. */
-    async store(text: string, sourceFile?: string, spaceId?: string): Promise<number> {
-        return this.ingestText(text, sourceFile ?? '', spaceId ?? '')
     }
 
     // -----------------------------------------------------------------------
