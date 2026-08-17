@@ -37,6 +37,13 @@ const searchInputRef = ref<HTMLInputElement | null>(null)
 
 const categories: SettingsCategory[] = [
   {
+    id: 'appearance',
+    label: 'Appearance',
+    description: 'Customize theme, chat display preferences, and setup guide access.',
+    icon: 'lucide:palette',
+    component: AppearanceSettings
+  },
+  {
     id: 'chat',
     label: 'Chat',
     description: 'Control automatic tool and memory modes, generated titles, and context handling for conversations.',
@@ -71,13 +78,6 @@ const categories: SettingsCategory[] = [
     icon: 'lucide:radio',
     component: ChannelsView,
     componentProps: { embedded: true }
-  },
-  {
-    id: 'appearance',
-    label: 'Appearance',
-    description: 'Customize theme, chat display preferences, and setup guide access.',
-    icon: 'lucide:palette',
-    component: AppearanceSettings
   },
   {
     id: 'backup',
@@ -311,7 +311,7 @@ const activeCategoryId = computed<SettingsCategoryId>(() => {
   const category = route.query.category
   return typeof category === 'string' && categoryIds.has(category as SettingsCategoryId)
     ? category as SettingsCategoryId
-    : 'providers'
+    : 'appearance'
 })
 
 const normalizedSearch = computed(() => normalize(searchQuery.value))
