@@ -6,6 +6,7 @@ import type { AgentDefinition, MemorySpace } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
+import { agentMemoryFolderName, agentMemoryRelativePath } from '../../utils/agent-memory'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -24,7 +25,7 @@ const assignedSpaces = computed(() =>
   allSpaces.value.filter(s => assignedIds.value.has(s.id))
 )
 
-const agentSpacePath = computed(() => `agents/${agentMemoryFolderName()}`)
+const agentSpacePath = computed(() => agentMemoryRelativePath(props.agent.internalName, props.agent.name))
 
 const agentSpaceExists = computed(() =>
   allSpaces.value.some(s => s.relativePath === agentSpacePath.value)
@@ -97,22 +98,13 @@ function deselectAll() {
   emit('update', 'memorySpaces', [])
 }
 
-function agentMemoryFolderName(): string {
-  return (props.agent.internalName || props.agent.name || 'agent')
-    .trim()
-    .replace(/[\\/]+/g, '-')
-    .replace(/[<>:"|?*\x00-\x1f]/g, '')
-    .replace(/\s+/g, '_')
-    || 'agent'
-}
-
 async function createAgentMemorySpace() {
   if (creatingAgentSpace.value) return
   creatingAgentSpace.value = true
   createAgentSpaceError.value = null
 
-  const folderName = agentMemoryFolderName()
-  const relativePath = `agents/${folderName}`
+  const folderName = agentMemoryFolderName(props.agent.internalName, props.agent.name)
+  const relativePath = agentMemoryRelativePath(props.agent.internalName, props.agent.name)
 
   try {
     let created = allSpaces.value.find((space) => space.relativePath === relativePath)
@@ -253,7 +245,7 @@ onMounted(() => loadSpaces())
             Create Memory Space for Agent
           </div>
           <div class="text-[11px] text-theme-500 truncate">
-            Creates <span class="font-mono text-theme-400">agents/{{ agentMemoryFolderName() }}</span> and assigns it here.
+            Creates <span class="font-mono text-theme-400">{{ agentSpacePath }}</span> and assigns it here.
           </div>
           <div
             v-if="createAgentSpaceError"
