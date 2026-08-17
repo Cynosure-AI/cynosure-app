@@ -311,7 +311,7 @@ onMounted(() => {
     :items="registryRows"
     :columns="registryTableColumns"
     :row-class="registryRowClass"
-    :loading="registryLoading"
+    :loading="registryLoading && registryRows.length === 0"
     empty-message="No servers found"
   >
     <template #col-server="{ item }">
@@ -484,7 +484,7 @@ onMounted(() => {
       Load More
     </button>
     <div
-      v-else-if="registryLoading"
+      v-else-if="registryLoading && registryRows.length > 0"
       class="flex items-center gap-2 text-theme-500 text-sm"
     >
       <Icon
