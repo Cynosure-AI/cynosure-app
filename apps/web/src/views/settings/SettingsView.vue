@@ -37,13 +37,6 @@ const searchInputRef = ref<HTMLInputElement | null>(null)
 
 const categories: SettingsCategory[] = [
   {
-    id: 'providers',
-    label: 'Providers',
-    description: 'Configure AI providers, API keys, base URLs, default models, and connection tests.',
-    icon: 'lucide:cpu',
-    component: ProviderSettings
-  },
-  {
     id: 'chat',
     label: 'Chat',
     description: 'Control automatic tool and memory modes, generated titles, and context handling for conversations.',
@@ -63,6 +56,13 @@ const categories: SettingsCategory[] = [
     description: 'Manage voice input, Whisper model downloads, language, quantization, and microphone selection.',
     icon: 'lucide:mic',
     component: SpeechToTextSettings
+  },
+  {
+    id: 'providers',
+    label: 'Providers',
+    description: 'Configure AI providers, API keys, base URLs, default models, and connection tests.',
+    icon: 'lucide:cpu',
+    component: ProviderSettings
   },
   {
     id: 'channels',
