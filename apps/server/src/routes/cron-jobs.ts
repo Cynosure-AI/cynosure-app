@@ -10,6 +10,7 @@ import {
     unscheduleCronJob,
     getActiveCronRuns,
     triggerCronJobNow,
+    isValidCronSchedule,
 } from '../core/triggers/cron-scheduler.js'
 import { getAgent } from '../core/agents/agent-store.js'
 
@@ -47,6 +48,10 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
             reply.code(400)
             return { error: 'agentId and schedule are required' }
         }
+        if (!isValidCronSchedule(schedule)) {
+            reply.code(400)
+            return { error: 'Invalid cron schedule' }
+        }
         const agent = getAgent(agentId)
         if (!agent) {
             reply.code(404)
@@ -59,6 +64,14 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
 
     // PUT /api/cron-jobs/:id — update a cron job
     app.put<{ Params: { id: string }; Body: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string } }>('/:id', async (req, reply) => {
+        if (req.body.schedule !== undefined && !isValidCronSchedule(req.body.schedule)) {
+            reply.code(400)
+            return { error: 'Invalid cron schedule' }
+        }
+        if (req.body.agentId !== undefined && !getAgent(req.body.agentId)) {
+            reply.code(404)
+            return { error: 'Agent not found' }
+        }
         const job = updateCronJob(req.params.id, req.body)
         if (!job) {
             reply.code(404)

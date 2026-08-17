@@ -22,12 +22,14 @@ let broadcast: BroadcastFn = () => { }
 const tasks = new Map<string, ScheduledTask>()
 const scheduledInfo = new Map<string, { jobId: string; agentId: string; schedule: string; scheduledSince: number }>()
 let missedRunSweep: NodeJS.Timeout | null = null
+let acceptingRuns = false
 
 /** Tracks cron jobs that are actively executing right now: jobId → run info */
 const activeCronRuns = new Map<string, { jobId: string; agentId: string; conversationId: string; startedAt: number }>()
 
 /** Abort controllers for currently-executing cron runs */
 const activeCronAbortControllers = new Map<string, AbortController>()
+const activeCronCompletions = new Map<string, Promise<void>>()
 
 // ─── DB row shape ──────────────────────────────────────────
 
@@ -61,6 +63,10 @@ export interface CronJobData {
     createdAt: number
     updatedAt: number
     lastRunAt: number | null
+}
+
+export function isValidCronSchedule(schedule: string): boolean {
+    return Boolean(schedule.trim()) && cron.validate(schedule)
 }
 
 function rowToData(row: CronJobRow): CronJobData {
@@ -206,7 +212,9 @@ async function shouldNotifyForCronJob(job: CronJobData, result: AgentExecutorRes
         return parsed.notify === true
     } catch (err) {
         console.warn(`[cron] Job "${job.name || job.id}" (${job.id}) could not evaluate notification condition:`, (err as Error).message)
-        return false
+        // Failing open is safer for unattended jobs: an evaluator outage must
+        // not silently suppress an otherwise configured notification.
+        return true
     }
 }
 
@@ -233,6 +241,7 @@ export function getScheduledJobIds(): string[] {
 
 /** Run one cron turn for a specific job */
 async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?: number }): Promise<void> {
+    if (!acceptingRuns) return
     const job = getCronJob(jobId)
     if (!job || (!job.enabled && !opts?.force)) return
 
@@ -251,6 +260,9 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
 
     const abortController = new AbortController()
     activeCronAbortControllers.set(jobId, abortController)
+    let resolveCompletion!: () => void
+    const completion = new Promise<void>((resolve) => { resolveCompletion = resolve })
+    activeCronCompletions.set(jobId, completion)
 
     const now = new Date(runStartedAt)
     const scheduledDate = new Date(scheduledAt)
@@ -294,7 +306,7 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
                     const target = resolveChannelTarget(job.outputChannelId)
                     if (target) {
                         const label = job.name?.trim() || 'Cron job'
-                        getChannelManager().queueNotification(job.outputChannelId, target, `**${label}:**\n${result.content}`)
+                        await getChannelManager().queueNotification(job.outputChannelId, target, `**${label}:**\n${result.content}`)
                     } else {
                         console.warn(`[cron] Job "${job.name || job.id}" (${job.id}) did not send output notification because channel "${job.outputChannelId}" has no known target`)
                     }
@@ -316,6 +328,8 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
         }
         activeCronRuns.delete(jobId)
         activeCronAbortControllers.delete(jobId)
+        activeCronCompletions.delete(jobId)
+        resolveCompletion()
     }
 }
 
@@ -354,7 +368,7 @@ export function scheduleCronJob(jobId: string): void {
     const job = getCronJob(jobId)
     if (!job || !job.enabled || !job.schedule) return
 
-    if (!cron.validate(job.schedule)) {
+    if (!isValidCronSchedule(job.schedule)) {
         console.warn(`[cron] Invalid cron expression for job ${jobId}: ${job.schedule}`)
         return
     }
@@ -410,12 +424,17 @@ export function unscheduleAllForAgent(agentId: string): void {
 /** Initialize cron scheduling for all enabled jobs. Call once on server startup. */
 export function startCronScheduler(broadcastFn: BroadcastFn): void {
     broadcast = broadcastFn
+    acceptingRuns = true
     if (missedRunSweep) {
         clearInterval(missedRunSweep)
         missedRunSweep = null
     }
 
     const jobs = listCronJobs()
+    const enabledJobIds = new Set(jobs.filter((job) => job.enabled && job.schedule).map((job) => job.id))
+    for (const jobId of tasks.keys()) {
+        if (!enabledJobIds.has(jobId)) unscheduleCronJob(jobId)
+    }
     for (const job of jobs) {
         if (!job.enabled || !job.schedule) continue
 
@@ -427,15 +446,19 @@ export function startCronScheduler(broadcastFn: BroadcastFn): void {
 }
 
 /** Stop all cron tasks. */
-export function stopCronScheduler(): void {
+export async function stopCronScheduler(): Promise<void> {
+    acceptingRuns = false
     for (const [, task] of tasks) {
         task.stop()
     }
     tasks.clear()
     scheduledInfo.clear()
-    activeCronRuns.clear()
     if (missedRunSweep) {
         clearInterval(missedRunSweep)
         missedRunSweep = null
     }
+    for (const controller of activeCronAbortControllers.values()) {
+        controller.abort()
+    }
+    await Promise.allSettled(Array.from(activeCronCompletions.values()))
 }

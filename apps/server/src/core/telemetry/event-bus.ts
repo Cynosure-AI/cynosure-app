@@ -17,7 +17,13 @@ export class EventBus {
     const handlers = this.handlers.get(event)
     if (handlers) {
       for (const handler of handlers) {
-        handler(...args)
+        try {
+          handler(...args)
+        } catch (err) {
+          // Telemetry and UI persistence listeners are observers. A broken
+          // observer must not fail the agent execution that emitted the event.
+          console.error(`[event-bus] Handler failed for ${event}:`, err)
+        }
       }
     }
   }

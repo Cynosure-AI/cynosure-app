@@ -106,7 +106,11 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         autoRouterModel,
         preferredToolKeys: fixedToolKeys,
         usedToolNames,
-        recentMessages: messages,
+        // Every current caller has already appended the active user turn to
+        // `messages`. The routing passes receive it separately as `userQuery`,
+        // so exclude that last turn from recent history to avoid duplicate
+        // context and wasted router tokens.
+        recentMessages: messages.at(-1)?.role === 'user' ? messages.slice(0, -1) : messages,
         userQuery: userText,
         memorySpaceOverrides,
         eventMeta,

@@ -107,6 +107,30 @@ function normalizeAgentTools(toolNames: string[]): string[] {
     return result
 }
 
+function normalizeSubAgents(assignments: SubAgentAssignment[], ownerId?: string): SubAgentAssignment[] {
+    const result: SubAgentAssignment[] = []
+    const seenIds = new Set<string>()
+    const seenInternalNames = new Set<string>()
+
+    for (const assignment of assignments) {
+        const agentId = typeof assignment?.agentId === 'string' ? assignment.agentId.trim() : ''
+        if (!agentId || agentId === ownerId || seenIds.has(agentId)) continue
+        const agent = getAgent(agentId)
+        if (!agent) {
+            console.warn(`[normalizeSubAgents] Dropping missing sub-agent: ${agentId}`)
+            continue
+        }
+        if (seenInternalNames.has(agent.internalName)) {
+            console.warn(`[normalizeSubAgents] Dropping sub-agent with duplicate internal name: ${agent.internalName}`)
+            continue
+        }
+        seenIds.add(agentId)
+        seenInternalNames.add(agent.internalName)
+        result.push({ agentId })
+    }
+    return result
+}
+
 /** DB row type matching the agents table */
 interface AgentRow {
     id: string
@@ -266,7 +290,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
         null, // icon_url - not used for new agents; icon_data/icon_mime used instead
         internalName,
         input.category || '',
-        JSON.stringify(input.subAgents || []),
+        JSON.stringify(normalizeSubAgents(input.subAgents || [], id)),
         input.autoApproveTools === true ? 1 : 0,
         input.thinkingEnabled !== false ? 1 : 0,
         input.reasoningEffort || 'medium',
@@ -296,7 +320,9 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     if (!existing) return null
 
     const now = Date.now()
-    const resolvedInternalName = input.internalName?.trim() || toInternalName(input.name ?? existing.name)
+    const resolvedInternalName = input.internalName !== undefined
+        ? (input.internalName.trim() || toInternalName(input.name ?? existing.name))
+        : (existing.internal_name || toInternalName(existing.name))
 
     const updatedName = input.name ?? existing.name
     const updatedDescription = input.description ?? existing.description
@@ -306,7 +332,9 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     const updatedSystemPrompt = input.systemPrompt !== undefined ? input.systemPrompt : existing.system_prompt
     const updatedCronPrompt = input.cronPrompt !== undefined ? (input.cronPrompt || '') : existing.cron_prompt
     const updatedTools = input.tools !== undefined ? normalizeAgentTools(input.tools) : JSON.parse(existing.tools_json || '[]')
-    const updatedSubAgents = input.subAgents !== undefined ? input.subAgents : JSON.parse(existing.sub_agents_json || '[]')
+    const updatedSubAgents = input.subAgents !== undefined
+        ? normalizeSubAgents(input.subAgents, id)
+        : JSON.parse(existing.sub_agents_json || '[]')
     const updatedAutoApprove = input.autoApproveTools !== undefined ? input.autoApproveTools : (existing.auto_approve_tools === 1)
     const updatedAutoToolRouting = input.autoToolRouting !== undefined ? input.autoToolRouting : (existing.auto_tool_routing === 1)
     const updatedAutoMemory = input.autoMemory !== undefined ? input.autoMemory : (existing.auto_memory === 1)
@@ -382,8 +410,26 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
 
 export function deleteAgent(id: string): boolean {
     const db = getDb()
-    const result = db.prepare('DELETE FROM agents WHERE id = ?').run(id)
-    return result.changes > 0
+    const transaction = db.transaction(() => {
+        const rows = db.prepare('SELECT id, sub_agents_json FROM agents WHERE id != ?').all(id) as Array<{ id: string; sub_agents_json: string }>
+        const update = db.prepare('UPDATE agents SET sub_agents_json = ?, updated_at = ? WHERE id = ?')
+        const now = Date.now()
+        for (const row of rows) {
+            let assignments: SubAgentAssignment[]
+            try {
+                const parsed = JSON.parse(row.sub_agents_json || '[]') as unknown
+                assignments = Array.isArray(parsed) ? parsed as SubAgentAssignment[] : []
+            } catch {
+                assignments = []
+            }
+            const filtered = assignments.filter((assignment) => assignment?.agentId !== id)
+            if (filtered.length !== assignments.length) {
+                update.run(JSON.stringify(filtered), now, row.id)
+            }
+        }
+        return db.prepare('DELETE FROM agents WHERE id = ?').run(id).changes > 0
+    })
+    return transaction()
 }
 
 export function duplicateAgent(id: string): AgentData | null {

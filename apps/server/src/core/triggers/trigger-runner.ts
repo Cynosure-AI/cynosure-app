@@ -57,82 +57,82 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         'INSERT INTO conversations (id, title, agent_id, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
     ).run(conversationId, title, agent.id, origin, Date.now(), Date.now())
 
-    // Notify caller of the conversationId before execution starts
+    // Notify the caller and persist the trigger input before any fallible
+    // context preparation. Failed/cancelled pre-turn work must still leave a
+    // coherent conversation that explains what was attempted.
     onConversationCreated?.(conversationId)
-    const memorySpaces = getAssignedOrDefaultSpaces(agent.id)
-
-    const planned = await planExecution({
-        resolvedAgent: agent,
-        conversationId,
-        broadcast,
-        abortSignal: signal,
-        gateway,
-        toolRegistry: getToolRegistry(),
-        messages: [{ role: 'user', content: userContent }],
-        userText: userContent,
-        run: {
-            systemPromptSuffix,
-            memorySpaceOverrides: memorySpaces,
-            autoMemory: agent.autoMemory === true,
-            thinkingEnabled: agent.thinkingEnabled !== false,
-        },
-    })
-
-    // Persist session config so the chat view can restore the correct model/provider
-    const executionConfig = buildPersistedChatConfig({
-        selectedToolKeys: agent.tools,
-        requestedSubAgents: agent.subAgents,
-        requestedMemorySpaceIds: memorySpaces.map((space) => space.id),
-        systemPrompt: planned.messages.find((message) => message.role === 'system')?.content.toString(),
-        responseModel: planned.responseModel,
-        responseProvider: planned.responseProvider,
-        thinkingEnabled: agent.thinkingEnabled !== false,
-        reasoningEffort: agent.reasoningEffort,
-        autoToolRouting: agent.autoToolRouting === true,
-        autoMemory: agent.autoMemory === true,
-    })
-    db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(JSON.stringify(executionConfig), conversationId)
-
-    const messages: ChatMessage[] = planned.messages
-
-    // Save trigger message
     const triggerMsgId = nanoid()
+    const triggerCreatedAt = Date.now()
     db.prepare(
         'INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(triggerMsgId, conversationId, 'user', userContent, Date.now())
+    ).run(triggerMsgId, conversationId, 'user', userContent, triggerCreatedAt)
+    db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(triggerCreatedAt, conversationId)
 
     broadcast('chat:new-message', {
         conversationId,
-        message: { id: triggerMsgId, conversationId, role: 'user', content: userContent, createdAt: Date.now() }
-    })
-
-    // Run executor
-    const executor = new AgentExecutor({
-        gateway,
-        tools: planned.tools,
-        conversationId,
-        broadcast,
-        providerId: planned.providerId,
-        model: planned.responseModel,
-        maxRounds: MAIN_AGENT_MAX_ROUNDS,
-        thinkingEnabled: agent.thinkingEnabled !== false,
-        reasoningEffort: agent.reasoningEffort,
-        streamMode: 'per-round',
-        hitl: !agent.autoApproveTools,
-        agentId: agent.id,
-        agentName: agent.name,
-        agentIconUrl: agent.iconUrl || null,
-        signal,
-        planningRunId: planned.planningRunId,
-        isPrimaryExecutor: true,
+        message: { id: triggerMsgId, conversationId, role: 'user', content: userContent, createdAt: triggerCreatedAt }
     })
 
     const startMs = Date.now()
+    let planningRunId: string | undefined
 
     try {
+        const memorySpaces = getAssignedOrDefaultSpaces(agent.id)
+        const planned = await planExecution({
+            resolvedAgent: agent,
+            conversationId,
+            broadcast,
+            abortSignal: signal,
+            gateway,
+            toolRegistry: getToolRegistry(),
+            messages: [{ role: 'user', content: userContent }],
+            userText: userContent,
+            run: {
+                systemPromptSuffix,
+                memorySpaceOverrides: memorySpaces,
+                autoMemory: agent.autoMemory === true,
+                thinkingEnabled: agent.thinkingEnabled !== false,
+            },
+        })
+        planningRunId = planned.planningRunId
+
+        const executionConfig = buildPersistedChatConfig({
+            selectedToolKeys: agent.tools,
+            requestedSubAgents: agent.subAgents,
+            requestedMemorySpaceIds: memorySpaces.map((space) => space.id),
+            systemPrompt: planned.messages.find((message) => message.role === 'system')?.content.toString(),
+            responseModel: planned.responseModel,
+            responseProvider: planned.responseProvider,
+            thinkingEnabled: agent.thinkingEnabled !== false,
+            reasoningEffort: agent.reasoningEffort,
+            autoToolRouting: agent.autoToolRouting === true,
+            autoMemory: agent.autoMemory === true,
+        })
+        db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(JSON.stringify(executionConfig), conversationId)
+
+        const messages: ChatMessage[] = planned.messages
+        const executor = new AgentExecutor({
+            gateway,
+            tools: planned.tools,
+            conversationId,
+            broadcast,
+            providerId: planned.providerId,
+            model: planned.responseModel,
+            maxRounds: MAIN_AGENT_MAX_ROUNDS,
+            thinkingEnabled: agent.thinkingEnabled !== false,
+            reasoningEffort: agent.reasoningEffort,
+            streamMode: 'per-round',
+            hitl: !agent.autoApproveTools,
+            agentId: agent.id,
+            agentName: agent.name,
+            agentIconUrl: agent.iconUrl || null,
+            signal,
+            planningRunId,
+            isPrimaryExecutor: true,
+        })
         const result = await executor.run(messages)
-        if (planned.planningRunId) {
-            closePlanningRun(planned.planningRunId, 'completed', { summary: result.content.slice(0, 500) })
+        if (planningRunId) {
+            closePlanningRun(planningRunId, 'completed', { summary: result.content.slice(0, 500) })
         }
 
         // Save assistant message
@@ -146,9 +146,9 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
 
         return { conversationId, result }
     } catch (err) {
-        if (planned.planningRunId) {
+        if (planningRunId) {
             closePlanningRun(
-                planned.planningRunId,
+                planningRunId,
                 (err as Error).name === 'AbortError' ? 'cancelled' : 'error',
                 { error: (err as Error).name === 'AbortError' ? 'Cancelled' : (err as Error).message }
             )
