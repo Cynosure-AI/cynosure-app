@@ -7,8 +7,9 @@ import PlanningTaskList from '../../components/chat/PlanningTaskList.vue'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatSidebar } from '../../composables/useSidebar'
-import { useChatStore } from '../../stores/chat.store'
+import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
+import { Icon } from '@iconify/vue'
 
 const { chatSidebarOpen, toggle } = useChatSidebar()
 const chatStore = useChatStore()
@@ -30,6 +31,16 @@ const showCenteredComposer = computed(() => {
     !chatStore.activeConversationId &&
     !chatStore.loadingMessages &&
     chatStore.messages.length === 0
+})
+
+const latestAgentChats = computed(() => {
+  const agentId = chatStore.activeAgentId
+  if (!agentId) return []
+
+  return [...chatStore.conversations]
+    .filter(conversation => conversation.agentId === agentId && conversation.origin === 'chat')
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, 4)
 })
 
 const hasPlanningTasks = computed(() => Boolean(agentStore.planningState?.items.length))
@@ -69,6 +80,11 @@ function onDrop(e: DragEvent) {
   if (files?.length && inputBarRef.value) {
     inputBarRef.value.processFiles(Array.from(files))
   }
+}
+
+async function openRecentChat(conversation: Conversation): Promise<void> {
+  await chatStore.selectConversation(conversation.id, conversation.agentId ?? null)
+  await router.push({ name: 'conversation', params: { conversationId: conversation.id } })
 }
 
 onUnmounted(() => {
@@ -163,6 +179,28 @@ watch(
         />
 
         <div
+          v-if="showCenteredComposer && latestAgentChats.length"
+          class="recent-agent-chats mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-2 px-4 pb-3"
+          aria-label="Recent chats with this agent"
+        >
+          <button
+            v-for="(conversation, index) in latestAgentChats"
+            :key="conversation.id"
+            type="button"
+            class="recent-agent-chat-pill inline-flex max-w-full items-center gap-1.5 rounded-full border border-theme-700/80 bg-theme-800/70 px-3 py-1.5 text-xs text-theme-400 shadow-sm transition-colors hover:border-accent-500/50 hover:bg-theme-800 hover:text-theme-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
+            :style="{ animationDelay: `${120 + index * 80}ms` }"
+            :title="conversation.title"
+            @click="openRecentChat(conversation)"
+          >
+            <Icon
+              icon="lucide:history"
+              class="h-3.5 w-3.5 shrink-0 text-theme-500"
+            />
+            <span class="max-w-52 truncate">{{ conversation.title }}</span>
+          </button>
+        </div>
+
+        <div
           class="composer-spacer"
           aria-hidden="true"
         />
@@ -218,9 +256,30 @@ watch(
   flex-basis: 0;
 }
 
+.recent-agent-chat-pill {
+  opacity: 0;
+  animation: recent-chat-pill-in 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes recent-chat-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .composer-spacer {
     transition: none;
+  }
+
+  .recent-agent-chat-pill {
+    opacity: 1;
+    animation: none;
   }
 }
 </style>
