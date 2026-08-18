@@ -42,8 +42,8 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
     })
 
     // POST /api/cron-jobs — create a new cron job
-    app.post<{ Body: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string } }>('/', async (req, reply) => {
-        const { name, agentId, schedule, prompt, enabled, oneOff, outputChannelId, notificationMode, notificationCondition } = req.body
+    app.post<{ Body: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; notifyInApp?: boolean } }>('/', async (req, reply) => {
+        const { name, agentId, schedule, prompt, enabled, oneOff, outputChannelId, notificationMode, notificationCondition, notifyInApp } = req.body
         if (!agentId || !schedule) {
             reply.code(400)
             return { error: 'agentId and schedule are required' }
@@ -57,13 +57,13 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
             reply.code(404)
             return { error: 'Agent not found' }
         }
-        const job = createCronJob({ name, agentId, schedule, prompt: prompt || '', enabled, oneOff, outputChannelId, notificationMode, notificationCondition })
+        const job = createCronJob({ name, agentId, schedule, prompt: prompt || '', enabled, oneOff, outputChannelId, notificationMode, notificationCondition, notifyInApp })
         if (job.enabled) scheduleCronJob(job.id)
         return job
     })
 
     // PUT /api/cron-jobs/:id — update a cron job
-    app.put<{ Params: { id: string }; Body: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string } }>('/:id', async (req, reply) => {
+    app.put<{ Params: { id: string }; Body: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; notifyInApp?: boolean } }>('/:id', async (req, reply) => {
         if (req.body.schedule !== undefined && !isValidCronSchedule(req.body.schedule)) {
             reply.code(400)
             return { error: 'Invalid cron schedule' }

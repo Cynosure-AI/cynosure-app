@@ -7,6 +7,7 @@ import {
 } from "../memory/memory-space-scope.js";
 import { getToolRegistry, type ToolNamespace } from "./tool-registry.js";
 import { makeNotificationTool } from "./builtin/notification.js";
+import { makeScheduleTools, SCHEDULE_TOOL_NAMES } from "./builtin/schedule-tools.js";
 import {
     makeMemoryListDocumentsTool,
     makeMemoryRetrieveChunksTool,
@@ -39,6 +40,8 @@ export {
     makeRelationshipGraphDeleteTool,
     MEMORY_TOOL_NAMES,
     RELATIONSHIP_GRAPH_TOOL_NAMES,
+    makeScheduleTools,
+    SCHEDULE_TOOL_NAMES,
 };
 export type { NotificationToolOptions } from "./builtin/notification.js";
 export {
@@ -82,6 +85,10 @@ const BUILTIN_TOOL_HYDRATORS = {
         conversationId: ctx.conversationId,
         broadcast: ctx.broadcast,
     }),
+    schedule_create: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "" })[0],
+    schedule_list: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "" })[1],
+    schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "" })[2],
+    schedule_delete: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "" })[3],
     memory_list_documents: (ctx: BuiltInHydrationContext) => makeMemoryListDocumentsTool({
         spaceFilter: ctx.spaceFilter,
         assignedSpaces: ctx.assignedSpaces,
