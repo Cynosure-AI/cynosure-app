@@ -212,8 +212,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 class="w-5 h-5"
               />
             </button>
-            <div
-              class="w-9 h-9 rounded-xl bg-linear-to-br from-sky-500/20 to-indigo-500/20 flex items-center justify-center shrink-0 overflow-hidden"
+            <button
+              type="button"
+              class="w-9 h-9 rounded-xl bg-linear-to-br from-sky-500/20 to-indigo-500/20 flex items-center justify-center shrink-0 overflow-hidden hover:ring-2 hover:ring-accent-500/60 transition-shadow"
+              :title="`Open ${job.agentName} agent details`"
+              :aria-label="`Open ${job.agentName} agent details`"
+              @click="router.push(`/agents/${job.agentId}`)"
             >
               <img
                 v-if="job.agentIconUrl"
@@ -225,7 +229,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 icon="lucide:clock"
                 class="w-5 h-5 text-sky-400"
               />
-            </div>
+            </button>
             <div>
               <h1 class="text-2xl font-bold text-theme-100">
                 {{ job.name || "Unnamed cron job" }}
