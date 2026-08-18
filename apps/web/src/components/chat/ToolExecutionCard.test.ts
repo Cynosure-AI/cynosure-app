@@ -168,4 +168,66 @@ describe('ToolExecutionCard', () => {
     await wrapper.get('button').trigger('click')
     expect(wrapper.findAll('icon-stub').filter((icon) => icon.attributes('icon') === 'svg-spinners:ring-resize')).toHaveLength(2)
   })
+
+  test('shows mixed tool outcomes as an amber partial success', () => {
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1,
+        isActive: false,
+        steps: [{
+          iteration: 1,
+          status: 'executing',
+          timestamp: Date.now(),
+          toolCalls: [
+            { name: 'create_directory', arguments: '{"path":"one"}' },
+            { name: 'create_directory', arguments: '{"path":"two"}' },
+            { name: 'create_directory', arguments: '{"path":"three"}' },
+          ],
+          results: [
+            { name: 'create_directory', success: true, output: 'created' },
+            { name: 'create_directory', success: true, output: 'created' },
+            { name: 'create_directory', success: false, output: '', error: 'already exists' },
+          ],
+        }],
+      },
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+
+    const trigger = wrapper.get('button')
+    expect(trigger.text()).toContain('2/3 ok · Partial success')
+    expect(trigger.get('icon-stub').attributes('icon')).toBe('lucide:triangle-alert')
+    expect(trigger.get('icon-stub').classes()).toContain('text-amber-600/80')
+  })
+
+  test('reserves the red failed state for rounds where every tool failed', () => {
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1,
+        isActive: false,
+        steps: [{
+          iteration: 1,
+          status: 'executing',
+          timestamp: Date.now(),
+          toolCalls: [
+            { name: 'create_directory', arguments: '{"path":"one"}' },
+            { name: 'create_directory', arguments: '{"path":"two"}' },
+          ],
+          results: [
+            { name: 'create_directory', success: false, output: '', error: 'failed' },
+            { name: 'create_directory', success: false, output: '', error: 'failed' },
+          ],
+        }],
+      },
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+
+    const trigger = wrapper.get('button')
+    expect(trigger.text()).toContain('0/2 ok · Failed')
+    expect(trigger.get('icon-stub').attributes('icon')).toBe('lucide:alert-circle')
+    expect(trigger.get('icon-stub').classes()).toContain('text-red-500/70')
+  })
 })

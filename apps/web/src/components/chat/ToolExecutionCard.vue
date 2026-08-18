@@ -25,6 +25,7 @@ export interface ToolExecStep {
 type ToolCall = { name: string; arguments: string }
 type ToolResult = { name: string; success: boolean; output: string; error?: string; images?: string[] }
 type StatusMeta = { label: string; icon: string; color: string }
+type ResultOutcomeMeta = { label: string; icon: string; color: string }
 type ContextSectionKind = 'tool' | 'memory'
 type ContextRowState = 'selected' | 'candidate'
 type ToolExecution = { call: ToolCall | null; result?: ToolResult }
@@ -457,9 +458,29 @@ const routingStatusSteps = computed(() => {
     })
 })
 
-const allSuccess = computed(() => results.value.length > 0 && results.value.every((result) => result.success))
-const anyFailed = computed(() => results.value.some((result) => !result.success))
 const successfulResultCount = computed(() => results.value.filter((result) => result.success).length)
+const resultOutcome = computed<ResultOutcomeMeta | null>(() => {
+  if (!results.value.length) return null
+  if (successfulResultCount.value === results.value.length) {
+    return {
+      label: 'Success',
+      icon: 'lucide:check-circle',
+      color: 'text-emerald-500/70 dark:text-emerald-400/70',
+    }
+  }
+  if (successfulResultCount.value > 0) {
+    return {
+      label: 'Partial success',
+      icon: 'lucide:triangle-alert',
+      color: 'text-amber-600/80 dark:text-amber-400/80',
+    }
+  }
+  return {
+    label: 'Failed',
+    icon: 'lucide:alert-circle',
+    color: 'text-red-500/70 dark:text-red-400/70',
+  }
+})
 
 const elapsedMs = computed(() => {
   if (!props.steps.length) return 0
@@ -585,8 +606,7 @@ const headerIcon = computed(() => {
   if (isRoutingWorkPending.value) return 'svg-spinners:ring-resize'
   if (isRoutingStatus.value) return currentPhase.value.icon
   if (headerToolNames.value.length && !results.value.length) return props.isActive ? 'svg-spinners:ring-resize' : 'lucide:circle-slash'
-  if (allSuccess.value) return 'lucide:check-circle'
-  if (anyFailed.value) return 'lucide:alert-circle'
+  if (resultOutcome.value) return resultOutcome.value.icon
   return currentPhase.value.icon
 })
 
@@ -596,8 +616,7 @@ const headerIconClass = computed(() => {
   if (isTaskContext.value) return 'text-cyan-600 dark:text-cyan-300'
   if (isRoutingStatus.value) return 'text-accent-500 dark:text-accent-300'
   if (headerToolNames.value.length && !results.value.length) return props.isActive ? 'text-accent-500 dark:text-accent-400' : 'text-theme-500'
-  if (allSuccess.value) return 'text-emerald-500 dark:text-emerald-400'
-  if (anyFailed.value) return 'text-red-500 dark:text-red-400'
+  if (resultOutcome.value) return resultOutcome.value.color
   return currentPhase.value.color
 })
 
@@ -687,10 +706,10 @@ const hasDisplayableActivity = computed(() =>
             </div>
 
             <span
-              v-if="results.length"
+              v-if="resultOutcome"
               class="text-[10px] shrink-0"
-              :class="allSuccess ? 'text-emerald-500/70 dark:text-emerald-400/70' : 'text-red-500/70 dark:text-red-400/70'"
-            >{{ successfulResultCount }}/{{ results.length }} ok</span>
+              :class="resultOutcome.color"
+            >{{ successfulResultCount }}/{{ results.length }} ok · {{ resultOutcome.label }}</span>
 
             <span
               v-if="elapsedMs > 0"
