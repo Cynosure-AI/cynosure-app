@@ -38,7 +38,7 @@ const latestAgentChats = computed(() => {
   if (!agentId) return []
 
   return [...chatStore.conversations]
-    .filter(conversation => conversation.agentId === agentId && conversation.origin === 'chat')
+    .filter(conversation => !conversation.temporary && conversation.agentId === agentId && conversation.origin === 'chat')
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 4)
 })

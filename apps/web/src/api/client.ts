@@ -55,10 +55,10 @@ export const api = {
   },
 
   chat: {
-    createConversation: (title?: string, agentId?: string, maWorkspaceId?: string) =>
+    createConversation: (title?: string, agentId?: string, maWorkspaceId?: string, temporary = false) =>
       post<ConversationDto>(
         '/api/chat/conversations',
-        { title, agentId, maWorkspaceId }
+        { title, agentId, maWorkspaceId, temporary }
       ),
     listConversations: (agentId?: string | null, maWorkspaceId?: string | null) => {
       const params = new URLSearchParams()
@@ -104,6 +104,8 @@ export const api = {
       patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/title`, { title }),
     pinConversation: (conversationId: string, pinned: boolean) =>
       patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/pin`, { pinned }),
+    setConversationTemporary: (conversationId: string, temporary: boolean) =>
+      patch<{ temporary: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/temporary`, { temporary }),
     markConversationRead: (conversationId: string) =>
       patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/read`),
     send: (conversationId: string, request: ChatSendRequest) =>

@@ -121,6 +121,24 @@ async function newChat(): Promise<void> {
 
     <SaveAgentModal />
 
+    <!-- Temporary chat toggle -->
+    <button
+      type="button"
+      class="flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors"
+      :class="chatStore.incognito
+        ? 'border-violet-500/50 bg-violet-500/15 text-violet-300 hover:bg-violet-500/20'
+        : 'border-theme-700 text-theme-400 hover:border-theme-600 hover:bg-theme-800 hover:text-theme-200'"
+      :title="chatStore.incognito ? 'Incognito is on — this chat will be deleted when you start a new chat' : 'Make this chat temporary and hide it from history'"
+      :aria-pressed="chatStore.incognito"
+      @click="chatStore.toggleIncognito"
+    >
+      <Icon
+        :icon="chatStore.incognito ? 'lucide:eye-off' : 'lucide:glasses'"
+        class="h-3.5 w-3.5"
+      />
+      <span class="hidden md:inline">Incognito</span>
+    </button>
+
     <!-- Planning task list toggle -->
     <button
       type="button"

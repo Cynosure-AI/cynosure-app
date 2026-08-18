@@ -511,10 +511,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             // --- Conversations (agent-linked chat history) ---
             if (requested.includes('conversations')) {
                 const db = getDb()
-                const conversations = db.prepare('SELECT * FROM conversations ORDER BY created_at').all()
-                const messages = db.prepare('SELECT * FROM messages ORDER BY created_at').all()
-                const messageAttachments = db.prepare('SELECT * FROM message_attachments ORDER BY created_at').all()
-                const tasks = db.prepare('SELECT * FROM tasks ORDER BY created_at').all()
+                const conversations = db.prepare('SELECT * FROM conversations WHERE is_temporary = 0 ORDER BY created_at').all()
+                const messages = db.prepare('SELECT * FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE is_temporary = 0) ORDER BY created_at').all()
+                const messageAttachments = db.prepare('SELECT * FROM message_attachments WHERE conversation_id IN (SELECT id FROM conversations WHERE is_temporary = 0) ORDER BY created_at').all()
+                const tasks = db.prepare('SELECT * FROM tasks WHERE conversation_id IN (SELECT id FROM conversations WHERE is_temporary = 0) ORDER BY created_at').all()
 
                 archive.append(JSON.stringify(conversations, null, 2), { name: 'conversations/conversations.json' })
                 archive.append(JSON.stringify(messages, null, 2), { name: 'conversations/messages.json' })

@@ -69,6 +69,7 @@ export interface ConversationDto {
   agentId: string | null
   maWorkspaceId: string | null
   origin: string
+  temporary: boolean
   createdAt: number
   updatedAt: number
 }
@@ -116,6 +117,11 @@ export interface StoredMessageDto {
 
 export interface ConversationMessagesResponse {
   conversationAgentId: string | null
+  conversationTitle: string
+  conversationOrigin: string
+  conversationTemporary: boolean
+  conversationCreatedAt: number
+  conversationUpdatedAt: number
   messages: StoredMessageDto[]
   lastContextTokens: number | null
   executionConfig: ConversationExecutionConfig

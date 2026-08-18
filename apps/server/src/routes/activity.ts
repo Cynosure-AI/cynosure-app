@@ -333,7 +333,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                      ORDER BY m.created_at DESC
                      LIMIT 1) AS last_user_message
              FROM conversations c
-             WHERE c.origin = 'chat'
+             WHERE c.origin = 'chat' AND c.is_temporary = 0
              ORDER BY c.updated_at DESC
              LIMIT ?`
         ).all(queryLimit) as {
@@ -406,7 +406,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             `SELECT m.id, m.conversation_id, m.content, m.image_urls_json, m.video_urls_json, m.created_at, c.title, c.agent_id
              FROM messages m
              JOIN conversations c ON c.id = m.conversation_id
-             WHERE m.role = 'assistant'
+             WHERE m.role = 'assistant' AND c.is_temporary = 0
              ORDER BY m.created_at DESC
              LIMIT ?`
         ).all(searchQuery ? -1 : Math.max(queryLimit * 3, 100)) as {
@@ -456,7 +456,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             `SELECT s.id, s.conversation_id, s.results_json, s.created_at, c.title, c.agent_id
              FROM execution_steps s
              JOIN conversations c ON c.id = s.conversation_id
-             WHERE s.results_json IS NOT NULL AND s.results_json != ''
+             WHERE s.results_json IS NOT NULL AND s.results_json != '' AND c.is_temporary = 0
              ORDER BY s.created_at DESC
              LIMIT ?`
         ).all(searchQuery ? -1 : Math.max(queryLimit * 2, 100)) as {

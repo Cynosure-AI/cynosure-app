@@ -54,8 +54,8 @@ function cloneAttachmentFile(sourcePath: string | null, conversationId: string, 
 
 export async function registerConversationRoutes(app: FastifyInstance): Promise<void> {
     // POST /api/chat/conversations — create
-    app.post<{ Body: { title?: string; agentId?: string; maWorkspaceId?: string; origin?: string; executionConfig?: ConversationExecutionConfig } }>('/conversations', async (req) => {
-        const { title, agentId, maWorkspaceId, origin, executionConfig } = req.body
+    app.post<{ Body: { title?: string; agentId?: string; maWorkspaceId?: string; origin?: string; temporary?: boolean; executionConfig?: ConversationExecutionConfig } }>('/conversations', async (req) => {
+        const { title, agentId, maWorkspaceId, origin, temporary, executionConfig } = req.body
         const db = getDb()
         const id = nanoid()
         const now = Date.now()
@@ -63,9 +63,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         const memorySpaceIds = agentId ? getAssignedOrDefaultSpaces(agentId).map((space) => space.id) : []
         const initialExecutionConfig = executionConfig ?? buildInitialExecutionConfig({ agent, memorySpaceIds })
         db.prepare(
-            'INSERT INTO conversations (id, title, agent_id, ma_workspace_id, origin, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(id, title || 'New Chat', agentId || null, maWorkspaceId || null, origin || 'chat', JSON.stringify(initialExecutionConfig), '{}', now, now)
-        return { id, title: title || 'New Chat', agentId: agentId || null, maWorkspaceId: maWorkspaceId || null, origin: origin || 'chat', createdAt: now, updatedAt: now }
+            'INSERT INTO conversations (id, title, agent_id, ma_workspace_id, origin, is_temporary, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, title || 'New Chat', agentId || null, maWorkspaceId || null, origin || 'chat', temporary ? 1 : 0, JSON.stringify(initialExecutionConfig), '{}', now, now)
+        return { id, title: title || 'New Chat', agentId: agentId || null, maWorkspaceId: maWorkspaceId || null, origin: origin || 'chat', temporary: !!temporary, createdAt: now, updatedAt: now }
     })
 
     // POST /api/chat/conversations/:id/fork — clone config and history through one message
@@ -336,7 +336,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             ? 'ORDER BY updated_at DESC'
             : 'ORDER BY pinned DESC, created_at DESC'
 
-        const conditions: string[] = []
+        const conditions: string[] = ['is_temporary = 0']
         const params: unknown[] = []
         if (maWorkspaceId) {
             conditions.push('ma_workspace_id = ?')
@@ -367,7 +367,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         const db = getDb()
 
         // Fetch conversation-level metadata (context tokens + execution config)
-        const convRow = db.prepare('SELECT agent_id, last_context_tokens, execution_config_json FROM conversations WHERE id = ?').get(req.params.id) as { agent_id: string | null; last_context_tokens: number | null; execution_config_json: string } | undefined
+        const convRow = db.prepare('SELECT title, agent_id, origin, is_temporary, last_context_tokens, execution_config_json, created_at, updated_at FROM conversations WHERE id = ?').get(req.params.id) as { title: string | null; agent_id: string | null; origin: string; is_temporary: number; last_context_tokens: number | null; execution_config_json: string; created_at: number; updated_at: number } | undefined
 
         const rows = db
             .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
@@ -410,6 +410,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
         return {
             conversationAgentId: convRow?.agent_id ?? null,
+            conversationTitle: convRow?.title || 'New Chat',
+            conversationOrigin: convRow?.origin || 'chat',
+            conversationTemporary: !!convRow?.is_temporary,
+            conversationCreatedAt: convRow?.created_at ?? 0,
+            conversationUpdatedAt: convRow?.updated_at ?? 0,
             lastContextTokens: convRow?.last_context_tokens ?? null,
             executionConfig,
             messages: rows.map((row) => {
@@ -548,6 +553,18 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 req.params.id
             )
             return { success: true }
+        }
+    )
+
+    // PATCH /api/chat/conversations/:id/temporary — hide or restore a chat in history
+    app.patch<{ Params: { id: string }; Body: { temporary: boolean } }>(
+        '/conversations/:id/temporary',
+        async (req) => {
+            const temporary = req.body.temporary ? 1 : 0
+            getDb().prepare(
+                'UPDATE conversations SET is_temporary = ?, pinned = CASE WHEN ? = 1 THEN 0 ELSE pinned END, updated_at = ? WHERE id = ?'
+            ).run(temporary, temporary, Date.now(), req.params.id)
+            return { temporary: !!temporary }
         }
     )
 

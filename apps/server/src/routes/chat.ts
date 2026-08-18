@@ -334,12 +334,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       }
 
       // Resolve agent for this conversation (used by both MA planning and normal chat)
-      const convCheck = db.prepare('SELECT agent_id, ma_workspace_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null; ma_workspace_id: string | null } | undefined
+      const convCheck = db.prepare('SELECT agent_id, ma_workspace_id, is_temporary FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null; ma_workspace_id: string | null; is_temporary: number } | undefined
       const agentId: string | null = convCheck?.agent_id || null
       const resolvedAgent = agentId ? getAgent(agentId) : null
       const effectiveRunFlags = resolveChatRunFlags({
         resolvedAgent,
-        autoMemory: reqAutoMemory,
+        autoMemory: convCheck?.is_temporary ? false : reqAutoMemory,
       })
 
       // Resolve memory space overrides (request body ids -> { id, name } objects)

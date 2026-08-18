@@ -61,6 +61,7 @@ function createTables(db: Database.Database): void {
       agent_id TEXT,
       ma_workspace_id TEXT,
       origin TEXT NOT NULL DEFAULT 'chat',
+      is_temporary INTEGER NOT NULL DEFAULT 0,
       pinned INTEGER NOT NULL DEFAULT 0,
       last_read_at INTEGER,
       last_context_tokens INTEGER,
@@ -525,6 +526,7 @@ function createTables(db: Database.Database): void {
 
   // Conversation unread tracking
   addColumnIfMissing('conversations', 'last_read_at', 'INTEGER')
+  addColumnIfMissing('conversations', 'is_temporary', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('conversations', 'execution_config_json', "TEXT NOT NULL DEFAULT '{}'")
   addColumnIfMissing('conversations', 'metadata_json', "TEXT NOT NULL DEFAULT '{}'")
 }

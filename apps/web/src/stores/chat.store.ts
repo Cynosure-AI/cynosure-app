@@ -16,6 +16,7 @@ export interface Conversation {
   title: string
   agentId?: string | null
   origin?: string
+  temporary: boolean
   pinned: boolean
   lastReadAt?: number | null
   createdAt: number
@@ -61,6 +62,7 @@ export const useChatStore = defineStore('chat', () => {
 
   const conversations = ref<Conversation[]>([])
   const activeConversationId = ref<string | null>(null)
+  const incognito = ref(false)
   const messages = ref<DisplayMessage[]>([])
   const loadingMessages = ref(false)
   const contextWindow = ref<number | null>(null)
@@ -134,18 +136,25 @@ export const useChatStore = defineStore('chat', () => {
   async function loadConversations(): Promise<void> {
     const agentId = agentConfig.activeAgentId.value
     const rows = await api.chat.listConversations(agentId !== null ? agentId : '')
-    conversations.value = rows.map(
+    const activeTemporaryConversation = conversations.value.find(
+      conversation => conversation.id === activeConversationId.value && conversation.temporary
+    )
+    const persistedConversations = rows.map(
       (r: { id: string; title: string; agent_id: string | null; origin: string; pinned: number; last_read_at: number | null; created_at: number; updated_at: number }) => ({
         id: r.id,
         title: r.title,
         agentId: r.agent_id,
         origin: r.origin,
+        temporary: false,
         pinned: !!r.pinned,
         lastReadAt: r.last_read_at,
         createdAt: r.created_at,
         updatedAt: r.updated_at
       })
     )
+    conversations.value = activeTemporaryConversation
+      ? [activeTemporaryConversation, ...persistedConversations]
+      : persistedConversations
   }
 
   async function handleChannelConversationState(data: {
@@ -184,13 +193,16 @@ export const useChatStore = defineStore('chat', () => {
   async function createConversation(title?: string): Promise<string> {
     const conv = await api.chat.createConversation(
       title,
-      agentConfig.activeAgentId.value ?? undefined
+      agentConfig.activeAgentId.value ?? undefined,
+      undefined,
+      incognito.value,
     )
     conversations.value.unshift({
       id: conv.id,
       title: conv.title,
       agentId: conv.agentId,
       origin: conv.origin,
+      temporary: conv.temporary,
       pinned: false,
       lastReadAt: conv.createdAt,
       createdAt: conv.createdAt,
@@ -233,6 +245,20 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const response = await api.chat.getMessages(id)
       if (activeConversationId.value !== id) return
+      incognito.value = response.conversationTemporary
+      if (response.conversationTemporary && !conversations.value.some(conversation => conversation.id === id)) {
+        conversations.value.unshift({
+          id,
+          title: response.conversationTitle,
+          agentId: response.conversationAgentId,
+          origin: response.conversationOrigin,
+          temporary: true,
+          pinned: false,
+          lastReadAt: response.conversationUpdatedAt,
+          createdAt: response.conversationCreatedAt,
+          updatedAt: response.conversationUpdatedAt,
+        })
+      }
       agentConfig.setConversationAgent(agentIdHint !== undefined ? agentIdHint : response.conversationAgentId)
 
       // Apply conversation-specific execution config immediately after setting
@@ -472,11 +498,19 @@ export const useChatStore = defineStore('chat', () => {
     // New chat starts from the selected agent defaults, while free chat keeps its current preset.
     agentConfig.syncAgentBaseline()
 
-    if (!activeConversationId.value && messages.value.length === 0) {
+    if (!activeConversationId.value && messages.value.length === 0 && !incognito.value) {
       return
     }
 
+    const temporaryConversationId = incognito.value ? activeConversationId.value : null
+    if (temporaryConversationId) {
+      await api.chat.deleteConversation(temporaryConversationId)
+      conversations.value = conversations.value.filter(conversation => conversation.id !== temporaryConversationId)
+      streaming.streamBuffers.delete(temporaryConversationId)
+    }
+
     activeConversationId.value = null
+    incognito.value = false
     messages.value = []
     agentStore.setActiveViewConversation(null)
     agentStore.clearExecutionState()
@@ -530,6 +564,7 @@ export const useChatStore = defineStore('chat', () => {
       title: fork.title,
       agentId: fork.agentId,
       origin: fork.origin,
+      temporary: false,
       pinned: false,
       lastReadAt: fork.createdAt,
       createdAt: fork.createdAt,
@@ -562,7 +597,7 @@ export const useChatStore = defineStore('chat', () => {
   // ── Computed ──
 
   const sortedConversations = computed(() =>
-    [...conversations.value].sort((a, b) => {
+    conversations.value.filter(conversation => !conversation.temporary).sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
       return b.createdAt - a.createdAt
     })
@@ -571,6 +606,20 @@ export const useChatStore = defineStore('chat', () => {
   const activeConversation = computed(() =>
     conversations.value.find((c) => c.id === activeConversationId.value)
   )
+
+  async function toggleIncognito(): Promise<void> {
+    const next = !incognito.value
+    const conversationId = activeConversationId.value
+    if (conversationId) {
+      await api.chat.setConversationTemporary(conversationId, next)
+      const conversation = conversations.value.find(item => item.id === conversationId)
+      if (conversation) {
+        conversation.temporary = next
+        if (next) conversation.pinned = false
+      }
+    }
+    incognito.value = next
+  }
 
   /** A conversation is unread when it has been updated after the user last read it. */
   function isConversationUnread(conv: Conversation): boolean {
@@ -603,6 +652,7 @@ export const useChatStore = defineStore('chat', () => {
     conversations,
     sortedConversations,
     activeConversationId,
+    incognito,
     messages,
     loadingMessages,
     memorySpaces,
@@ -726,6 +776,7 @@ export const useChatStore = defineStore('chat', () => {
     pinConversation,
     renameConversation,
     startNewChat,
+    toggleIncognito,
     handlePostAction,
   }
 })

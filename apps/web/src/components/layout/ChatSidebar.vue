@@ -195,6 +195,7 @@ function mapConversationRow(row: {
     title: row.title,
     agentId: row.agent_id,
     origin: row.origin,
+    temporary: false,
     pinned: !!row.pinned,
     lastReadAt: row.last_read_at,
     createdAt: row.created_at,
