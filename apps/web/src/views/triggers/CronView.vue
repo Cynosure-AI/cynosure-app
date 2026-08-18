@@ -9,6 +9,7 @@ import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import BaseCard from '../../components/shared/BaseCard.vue'
 import DataTable, { type Column } from '../../components/shared/DataTable.vue'
 import AgentSelect from '../../components/shared/AgentSelect.vue'
+import CustomSelect from '../../components/shared/CustomSelect.vue'
 import {
   buildCronExpr, cronToHuman,
   WEEKDAYS, HOUR_OPTIONS, MINUTE_OPTIONS, INTERVAL_MINUTES, FREQUENCY_OPTIONS,
@@ -38,6 +39,17 @@ const dlgAtHour = ref(9)
 const dlgWeekday = ref(1)
 const dlgMonthDay = ref(1)
 const dlgCustomExpr = ref('')
+const dlgFrequencyValue = computed({
+  get: () => dlgFrequency.value,
+  set: (value: string) => { dlgFrequency.value = value as CronFrequency },
+})
+const frequencyGroups = [{
+  options: FREQUENCY_OPTIONS.map(option => ({
+    value: option.value,
+    label: option.label,
+    iconName: option.icon,
+  })),
+}]
 
 const dlgParts = computed(() => ({
   frequency: dlgFrequency.value, everyMinutes: dlgEveryMinutes.value,
@@ -121,6 +133,7 @@ async function duplicateCronJob(job: CronJob) {
       outputChannelId: job.outputChannelId,
       notificationMode: job.notificationMode,
       notificationCondition: job.notificationCondition,
+      notifyInApp: job.notifyInApp,
     })
     await loadSchedules()
     router.push(`/triggers/cron/${created.id}`)
@@ -488,24 +501,14 @@ onUnmounted(() => {
             <!-- Schedule builder -->
             <div>
               <label class="block text-sm text-theme-400 mb-2">Schedule</label>
-              <div class="grid grid-cols-3 gap-1.5 mb-3">
-                <button
-                  v-for="opt in FREQUENCY_OPTIONS"
-                  :key="opt.value"
-                  type="button"
-                  class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-colors"
-                  :class="dlgFrequency === opt.value
-                    ? 'border-accent-500 bg-accent-500/10 text-accent-400'
-                    : 'border-theme-700 bg-theme-800 text-theme-400 hover:text-theme-200 hover:border-theme-600'"
-                  @click="dlgFrequency = opt.value"
-                >
-                  <Icon
-                    :icon="opt.icon"
-                    class="w-3.5 h-3.5"
-                  />
-                  {{ opt.label }}
-                </button>
-              </div>
+              <CustomSelect
+                v-model="dlgFrequencyValue"
+                :groups="frequencyGroups"
+                placeholder="Select a frequencyâ€¦"
+                placeholder-icon="lucide:calendar-clock"
+                size="sm"
+                class="mb-3"
+              />
 
               <!-- Every X minutes -->
               <div
