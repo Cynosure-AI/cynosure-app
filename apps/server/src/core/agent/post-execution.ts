@@ -95,6 +95,9 @@ export interface GenerateTitleOpts {
 const MAX_TITLE_CHARS = 70
 const MIN_TITLE_WORDS = 2
 const MAX_TITLE_WORDS = 8
+// Some models use part of the completion budget for hidden reasoning even when
+// thinking is disabled. The title validator below still limits visible output.
+const TITLE_MAX_TOKENS = 256
 
 export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     const { conversationId, userMessage, assistantResponse, broadcast, providerId, model } = opts
@@ -110,7 +113,7 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
             messages: buildTitleMessages(userMessage, assistantResponse),
             model: titleTarget.model,
             signal,
-            maxTokens: 40,
+            maxTokens: TITLE_MAX_TOKENS,
             thinkingEnabled: false
         }, titleTarget.providerId)
 

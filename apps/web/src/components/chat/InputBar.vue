@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useChatStore } from '../../stores/chat.store'
+import { SK_CHAT_DRAFT_PREFIX } from '../../utils/storage-keys'
 import { Icon } from '@iconify/vue'
 import InputToolbar from './inputbar/InputToolbar.vue'
 import ContextRing from './inputbar/ContextRing.vue'
@@ -12,7 +13,36 @@ defineProps<{
   floating?: boolean
 }>()
 
-const inputText = ref('')
+function getDraftStorageKey(conversationId: string | null, agentId: string | null): string {
+  const scope = conversationId ? `conversation:${conversationId}` : `new:${agentId || 'default'}`
+  return `${SK_CHAT_DRAFT_PREFIX}${scope}`
+}
+
+function readDraft(key: string): string {
+  try {
+    return localStorage.getItem(key) || ''
+  } catch {
+    return ''
+  }
+}
+
+function persistDraft(key: string, value: string): void {
+  try {
+    if (value) {
+      localStorage.setItem(key, value)
+    } else {
+      localStorage.removeItem(key)
+    }
+  } catch {
+    // Draft persistence is best-effort (for example, storage may be disabled).
+  }
+}
+
+const draftStorageKey = computed(() => getDraftStorageKey(
+  chatStore.activeConversationId,
+  chatStore.activeAgentId
+))
+const inputText = ref(readDraft(draftStorageKey.value))
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<{ url: string; name: string }[]>([])
@@ -41,6 +71,7 @@ async function send(): Promise<void> {
   const files = attachedFiles.value.map((f) => ({ name: f.name, content: f.content }))
   const audio = attachedAudio.value.map((a) => a.url)
   inputText.value = ''
+  persistDraft(draftStorageKey.value, '')
   attachedImages.value = []
   attachedFiles.value = []
   attachedAudio.value = []
@@ -165,6 +196,15 @@ function resetHeight(): void {
 
 watch(inputText, () => {
   nextTick(autoResize)
+})
+
+watch(draftStorageKey, (newKey, oldKey) => {
+  persistDraft(oldKey, inputText.value)
+  inputText.value = readDraft(newKey)
+})
+
+onBeforeUnmount(() => {
+  persistDraft(draftStorageKey.value, inputText.value)
 })
 
 function onTranscription(text: string): void {
