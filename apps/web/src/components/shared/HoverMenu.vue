@@ -46,9 +46,13 @@ const menuStyle = computed(() => {
     return style
   }
 
-  const right = window.innerWidth - rect.right
+  const menuWidth = Math.min(props.maxWidth, window.innerWidth - 16)
+  const halfWidth = menuWidth / 2
+  const triggerCenter = rect.left + rect.width / 2
+  const center = Math.max(8 + halfWidth, Math.min(triggerCenter, window.innerWidth - 8 - halfWidth))
   style.bottom = `${window.innerHeight - rect.top + 6}px`
-  style.right = `${right}px`
+  style.left = `${center}px`
+  style.transform = 'translateX(-50%)'
   return style
 })
 

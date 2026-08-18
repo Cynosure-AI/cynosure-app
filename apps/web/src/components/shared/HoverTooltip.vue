@@ -55,10 +55,15 @@ const popoverStyle = computed(() => {
     style.transform = 'translateY(-50%)'
     return style
   }
-  // "above" placement: right-aligned above the trigger element
-  const right = window.innerWidth - rect.right
+  // "above" placement: horizontally centered on the trigger while remaining
+  // inside the viewport near either edge.
+  const popoverWidth = Math.min(props.maxWidth, window.innerWidth - 16)
+  const halfWidth = popoverWidth / 2
+  const triggerCenter = rect.left + rect.width / 2
+  const center = Math.max(8 + halfWidth, Math.min(triggerCenter, window.innerWidth - 8 - halfWidth))
   style.bottom = `${window.innerHeight - rect.top + 6}px`
-  style.right = `${right}px`
+  style.left = `${center}px`
+  style.transform = 'translateX(-50%)'
   return style
 })
 
