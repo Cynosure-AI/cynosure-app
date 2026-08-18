@@ -33,7 +33,7 @@ function itemClass(item: PlanningTaskItem): string {
     v-if="shouldShow && state"
     role="dialog"
     aria-label="Planning tasks"
-    class="absolute right-3 top-3 z-20 flex max-h-[min(32rem,calc(100%-1.5rem))] w-[min(24rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-xl border border-theme-700 bg-theme-950/95 shadow-2xl shadow-black/40 backdrop-blur"
+    class="absolute right-3 top-3 z-20 flex max-h-[min(24rem,calc(100%-1.5rem))] w-[min(24rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-xl border border-theme-700 bg-theme-950/95 shadow-2xl shadow-black/40 backdrop-blur"
   >
     <div class="flex min-w-0 items-center gap-3 border-b border-theme-800 px-3 py-2.5">
       <span class="h-6 w-6 flex items-center justify-center rounded-md text-accent-400 shrink-0">
@@ -74,18 +74,20 @@ function itemClass(item: PlanningTaskItem): string {
           class="w-3.5 h-3.5 shrink-0"
           :class="statusMeta[item.status].cls"
         />
-        <span
-          class="text-xs truncate min-w-0"
-          :class="itemClass(item)"
-        >
-          {{ item.title }}
-        </span>
-        <span
-          v-if="item.note"
-          class="text-[11px] text-theme-500 truncate min-w-0 hidden sm:block"
-        >
-          {{ item.note }}
-        </span>
+        <div class="flex flex-col min-w-0 flex-1 gap-0.5">
+          <span
+            class="text-xs truncate min-w-0"
+            :class="itemClass(item)"
+          >
+            {{ item.title }}
+          </span>
+          <span
+            v-if="item.note"
+            class="text-[11px] text-theme-500 truncate min-w-0 hidden sm:block whitespace-pre-wrap"
+          >
+            {{ item.note }}
+          </span>
+        </div>
       </div>
     </div>
   </div>

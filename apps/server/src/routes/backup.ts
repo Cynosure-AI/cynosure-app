@@ -61,6 +61,10 @@ interface ManifestModule {
     count: number
 }
 
+interface BackupSummaryModule extends ManifestModule {
+    details?: Record<string, number>
+}
+
 interface BackupManifest {
     version: 1
     createdAt: string
@@ -367,6 +371,61 @@ async function resetSelectedModules(modules: ResetModule[]): Promise<Record<stri
 
 export async function registerBackupRoutes(app: FastifyInstance, broadcast?: BroadcastFn): Promise<void> {
     await app.register(multipart, { limits: { fileSize: 1024 * 1024 * 1024 } }) // 1 GB limit
+
+    app.get('/summary', async () => {
+        const db = getDb()
+        const count = (table: string): number => {
+            const row = db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }
+            return row.count
+        }
+
+        const memorySpaces = db.prepare('SELECT folder_path FROM memory_spaces').all() as { folder_path: string }[]
+        const memoryDocuments = memorySpaces.reduce((total, space) => {
+            if (!space.folder_path) return total
+            return total + listFilesInFolder(space.folder_path).filter((file) => file.supported).length
+        }, 0)
+        const settings = count('settings')
+        const approvals = count('tool_approvals')
+        const cronJobs = count('cron_jobs')
+        const graphNodes = count('entity_graph_nodes')
+        const graphEdges = count('entity_graph_edges')
+        const graphEvidence = count('entity_graph_edge_evidence')
+        const conversations = count('conversations')
+        const messages = count('messages')
+        const attachments = count('message_attachments')
+        const tasks = count('tasks')
+        const executionLogs = count('execution_logs')
+        const executionSteps = count('execution_steps')
+
+        const modules: Record<string, BackupSummaryModule> = {
+            agents: { count: count('agents') },
+            providers: { count: count('providers') },
+            mcp: { count: count('mcp_servers') },
+            settings: {
+                count: settings + approvals + cronJobs,
+                details: { settings, approvals, cronJobs }
+            },
+            channels: { count: count('channels') },
+            memory: {
+                count: memoryDocuments,
+                details: { spaces: memorySpaces.length, documents: memoryDocuments }
+            },
+            entityGraph: {
+                count: graphNodes + graphEdges + graphEvidence,
+                details: { entities: graphNodes, relationships: graphEdges, evidence: graphEvidence }
+            },
+            conversations: {
+                count: conversations,
+                details: { conversations, messages, attachments, tasks }
+            },
+            usage: {
+                count: executionLogs + executionSteps,
+                details: { runs: executionLogs, steps: executionSteps }
+            }
+        }
+
+        return { modules }
+    })
 
     // ── GET /api/backup/export?modules=agents,providers,mcp,settings ────────
     app.get<{ Querystring: { modules?: string } }>(

@@ -506,6 +506,8 @@ export const api = {
   },
 
   backup: {
+    getSummary: () =>
+      get<{ modules: Record<string, { count: number; details?: Record<string, number> }> }>('/api/backup/summary'),
     exportBackup: async (modules: string[]): Promise<Blob> => {
       const params = new URLSearchParams({ modules: modules.join(',') })
       const res = await fetch(`${BASE_URL}/api/backup/export?${params}`)

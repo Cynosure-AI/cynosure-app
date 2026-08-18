@@ -49,6 +49,7 @@ export const SK_CHAT_SIDEBAR_OPEN = 'chat-sidebar-open'
 export const SK_ACTIVE_AGENT = 'cy-active-agent'
 export const SK_AGENTS_VIEW_MODE = 'agents-view-mode'
 export const SK_ACTIVITY_LOG_FILTERS = 'cy-activity-log-filters'
+export const SK_CHAT_DRAFT_PREFIX = 'cy-chat-draft:'
 
 /**
  * All preference keys that should be synced to Electron's reliable JSON store.
