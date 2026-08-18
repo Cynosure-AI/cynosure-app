@@ -1,0 +1,202 @@
+import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
+import { CronExpressionParser } from 'cron-parser'
+
+export interface ScheduleToolOptions {
+    agentId: string
+}
+
+export const SCHEDULE_TOOL_NAMES = [
+    'schedule_create',
+    'schedule_list',
+    'schedule_update',
+    'schedule_delete',
+] as const
+
+function result(value: unknown) {
+    return { success: true as const, output: JSON.stringify(value, null, 2) }
+}
+
+function failure(message: string) {
+    return { success: false as const, output: '', error: message }
+}
+
+/** Convert an exact, timezone-qualified instant into the server-local cron expression used by node-cron. */
+export function oneOffCronExpression(runAt: string, now = Date.now()): { schedule: string; runAt: number } {
+    if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(runAt.trim())) {
+        throw new Error('runAt must be an ISO 8601 date-time with a timezone, for example 2026-08-19T09:00:00+02:00')
+    }
+
+    const date = new Date(runAt)
+    const timestamp = date.getTime()
+    if (!Number.isFinite(timestamp)) throw new Error('runAt is not a valid date-time')
+    if (date.getSeconds() !== 0 || date.getMilliseconds() !== 0) {
+        throw new Error('runAt must be aligned to a whole minute')
+    }
+    if (timestamp <= now) throw new Error('runAt must be in the future')
+
+    const schedule = `${date.getMinutes()} ${date.getHours()} ${date.getDate()} ${date.getMonth() + 1} *`
+    const nextMatchingRun = CronExpressionParser.parse(schedule, { currentDate: new Date(now) }).next().getTime()
+    if (nextMatchingRun !== timestamp) {
+        throw new Error('runAt is too far in the future for a one-time cron job; choose a date within the next calendar occurrence')
+    }
+
+    return { schedule, runAt: timestamp }
+}
+
+function createTool(opts: ScheduleToolOptions): ToolDefinition {
+    return {
+        name: 'schedule_create',
+        description: `Create a scheduled job for this agent. Use runAt for an exact one-time future run, or schedule for a recurring cron expression. The server's current local date-time is ${new Date().toString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'}). The executing agent must already have any tools needed by the future task.`,
+        parameters: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'Short user-facing name for the job.' },
+                prompt: { type: 'string', description: 'Complete instructions the agent should execute at the scheduled time.' },
+                runAt: { type: 'string', description: 'For a one-time job: future ISO 8601 date-time including timezone, aligned to a whole minute.' },
+                schedule: { type: 'string', description: 'For a recurring job: cron expression, such as "0 15 * * *" for every day at 15:00.' },
+                notify: { type: 'boolean', description: 'Set true when the user asks to be notified; creates an in-app notification containing the result. Defaults to false.' },
+            },
+            required: ['name', 'prompt'],
+            additionalProperties: false,
+        },
+        timeout: 5_000,
+        annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
+        execute: async (params: unknown) => {
+            if (!opts.agentId) return failure('This tool requires an agent context')
+            const input = params as { name?: string; prompt?: string; runAt?: string; schedule?: string; notify?: boolean }
+            if (!input.name?.trim() || !input.prompt?.trim()) return failure('name and prompt are required')
+            if (Boolean(input.runAt) === Boolean(input.schedule)) return failure('Provide exactly one of runAt or schedule')
+
+            const scheduler = await import('../../triggers/cron-scheduler.js')
+            let schedule = input.schedule?.trim() || ''
+            let oneOff = false
+            let requestedRunAt: number | undefined
+            try {
+                if (input.runAt) {
+                    const converted = oneOffCronExpression(input.runAt)
+                    schedule = converted.schedule
+                    requestedRunAt = converted.runAt
+                    oneOff = true
+                }
+                if (!scheduler.isValidCronSchedule(schedule)) return failure('Invalid cron schedule')
+
+                const job = scheduler.createCronJob({
+                    name: input.name.trim(),
+                    agentId: opts.agentId,
+                    schedule,
+                    prompt: input.prompt.trim(),
+                    enabled: true,
+                    oneOff,
+                    notifyInApp: input.notify === true,
+                })
+                scheduler.scheduleCronJob(job.id)
+                return result({ ...job, requestedRunAt: requestedRunAt ? new Date(requestedRunAt).toISOString() : undefined })
+            } catch (error) {
+                return failure((error as Error).message)
+            }
+        },
+    }
+}
+
+function listTool(opts: ScheduleToolOptions): ToolDefinition {
+    return {
+        name: 'schedule_list',
+        description: 'List scheduled jobs owned by this agent. Use this before updating or deleting a job when its ID is unknown.',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+        timeout: 5_000,
+        execution: { readOnly: true },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        execute: async () => {
+            if (!opts.agentId) return failure('This tool requires an agent context')
+            const { getCronJobsForAgent } = await import('../../triggers/cron-scheduler.js')
+            return result(getCronJobsForAgent(opts.agentId))
+        },
+    }
+}
+
+function updateTool(opts: ScheduleToolOptions): ToolDefinition {
+    return {
+        name: 'schedule_update',
+        description: 'Update a scheduled job owned by this agent. Only supplied fields are changed. Use runAt to turn it into an exact one-time job, or schedule to set a recurring cron expression.',
+        parameters: {
+            type: 'object',
+            properties: {
+                jobId: { type: 'string' },
+                name: { type: 'string' },
+                prompt: { type: 'string' },
+                runAt: { type: 'string', description: 'Future ISO 8601 date-time including timezone, aligned to a whole minute.' },
+                schedule: { type: 'string', description: 'Recurring cron expression.' },
+                enabled: { type: 'boolean' },
+                notify: { type: 'boolean', description: 'Whether completed runs create an in-app notification.' },
+            },
+            required: ['jobId'],
+            additionalProperties: false,
+        },
+        timeout: 5_000,
+        annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        execute: async (params: unknown) => {
+            if (!opts.agentId) return failure('This tool requires an agent context')
+            const input = params as { jobId?: string; name?: string; prompt?: string; runAt?: string; schedule?: string; enabled?: boolean; notify?: boolean }
+            if (!input.jobId) return failure('jobId is required')
+            if (input.runAt && input.schedule) return failure('Provide runAt or schedule, not both')
+
+            const scheduler = await import('../../triggers/cron-scheduler.js')
+            const existing = scheduler.getCronJob(input.jobId)
+            if (!existing || existing.agentId !== opts.agentId) return failure('Scheduled job not found')
+
+            let schedule = input.schedule?.trim()
+            let oneOff: boolean | undefined = input.schedule ? false : undefined
+            try {
+                if (input.runAt) {
+                    schedule = oneOffCronExpression(input.runAt).schedule
+                    oneOff = true
+                }
+                if (schedule !== undefined && !scheduler.isValidCronSchedule(schedule)) return failure('Invalid cron schedule')
+                const job = scheduler.updateCronJob(input.jobId, {
+                    name: input.name?.trim(),
+                    prompt: input.prompt?.trim(),
+                    schedule,
+                    oneOff,
+                    enabled: input.enabled,
+                    notifyInApp: input.notify,
+                })
+                if (!job) return failure('Scheduled job not found')
+                if (job.enabled) scheduler.scheduleCronJob(job.id)
+                else scheduler.unscheduleCronJob(job.id)
+                return result(job)
+            } catch (error) {
+                return failure((error as Error).message)
+            }
+        },
+    }
+}
+
+function deleteTool(opts: ScheduleToolOptions): ToolDefinition {
+    return {
+        name: 'schedule_delete',
+        description: 'Permanently delete a scheduled job owned by this agent.',
+        parameters: {
+            type: 'object',
+            properties: { jobId: { type: 'string' } },
+            required: ['jobId'],
+            additionalProperties: false,
+        },
+        timeout: 5_000,
+        annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
+        execute: async (params: unknown) => {
+            if (!opts.agentId) return failure('This tool requires an agent context')
+            const { getCronJob, unscheduleCronJob, deleteCronJob } = await import('../../triggers/cron-scheduler.js')
+            const jobId = (params as { jobId?: string }).jobId
+            if (!jobId) return failure('jobId is required')
+            const existing = getCronJob(jobId)
+            if (!existing || existing.agentId !== opts.agentId) return failure('Scheduled job not found')
+            unscheduleCronJob(jobId)
+            deleteCronJob(jobId)
+            return result({ deleted: true, jobId })
+        },
+    }
+}
+
+export function makeScheduleTools(opts: ScheduleToolOptions): ToolDefinition[] {
+    return [createTool(opts), listTool(opts), updateTool(opts), deleteTool(opts)]
+}

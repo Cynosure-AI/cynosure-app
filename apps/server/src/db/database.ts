@@ -521,6 +521,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('cron_jobs', 'output_target', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('cron_jobs', 'notification_mode', "TEXT NOT NULL DEFAULT 'always'")
   addColumnIfMissing('cron_jobs', 'notification_condition', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('cron_jobs', 'notify_in_app', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('cron_jobs', 'last_run_at', 'INTEGER')
 
   // Conversation unread tracking
