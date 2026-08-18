@@ -438,6 +438,7 @@ export interface CronJob {
     name: string
     agentId: string
     schedule: string
+    notifyInApp: boolean
     prompt: string
     enabled: boolean
     oneOff: boolean

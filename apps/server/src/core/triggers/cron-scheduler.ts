@@ -11,6 +11,7 @@ import { getGateway } from '../gateway/gateway.js'
 import { cancelPostActions, generateTitle } from '../agent/post-execution.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import type { AgentExecutorResult } from '../agent/agent-executor.js'
+import { createAppNotification } from '../notifications/app-notifications.js'
 
 type CronNotificationMode = 'always' | 'conditional'
 
@@ -44,6 +45,7 @@ export interface CronJobRow {
     output_channel_id: string
     notification_mode: string
     notification_condition: string
+    notify_in_app: number
     created_at: number
     updated_at: number
     last_run_at: number | null
@@ -60,6 +62,7 @@ export interface CronJobData {
     outputChannelId: string
     notificationMode: CronNotificationMode
     notificationCondition: string
+    notifyInApp: boolean
     createdAt: number
     updatedAt: number
     lastRunAt: number | null
@@ -81,6 +84,7 @@ function rowToData(row: CronJobRow): CronJobData {
         outputChannelId: row.output_channel_id || '',
         notificationMode: row.notification_mode === 'conditional' ? 'conditional' : 'always',
         notificationCondition: row.notification_condition || '',
+        notifyInApp: row.notify_in_app === 1,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         lastRunAt: row.last_run_at ?? null,
@@ -101,19 +105,19 @@ export function getCronJob(id: string): CronJobData | undefined {
     return row ? rowToData(row) : undefined
 }
 
-export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string }): CronJobData {
+export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; notifyInApp?: boolean }): CronJobData {
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
     const notificationMode = input.notificationMode === 'conditional' ? 'conditional' : 'always'
     // Set lastRunAt to now so missed first runs are caught up after downtime
     db.prepare(
-        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, output_channel_id, notification_mode, notification_condition, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.outputChannelId || '', notificationMode, input.notificationCondition || '', now, now, now)
+        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, output_channel_id, notification_mode, notification_condition, notify_in_app, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.outputChannelId || '', notificationMode, input.notificationCondition || '', input.notifyInApp ? 1 : 0, now, now, now)
     return getCronJob(id)!
 }
 
-export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string }): CronJobData | undefined {
+export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; notifyInApp?: boolean }): CronJobData | undefined {
     const db = getDb()
     const existing = db.prepare('SELECT * FROM cron_jobs WHERE id = ?').get(id) as CronJobRow | undefined
     if (!existing) return undefined
@@ -125,7 +129,7 @@ export function updateCronJob(id: string, input: { name?: string; agentId?: stri
         : (existing.notification_mode === 'conditional' ? 'conditional' : 'always')
     const shouldResetLastRun = (existing.enabled !== 1 && enabled === 1) || schedule !== existing.schedule
     db.prepare(
-        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, output_channel_id = ?, notification_mode = ?, notification_condition = ?, updated_at = ?, last_run_at = ? WHERE id = ?'
+        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, output_channel_id = ?, notification_mode = ?, notification_condition = ?, notify_in_app = ?, updated_at = ?, last_run_at = ? WHERE id = ?'
     ).run(
         input.name !== undefined ? input.name : existing.name,
         input.agentId !== undefined ? input.agentId : existing.agent_id,
@@ -136,6 +140,7 @@ export function updateCronJob(id: string, input: { name?: string; agentId?: stri
         input.outputChannelId !== undefined ? input.outputChannelId : (existing.output_channel_id || ''),
         notificationMode,
         input.notificationCondition !== undefined ? input.notificationCondition : (existing.notification_condition || ''),
+        input.notifyInApp !== undefined ? (input.notifyInApp ? 1 : 0) : (existing.notify_in_app || 0),
         now,
         shouldResetLastRun ? now : existing.last_run_at,
         id
@@ -296,13 +301,29 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
             model: result.model || undefined,
         }).catch(() => { })
 
+        const notificationAllowed = (job.notifyInApp || Boolean(job.outputChannelId)) && result.content
+            ? await shouldNotifyForCronJob(job, result, conversationId)
+            : false
+
+        if (job.notifyInApp && result.content) {
+            if (notificationAllowed) {
+                createAppNotification({
+                    agentId: job.agentId,
+                    conversationId,
+                    title: job.name?.trim() || 'Scheduled job complete',
+                    body: result.content,
+                    priority: 'notice',
+                    broadcast,
+                })
+            }
+        }
+
         // Send result to configured output channel if set
         if (job.outputChannelId) {
             if (!result.content) {
                 console.warn(`[cron] Job "${job.name || job.id}" (${job.id}) did not send output notification because the agent returned empty content`)
             } else {
-                const shouldNotify = await shouldNotifyForCronJob(job, result, conversationId)
-                if (shouldNotify) {
+                if (notificationAllowed) {
                     const target = resolveChannelTarget(job.outputChannelId)
                     if (target) {
                         const label = job.name?.trim() || 'Cron job'
