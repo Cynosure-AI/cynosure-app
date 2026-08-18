@@ -73,4 +73,64 @@ describe('ProviderModelSelect favorites', () => {
       { providerId: 'openrouter-1', model: 'speech/model', modelType: 'transcription' },
     ])
   })
+
+  test('does not let another mounted selector overwrite a versioned favorite', async () => {
+    localStorage.setItem(SK_PROVIDER_MODEL_FAVORITES, JSON.stringify([{
+      providerId: 'deepseek-provider',
+      model: 'deepseek-v4-flash',
+      modelType: 'llm',
+      label: 'deepseek-v4-flash',
+    }]))
+
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockResolvedValue([
+      { id: 'deepseek-v4-flash' },
+      { id: 'deepseek-v4-flash-0731' },
+      { id: 'another-model' },
+    ])
+    const mountSelector = () => mount(ProviderModelSelect, {
+      props: {
+        providerId: 'deepseek-provider',
+        modelValue: '',
+        providers: [{
+          id: 'deepseek-provider',
+          name: 'DeepSeek',
+          type: 'openai',
+          defaultModel: 'deepseek-v4-flash',
+        }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    const first = mountSelector()
+    const second = mountSelector()
+    await flushPromises()
+
+    await first.get('[role="combobox"]').trigger('click')
+    const versionedRow = first.findAll('[role="option"]')
+      .find((option) => option.text().includes('deepseek-v4-flash-0731'))!
+    await versionedRow.get('[aria-label="Add to favorites"]').trigger('click')
+
+    await second.get('[role="combobox"]').trigger('click')
+    const syncedVersionedRow = second.findAll('[role="option"]')
+      .find((option) => option.text().includes('deepseek-v4-flash-0731'))!
+    expect(syncedVersionedRow.get('[role="button"]').attributes('aria-label'))
+      .toBe('Remove from favorites')
+
+    const anotherRow = second.findAll('[role="option"]')
+      .find((option) => option.text().includes('another-model'))!
+    await anotherRow.get('[aria-label="Add to favorites"]').trigger('click')
+
+    const storedModels = JSON.parse(
+      localStorage.getItem(SK_PROVIDER_MODEL_FAVORITES) || '[]',
+    ).map((favorite: { model: string }) => favorite.model)
+    expect(storedModels).toEqual([
+      'deepseek-v4-flash',
+      'deepseek-v4-flash-0731',
+      'another-model',
+    ])
+
+    first.unmount()
+    second.unmount()
+  })
 })

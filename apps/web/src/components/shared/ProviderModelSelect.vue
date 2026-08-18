@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { LLMProviderConfig, ModelListItem, ModelListType } from "../../api/types";
 import CustomSelect, {
   type SelectOption,
@@ -93,6 +93,7 @@ const providerModels = ref<Record<string, ModelListItem[]>>({});
 const providerModelTypes = ref<Record<string, Record<string, ModelListType[]>>>({});
 const loadingByProvider = ref<Record<string, boolean>>({});
 const favoriteModels = ref<ProviderModelSelection[]>(loadFavoriteModels());
+const FAVORITES_CHANGED_EVENT = "cy-provider-model-favorites-changed";
 
 function cacheKey(providerId: string): string {
   return `${activeModelTypes.value.join("+")}:${providerId}`;
@@ -190,7 +191,29 @@ function persistFavoriteModels(): void {
     SK_PROVIDER_MODEL_FAVORITES,
     JSON.stringify(favoriteModels.value),
   );
+  window.dispatchEvent(new Event(FAVORITES_CHANGED_EVENT));
 }
+
+function syncFavoriteModels(event?: Event): void {
+  if (
+    event instanceof StorageEvent &&
+    event.key !== null &&
+    event.key !== SK_PROVIDER_MODEL_FAVORITES
+  ) {
+    return;
+  }
+  favoriteModels.value = loadFavoriteModels();
+}
+
+onMounted(() => {
+  window.addEventListener("storage", syncFavoriteModels);
+  window.addEventListener(FAVORITES_CHANGED_EVENT, syncFavoriteModels);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("storage", syncFavoriteModels);
+  window.removeEventListener(FAVORITES_CHANGED_EVENT, syncFavoriteModels);
+});
 
 function isFavorite(providerId: string, model: string, modelType = props.modelType): boolean {
   return favoriteModels.value.some(
@@ -228,6 +251,10 @@ function toggleFavorite(option: SelectOption): void {
   const selection = decode(option.value);
   if (!selection.providerId || !selection.model) return;
 
+  // Multiple selectors can be mounted at once. Always apply this change to the
+  // latest persisted list so a stale selector cannot discard another one's
+  // recently added (or removed) favorite.
+  favoriteModels.value = loadFavoriteModels();
   const actionData = option.actionData as { modelType?: ModelListType } | undefined;
   const modelType = actionData?.modelType || optionModelType(selection.providerId, selection.model);
   const key = favoriteKey(selection.providerId, selection.model, modelType);
