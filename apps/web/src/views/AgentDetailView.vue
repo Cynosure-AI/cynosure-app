@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
+import { useChatStore } from '../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import AgentGeneralTab from '../components/agent/AgentGeneralTab.vue'
 import AgentToolsTab from '../components/agent/AgentToolsTab.vue'
@@ -23,6 +24,7 @@ interface AgentSection {
 const route = useRoute()
 const router = useRouter()
 const agentDefs = useAgentDefinitionsStore()
+const chatStore = useChatStore()
 
 const activeSectionId = ref<AgentSectionId>('general')
 
@@ -41,6 +43,11 @@ async function updateField(field: string, value: unknown) {
   if (agent.value) {
     await agentDefs.update(agentId.value, { [field]: value })
   }
+}
+
+async function goToChat() {
+  await chatStore.setActiveAgent(agentId.value)
+  await router.push({ name: 'triggers-chat' })
 }
 
 const sections: AgentSection[] = [
@@ -133,6 +140,34 @@ function sectionButtonClass(id: AgentSectionId): string {
           >
             {{ agent.description }}
           </p>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <span
+              class="inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium"
+              :class="agent.autoToolRouting
+                ? 'border-accent-500/25 bg-accent-500/10 text-accent-300'
+                : 'border-theme-700 bg-theme-900/70 text-theme-500'"
+              :title="`Automatic tool selection is ${agent.autoToolRouting ? 'enabled' : 'disabled'}`"
+            >
+              <Icon
+                icon="lucide:wrench"
+                class="h-3 w-3"
+              />
+              Auto tools: {{ agent.autoToolRouting ? 'On' : 'Off' }}
+            </span>
+            <span
+              class="inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium"
+              :class="agent.autoMemory
+                ? 'border-accent-500/25 bg-accent-500/10 text-accent-300'
+                : 'border-theme-700 bg-theme-900/70 text-theme-500'"
+              :title="`Automatic memory retrieval is ${agent.autoMemory ? 'enabled' : 'disabled'}`"
+            >
+              <Icon
+                icon="lucide:brain"
+                class="h-3 w-3"
+              />
+              Auto memory: {{ agent.autoMemory ? 'On' : 'Off' }}
+            </span>
+          </div>
         </header>
 
         <nav class="flex gap-1 overflow-x-auto px-3 py-3 lg:block lg:space-y-1 lg:overflow-x-visible lg:p-4">
@@ -170,6 +205,16 @@ function sectionButtonClass(id: AgentSectionId): string {
                   {{ activeSection.description }}
                 </p>
               </div>
+              <button
+                class="ml-auto inline-flex shrink-0 items-center gap-2 rounded-lg bg-accent-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-400"
+                @click="goToChat"
+              >
+                <Icon
+                  icon="lucide:message-circle"
+                  class="h-4 w-4"
+                />
+                <span class="hidden sm:inline">Go to chat</span>
+              </button>
             </div>
 
             <component
