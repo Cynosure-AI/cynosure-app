@@ -146,10 +146,6 @@ function isContextGatheringCall(call: ToolCall): boolean {
   return isMemoryCall(call) || isToolRouterCall(call)
 }
 
-function isDisabledContextCall(call: ToolCall): boolean {
-  return isContextGatheringCall(call) && parseArgs(call.arguments)?.emptyReason === 'disabled'
-}
-
 function contextPhase(call?: ToolCall | null): string {
   return visibleText(call ? parseArgs(call.arguments)?.contextPhase : undefined) ?? ''
 }
@@ -222,10 +218,7 @@ function formatElapsed(ms: number): string {
 }
 
 function visibleToolCalls(calls: ToolCall[] = []): ToolCall[] {
-  return calls.filter((call) => {
-    if (isDisabledContextCall(call)) return false
-    return prefs.showInternalToolCalls || isTaskContextCall(call) || !isInternalToolName(call.name)
-  })
+  return calls
 }
 
 function isInternalExecution(execution: ToolExecution): boolean {
@@ -433,10 +426,7 @@ const rawToolCallArgs = computed(() => latestToolCalls.value)
 const toolCallArgs = computed(() => visibleToolCalls(rawToolCallArgs.value))
 
 const results = computed(() => {
-  const latestResults = [...props.steps].reverse().find((step) => step.results?.length)?.results ?? []
-  return prefs.showInternalToolCalls
-    ? latestResults
-    : latestResults.filter((result) => !isInternalToolName(result.name))
+  return [...props.steps].reverse().find((step) => step.results?.length)?.results ?? []
 })
 
 const toolNames = computed(() => visibleToolCalls(latestToolCalls.value).map((call) => call.name))

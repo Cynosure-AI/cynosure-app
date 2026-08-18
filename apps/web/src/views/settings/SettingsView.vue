@@ -251,13 +251,6 @@ const sections: SettingsSection[] = [
     terms: ['auto expand tool calls', 'tool calls', 'tool details', 'expand tools']
   },
   {
-    id: 'show-internal-tool-calls',
-    categoryId: 'appearance',
-    label: 'Show Internal Tool Calls',
-    description: 'Show planning, attachment retrieval, routing, memory, and other system-managed tool calls in chat.',
-    terms: ['internal tools', 'show internal tool calls', 'planning tools', 'todo tools', 'attachment tools', 'routing tools', 'memory tools', 'chat display', 'transparency']
-  },
-  {
     id: 'setup-guide',
     categoryId: 'appearance',
     label: 'Setup Guide',
