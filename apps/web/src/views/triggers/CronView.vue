@@ -180,6 +180,10 @@ function openCronJob(job: CronJob) {
   router.push(`/triggers/cron/${job.id}`)
 }
 
+function openAgentDetails(agentId: string) {
+  router.push(`/agents/${agentId}`)
+}
+
 // ─── Ticking countdown ───────────────────────────────────
 
 const now = ref(Date.now())
@@ -315,7 +319,13 @@ onUnmounted(() => {
         >
           <template #col-job="{ item: job }">
             <div class="flex items-start gap-3 min-w-0">
-              <div class="w-9 h-9 rounded-full bg-theme-700 flex items-center justify-center shrink-0 overflow-hidden mt-0.5">
+              <button
+                type="button"
+                class="w-9 h-9 rounded-full bg-theme-700 flex items-center justify-center shrink-0 overflow-hidden mt-0.5 hover:ring-2 hover:ring-accent-500/60 transition-shadow"
+                :title="`Open ${job.agentName} agent details`"
+                :aria-label="`Open ${job.agentName} agent details`"
+                @click.stop="openAgentDetails(job.agentId)"
+              >
                 <img
                   v-if="job.agentIconUrl"
                   :src="job.agentIconUrl"
@@ -327,7 +337,7 @@ onUnmounted(() => {
                   icon="lucide:bot"
                   class="w-4 h-4 text-theme-400"
                 />
-              </div>
+              </button>
               <div class="min-w-0">
                 <div class="font-medium text-theme-100 truncate">
                   {{ job.name || 'Unnamed job' }}
