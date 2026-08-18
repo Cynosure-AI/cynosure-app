@@ -11,13 +11,10 @@ import HITLDialog from '../agent/HITLDialog.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import { Icon } from '@iconify/vue'
 import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
-import { isInternalToolName } from '../../utils/internal-tools'
-import { usePreferencesStore } from '../../stores/preferences.store'
 
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
-const prefs = usePreferencesStore()
 const scrollContainer = ref<HTMLDivElement | null>(null)
 const expandedFallback = ref<Set<string>>(new Set())
 const collapsedSubAgentGroups = reactive(new Set<string>())
@@ -467,7 +464,6 @@ function assistantFileArtifacts(entry: TimelineEntry, entries = unifiedTimeline.
     if (previous.type !== 'tool-group') continue
     for (const step of previous.group.steps) {
       for (const result of step.results || []) {
-        if (!prefs.showInternalToolCalls && isInternalToolName(result.name)) continue
         collectFileArtifactsFromText(result.output || '', seen, artifacts)
       }
     }

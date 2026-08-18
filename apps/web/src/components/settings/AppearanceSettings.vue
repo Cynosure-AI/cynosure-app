@@ -133,7 +133,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
     </BaseCard>
 
     <SettingsSubheading
-      v-if="showAnySection(['auto-expand-thinking', 'auto-expand-tool-calls', 'show-internal-tool-calls'])"
+      v-if="showAnySection(['auto-expand-thinking', 'auto-expand-tool-calls'])"
       label="Chat Display"
     />
 
@@ -191,35 +191,6 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
         <ToggleSwitch
           v-model="prefs.autoExpandToolCalls"
           label="Auto-expand tool calls"
-        />
-      </div>
-    </BaseCard>
-
-    <!-- Internal Tool Calls -->
-    <BaseCard
-      v-if="showSection('show-internal-tool-calls')"
-      class="p-5"
-    >
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
-            <Icon
-              icon="lucide:shield-ellipsis"
-              class="w-5 h-5 text-theme-400"
-            />
-          </div>
-          <div>
-            <h3 class="text-sm font-medium text-theme-200">
-              Show Internal Tool Calls
-            </h3>
-            <p class="text-xs text-theme-500 mt-0.5">
-              Display orchestration, attachment retrieval, routing, memory and other system-managed tool calls
-            </p>
-          </div>
-        </div>
-        <ToggleSwitch
-          v-model="prefs.showInternalToolCalls"
-          label="Show internal tool calls"
         />
       </div>
     </BaseCard>

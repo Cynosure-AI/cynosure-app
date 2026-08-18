@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { syncPrefsToElectron } from '@/utils/electron-prefs'
 import {
-    SK_THEME, SK_AUTO_EXPAND, SK_AUTO_EXPAND_TOOLS, SK_SHOW_INTERNAL_TOOL_CALLS, SK_GENERATE_TITLE, SK_TITLE_PROVIDER, SK_TITLE_MODEL,
+    SK_THEME, SK_AUTO_EXPAND, SK_AUTO_EXPAND_TOOLS, SK_GENERATE_TITLE, SK_TITLE_PROVIDER, SK_TITLE_MODEL,
     SK_ENTITY_GRAPH_PROVIDER, SK_ENTITY_GRAPH_MODEL,
     SK_AUTO_ROUTER_PROVIDER, SK_AUTO_ROUTER_MODEL, SK_LEGACY_SKILL_ROUTER_PROVIDER, SK_LEGACY_SKILL_ROUTER_MODEL,
     SK_CONTEXT_STRATEGY, SK_INLINE_ATTACHMENT_TEXT_LIMIT, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL,
@@ -21,7 +21,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const theme = useLocalStorage<ThemeId>(SK_THEME, 'dark')
     const autoExpandSteps = useLocalStorage(SK_AUTO_EXPAND, false)
     const autoExpandToolCalls = useLocalStorage(SK_AUTO_EXPAND_TOOLS, false)
-    const showInternalToolCalls = useLocalStorage(SK_SHOW_INTERNAL_TOOL_CALLS, false)
     const generateTitle = useLocalStorage(SK_GENERATE_TITLE, true)
     const titleProviderId = useLocalStorage(SK_TITLE_PROVIDER, '')
     const titleModel = useLocalStorage(SK_TITLE_MODEL, '')
@@ -61,7 +60,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     // Sync all pref changes to Electron's JSON file (single watcher)
     watch(
-        [theme, autoExpandSteps, autoExpandToolCalls, showInternalToolCalls, generateTitle, titleProviderId, titleModel, entityGraphProviderId, entityGraphModel, autoRouterProviderId, autoRouterModel, compactProviderId, compactModel, contextStrategy, inlineAttachmentTextLimit,
+        [theme, autoExpandSteps, autoExpandToolCalls, generateTitle, titleProviderId, titleModel, entityGraphProviderId, entityGraphModel, autoRouterProviderId, autoRouterModel, compactProviderId, compactModel, contextStrategy, inlineAttachmentTextLimit,
             agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
             voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel],
         () => { syncPrefsToElectron() },
@@ -120,7 +119,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     }
 
     return {
-        theme, autoExpandSteps, autoExpandToolCalls, showInternalToolCalls, generateTitle, titleProviderId, titleModel, entityGraphProviderId, entityGraphModel, autoRouterProviderId, autoRouterModel, compactProviderId, compactModel, sidebarCollapsed,
+        theme, autoExpandSteps, autoExpandToolCalls, generateTitle, titleProviderId, titleModel, entityGraphProviderId, entityGraphModel, autoRouterProviderId, autoRouterModel, compactProviderId, compactModel, sidebarCollapsed,
         contextStrategy, inlineAttachmentTextLimit,
         agentCategories, maCategories,
         whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
