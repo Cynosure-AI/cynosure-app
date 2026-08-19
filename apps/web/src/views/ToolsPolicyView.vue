@@ -31,11 +31,14 @@ interface ToolParamSchema {
   required?: string[]
 }
 
+type ApprovalState = 'all' | 'defaults' | 'none' | 'partial'
+
 const agentStore = useAgentStore()
 const tools = ref<ToolInfo[]>([])
 const filterText = ref('')
 const expandedGroupIds = ref<Set<string>>(new Set())
 const loading = ref(true)
+const defaultApprovalNames = ref<Set<string>>(new Set())
 const debouncedSearchExpansion = ref(false)
 let searchExpansionTimer: number | undefined
 
@@ -136,7 +139,8 @@ function namespaceAutoApprovedCount(group: NamespaceGroup): number {
   return group.tools.filter((tool) => isAutoApproved(approvalName(tool))).length
 }
 
-function namespaceApprovalState(group: NamespaceGroup): 'all' | 'none' | 'partial' {
+function namespaceApprovalState(group: NamespaceGroup): ApprovalState {
+  if (group.tools.every((tool) => defaultApprovalNames.value.has(approvalName(tool)))) return 'defaults'
   const autoCount = namespaceAutoApprovedCount(group)
   if (autoCount === 0) return 'none'
   if (autoCount === group.tools.length) return 'all'
@@ -145,7 +149,8 @@ function namespaceApprovalState(group: NamespaceGroup): 'all' | 'none' | 'partia
 
 function namespaceApprovalSort(group: NamespaceGroup): number {
   const state = namespaceApprovalState(group)
-  if (state === 'all') return 2
+  if (state === 'all') return 3
+  if (state === 'defaults') return 2
   if (state === 'partial') return 1
   return 0
 }
@@ -153,18 +158,21 @@ function namespaceApprovalSort(group: NamespaceGroup): number {
 function namespaceApprovalLabel(group: NamespaceGroup): string {
   const state = namespaceApprovalState(group)
   if (state === 'all') return 'all auto'
+  if (state === 'defaults') return 'defaults'
   if (state === 'none') return 'all ask'
   return 'mixed'
 }
 
-function stateIcon(state: 'all' | 'none' | 'partial'): string {
+function stateIcon(state: ApprovalState): string {
   if (state === 'all') return 'lucide:shield-check'
+  if (state === 'defaults') return 'lucide:rotate-ccw'
   if (state === 'none') return 'lucide:shield-alert'
   return 'lucide:shield'
 }
 
-function stateClass(state: 'all' | 'none' | 'partial'): string {
+function stateClass(state: ApprovalState): string {
   if (state === 'all') return 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
+  if (state === 'defaults') return 'bg-sky-500/15 text-sky-400 hover:bg-sky-500/25'
   if (state === 'none') return 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
   return 'bg-accent-500/15 text-accent-300 hover:bg-accent-500/25'
 }
@@ -231,35 +239,64 @@ function toggleExpanded(group: NamespaceGroup): void {
 
 async function toggleApproval(name: string): Promise<void> {
   await agentStore.setToolApproval(name, !isAutoApproved(name))
+  await refreshPolicyTools()
 }
 
 async function setAllInGroup(group: NamespaceGroup, autoApprove: boolean): Promise<void> {
-  await Promise.all(group.tools.map((tool) => agentStore.setToolApproval(approvalName(tool), autoApprove)))
+  await setApprovals(group.tools, autoApprove)
+}
+
+async function setApprovals(policyTools: ToolInfo[], autoApprove: boolean): Promise<void> {
+  const approvals = Object.fromEntries(policyTools.map((tool) => [approvalName(tool), autoApprove]))
+  await api.agent.setToolApprovalsBulk(approvals)
+  await refreshPolicyTools()
+}
+
+async function restoreDefaults(policyTools: ToolInfo[]): Promise<void> {
+  const names = policyTools.map(approvalName)
+  await api.agent.resetToolApprovalsToDefaults(names)
+  await refreshPolicyTools()
 }
 
 async function toggleNamespaceApproval(group: NamespaceGroup): Promise<void> {
-  await setAllInGroup(group, namespaceApprovalState(group) !== 'all')
+  const state = namespaceApprovalState(group)
+  if (state === 'all' || state === 'partial') {
+    await restoreDefaults(group.tools)
+  } else if (state === 'defaults') {
+    await setAllInGroup(group, false)
+  } else {
+    await setAllInGroup(group, true)
+  }
 }
 
 async function confirmAll(): Promise<void> {
-  await Promise.all(tools.value.map((tool) => agentStore.setToolApproval(approvalName(tool), true)))
+  await setApprovals(tools.value, true)
+}
+
+async function defaultsAll(): Promise<void> {
+  await restoreDefaults(tools.value)
 }
 
 async function askAll(): Promise<void> {
-  await Promise.all(tools.value.map((tool) => agentStore.setToolApproval(approvalName(tool), false)))
+  await setApprovals(tools.value, false)
 }
 
 async function loadPolicyTools(): Promise<void> {
   loading.value = true
   try {
-    const [policyTools] = await Promise.all([
-      api.agent.listPolicyTools(),
-      agentStore.loadToolApprovals(),
-    ])
-    tools.value = policyTools
+    await refreshPolicyTools()
   } finally {
     loading.value = false
   }
+}
+
+async function refreshPolicyTools(): Promise<void> {
+  const policyTools = await api.agent.listPolicyTools()
+  tools.value = policyTools
+  agentStore.syncToolApprovals(policyTools)
+  defaultApprovalNames.value = new Set(
+    policyTools.filter((tool) => tool.usesDefaultApproval).map(approvalName)
+  )
 }
 
 watch(filterText, (value) => {
@@ -289,7 +326,7 @@ onMounted(loadPolicyTools)
             Tools
           </h1>
           <p class="text-sm text-theme-500 mt-1 max-w-3xl">
-            Set the default HITL behaviour for every registered MCP and built-in tool. <strong class="text-theme-400">Auto-confirm</strong> lets the agent call the tool without asking you first; <strong class="text-theme-400">Ask</strong> pauses for your approval.
+            Set the HITL behaviour for every registered MCP and built-in tool. <strong class="text-theme-400">Auto-confirm</strong> lets the agent call the tool without asking you first; <strong class="text-theme-400">Ask</strong> pauses for your approval; <strong class="text-theme-400">Defaults</strong> follows each tool's behavior annotations.
           </p>
         </div>
 
@@ -323,6 +360,13 @@ onMounted(loadPolicyTools)
                 @click="confirmAll"
               >
                 Auto-confirm all
+              </button>
+              <button
+                class="text-xs text-sky-400 hover:text-sky-300 transition-colors"
+                title="Use annotation defaults: read-only tools auto-confirm; write, destructive, and unannotated tools ask"
+                @click="defaultsAll"
+              >
+                Defaults
               </button>
               <button
                 class="text-xs text-theme-400 hover:text-theme-200 transition-colors"
@@ -379,8 +423,14 @@ onMounted(loadPolicyTools)
                 class="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors"
                 :class="stateClass(namespaceApprovalState(group))"
                 role="checkbox"
-                :aria-checked="namespaceApprovalState(group) === 'partial' ? 'mixed' : namespaceApprovalState(group) === 'all'"
-                :title="namespaceApprovalState(group) === 'all' ? 'All tools auto-confirmed. Click to require approval for all.' : 'Enable auto-confirm for all tools in this category.'"
+                :aria-checked="namespaceApprovalState(group) === 'partial' || namespaceApprovalState(group) === 'defaults' ? 'mixed' : namespaceApprovalState(group) === 'all'"
+                :title="namespaceApprovalState(group) === 'all'
+                  ? 'All tools auto-confirm. Click to restore annotation defaults.'
+                  : namespaceApprovalState(group) === 'defaults'
+                    ? 'Using annotation defaults. Click to require approval for all.'
+                    : namespaceApprovalState(group) === 'none'
+                      ? 'All tools ask. Click to auto-confirm all.'
+                      : 'Custom mix. Click to restore annotation defaults.'"
                 @click.stop="toggleNamespaceApproval(group)"
               >
                 <Icon

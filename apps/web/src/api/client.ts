@@ -219,10 +219,12 @@ export const api = {
       put<{ success: boolean }>(`/api/agents/tool-approvals/${encodeURIComponent(toolName)}`, { autoApprove }),
     setToolApprovalsBulk: (approvals: Record<string, boolean>) =>
       put<{ success: boolean }>('/api/agents/tool-approvals', approvals),
+    resetToolApprovalsToDefaults: (toolNames: string[]) =>
+      post<{ success: boolean }>('/api/agents/tool-approvals/defaults', { toolNames }),
     listTools: () =>
-      get<{ key: string; name: string; executionName: string; description: string; parameters: Record<string, unknown>; annotations?: { title?: string; readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean }; autoApprove: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools'),
+      get<{ key: string; name: string; executionName: string; description: string; parameters: Record<string, unknown>; annotations?: { title?: string; readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean }; autoApprove: boolean; usesDefaultApproval: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools'),
     listPolicyTools: () =>
-      get<{ key: string; name: string; executionName: string; description: string; parameters: Record<string, unknown>; annotations?: { title?: string; readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean }; autoApprove: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools'),
+      get<{ key: string; name: string; executionName: string; description: string; parameters: Record<string, unknown>; annotations?: { title?: string; readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean }; autoApprove: boolean; usesDefaultApproval: boolean; namespace: { id: string; label: string }; ambiguous: boolean }[]>('/api/agents/tools'),
     onExecutionUpdate: (cb: (data: unknown) => void) =>
       onWsEvent('agent:execution-update', cb),
     onPlanningStateUpdated: (cb: (data: unknown) => void) =>

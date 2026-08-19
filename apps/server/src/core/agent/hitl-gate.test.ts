@@ -6,11 +6,15 @@ const { approvalRows } = vi.hoisted(() => ({
 
 vi.mock('../../db/database.js', () => ({
   getDb: () => ({
-    prepare: () => ({
+    prepare: (sql: string) => ({
       get: (toolName: string) => approvalRows.has(toolName)
         ? { auto_approve: approvalRows.get(toolName) }
         : undefined,
+      run: (toolName: string) => {
+        if (sql.startsWith('DELETE FROM tool_approvals')) approvalRows.delete(toolName)
+      },
     }),
+    transaction: (callback: () => void) => callback,
   }),
 }))
 
@@ -40,5 +44,16 @@ describe('HITLGate annotation defaults', () => {
 
     expect(gate.isAutoApproved('mcp_read', { readOnlyHint: true })).toBe(false)
     expect(gate.isAutoApproved('mcp_write', { readOnlyHint: false, destructiveHint: true })).toBe(true)
+  })
+
+  test('restores annotation defaults by removing explicit choices', () => {
+    const gate = new HITLGate()
+    approvalRows.set('mcp_read', 0)
+    approvalRows.set('mcp_write', 1)
+
+    gate.resetAutoApproveBulk(['mcp_read', 'mcp_write', 'mcp_read'])
+
+    expect(gate.isAutoApproved('mcp_read', { readOnlyHint: true })).toBe(true)
+    expect(gate.isAutoApproved('mcp_write', { readOnlyHint: false })).toBe(false)
   })
 })

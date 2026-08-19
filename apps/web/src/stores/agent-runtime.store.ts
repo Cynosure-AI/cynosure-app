@@ -25,6 +25,7 @@ export interface ToolInfo {
   parameters: Record<string, unknown>
   annotations?: ToolBehaviorAnnotations
   autoApprove: boolean
+  usesDefaultApproval: boolean
   namespace: ToolNamespace
   ambiguous: boolean
 }
@@ -126,12 +127,7 @@ export const useAgentStore = defineStore('agent', () => {
   async function loadTools(): Promise<void> {
     availableTools.value = await api.agent.listTools()
 
-    // Sync approval state from server
-    const approvalMap: Record<string, boolean> = {}
-    for (const tool of availableTools.value) {
-      approvalMap[tool.executionName] = tool.autoApprove
-    }
-    toolApprovals.value = approvalMap
+    syncToolApprovals(availableTools.value)
 
     const availableKeys = new Set(
       availableTools.value
@@ -142,6 +138,14 @@ export const useAgentStore = defineStore('agent', () => {
 
     // Keep only previously selected tools that still exist; default to none.
     selectedToolNames.value = filtered
+  }
+
+  function syncToolApprovals(tools: ToolInfo[]): void {
+    const approvalMap: Record<string, boolean> = {}
+    for (const tool of tools) {
+      approvalMap[tool.executionName] = tool.autoApprove
+    }
+    toolApprovals.value = approvalMap
   }
 
   function toggleTool(name: string): void {
@@ -628,6 +632,7 @@ export const useAgentStore = defineStore('agent', () => {
     liveExecutionConversationIds,
     loadToolApprovals,
     loadTools,
+    syncToolApprovals,
     toggleTool,
     selectAllTools,
     clearSelectedTools,
