@@ -1,4 +1,4 @@
-import { getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
+import { BUILTIN_NAMESPACE_ID, getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
 import { applyAutoToolRouting, emitAutoToolRoutingSkipped } from './auto-tool-routing.js'
 import { isRuntimeMemoryEnabled, type ExecutionMemorySpaceRef } from './execution-memory.js'
 import type { ExecutionPreset } from '../execution-preset.js'
@@ -6,6 +6,7 @@ import type { SubAgentAssignment } from '../../agents/agent-store.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolRegistry } from '../../tools/tool-registry.js'
+import { isScheduleToolName } from '../../tools/builtin/schedule-tools.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -67,10 +68,12 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         ? toolRegistry.listRegisteredTools().map((tool) => tool.key)
         : configuredToolKeys
 
-    let tools: RegistryAwareToolDefinition[] = toolRegistry.resolveForExecution(toolKeys)
+    let tools: RegistryAwareToolDefinition[] = filterToolsForExecutionPreset(
+        preset,
+        toolRegistry.resolveForExecution(toolKeys),
+    )
     const preferredToolNames = routingEnabled
-        ? toolRegistry
-            .resolveForExecution(preferredToolKeys ?? [])
+        ? filterToolsForExecutionPreset(preset, toolRegistry.resolveForExecution(preferredToolKeys ?? []))
             .map((tool) => tool.name)
         : []
 
@@ -130,6 +133,17 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         hasSubAgents,
         effectiveSubAgents,
     }
+}
+
+/** Agentless conversations cannot own durable schedules. */
+export function filterToolsForExecutionPreset<T extends Pick<RegistryAwareToolDefinition, 'name' | 'originalName' | 'namespaceId'>>(
+    preset: ExecutionPreset,
+    tools: T[],
+): T[] {
+    if (preset.id !== '__agentless__') return tools
+    return tools.filter((tool) => (
+        tool.namespaceId !== BUILTIN_NAMESPACE_ID || !isScheduleToolName(tool.originalName ?? tool.name)
+    ))
 }
 
 function dedupeToolsByName(tools: RegistryAwareToolDefinition[]): RegistryAwareToolDefinition[] {

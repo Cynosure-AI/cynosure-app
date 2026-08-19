@@ -13,8 +13,9 @@ const props = withDefaults(
     showApprovals?: boolean
     scrollable?: boolean
     automaticToolStates?: Record<string, { active: boolean; criteria: string }>
+    toolRequirements?: Record<string, { met: boolean; criteria: string }>
   }>(),
-  { showApprovals: false, scrollable: true, automaticToolStates: () => ({}) }
+  { showApprovals: false, scrollable: true, automaticToolStates: () => ({}), toolRequirements: () => ({}) }
 )
 
 const emit = defineEmits<{
@@ -50,6 +51,23 @@ function isAutoManagedTool(tool: ToolInfo): boolean {
   return tool.name.startsWith('relationship_graph_') && automaticToolState(tool).active
 }
 
+function toolRequirement(tool: ToolInfo): { met: boolean; criteria: string } | undefined {
+  if (tool.namespace.id !== 'builtin') return undefined
+  return props.toolRequirements[tool.name]
+}
+
+function hasUnmetRequirement(tool: ToolInfo): boolean {
+  return toolRequirement(tool)?.met === false
+}
+
+function isToolDisabled(tool: ToolInfo): boolean {
+  return isAutoManagedTool(tool) || hasUnmetRequirement(tool)
+}
+
+function requirementBadge(tool: ToolInfo): string {
+  return `requires: ${toolRequirement(tool)?.criteria || 'additional configuration'}`
+}
+
 function automaticToolState(tool: ToolInfo): { active: boolean; criteria: string } {
   return props.automaticToolStates[tool.name] ?? { active: false, criteria: automaticToolCriteria(tool.name) }
 }
@@ -69,11 +87,11 @@ function automaticToolBadge(tool: ToolInfo): string {
 }
 
 function selectableTools(tools: ToolInfo[]): ToolInfo[] {
-  return tools.filter((tool) => !isAutoManagedTool(tool))
+  return tools.filter((tool) => !isAutoManagedTool(tool) && !hasUnmetRequirement(tool))
 }
 
 function toggleTool(tool: ToolInfo): void {
-  if (isAutoManagedTool(tool)) return
+  if (isToolDisabled(tool)) return
   const key = toolKey(tool)
   if (isSelected(tool)) {
     emit('update:modelValue', props.modelValue.filter((n) => n !== key))
@@ -186,7 +204,11 @@ function selectableCount(group: NamespaceGroup): number {
 }
 
 function autoManagedCount(group: NamespaceGroup): number {
-  return group.tools.length - selectableCount(group)
+  return group.tools.filter(isAutoManagedTool).length
+}
+
+function unavailableCount(group: NamespaceGroup): number {
+  return group.tools.filter((tool) => !isAutoManagedTool(tool) && hasUnmetRequirement(tool)).length
 }
 
 function isNamespaceExpanded(namespaceId: string): boolean {
@@ -312,6 +334,7 @@ onBeforeUnmount(() => {
                     <p class="text-[10px] text-theme-600 mt-0.5">
                       {{ selectedCount(group) }}/{{ selectableCount(group) }} selected
                       <span v-if="autoManagedCount(group)"> · {{ autoManagedCount(group) }} automatic</span>
+                      <span v-if="unavailableCount(group)"> · {{ unavailableCount(group) }} require agent</span>
                     </p>
                   </div>
                 </div>
@@ -322,15 +345,15 @@ onBeforeUnmount(() => {
                   v-for="tool in group.tools"
                   :key="toolKey(tool)"
                   class="flex items-center gap-2 rounded-lg px-2 py-2"
-                  :class="isAutoManagedTool(tool) ? 'cursor-not-allowed opacity-55' : 'hover:bg-theme-800/70 cursor-pointer'"
+                  :class="isToolDisabled(tool) ? 'cursor-not-allowed opacity-55' : 'hover:bg-theme-800/70 cursor-pointer'"
                 >
                   <div class="flex items-start gap-2 flex-1 min-w-0">
                     <input
                       type="checkbox"
                       class="mt-0.5 h-4 w-4 accent-accent-600 shrink-0"
                       :checked="isSelected(tool)"
-                      :disabled="isAutoManagedTool(tool)"
-                      :title="isAutoManagedTool(tool) ? automaticToolBadge(tool) : undefined"
+                      :disabled="isToolDisabled(tool)"
+                      :title="isAutoManagedTool(tool) ? automaticToolBadge(tool) : hasUnmetRequirement(tool) ? requirementBadge(tool) : undefined"
                       @change="toggleTool(tool)"
                     >
                     <HoverTooltip
@@ -348,6 +371,13 @@ onBeforeUnmount(() => {
                           >
                             {{ automaticToolBadge(tool) }}
                           </span>
+                          <span
+                            v-else-if="toolRequirement(tool)"
+                            class="ml-1 rounded px-1 py-0.5 text-[9px] font-normal uppercase tracking-wide"
+                            :class="toolRequirement(tool)?.met ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'"
+                          >
+                            {{ requirementBadge(tool) }}
+                          </span>
                         </p>
                         <ToolBehaviorBadges
                           :annotations="tool.annotations"
@@ -361,6 +391,13 @@ onBeforeUnmount(() => {
                           :class="automaticToolState(tool).active ? 'text-emerald-300' : 'text-theme-400'"
                         >
                           {{ automaticToolState(tool).active ? 'Active' : 'Inactive' }} automatically when {{ automaticToolState(tool).criteria }}.
+                        </div>
+                        <div
+                          v-else-if="toolRequirement(tool)"
+                          class="mb-2 rounded border bg-theme-900/70 px-2 py-1.5 text-[10px] leading-snug"
+                          :class="toolRequirement(tool)?.met ? 'border-emerald-500/20 text-emerald-300' : 'border-amber-500/20 text-amber-300'"
+                        >
+                          {{ toolRequirement(tool)?.met ? 'Requirement met' : 'Unavailable' }}: {{ toolRequirement(tool)?.criteria }}.
                         </div>
                         <div
                           class=" text-theme-400 leading-snug"
