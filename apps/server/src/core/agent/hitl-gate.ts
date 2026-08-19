@@ -73,6 +73,18 @@ export class HITLGate {
     tx()
   }
 
+  /** Remove explicit choices so tools fall back to system and annotation policy. */
+  resetAutoApproveBulk(toolNames: string[]): void {
+    if (toolNames.length === 0) return
+
+    const db = getDb()
+    const stmt = db.prepare('DELETE FROM tool_approvals WHERE tool_name = ?')
+    const tx = db.transaction(() => {
+      for (const name of new Set(toolNames)) stmt.run(name)
+    })
+    tx()
+  }
+
   async requestApproval(
     taskId: string,
     toolCalls: ToolCall[],

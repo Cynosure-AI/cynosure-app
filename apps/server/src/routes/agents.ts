@@ -157,6 +157,16 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
         return { success: true }
     })
 
+    // POST /api/agents/tool-approvals/defaults — remove explicit choices
+    app.post<{ Body: { toolNames: string[] } }>('/tool-approvals/defaults', async (req, reply) => {
+        const toolNames = req.body?.toolNames
+        if (!Array.isArray(toolNames) || toolNames.some((name) => typeof name !== 'string')) {
+            return reply.status(400).send({ error: 'Expected { toolNames: string[] }' })
+        }
+        getHITLGate().resetAutoApproveBulk(toolNames)
+        return { success: true }
+    })
+
     // PUT /api/agents/tool-approvals/:toolName — set approval for a specific tool
     app.put<{ Params: { toolName: string }; Body: { autoApprove: boolean } }>(
         '/tool-approvals/:toolName',
@@ -176,6 +186,7 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     app.get('/tools', async () => {
         const registry = getToolRegistry()
         const gate = getHITLGate()
+        const explicitApprovals = gate.getAllApprovals()
         const items = registry.listRegisteredTools()
         const dynamicBuiltIns = [
             ...makePlanningTools('').map((tool) => ({
@@ -228,6 +239,7 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
                 parameters: tool.parameters,
                 annotations,
                 autoApprove: gate.isAutoApproved(tool.executionName, annotations),
+                usesDefaultApproval: !Object.prototype.hasOwnProperty.call(explicitApprovals, tool.executionName),
                 namespace: tool.namespace,
                 ambiguous: tool.ambiguous,
             }
