@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { makeScheduleTools, oneOffCronExpression, SCHEDULE_TOOL_NAMES } from './schedule-tools.js'
+import { isScheduleToolName, makeScheduleTools, oneOffCronExpression, SCHEDULE_TOOL_NAMES } from './schedule-tools.js'
 
 describe('schedule built-in tools', () => {
     test('exposes an agent-scoped CRUD toolset with explicit mutation hints', () => {
@@ -9,6 +9,23 @@ describe('schedule built-in tools', () => {
         expect(tools.find((tool) => tool.name === 'schedule_delete')?.annotations?.destructiveHint).toBe(true)
         for (const tool of tools) {
             expect(tool.parameters).toMatchObject({ type: 'object', additionalProperties: false })
+        }
+    })
+
+    test('identifies only built-in schedule tool names', () => {
+        expect(SCHEDULE_TOOL_NAMES.every(isScheduleToolName)).toBe(true)
+        expect(isScheduleToolName('memory_create')).toBe(false)
+    })
+
+    test('rejects every scheduling operation in an agentless context', async () => {
+        const tools = makeScheduleTools({ agentId: '__agentless__' })
+
+        for (const tool of tools) {
+            const response = await tool.execute({})
+            expect(response).toMatchObject({
+                success: false,
+                error: expect.stringMatching(/require a saved agent/i),
+            })
         }
     })
 

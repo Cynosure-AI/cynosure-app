@@ -12,6 +12,24 @@ export const SCHEDULE_TOOL_NAMES = [
     'schedule_delete',
 ] as const
 
+export type ScheduleToolName = (typeof SCHEDULE_TOOL_NAMES)[number]
+
+const SCHEDULE_TOOL_NAME_SET = new Set<string>(SCHEDULE_TOOL_NAMES)
+
+export function isScheduleToolName(name?: string | null): name is ScheduleToolName {
+    return Boolean(name && SCHEDULE_TOOL_NAME_SET.has(name))
+}
+
+function hasAgentContext(agentId: string): boolean {
+    return Boolean(agentId && agentId !== '__agentless__')
+}
+
+function requireAgentContext(agentId: string): ReturnType<typeof failure> | undefined {
+    return hasAgentContext(agentId)
+        ? undefined
+        : failure('Scheduling tools require a saved agent. Select or create an agent before managing schedules.')
+}
+
 function result(value: unknown) {
     return { success: true as const, output: JSON.stringify(value, null, 2) }
 }
@@ -62,7 +80,8 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
         timeout: 5_000,
         annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
         execute: async (params: unknown) => {
-            if (!opts.agentId) return failure('This tool requires an agent context')
+            const contextFailure = requireAgentContext(opts.agentId)
+            if (contextFailure) return contextFailure
             const input = params as { name?: string; prompt?: string; runAt?: string; schedule?: string; notify?: boolean }
             if (!input.name?.trim() || !input.prompt?.trim()) return failure('name and prompt are required')
             if (Boolean(input.runAt) === Boolean(input.schedule)) return failure('Provide exactly one of runAt or schedule')
@@ -107,7 +126,8 @@ function listTool(opts: ScheduleToolOptions): ToolDefinition {
         execution: { readOnly: true },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         execute: async () => {
-            if (!opts.agentId) return failure('This tool requires an agent context')
+            const contextFailure = requireAgentContext(opts.agentId)
+            if (contextFailure) return contextFailure
             const { getCronJobsForAgent } = await import('../../triggers/cron-scheduler.js')
             return result(getCronJobsForAgent(opts.agentId))
         },
@@ -135,7 +155,8 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
         timeout: 5_000,
         annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
         execute: async (params: unknown) => {
-            if (!opts.agentId) return failure('This tool requires an agent context')
+            const contextFailure = requireAgentContext(opts.agentId)
+            if (contextFailure) return contextFailure
             const input = params as { jobId?: string; name?: string; prompt?: string; runAt?: string; schedule?: string; enabled?: boolean; notify?: boolean }
             if (!input.jobId) return failure('jobId is required')
             if (input.runAt && input.schedule) return failure('Provide runAt or schedule, not both')
@@ -184,7 +205,8 @@ function deleteTool(opts: ScheduleToolOptions): ToolDefinition {
         timeout: 5_000,
         annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
         execute: async (params: unknown) => {
-            if (!opts.agentId) return failure('This tool requires an agent context')
+            const contextFailure = requireAgentContext(opts.agentId)
+            if (contextFailure) return contextFailure
             const { getCronJob, unscheduleCronJob, deleteCronJob } = await import('../../triggers/cron-scheduler.js')
             const jobId = (params as { jobId?: string }).jobId
             if (!jobId) return failure('jobId is required')

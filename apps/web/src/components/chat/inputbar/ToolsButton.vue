@@ -5,7 +5,7 @@ import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
 import ToolSelectorModal from '../modals/ToolSelectorModal.vue'
-import { isAutoManagedBuiltInToolName } from '../../../utils/internal-tools'
+import { isAgentRequiredBuiltInToolName, isAutoManagedBuiltInToolName } from '../../../utils/internal-tools'
 
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
@@ -19,7 +19,10 @@ const selectedToolsList = computed(() =>
 )
 
 const selectableToolsList = computed(() =>
-  agentStore.availableTools.filter(t => !(t.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(t.name)))
+  agentStore.availableTools.filter(t =>
+    !(t.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(t.name)) &&
+    (Boolean(chatStore.activeAgentId) || t.namespace.id !== 'builtin' || !isAgentRequiredBuiltInToolName(t.name))
+  )
 )
 
 const missingTools = computed(() => {
