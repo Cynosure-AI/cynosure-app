@@ -32,6 +32,7 @@ import {
 } from '../core/memory/memory-space-folders.js'
 import {
     deleteMemoryGraphSource,
+    deleteMemoryGraphSpace,
     indexMemoryFileIntoEntityGraph,
     moveMemoryGraphSource,
 } from '../core/memory/memory-entity-indexer.js'
@@ -282,6 +283,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         for (const target of rowsToDelete) {
             await rag.deleteByFilter(getActivePermanentMemoryTableName(), lanceDbEqFilter('spaceId', target.id))
             stopWatchingMemorySpace(target.id)
+            // Remove the space's entity-graph edges (and prune orphaned nodes).
+            deleteMemoryGraphSpace(target.id)
         }
         archiveMemorySpaceFolder(row)
         const deleteRows = db.transaction(() => {
