@@ -1570,6 +1570,77 @@ export class EntityGraphStore {
     }
   }
 
+  /** Delete every edge whose evidence is scoped to any of the given source-id
+   * prefixes (e.g. `memory:<spaceId>:`), removing edges that lose all their
+   * supporting sources and pruning any nodes that become orphaned. */
+  deleteEdgesBySourcePrefixes(sourceIdPrefixes: string[]): { edgesDeleted: number; orphanedNodeIds: string[] } {
+    const prefixes = Array.from(new Set(sourceIdPrefixes.map((value) => value.trim()).filter(Boolean)))
+    if (prefixes.length === 0) return { edgesDeleted: 0, orphanedNodeIds: [] }
+
+    const db = getDb()
+    const where = prefixes.map(() => `ev.source_id LIKE ? ESCAPE '\\'`).join(' OR ')
+    const deleteWhere = prefixes.map(() => `source_id LIKE ? ESCAPE '\\'`).join(' OR ')
+    const args = prefixes.map((prefix) => `${escapeLike(prefix)}%`)
+
+    const edges = db.prepare(`
+      SELECT DISTINCT e.id, e.from_node_id, e.to_node_id
+      FROM entity_graph_edges e
+      JOIN entity_graph_edge_evidence ev ON ev.edge_id = e.id
+      WHERE ${where}
+    `).all(...args) as { id: string; from_node_id: string; to_node_id: string }[]
+
+    if (edges.length === 0) return { edgesDeleted: 0, orphanedNodeIds: [] }
+
+    const allOrphanedNodeIds = new Set<string>()
+    let deletedEdgesCount = 0
+
+    db.transaction(() => {
+      db.prepare(`DELETE FROM entity_graph_edge_evidence WHERE ${deleteWhere}`).run(...args)
+
+      // Delete only edges that no longer have any supporting source.
+      const deletedEdgeIds: string[] = []
+      const noEvidence = db.prepare('SELECT 1 FROM entity_graph_edge_evidence WHERE edge_id = ? LIMIT 1')
+      const deleteEdge = db.prepare('DELETE FROM entity_graph_edges WHERE id = ?')
+      for (const edge of edges) {
+        if (!noEvidence.get(edge.id)) {
+          deleteEdge.run(edge.id)
+          deletedEdgeIds.push(edge.id)
+          deletedEdgesCount++
+        }
+      }
+
+      // Collect all nodes involved in deleted edges.
+      const involvedNodeIds = new Set<string>()
+      for (const edge of edges.filter((edge) => deletedEdgeIds.includes(edge.id))) {
+        involvedNodeIds.add(edge.from_node_id)
+        involvedNodeIds.add(edge.to_node_id)
+      }
+
+      for (const edge of edges) {
+        this.refreshNodeSourceCount(edge.from_node_id)
+        this.refreshNodeSourceCount(edge.to_node_id)
+      }
+
+      // Check which nodes are now orphaned (no remaining edges).
+      for (const nodeId of involvedNodeIds) {
+        const remaining = db.prepare(`
+          SELECT 1 FROM entity_graph_edges WHERE from_node_id = ? OR to_node_id = ? LIMIT 1
+        `).get(nodeId, nodeId)
+        if (!remaining) allOrphanedNodeIds.add(nodeId)
+      }
+
+      // Delete orphaned nodes.
+      for (const nodeId of allOrphanedNodeIds) {
+        db.prepare('DELETE FROM entity_graph_nodes WHERE id = ?').run(nodeId)
+      }
+    })()
+
+    return {
+      edgesDeleted: deletedEdgesCount,
+      orphanedNodeIds: Array.from(allOrphanedNodeIds),
+    }
+  }
+
   formatWalk(walk: GraphWalkResult): string {
     if (walk.edges.length === 0) return ''
     const importanceLabel = (level: ImportanceLevel): string =>

@@ -156,6 +156,15 @@ export function deleteMemoryGraphSource(spaceId: string, fileName: string): { ed
   }
 }
 
+/** Remove every entity-graph edge sourced from a memory space (scoped source
+ * ids of the form `memory:<spaceId>:<fileName>`), pruning orphaned nodes. Used
+ * when a whole memory space is deleted. Legacy `memory:<fileName>` sources are
+ * intentionally left untouched because they cannot be scoped to a single space. */
+export function deleteMemoryGraphSpace(spaceId: string): { edgesDeleted: number; orphanedNodeIds: string[] } {
+  const graph = getEntityGraphStore()
+  return graph.deleteEdgesBySourcePrefixes([memoryGraphSourceId(spaceId, '')])
+}
+
 export async function readMemoryFileForEntityIndex(folderPath: string, fileName: string): Promise<string> {
   const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase()
   if (PLAIN_TEXT_EXTENSIONS.has(ext)) {
