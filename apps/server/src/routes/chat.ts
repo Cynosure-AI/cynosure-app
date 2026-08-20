@@ -22,7 +22,7 @@ import type {
 } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
-import { materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
+import { materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
 import { buildAttachmentContext, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
 import {
@@ -140,10 +140,6 @@ async function pollVideoGeneration(
     throw new Error(job.error || `Video generation ${job.status}`)
   }
   return job
-}
-
-function videoContentUrl(providerId: string, jobId: string, index = 0): string {
-  return `/api/providers/${encodeURIComponent(providerId)}/videos/${encodeURIComponent(jobId)}/content?index=${encodeURIComponent(String(index))}`
 }
 
 function buildVideoGenerationRequest(input: {
@@ -267,6 +263,18 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
       }
 
+      // Persist audio beside the other conversation artifacts. Keep the original
+      // data URLs only for the immediate provider request below.
+      let storedAudioUrls = audioDataUrls
+      if (audioDataUrls?.length) {
+        try {
+          const artifacts = await materializeAudioArtifacts(audioDataUrls, conversationId)
+          storedAudioUrls = artifacts.map((artifact) => artifact.url)
+        } catch (err) {
+          console.warn('[chat] Failed to materialize user audio, keeping original URLs:', err)
+        }
+      }
+
       const storedFileAttachments = files?.length
         ? await materializeFileAttachments(files, conversationId)
         : []
@@ -321,7 +329,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       db.prepare(
         `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(userMsgId, conversationId, 'user', normalizedContent, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, audioDataUrls?.length ? JSON.stringify(audioDataUrls) : null, now)
+      ).run(userMsgId, conversationId, 'user', normalizedContent, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, storedAudioUrls?.length ? JSON.stringify(storedAudioUrls) : null, now)
       persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
 
@@ -494,7 +502,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             signal: abortController.signal,
           }), responseProvider)
           const completedJob = await pollVideoGeneration(gateway, responseProvider, submittedJob, abortController.signal)
-          const videoUrls = [videoContentUrl(responseProvider, completedJob.id)]
+          const videoContent = await gateway.getVideoGenerationContent(completedJob.id, 0, responseProvider)
+          const videoArtifact = materializeMediaBuffer(
+            videoContent.data,
+            videoContent.contentType,
+            conversationId,
+            'video',
+          )
+          const videoUrls = [videoArtifact.url]
 
           broadcast('chat:stream-videos', { streamId, conversationId, videos: videoUrls })
           broadcast('chat:stream-end', { streamId, conversationId, model: responseModel })

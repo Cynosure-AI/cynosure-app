@@ -15,6 +15,7 @@ vi.mock('../artifacts/file-artifacts.js', () => ({
 }))
 vi.mock('../artifacts/image-artifacts.js', () => ({
     extractFilePathFromFileUrl: (url: string) => url.startsWith('file://') ? url.slice(7) : null,
+    artifactFileUrlToDataUrl: (url: string) => url.startsWith('file://') ? `data:mock;base64,${url.slice(7)}` : null,
 }))
 
 import {

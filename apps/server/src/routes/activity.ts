@@ -429,7 +429,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             `SELECT m.id, m.conversation_id, m.content, m.image_urls_json, m.video_urls_json, m.audio_urls_json, m.created_at, c.title, c.agent_id
              FROM messages m
              JOIN conversations c ON c.id = m.conversation_id
-             WHERE m.role = 'assistant'
+             WHERE m.role IN ('assistant', 'tool')
              ORDER BY m.created_at DESC
              LIMIT ?`
         ).all(searchQuery ? -1 : Math.max(queryLimit * 3, 100)) as {
