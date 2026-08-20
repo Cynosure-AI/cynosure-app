@@ -47,6 +47,30 @@ describe('DataTable', () => {
     expect(renderedNames(wrapper)).toEqual(['Enabled', 'Disabled'])
   })
 
+  test('applies one-time initial ordering after asynchronous items arrive', async () => {
+    const wrapper = mount(DataTable<Item>, {
+      props: {
+        items: [],
+        columns,
+        initialSortKey: 'enabled',
+        initialSortDirection: 'desc',
+        initialSortOnce: true,
+      },
+      slots: {
+        'col-name': '<template #col-name="{ item }"><span data-testid="name">{{ item.name }}</span></template>',
+      },
+    })
+
+    await wrapper.setProps({
+      items: [
+        { id: 'disabled', name: 'Disabled', enabled: false },
+        { id: 'enabled', name: 'Enabled', enabled: true },
+      ],
+    })
+
+    expect(renderedNames(wrapper)).toEqual(['Enabled', 'Disabled'])
+  })
+
   test('sorts the full collection before applying pagination', () => {
     const wrapper = mount(DataTable<Item>, {
       props: {
@@ -135,5 +159,57 @@ describe('DataTable', () => {
     await rowCheckboxes()[1].trigger('click', { shiftKey: true })
 
     expect(wrapper.emitted('update:selectedIds')?.at(-1)?.[0]).toEqual(['a', 'c'])
+  })
+
+  test('filters rows through the shared table pipeline before sorting', () => {
+    const wrapper = mount(DataTable<Item>, {
+      props: {
+        items: [
+          { id: 'c', name: 'Charlie', enabled: true },
+          { id: 'a', name: 'Alpha', enabled: true },
+          { id: 'b', name: 'Bravo', enabled: true },
+        ],
+        columns,
+        filterText: 'ha',
+        initialSortKey: 'name',
+      },
+      slots: {
+        'col-name': '<template #col-name="{ item }"><span data-testid="name">{{ item.name }}</span></template>',
+      },
+    })
+
+    expect(renderedNames(wrapper)).toEqual(['Alpha', 'Charlie'])
+  })
+
+  test('opens an editable cell for every selected row and keeps row navigation suppressed', async () => {
+    const editableColumns: Column<Item>[] = [
+      { key: 'name', label: 'Name', editable: true },
+      columns[1],
+    ]
+    const wrapper = mount(DataTable<Item>, {
+      attachTo: document.body,
+      props: {
+        items: [
+          { id: 'a', name: 'Alpha', enabled: true },
+          { id: 'b', name: 'Bravo', enabled: true },
+        ],
+        columns: editableColumns,
+        selectedIds: ['a', 'b'],
+        selectable: true,
+        rowClickable: true,
+      },
+      slots: {
+        'edit-col-name': '<template #edit-col-name="{ items }"><span data-testid="editor-count">{{ items.length }}</span></template>',
+      },
+    })
+
+    const cell = wrapper.find('.dt-cell-editable')
+    await cell.trigger('click')
+    expect(wrapper.emitted('row-click')).toBeUndefined()
+    await cell.trigger('dblclick')
+
+    expect(document.body.querySelector('[data-testid="editor-count"]')?.textContent).toBe('2')
+    expect(wrapper.emitted('cell-edit-start')?.[0]?.[2]).toHaveLength(2)
+    wrapper.unmount()
   })
 })

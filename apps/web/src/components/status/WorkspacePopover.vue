@@ -4,7 +4,6 @@ import type { CSSProperties } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { api } from '../../api/client'
-import { useProviderStore } from '../../stores/provider.store'
 import { usePreferencesStore } from '../../stores/preferences.store'
 
 const props = withDefaults(defineProps<{
@@ -20,21 +19,9 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ close: [] }>()
 const router = useRouter()
-const providerStore = useProviderStore()
 const preferencesStore = usePreferencesStore()
-
-interface ProviderHealth {
-  id: string
-  name: string
-  status: 'checking' | 'ok' | 'error'
-}
-
-const providerHealthList = ref<ProviderHealth[]>([])
 const appVersion = ref<string | null>(null)
-const refreshing = ref(false)
 const popoverStyle = ref<CSSProperties>({})
-let lastFetchedAt = 0
-const CACHE_TTL = 20_000
 
 const setupLinks = [
   { path: '/settings', label: 'Settings', description: 'Profile, providers and preferences', icon: 'lucide:settings' },
@@ -55,37 +42,10 @@ function updatePosition() {
   }
 }
 
-async function fetchStatus(force = false) {
-  const now = Date.now()
-  if (!force && lastFetchedAt && now - lastFetchedAt < CACHE_TTL) return
-  refreshing.value = true
-  providerHealthList.value = providerStore.providers.map((provider) => ({
-    id: provider.id,
-    name: provider.name,
-    status: 'checking',
-  }))
-
-  const checks = await Promise.allSettled(providerStore.providers.map(async (provider) => {
-    try {
-      await api.provider.listModels(provider.id)
-      return { id: provider.id, ok: true }
-    } catch {
-      return { id: provider.id, ok: false }
-    }
-  }))
-
-  for (const result of checks) {
-    if (result.status !== 'fulfilled') continue
-    const provider = providerHealthList.value.find((entry) => entry.id === result.value.id)
-    if (provider) provider.status = result.value.ok ? 'ok' : 'error'
-  }
-
+async function fetchVersion() {
   try {
     appVersion.value = (await api.system.health()).version
   } catch { /* non-critical */ }
-
-  lastFetchedAt = Date.now()
-  refreshing.value = false
 }
 
 function goTo(path: string) {
@@ -97,7 +57,7 @@ watch(() => props.show, async (show) => {
   if (!show) return
   await nextTick()
   updatePosition()
-  void fetchStatus()
+  if (!appVersion.value) void fetchVersion()
 })
 
 onMounted(() => {
@@ -135,71 +95,8 @@ onBeforeUnmount(() => {
               {{ preferencesStore.userName.trim() || 'Workspace' }}
             </p>
             <p class="text-[10px] font-medium uppercase tracking-wider text-theme-500">
-              {{ preferencesStore.userName.trim() ? 'Workspace · status and configuration' : 'Status and configuration' }}
+              {{ preferencesStore.userName.trim() ? 'Workspace · shortcuts and configuration' : 'Shortcuts and configuration' }}
             </p>
-          </div>
-          <div class="flex shrink-0 items-center gap-0.5">
-            <button
-              type="button"
-              class="rounded-md p-1.5 text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
-              title="Refresh provider status"
-              :disabled="refreshing"
-              @click="fetchStatus(true)"
-            >
-              <Icon
-                icon="lucide:refresh-cw"
-                class="h-3.5 w-3.5"
-                :class="{ 'animate-spin': refreshing }"
-              />
-            </button>
-            <button
-              type="button"
-              class="rounded-md p-1.5 text-theme-400 transition hover:bg-theme-800 hover:text-accent-400"
-              title="Open settings"
-              aria-label="Open settings"
-              @click="goTo('/settings')"
-            >
-              <Icon
-                icon="lucide:settings"
-                class="h-4 w-4"
-              />
-            </button>
-          </div>
-        </div>
-
-        <div class="mt-1 rounded-lg border border-theme-800 bg-theme-950/45 p-2.5">
-          <div class="mb-2 flex items-center gap-2">
-            <Icon
-              icon="lucide:cpu"
-              class="h-3.5 w-3.5 text-theme-500"
-            />
-            <span class="text-[10px] font-semibold uppercase tracking-wider text-theme-500">Providers</span>
-          </div>
-          <p
-            v-if="providerHealthList.length === 0"
-            class="px-1 text-[11px] text-theme-600"
-          >
-            No providers configured
-          </p>
-          <div
-            v-for="provider in providerHealthList"
-            :key="provider.id"
-            class="flex items-center gap-2 px-1 py-1"
-          >
-            <span
-              class="h-1.5 w-1.5 shrink-0 rounded-full"
-              :class="{
-                'animate-pulse bg-theme-600': provider.status === 'checking',
-                'bg-emerald-500': provider.status === 'ok',
-                'bg-red-500': provider.status === 'error',
-              }"
-            />
-            <span
-              class="min-w-0 flex-1 truncate text-[11px]"
-              :class="provider.status === 'error' ? 'text-red-400' : 'text-theme-400'"
-            >
-              {{ provider.name }}
-            </span>
           </div>
         </div>
 

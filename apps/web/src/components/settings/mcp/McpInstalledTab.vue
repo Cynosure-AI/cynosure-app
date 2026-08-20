@@ -41,22 +41,13 @@ function originalServerName(server: McpServerInfo): string {
   return server.originalName || server.serverInfo?.title || server.name || 'Server name'
 }
 
-const filteredServers = computed(() => {
-  const q = installedFilter.value.trim().toLowerCase()
-  let list = servers.value
-
-  if (q) {
-    list = list.filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      originalServerName(s).toLowerCase().includes(q) ||
-      s.description.toLowerCase().includes(q) ||
-      s.command.toLowerCase().includes(q) ||
-      s.args.some(a => a.toLowerCase().includes(q)),
-    )
-  }
-
-  return list
-})
+function matchesInstalledFilter(server: McpServerInfo, query: string): boolean {
+  return server.name.toLowerCase().includes(query)
+    || originalServerName(server).toLowerCase().includes(query)
+    || server.description.toLowerCase().includes(query)
+    || server.command.toLowerCase().includes(query)
+    || server.args.some(argument => argument.toLowerCase().includes(query))
+}
 
 // Table columns definition for DataTable component
 const tableColumns: Column<McpServerInfo>[] = [
@@ -468,9 +459,11 @@ defineExpose({ loadServers })
     </div>
 
     <DataTable
-      v-if="filteredServers.length"
-      :items="filteredServers"
+      v-if="servers.length"
+      :items="servers"
       :columns="tableColumns"
+      :filter-text="installedFilter"
+      :filter-predicate="matchesInstalledFilter"
       initial-sort-key="enable"
       initial-sort-direction="desc"
       :initial-sort-once="true"
