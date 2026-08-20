@@ -28,6 +28,60 @@ export interface ChatRunConfig {
   compactProviderId?: string
   compactModel?: string
   inlineAttachmentTextLimit?: number
+  /** Capture the exact gateway context for the opt-in chat debug inspector. */
+  debugMode?: boolean
+}
+
+export interface DebugContextTool {
+  name: string
+  title?: string
+  description: string
+  parameters: Record<string, unknown>
+  outputSchema?: Record<string, unknown>
+}
+
+export interface DebugContextMessage {
+  role: ChatRole
+  content: unknown
+  toolCalls?: unknown[]
+  toolCallId?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface DebugContextRound {
+  round: number
+  capturedAt: number
+  request: {
+    messages: DebugContextMessage[]
+    tools: DebugContextTool[]
+    model?: string
+    temperature?: number
+    maxTokens?: number
+    thinkingEnabled?: boolean
+    reasoningEffort?: ReasoningEffort
+  }
+  response?: {
+    content: string
+    thinking: string
+    toolCalls?: unknown[]
+    images?: string[]
+    usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+    error?: string
+    completedAt: number
+  }
+}
+
+export interface DebugContextSnapshot {
+  conversationId: string
+  executionId: string
+  createdAt: number
+  updatedAt: number
+  providerId?: string
+  model?: string
+  contextWindow?: number
+  contextStrategy?: ContextStrategy
+  rounds: DebugContextRound[]
+  limitations: string[]
 }
 
 export interface ChatAttachmentInput {
