@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { DisplayMessage } from '../stores/chat.store'
 
 vi.mock('../api/client', () => ({
@@ -19,6 +19,22 @@ function setup() {
 }
 
 describe('chat streaming completion', () => {
+  test('invalidates active stream state when a stream finishes', () => {
+    const { messages, streaming } = setup()
+    const isActiveConversationStreaming = computed(() => {
+      if (streaming.streamBuffers.get('conversation')?.active) return true
+      return streaming.isStreaming.value && messages.value.some((message) => message.isStreaming)
+    })
+
+    expect(isActiveConversationStreaming.value).toBe(false)
+
+    streaming.handleStreamStart({ streamId: 'stream', conversationId: 'conversation' })
+    expect(isActiveConversationStreaming.value).toBe(true)
+
+    streaming.handleStreamEnd({ streamId: 'stream', conversationId: 'conversation' })
+    expect(isActiveConversationStreaming.value).toBe(false)
+  })
+
   test('removes an empty placeholder after a tool-only continuation finishes', () => {
     const { messages, streaming } = setup()
 

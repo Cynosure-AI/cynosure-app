@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue'
+import { reactive, ref, type Ref } from 'vue'
 import { api } from '../api/client'
 import type { DisplayMessage } from '../stores/chat.store'
 
@@ -78,8 +78,10 @@ export function useChatStreaming(
     const lastUsage = ref<TokenUsage | null>(null)
     const primaryStreamId = ref<string | null>(null)
     const primaryStreamAgent = ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>({})
-    const streamBuffers = new Map<string, StreamBuffer>()
-    const subAgentStreamBuffers = new Map<string, StreamBuffer>()
+    // These maps are consumed by computed state outside this composable. Keep
+    // them reactive so adding/removing a stream invalidates those computations.
+    const streamBuffers = reactive(new Map<string, StreamBuffer>())
+    const subAgentStreamBuffers = reactive(new Map<string, StreamBuffer>())
     const subAgentStreamMsgs = new Map<string, DisplayMessage>()
     /** Tracks the last completed (non-empty) sub-agent message so the final
      *  subagent-stream-end event (which carries model/usage) can find it
