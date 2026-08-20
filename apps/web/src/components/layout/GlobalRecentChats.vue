@@ -252,7 +252,7 @@ onBeforeUnmount(() => {
         :key="conversation.id"
         role="button"
         tabindex="0"
-        class="group relative mb-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-theme-800/70"
+        class="group relative cursor-pointer mb-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-theme-800/70"
         :class="{
           'bg-theme-800': conversation.id === chatStore.activeConversationId,
           'bg-amber-500/10 ring-1 ring-inset ring-amber-500/20': awaitingIds.has(conversation.id),
