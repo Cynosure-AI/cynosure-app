@@ -9,6 +9,7 @@ const props = defineProps<{
   createdAt?: number
   agentName?: string | null
   conversationTitle?: string | null
+  conversationId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -156,6 +157,18 @@ const formattedDate = computed(() => props.createdAt
           />
           Download
         </a>
+        <RouterLink
+          v-if="conversationId"
+          :to="`/triggers/chat/${encodeURIComponent(conversationId)}`"
+          class="inline-flex items-center justify-center gap-2 rounded-xl border border-accent-500/40 bg-accent-500/10 px-4 py-2.5 text-sm font-semibold text-accent-200 transition-colors hover:border-accent-400/60 hover:bg-accent-500/20"
+          @click="emit('close')"
+        >
+          <Icon
+            icon="lucide:message-square"
+            class="h-4 w-4"
+          />
+          Go to chat
+        </RouterLink>
       </div>
     </template>
   </ModalDialog>

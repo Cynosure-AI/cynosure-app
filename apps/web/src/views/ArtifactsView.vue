@@ -13,6 +13,7 @@ interface ArtifactEntry {
   createdAt: number
   agentName: string | null
   conversationTitle: string
+  conversationId: string | null
 }
 
 const activityItems = ref<ActivityItem[]>([])
@@ -49,6 +50,7 @@ const allEntries = computed<ArtifactEntry[]>(() => {
         createdAt: item.createdAt,
         agentName: item.agentName,
         conversationTitle: item.description,
+        conversationId: item.conversationId,
       })
     }
   }
@@ -400,6 +402,7 @@ onUnmounted(() => clearTimeout(searchTimer))
       :created-at="selectedEntry?.createdAt"
       :agent-name="selectedEntry?.agentName"
       :conversation-title="selectedEntry?.conversationTitle"
+      :conversation-id="selectedEntry?.conversationId"
       @close="selectedEntry = null"
     />
   </div>

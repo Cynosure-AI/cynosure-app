@@ -65,4 +65,32 @@ describe('ArtifactPreviewModal', () => {
 
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
+
+  test('links back to the originating chat when available', () => {
+    mount(ArtifactPreviewModal, {
+      props: {
+        artifact: {
+          href: '/api/files?path=%2Ftmp%2Fgenerated.png',
+          label: 'generated.png',
+          kind: 'image',
+          ext: 'PNG',
+        },
+        conversationId: 'conversation-1',
+      },
+      attachTo: document.body,
+      global: {
+        stubs: {
+          Icon: true,
+          RouterLink: {
+            template: '<a :href="to"><slot /></a>',
+            props: ['to'],
+          },
+        },
+      },
+    })
+
+    const chatLink = [...document.body.querySelectorAll('a')]
+      .find((link) => link.textContent?.includes('Go to chat'))
+    expect(chatLink?.getAttribute('href')).toBe('/triggers/chat/conversation-1')
+  })
 })
