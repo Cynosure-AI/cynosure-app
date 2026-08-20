@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useProviderStore } from "../../stores/provider.store";
 import { useNotificationStore } from "../../stores/notification.store";
@@ -33,6 +33,8 @@ const statusButtonRef = ref<HTMLElement | null>(null);
 const showNotifications = ref(false);
 const workspaceOpen = ref(true);
 const recentChatsOpen = ref(true);
+const recentFilterMenuOpen = ref(false);
+const recentChatFilter = ref<"all" | "agent">("all");
 const bellBtnRef = ref<HTMLElement | null>(null);
 const notifPopoverStyle = computed(() => {
   if (!bellBtnRef.value) return {};
@@ -77,6 +79,7 @@ onMounted(() => {
     if (d.event === "step:status" && d.data?.status !== "awaiting-approval")
       loadInstances();
   });
+  document.addEventListener("click", closeRecentFilterMenu);
 });
 
 onUnmounted(() => {
@@ -84,6 +87,23 @@ onUnmounted(() => {
   memoryJobsStore.stopPolling();
   unsubHITLRequest?.();
   unsubExecutionUpdate?.();
+  document.removeEventListener("click", closeRecentFilterMenu);
+});
+
+function closeRecentFilterMenu(): void {
+  recentFilterMenuOpen.value = false;
+}
+
+function setRecentChatFilter(filter: "all" | "agent"): void {
+  if (filter === "agent" && !chatStore.activeAgentId) return;
+  recentChatFilter.value = filter;
+  recentFilterMenuOpen.value = false;
+}
+
+watch(() => chatStore.activeAgentId, (agentId) => {
+  if (!agentId && recentChatFilter.value === "agent") {
+    recentChatFilter.value = "all";
+  }
 });
 
 function formatTimeAgo(ts: number): string {
@@ -451,22 +471,91 @@ const chatRoute = computed(() =>
 
       <section class="recent-region flex min-h-0 flex-1 flex-col">
         <div class="section-separator" />
-        <button
-          type="button"
-          class="region-toggle"
-          :aria-expanded="recentChatsOpen"
-          @click="recentChatsOpen = !recentChatsOpen"
-        >
-          <span>Recent chats</span>
-          <Icon
-            icon="lucide:chevron-down"
-            class="h-3.5 w-3.5 transition-transform"
-            :class="{ '-rotate-90': !recentChatsOpen }"
-          />
-        </button>
+        <div class="group/recent-header relative flex items-center">
+          <button
+            type="button"
+            class="region-toggle min-w-0 flex-1 pr-1"
+            :aria-expanded="recentChatsOpen"
+            @click="recentChatsOpen = !recentChatsOpen"
+          >
+            <span>Recent chats</span>
+            <Icon
+              icon="lucide:chevron-down"
+              class="h-3.5 w-3.5 transition-transform"
+              :class="{ '-rotate-90': !recentChatsOpen }"
+            />
+          </button>
+          <button
+            type="button"
+            class="absolute right-8 z-10 flex h-6 w-6 items-center justify-center rounded-md text-theme-500 opacity-0 transition hover:bg-theme-800 hover:text-theme-200 group-hover/recent-header:opacity-100 focus-visible:opacity-100"
+            :class="{ 'bg-theme-800 text-theme-200 opacity-100': recentFilterMenuOpen }"
+            aria-label="Filter recent chats"
+            aria-haspopup="menu"
+            :aria-expanded="recentFilterMenuOpen"
+            @click.stop="recentFilterMenuOpen = !recentFilterMenuOpen"
+          >
+            <Icon
+              icon="lucide:ellipsis"
+              class="h-4 w-4"
+            />
+          </button>
+          <div
+            v-if="recentFilterMenuOpen"
+            role="menu"
+            class="absolute right-2 top-7 z-30 w-44 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
+            @click.stop
+          >
+            <div
+              class="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-theme-500"
+            >
+              Sort By
+            </div>
+
+            <button
+              type="button"
+              role="menuitemradio"
+              :aria-checked="recentChatFilter === 'all'"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+              @click="setRecentChatFilter('all')"
+            >
+              <Icon
+                icon="lucide:messages-square"
+                class="h-3.5 w-3.5 text-theme-500"
+              />
+              <span class="flex-1">All Recent</span>
+              <Icon
+                v-if="recentChatFilter === 'all'"
+                icon="lucide:check"
+                class="h-3.5 w-3.5 text-accent-400"
+              />
+            </button>
+
+            <button
+              type="button"
+              role="menuitemradio"
+              :aria-checked="recentChatFilter === 'agent'"
+              :disabled="!chatStore.activeAgentId"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              :title="chatStore.activeAgentId ? 'Show chats for the active agent' : 'Select an agent first'"
+              @click="setRecentChatFilter('agent')"
+            >
+              <Icon
+                icon="lucide:bot"
+                class="h-3.5 w-3.5 text-theme-500"
+              />
+              <span class="flex-1">Agent Only</span>
+              <Icon
+                v-if="recentChatFilter === 'agent'"
+                icon="lucide:check"
+                class="h-3.5 w-3.5 text-accent-400"
+              />
+            </button>
+          </div>
+        </div>
         <GlobalRecentChats
           v-if="recentChatsOpen && !sidebarCollapsed"
           :awaiting-conversation-ids="awaitingConversationIds"
+          :agent-id="recentChatFilter === 'agent' ? chatStore.activeAgentId || undefined : undefined"
         />
       </section>
     </nav>

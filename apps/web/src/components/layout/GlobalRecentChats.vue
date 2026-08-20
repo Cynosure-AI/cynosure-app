@@ -9,8 +9,10 @@ import { useChatStore, type Conversation } from '../../stores/chat.store'
 
 const props = withDefaults(defineProps<{
   awaitingConversationIds?: string[]
+  agentId?: string
 }>(), {
   awaitingConversationIds: () => [],
+  agentId: undefined,
 })
 
 const router = useRouter()
@@ -92,6 +94,7 @@ async function load(reset = false): Promise<void> {
       reset ? 0 : conversations.value.length,
       'sidebar',
       activeQuery.value || undefined,
+      props.agentId,
     )
     if (token !== requestToken.value) return
     const rows = response.items.map(mapRow)
@@ -193,11 +196,16 @@ watch(searchQuery, (query) => {
   }, 250)
 })
 
+watch(() => props.agentId, () => {
+  void load(true)
+})
+
 watch(
   () => chatStore.conversations.map((conversation) => `${conversation.id}:${conversation.title}:${conversation.updatedAt}:${conversation.pinned}`).join('|'),
   () => {
     if (activeQuery.value) return
     for (const conversation of chatStore.conversations) {
+      if (props.agentId && conversation.agentId !== props.agentId) continue
       const index = conversations.value.findIndex((item) => item.id === conversation.id)
       if (index >= 0) conversations.value[index] = { ...conversation }
       else conversations.value.push({ ...conversation })
@@ -236,7 +244,7 @@ onBeforeUnmount(() => {
         <input
           v-model="searchQuery"
           type="search"
-          placeholder="Filter all chats…"
+          :placeholder="agentId ? 'Filter this agent’s chats…' : 'Filter all chats…'"
           aria-label="Filter recent chats"
           class="w-full rounded-lg border border-theme-800 bg-theme-900/70 py-1.5 pl-8 pr-3 text-xs text-theme-300 outline-none transition placeholder:text-theme-600 focus:border-theme-600"
         >

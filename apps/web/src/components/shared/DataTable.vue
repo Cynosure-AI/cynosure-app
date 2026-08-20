@@ -488,7 +488,7 @@ defineExpose({ startEditing, closeEditor })
         >
           <input
             type="checkbox"
-            class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer"
+            class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950"
             :checked="allSelected"
             :indeterminate="someSelected"
             :aria-label="allSelected ? 'Deselect all visible rows' : 'Select all visible rows'"
@@ -553,7 +553,7 @@ defineExpose({ startEditing, closeEditor })
               <input
                 v-if="isSelectable(item)"
                 type="checkbox"
-                class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-accent-500 focus:ring-accent-500/60 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-0 transition-opacity focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950 group-hover:opacity-100"
                 :class="{ 'opacity-100': anySelected || isSelected(item.id) }"
                 :checked="isSelected(item.id)"
                 :aria-label="`${isSelected(item.id) ? 'Deselect' : 'Select'} row`"
