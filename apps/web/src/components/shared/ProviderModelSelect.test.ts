@@ -38,6 +38,8 @@ describe('ProviderModelSelect favorites', () => {
       },
     })
     await flushPromises()
+
+    expect(wrapper.get('[role="combobox"]').text()).not.toContain('$2.50 / $10.00/M')
     await wrapper.get('[role="combobox"]').trigger('click')
 
     const matchingRows = wrapper.findAll('[role="option"]')
@@ -67,6 +69,8 @@ describe('ProviderModelSelect favorites', () => {
     await flushPromises()
     await wrapper.get('[role="combobox"]').trigger('click')
     const row = wrapper.findAll('[role="option"]').find((option) => option.text().includes('speech/model'))!
+    expect(row.text()).toContain('$')
+    expect(row.text()).not.toContain('Transcription')
     await row.get('[aria-label="Add to favorites"]').trigger('click')
 
     expect(JSON.parse(localStorage.getItem(SK_PROVIDER_MODEL_FAVORITES) || '[]')).toMatchObject([

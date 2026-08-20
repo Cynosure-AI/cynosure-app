@@ -1,19 +1,21 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useProviderStore } from "../../stores/provider.store";
 import { useNotificationStore } from "../../stores/notification.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { useChatStore } from "../../stores/chat.store";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
+import { usePreferencesStore } from "../../stores/preferences.store";
 import { api } from "../../api/client";
 import { wsConnected } from "../../api/http";
 import type { AgentInstance } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import { useSidebar } from "../../composables/useSidebar";
 import { useAppBranding } from "../../composables/useAppBranding";
-import StatusPopover from "../status/StatusPopover.vue";
+import WorkspacePopover from "../status/WorkspacePopover.vue";
 import HoverTooltip from "../shared/HoverTooltip.vue";
+import GlobalRecentChats from "./GlobalRecentChats.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -22,12 +24,17 @@ const notificationStore = useNotificationStore();
 const agentDefs = useAgentDefinitionsStore();
 const chatStore = useChatStore();
 const memoryJobsStore = useMemoryJobsStore();
+const preferencesStore = usePreferencesStore();
 const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar();
 const { logoIconUrl, logoTextUrl } = useAppBranding();
 
 const showStatusPopover = ref(false);
 const statusButtonRef = ref<HTMLElement | null>(null);
 const showNotifications = ref(false);
+const workspaceOpen = ref(true);
+const recentChatsOpen = ref(true);
+const recentFilterMenuOpen = ref(false);
+const recentChatFilter = ref<"all" | "agent">("all");
 const bellBtnRef = ref<HTMLElement | null>(null);
 const notifPopoverStyle = computed(() => {
   if (!bellBtnRef.value) return {};
@@ -48,6 +55,12 @@ const hasAwaitingApproval = computed(() =>
   instances.value.some((i) => i.status === "awaiting-approval"),
 );
 const activeWorkCount = computed(() => instances.value.length + memoryJobsStore.activeJobs.length);
+const runningConversationIds = computed(() => instances.value
+  .filter((instance) => instance.status === "running" && instance.conversationId)
+  .map((instance) => instance.conversationId as string));
+const awaitingConversationIds = computed(() => instances.value
+  .filter((instance) => instance.status === "awaiting-approval" && instance.conversationId)
+  .map((instance) => instance.conversationId as string));
 
 async function loadInstances() {
   try {
@@ -69,6 +82,7 @@ onMounted(() => {
     if (d.event === "step:status" && d.data?.status !== "awaiting-approval")
       loadInstances();
   });
+  document.addEventListener("click", closeRecentFilterMenu);
 });
 
 onUnmounted(() => {
@@ -76,6 +90,23 @@ onUnmounted(() => {
   memoryJobsStore.stopPolling();
   unsubHITLRequest?.();
   unsubExecutionUpdate?.();
+  document.removeEventListener("click", closeRecentFilterMenu);
+});
+
+function closeRecentFilterMenu(): void {
+  recentFilterMenuOpen.value = false;
+}
+
+function setRecentChatFilter(filter: "all" | "agent"): void {
+  if (filter === "agent" && !chatStore.activeAgentId) return;
+  recentChatFilter.value = filter;
+  recentFilterMenuOpen.value = false;
+}
+
+watch(() => chatStore.activeAgentId, (agentId) => {
+  if (!agentId && recentChatFilter.value === "agent") {
+    recentChatFilter.value = "all";
+  }
 });
 
 function formatTimeAgo(ts: number): string {
@@ -128,24 +159,6 @@ function isActive(path: string, exact = false): boolean {
   return route.path === path || route.path.startsWith(path + "/");
 }
 
-interface NavItem {
-  to: string;
-  icon: string;
-  label: string;
-  badge?: string;
-  exact?: boolean;
-}
-
-const triggerItems: NavItem[] = [
-  { to: "/triggers/cron", icon: "lucide:clock", label: "Cron" },
-];
-
-const settingsItems: NavItem[] = [
-  { to: "/settings", icon: "lucide:settings", label: "Settings", exact: true },
-  { to: "/settings/mcp", icon: "lucide:plug", label: "MCP Servers" },
-  { to: "/tools-policy", icon: "lucide:wrench", label: "Tools Policy" },
-];
-
 const chatRoute = computed(() =>
   chatStore.activeConversationId
     ? `/triggers/chat/${chatStore.activeConversationId}`
@@ -156,7 +169,7 @@ const chatRoute = computed(() =>
 <template>
   <aside
     class="bg-theme-950 relative flex flex-col h-full shrink-0 transition-all duration-200 overflow-hidden"
-    :class="sidebarCollapsed ? 'w-60 md:w-16 sidebar-collapsed' : 'w-60'"
+    :class="sidebarCollapsed ? 'w-72 md:w-16 sidebar-collapsed' : 'w-72'"
   >
     <!-- Brand -->
     <div class="brand-area pl-3 pr-2 py-3 mt-2 mb-2 flex items-center gap-3 shrink-0">
@@ -386,8 +399,8 @@ const chatRoute = computed(() =>
       </div>
     </div>
 
-    <!-- Navigation -->
-    <nav class="flex-1 overflow-y-auto py-2 px-3">
+    <!-- V2 Navigation -->
+    <nav class="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-1">
       <!-- Chat -->
       <HoverTooltip
         placement="right"
@@ -410,179 +423,145 @@ const chatRoute = computed(() =>
         </template>
       </HoverTooltip>
 
-
-
-      <!-- Triggers -->
       <div class="section-separator" />
-      <div class="section-label">
-        Triggers
-      </div>
-      <HoverTooltip
-        v-for="item in triggerItems"
-        :key="item.to"
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          :to="item.to"
-          class="nav-item"
-          :class="{ active: isActive(item.to, item.exact) }"
-        >
-          <Icon
-            :icon="item.icon"
-            class="w-4.5 h-4.5"
-          />
-          <span>{{ item.label }}</span>
-        </RouterLink>
-        <template #content>
-          {{ item.label }}
-        </template>
-      </HoverTooltip>
 
-      <!-- Configuration -->
-      <div class="section-separator" />
-      <div class="section-label">
-        Configuration
-      </div>
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/agents"
-          class="nav-item"
-          :class="{ active: isActive('/agents') }"
+      <section class="sidebar-region shrink-0">
+        <button
+          type="button"
+          class="region-toggle"
+          :aria-expanded="workspaceOpen"
+          @click="workspaceOpen = !workspaceOpen"
         >
+          <span>Workspace</span>
           <Icon
-            icon="lucide:bot"
-            class="w-4.5 h-4.5"
+            icon="lucide:chevron-down"
+            class="h-3.5 w-3.5 transition-transform"
+            :class="{ '-rotate-90': !workspaceOpen }"
           />
-          <span>Agents</span>
-        </RouterLink>
-        <template #content>
-          Agents
-        </template>
-      </HoverTooltip>
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/memory-spaces"
-          class="nav-item"
-          :class="{ active: isActive('/memory-spaces') }"
+        </button>
+        <div
+          v-show="workspaceOpen || sidebarCollapsed"
+          class="space-y-0.5"
         >
-          <Icon
-            icon="lucide:brain"
-            class="w-4.5 h-4.5"
-          />
-          <span>Memories</span>
-        </RouterLink>
-        <template #content>
-          Memory Folders
-        </template>
-      </HoverTooltip>
-      <!-- Activity -->
-      <div class="section-separator" />
-      <div class="section-label">
-        Activity
-      </div>
-
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/activity"
-          class="nav-item"
-          :class="{ active: isActive('/activity') }"
-          :aria-label="hasAwaitingApproval ? 'Activity Log — approval required' : 'Activity Log'"
-        >
-          <span class="relative inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center">
-            <Icon
-              icon="lucide:list-tree"
-              class="w-4.5 h-4.5"
-            />
-            <span
-              v-if="hasAwaitingApproval"
-              class="collapsed-hitl-indicator absolute -right-1.5 -top-1.5 h-3 w-3 items-center justify-center"
-              aria-hidden="true"
-            >
-              <span class="absolute h-full w-full rounded-full bg-amber-400/50 animate-ping" />
-              <span class="relative h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-theme-950" />
-            </span>
-          </span>
-          <span>Activity Log</span>
-          <span
-            v-if="hasAwaitingApproval"
-            class="ml-1 h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-amber-400"
-          />
-          <div
-            v-if="activeWorkCount"
-            class="ml-2 flex h-5 w-5 items-center justify-center rounded-full text-xs text-white"
-            :class="hasAwaitingApproval ? 'bg-amber-500' : 'bg-red-500'"
+          <HoverTooltip
+            v-for="item in [
+              { to: '/triggers/cron', icon: 'lucide:calendar-clock', label: 'Schedule' },
+              { to: '/agents', icon: 'lucide:bot', label: 'Agents' },
+              { to: '/memory-spaces', icon: 'lucide:brain', label: 'Memories' },
+            ]"
+            :key="item.to"
+            placement="right"
+            block
+            :disabled="!sidebarCollapsed"
           >
-            <span v-if="activeWorkCount > 9">9+</span>
-            <span v-else>{{ activeWorkCount }}</span>
+            <RouterLink
+              :to="item.to"
+              class="nav-item"
+              :class="{ active: isActive(item.to) }"
+            >
+              <Icon
+                :icon="item.icon"
+                class="h-4.5 w-4.5"
+              />
+              <span>{{ item.label }}</span>
+            </RouterLink>
+            <template #content>
+              {{ item.label }}
+            </template>
+          </HoverTooltip>
+        </div>
+      </section>
+
+      <section class="recent-region flex min-h-0 flex-1 flex-col">
+        <div class="section-separator" />
+        <div class="group/recent-header relative flex items-center">
+          <button
+            type="button"
+            class="region-toggle min-w-0 flex-1 pr-1"
+            :aria-expanded="recentChatsOpen"
+            @click="recentChatsOpen = !recentChatsOpen"
+          >
+            <span>Recent chats</span>
+            <Icon
+              icon="lucide:chevron-down"
+              class="h-3.5 w-3.5 transition-transform"
+              :class="{ '-rotate-90': !recentChatsOpen }"
+            />
+          </button>
+          <button
+            type="button"
+            class="absolute right-8 z-10 flex h-6 w-6 items-center justify-center rounded-md text-theme-500 opacity-0 transition hover:bg-theme-800 hover:text-theme-200 group-hover/recent-header:opacity-100 focus-visible:opacity-100"
+            :class="{ 'bg-theme-800 text-theme-200 opacity-100': recentFilterMenuOpen }"
+            aria-label="Filter recent chats"
+            aria-haspopup="menu"
+            :aria-expanded="recentFilterMenuOpen"
+            @click.stop="recentFilterMenuOpen = !recentFilterMenuOpen"
+          >
+            <Icon
+              icon="lucide:ellipsis"
+              class="h-4 w-4"
+            />
+          </button>
+          <div
+            v-if="recentFilterMenuOpen"
+            role="menu"
+            class="absolute right-2 top-7 z-30 w-44 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
+            @click.stop
+          >
+            <div
+              class="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-theme-500"
+            >
+              Sort By
+            </div>
+
+            <button
+              type="button"
+              role="menuitemradio"
+              :aria-checked="recentChatFilter === 'all'"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+              @click="setRecentChatFilter('all')"
+            >
+              <Icon
+                icon="lucide:messages-square"
+                class="h-3.5 w-3.5 text-theme-500"
+              />
+              <span class="flex-1">All Recent</span>
+              <Icon
+                v-if="recentChatFilter === 'all'"
+                icon="lucide:check"
+                class="h-3.5 w-3.5 text-accent-400"
+              />
+            </button>
+
+            <button
+              type="button"
+              role="menuitemradio"
+              :aria-checked="recentChatFilter === 'agent'"
+              :disabled="!chatStore.activeAgentId"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              :title="chatStore.activeAgentId ? 'Show chats for the active agent' : 'Select an agent first'"
+              @click="setRecentChatFilter('agent')"
+            >
+              <Icon
+                icon="lucide:bot"
+                class="h-3.5 w-3.5 text-theme-500"
+              />
+              <span class="flex-1">Agent Only</span>
+              <Icon
+                v-if="recentChatFilter === 'agent'"
+                icon="lucide:check"
+                class="h-3.5 w-3.5 text-accent-400"
+              />
+            </button>
           </div>
-        </RouterLink>
-        <template #content>
-          {{ hasAwaitingApproval ? "Activity Log — approval required" : "Activity Log" }}
-        </template>
-      </HoverTooltip>
-
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/usage"
-          class="nav-item"
-          :class="{ active: isActive('/usage') }"
-        >
-          <Icon
-            icon="lucide:bar-chart-3"
-            class="w-4.5 h-4.5"
-          />
-          <span>Usage</span>
-        </RouterLink>
-        <template #content>
-          Usage
-        </template>
-      </HoverTooltip>
-
-      <!-- Settings -->
-      <div class="section-separator" />
-      <div class="section-label">
-        Settings
-      </div>
-      <HoverTooltip
-        v-for="item in settingsItems"
-        :key="item.to"
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          :to="item.to"
-          class="nav-item"
-          :class="{ active: isActive(item.to, item.exact) }"
-        >
-          <Icon
-            :icon="item.icon"
-            class="w-4.5 h-4.5"
-          />
-          <span>{{ item.label }}</span>
-        </RouterLink>
-        <template #content>
-          {{ item.label }}
-        </template>
-      </HoverTooltip>
+        </div>
+        <GlobalRecentChats
+          v-if="recentChatsOpen && !sidebarCollapsed"
+          :awaiting-conversation-ids="awaitingConversationIds"
+          :active-conversation-ids="runningConversationIds"
+          :agent-id="recentChatFilter === 'agent' ? chatStore.activeAgentId || undefined : undefined"
+        />
+      </section>
     </nav>
 
     <!-- Status Footer -->
@@ -593,42 +572,65 @@ const chatRoute = computed(() =>
         :aria-expanded="showStatusPopover"
         @click="showStatusPopover = !showStatusPopover"
       >
-        <span
-          class="w-2 h-2 rounded-full shrink-0"
-          :class="{
-            'bg-red-500 animate-pulse': !wsConnected,
-            'bg-amber-500 animate-pulse': wsConnected && hasAwaitingApproval,
-            'bg-accent-500 animate-pulse':
-              wsConnected &&
-              !hasAwaitingApproval &&
-              (instances.length > 0 || memoryJobsStore.hasRunningJobs),
-            'bg-emerald-500':
-              wsConnected &&
-              instances.length === 0 &&
-              !memoryJobsStore.hasRunningJobs &&
-              providerStore.providers.length > 0,
-            'bg-theme-600': wsConnected && !memoryJobsStore.hasRunningJobs && !providerStore.providers.length,
-          }"
-        />
-        <span class="text-[11px] text-theme-400 truncate flex-1">
-          <template v-if="!wsConnected">Connecting...</template>
-          <template v-else-if="hasAwaitingApproval">Needs Attention</template>
-          <template v-else-if="instances.length > 0">Agents Running...</template>
-          <template v-else-if="memoryJobsStore.hasRunningJobs">{{ memoryJobsStore.statusLabel }}</template>
-          <template v-else-if="!providerStore.providers.length">No providers</template>
-          <template v-else>Ready</template>
+        <span class="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-theme-800 ring-1 ring-theme-700/70">
+          <img
+            v-if="preferencesStore.userAvatarUrl"
+            :src="preferencesStore.userAvatarUrl"
+            alt=""
+            class="h-full w-full rounded-full object-cover"
+          >
+          <Icon
+            v-else
+            icon="lucide:user-round"
+            class="h-4 w-4 text-theme-500"
+          />
+          <span
+            class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-theme-950"
+            :class="{
+              'bg-red-500 animate-pulse': !wsConnected,
+              'bg-amber-500 animate-pulse': wsConnected && hasAwaitingApproval,
+              'bg-accent-500 animate-pulse':
+                wsConnected &&
+                !hasAwaitingApproval &&
+                (instances.length > 0 || memoryJobsStore.hasRunningJobs),
+              'bg-emerald-500':
+                wsConnected &&
+                instances.length === 0 &&
+                !memoryJobsStore.hasRunningJobs &&
+                providerStore.providers.length > 0,
+              'bg-theme-600': wsConnected && !memoryJobsStore.hasRunningJobs && !providerStore.providers.length,
+            }"
+          />
+        </span>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span
+            v-if="preferencesStore.userName.trim()"
+            class="truncate text-sm font-semibold leading-5 text-theme-200"
+          >
+            {{ preferencesStore.userName.trim() }}
+          </span>
+          <span class="truncate text-[11px] leading-4 text-theme-400">
+            <template v-if="!wsConnected">Connecting...</template>
+            <template v-else-if="hasAwaitingApproval">Needs Attention</template>
+            <template v-else-if="instances.length > 0">Agents Running...</template>
+            <template v-else-if="memoryJobsStore.hasRunningJobs">{{ memoryJobsStore.statusLabel }}</template>
+            <template v-else-if="!providerStore.providers.length">No providers</template>
+            <template v-else>Ready</template>
+          </span>
         </span>
         <Icon
-          icon="lucide:chevron-up"
-          class="w-3 h-3 text-theme-600 shrink-0 transition-transform"
-          :class="{ 'rotate-180': showStatusPopover }"
+          icon="lucide:settings"
+          class="h-4 w-4 shrink-0 text-theme-500 transition-colors"
+          :class="{ 'text-accent-400': showStatusPopover }"
         />
       </button>
 
-      <!-- Status Popover -->
-      <StatusPopover
+      <!-- Workspace Popover -->
+      <WorkspacePopover
         :show="showStatusPopover"
         :anchor-el="statusButtonRef"
+        :active-work-count="activeWorkCount"
+        :has-awaiting-approval="hasAwaitingApproval"
         @close="showStatusPopover = false"
       />
     </div>
@@ -692,6 +694,24 @@ const chatRoute = computed(() =>
   opacity: 0.6;
 }
 
+.region-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem 0.4rem;
+  color: var(--color-theme-500, #71717a);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: color 150ms ease;
+}
+
+.region-toggle:hover {
+  color: var(--color-theme-300, #d4d4d8);
+}
+
 .brand-logo-icon {
   display: none;
 }
@@ -744,6 +764,15 @@ const chatRoute = computed(() =>
     margin: 0.375rem auto 0.375rem;
     width: 60%;
     opacity: 1;
+  }
+
+  .sidebar-collapsed .region-toggle,
+  .sidebar-collapsed .recent-region {
+    display: none;
+  }
+
+  .sidebar-collapsed .sidebar-region {
+    margin-top: 0.25rem;
   }
 
   .sidebar-collapsed .brand-area {

@@ -39,6 +39,7 @@ import { watchMemorySpace, stopAllMemorySpaceWatchers } from './core/memory/memo
 import { runFolderModelCleanupOnce, syncMemorySpacesFromFolders } from './core/memory/memory-space-folders.js'
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
+import { registerUserSettingsRoutes } from './routes/user-settings.js'
 import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat } from './ws.js'
 import { getMcpManager } from './core/tools/mcp/mcp-manager.js'
 import { getEmbeddingProvider } from './core/memory/embedding.js'
@@ -493,6 +494,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerMemorySpacesRoutes, { prefix: '/api/memory-spaces' })
   app.register(registerMetricsRoutes, { prefix: '/api/metrics' })
   app.register(registerFileRoutes, { prefix: '/api/files' })
+  app.register(registerUserSettingsRoutes, { prefix: '/api/user-settings' })
 
   app.get('/api/health', async () => {
     return {

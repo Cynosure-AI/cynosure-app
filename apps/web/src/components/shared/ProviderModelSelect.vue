@@ -11,7 +11,6 @@ import { useProviderLogos } from "../../composables/useProviderLogos";
 import { SK_PROVIDER_MODEL_FAVORITES } from "../../utils/storage-keys";
 import {
   compactPricingTag,
-  humanizePricingKey,
   pricingTooltipLines,
 } from "../../utils/model-pricing";
 
@@ -138,19 +137,6 @@ function pricingTag(model: ModelListItem): string | undefined {
 function pricingTooltip(model: ModelListItem): string | undefined {
   const lines = pricingTooltipLines(model);
   return lines.length ? lines.join("\n") : undefined;
-}
-
-function outputCapabilityTag(model: ModelListItem): string | undefined {
-  const output = (model.outputModalities ?? []).map((item) => item.toLowerCase());
-  if (!output.length) return undefined;
-  const nonTextOutput = output.filter((item) => item !== "text");
-  if (!nonTextOutput.length) return undefined;
-
-  if (nonTextOutput.includes("transcription")) return "Transcription";
-  if (nonTextOutput.includes("video")) return output.includes("text") ? "Video + text" : "Video";
-  if (nonTextOutput.includes("image")) return output.includes("text") ? "Image + text" : "Image";
-  if (nonTextOutput.includes("audio")) return output.includes("text") ? "Audio + text" : "Audio";
-  return nonTextOutput.map((item) => humanizePricingKey(item)).join(" + ");
 }
 
 function mergeModelItems(existing: ModelListItem, incoming: ModelListItem): ModelListItem {
@@ -424,14 +410,13 @@ const groups = computed((): SelectOptionGroup[] => {
       const model = (providerModels.value[favorite.providerId] || []).find(
         (item) => item.id === favorite.model,
       );
-      const capabilityTag = model ? outputCapabilityTag(model) : undefined;
       const costTag = model ? pricingTag(model) : undefined;
       return {
         value: encode(favorite.providerId, favorite.model),
         label: favorite.model,
         imgSrc: provider ? logoUrl(provider.type) : favorite.imgSrc,
-        tag: capabilityTag || costTag,
-        tagVariant: capabilityTag ? "cyan" as const : "default" as const,
+        tag: costTag,
+        tagVariant: "default" as const,
         tooltip: model ? pricingTooltip(model) : favorite.tooltip,
         ...favoriteAction(favorite.providerId, favorite.model, favorite.modelType || "llm"),
       };
@@ -485,22 +470,15 @@ const groups = computed((): SelectOptionGroup[] => {
           imgSrc: logoUrl(provider.type),
         });
       } else {
-        const preferCostTag = activeModelTypes.value.some(
-          (type) => type === "embedding" || type === "reranker",
-        );
         for (const model of models) {
           const modelType = optionModelType(provider.id, model.id);
-          const capabilityTag = outputCapabilityTag(model);
           const costTag = pricingTag(model);
-          const tag = preferCostTag
-            ? costTag || capabilityTag
-            : capabilityTag || costTag;
           options.push({
             value: encode(provider.id, model.id),
             label: model.id,
             imgSrc: logoUrl(provider.type),
-            tag,
-            tagVariant: tag === capabilityTag ? 'cyan' : 'default',
+            tag: costTag,
+            tagVariant: 'default',
             tooltip: pricingTooltip(model),
             ...favoriteAction(provider.id, model.id, modelType),
           });
@@ -541,6 +519,7 @@ function onSelectionChange(value: string): void {
     :dropdown-width="dropdownWidth"
     :size="size"
     :sticky-group-headers="true"
+    :show-selected-tag="false"
     @update:model-value="onSelectionChange"
     @option-action="toggleFavorite"
     @open="refreshIncompleteModels"

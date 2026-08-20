@@ -137,12 +137,16 @@ const router = createRouter({
       redirect: { name: 'settings', query: { category: 'memory' } }
     },
     {
+      path: '/settings/general',
+      redirect: { name: 'settings', query: { category: 'general' } }
+    },
+    {
       path: '/settings/appearance',
-      redirect: { name: 'settings', query: { category: 'appearance' } }
+      redirect: { name: 'settings', query: { category: 'general' } }
     },
     {
       path: '/settings/preferences',
-      redirect: { name: 'settings', query: { category: 'appearance' } }
+      redirect: { name: 'settings', query: { category: 'general' } }
     },
     {
       path: '/settings/backup',

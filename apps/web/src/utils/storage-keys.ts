@@ -46,7 +46,6 @@ export const SK_ONBOARDING_COMPLETE = 'cy-onboarding-complete'
 
 // ── Layout state ───────────────────────────────────────────────────────────────
 export const SK_SIDEBAR_COLLAPSED = 'sidebar-collapsed'
-export const SK_CHAT_SIDEBAR_OPEN = 'chat-sidebar-open'
 export const SK_ACTIVE_AGENT = 'cy-active-agent'
 export const SK_AGENTS_VIEW_MODE = 'agents-view-mode'
 export const SK_ACTIVITY_LOG_FILTERS = 'cy-activity-log-filters'
@@ -84,7 +83,6 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_WHISPER_ENABLED,
     SK_WHISPER_QUANTIZATION,
     SK_WHISPER_LANGUAGE,
-    SK_CHAT_SIDEBAR_OPEN,
     SK_WHISPER_MIC_DEVICE,
     SK_VOICE_TRANSCRIPTION_MODE,
     SK_REMOTE_TRANSCRIPTION_PROVIDER,

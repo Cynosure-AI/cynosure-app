@@ -20,6 +20,7 @@ import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
+import { getUserSettings } from '../user-settings.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 const AGENT_ROUTER_PROVIDER = '__agent_provider__'
@@ -208,6 +209,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         suffix: systemPromptSuffix,
         subAgents: toolLayer.effectiveSubAgents,
         smartTagContext: {
+            userName: getUserSettings().name,
             agentId: preset.id,
             agentName: preset.name,
             agentInternalName: preset.internalName,

@@ -23,6 +23,11 @@ function memorySpacePathId(id: string): string {
 // ---- API object (same shape as window.api from preload) ----
 
 export const api = {
+  userSettings: {
+    get: () => get<{ name: string; avatarUrl: string | null }>('/api/user-settings'),
+    update: (profile: { name: string; avatarUrl: string | null }) =>
+      put<{ name: string; avatarUrl: string | null }>('/api/user-settings', profile),
+  },
   provider: {
     list: () => get<LLMProviderConfig[]>('/api/providers'),
     add: (config: LLMProviderConfig) => post<{ id: string }>('/api/providers', config).then((r) => r.id),
@@ -72,10 +77,11 @@ export const api = {
         `/api/chat/conversations${qs ? `?${qs}` : ''}`
       )
     },
-    listConversationsPaginated: (limit: number, offset: number, sort?: 'updated', search?: string) => {
+    listConversationsPaginated: (limit: number, offset: number, sort?: 'updated' | 'sidebar', search?: string, agentId?: string | null) => {
       const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
       if (sort) params.set('sort', sort)
       if (search) params.set('search', search)
+      if (agentId !== undefined) params.set('agentId', agentId ?? '')
       return get<{ items: { id: string; title: string; agent_id: string | null; ma_workspace_id: string | null; origin: string; pinned: number; last_read_at: number | null; created_at: number; updated_at: number; last_user_message: string | null }[]; total: number }>(
         `/api/chat/conversations?${params}`
       )

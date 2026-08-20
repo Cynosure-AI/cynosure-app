@@ -6,7 +6,7 @@
       </h2>
       <p class="text-sm text-theme-500 mt-1">
         Choose which provider Cynosure should use to turn documents and conversations into
-        searchable memory. We’ll select a suitable embedding model automatically.
+        searchable memory. Cynosure recommends a strong default while leaving the final choice to you.
       </p>
     </div>
 
@@ -36,36 +36,69 @@
         </select>
       </div>
 
-      <div
-        v-if="embProviderId"
-        class="flex items-start gap-2.5 rounded-lg border border-theme-700/60 bg-theme-900/50 px-3.5 py-3"
-      >
-        <Icon
-          :icon="resolvingModel ? 'lucide:loader-2' : embModel ? 'lucide:sparkles' : 'lucide:triangle-alert'"
-          class="w-4 h-4 mt-0.5 shrink-0"
-          :class="[
-            resolvingModel ? 'animate-spin text-theme-500' : '',
-            !resolvingModel && embModel ? 'text-accent-400' : '',
-            !resolvingModel && !embModel ? 'text-amber-400' : '',
-          ]"
-        />
-        <div class="min-w-0">
-          <p class="text-xs font-medium text-theme-300">
-            {{ resolvingModel ? 'Finding an embedding model…' : embModel ? 'Embedding model selected automatically' : 'No embedding model found' }}
-          </p>
-          <p
-            v-if="!resolvingModel && embModel"
-            class="text-[11px] text-theme-500 mt-0.5 font-mono truncate"
-          >
-            {{ embModel }}<span v-if="embDimensions"> · {{ embDimensions }} dimensions</span>
-          </p>
-          <p
-            v-else-if="!resolvingModel"
-            class="text-[11px] text-theme-500 mt-0.5"
-          >
-            You can configure a model manually later in Settings → Memory.
-          </p>
+      <div v-if="embProviderId">
+        <div class="mb-1.5 flex items-center justify-between gap-3">
+          <label
+            for="onboarding-embedding-model"
+            class="block text-sm font-medium text-theme-300"
+          >Embedding model</label>
+          <span
+            v-if="embDimensions"
+            class="whitespace-nowrap text-[11px] text-theme-500"
+          >{{ embDimensions }} dimensions</span>
         </div>
+
+        <div class="relative">
+          <select
+            id="onboarding-embedding-model"
+            v-model="embModel"
+            :disabled="resolvingModel || !availableModels.length"
+            class="w-full rounded-lg border border-theme-600 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500 disabled:cursor-wait disabled:text-theme-500"
+            @change="onEmbeddingModelChange"
+          >
+            <option
+              v-if="resolvingModel"
+              value=""
+            >
+              Finding embedding models…
+            </option>
+            <option
+              v-else-if="!availableModels.length"
+              value=""
+            >
+              No embedding model found
+            </option>
+            <option
+              v-for="availableModel in availableModels"
+              :key="availableModel"
+              :value="availableModel"
+            >
+              {{ availableModel }}{{ availableModel === recommendedModel ? ' (Recommended)' : '' }}
+            </option>
+          </select>
+          <Icon
+            v-if="resolvingModel"
+            icon="lucide:loader-2"
+            class="pointer-events-none absolute right-8 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-theme-500"
+          />
+        </div>
+
+        <p
+          v-if="recommendedModel"
+          class="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-theme-500"
+        >
+          <Icon
+            icon="lucide:sparkles"
+            class="mt-0.5 h-3 w-3 shrink-0 text-accent-400"
+          />
+          We recommend <span class="font-mono text-theme-400">{{ recommendedModel }}</span> for this provider.
+        </p>
+        <p
+          v-else-if="!resolvingModel && !availableModels.length"
+          class="mt-2 text-[11px] text-theme-500"
+        >
+          This provider did not return an embedding model. You can configure one later in Settings → Memory.
+        </p>
       </div>
 
       <button
@@ -118,6 +151,8 @@ const providerStore = useProviderStore()
 
 const embProviderId = ref('')
 const embModel = ref('')
+const availableModels = ref<string[]>([])
+const recommendedModel = ref('')
 const embDimensions = ref(0)
 const savingEmb = ref(false)
 const embSaved = ref(false)
@@ -131,10 +166,10 @@ onMounted(async () => {
   try {
     const cfg = await api.memory.getEmbeddingConfig()
     if (cfg.providerId) embProviderId.value = cfg.providerId
-    embModel.value = cfg.model
     embDimensions.value = cfg.dimensions
     if (cfg.providerId) {
       embConfigured.value = true
+      await resolveEmbeddingModel(cfg.providerId, cfg.model)
     } else {
       applyDefaultEmbeddingConfig()
     }
@@ -147,31 +182,50 @@ onMounted(async () => {
 watch(embProviderId, (id) => {
   if (loadingInitialConfig.value) return
   embDimensions.value = 0
+  availableModels.value = []
+  recommendedModel.value = ''
   embConfigured.value = false
   embSaved.value = false
   void resolveEmbeddingModel(id)
 })
 
-async function resolveEmbeddingModel(providerId: string) {
+async function resolveEmbeddingModel(providerId: string, preferredModel = '') {
   const requestId = ++modelRequest
   if (!providerId) {
     embModel.value = ''
+    availableModels.value = []
+    recommendedModel.value = ''
     resolvingModel.value = false
     return
   }
 
   resolvingModel.value = true
+  embModel.value = preferredModel
   const defaultModel = defaultEmbeddingModelForProviderId(providerId, providerStore.providers)
+  recommendedModel.value = defaultModel
   try {
     const models = await providerStore.listModels(providerId, 'embedding')
     if (requestId !== modelRequest) return
-    embModel.value = withDefaultEmbeddingModel(models, defaultModel)[0] || ''
+    const suggestedModels = withDefaultEmbeddingModel(models, defaultModel)
+    availableModels.value = preferredModel && !suggestedModels.includes(preferredModel)
+      ? [...suggestedModels, preferredModel]
+      : suggestedModels
+    embModel.value = preferredModel || availableModels.value[0] || ''
   } catch {
     if (requestId !== modelRequest) return
-    embModel.value = defaultModel
+    availableModels.value = preferredModel
+      ? [preferredModel, ...(defaultModel && defaultModel !== preferredModel ? [defaultModel] : [])]
+      : defaultModel ? [defaultModel] : []
+    embModel.value = preferredModel || defaultModel
   } finally {
     if (requestId === modelRequest) resolvingModel.value = false
   }
+}
+
+function onEmbeddingModelChange() {
+  embDimensions.value = 0
+  embConfigured.value = false
+  embSaved.value = false
 }
 
 function applyDefaultEmbeddingConfig() {

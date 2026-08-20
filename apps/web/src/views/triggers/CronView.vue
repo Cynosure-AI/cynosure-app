@@ -156,16 +156,14 @@ async function deleteCronJobConfirmed() {
   await loadSchedules()
 }
 
-const filteredCronJobs = computed(() => {
-  const q = cronFilter.value.trim().toLowerCase()
-  if (!q) return cronJobs.value
-  return cronJobs.value.filter((job) =>
+function matchesCronFilter(job: CronJob, q: string): boolean {
+  return (
     (job.name || '').toLowerCase().includes(q)
     || job.agentName.toLowerCase().includes(q)
     || cronToHuman(job.schedule).toLowerCase().includes(q)
     || (job.prompt || '').toLowerCase().includes(q)
   )
-})
+}
 
 const tableColumns: Column<CronJob>[] = [
   { key: 'job', label: 'Job', width: 'minmax(0,1.7fr)', sortable: true, sortValue: job => job.name || job.agentName },
@@ -310,8 +308,10 @@ onUnmounted(() => {
 
         <DataTable
           v-else
-          :items="filteredCronJobs"
+          :items="cronJobs"
           :columns="tableColumns"
+          :filter-text="cronFilter"
+          :filter-predicate="matchesCronFilter"
           :row-clickable="true"
           :empty-message="cronFilter.trim() ? 'No jobs match the current filter' : 'No cron jobs'"
           @row-click="openCronJob"

@@ -7,10 +7,13 @@ import { useOnboardingStore } from '../../stores/onboarding.store'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import SettingsSubheading from './SettingsSubheading.vue'
+import IconUpload from '../shared/IconUpload.vue'
+import { ref } from 'vue'
 
 const prefs = usePreferencesStore()
 const onboardingStore = useOnboardingStore()
 const router = useRouter()
+const nameSaveError = ref('')
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
 }>(), {
@@ -30,6 +33,27 @@ function redoOnboarding() {
   router.push('/onboarding')
 }
 
+async function saveName() {
+  nameSaveError.value = ''
+  try {
+    await prefs.saveUserName()
+  } catch {
+    nameSaveError.value = 'Could not save your name.'
+  }
+}
+
+async function updateAvatar(value: string | null) {
+  nameSaveError.value = ''
+  const previous = prefs.userAvatarUrl
+  prefs.userAvatarUrl = value
+  try {
+    await prefs.saveUserProfile()
+  } catch {
+    prefs.userAvatarUrl = previous
+    nameSaveError.value = 'Could not save your profile image.'
+  }
+}
+
 const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#141417', surface: '#202024', accent: '#3b82f6', text: '#f4f4f5' } },
   { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#eef2f7', surface: '#ffffff', accent: '#3b82f6', text: '#0f172a' } },
@@ -46,6 +70,72 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
 
 <template>
   <div class="space-y-4">
+    <SettingsSubheading
+      v-if="showAnySection(['user-profile'])"
+      label="Profile"
+    />
+
+    <BaseCard
+      v-if="showSection('user-profile')"
+      class="p-5"
+    >
+      <label
+        class="flex items-start gap-3"
+        for="settings-user-name"
+      >
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-900">
+          <Icon
+            icon="lucide:user-round"
+            class="h-5 w-5 text-theme-400"
+          />
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-sm font-medium text-theme-200">Your name</span>
+          <span class="mt-0.5 block text-xs text-theme-500">
+            Agents can reference this value with the <code
+              v-pre
+              class="text-accent-400"
+            >{{userName}}</code> smart tag.
+          </span>
+          <span class="mt-3 flex items-center gap-2">
+            <input
+              id="settings-user-name"
+              v-model="prefs.userName"
+              type="text"
+              maxlength="100"
+              autocomplete="name"
+              placeholder="How should agents address you?"
+              class="w-full max-w-md rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-100 outline-none transition placeholder:text-theme-600 focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+              @change="saveName"
+              @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+            >
+            <Icon
+              v-if="prefs.userSettingsSaving"
+              icon="lucide:loader-2"
+              class="h-4 w-4 animate-spin text-theme-500"
+            />
+          </span>
+          <span
+            v-if="nameSaveError"
+            class="mt-2 block text-xs text-red-400"
+          >{{ nameSaveError }}</span>
+        </span>
+      </label>
+
+      <div class="mt-5 border-t border-theme-800 pt-5">
+        <IconUpload
+          :icon-url="prefs.userAvatarUrl"
+          fallback-icon="lucide:user-round"
+          label="Profile image"
+          @update="updateAvatar"
+        >
+          <template #description>
+            Used for your workspace profile and user messages in chat.
+          </template>
+        </IconUpload>
+      </div>
+    </BaseCard>
+
     <SettingsSubheading
       v-if="showAnySection(['theme'])"
       label="Theme"

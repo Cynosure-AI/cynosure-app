@@ -76,7 +76,7 @@
   color: #aa9b7e;
 }
 
-[data-theme="industrial"] input:focus,
+[data-theme="industrial"] input:not([type="checkbox"]):not([type="radio"]):focus,
 [data-theme="industrial"] textarea:focus,
 [data-theme="industrial"] select:focus {
   border-color: rgba(245, 158, 11, 0.52) !important;

@@ -6,6 +6,11 @@ export interface PromptSmartTag {
 
 export const PROMPT_SMART_TAGS: PromptSmartTag[] = [
   {
+    name: "userName",
+    label: "User name",
+    description: "The name configured for the current user in General settings.",
+  },
+  {
     name: "currentDateTime",
     label: "Current date/time",
     description: "Current date and time in the server locale and timezone.",

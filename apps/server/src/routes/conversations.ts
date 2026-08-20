@@ -333,9 +333,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         const offset = req.query.offset ? Math.max(0, parseInt(req.query.offset, 10) || 0) : 0
         const search = req.query.search?.trim()
         const excerpt = `(SELECT SUBSTR(m.content, 1, 120) FROM messages m WHERE m.conversation_id = conversations.id AND m.role = 'user' ORDER BY m.created_at DESC LIMIT 1) AS last_user_message`
-        const orderBy = req.query.sort === 'updated'
-            ? 'ORDER BY updated_at DESC'
-            : 'ORDER BY pinned DESC, created_at DESC'
+        const orderBy = req.query.sort === 'sidebar'
+            ? 'ORDER BY EXISTS(SELECT 1 FROM pending_hitl WHERE pending_hitl.conversation_id = conversations.id) DESC, pinned DESC, updated_at DESC'
+            : req.query.sort === 'updated'
+                ? 'ORDER BY updated_at DESC'
+                : 'ORDER BY pinned DESC, created_at DESC'
 
         const conditions: string[] = []
         const params: unknown[] = []
