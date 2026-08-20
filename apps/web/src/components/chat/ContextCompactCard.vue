@@ -25,7 +25,7 @@ const formattedDate = computed(() => {
 
 <template>
   <div class="px-4 py-3">
-    <div class="max-w-4xl mx-auto">
+    <div class="max-w-5xl mx-auto">
       <!-- Divider line with label -->
       <div class="flex items-center gap-3 mb-2">
         <div class="flex-1 h-px bg-amber-500/20" />

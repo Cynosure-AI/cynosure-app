@@ -662,7 +662,7 @@ onMounted(() => {
     <!-- Unified timeline -->
     <div
       v-else
-      class="max-w-4xl mx-auto py-4"
+      class="max-w-5xl mx-auto py-4"
     >
       <template
         v-for="entry in unifiedTimeline"
