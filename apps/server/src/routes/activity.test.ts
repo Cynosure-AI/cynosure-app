@@ -49,6 +49,17 @@ describe('activity artifact discovery', () => {
             JSON.stringify(['https://example.com/generated.png']),
             now + 1,
         )
+        db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, audio_urls_json, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+        ).run(
+            'tool-message-1',
+            'conversation-1',
+            'tool',
+            'Generated audio.',
+            JSON.stringify(['/api/files?path=%2Ftmp%2Fgenerated.mp3']),
+            now + 2,
+        )
 
         const app = Fastify()
         await app.register(registerActivityRoutes, { prefix: '/api/activity' })
@@ -60,9 +71,13 @@ describe('activity artifact discovery', () => {
 
         expect(response.statusCode).toBe(200)
         const body = response.json() as { items: { sourceId?: string; artifacts?: { label: string }[] }[] }
-        expect(body.items).toHaveLength(1)
-        expect(body.items[0].sourceId).toBe('message-1')
+        expect(body.items).toHaveLength(2)
+        expect(body.items[0].sourceId).toBe('tool-message-1')
         expect(body.items[0].artifacts).toEqual([
+            expect.objectContaining({ label: 'generated.mp3' }),
+        ])
+        expect(body.items[1].sourceId).toBe('message-1')
+        expect(body.items[1].artifacts).toEqual([
             expect.objectContaining({ label: 'generated.png' }),
         ])
     })

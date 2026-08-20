@@ -9,11 +9,11 @@ import { loadSavedProviders } from './providers.js'
 import { loadSavedMcpServers } from './mcp/index.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { writeFileSync } from 'fs'
-import { getConversationArtifactsDir } from '../core/artifacts/image-artifacts.js'
+import { extractFilePathFromFileUrl, getConversationArtifactsDir, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { getMemoryParser } from '../core/memory/parser.js'
 import { getEmbeddingProvider } from '../core/memory/embedding.js'
-import { basename, join } from 'path'
+import { basename, dirname, join } from 'path'
 import {
     existsSync,
     mkdirSync,
@@ -1352,8 +1352,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
 
                         try {
                             const targetPath = join(artifactsBaseDir, convId, relPath)
-                            const targetDir = join(artifactsBaseDir, convId)
-                            mkdirSync(targetDir, { recursive: true })
+                            mkdirSync(dirname(targetPath), { recursive: true })
                             writeFileSync(targetPath, entry.getData())
                         } catch (e) {
                             res.errors.push(`Artifact file ${entry.entryName}: ${(e as Error).message}`)
@@ -1361,6 +1360,54 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     }
                 } catch (e) {
                     res.errors.push(`Artifact restoration: ${(e as Error).message}`)
+                }
+
+                // Re-home absolute media URLs to this installation's data directory.
+                // Backup archives retain filenames, while the old absolute prefix may
+                // belong to another OS, user account, or CYNOSURE_DATA_DIR.
+                try {
+                    const artifactsBaseDir = join(getAppDataDir(), 'artifacts', 'conversations')
+                    const placeholders = Array.from(importedConversationIds).map(() => '?').join(',') || "''"
+                    const rows = db.prepare(`
+                        SELECT id, conversation_id, image_urls_json, video_urls_json, audio_urls_json
+                        FROM messages
+                        WHERE conversation_id IN (${placeholders})
+                    `).all(...Array.from(importedConversationIds)) as {
+                        id: string
+                        conversation_id: string
+                        image_urls_json: string | null
+                        video_urls_json: string | null
+                        audio_urls_json: string | null
+                    }[]
+                    const rehome = (json: string | null, conversationId: string, directory: string): string | null => {
+                        if (!json) return null
+                        try {
+                            const urls = JSON.parse(json) as string[]
+                            return JSON.stringify(urls.map((url) => {
+                                const oldPath = extractFilePathFromFileUrl(url)
+                                if (!oldPath) return url
+                                const targetPath = join(artifactsBaseDir, conversationId, directory, basename(oldPath))
+                                return existsSync(targetPath) ? toFileUrl(targetPath) : url
+                            }))
+                        } catch {
+                            return json
+                        }
+                    }
+                    const update = db.prepare(`
+                        UPDATE messages
+                        SET image_urls_json = ?, video_urls_json = ?, audio_urls_json = ?
+                        WHERE id = ?
+                    `)
+                    for (const row of rows) {
+                        update.run(
+                            rehome(row.image_urls_json, row.conversation_id, 'images'),
+                            rehome(row.video_urls_json, row.conversation_id, 'videos'),
+                            rehome(row.audio_urls_json, row.conversation_id, 'audio'),
+                            row.id,
+                        )
+                    }
+                } catch (e) {
+                    res.errors.push(`Artifact path migration: ${(e as Error).message}`)
                 }
 
                 // Re-home restored attachment artifact paths and rebuild conversation-scoped vectors.
