@@ -73,9 +73,9 @@
 }
 
 /* ── Corner bracket decorations (terminal-window style) ── */
-[data-theme="matrix"] main,
-[data-theme="matrix"] dialog,
-[data-theme="matrix"] [role="dialog"] {
+/* Do not set positioning on dialogs here: it overrides their fixed/absolute
+   utility classes and pulls floating UI back into normal document flow. */
+[data-theme="matrix"] main {
   position: relative;
 }
 [data-theme="matrix"] main::before,

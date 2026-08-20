@@ -73,10 +73,10 @@
   border-color: var(--cb-red-dim);
 }
 
-/* ── Corner bracket decorations on cards & modal panels ── */
-[data-theme="arasaka"] main,
-[data-theme="arasaka"] dialog,
-[data-theme="arasaka"] [role="dialog"] {
+/* ── Corner bracket decorations on structural panels ── */
+/* Dialog positioning belongs to the component; overriding it here breaks
+   fixed and absolute overlays because theme CSS is unlayered. */
+[data-theme="arasaka"] main {
   position: relative;
 }
 [data-theme="arasaka"] main::before,

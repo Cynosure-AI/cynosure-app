@@ -33,7 +33,7 @@ function itemClass(item: PlanningTaskItem): string {
     v-if="shouldShow && state"
     role="dialog"
     aria-label="Planning tasks"
-    class="absolute right-3 top-3 z-20 flex max-h-[min(24rem,calc(100%-1.5rem))] w-[min(24rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-xl border border-theme-700 bg-theme-950/95 shadow-2xl shadow-black/40 backdrop-blur"
+    class="absolute right-3 top-3 z-20 flex max-h-[min(24rem,calc(100%_-_1.5rem))] w-[min(24rem,calc(100%_-_1.5rem))] flex-col overflow-hidden rounded-xl border border-theme-700 bg-theme-950/95 shadow-2xl shadow-black/40 backdrop-blur"
   >
     <div class="flex min-w-0 items-center gap-3 border-b border-theme-800 px-3 py-2.5">
       <span class="h-6 w-6 flex items-center justify-center rounded-md text-accent-400 shrink-0">

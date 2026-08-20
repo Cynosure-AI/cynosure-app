@@ -5,6 +5,7 @@ import { Icon } from '@iconify/vue'
 defineProps<{
   iconUrl: string | null
   fallbackIcon?: string
+  label?: string
 }>()
 
 const emit = defineEmits<{
@@ -14,8 +15,49 @@ const emit = defineEmits<{
 const fileInput = ref<HTMLInputElement | null>(null)
 const isDragging = ref(false)
 const errorMessage = ref<string | null>(null)
+const isProcessing = ref(false)
 
-function processFile(file: File | undefined | null) {
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+const AVATAR_SIZE = 512
+
+function readFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(new Error('Unable to read image'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Unable to decode image'))
+    image.src = src
+  })
+}
+
+async function resizeAvatar(file: File): Promise<string> {
+  const image = await loadImage(await readFile(file))
+  const canvas = document.createElement('canvas')
+  canvas.width = AVATAR_SIZE
+  canvas.height = AVATAR_SIZE
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Image processing is unavailable')
+
+  // Fill the square without stretching. Cropping is centered, matching the
+  // object-cover treatment used everywhere agent avatars are displayed.
+  const scale = Math.max(AVATAR_SIZE / image.naturalWidth, AVATAR_SIZE / image.naturalHeight)
+  const width = image.naturalWidth * scale
+  const height = image.naturalHeight * scale
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(image, (AVATAR_SIZE - width) / 2, (AVATAR_SIZE - height) / 2, width, height)
+  return canvas.toDataURL('image/webp', 0.9)
+}
+
+async function processFile(file: File | undefined | null) {
   errorMessage.value = null
   
   if (!file) return
@@ -26,20 +68,19 @@ function processFile(file: File | undefined | null) {
     return
   }
 
-  // Validate size (2 MB max)
-  if (file.size > 2 * 1024 * 1024) {
-    errorMessage.value = `Image is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max size is 2 MB.`
+  if (file.size > MAX_UPLOAD_BYTES) {
+    errorMessage.value = `Image is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max size is 5 MB.`
     return
   }
 
-  const reader = new FileReader()
-  reader.onload = () => {
-    emit('update', reader.result as string)
+  isProcessing.value = true
+  try {
+    emit('update', await resizeAvatar(file))
+  } catch {
+    errorMessage.value = 'The image could not be processed. Please try another file.'
+  } finally {
+    isProcessing.value = false
   }
-  reader.onerror = () => {
-    errorMessage.value = 'An error occurred while reading the file.'
-  }
-  reader.readAsDataURL(file)
 }
 
 function handleUpload(event: Event) {
@@ -69,10 +110,10 @@ function removeImage() {
 
 <template>
   <div>
-    <label class="block text-sm text-theme-400 mb-1.5">Icon</label>
+    <label class="block text-sm text-theme-400 mb-1.5">{{ label || 'Icon' }}</label>
     <p class="text-xs text-theme-600 mb-2">
       <slot name="description">
-        Custom avatar. Falls back to the default icon if not set.
+        Custom avatar. Images up to 5 MB are cropped and optimized to 512 × 512.
       </slot>
     </p>
     
@@ -98,15 +139,16 @@ function removeImage() {
         >
         <Icon
           v-else
-          :icon="fallbackIcon || 'lucide:image'"
+          :icon="isProcessing ? 'lucide:loader-2' : fallbackIcon || 'lucide:image'"
           class="w-7 h-7 transition-colors"
-          :class="isDragging ? 'text-theme-300' : 'text-theme-500'"
+          :class="[isDragging ? 'text-theme-300' : 'text-theme-500', { 'animate-spin': isProcessing }]"
         />
       </div>
 
       <div class="flex gap-2">
         <button
           type="button"
+          :disabled="isProcessing"
           class="px-3 py-1.5 bg-theme-700 hover:bg-theme-600 text-theme-300 text-xs rounded-lg transition-colors"
           @click="fileInput?.click()"
         >

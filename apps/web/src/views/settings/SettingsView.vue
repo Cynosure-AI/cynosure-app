@@ -6,12 +6,12 @@ import ProviderSettings from '../../components/settings/ProviderSettings.vue'
 import MemorySettings from '../../components/settings/MemorySettings.vue'
 import ChatSettings from '../../components/settings/ChatSettings.vue'
 import SpeechToTextSettings from '../../components/settings/SpeechToTextSettings.vue'
-import AppearanceSettings from '../../components/settings/AppearanceSettings.vue'
+import GeneralSettings from '../../components/settings/AppearanceSettings.vue'
 import BackupSettings from '../../components/settings/BackupSettings.vue'
 import ResetDataSettings from '../../components/settings/ResetDataSettings.vue'
 import ChannelsView from '../triggers/ChannelsView.vue'
 
-type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'appearance' | 'backup' | 'reset-data'
+type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'general' | 'backup' | 'reset-data'
 
 interface SettingsCategory {
   id: SettingsCategoryId
@@ -34,14 +34,15 @@ const route = useRoute()
 const router = useRouter()
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
+const settingsPanelRef = ref<HTMLElement | null>(null)
 
 const categories: SettingsCategory[] = [
   {
-    id: 'appearance',
-    label: 'Appearance',
-    description: 'Customize theme, chat display preferences, and setup guide access.',
-    icon: 'lucide:palette',
-    component: AppearanceSettings
+    id: 'general',
+    label: 'General',
+    description: 'Manage your profile, appearance, chat display preferences, and setup guide access.',
+    icon: 'lucide:sliders-horizontal',
+    component: GeneralSettings
   },
   {
     id: 'chat',
@@ -96,6 +97,13 @@ const categories: SettingsCategory[] = [
 ]
 
 const sections: SettingsSection[] = [
+  {
+    id: 'user-profile',
+    categoryId: 'general',
+    label: 'User Profile',
+    description: 'Set your name and profile image.',
+    terms: ['name', 'user name', 'profile', 'identity', 'smart tag', 'username', 'avatar', 'profile image', 'user image']
+  },
   {
     id: 'provider-actions',
     categoryId: 'providers',
@@ -238,28 +246,28 @@ const sections: SettingsSection[] = [
   },
   {
     id: 'theme',
-    categoryId: 'appearance',
+    categoryId: 'general',
     label: 'Theme',
     description: 'Choose your visual style.',
     terms: ['theme', 'themes', 'visual style', 'dark', 'light', 'arasaka', 'galaxy', 'cyberpunk', 'matrix', 'sakura', 'industrial', 'amber', 'arctic', 'ice', 'monochrome', 'palette', 'appearance']
   },
   {
     id: 'auto-expand-thinking',
-    categoryId: 'appearance',
+    categoryId: 'general',
     label: 'Auto-expand Thinking',
     description: 'Automatically expand thinking and reasoning blocks.',
     terms: ['auto expand thinking', 'thinking', 'reasoning', 'reasoning blocks', 'expand steps']
   },
   {
     id: 'auto-expand-tool-calls',
-    categoryId: 'appearance',
+    categoryId: 'general',
     label: 'Auto-expand Tool Calls',
     description: 'Automatically expand tool call details in chat.',
     terms: ['auto expand tool calls', 'tool calls', 'tool details', 'expand tools']
   },
   {
     id: 'setup-guide',
-    categoryId: 'appearance',
+    categoryId: 'general',
     label: 'Setup Guide',
     description: 'Re-run onboarding to configure providers, memory, and MCPs.',
     terms: ['setup guide', 'onboarding', 'redo setup', 'configure providers', 'memory', 'mcps']
@@ -311,7 +319,7 @@ const activeCategoryId = computed<SettingsCategoryId>(() => {
   const category = route.query.category
   return typeof category === 'string' && categoryIds.has(category as SettingsCategoryId)
     ? category as SettingsCategoryId
-    : 'appearance'
+    : 'general'
 })
 
 const normalizedSearch = computed(() => normalize(searchQuery.value))
@@ -417,10 +425,24 @@ function onGlobalKeydown(event: KeyboardEvent): void {
     event.preventDefault()
     searchInputRef.value?.focus()
   }
-  if (event.key === 'Escape' && isSearching.value) {
-    clearSearch()
-    searchInputRef.value?.blur()
+  if (event.key === 'Escape') {
+    const owningDialog = (event.target as Element | null)?.closest?.('[role="dialog"]')
+    if (owningDialog && owningDialog !== settingsPanelRef.value) return
+    if (isSearching.value) {
+      clearSearch()
+      searchInputRef.value?.blur()
+    } else {
+      closeSettings()
+    }
   }
+}
+
+function closeSettings(): void {
+  const previousPath = window.history.state?.back
+  const canReturn = typeof previousPath === 'string'
+    && previousPath.startsWith('/')
+    && !previousPath.startsWith('/settings')
+  router.push(canReturn ? previousPath : '/chat')
 }
 
 function normalize(value: string): string {
@@ -492,137 +514,161 @@ function scoreSection(section: SettingsSection, query: string): number {
 </script>
 
 <template>
-  <div class="h-full overflow-hidden">
-    <div class="flex h-full flex-col lg:flex-row">
-      <aside class="shrink-0 border-b border-theme-800 bg-theme-950/60 lg:w-72 lg:border-b-0 lg:border-r">
-        <header class=" p-4">
-          <h1 class="text-2xl font-bold text-theme-100">
-            Settings
-          </h1>
-          <p class="mt-1 text-sm leading-relaxed text-theme-500">
-            Configure Cynosure, AI behavior, and your workspace appearance.
-          </p>
-        </header>
-        <nav class="flex gap-1 overflow-x-auto px-3 py-3 lg:block lg:space-y-1 lg:overflow-x-visible lg:p-4">
-          <button
-            v-for="category in categories"
-            :key="category.id"
-            class="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all lg:w-full"
-            :class="categoryButtonClass(category.id)"
-            @click="selectCategory(category.id)"
-          >
-            <Icon
-              :icon="category.icon"
-              class="h-4.5 w-4.5 shrink-0"
-            />
-            <span class="whitespace-nowrap">{{ category.label }}</span>
-            <span
-              v-if="isSearching && matchCountByCategory.get(category.id)"
-              class="ml-auto text-[10px] font-medium bg-accent-600/20 text-accent-400 px-1.5 py-0.5 rounded-full leading-none"
-            >
-              {{ matchCountByCategory.get(category.id) }}
-            </span>
-          </button>
-        </nav>
-      </aside>
-
-      <main class="min-w-0 flex-1 overflow-y-auto">
-        <!-- Sticky search bar -->
-        <div class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 backdrop-blur-sm px-4 py-3 sm:px-6 lg:px-8">
-          <div class="mx-auto max-w-5xl">
-            <div class="relative">
-              <Icon
-                icon="lucide:search"
-                class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
-              />
-              <input
-                ref="searchInputRef"
-                v-model="searchQuery"
-                type="text"
-                placeholder="Search settings..."
-                class="w-full rounded-lg border border-theme-700 bg-theme-900/80 px-9 py-2.5 text-sm text-theme-100 placeholder-theme-600 outline-none transition focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
-              >
-              <kbd
-                v-if="!isSearching"
-                class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-theme-600 bg-theme-800 border border-theme-700 rounded"
-              >
-                /
-              </kbd>
+  <Teleport to="body">
+    <div
+      class="fixed inset-0 z-150 flex items-center justify-center bg-black/65 p-2 backdrop-blur-sm sm:p-5"
+      @click.self="closeSettings"
+    >
+      <section
+        ref="settingsPanelRef"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Settings"
+        class="relative h-full max-h-[900px] w-full max-w-7xl overflow-hidden rounded-2xl border border-theme-700 bg-theme-950 shadow-2xl"
+      >
+        <button
+          type="button"
+          class="absolute right-3 top-3 z-30 rounded-lg border border-theme-700 bg-theme-900/90 p-2 text-theme-400 shadow-lg transition hover:bg-theme-800 hover:text-theme-100"
+          aria-label="Close settings"
+          @click="closeSettings"
+        >
+          <Icon
+            icon="lucide:x"
+            class="h-4 w-4"
+          />
+        </button>
+        <div class="flex h-full flex-col lg:flex-row">
+          <aside class="shrink-0 border-b border-theme-800 bg-theme-950/60 lg:w-72 lg:border-b-0 lg:border-r">
+            <header class=" p-4">
+              <h1 class="text-2xl font-bold text-theme-100">
+                Settings
+              </h1>
+              <p class="mt-1 text-sm leading-relaxed text-theme-500">
+                Configure Cynosure, AI behavior, and your workspace.
+              </p>
+            </header>
+            <nav class="flex gap-1 overflow-x-auto px-3 py-3 lg:block lg:space-y-1 lg:overflow-x-visible lg:p-4">
               <button
-                v-if="isSearching"
-                class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
-                type="button"
-                aria-label="Clear settings search"
-                @click="clearSearch"
+                v-for="category in categories"
+                :key="category.id"
+                class="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all lg:w-full"
+                :class="categoryButtonClass(category.id)"
+                @click="selectCategory(category.id)"
               >
                 <Icon
-                  icon="lucide:x"
-                  class="h-4 w-4"
+                  :icon="category.icon"
+                  class="h-4.5 w-4.5 shrink-0"
                 />
+                <span class="whitespace-nowrap">{{ category.label }}</span>
+                <span
+                  v-if="isSearching && matchCountByCategory.get(category.id)"
+                  class="ml-auto text-[10px] font-medium bg-accent-600/20 text-accent-400 px-1.5 py-0.5 rounded-full leading-none"
+                >
+                  {{ matchCountByCategory.get(category.id) }}
+                </span>
               </button>
-            </div>
-            <p
-              v-if="isSearching"
-              class="mt-2 text-xs text-theme-500"
-            >
-              {{ resultCountLabel }}
-            </p>
-          </div>
-        </div>
+            </nav>
+          </aside>
 
-        <div class="mx-auto max-w-5xl px-4 pt-6 pb-8 sm:px-6 lg:px-8">
-          <div
-            v-if="visibleCategoryGroups.length === 0"
-            class="rounded-xl border border-theme-800 bg-theme-900/50 px-5 py-10 text-center"
-          >
-            <Icon
-              icon="lucide:search-x"
-              class="mx-auto h-8 w-8 text-theme-600"
-            />
-            <h2 class="mt-3 text-sm font-semibold text-theme-200">
-              No settings found
-            </h2>
-            <p class="mt-1 text-sm text-theme-500">
-              Try a different term or clear the search.
-            </p>
-          </div>
-
-          <div
-            v-else
-            class="space-y-10"
-          >
-            <section
-              v-for="{ category, visibleSectionIds } in visibleCategoryGroups"
-              :id="`settings-${category.id}`"
-              :key="category.id"
-              class="scroll-mt-4"
-            >
-              <div class="mb-5 flex items-start gap-3">
-                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-theme-900 text-theme-400 ring-1 ring-theme-800">
+          <main class="min-w-0 flex-1 overflow-y-auto">
+            <!-- Sticky search bar -->
+            <div class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 backdrop-blur-sm px-4 py-3 sm:px-6 lg:px-8">
+              <div class="mx-auto max-w-5xl">
+                <div class="relative">
                   <Icon
-                    :icon="category.icon"
-                    class="h-5 w-5"
+                    icon="lucide:search"
+                    class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
                   />
+                  <input
+                    ref="searchInputRef"
+                    v-model="searchQuery"
+                    type="text"
+                    placeholder="Search settings..."
+                    class="w-full rounded-lg border border-theme-700 bg-theme-900/80 px-9 py-2.5 text-sm text-theme-100 placeholder-theme-600 outline-none transition focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+                  >
+                  <kbd
+                    v-if="!isSearching"
+                    class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-theme-600 bg-theme-800 border border-theme-700 rounded"
+                  >
+                    /
+                  </kbd>
+                  <button
+                    v-if="isSearching"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
+                    type="button"
+                    aria-label="Clear settings search"
+                    @click="clearSearch"
+                  >
+                    <Icon
+                      icon="lucide:x"
+                      class="h-4 w-4"
+                    />
+                  </button>
                 </div>
-                <div class="min-w-0">
-                  <h2 class="text-xl font-bold text-theme-100">
-                    {{ category.label }}
-                  </h2>
-                  <p class="mt-1 text-sm leading-relaxed text-theme-500">
-                    {{ category.description }}
-                  </p>
-                </div>
+                <p
+                  v-if="isSearching"
+                  class="mt-2 text-xs text-theme-500"
+                >
+                  {{ resultCountLabel }}
+                </p>
+              </div>
+            </div>
+
+            <div class="mx-auto max-w-5xl px-4 pt-6 pb-8 sm:px-6 lg:px-8">
+              <div
+                v-if="visibleCategoryGroups.length === 0"
+                class="rounded-xl border border-theme-800 bg-theme-900/50 px-5 py-10 text-center"
+              >
+                <Icon
+                  icon="lucide:search-x"
+                  class="mx-auto h-8 w-8 text-theme-600"
+                />
+                <h2 class="mt-3 text-sm font-semibold text-theme-200">
+                  No settings found
+                </h2>
+                <p class="mt-1 text-sm text-theme-500">
+                  Try a different term or clear the search.
+                </p>
               </div>
 
-              <component
-                :is="category.component"
-                :visible-sections="visibleSectionIds"
-                v-bind="category.componentProps || {}"
-              />
-            </section>
-          </div>
+              <div
+                v-else
+                class="space-y-10"
+              >
+                <section
+                  v-for="{ category, visibleSectionIds } in visibleCategoryGroups"
+                  :id="`settings-${category.id}`"
+                  :key="category.id"
+                  class="scroll-mt-4"
+                >
+                  <div class="mb-5 flex items-start gap-3">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-theme-900 text-theme-400 ring-1 ring-theme-800">
+                      <Icon
+                        :icon="category.icon"
+                        class="h-5 w-5"
+                      />
+                    </div>
+                    <div class="min-w-0">
+                      <h2 class="text-xl font-bold text-theme-100">
+                        {{ category.label }}
+                      </h2>
+                      <p class="mt-1 text-sm leading-relaxed text-theme-500">
+                        {{ category.description }}
+                      </p>
+                    </div>
+                  </div>
+
+                  <component
+                    :is="category.component"
+                    :visible-sections="visibleSectionIds"
+                    v-bind="category.componentProps || {}"
+                  />
+                </section>
+              </div>
+            </div>
+          </main>
         </div>
-      </main>
+      </section>
     </div>
-  </div>
+  </Teleport>
 </template>

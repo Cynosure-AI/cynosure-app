@@ -2,6 +2,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, watch } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { syncPrefsToElectron } from '@/utils/electron-prefs'
+import { api } from '@/api/client'
 import {
     SK_THEME, SK_AUTO_EXPAND, SK_AUTO_EXPAND_TOOLS, SK_DEBUG_MODE, SK_GENERATE_TITLE, SK_TITLE_PROVIDER, SK_TITLE_MODEL,
     SK_ENTITY_GRAPH_PROVIDER, SK_ENTITY_GRAPH_MODEL,
@@ -18,6 +19,10 @@ export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' |
 export type VoiceTranscriptionMode = 'local' | 'remote'
 
 export const usePreferencesStore = defineStore('preferences', () => {
+    const userName = ref('')
+    const userAvatarUrl = ref<string | null>(null)
+    const userSettingsLoaded = ref(false)
+    const userSettingsSaving = ref(false)
     const theme = useLocalStorage<ThemeId>(SK_THEME, 'dark')
     const autoExpandSteps = useLocalStorage(SK_AUTO_EXPAND, false)
     const autoExpandToolCalls = useLocalStorage(SK_AUTO_EXPAND_TOOLS, false)
@@ -72,6 +77,34 @@ export const usePreferencesStore = defineStore('preferences', () => {
         theme.value = theme.value === 'dark' ? 'light' : 'dark'
     }
 
+    async function loadUserSettings() {
+        try {
+            const settings = await api.userSettings.get()
+            userName.value = settings.name
+            userAvatarUrl.value = settings.avatarUrl
+        } catch {
+            // Non-critical during startup; reconnect will retry with the other stores.
+        } finally {
+            userSettingsLoaded.value = true
+        }
+    }
+
+    async function saveUserProfile() {
+        userSettingsSaving.value = true
+        try {
+            const settings = await api.userSettings.update({
+                name: userName.value,
+                avatarUrl: userAvatarUrl.value,
+            })
+            userName.value = settings.name
+            userAvatarUrl.value = settings.avatarUrl
+        } finally {
+            userSettingsSaving.value = false
+        }
+    }
+
+    const saveUserName = saveUserProfile
+
     function setTheme(id: ThemeId) {
         theme.value = id
     }
@@ -120,6 +153,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     }
 
     return {
+        userName, userAvatarUrl, userSettingsLoaded, userSettingsSaving, loadUserSettings, saveUserProfile, saveUserName,
         theme, autoExpandSteps, autoExpandToolCalls, debugMode, generateTitle, titleProviderId, titleModel, entityGraphProviderId, entityGraphModel, autoRouterProviderId, autoRouterModel, compactProviderId, compactModel, sidebarCollapsed,
         contextStrategy, inlineAttachmentTextLimit,
         agentCategories, maCategories,

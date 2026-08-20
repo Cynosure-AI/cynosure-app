@@ -18,7 +18,7 @@
       </p>
 
       <div
-        class="mx-auto my-8 flex max-w-xs items-center gap-2"
+        class="mx-auto my-10 flex max-w-xs items-center gap-2"
         aria-hidden="true"
       >
         <span class="h-px flex-1 bg-gradient-to-r from-transparent to-theme-700" />
