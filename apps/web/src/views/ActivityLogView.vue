@@ -454,12 +454,14 @@ async function cancelMemoryJob(item: ActivityItem, event: Event): Promise<void> 
 function artifactIcon(kind: string): string {
   if (kind === "image") return "lucide:image";
   if (kind === "video") return "lucide:film";
+  if (kind === "audio") return "lucide:audio-lines";
   return "lucide:file";
 }
 
 function artifactTypeLabel(kind: string): string {
   if (kind === "video") return "Video";
   if (kind === "image") return "Image";
+  if (kind === "audio") return "Audio";
   return "File";
 }
 

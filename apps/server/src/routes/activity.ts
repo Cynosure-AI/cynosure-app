@@ -8,7 +8,7 @@ type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory'
 interface ActivityArtifact {
     href: string
     label: string
-    kind: 'file' | 'image' | 'video'
+    kind: 'file' | 'image' | 'video' | 'audio'
     ext: string
 }
 
@@ -45,6 +45,12 @@ const ARTIFACT_EXTENSIONS = [
     'mp4',
     'webm',
     'mov',
+    'mp3',
+    'wav',
+    'flac',
+    'ogg',
+    'm4a',
+    'aac',
     'pdf',
     'doc',
     'docx',
@@ -64,6 +70,7 @@ const ARTIFACT_EXTENSIONS = [
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg', 'avif'])
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'mov'])
+const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac'])
 
 const artifactExtensionPattern = ARTIFACT_EXTENSIONS
     .map((ext) => ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
@@ -129,6 +136,17 @@ function artifactFromPath(path: string, kind: ActivityArtifact['kind']): Activit
 }
 
 function artifactFromUrl(url: string, kind: ActivityArtifact['kind']): ActivityArtifact {
+    if (url.startsWith('data:')) {
+        const mimeSubtype = url.match(/^data:[^/]+\/([^;,]+)/i)?.[1]?.toLowerCase()
+        const ext = mimeSubtype === 'jpeg' ? 'jpg' : (mimeSubtype || kind)
+        return {
+            href: url,
+            label: `Generated ${kind}.${ext}`,
+            kind,
+            ext: ext.toUpperCase(),
+        }
+    }
+
     try {
         const parsed = new URL(url, 'http://local')
         const path = parsed.searchParams.get('path')
@@ -142,6 +160,14 @@ function artifactFromUrl(url: string, kind: ActivityArtifact['kind']): ActivityA
     if (kind === 'video' && !VIDEO_EXTENSIONS.has(ext.toLowerCase())) {
         label = 'Generated video'
         ext = 'VIDEO'
+    }
+    if (kind === 'audio' && !AUDIO_EXTENSIONS.has(ext.toLowerCase())) {
+        label = 'Generated audio'
+        ext = 'AUDIO'
+    }
+    if (kind === 'image' && !IMAGE_EXTENSIONS.has(ext.toLowerCase())) {
+        label = 'Generated image'
+        ext = 'IMAGE'
     }
     return { href: url, label, kind, ext }
 }
@@ -170,13 +196,14 @@ function dedupeArtifacts(artifacts: ActivityArtifact[]): ActivityArtifact[] {
 }
 
 function isMediaArtifact(artifact: ActivityArtifact): boolean {
-    return artifact.kind === 'image' || artifact.kind === 'video'
+    return artifact.kind === 'image' || artifact.kind === 'video' || artifact.kind === 'audio'
 }
 
 function artifactKindFromPath(path: string): ActivityArtifact['kind'] {
     const ext = (path.split('.').pop() || '').toLowerCase()
     if (IMAGE_EXTENSIONS.has(ext)) return 'image'
     if (VIDEO_EXTENSIONS.has(ext)) return 'video'
+    if (AUDIO_EXTENSIONS.has(ext)) return 'audio'
     return 'file'
 }
 
@@ -403,7 +430,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
 
         const messageArtifactKeysByConversation = new Map<string, Set<string>>()
         const messageRows = db.prepare(
-            `SELECT m.id, m.conversation_id, m.content, m.image_urls_json, m.video_urls_json, m.created_at, c.title, c.agent_id
+            `SELECT m.id, m.conversation_id, m.content, m.image_urls_json, m.video_urls_json, m.audio_urls_json, m.created_at, c.title, c.agent_id
              FROM messages m
              JOIN conversations c ON c.id = m.conversation_id
              WHERE m.role = 'assistant'
@@ -415,6 +442,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             content: string
             image_urls_json: string | null
             video_urls_json: string | null
+            audio_urls_json: string | null
             created_at: number
             title: string | null
             agent_id: string | null
@@ -424,6 +452,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             const artifacts = dedupeArtifacts([
                 ...parseJsonStringArray(row.image_urls_json).map((url) => artifactFromUrl(url, 'image')),
                 ...parseJsonStringArray(row.video_urls_json).map((url) => artifactFromUrl(url, 'video')),
+                ...parseJsonStringArray(row.audio_urls_json).map((url) => artifactFromUrl(url, 'audio')),
                 ...fileArtifactsFromText(row.content),
             ])
             if (!artifacts.length) continue
