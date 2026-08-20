@@ -24,8 +24,9 @@ function memorySpacePathId(id: string): string {
 
 export const api = {
   userSettings: {
-    get: () => get<{ name: string }>('/api/user-settings'),
-    update: (name: string) => put<{ name: string }>('/api/user-settings', { name }),
+    get: () => get<{ name: string; avatarUrl: string | null }>('/api/user-settings'),
+    update: (profile: { name: string; avatarUrl: string | null }) =>
+      put<{ name: string; avatarUrl: string | null }>('/api/user-settings', profile),
   },
   provider: {
     list: () => get<LLMProviderConfig[]>('/api/providers'),

@@ -46,6 +46,19 @@
         </span>
       </label>
 
+      <div class="mx-auto mt-5 max-w-sm text-left">
+        <IconUpload
+          :icon-url="prefs.userAvatarUrl"
+          fallback-icon="lucide:user-round"
+          label="Profile image"
+          @update="prefs.userAvatarUrl = $event"
+        >
+          <template #description>
+            Optional. This image represents you in the workspace and chat.
+          </template>
+        </IconUpload>
+      </div>
+
       <div
         class="mx-auto my-8 flex max-w-xs items-center gap-2"
         aria-hidden="true"
@@ -91,6 +104,7 @@
 import { Icon } from '@iconify/vue'
 import { useAppBranding } from '../../composables/useAppBranding'
 import { usePreferencesStore } from '../../stores/preferences.store'
+import IconUpload from '../shared/IconUpload.vue'
 
 const { logoIconUrl } = useAppBranding()
 const prefs = usePreferencesStore()

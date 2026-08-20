@@ -20,6 +20,7 @@ export type VoiceTranscriptionMode = 'local' | 'remote'
 
 export const usePreferencesStore = defineStore('preferences', () => {
     const userName = ref('')
+    const userAvatarUrl = ref<string | null>(null)
     const userSettingsLoaded = ref(false)
     const userSettingsSaving = ref(false)
     const theme = useLocalStorage<ThemeId>(SK_THEME, 'dark')
@@ -80,6 +81,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
         try {
             const settings = await api.userSettings.get()
             userName.value = settings.name
+            userAvatarUrl.value = settings.avatarUrl
         } catch {
             // Non-critical during startup; reconnect will retry with the other stores.
         } finally {
@@ -87,15 +89,21 @@ export const usePreferencesStore = defineStore('preferences', () => {
         }
     }
 
-    async function saveUserName() {
+    async function saveUserProfile() {
         userSettingsSaving.value = true
         try {
-            const settings = await api.userSettings.update(userName.value)
+            const settings = await api.userSettings.update({
+                name: userName.value,
+                avatarUrl: userAvatarUrl.value,
+            })
             userName.value = settings.name
+            userAvatarUrl.value = settings.avatarUrl
         } finally {
             userSettingsSaving.value = false
         }
     }
+
+    const saveUserName = saveUserProfile
 
     function setTheme(id: ThemeId) {
         theme.value = id
@@ -145,7 +153,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     }
 
     return {
-        userName, userSettingsLoaded, userSettingsSaving, loadUserSettings, saveUserName,
+        userName, userAvatarUrl, userSettingsLoaded, userSettingsSaving, loadUserSettings, saveUserProfile, saveUserName,
         theme, autoExpandSteps, autoExpandToolCalls, debugMode, generateTitle, titleProviderId, titleModel, entityGraphProviderId, entityGraphModel, autoRouterProviderId, autoRouterModel, compactProviderId, compactModel, sidebarCollapsed,
         contextStrategy, inlineAttachmentTextLimit,
         agentCategories, maCategories,

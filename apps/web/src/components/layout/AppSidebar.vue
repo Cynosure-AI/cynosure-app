@@ -479,23 +479,36 @@ const chatRoute = computed(() =>
         :aria-expanded="showStatusPopover"
         @click="showStatusPopover = !showStatusPopover"
       >
-        <span
-          class="w-2 h-2 rounded-full shrink-0"
-          :class="{
-            'bg-red-500 animate-pulse': !wsConnected,
-            'bg-amber-500 animate-pulse': wsConnected && hasAwaitingApproval,
-            'bg-accent-500 animate-pulse':
-              wsConnected &&
-              !hasAwaitingApproval &&
-              (instances.length > 0 || memoryJobsStore.hasRunningJobs),
-            'bg-emerald-500':
-              wsConnected &&
-              instances.length === 0 &&
-              !memoryJobsStore.hasRunningJobs &&
-              providerStore.providers.length > 0,
-            'bg-theme-600': wsConnected && !memoryJobsStore.hasRunningJobs && !providerStore.providers.length,
-          }"
-        />
+        <span class="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-theme-800 ring-1 ring-theme-700/70">
+          <img
+            v-if="preferencesStore.userAvatarUrl"
+            :src="preferencesStore.userAvatarUrl"
+            alt=""
+            class="h-full w-full rounded-full object-cover"
+          >
+          <Icon
+            v-else
+            icon="lucide:user-round"
+            class="h-4 w-4 text-theme-500"
+          />
+          <span
+            class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-theme-950"
+            :class="{
+              'bg-red-500 animate-pulse': !wsConnected,
+              'bg-amber-500 animate-pulse': wsConnected && hasAwaitingApproval,
+              'bg-accent-500 animate-pulse':
+                wsConnected &&
+                !hasAwaitingApproval &&
+                (instances.length > 0 || memoryJobsStore.hasRunningJobs),
+              'bg-emerald-500':
+                wsConnected &&
+                instances.length === 0 &&
+                !memoryJobsStore.hasRunningJobs &&
+                providerStore.providers.length > 0,
+              'bg-theme-600': wsConnected && !memoryJobsStore.hasRunningJobs && !providerStore.providers.length,
+            }"
+          />
+        </span>
         <span class="flex min-w-0 flex-1 flex-col">
           <span
             v-if="preferencesStore.userName.trim()"
