@@ -768,6 +768,9 @@ function formatDate(ts: number): string {
           <div class="hidden xl:block">
             Info
           </div>
+          <div class="hidden xl:block">
+            Date
+          </div>
           <div class="text-right">
             Actions
           </div>
@@ -966,13 +969,14 @@ function formatDate(ts: number): string {
                 </div>
               </template>
             </HoverTooltip>
-            <span class="flex items-center gap-1 whitespace-nowrap">
-              <Icon
-                icon="lucide:calendar"
-                class="w-3 h-3"
-              />
-              {{ formatDate(item.createdAt) }}
-            </span>
+          </div>
+
+          <div class="hidden xl:flex items-center gap-1 text-xs text-theme-500 whitespace-nowrap">
+            <Icon
+              icon="lucide:calendar"
+              class="w-3 h-3"
+            />
+            {{ formatDate(item.createdAt) }}
           </div>
 
           <div class="flex items-center justify-end gap-1">
@@ -1137,7 +1141,7 @@ function formatDate(ts: number): string {
 <style scoped>
 .agent-grid {
   display: grid;
-  grid-template-columns: 68px minmax(180px, 1.4fr) minmax(150px, 0.9fr) minmax(180px, 0.9fr) 180px 96px;
+  grid-template-columns: 56px minmax(160px, 1.4fr) minmax(130px, 0.9fr) minmax(170px, 0.9fr) 160px 130px 80px;
   gap: 1rem;
   align-items: start;
 }
