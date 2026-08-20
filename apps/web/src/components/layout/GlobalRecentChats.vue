@@ -9,9 +9,11 @@ import { useChatStore, type Conversation } from '../../stores/chat.store'
 
 const props = withDefaults(defineProps<{
   awaitingConversationIds?: string[]
+  activeConversationIds?: string[]
   agentId?: string
 }>(), {
   awaitingConversationIds: () => [],
+  activeConversationIds: () => [],
   agentId: undefined,
 })
 
@@ -40,6 +42,16 @@ const awaitingIds = computed(() => new Set([
   ...props.awaitingConversationIds,
   ...agentStore.awaitingHITLConvIds,
 ]))
+const runningIds = computed(() => {
+  const ids = new Set([
+    ...props.activeConversationIds,
+    ...agentStore.liveExecutionConversationIds,
+  ])
+  if (chatStore.activeConversationIsStreaming && chatStore.activeConversationId) {
+    ids.add(chatStore.activeConversationId)
+  }
+  return ids
+})
 
 function ordered(items: Conversation[]): Conversation[] {
   return [...items].sort((a, b) => {
@@ -51,7 +63,16 @@ function ordered(items: Conversation[]): Conversation[] {
   })
 }
 
-const visibleConversations = computed(() => ordered(conversations.value))
+const visibleConversations = computed(() => {
+  const merged = new Map(conversations.value.map((conversation) => [conversation.id, conversation]))
+  if (!activeQuery.value) {
+    for (const conversation of chatStore.conversations) {
+      if (props.agentId && conversation.agentId !== props.agentId) continue
+      merged.set(conversation.id, conversation)
+    }
+  }
+  return ordered([...merged.values()])
+})
 const hasMore = computed(() => conversations.value.length < total.value)
 
 function mapRow(row: {
@@ -200,18 +221,11 @@ watch(() => props.agentId, () => {
   void load(true)
 })
 
-watch(
-  () => chatStore.conversations.map((conversation) => `${conversation.id}:${conversation.title}:${conversation.updatedAt}:${conversation.pinned}`).join('|'),
-  () => {
-    if (activeQuery.value) return
-    for (const conversation of chatStore.conversations) {
-      if (props.agentId && conversation.agentId !== props.agentId) continue
-      const index = conversations.value.findIndex((item) => item.id === conversation.id)
-      if (index >= 0) conversations.value[index] = { ...conversation }
-      else conversations.value.push({ ...conversation })
-    }
-  },
-)
+watch(() => chatStore.activeConversationId, (conversationId) => {
+  if (conversationId) scheduleRefresh()
+})
+
+watch(() => props.activeConversationIds.join('|'), scheduleRefresh)
 
 onMounted(() => {
   document.addEventListener('click', closeMenu)
@@ -270,8 +284,13 @@ onBeforeUnmount(() => {
         @keydown.enter.self.prevent="selectConversation(conversation)"
       >
         <span class="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800 text-theme-500">
+          <Icon
+            v-if="runningIds.has(conversation.id)"
+            icon="lucide:loader-circle"
+            class="h-3.5 w-3.5 animate-spin text-accent-400"
+          />
           <img
-            v-if="conversation.agentId && agentDefs.get(conversation.agentId)?.iconUrl"
+            v-else-if="conversation.agentId && agentDefs.get(conversation.agentId)?.iconUrl"
             :src="agentDefs.get(conversation.agentId)?.iconUrl || ''"
             :alt="`${agentName(conversation)} icon`"
             class="h-full w-full object-cover"
