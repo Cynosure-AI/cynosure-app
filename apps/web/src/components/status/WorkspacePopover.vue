@@ -24,9 +24,9 @@ const appVersion = ref<string | null>(null)
 const popoverStyle = ref<CSSProperties>({})
 
 const setupLinks = [
-  { path: '/settings', label: 'Settings', description: 'Profile, providers and preferences', icon: 'lucide:settings' },
-  { path: '/settings/mcp', label: 'MCP Servers', description: 'Connect external tools and services', icon: 'lucide:plug' },
-  { path: '/tools-policy', label: 'Tools Policy', description: 'Review tool access and approvals', icon: 'lucide:shield-check' },
+  { path: '/settings', label: 'Settings', icon: 'lucide:settings' },
+  { path: '/settings/mcp', label: 'MCP Servers', icon: 'lucide:plug' },
+  { path: '/tools-policy', label: 'Tools Policy', icon: 'lucide:shield-check' },
 ]
 
 function updatePosition() {
@@ -89,73 +89,60 @@ onBeforeUnmount(() => {
         :style="popoverStyle"
         @click.stop
       >
-        <div class="flex items-center justify-between gap-3 px-2 py-1.5">
-          <div>
-            <p class="truncate text-base font-semibold text-theme-100">
-              {{ preferencesStore.userName.trim() || 'Workspace' }}
-            </p>
-            <p class="text-[10px] font-medium uppercase tracking-wider text-theme-500">
-              {{ preferencesStore.userName.trim() ? 'Workspace · shortcuts and configuration' : 'Shortcuts and configuration' }}
-            </p>
-          </div>
-        </div>
-
-        <div class="my-2 grid grid-cols-2 gap-1">
+        <div class="mb-2 border-b border-theme-800 pb-2">
           <button
             type="button"
-            class="relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
+            class="relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
             @click="goTo('/activity')"
           >
             <Icon
               icon="lucide:list-tree"
-              class="h-4 w-4 text-theme-500"
+              class="h-5 w-5 text-theme-500"
             />
             <span>Activity</span>
             <span
               v-if="activeWorkCount"
               class="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold text-white"
               :class="hasAwaitingApproval ? 'bg-amber-500' : 'bg-accent-600'"
-            >{{ activeWorkCount > 9 ? '9+' : activeWorkCount }}</span>
+            >
+              {{ activeWorkCount > 9 ? '9+' : activeWorkCount }}
+            </span>
           </button>
+
           <button
             type="button"
-            class="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
+            class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
             @click="goTo('/usage')"
           >
             <Icon
               icon="lucide:bar-chart-3"
-              class="h-4 w-4 text-theme-500"
+              class="h-5 w-5 text-theme-500"
             />
             <span>Usage</span>
           </button>
         </div>
 
-        <div class="border-t border-theme-800 pt-2">
+        <div class="py-1">
           <button
             v-for="link in setupLinks"
             :key="link.path"
             type="button"
-            class="group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition hover:bg-theme-800"
+            class="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
             @click="goTo(link.path)"
           >
-            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-theme-800 text-theme-400 group-hover:text-accent-400">
-              <Icon
-                :icon="link.icon"
-                class="h-4 w-4"
-              />
-            </span>
-            <span class="min-w-0 flex-1">
-              <span class="block text-xs font-medium text-theme-200">{{ link.label }}</span>
-              <span class="block truncate text-[10px] text-theme-500">{{ link.description }}</span>
-            </span>
+            <Icon
+              :icon="link.icon"
+              class="h-5 w-5 shrink-0 text-theme-500 group-hover:text-accent-400"
+            />
+            <span class="min-w-0 flex-1">{{ link.label }}</span>
             <Icon
               icon="lucide:chevron-right"
-              class="h-3.5 w-3.5 text-theme-600"
+              class="h-4 w-4 text-theme-600"
             />
           </button>
         </div>
 
-        <div class="px-2 pb-1 pt-2 text-[10px] text-theme-600">
+        <div class="mt-1 border-t border-theme-800 px-3 pb-1 pt-3 text-[10px] text-theme-600">
           Cynosure <span v-if="appVersion">v{{ appVersion }}</span>
         </div>
       </div>
