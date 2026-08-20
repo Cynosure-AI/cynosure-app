@@ -13,6 +13,7 @@ import { isPlanningToolName } from '../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
 import { getPlanningState, reconcilePlanningAfterToolBatch } from './planning-state.js'
 import { validateToolArguments } from '../tools/tool-argument-validator.js'
+import { recordDebugModelRequest, recordDebugModelResponse } from '../chat/debug-context.js'
 
 /** Maximum tool-use rounds for the main (orchestrator) agent per request. */
 export const MAIN_AGENT_MAX_ROUNDS = 50
@@ -101,6 +102,8 @@ export interface AgentExecutorConfig {
     planningRunId?: string
     /** True only for the top-level chat executor that owns conversation-level progress persistence. */
     isPrimaryExecutor?: boolean
+    /** Capture model-visible requests and provider-exposed responses for the debug inspector. */
+    debugContextEnabled?: boolean
 }
 
 export interface AgentExecutorResult {
@@ -226,9 +229,11 @@ export class AgentExecutor {
         // --- Phase 1: Initial LLM streaming response ---
         this.broadcastStreamStart(activeStreamId)
 
+        const initialStream = this.createStream(currentMessages)
         const initialResult = await this.consumeStream(
-            this.createStream(currentMessages),
+            initialStream.stream,
             activeStreamId,
+            initialStream.debugRoundIndex,
         )
 
         if (initialResult.error) {
@@ -522,20 +527,34 @@ export class AgentExecutor {
     /**
      * Create a gateway stream from the current messages, with old images trimmed.
      */
-    private createStream(messages: ChatMessage[]) {
+    private createStream(messages: ChatMessage[]): {
+        stream: AsyncIterable<import('../gateway/providers/base.provider.js').StreamChunk>
+        debugRoundIndex?: number
+    } {
         const { gateway, tools, model, temperature, thinkingEnabled, reasoningEffort, signal, providerId } = this.config
-        return gateway.streamComplete(
-            {
-                messages: AgentExecutor.trimOldImages(messages),
+        const request = {
+            messages: AgentExecutor.trimOldImages(messages),
+            model,
+            tools: tools.length ? tools : undefined,
+            temperature,
+            thinkingEnabled,
+            reasoningEffort,
+            signal,
+        }
+        const debugRoundIndex = this.config.debugContextEnabled
+            ? recordDebugModelRequest(this.config.conversationId, {
+                messages: request.messages,
+                tools: tools,
                 model,
-                tools: tools.length ? tools : undefined,
                 temperature,
                 thinkingEnabled,
                 reasoningEffort,
-                signal,
-            },
-            providerId
-        )
+            })
+            : undefined
+        return {
+            stream: gateway.streamComplete(request, providerId),
+            debugRoundIndex,
+        }
     }
 
     /**
@@ -612,6 +631,7 @@ export class AgentExecutor {
     private async consumeStream(
         stream: AsyncIterable<import('../gateway/providers/base.provider.js').StreamChunk>,
         streamId: string,
+        debugRoundIndex?: number,
     ): Promise<{
         content: string
         thinking: string
@@ -624,6 +644,7 @@ export class AgentExecutor {
         let content = ''
         let thinking = ''
         const images: string[] = []
+        const debugImages: string[] = []
         let toolCalls: ToolCall[] | undefined
         let usage: Usage
         let completed = false
@@ -642,6 +663,7 @@ export class AgentExecutor {
                     this.emit('step:thinking', { conversationId, thinking: chunk.thinking })
                 }
                 if (chunk.images?.length) {
+                    debugImages.push(...chunk.images)
                     let artifactUrls = chunk.images
                     try {
                         const artifacts = await materializeImageArtifacts(chunk.images, conversationId)
@@ -660,20 +682,32 @@ export class AgentExecutor {
                 }
             }
         } catch (err) {
+            recordDebugModelResponse(conversationId, debugRoundIndex, {
+                content, thinking, images: debugImages, toolCalls, usage,
+                error: (err as Error).message,
+            })
             return { content, thinking, images, toolCalls, usage, error: err as Error }
         }
 
         if (!completed) {
+            const error = new Error('Model stream ended before a terminal completion event.')
+            recordDebugModelResponse(conversationId, debugRoundIndex, {
+                content, thinking, images: debugImages, toolCalls, usage,
+                error: error.message,
+            })
             return {
                 content,
                 thinking,
                 images,
                 toolCalls,
                 usage,
-                error: new Error('Model stream ended before a terminal completion event.'),
+                error,
             }
         }
 
+        recordDebugModelResponse(conversationId, debugRoundIndex, {
+            content, thinking, images: debugImages, toolCalls, usage,
+        })
         return { content, thinking, images, toolCalls, usage }
     }
 
@@ -706,7 +740,8 @@ export class AgentExecutor {
                 this.config.broadcast(`${this._sp}-reset`, { streamId, conversationId })
             }
 
-            const result = await this.consumeStream(this.createStream(messages), streamId)
+            const nextStream = this.createStream(messages)
+            const result = await this.consumeStream(nextStream.stream, streamId, nextStream.debugRoundIndex)
 
             if (!result.error) {
                 if (this.config.streamMode === 'per-round') {

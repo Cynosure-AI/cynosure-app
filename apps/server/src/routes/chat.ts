@@ -36,6 +36,7 @@ import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
 import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageArtifactsSystemHint } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemorySpaceOverrides, resolveToolSelection } from '../core/chat/run-config.js'
+import { beginDebugContextCapture, getDebugContextCapture } from '../core/chat/debug-context.js'
 import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -202,6 +203,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     return { success: true, inlineAttachmentTextLimit }
   })
 
+  // GET /api/chat/conversations/:id/debug-context — latest opt-in gateway capture
+  app.get<{ Params: { id: string } }>('/conversations/:id/debug-context', async (req, reply) => {
+    const capture = getDebugContextCapture(req.params.id)
+    if (!capture) {
+      return reply.status(404).send({ error: 'No debug context has been captured for this conversation' })
+    }
+    return capture
+  })
+
   // POST /api/chat/conversations/:id/send — send message + stream response
   app.post<{
     Params: { id: string }
@@ -232,6 +242,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         titleProviderId: titleProviderIdPref,
         titleModel: titleModelPref,
         inlineAttachmentTextLimit: reqInlineAttachmentTextLimit,
+        debugMode: reqDebugMode,
       } = run
       const db = getDb()
       const inlineAttachmentTextLimit = reqInlineAttachmentTextLimit !== undefined
@@ -658,6 +669,17 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           messages = trimMessagesToContextLimit(messages, contextWindow, undefined, contextStrategy)
         }
 
+        if (reqDebugMode === true) {
+          beginDebugContextCapture({
+            conversationId,
+            executionId,
+            providerId: responseProvider,
+            model: responseModel,
+            contextWindow,
+            contextStrategy,
+          })
+        }
+
         const executor = new AgentExecutor({
           gateway,
           tools,
@@ -681,6 +703,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           planningRunId,
           isPrimaryExecutor: true,
           usedToolNames,
+          debugContextEnabled: reqDebugMode === true,
         })
 
         const result = await executor.run(messages)
