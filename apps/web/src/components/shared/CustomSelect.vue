@@ -56,6 +56,8 @@ const props = withDefaults(
     stickyGroupHeaders?: boolean;
     /** Text alignment for the trigger label: 'left' | 'center' | 'right' */
     align?: "left" | "center" | "right";
+    /** Show the selected option's tag in the closed trigger */
+    showSelectedTag?: boolean;
     /**
      * Trigger button size:
      * - 'xs' — extra compact (text-xs, py-1, px-2)
@@ -73,6 +75,7 @@ const props = withDefaults(
     dropUp: false,
     stickyGroupHeaders: false,
     align: "left",
+    showSelectedTag: true,
     size: "sm",
   },
 );
@@ -323,7 +326,7 @@ onBeforeUnmount(() =>
       </span>
 
       <span
-        v-if="selectedOption?.tagIconName"
+        v-if="showSelectedTag && selectedOption?.tagIconName"
         class="shrink-0 inline-flex items-center justify-center text-amber-400"
         :title="selectedOption.tag"
       >
@@ -334,7 +337,7 @@ onBeforeUnmount(() =>
       </span>
 
       <span
-        v-else-if="selectedOption?.tag"
+        v-else-if="showSelectedTag && selectedOption?.tag"
         class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full"
         :class="selectedOption.tagVariant === 'cyan' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-violet-500/10 text-violet-400'"
       >
