@@ -136,12 +136,6 @@ function isActive(path: string, exact = false): boolean {
   return route.path === path || route.path.startsWith(path + "/");
 }
 
-function openSettings(): void {
-  showStatusPopover.value = false;
-  closeSidebar();
-  router.push("/settings");
-}
-
 const chatRoute = computed(() =>
   chatStore.activeConversationId
     ? `/triggers/chat/${chatStore.activeConversationId}`
@@ -479,77 +473,64 @@ const chatRoute = computed(() =>
 
     <!-- Status Footer -->
     <div class="status-section px-3 py-3 shrink-0 relative">
-      <div
+      <button
         ref="statusButtonRef"
-        class="status-trigger flex w-full items-center rounded-lg transition-colors hover:bg-theme-800/60"
+        class="status-trigger w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-theme-800/60 transition-colors text-left"
+        :aria-expanded="showStatusPopover"
+        @click="showStatusPopover = !showStatusPopover"
       >
-        <button
-          type="button"
-          class="workspace-trigger flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
-          :aria-expanded="showStatusPopover"
-          aria-label="Open workspace menu"
-          @click="showStatusPopover = !showStatusPopover"
-        >
-          <span class="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-theme-800 ring-1 ring-theme-700/70">
-            <img
-              v-if="preferencesStore.userAvatarUrl"
-              :src="preferencesStore.userAvatarUrl"
-              alt=""
-              class="h-full w-full rounded-full object-cover"
-            >
-            <Icon
-              v-else
-              icon="lucide:user-round"
-              class="h-4 w-4 text-theme-500"
-            />
-            <span
-              class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-theme-950"
-              :class="{
-                'bg-red-500 animate-pulse': !wsConnected,
-                'bg-amber-500 animate-pulse': wsConnected && hasAwaitingApproval,
-                'bg-accent-500 animate-pulse':
-                  wsConnected &&
-                  !hasAwaitingApproval &&
-                  (instances.length > 0 || memoryJobsStore.hasRunningJobs),
-                'bg-emerald-500':
-                  wsConnected &&
-                  instances.length === 0 &&
-                  !memoryJobsStore.hasRunningJobs &&
-                  providerStore.providers.length > 0,
-                'bg-theme-600': wsConnected && !memoryJobsStore.hasRunningJobs && !providerStore.providers.length,
-              }"
-            />
-          </span>
-          <span class="workspace-summary flex min-w-0 flex-1 flex-col">
-            <span
-              v-if="preferencesStore.userName.trim()"
-              class="truncate text-sm font-semibold leading-5 text-theme-200"
-            >
-              {{ preferencesStore.userName.trim() }}
-            </span>
-            <span class="truncate text-[11px] leading-4 text-theme-400">
-              <template v-if="!wsConnected">Connecting...</template>
-              <template v-else-if="hasAwaitingApproval">Needs Attention</template>
-              <template v-else-if="instances.length > 0">Agents Running...</template>
-              <template v-else-if="memoryJobsStore.hasRunningJobs">{{ memoryJobsStore.statusLabel }}</template>
-              <template v-else-if="!providerStore.providers.length">No providers</template>
-              <template v-else>Ready</template>
-            </span>
-          </span>
-        </button>
-        <button
-          type="button"
-          class="settings-shortcut mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-700 hover:text-theme-100"
-          aria-label="Open settings"
-          title="Settings"
-          @click="openSettings"
-        >
+        <span class="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-theme-800 ring-1 ring-theme-700/70">
+          <img
+            v-if="preferencesStore.userAvatarUrl"
+            :src="preferencesStore.userAvatarUrl"
+            alt=""
+            class="h-full w-full rounded-full object-cover"
+          >
           <Icon
-            icon="lucide:settings"
-            class="h-4 w-4"
+            v-else
+            icon="lucide:user-round"
+            class="h-4 w-4 text-theme-500"
           />
-        </button>
-      </div>
+          <span
+            class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-theme-950"
+            :class="{
+              'bg-red-500 animate-pulse': !wsConnected,
+              'bg-amber-500 animate-pulse': wsConnected && hasAwaitingApproval,
+              'bg-accent-500 animate-pulse':
+                wsConnected &&
+                !hasAwaitingApproval &&
+                (instances.length > 0 || memoryJobsStore.hasRunningJobs),
+              'bg-emerald-500':
+                wsConnected &&
+                instances.length === 0 &&
+                !memoryJobsStore.hasRunningJobs &&
+                providerStore.providers.length > 0,
+              'bg-theme-600': wsConnected && !memoryJobsStore.hasRunningJobs && !providerStore.providers.length,
+            }"
+          />
+        </span>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span
+            v-if="preferencesStore.userName.trim()"
+            class="truncate text-sm font-semibold leading-5 text-theme-200"
+          >
+            {{ preferencesStore.userName.trim() }}
+          </span>
+          <span class="truncate text-[11px] leading-4 text-theme-400">
+            <template v-if="!wsConnected">Connecting...</template>
+            <template v-else-if="hasAwaitingApproval">Needs Attention</template>
+            <template v-else-if="instances.length > 0">Agents Running...</template>
+            <template v-else-if="memoryJobsStore.hasRunningJobs">{{ memoryJobsStore.statusLabel }}</template>
+            <template v-else-if="!providerStore.providers.length">No providers</template>
+            <template v-else>Ready</template>
+          </span>
+        </span>
+        <Icon
+          icon="lucide:settings"
+          class="h-4 w-4 shrink-0 text-theme-500 transition-colors"
+          :class="{ 'text-accent-400': showStatusPopover }"
+        />
+      </button>
 
       <!-- Workspace Popover -->
       <WorkspacePopover
@@ -738,16 +719,11 @@ const chatRoute = computed(() =>
 
   .sidebar-collapsed .status-section>.status-trigger {
     justify-content: center;
-    padding: 0;
-  }
-
-  .sidebar-collapsed .status-trigger .workspace-trigger {
-    flex: none;
+    gap: 0;
     padding: 0.5rem;
   }
 
-  .sidebar-collapsed .status-trigger .workspace-summary,
-  .sidebar-collapsed .status-trigger .settings-shortcut {
+  .sidebar-collapsed .status-section>.status-trigger>*:not(:first-child) {
     display: none;
   }
 }
