@@ -70,6 +70,12 @@ const router = createRouter({
       name: 'agent-detail',
       component: () => import('@/views/AgentDetailView.vue')
     },
+    // Artifacts
+    {
+      path: '/artifacts',
+      name: 'artifacts',
+      component: () => import('@/views/ArtifactsView.vue')
+    },
     // Memory Spaces
     {
       path: '/memory-spaces',
