@@ -100,9 +100,9 @@ const sections: SettingsSection[] = [
   {
     id: 'user-profile',
     categoryId: 'general',
-    label: 'Your Name',
-    description: 'Set the name agents can use through the userName smart tag.',
-    terms: ['name', 'user name', 'profile', 'identity', 'smart tag', 'username']
+    label: 'User Profile',
+    description: 'Set your name and profile image.',
+    terms: ['name', 'user name', 'profile', 'identity', 'smart tag', 'username', 'avatar', 'profile image', 'user image']
   },
   {
     id: 'provider-actions',

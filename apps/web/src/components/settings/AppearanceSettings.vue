@@ -7,6 +7,7 @@ import { useOnboardingStore } from '../../stores/onboarding.store'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import SettingsSubheading from './SettingsSubheading.vue'
+import IconUpload from '../shared/IconUpload.vue'
 import { ref } from 'vue'
 
 const prefs = usePreferencesStore()
@@ -38,6 +39,18 @@ async function saveName() {
     await prefs.saveUserName()
   } catch {
     nameSaveError.value = 'Could not save your name.'
+  }
+}
+
+async function updateAvatar(value: string | null) {
+  nameSaveError.value = ''
+  const previous = prefs.userAvatarUrl
+  prefs.userAvatarUrl = value
+  try {
+    await prefs.saveUserProfile()
+  } catch {
+    prefs.userAvatarUrl = previous
+    nameSaveError.value = 'Could not save your profile image.'
   }
 }
 
@@ -108,6 +121,19 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
           >{{ nameSaveError }}</span>
         </span>
       </label>
+
+      <div class="mt-5 border-t border-theme-800 pt-5">
+        <IconUpload
+          :icon-url="prefs.userAvatarUrl"
+          fallback-icon="lucide:user-round"
+          label="Profile image"
+          @update="updateAvatar"
+        >
+          <template #description>
+            Used for your workspace profile and user messages in chat.
+          </template>
+        </IconUpload>
+      </div>
     </BaseCard>
 
     <SettingsSubheading

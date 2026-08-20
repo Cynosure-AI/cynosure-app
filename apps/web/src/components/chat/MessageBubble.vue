@@ -112,6 +112,7 @@ const renderedContent = computed(() => {
 })
 
 const isUser = computed(() => props.role === 'user')
+const userInitial = computed(() => prefs.userName.trim().charAt(0).toLocaleUpperCase() || 'U')
 const isForkable = computed(() =>  props.role === 'assistant') //Could also include user too though it doesn't make as much sense since user messages are editable
 const hasAssistantImages = computed(() => !isUser.value && Boolean(props.imageDataUrls?.length))
 const hasAssistantVideos = computed(() => !isUser.value && Boolean(props.videoDataUrls?.length))
@@ -452,9 +453,17 @@ const imageGridClass = computed(() => {
     <!-- User avatar -->
     <div
       v-if="isUser"
-      class="w-8 h-8 hidden rounded-full md:flex items-center justify-center text-xs font-medium shrink-0 mt-0.5 bg-linear-to-br from-accent-500 to-accent-700 text-white shadow-sm ring-1 ring-white/10"
+      class="w-8 h-8 hidden rounded-full md:flex items-center justify-center overflow-hidden text-xs font-medium shrink-0 mt-0.5 bg-linear-to-br from-accent-500 to-accent-700 text-white shadow-sm ring-1 ring-white/10"
     >
-      U
+      <img
+        v-if="prefs.userAvatarUrl"
+        :src="prefs.userAvatarUrl"
+        alt=""
+        class="h-full w-full object-cover"
+      >
+      <template v-else>
+        {{ userInitial }}
+      </template>
     </div>
   </div>
 

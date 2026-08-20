@@ -5,6 +5,7 @@ import { Icon } from '@iconify/vue'
 defineProps<{
   iconUrl: string | null
   fallbackIcon?: string
+  label?: string
 }>()
 
 const emit = defineEmits<{
@@ -109,7 +110,7 @@ function removeImage() {
 
 <template>
   <div>
-    <label class="block text-sm text-theme-400 mb-1.5">Icon</label>
+    <label class="block text-sm text-theme-400 mb-1.5">{{ label || 'Icon' }}</label>
     <p class="text-xs text-theme-600 mb-2">
       <slot name="description">
         Custom avatar. Images up to 5 MB are cropped and optimized to 512 × 512.
