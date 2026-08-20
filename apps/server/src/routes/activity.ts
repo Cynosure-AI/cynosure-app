@@ -195,10 +195,6 @@ function dedupeArtifacts(artifacts: ActivityArtifact[]): ActivityArtifact[] {
     return unique
 }
 
-function isMediaArtifact(artifact: ActivityArtifact): boolean {
-    return artifact.kind === 'image' || artifact.kind === 'video' || artifact.kind === 'audio'
-}
-
 function artifactKindFromPath(path: string): ActivityArtifact['kind'] {
     const ext = (path.split('.').pop() || '').toLowerCase()
     if (IMAGE_EXTENSIONS.has(ext)) return 'image'
@@ -477,48 +473,6 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 conversationId: row.conversation_id,
                 sourceId: row.id,
                 sourceLabel: 'Artifact',
-                artifacts: visibleArtifacts,
-            })
-        }
-
-        const stepRows = db.prepare(
-            `SELECT s.id, s.conversation_id, s.results_json, s.created_at, c.title, c.agent_id
-             FROM execution_steps s
-             JOIN conversations c ON c.id = s.conversation_id
-             WHERE s.results_json IS NOT NULL AND s.results_json != ''
-             ORDER BY s.created_at DESC
-             LIMIT ?`
-        ).all(searchQuery ? -1 : Math.max(queryLimit * 2, 100)) as {
-            id: string
-            conversation_id: string
-            results_json: string
-            created_at: number
-            title: string | null
-            agent_id: string | null
-        }[]
-
-        for (const row of stepRows) {
-            const artifacts = dedupeArtifacts(fileArtifactsFromText(row.results_json))
-            if (!artifacts.length) continue
-            const messageArtifactKeys = messageArtifactKeysByConversation.get(row.conversation_id)
-            const overlapsAssistantArtifact = messageArtifactKeys
-                ? artifacts.some((artifact) => messageArtifactKeys.has(artifactKey(artifact)))
-                : false
-            const visibleArtifacts = overlapsAssistantArtifact
-                ? artifacts.filter((artifact) => !isMediaArtifact(artifact))
-                : artifacts
-            if (!visibleArtifacts.length) continue
-            items.push({
-                id: `artifact-step:${row.id}`,
-                kind: 'artifact',
-                title: visibleArtifacts.length === 1 ? `Generated ${visibleArtifacts[0].label}` : `Generated ${visibleArtifacts.length} artifacts`,
-                description: row.title || 'Tool output',
-                createdAt: row.created_at,
-                agentId: row.agent_id,
-                ...agentInfo(row.agent_id),
-                conversationId: row.conversation_id,
-                sourceId: row.id,
-                sourceLabel: 'Tool artifact',
                 artifacts: visibleArtifacts,
             })
         }
