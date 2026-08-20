@@ -55,6 +55,9 @@ const hasAwaitingApproval = computed(() =>
   instances.value.some((i) => i.status === "awaiting-approval"),
 );
 const activeWorkCount = computed(() => instances.value.length + memoryJobsStore.activeJobs.length);
+const runningConversationIds = computed(() => instances.value
+  .filter((instance) => instance.status === "running" && instance.conversationId)
+  .map((instance) => instance.conversationId as string));
 const awaitingConversationIds = computed(() => instances.value
   .filter((instance) => instance.status === "awaiting-approval" && instance.conversationId)
   .map((instance) => instance.conversationId as string));
@@ -555,6 +558,7 @@ const chatRoute = computed(() =>
         <GlobalRecentChats
           v-if="recentChatsOpen && !sidebarCollapsed"
           :awaiting-conversation-ids="awaitingConversationIds"
+          :active-conversation-ids="runningConversationIds"
           :agent-id="recentChatFilter === 'agent' ? chatStore.activeAgentId || undefined : undefined"
         />
       </section>
