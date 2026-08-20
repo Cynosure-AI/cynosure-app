@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useChatStore } from "../../stores/chat.store";
 import { useProviderStore } from "../../stores/provider.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
@@ -7,6 +7,8 @@ import { Icon } from "@iconify/vue";
 import AgentSelect from "../shared/AgentSelect.vue";
 import { useChatSidebar } from "../../composables/useSidebar";
 import SaveAgentModal from "./inputbar/SaveAgentModal.vue";
+import DebugContextModal from "./modals/DebugContextModal.vue";
+import { usePreferencesStore } from "../../stores/preferences.store";
 
 defineProps<{
   hasPlanningTasks: boolean;
@@ -19,7 +21,9 @@ defineEmits<{ toggleTaskList: [] }>();
 const chatStore = useChatStore();
 const providerStore = useProviderStore();
 const agentDefs = useAgentDefinitionsStore();
+const prefs = usePreferencesStore();
 const { chatSidebarOpen, toggle: toggleSidebar } = useChatSidebar();
+const debugContextOpen = ref(false);
 
 const conversationTitle = computed(
   () => chatStore.activeConversation?.title || "",
@@ -121,6 +125,20 @@ async function newChat(): Promise<void> {
 
     <SaveAgentModal />
 
+    <button
+      v-if="prefs.debugMode"
+      type="button"
+      class="shrink-0 rounded-lg p-1.5 text-amber-400 transition-colors hover:bg-amber-400/10 hover:text-amber-300"
+      title="Inspect the complete LLM context"
+      aria-label="Open LLM context inspector"
+      @click="debugContextOpen = true"
+    >
+      <Icon
+        icon="lucide:bug"
+        class="h-4 w-4"
+      />
+    </button>
+
     <!-- Planning task list toggle -->
     <button
       type="button"
@@ -157,5 +175,10 @@ async function newChat(): Promise<void> {
       />
       <span class="hidden sm:inline">New Chat</span>
     </button>
+
+    <DebugContextModal
+      v-model="debugContextOpen"
+      :conversation-id="chatStore.activeConversationId"
+    />
   </div>
 </template>

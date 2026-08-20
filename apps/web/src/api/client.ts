@@ -14,7 +14,7 @@ import type {
   TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatSendRequest, ConversationDto, ConversationMessagesResponse } from '@shared/types'
+import type { ChatSendRequest, ConversationDto, ConversationMessagesResponse, DebugContextSnapshot } from '@shared/types'
 
 function memorySpacePathId(id: string): string {
   return encodeURIComponent(encodeURIComponent(id))
@@ -82,6 +82,8 @@ export const api = {
     },
     getMessages: (conversationId: string) =>
       get<ConversationMessagesResponse>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
+    getDebugContext: (conversationId: string) =>
+      get<DebugContextSnapshot>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/debug-context`),
     getExecutionSteps: (conversationId: string) =>
       get<ExecutionStepRecord[]>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/steps`),
     getPendingHITL: (conversationId: string) =>
