@@ -56,7 +56,7 @@
 
         <!-- Dismiss button -->
         <button
-          v-if="currentStep !== STEP_WELCOME && currentStep !== STEP_DONE && serverReady"
+          v-if="currentStep !== STEP_DONE && serverReady"
           class="text-xs text-theme-600 hover:text-theme-400 transition-colors flex items-center gap-1 ml-auto disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="advancing"
           @click="dismiss"
@@ -190,13 +190,6 @@
 
           <!-- Required step note -->
           <span
-            v-if="serverReady && currentStep === STEP_WELCOME && !canContinue"
-            class="text-xs text-amber-400/80 hidden sm:block"
-          >
-            Add your name first
-          </span>
-
-          <span
             v-if="serverReady && currentStep === STEP_PROVIDER && !canContinue"
             class="text-xs text-amber-400/80 hidden sm:block"
           >
@@ -324,9 +317,6 @@ function stepCircleClass(bIndex: number): string {
 
 // ── Validation ────────────────────────────────────────────────────
 const canContinue = computed(() => {
-  if (currentStep.value === STEP_WELCOME) {
-    return prefs.userName.trim().length > 0
-  }
   if (currentStep.value === STEP_PROVIDER) {
     return providerStore.providers.length > 0
   }
@@ -386,8 +376,13 @@ function jumpToStep(index: number) {
   currentStep.value = index
 }
 
-function dismiss() {
+async function dismiss() {
   if (advancing.value) return
+  if (currentStep.value === STEP_WELCOME) {
+    try {
+      await prefs.saveUserName()
+    } catch { /* Skipping setup should remain available if profile persistence fails. */ }
+  }
   onboardingStore.finish()
   router.push('/chat')
 }

@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { api } from '../../api/client'
 import { useProviderStore } from '../../stores/provider.store'
+import { usePreferencesStore } from '../../stores/preferences.store'
 
 const props = withDefaults(defineProps<{
   show: boolean
@@ -20,6 +21,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ close: [] }>()
 const router = useRouter()
 const providerStore = useProviderStore()
+const preferencesStore = usePreferencesStore()
 
 interface ProviderHealth {
   id: string
@@ -127,28 +129,42 @@ onBeforeUnmount(() => {
         :style="popoverStyle"
         @click.stop
       >
-        <div class="flex items-center justify-between px-2 py-1.5">
+        <div class="flex items-center justify-between gap-3 px-2 py-1.5">
           <div>
-            <p class="text-xs font-semibold text-theme-200">
-              Workspace
+            <p class="truncate text-base font-semibold text-theme-100">
+              {{ preferencesStore.userName.trim() || 'Workspace' }}
             </p>
-            <p class="text-[10px] text-theme-500">
-              Status and configuration
+            <p class="text-[10px] font-medium uppercase tracking-wider text-theme-500">
+              {{ preferencesStore.userName.trim() ? 'Workspace · status and configuration' : 'Status and configuration' }}
             </p>
           </div>
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
-            title="Refresh provider status"
-            :disabled="refreshing"
-            @click="fetchStatus(true)"
-          >
-            <Icon
-              icon="lucide:refresh-cw"
-              class="h-3.5 w-3.5"
-              :class="{ 'animate-spin': refreshing }"
-            />
-          </button>
+          <div class="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              class="rounded-md p-1.5 text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
+              title="Refresh provider status"
+              :disabled="refreshing"
+              @click="fetchStatus(true)"
+            >
+              <Icon
+                icon="lucide:refresh-cw"
+                class="h-3.5 w-3.5"
+                :class="{ 'animate-spin': refreshing }"
+              />
+            </button>
+            <button
+              type="button"
+              class="rounded-md p-1.5 text-theme-400 transition hover:bg-theme-800 hover:text-accent-400"
+              title="Open settings"
+              aria-label="Open settings"
+              @click="goTo('/settings')"
+            >
+              <Icon
+                icon="lucide:settings"
+                class="h-4 w-4"
+              />
+            </button>
+          </div>
         </div>
 
         <div class="mt-1 rounded-lg border border-theme-800 bg-theme-950/45 p-2.5">
