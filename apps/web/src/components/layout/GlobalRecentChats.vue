@@ -65,9 +65,13 @@ function ordered(items: Conversation[]): Conversation[] {
 
 const visibleConversations = computed(() => {
   const merged = new Map(conversations.value.map((conversation) => [conversation.id, conversation]))
-  if (!activeQuery.value) {
+  // The chat store is scoped to the active agent, so only use it as an
+  // optimistic source when the sidebar is explicitly filtered to that agent.
+  // Merging it into the default view makes agent-only chats flash before the
+  // global sidebar query has returned.
+  if (!activeQuery.value && props.agentId) {
     for (const conversation of chatStore.conversations) {
-      if (props.agentId && conversation.agentId !== props.agentId) continue
+      if (conversation.agentId !== props.agentId) continue
       merged.set(conversation.id, conversation)
     }
   }
