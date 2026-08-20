@@ -103,6 +103,9 @@
           <!-- Welcome -->
           <OnboardingWelcome v-if="currentStep === STEP_WELCOME" />
 
+          <!-- Profile -->
+          <OnboardingProfile v-else-if="currentStep === STEP_PROFILE" />
+
           <!-- AI Provider -->
           <OnboardingProvider v-else-if="currentStep === STEP_PROVIDER" />
 
@@ -251,6 +254,7 @@ import { useProviderStore } from '../stores/provider.store'
 import { usePreferencesStore } from '../stores/preferences.store'
 import { api } from '../api/client'
 import OnboardingWelcome from '../components/onboarding/OnboardingWelcome.vue'
+import OnboardingProfile from '../components/onboarding/OnboardingProfile.vue'
 import OnboardingProvider from '../components/onboarding/OnboardingProvider.vue'
 import OnboardingMemory from '../components/onboarding/OnboardingMemory.vue'
 import OnboardingPopularMcps from '../components/onboarding/OnboardingPopularMcps.vue'
@@ -267,13 +271,14 @@ const prefs = usePreferencesStore()
 
 // ── Step indices ──────────────────────────────────────────────────
 const STEP_WELCOME = 0
-const STEP_PROVIDER = 1
-const STEP_MEMORY = 2
-const STEP_MCPS = 3
-const STEP_AGENT = 4
-const STEP_DONE = 5
+const STEP_PROFILE = 1
+const STEP_PROVIDER = 2
+const STEP_MEMORY = 3
+const STEP_MCPS = 4
+const STEP_AGENT = 5
+const STEP_DONE = 6
 
-const totalSteps = STEP_DONE + 1 // 0..5
+const totalSteps = STEP_DONE + 1 // 0..6
 
 // ── Navigation state ──────────────────────────────────────────────
 const currentStep = ref(STEP_WELCOME)
@@ -290,6 +295,7 @@ const transitionName = computed(() =>
 
 // ── Breadcrumb data ───────────────────────────────────────────────
 const breadcrumbSteps = [
+  { id: 'profile', label: 'Profile', globalIndex: STEP_PROFILE },
   { id: 'provider', label: 'AI Provider', globalIndex: STEP_PROVIDER },
   { id: 'memory', label: 'Memory', globalIndex: STEP_MEMORY },
   { id: 'mcps', label: 'MCP Tools', globalIndex: STEP_MCPS },
@@ -298,11 +304,11 @@ const breadcrumbSteps = [
 
 // Which breadcrumb index is active (0-based within breadcrumbSteps)
 const breadcrumbStepIndex = computed(() =>
-  Math.max(0, currentStep.value - 1) // steps 1-4 map to breadcrumb 0-3
+  Math.max(0, currentStep.value - 1) // steps 1-5 map to breadcrumb 0-4
 )
 
 const showBreadcrumb = computed(() =>
-  currentStep.value >= STEP_PROVIDER && currentStep.value <= STEP_AGENT
+  currentStep.value >= STEP_PROFILE && currentStep.value <= STEP_AGENT
 )
 
 function stepCircleClass(bIndex: number): string {
@@ -327,7 +333,7 @@ const canContinue = computed(() => {
 })
 
 const nextButtonLabel = computed(() => {
-  if (advancing.value) return currentStep.value === STEP_WELCOME ? 'Saving…' : 'Creating…'
+  if (advancing.value) return currentStep.value === STEP_PROFILE ? 'Saving…' : 'Creating…'
   if (currentStep.value === STEP_AGENT) {
     return agentDraftState.value.hasDraft ? 'Create agent' : 'Skip for now'
   }
@@ -339,7 +345,7 @@ async function goNext() {
   if (!canContinue.value || advancing.value) return
   if (currentStep.value >= STEP_DONE) return
 
-  if (currentStep.value === STEP_WELCOME) {
+  if (currentStep.value === STEP_PROFILE) {
     advancing.value = true
     try {
       await prefs.saveUserName()
@@ -370,15 +376,27 @@ function goBack() {
   currentStep.value--
 }
 
-function jumpToStep(index: number) {
+async function jumpToStep(index: number) {
   if (advancing.value || index === currentStep.value) return
+
+  if (currentStep.value === STEP_PROFILE) {
+    advancing.value = true
+    try {
+      await prefs.saveUserName()
+    } catch {
+      advancing.value = false
+      return
+    }
+    advancing.value = false
+  }
+
   direction.value = index > currentStep.value ? 'forward' : 'backward'
   currentStep.value = index
 }
 
 async function dismiss() {
   if (advancing.value) return
-  if (currentStep.value === STEP_WELCOME) {
+  if (currentStep.value === STEP_PROFILE) {
     try {
       await prefs.saveUserName()
     } catch { /* Skipping setup should remain available if profile persistence fails. */ }
