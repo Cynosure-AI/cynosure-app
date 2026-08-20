@@ -127,7 +127,7 @@ defineExpose({ createAgent })
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl px-4 py-6">
+  <div class="mx-auto w-full max-w-2xl px-4 py-6">
     <div class="mb-6">
       <div class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-accent-400">
         <Icon
@@ -145,38 +145,28 @@ defineExpose({ createAgent })
       </p>
     </div>
 
-    <div class="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-      <BaseCard class="space-y-5 p-5">
-        <div class="flex items-center gap-2 border-b border-theme-700/70 pb-3">
-          <Icon
-            icon="lucide:id-card"
-            class="h-4 w-4 text-accent-400"
-          />
-          <h3 class="text-sm font-semibold text-theme-200">
-            Identity
-          </h3>
-        </div>
+    <BaseCard class="p-5">
+      <div class="border-b border-theme-700/70 pb-5">
+        <label
+          for="onboarding-agent-name"
+          class="mb-1.5 block text-sm font-medium text-theme-300"
+        >
+          Name <span class="text-red-400">*</span>
+        </label>
+        <input
+          id="onboarding-agent-name"
+          v-model="name"
+          type="text"
+          autocomplete="off"
+          placeholder="e.g. Research Assistant"
+          class="w-full rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+        >
+        <p class="mt-1.5 text-[11px] text-theme-600">
+          Internal name: <span class="font-mono text-theme-500">{{ internalName }}</span>
+        </p>
+      </div>
 
-        <div>
-          <label
-            for="onboarding-agent-name"
-            class="mb-1.5 block text-sm font-medium text-theme-300"
-          >
-            Name <span class="text-red-400">*</span>
-          </label>
-          <input
-            id="onboarding-agent-name"
-            v-model="name"
-            type="text"
-            autocomplete="off"
-            placeholder="e.g. Research Assistant"
-            class="w-full rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
-          >
-          <p class="mt-1.5 text-[11px] text-theme-600">
-            Internal name: <span class="font-mono text-theme-500">{{ internalName }}</span>
-          </p>
-        </div>
-
+      <div class="border-b border-theme-700/70 py-5">
         <IconUpload
           :icon-url="iconUrl"
           fallback-icon="lucide:bot"
@@ -186,103 +176,87 @@ defineExpose({ createAgent })
             Add an optional image so this agent is easy to spot.
           </template>
         </IconUpload>
+      </div>
 
-        <div>
+      <div class="border-b border-theme-700/70 py-5">
+        <label
+          for="onboarding-agent-description"
+          class="mb-1.5 block text-sm font-medium text-theme-300"
+        >Description</label>
+        <textarea
+          id="onboarding-agent-description"
+          v-model="description"
+          rows="3"
+          placeholder="What is this agent best at?"
+          class="w-full resize-none rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+        />
+      </div>
+
+      <div class="border-b border-theme-700/70 py-5">
+        <label class="mb-1.5 block text-sm font-medium text-theme-300">Provider / Model</label>
+        <ProviderModelSelect
+          :provider-id="providerId"
+          :model-value="model"
+          :providers="providerStore.providers"
+          placeholder="Use provider default"
+          @change="selection => { providerId = selection.providerId; model = selection.model }"
+        />
+      </div>
+
+      <div class="border-b border-theme-700/70 py-5">
+        <div class="mb-1.5 flex items-center justify-between gap-3">
           <label
-            for="onboarding-agent-description"
-            class="mb-1.5 block text-sm font-medium text-theme-300"
-          >Description</label>
-          <textarea
-            id="onboarding-agent-description"
-            v-model="description"
-            rows="3"
-            placeholder="What is this agent best at?"
-            class="w-full resize-none rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
-          />
+            for="onboarding-agent-system-prompt"
+            class="block text-sm font-medium text-theme-300"
+          >System prompt</label>
+          <PromptSmartTagPicker @insert="insertSystemPromptTag" />
         </div>
-      </BaseCard>
+        <textarea
+          id="onboarding-agent-system-prompt"
+          ref="systemPromptRef"
+          v-model="systemPrompt"
+          rows="7"
+          placeholder="Describe the role, tone, and boundaries for this agent…"
+          class="w-full resize-y rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 font-mono text-sm leading-relaxed text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+        />
+        <p class="mt-1.5 text-[11px] text-theme-600">
+          These instructions are added to Cynosure’s built-in agent behavior.
+        </p>
+      </div>
 
-      <div class="space-y-4">
-        <BaseCard class="space-y-4 p-5">
-          <div class="flex items-center gap-2 border-b border-theme-700/70 pb-3">
+      <div class="flex items-start justify-between gap-4 pt-5">
+        <div class="min-w-0">
+          <div class="mb-1 flex items-center gap-2">
             <Icon
-              icon="lucide:sliders-horizontal"
+              icon="lucide:brain-circuit"
               class="h-4 w-4 text-accent-400"
             />
             <h3 class="text-sm font-semibold text-theme-200">
-              Behavior
+              Has memory
             </h3>
           </div>
-
-          <div>
-            <label class="mb-1.5 block text-sm font-medium text-theme-300">Provider / Model</label>
-            <ProviderModelSelect
-              :provider-id="providerId"
-              :model-value="model"
-              :providers="providerStore.providers"
-              placeholder="Use provider default"
-              @change="selection => { providerId = selection.providerId; model = selection.model }"
+          <p class="text-xs leading-relaxed text-theme-500">
+            Create and assign a private memory folder for this agent, with automatic retrieval enabled.
+          </p>
+          <div
+            v-if="hasMemory"
+            class="mt-2 flex items-center gap-1.5 text-[11px] text-theme-600"
+          >
+            <Icon
+              icon="lucide:folder"
+              class="h-3 w-3 shrink-0"
             />
+            <span class="truncate font-mono">{{ memoryPathPreview }}</span>
           </div>
-
-          <div>
-            <div class="mb-1.5 flex items-center justify-between gap-3">
-              <label
-                for="onboarding-agent-system-prompt"
-                class="block text-sm font-medium text-theme-300"
-              >System prompt</label>
-              <PromptSmartTagPicker @insert="insertSystemPromptTag" />
-            </div>
-            <textarea
-              id="onboarding-agent-system-prompt"
-              ref="systemPromptRef"
-              v-model="systemPrompt"
-              rows="7"
-              placeholder="Describe the role, tone, and boundaries for this agent…"
-              class="w-full resize-y rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 font-mono text-sm leading-relaxed text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
-            />
-            <p class="mt-1.5 text-[11px] text-theme-600">
-              These instructions are added to Cynosure’s built-in agent behavior.
-            </p>
-          </div>
-        </BaseCard>
-
-        <BaseCard class="p-5">
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <div class="mb-1 flex items-center gap-2">
-                <Icon
-                  icon="lucide:brain-circuit"
-                  class="h-4 w-4 text-accent-400"
-                />
-                <h3 class="text-sm font-semibold text-theme-200">
-                  Has memory
-                </h3>
-              </div>
-              <p class="text-xs leading-relaxed text-theme-500">
-                Create and assign a private memory folder for this agent, with automatic retrieval enabled.
-              </p>
-              <div
-                v-if="hasMemory"
-                class="mt-2 flex items-center gap-1.5 text-[11px] text-theme-600"
-              >
-                <Icon
-                  icon="lucide:folder"
-                  class="h-3 w-3 shrink-0"
-                />
-                <span class="truncate font-mono">{{ memoryPathPreview }}</span>
-              </div>
-            </div>
-            <ToggleSwitch
-              :model-value="hasMemory"
-              size="md"
-              label="Give this agent memory"
-              @update:model-value="hasMemory = $event"
-            />
-          </div>
-        </BaseCard>
+        </div>
+        <ToggleSwitch
+          :model-value="hasMemory"
+          size="md"
+          label="Give this agent memory"
+          @update:model-value="hasMemory = $event"
+        />
       </div>
-    </div>
+    </BaseCard>
 
     <div
       v-if="error"
