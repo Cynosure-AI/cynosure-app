@@ -303,6 +303,10 @@ async function toggleMic(): Promise<void> {
 
         <template #content>
           <div class="space-y-2">
+            <p class="max-w-64 break-words border-b border-theme-700 pb-2 text-xs font-semibold text-theme-100">
+              {{ currentModelId || "Default model" }}
+            </p>
+
             <div>
               <p class="text-xs font-medium text-theme-300">
                 Capabilities
