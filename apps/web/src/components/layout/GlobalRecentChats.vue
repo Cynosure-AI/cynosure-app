@@ -97,14 +97,16 @@ function mapRow(row: {
   }
 }
 
-async function load(reset = false): Promise<void> {
+async function load(reset = false, clearExisting = false): Promise<void> {
   if (loading.value && !reset) return
   if (!reset && !hasMore.value) return
 
   if (reset) {
     requestToken.value += 1
-    conversations.value = []
-    total.value = 0
+    if (clearExisting) {
+      conversations.value = []
+      total.value = 0
+    }
   }
   const token = requestToken.value
   loading.value = true
@@ -213,12 +215,12 @@ watch(searchQuery, (query) => {
   }
   searchTimer = setTimeout(() => {
     activeQuery.value = trimmed
-    void load(true)
+    void load(true, true)
   }, 250)
 })
 
 watch(() => props.agentId, () => {
-  void load(true)
+  void load(true, true)
 })
 
 watch(() => chatStore.activeConversationId, (conversationId) => {
@@ -397,7 +399,7 @@ onBeforeUnmount(() => {
         {{ searchQuery.trim().length === 1 ? 'Type at least 2 characters' : searchQuery ? 'No matching chats' : 'No recent chats' }}
       </p>
       <p
-        v-if="loading"
+        v-if="loading && !visibleConversations.length"
         class="px-3 py-2 text-center text-[10px] text-theme-600"
       >
         Loading chats…
