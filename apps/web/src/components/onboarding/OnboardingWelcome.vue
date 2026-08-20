@@ -21,7 +21,10 @@
         class="mx-auto mt-7 block max-w-sm text-left"
         for="onboarding-user-name"
       >
-        <span class="mb-2 block text-sm font-medium text-theme-200">What should we call you?</span>
+        <span class="mb-2 flex items-center justify-between gap-2 text-sm font-medium text-theme-200">
+          <span>What should we call you?</span>
+          <span class="text-xs font-normal text-theme-600">Optional</span>
+        </span>
         <div class="relative">
           <Icon
             icon="lucide:user-round"
@@ -39,7 +42,7 @@
           >
         </div>
         <span class="mt-2 block text-xs leading-5 text-theme-500">
-          This is stored in your settings and can be used by agents to address you personally.
+          If provided, this is stored in your settings and can be used by agents to address you personally.
         </span>
       </label>
 

@@ -6,6 +6,7 @@ import { useNotificationStore } from "../../stores/notification.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { useChatStore } from "../../stores/chat.store";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
+import { usePreferencesStore } from "../../stores/preferences.store";
 import { api } from "../../api/client";
 import { wsConnected } from "../../api/http";
 import type { AgentInstance } from "../../api/types";
@@ -23,6 +24,7 @@ const notificationStore = useNotificationStore();
 const agentDefs = useAgentDefinitionsStore();
 const chatStore = useChatStore();
 const memoryJobsStore = useMemoryJobsStore();
+const preferencesStore = usePreferencesStore();
 const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar();
 const { logoIconUrl, logoTextUrl } = useAppBranding();
 
@@ -494,18 +496,26 @@ const chatRoute = computed(() =>
             'bg-theme-600': wsConnected && !memoryJobsStore.hasRunningJobs && !providerStore.providers.length,
           }"
         />
-        <span class="text-[11px] text-theme-400 truncate flex-1">
-          <template v-if="!wsConnected">Connecting...</template>
-          <template v-else-if="hasAwaitingApproval">Needs Attention</template>
-          <template v-else-if="instances.length > 0">Agents Running...</template>
-          <template v-else-if="memoryJobsStore.hasRunningJobs">{{ memoryJobsStore.statusLabel }}</template>
-          <template v-else-if="!providerStore.providers.length">No providers</template>
-          <template v-else>Ready</template>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span
+            v-if="preferencesStore.userName.trim()"
+            class="truncate text-sm font-semibold leading-5 text-theme-200"
+          >
+            {{ preferencesStore.userName.trim() }}
+          </span>
+          <span class="truncate text-[11px] leading-4 text-theme-400">
+            <template v-if="!wsConnected">Connecting...</template>
+            <template v-else-if="hasAwaitingApproval">Needs Attention</template>
+            <template v-else-if="instances.length > 0">Agents Running...</template>
+            <template v-else-if="memoryJobsStore.hasRunningJobs">{{ memoryJobsStore.statusLabel }}</template>
+            <template v-else-if="!providerStore.providers.length">No providers</template>
+            <template v-else>Ready</template>
+          </span>
         </span>
         <Icon
-          icon="lucide:chevron-up"
-          class="w-3 h-3 text-theme-600 shrink-0 transition-transform"
-          :class="{ 'rotate-180': showStatusPopover }"
+          icon="lucide:settings"
+          class="h-4 w-4 shrink-0 text-theme-500 transition-colors"
+          :class="{ 'text-accent-400': showStatusPopover }"
         />
       </button>
 
