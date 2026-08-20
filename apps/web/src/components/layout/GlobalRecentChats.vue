@@ -163,6 +163,12 @@ function closeMenu(): void {
   openMenuId.value = null
 }
 
+function openContextMenu(conversationId: string, event: MouseEvent): void {
+  event.stopPropagation()
+  editingId.value = null
+  openMenuId.value = conversationId
+}
+
 function scheduleRefresh(): void {
   if (activeQuery.value) return
   if (refreshTimer) clearTimeout(refreshTimer)
@@ -252,6 +258,7 @@ onBeforeUnmount(() => {
           'bg-amber-500/10 ring-1 ring-inset ring-amber-500/20': awaitingIds.has(conversation.id),
         }"
         @click="selectConversation(conversation)"
+        @contextmenu.prevent="openContextMenu(conversation.id, $event)"
         @keydown.enter.self.prevent="selectConversation(conversation)"
       >
         <span class="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800 text-theme-500">
