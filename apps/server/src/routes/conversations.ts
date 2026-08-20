@@ -11,6 +11,7 @@ import { getAssignedOrDefaultSpaces } from '../core/memory/memory-space-scope.js
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
 import type { ConversationExecutionConfig } from '@shared/types'
+import { clearDebugContextCapture } from '../core/chat/debug-context.js'
 
 function escapeSqlLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
@@ -569,6 +570,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             return reply.status(400).send({ error: 'Cannot delete a pinned conversation. Unpin it first.' })
         }
         await cleanupConversationArtifactsAndIndexes([req.params.id])
+        clearDebugContextCapture(req.params.id)
         db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(req.params.id)
@@ -585,6 +587,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             const filter = agentId === '' ? 'agent_id IS NULL AND ma_workspace_id IS NULL' : 'agent_id = ?'
             const ids = db.prepare(`SELECT id FROM conversations WHERE ${filter} AND pinned = 0`).all(...(agentId === '' ? [] : [agentId])) as { id: string }[]
             await cleanupConversationArtifactsAndIndexes(ids.map(r => r.id))
+            for (const { id } of ids) clearDebugContextCapture(id)
             for (const { id } of ids) {
                 db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
@@ -595,6 +598,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         } else {
             const allIds = db.prepare('SELECT id FROM conversations WHERE pinned = 0').all() as { id: string }[]
             await cleanupConversationArtifactsAndIndexes(allIds.map(r => r.id))
+            for (const { id } of allIds) clearDebugContextCapture(id)
             for (const { id } of allIds) {
                 db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
