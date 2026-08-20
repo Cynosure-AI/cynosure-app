@@ -12,8 +12,9 @@ import type { AgentInstance } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import { useSidebar } from "../../composables/useSidebar";
 import { useAppBranding } from "../../composables/useAppBranding";
-import StatusPopover from "../status/StatusPopover.vue";
+import WorkspacePopover from "../status/WorkspacePopover.vue";
 import HoverTooltip from "../shared/HoverTooltip.vue";
+import GlobalRecentChats from "./GlobalRecentChats.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -28,6 +29,8 @@ const { logoIconUrl, logoTextUrl } = useAppBranding();
 const showStatusPopover = ref(false);
 const statusButtonRef = ref<HTMLElement | null>(null);
 const showNotifications = ref(false);
+const workspaceOpen = ref(true);
+const recentChatsOpen = ref(true);
 const bellBtnRef = ref<HTMLElement | null>(null);
 const notifPopoverStyle = computed(() => {
   if (!bellBtnRef.value) return {};
@@ -48,6 +51,9 @@ const hasAwaitingApproval = computed(() =>
   instances.value.some((i) => i.status === "awaiting-approval"),
 );
 const activeWorkCount = computed(() => instances.value.length + memoryJobsStore.activeJobs.length);
+const awaitingConversationIds = computed(() => instances.value
+  .filter((instance) => instance.status === "awaiting-approval" && instance.conversationId)
+  .map((instance) => instance.conversationId as string));
 
 async function loadInstances() {
   try {
@@ -128,24 +134,6 @@ function isActive(path: string, exact = false): boolean {
   return route.path === path || route.path.startsWith(path + "/");
 }
 
-interface NavItem {
-  to: string;
-  icon: string;
-  label: string;
-  badge?: string;
-  exact?: boolean;
-}
-
-const triggerItems: NavItem[] = [
-  { to: "/triggers/cron", icon: "lucide:clock", label: "Cron" },
-];
-
-const settingsItems: NavItem[] = [
-  { to: "/settings", icon: "lucide:settings", label: "Settings", exact: true },
-  { to: "/settings/mcp", icon: "lucide:plug", label: "MCP Servers" },
-  { to: "/tools-policy", icon: "lucide:wrench", label: "Tools Policy" },
-];
-
 const chatRoute = computed(() =>
   chatStore.activeConversationId
     ? `/triggers/chat/${chatStore.activeConversationId}`
@@ -156,7 +144,7 @@ const chatRoute = computed(() =>
 <template>
   <aside
     class="bg-theme-950 relative flex flex-col h-full shrink-0 transition-all duration-200 overflow-hidden"
-    :class="sidebarCollapsed ? 'w-60 md:w-16 sidebar-collapsed' : 'w-60'"
+    :class="sidebarCollapsed ? 'w-72 md:w-16 sidebar-collapsed' : 'w-72'"
   >
     <!-- Brand -->
     <div class="brand-area pl-3 pr-2 py-3 mt-2 mb-2 flex items-center gap-3 shrink-0">
@@ -386,8 +374,8 @@ const chatRoute = computed(() =>
       </div>
     </div>
 
-    <!-- Navigation -->
-    <nav class="flex-1 overflow-y-auto py-2 px-3">
+    <!-- V2 Navigation -->
+    <nav class="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-1">
       <!-- Chat -->
       <HoverTooltip
         placement="right"
@@ -410,179 +398,75 @@ const chatRoute = computed(() =>
         </template>
       </HoverTooltip>
 
-
-
-      <!-- Triggers -->
       <div class="section-separator" />
-      <div class="section-label">
-        Triggers
-      </div>
-      <HoverTooltip
-        v-for="item in triggerItems"
-        :key="item.to"
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          :to="item.to"
-          class="nav-item"
-          :class="{ active: isActive(item.to, item.exact) }"
-        >
-          <Icon
-            :icon="item.icon"
-            class="w-4.5 h-4.5"
-          />
-          <span>{{ item.label }}</span>
-        </RouterLink>
-        <template #content>
-          {{ item.label }}
-        </template>
-      </HoverTooltip>
 
-      <!-- Configuration -->
-      <div class="section-separator" />
-      <div class="section-label">
-        Configuration
-      </div>
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/agents"
-          class="nav-item"
-          :class="{ active: isActive('/agents') }"
+      <section class="sidebar-region shrink-0">
+        <button
+          type="button"
+          class="region-toggle"
+          :aria-expanded="workspaceOpen"
+          @click="workspaceOpen = !workspaceOpen"
         >
+          <span>Workspace</span>
           <Icon
-            icon="lucide:bot"
-            class="w-4.5 h-4.5"
+            icon="lucide:chevron-down"
+            class="h-3.5 w-3.5 transition-transform"
+            :class="{ '-rotate-90': !workspaceOpen }"
           />
-          <span>Agents</span>
-        </RouterLink>
-        <template #content>
-          Agents
-        </template>
-      </HoverTooltip>
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/memory-spaces"
-          class="nav-item"
-          :class="{ active: isActive('/memory-spaces') }"
+        </button>
+        <div
+          v-show="workspaceOpen || sidebarCollapsed"
+          class="space-y-0.5"
         >
-          <Icon
-            icon="lucide:brain"
-            class="w-4.5 h-4.5"
-          />
-          <span>Memories</span>
-        </RouterLink>
-        <template #content>
-          Memory Folders
-        </template>
-      </HoverTooltip>
-      <!-- Activity -->
-      <div class="section-separator" />
-      <div class="section-label">
-        Activity
-      </div>
-
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/activity"
-          class="nav-item"
-          :class="{ active: isActive('/activity') }"
-          :aria-label="hasAwaitingApproval ? 'Activity Log — approval required' : 'Activity Log'"
-        >
-          <span class="relative inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center">
-            <Icon
-              icon="lucide:list-tree"
-              class="w-4.5 h-4.5"
-            />
-            <span
-              v-if="hasAwaitingApproval"
-              class="collapsed-hitl-indicator absolute -right-1.5 -top-1.5 h-3 w-3 items-center justify-center"
-              aria-hidden="true"
-            >
-              <span class="absolute h-full w-full rounded-full bg-amber-400/50 animate-ping" />
-              <span class="relative h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-theme-950" />
-            </span>
-          </span>
-          <span>Activity Log</span>
-          <span
-            v-if="hasAwaitingApproval"
-            class="ml-1 h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-amber-400"
-          />
-          <div
-            v-if="activeWorkCount"
-            class="ml-2 flex h-5 w-5 items-center justify-center rounded-full text-xs text-white"
-            :class="hasAwaitingApproval ? 'bg-amber-500' : 'bg-red-500'"
+          <HoverTooltip
+            v-for="item in [
+              { to: '/triggers/cron', icon: 'lucide:calendar-clock', label: 'Schedule' },
+              { to: '/agents', icon: 'lucide:bot', label: 'Agents' },
+              { to: '/memory-spaces', icon: 'lucide:brain', label: 'Memories' },
+            ]"
+            :key="item.to"
+            placement="right"
+            block
+            :disabled="!sidebarCollapsed"
           >
-            <span v-if="activeWorkCount > 9">9+</span>
-            <span v-else>{{ activeWorkCount }}</span>
-          </div>
-        </RouterLink>
-        <template #content>
-          {{ hasAwaitingApproval ? "Activity Log — approval required" : "Activity Log" }}
-        </template>
-      </HoverTooltip>
+            <RouterLink
+              :to="item.to"
+              class="nav-item"
+              :class="{ active: isActive(item.to) }"
+            >
+              <Icon
+                :icon="item.icon"
+                class="h-4.5 w-4.5"
+              />
+              <span>{{ item.label }}</span>
+            </RouterLink>
+            <template #content>
+              {{ item.label }}
+            </template>
+          </HoverTooltip>
+        </div>
+      </section>
 
-      <HoverTooltip
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          to="/usage"
-          class="nav-item"
-          :class="{ active: isActive('/usage') }"
+      <section class="recent-region flex min-h-0 flex-1 flex-col">
+        <div class="section-separator" />
+        <button
+          type="button"
+          class="region-toggle"
+          :aria-expanded="recentChatsOpen"
+          @click="recentChatsOpen = !recentChatsOpen"
         >
+          <span>Recent chats</span>
           <Icon
-            icon="lucide:bar-chart-3"
-            class="w-4.5 h-4.5"
+            icon="lucide:chevron-down"
+            class="h-3.5 w-3.5 transition-transform"
+            :class="{ '-rotate-90': !recentChatsOpen }"
           />
-          <span>Usage</span>
-        </RouterLink>
-        <template #content>
-          Usage
-        </template>
-      </HoverTooltip>
-
-      <!-- Settings -->
-      <div class="section-separator" />
-      <div class="section-label">
-        Settings
-      </div>
-      <HoverTooltip
-        v-for="item in settingsItems"
-        :key="item.to"
-        placement="right"
-        block
-        :disabled="!sidebarCollapsed"
-      >
-        <RouterLink
-          :to="item.to"
-          class="nav-item"
-          :class="{ active: isActive(item.to, item.exact) }"
-        >
-          <Icon
-            :icon="item.icon"
-            class="w-4.5 h-4.5"
-          />
-          <span>{{ item.label }}</span>
-        </RouterLink>
-        <template #content>
-          {{ item.label }}
-        </template>
-      </HoverTooltip>
+        </button>
+        <GlobalRecentChats
+          v-if="recentChatsOpen && !sidebarCollapsed"
+          :awaiting-conversation-ids="awaitingConversationIds"
+        />
+      </section>
     </nav>
 
     <!-- Status Footer -->
@@ -625,10 +509,12 @@ const chatRoute = computed(() =>
         />
       </button>
 
-      <!-- Status Popover -->
-      <StatusPopover
+      <!-- Workspace Popover -->
+      <WorkspacePopover
         :show="showStatusPopover"
         :anchor-el="statusButtonRef"
+        :active-work-count="activeWorkCount"
+        :has-awaiting-approval="hasAwaitingApproval"
         @close="showStatusPopover = false"
       />
     </div>
@@ -692,6 +578,24 @@ const chatRoute = computed(() =>
   opacity: 0.6;
 }
 
+.region-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem 0.4rem;
+  color: var(--color-theme-500, #71717a);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: color 150ms ease;
+}
+
+.region-toggle:hover {
+  color: var(--color-theme-300, #d4d4d8);
+}
+
 .brand-logo-icon {
   display: none;
 }
@@ -744,6 +648,15 @@ const chatRoute = computed(() =>
     margin: 0.375rem auto 0.375rem;
     width: 60%;
     opacity: 1;
+  }
+
+  .sidebar-collapsed .region-toggle,
+  .sidebar-collapsed .recent-region {
+    display: none;
+  }
+
+  .sidebar-collapsed .sidebar-region {
+    margin-top: 0.25rem;
   }
 
   .sidebar-collapsed .brand-area {

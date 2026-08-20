@@ -17,6 +17,32 @@
         and let them work for you.
       </p>
 
+      <label
+        class="mx-auto mt-7 block max-w-sm text-left"
+        for="onboarding-user-name"
+      >
+        <span class="mb-2 block text-sm font-medium text-theme-200">What should we call you?</span>
+        <div class="relative">
+          <Icon
+            icon="lucide:user-round"
+            class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
+          />
+          <input
+            id="onboarding-user-name"
+            v-model="prefs.userName"
+            type="text"
+            maxlength="100"
+            autocomplete="name"
+            autofocus
+            placeholder="Your name"
+            class="w-full rounded-xl border border-theme-700 bg-theme-900/80 py-3 pl-10 pr-3 text-sm text-theme-100 outline-none transition placeholder:text-theme-600 focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+          >
+        </div>
+        <span class="mt-2 block text-xs leading-5 text-theme-500">
+          This is stored in your settings and can be used by agents to address you personally.
+        </span>
+      </label>
+
       <div
         class="mx-auto my-8 flex max-w-xs items-center gap-2"
         aria-hidden="true"
@@ -61,8 +87,10 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
 import { useAppBranding } from '../../composables/useAppBranding'
+import { usePreferencesStore } from '../../stores/preferences.store'
 
 const { logoIconUrl } = useAppBranding()
+const prefs = usePreferencesStore()
 
 const features = [
   {

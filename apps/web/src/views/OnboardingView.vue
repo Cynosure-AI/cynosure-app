@@ -56,7 +56,7 @@
 
         <!-- Dismiss button -->
         <button
-          v-if="currentStep !== STEP_DONE && serverReady"
+          v-if="currentStep !== STEP_WELCOME && currentStep !== STEP_DONE && serverReady"
           class="text-xs text-theme-600 hover:text-theme-400 transition-colors flex items-center gap-1 ml-auto disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="advancing"
           @click="dismiss"
@@ -137,7 +137,7 @@
               Cynosure is configured and ready to use. Start a conversation and see what your agents can do.
             </p>
             <p class="text-theme-600 text-xs">
-              You can always revisit these settings from the sidebar.
+              You can always revisit these settings from the workspace drawer.
             </p>
           </div>
         </div>
@@ -189,6 +189,13 @@
           </span>
 
           <!-- Required step note -->
+          <span
+            v-if="serverReady && currentStep === STEP_WELCOME && !canContinue"
+            class="text-xs text-amber-400/80 hidden sm:block"
+          >
+            Add your name first
+          </span>
+
           <span
             v-if="serverReady && currentStep === STEP_PROVIDER && !canContinue"
             class="text-xs text-amber-400/80 hidden sm:block"
@@ -248,6 +255,7 @@ import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useOnboardingStore } from '../stores/onboarding.store'
 import { useProviderStore } from '../stores/provider.store'
+import { usePreferencesStore } from '../stores/preferences.store'
 import { api } from '../api/client'
 import OnboardingWelcome from '../components/onboarding/OnboardingWelcome.vue'
 import OnboardingProvider from '../components/onboarding/OnboardingProvider.vue'
@@ -262,6 +270,7 @@ interface OnboardingAgentHandle {
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const providerStore = useProviderStore()
+const prefs = usePreferencesStore()
 
 // ── Step indices ──────────────────────────────────────────────────
 const STEP_WELCOME = 0
@@ -315,6 +324,9 @@ function stepCircleClass(bIndex: number): string {
 
 // ── Validation ────────────────────────────────────────────────────
 const canContinue = computed(() => {
+  if (currentStep.value === STEP_WELCOME) {
+    return prefs.userName.trim().length > 0
+  }
   if (currentStep.value === STEP_PROVIDER) {
     return providerStore.providers.length > 0
   }
@@ -325,7 +337,7 @@ const canContinue = computed(() => {
 })
 
 const nextButtonLabel = computed(() => {
-  if (advancing.value) return 'Creating…'
+  if (advancing.value) return currentStep.value === STEP_WELCOME ? 'Saving…' : 'Creating…'
   if (currentStep.value === STEP_AGENT) {
     return agentDraftState.value.hasDraft ? 'Create agent' : 'Skip for now'
   }
@@ -336,6 +348,17 @@ const nextButtonLabel = computed(() => {
 async function goNext() {
   if (!canContinue.value || advancing.value) return
   if (currentStep.value >= STEP_DONE) return
+
+  if (currentStep.value === STEP_WELCOME) {
+    advancing.value = true
+    try {
+      await prefs.saveUserName()
+    } catch {
+      advancing.value = false
+      return
+    }
+    advancing.value = false
+  }
 
   if (currentStep.value === STEP_AGENT && agentDraftState.value.hasDraft) {
     advancing.value = true
@@ -389,6 +412,7 @@ async function probeServerReadiness() {
 }
 
 onMounted(() => {
+  void prefs.loadUserSettings()
   void probeServerReadiness()
   readinessPoll = setInterval(() => {
     if (!serverReady.value) void probeServerReadiness()

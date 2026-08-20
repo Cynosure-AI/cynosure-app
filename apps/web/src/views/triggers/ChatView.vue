@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import ChatSidebar from '../../components/layout/ChatSidebar.vue'
 import ChatHeaderBar from '../../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import InputBar from '../../components/chat/InputBar.vue'
 import PlanningTaskList from '../../components/chat/PlanningTaskList.vue'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useChatSidebar } from '../../composables/useSidebar'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
 
-const { chatSidebarOpen, toggle } = useChatSidebar()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const route = useRoute()
@@ -134,25 +131,8 @@ watch(
       @toggle-task-list="taskListOpen = !taskListOpen"
     />
 
-    <!-- Main content area: sidebar + chat column -->
+    <!-- Main content area -->
     <div class="flex flex-1 min-h-0 relative">
-      <!-- Mobile overlay backdrop -->
-      <Transition name="fade">
-        <div
-          v-if="chatSidebarOpen"
-          class="absolute inset-0 z-30 bg-black/40 md:hidden"
-          @click="toggle"
-        />
-      </Transition>
-
-      <!-- Sidebar: overlay on mobile, shifts content on desktop -->
-      <div
-        class="absolute left-0 top-0 z-40 h-full w-64 md:relative md:z-auto md:shrink-0 md:overflow-hidden md:transition-all md:duration-200 md:ease-in-out transition-all duration-200 ease-in-out overflow-hidden"
-        :class="chatSidebarOpen ? 'translate-x-0 md:w-64' : '-translate-x-full md:w-0'"
-      >
-        <ChatSidebar />
-      </div>
-
       <!-- Chat column: panel + input bar -->
       <div
         class="chat-column relative flex flex-col flex-1 min-w-0"

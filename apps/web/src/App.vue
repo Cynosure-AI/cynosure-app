@@ -22,7 +22,7 @@ const agentDefs = useAgentDefinitionsStore()
 const notificationStore = useNotificationStore()
 
 // Initialize preferences early so theme is applied before first render
-usePreferencesStore()
+const preferencesStore = usePreferencesStore()
 
 const { sidebarOpen, sidebarCollapsed, close: closeSidebar } = useSidebar()
 const route = useRoute()
@@ -38,6 +38,7 @@ const mcpAuthReconnecting = ref<string | null>(null)
 const cleanups: (() => void)[] = []
 
 async function loadAllStores() {
+  await preferencesStore.loadUserSettings()
   await providerStore.loadProviders()
   await agentDefs.load()
   await chatStore.loadMemorySpaces()
@@ -174,7 +175,7 @@ onUnmounted(() => {
     <div
       v-if="!isOnboardingRoute"
       id="primary-navigation"
-      class="fixed inset-y-0 left-0 z-30 w-60 transition-all duration-200 md:static md:translate-x-0"
+      class="fixed inset-y-0 left-0 z-30 w-72 transition-all duration-200 md:static md:translate-x-0"
       :class="[
         sidebarOpen ? 'translate-x-0' : '-translate-x-full',
         sidebarCollapsed ? 'md:w-16' : ''

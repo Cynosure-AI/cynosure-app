@@ -23,6 +23,10 @@ function memorySpacePathId(id: string): string {
 // ---- API object (same shape as window.api from preload) ----
 
 export const api = {
+  userSettings: {
+    get: () => get<{ name: string }>('/api/user-settings'),
+    update: (name: string) => put<{ name: string }>('/api/user-settings', { name }),
+  },
   provider: {
     list: () => get<LLMProviderConfig[]>('/api/providers'),
     add: (config: LLMProviderConfig) => post<{ id: string }>('/api/providers', config).then((r) => r.id),
@@ -72,7 +76,7 @@ export const api = {
         `/api/chat/conversations${qs ? `?${qs}` : ''}`
       )
     },
-    listConversationsPaginated: (limit: number, offset: number, sort?: 'updated', search?: string) => {
+    listConversationsPaginated: (limit: number, offset: number, sort?: 'updated' | 'sidebar', search?: string) => {
       const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
       if (sort) params.set('sort', sort)
       if (search) params.set('search', search)

@@ -1,4 +1,5 @@
 export interface PromptSmartTagContext {
+    userName?: string
     agentId?: string
     agentName?: string
     agentInternalName?: string
@@ -28,6 +29,7 @@ function buildPromptSmartTagValues(context: PromptSmartTagContext): PromptSmartT
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || 'en-US'
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || process.env.TZ || 'UTC'
     return {
+        userName: context.userName || '',
         currentDateTime: formatDateTime(now, locale, timezone),
         currentDate: formatDate(now, locale, timezone),
         currentTime: formatTime(now, locale, timezone),

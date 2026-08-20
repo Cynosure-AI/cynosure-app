@@ -9,6 +9,7 @@ import BaseCard from '../shared/BaseCard.vue'
 import IconUpload from '../shared/IconUpload.vue'
 import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
+import PromptSmartTagPicker from '../shared/PromptSmartTagPicker.vue'
 
 interface DraftState {
   hasDraft: boolean
@@ -28,6 +29,7 @@ const description = ref('')
 const providerId = ref('')
 const model = ref('')
 const systemPrompt = ref('')
+const systemPromptRef = ref<HTMLTextAreaElement | null>(null)
 const hasMemory = ref(true)
 const creating = ref(false)
 const error = ref('')
@@ -42,6 +44,21 @@ const hasDraft = computed(() => Boolean(
   || systemPrompt.value.trim()
 ))
 const valid = computed(() => !hasDraft.value || Boolean(name.value.trim()))
+
+function insertSystemPromptTag(tag: string): void {
+  const input = systemPromptRef.value
+  if (!input) {
+    systemPrompt.value += tag
+    return
+  }
+  const start = input.selectionStart ?? systemPrompt.value.length
+  const end = input.selectionEnd ?? systemPrompt.value.length
+  systemPrompt.value = `${systemPrompt.value.slice(0, start)}${tag}${systemPrompt.value.slice(end)}`
+  requestAnimationFrame(() => {
+    input.focus()
+    input.setSelectionRange(start + tag.length, start + tag.length)
+  })
+}
 
 watch([hasDraft, valid], () => {
   emit('draftChange', { hasDraft: hasDraft.value, valid: valid.value })
@@ -209,12 +226,16 @@ defineExpose({ createAgent })
           </div>
 
           <div>
-            <label
-              for="onboarding-agent-system-prompt"
-              class="mb-1.5 block text-sm font-medium text-theme-300"
-            >System prompt</label>
+            <div class="mb-1.5 flex items-center justify-between gap-3">
+              <label
+                for="onboarding-agent-system-prompt"
+                class="block text-sm font-medium text-theme-300"
+              >System prompt</label>
+              <PromptSmartTagPicker @insert="insertSystemPromptTag" />
+            </div>
             <textarea
               id="onboarding-agent-system-prompt"
+              ref="systemPromptRef"
               v-model="systemPrompt"
               rows="7"
               placeholder="Describe the role, tone, and boundaries for this agent…"
