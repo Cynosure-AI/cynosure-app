@@ -1,8 +1,6 @@
 import Database from 'better-sqlite3'
-import { existsSync, readFileSync } from 'fs'
-import { extname } from 'path'
 import { COMPACT_EVENT_PREFIX } from '../agent/context-compactor.js'
-import { extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
+import { artifactFileUrlToDataUrl, extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
 import { listConversationFileAttachmentsByMessage } from '../artifacts/attachment-rag.js'
 import { readFileAttachmentText, type FileAttachmentArtifact } from '../artifacts/file-artifacts.js'
 import type { ChatMessage, ContentPart, ToolCall } from '../gateway/providers/base.provider.js'
@@ -168,41 +166,12 @@ function buildHistoryContent(
         })
     }
     for (const url of imageUrls) {
-        parts.push({ type: 'image_url', image_url: { url: localFileUrlToDataUrl(url) } })
+        parts.push({ type: 'image_url', image_url: { url: artifactFileUrlToDataUrl(url) || url } })
     }
     for (const url of audioUrls) {
-        parts.push({ type: 'audio_url', audio_url: { url } })
+        parts.push({ type: 'audio_url', audio_url: { url: artifactFileUrlToDataUrl(url) || url } })
     }
     return parts
-}
-
-function localFileUrlToDataUrl(url: string): string {
-    const filePath = extractFilePathFromFileUrl(url)
-    if (!filePath || !existsSync(filePath)) return url
-    try {
-        const data = readFileSync(filePath).toString('base64')
-        return `data:${imageMimeFromPath(filePath)};base64,${data}`
-    } catch {
-        return url
-    }
-}
-
-function imageMimeFromPath(filePath: string): string {
-    switch (extname(filePath).toLowerCase()) {
-        case '.jpg':
-        case '.jpeg':
-            return 'image/jpeg'
-        case '.gif':
-            return 'image/gif'
-        case '.webp':
-            return 'image/webp'
-        case '.bmp':
-            return 'image/bmp'
-        case '.svg':
-            return 'image/svg+xml'
-        default:
-            return 'image/png'
-    }
 }
 
 function parseJsonArray<T>(json: string | null): T[] {

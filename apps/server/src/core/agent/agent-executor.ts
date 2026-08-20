@@ -1,6 +1,4 @@
 import { nanoid } from 'nanoid'
-import { existsSync, readFileSync } from 'fs'
-import { extname } from 'path'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getHITLGate } from './hitl-gate.js'
@@ -8,7 +6,11 @@ import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy }
 import type { LLMGateway } from '../gateway/gateway.js'
 import { IncompleteModelResponseError, type ChatMessage, type ToolCall, type ToolDefinition, type ToolResult, type ToolResultContent } from '../gateway/providers/base.provider.js'
 import type { ReasoningEffort } from '@shared/types'
-import { extractFilePathFromFileUrl, materializeImageArtifacts } from '../artifacts/image-artifacts.js'
+import {
+    artifactFileUrlToDataUrl,
+    materializeAudioArtifacts,
+    materializeImageArtifacts,
+} from '../artifacts/image-artifacts.js'
 import { isPlanningToolName } from '../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
 import { getPlanningState, reconcilePlanningAfterToolBatch } from './planning-state.js'
@@ -136,6 +138,8 @@ interface ToolCallResult {
     imageDataUrls?: string[]
     /** Base64 data-URL audio for multimodal models and UI playback. */
     audioDataUrls?: string[]
+    /** Local artifact URLs used for persistence and UI playback. */
+    audioArtifacts?: string[]
     /** Original MCP result values retained for structured consumers. */
     structuredContent?: unknown
     content?: ToolResultContent[]
@@ -357,7 +361,7 @@ export class AgentExecutor {
                             output: tr.output,
                             images: tr.images,
                             imageDataUrls: tr.imageDataUrls,
-                            audioDataUrls: tr.audioDataUrls,
+                            audioDataUrls: tr.audioArtifacts || tr.audioDataUrls,
                             structuredContent: tr.structuredContent,
                         }))
                     })
@@ -902,6 +906,7 @@ export class AgentExecutor {
             const imageDataUrls = res?.imageDataUrls?.length
                 ? res.imageDataUrls
                 : this.imageArtifactsToDataUrls(images)
+            const audioArtifacts = await this.materializeToolAudio(res)
             return {
                 toolCallId: tc.id,
                 name: tc.function.name,
@@ -910,6 +915,7 @@ export class AgentExecutor {
                 images,
                 imageDataUrls,
                 audioDataUrls: res?.audioDataUrls,
+                audioArtifacts,
                 structuredContent: res?.structuredContent,
                 content: res?.content,
             }
@@ -943,38 +949,25 @@ export class AgentExecutor {
         }
     }
 
+    private async materializeToolAudio(res: ToolResult | undefined): Promise<string[] | undefined> {
+        if (!res?.audioDataUrls?.length) return undefined
+        try {
+            const artifacts = await materializeAudioArtifacts(res.audioDataUrls, this.config.conversationId)
+            return artifacts.map((artifact) => artifact.url)
+        } catch (err) {
+            console.warn('[artifacts] Failed to materialize tool audio:', err instanceof Error ? err.message : err)
+            return undefined
+        }
+    }
+
     private imageArtifactsToDataUrls(images: string[] | undefined): string[] | undefined {
         if (!images?.length) return undefined
         const dataUrls: string[] = []
         for (const image of images) {
-            const filePath = extractFilePathFromFileUrl(image)
-            if (!filePath || !existsSync(filePath)) continue
-            try {
-                const data = readFileSync(filePath).toString('base64')
-                dataUrls.push(`data:${this.imageMimeFromPath(filePath)};base64,${data}`)
-            } catch {
-                // Best effort: the artifact URL remains available in the text/UI result.
-            }
+            const dataUrl = artifactFileUrlToDataUrl(image)
+            if (dataUrl) dataUrls.push(dataUrl)
         }
         return dataUrls.length ? dataUrls : undefined
-    }
-
-    private imageMimeFromPath(filePath: string): string {
-        switch (extname(filePath).toLowerCase()) {
-            case '.jpg':
-            case '.jpeg':
-                return 'image/jpeg'
-            case '.gif':
-                return 'image/gif'
-            case '.webp':
-                return 'image/webp'
-            case '.bmp':
-                return 'image/bmp'
-            case '.svg':
-                return 'image/svg+xml'
-            default:
-                return 'image/png'
-        }
     }
 
     private addLoadedTools(tools: ToolDefinition[]): void {
@@ -1068,7 +1061,7 @@ export class AgentExecutor {
             ).run(
                 toolMsgId, conversationId, 'tool', tr.output, tr.toolCallId,
                 tr.images?.length ? JSON.stringify(tr.images) : null,
-                tr.audioDataUrls?.length ? JSON.stringify(tr.audioDataUrls) : null,
+                (tr.audioArtifacts || tr.audioDataUrls)?.length ? JSON.stringify(tr.audioArtifacts || tr.audioDataUrls) : null,
                 tr.structuredContent === undefined ? null : JSON.stringify(tr.structuredContent),
                 agentId || null,
                 (meta?.maCodename as string) || null,
@@ -1086,7 +1079,7 @@ export class AgentExecutor {
                     maAgentName: meta?.maAgentName,
                     maInvocationId: meta?.maInvocationId,
                     imageDataUrls: tr.images,
-                    audioDataUrls: tr.audioDataUrls,
+                    audioDataUrls: tr.audioArtifacts || tr.audioDataUrls,
                     structuredContent: tr.structuredContent,
                     createdAt: now,
                 },

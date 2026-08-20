@@ -13,11 +13,8 @@ import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
 import type { PlannedExecution } from '../agent/pre-execution/execution-planner.js'
 import type { ActiveChannelExecutionEntry } from './base.channel.js'
-import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
-import { extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
+import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 import { getAssignedOrDefaultSpaces } from '../memory/memory-space-scope.js'
-import { existsSync, readFileSync } from 'fs'
-import { extname } from 'path'
 
 type BroadcastFn = (event: string, data: unknown) => void
 export type ActiveChannelExecutionMap = Map<string, ActiveChannelExecutionEntry>
@@ -127,25 +124,23 @@ export async function materializeChannelInputImages(
     }
 }
 
+export async function materializeChannelInputAudio(
+    audioDataUrls: string[],
+    conversationId: string,
+): Promise<string[]> {
+    if (!audioDataUrls.length) return []
+    try {
+        const artifacts = await materializeAudioArtifacts(audioDataUrls, conversationId)
+        return artifacts.map((artifact) => artifact.url)
+    } catch (err) {
+        console.warn('[channels] Failed to materialize input audio, retaining inline data:', err)
+        return audioDataUrls
+    }
+}
+
 export function channelImageDataUrl(source: string): string | null {
     if (source.startsWith('data:image/')) return source
-    const filePath = extractFilePathFromFileUrl(source)
-    if (!filePath || !existsSync(filePath)) return null
-    const mime = (() => {
-        switch (extname(filePath).toLowerCase()) {
-            case '.jpg':
-            case '.jpeg': return 'image/jpeg'
-            case '.gif': return 'image/gif'
-            case '.webp': return 'image/webp'
-            case '.svg': return 'image/svg+xml'
-            default: return 'image/png'
-        }
-    })()
-    try {
-        return `data:${mime};base64,${readFileSync(filePath).toString('base64')}`
-    } catch {
-        return null
-    }
+    return artifactFileUrlToDataUrl(source)
 }
 
 export async function applyChannelContextLimit(input: {

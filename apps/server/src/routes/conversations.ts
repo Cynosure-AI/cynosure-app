@@ -4,8 +4,14 @@ import { getLatestPlanningState } from '../core/agent/planning-state.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { nanoid } from 'nanoid'
 import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
-import { basename, join } from 'path'
-import { cleanupConversationArtifacts, extractFilePathFromFileUrl, getConversationArtifactsDir, materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
+import { basename, join, resolve } from 'path'
+import {
+    cleanupConversationArtifacts,
+    extractFilePathFromFileUrl,
+    getConversationArtifactsDir,
+    materializeMediaArtifacts,
+    type MediaArtifactKind,
+} from '../core/artifacts/image-artifacts.js'
 import { deleteConversationAttachmentIndexes, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import { getAssignedOrDefaultSpaces } from '../core/memory/memory-space-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
@@ -15,6 +21,29 @@ import { clearDebugContextCapture } from '../core/chat/debug-context.js'
 
 function escapeSqlLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
+}
+
+async function cloneMediaUrlsJson(
+    json: string | null,
+    conversationId: string,
+    kind: MediaArtifactKind,
+): Promise<string | null> {
+    if (!json) return null
+    try {
+        const urls = JSON.parse(json) as string[]
+        const clonedUrls: string[] = []
+        for (const url of urls) {
+            try {
+                const artifacts = await materializeMediaArtifacts([url], conversationId, kind)
+                clonedUrls.push(...artifacts.map((artifact) => artifact.url))
+            } catch {
+                // Skip missing, expired, or unreadable historical artifacts.
+            }
+        }
+        return clonedUrls.length ? JSON.stringify(clonedUrls) : null
+    } catch {
+        return null
+    }
 }
 
 /** Delete artifact files and attachment vectors referenced by conversations. */
@@ -162,24 +191,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             for (const row of messageRows) {
                 const nextMessageId = nanoid()
                 messageIdMap.set(row.id, nextMessageId)
-                let imageUrlsJson = row.image_urls_json
-                if (row.image_urls_json) {
-                    try {
-                        const imageUrls = JSON.parse(row.image_urls_json) as string[]
-                        const forkedImageUrls: string[] = []
-                        for (const imageUrl of imageUrls) {
-                            try {
-                                const artifacts = await materializeImageArtifacts([imageUrl], id)
-                                forkedImageUrls.push(...artifacts.map((artifact) => artifact.url))
-                            } catch {
-                                // Skip missing or unreadable historical artifacts in the fork.
-                            }
-                        }
-                        imageUrlsJson = forkedImageUrls.length ? JSON.stringify(forkedImageUrls) : null
-                    } catch {
-                        imageUrlsJson = null
-                    }
-                }
+                const imageUrlsJson = await cloneMediaUrlsJson(row.image_urls_json, id, 'image')
+                const videoUrlsJson = await cloneMediaUrlsJson(row.video_urls_json, id, 'video')
+                const audioUrlsJson = await cloneMediaUrlsJson(row.audio_urls_json, id, 'audio')
 
                 insertMessage.run(
                     nextMessageId,
@@ -194,11 +208,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     row.completion_tokens,
                     row.latency_ms,
                     imageUrlsJson,
-                    row.video_urls_json,
+                    videoUrlsJson,
                     row.agent_id,
                     row.memory_sources_json,
                     row.thinking,
-                    row.audio_urls_json,
+                    audioUrlsJson,
                     row.structured_content_json,
                     row.context_tokens,
                     row.created_at,
@@ -641,20 +655,30 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 .get(messageId, conversationId) as { created_at: number } | undefined
             if (!row) return reply.status(404).send({ error: 'Message not found' })
 
-            // Cleanup image files for messages being truncated
-            const imageRows = db.prepare(
-                'SELECT image_urls_json FROM messages WHERE conversation_id = ? AND created_at >= ? AND image_urls_json IS NOT NULL'
-            ).all(conversationId, row.created_at) as { image_urls_json: string }[]
-            for (const ir of imageRows) {
-                try {
-                    const urls: string[] = JSON.parse(ir.image_urls_json)
-                    for (const url of urls) {
-                        const filePath = extractFilePathFromFileUrl(url)
-                        if (filePath) {
-                            try { unlinkSync(filePath) } catch { /* already gone */ }
+            // Cleanup locally materialized media for messages being truncated.
+            const mediaRows = db.prepare(
+                `SELECT image_urls_json, video_urls_json, audio_urls_json
+                 FROM messages WHERE conversation_id = ? AND created_at >= ?`
+            ).all(conversationId, row.created_at) as {
+                image_urls_json: string | null
+                video_urls_json: string | null
+                audio_urls_json: string | null
+            }[]
+            const conversationArtifactsDir = resolve(getConversationArtifactsDir(conversationId))
+            for (const mediaRow of mediaRows) {
+                for (const json of [mediaRow.image_urls_json, mediaRow.video_urls_json, mediaRow.audio_urls_json]) {
+                    if (!json) continue
+                    try {
+                        const urls: string[] = JSON.parse(json)
+                        for (const url of urls) {
+                            const filePath = extractFilePathFromFileUrl(url)
+                            const resolvedPath = filePath ? resolve(filePath) : null
+                            if (resolvedPath?.startsWith(`${conversationArtifactsDir}/`)) {
+                                try { unlinkSync(resolvedPath) } catch { /* already gone */ }
+                            }
                         }
-                    }
-                } catch { /* skip */ }
+                    } catch { /* skip malformed media metadata */ }
+                }
             }
 
             const result = db

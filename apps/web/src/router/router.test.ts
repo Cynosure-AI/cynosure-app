@@ -20,4 +20,11 @@ describe('router onboarding guard', () => {
     await router.push('/settings')
     expect(router.currentRoute.value.name).toBe('settings')
   })
+
+  test('exposes the artifacts workspace route', async () => {
+    localStorage.setItem(SK_ONBOARDING_COMPLETE, 'true')
+    const { default: router } = await import('./index')
+    await router.push('/artifacts')
+    expect(router.currentRoute.value.name).toBe('artifacts')
+  })
 })
