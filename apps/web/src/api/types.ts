@@ -294,7 +294,7 @@ export type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | '
 export interface ActivityArtifact {
     href: string
     label: string
-    kind: 'file' | 'image' | 'video'
+    kind: 'file' | 'image' | 'video' | 'audio'
     ext: string
 }
 

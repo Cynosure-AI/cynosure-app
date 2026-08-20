@@ -632,19 +632,28 @@ On the first exchange (when conversation title is `"New Chat"`), title generatio
 
 **File:** `core/artifacts/image-artifacts.ts`
 
-- User-uploaded data-URL images are saved to `{dataDir}/artifacts/{conversationId}/{id}.{ext}`
+- User-uploaded and model/tool-generated images are saved to `{appDataDir}/artifacts/conversations/{conversationId}/images/{id}.{ext}`
 - Returned as HTTP URLs: `/api/files?path=...`
 - Cleaned up when conversation is deleted
 
-### 11.2 File Artifacts
+### 11.2 Video and Audio Artifacts
+
+**File:** `core/artifacts/image-artifacts.ts`
+
+- Generated videos are downloaded from the provider after generation completes and saved under `{appDataDir}/artifacts/conversations/{conversationId}/videos/`
+- Uploaded or tool-returned audio is saved under `{appDataDir}/artifacts/conversations/{conversationId}/audio/`
+- SQLite stores local `/api/files?path=...` references instead of provider URLs or base64 payloads
+- Inline data URLs are retained only in memory for the active multimodal model request
+
+### 11.3 File Artifacts
 
 **File:** `core/artifacts/file-artifacts.ts`
 
-- User-uploaded files are saved to disk and indexed in the database
+- User-uploaded files are copied to `{appDataDir}/artifacts/conversations/{conversationId}/files/` and indexed in the database
 - Small files are inlined directly into the message context
 - Large files are chunked and made searchable via attachment RAG
 
-### 11.3 Attachment RAG
+### 11.4 Attachment RAG
 
 **File:** `core/artifacts/attachment-rag.ts`
 

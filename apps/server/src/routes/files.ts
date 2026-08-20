@@ -3,9 +3,10 @@ import { existsSync, createReadStream, statSync } from 'fs'
 import { resolve, extname, isAbsolute } from 'path'
 
 const ALLOWED_EXTENSIONS = new Set([
-    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
-    '.mp4', '.webm', '.ogg', '.mp3', '.wav', '.flac',
-    '.pdf', '.docx', '.doc', '.odt', '.rtf', '.txt', '.md'
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.avif',
+    '.mp4', '.webm', '.mov', '.ogg', '.mp3', '.wav', '.flac', '.m4a', '.aac',
+    '.pdf', '.docx', '.doc', '.odt', '.rtf', '.txt', '.md', '.csv', '.tsv',
+    '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.json'
 ])
 
 const MIME_TYPES: Record<string, string> = {
@@ -16,19 +17,31 @@ const MIME_TYPES: Record<string, string> = {
     '.webp': 'image/webp',
     '.bmp': 'image/bmp',
     '.svg': 'image/svg+xml',
+    '.avif': 'image/avif',
     '.mp4': 'video/mp4',
     '.webm': 'video/webm',
+    '.mov': 'video/quicktime',
     '.ogg': 'audio/ogg',
     '.mp3': 'audio/mpeg',
     '.wav': 'audio/wav',
     '.flac': 'audio/flac',
+    '.m4a': 'audio/mp4',
+    '.aac': 'audio/aac',
     '.pdf': 'application/pdf',
     '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     '.doc': 'application/msword',
     '.odt': 'application/vnd.oasis.opendocument.text',
     '.rtf': 'application/rtf',
     '.txt': 'text/plain; charset=utf-8',
-    '.md': 'text/markdown; charset=utf-8'
+    '.md': 'text/markdown; charset=utf-8',
+    '.csv': 'text/csv; charset=utf-8',
+    '.tsv': 'text/tab-separated-values; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.xls': 'application/vnd.ms-excel',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.zip': 'application/zip'
 }
 
 export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
@@ -61,7 +74,8 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
 
         const mime = MIME_TYPES[ext] || 'application/octet-stream'
         reply.header('Content-Type', mime)
-        if (!mime.startsWith('image/') && !mime.startsWith('audio/') && !mime.startsWith('video/') && ext !== '.pdf') {
+        const inlineDocument = ext === '.pdf' || ext === '.txt' || ext === '.md' || ext === '.csv' || ext === '.tsv' || ext === '.json'
+        if (!mime.startsWith('image/') && !mime.startsWith('audio/') && !mime.startsWith('video/') && !inlineDocument) {
             reply.header('Content-Disposition', `attachment; filename="${resolved.split('/').pop()?.replace(/"/g, '') || 'download'}"`)
         }
         reply.header('Content-Length', stat.size)

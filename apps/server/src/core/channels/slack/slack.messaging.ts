@@ -17,7 +17,7 @@ import { handleCommand } from './slack.commands.js'
 import { postOrUpdate, sendLongSlackMessage, uploadImage, extractAttachments } from './slack.api.js'
 import {
     applyChannelContextLimit, beginChannelExecution, buildChannelHistory, finishChannelExecution,
-    materializeChannelInputImages, persistChannelAssistantMessage, persistChannelExecutionConfig,
+    materializeChannelInputAudio, materializeChannelInputImages, persistChannelAssistantMessage, persistChannelExecutionConfig,
     updateChannelExecution,
     channelImageDataUrl,
 } from '../channel-execution.js'
@@ -137,6 +137,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
     const db = getDb()
     const now = Date.now()
     const storedImageUrls = await materializeChannelInputImages(imageDataUrls, conversationId)
+    const storedAudioUrls = await materializeChannelInputAudio(audioDataUrls, conversationId)
 
     const userMsgId = nanoid()
     db.prepare(
@@ -144,7 +145,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
     ).run(
         userMsgId, conversationId, 'user', userText || '(attached media)',
         storedImageUrls.length ? JSON.stringify(storedImageUrls) : null,
-        audioDataUrls.length ? JSON.stringify(audioDataUrls) : null,
+        storedAudioUrls.length ? JSON.stringify(storedAudioUrls) : null,
         now
     )
     db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)

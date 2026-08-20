@@ -18,7 +18,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js'
 import type { Message, Interaction } from 'discord.js'
 import {
     applyChannelContextLimit, beginChannelExecution, buildChannelHistory, finishChannelExecution,
-    materializeChannelInputImages, persistChannelAssistantMessage, persistChannelExecutionConfig,
+    materializeChannelInputAudio, materializeChannelInputImages, persistChannelAssistantMessage, persistChannelExecutionConfig,
     updateChannelExecution,
     channelImageDataUrl,
 } from '../channel-execution.js'
@@ -125,13 +125,14 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
     const db = getDb()
     const now = Date.now()
     const storedImageUrls = await materializeChannelInputImages(imageDataUrls, conversationId)
+    const storedAudioUrls = await materializeChannelInputAudio(audioDataUrls, conversationId)
     const userMsgId = nanoid()
     db.prepare(
         'INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).run(
         userMsgId, conversationId, 'user', userText || '(attached media)',
         storedImageUrls.length ? JSON.stringify(storedImageUrls) : null,
-        audioDataUrls.length ? JSON.stringify(audioDataUrls) : null,
+        storedAudioUrls.length ? JSON.stringify(storedAudioUrls) : null,
         now
     )
     db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)

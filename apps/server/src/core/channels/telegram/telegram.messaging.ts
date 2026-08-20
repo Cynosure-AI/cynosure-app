@@ -21,6 +21,7 @@ import {
     beginChannelExecution,
     buildChannelHistory,
     finishChannelExecution,
+    materializeChannelInputAudio,
     materializeChannelInputImages,
     persistChannelAssistantMessage,
     persistChannelExecutionConfig,
@@ -134,6 +135,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
     const db = getDb()
     const now = Date.now()
     const storedImageUrls = await materializeChannelInputImages(imageDataUrls, conversationId)
+    const storedAudioUrls = await materializeChannelInputAudio(audioDataUrls, conversationId)
 
     // Save user message
     const userMsgId = nanoid()
@@ -143,7 +145,7 @@ export async function processMessage(ctx: TelegramCtx, update: TelegramUpdate): 
     ).run(
         userMsgId, conversationId, 'user', userText || '(attached media)',
         storedImageUrls.length ? JSON.stringify(storedImageUrls) : null,
-        audioDataUrls.length ? JSON.stringify(audioDataUrls) : null,
+        storedAudioUrls.length ? JSON.stringify(storedAudioUrls) : null,
         now
     )
     db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
