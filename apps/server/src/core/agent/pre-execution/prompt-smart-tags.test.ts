@@ -10,8 +10,9 @@ import { resolvePromptSmartTags } from './prompt-smart-tags.js'
 describe('prompt smart tags', () => {
     test('resolves execution identity, ISO time, and unique memory folders', () => {
         const result = resolvePromptSmartTags(
-            '{{agentName}}/{{providerId}}/{{model}} at {{isoDate}} {{isoTime}}. {{selectedMemFolderNames}}',
+            '{{userName}} + {{agentName}}/{{providerId}}/{{model}} at {{isoDate}} {{isoTime}}. {{selectedMemFolderNames}}',
             {
+                userName: 'Ada',
                 agentName: 'Researcher',
                 providerId: 'provider',
                 model: 'model',
@@ -21,7 +22,7 @@ describe('prompt smart tags', () => {
         )
 
         expect(result).toBe(
-            'Researcher/provider/model at 2026-05-06 07:08:09. Provided Memory Spaces are: Project, Shared',
+            'Ada + Researcher/provider/model at 2026-05-06 07:08:09. Provided Memory Spaces are: Project, Shared',
         )
     })
 

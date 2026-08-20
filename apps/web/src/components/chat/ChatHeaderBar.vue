@@ -5,7 +5,6 @@ import { useProviderStore } from "../../stores/provider.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { Icon } from "@iconify/vue";
 import AgentSelect from "../shared/AgentSelect.vue";
-import { useChatSidebar } from "../../composables/useSidebar";
 import SaveAgentModal from "./inputbar/SaveAgentModal.vue";
 import DebugContextModal from "./modals/DebugContextModal.vue";
 import { usePreferencesStore } from "../../stores/preferences.store";
@@ -22,7 +21,6 @@ const chatStore = useChatStore();
 const providerStore = useProviderStore();
 const agentDefs = useAgentDefinitionsStore();
 const prefs = usePreferencesStore();
-const { chatSidebarOpen, toggle: toggleSidebar } = useChatSidebar();
 const debugContextOpen = ref(false);
 
 const conversationTitle = computed(
@@ -70,20 +68,6 @@ async function newChat(): Promise<void> {
   <div
     class="shrink-0 border-b border-theme-800/60 px-3 py-2 flex items-center gap-2"
   >
-    <!-- Sidebar toggle -->
-    <button
-      class="p-1.5 rounded-lg hover:bg-theme-800 transition-colors text-theme-500 hover:text-theme-300 shrink-0"
-      title="Toggle chat history"
-      @click="toggleSidebar"
-    >
-      <Icon
-        :icon="
-          chatSidebarOpen ? 'lucide:panel-left-close' : 'lucide:panel-left-open'
-        "
-        class="w-4 h-4"
-      />
-    </button>
-
     <!-- Agent selector -->
     <div class="sm:w-44 md:w-64 shrink-0">
       <AgentSelect
