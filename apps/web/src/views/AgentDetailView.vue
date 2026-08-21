@@ -66,18 +66,18 @@ const sections: AgentSection[] = [
     component: AgentToolsTab
   },
   {
-    id: 'sub-agents',
-    label: 'Sub-Agents',
-    description: 'Configure delegated agents and collaboration behavior.',
-    icon: 'lucide:users',
-    component: AgentSubAgentsTab
-  },
-  {
     id: 'memory',
     label: 'Memory',
     description: 'Control memory spaces and retrieval behavior for this agent.',
     icon: 'lucide:brain',
     component: AgentMemoryTab
+  },
+    {
+    id: 'sub-agents',
+    label: 'Sub-Agents',
+    description: 'Configure delegated agents and collaboration behavior.',
+    icon: 'lucide:users',
+    component: AgentSubAgentsTab
   },
   {
     id: 'advanced',
