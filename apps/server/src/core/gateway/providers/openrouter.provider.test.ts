@@ -102,6 +102,36 @@ describe('OpenRouter model metadata', () => {
             skus: { per_audio_minute: 0.0015 }
         })
     })
+
+    test('uses dedicated image output pricing instead of the generic input-image price', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string | URL | Request) => {
+            const url = String(input)
+            if (url.endsWith('/images/models')) {
+                return new Response(JSON.stringify({ data: [{
+                    id: 'x-ai/grok-imagine-image-2.0',
+                    name: 'Grok Imagine Image 2.0',
+                    architecture: { input_modalities: ['text', 'image'], output_modalities: ['image'] },
+                    endpoints: '/api/v1/images/models/x-ai/grok-imagine-image-2.0/endpoints'
+                }] }), { status: 200 })
+            }
+            return new Response(JSON.stringify({ endpoints: [{ pricing: [
+                { billable: 'input_image', unit: 'image', cost_usd: 0.01 },
+                { billable: 'output_image', unit: 'image', cost_usd: 0.04, variant: 'low_1k' },
+                { billable: 'output_image', unit: 'image', cost_usd: 0.08, variant: 'medium_2k' },
+            ] }] }), { status: 200 })
+        }))
+
+        const model = (await new OpenRouterProvider(config).listModelItems('image'))[0]
+
+        expect(model.pricing).toMatchObject({
+            image: 0.04,
+            skus: {
+                input_image_per_image: 0.01,
+                output_image_low_1k_per_image: 0.04,
+                output_image_medium_2k_per_image: 0.08,
+            }
+        })
+    })
 })
 
 describe('OpenRouter completion termination', () => {
@@ -144,5 +174,29 @@ describe('OpenRouter completion termination', () => {
         ])
 
         await expect(collectStream(provider)).rejects.toThrow('before a finish reason')
+    })
+
+    test('formats attached audio as OpenRouter input_audio content', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({ data: [] }), { status: 200 })))
+        const provider = new OpenRouterProvider(config)
+        const create = vi.fn().mockResolvedValue((async function* () {
+            yield { choices: [{ delta: { content: 'done' }, finish_reason: 'stop' }], usage: null }
+        })())
+        ;(provider as unknown as { client: { chat: { completions: { create: typeof create } } } }).client = {
+            chat: { completions: { create } }
+        }
+
+        for await (const _chunk of provider.streamComplete({
+            model: 'test/model',
+            messages: [{ role: 'user', content: [{
+                type: 'audio_url',
+                audio_url: { url: 'data:audio/mpeg;base64,SU4=' }
+            }] }]
+        })) { /* consume stream */ }
+
+        expect(create.mock.calls[0][0]).toMatchObject({
+            messages: [{ content: [{ type: 'input_audio', input_audio: { data: 'SU4=', format: 'mp3' } }] }]
+        })
+        expect(create.mock.calls[0][0]).not.toHaveProperty('audio')
     })
 })
