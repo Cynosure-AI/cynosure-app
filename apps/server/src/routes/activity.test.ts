@@ -20,7 +20,7 @@ describe('activity artifact discovery', () => {
         await rm(directory, { recursive: true, force: true })
     })
 
-    test('ignores files mentioned only in tool results', async () => {
+    test('only includes generated assistant media, not uploads or tool-viewed media', async () => {
         const now = Date.now()
         const db = getDb()
         db.prepare(
@@ -56,9 +56,54 @@ describe('activity artifact discovery', () => {
             'tool-message-1',
             'conversation-1',
             'tool',
-            'Generated audio.',
-            JSON.stringify(['/api/files?path=%2Ftmp%2Fgenerated.mp3']),
+            'Viewed existing audio.',
+            JSON.stringify(['/api/files?path=%2Ftmp%2Fexisting.mp3']),
             now + 2,
+        )
+        db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, created_at)
+             VALUES (?, ?, ?, ?, ?)`,
+        ).run(
+            'assistant-view-intent',
+            'conversation-1',
+            'assistant',
+            'I will inspect /tmp/existing-image.jpg now.',
+            now + 2,
+        )
+        db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+        ).run(
+            'user-message-1',
+            'conversation-1',
+            'user',
+            'Use this upload.',
+            JSON.stringify(['/api/files?path=%2Ftmp%2Fuploaded.png']),
+            now + 3,
+        )
+        db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+            'assistant-message-2',
+            'conversation-1',
+            'assistant',
+            'I inspected the supplied media.',
+            JSON.stringify(['/api/files?path=%2Ftmp%2Fuploaded.png']),
+            JSON.stringify(['/api/files?path=%2Ftmp%2Fexisting.mp3']),
+            now + 4,
+        )
+        db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, audio_urls_json, generated_media, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+            'generated-tool-message',
+            'conversation-1',
+            'tool',
+            'Synthesized speech.',
+            JSON.stringify(['/api/files?path=%2Ftmp%2Fspeech.wav']),
+            1,
+            now + 5,
         )
 
         const app = Fastify()
@@ -72,9 +117,9 @@ describe('activity artifact discovery', () => {
         expect(response.statusCode).toBe(200)
         const body = response.json() as { items: { sourceId?: string; artifacts?: { label: string }[] }[] }
         expect(body.items).toHaveLength(2)
-        expect(body.items[0].sourceId).toBe('tool-message-1')
+        expect(body.items[0].sourceId).toBe('generated-tool-message')
         expect(body.items[0].artifacts).toEqual([
-            expect.objectContaining({ label: 'generated.mp3' }),
+            expect.objectContaining({ label: 'speech.wav' }),
         ])
         expect(body.items[1].sourceId).toBe('message-1')
         expect(body.items[1].artifacts).toEqual([

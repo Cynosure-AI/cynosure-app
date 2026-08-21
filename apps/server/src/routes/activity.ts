@@ -424,12 +424,47 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             })
         }
 
+        // Media attached by the user or returned by a tool is context, not a
+        // generated artifact. Remember when those URLs/paths first appeared so
+        // legacy assistant rows that duplicated tool media are filtered too.
+        const nonGeneratedArtifactFirstSeen = new Map<string, number>()
+        const contextMediaRows = db.prepare(
+            `SELECT conversation_id, content, image_urls_json, video_urls_json, audio_urls_json, created_at
+             FROM messages
+             WHERE (role = 'user' OR (role = 'tool' AND generated_media = 0 AND lower(content) NOT LIKE '%generat%'))
+               AND (image_urls_json IS NOT NULL OR video_urls_json IS NOT NULL OR audio_urls_json IS NOT NULL OR content LIKE '%/api/files?path=%' OR content GLOB '*/*.*')`
+        ).all() as {
+            conversation_id: string
+            content: string
+            image_urls_json: string | null
+            video_urls_json: string | null
+            audio_urls_json: string | null
+            created_at: number
+        }[]
+        for (const row of contextMediaRows) {
+            const contextArtifacts = dedupeArtifacts([
+                ...parseJsonStringArray(row.image_urls_json).map((url) => artifactFromUrl(url, 'image')),
+                ...parseJsonStringArray(row.video_urls_json).map((url) => artifactFromUrl(url, 'video')),
+                ...parseJsonStringArray(row.audio_urls_json).map((url) => artifactFromUrl(url, 'audio')),
+                ...fileArtifactsFromText(row.content),
+            ])
+            for (const artifact of contextArtifacts) {
+                const key = `${row.conversation_id}:${artifactKey(artifact)}`
+                const previous = nonGeneratedArtifactFirstSeen.get(key)
+                if (previous === undefined || row.created_at < previous) {
+                    nonGeneratedArtifactFirstSeen.set(key, row.created_at)
+                }
+            }
+        }
+
         const messageArtifactKeysByConversation = new Map<string, Set<string>>()
         const messageRows = db.prepare(
             `SELECT m.id, m.conversation_id, m.content, m.image_urls_json, m.video_urls_json, m.audio_urls_json, m.created_at, c.title, c.agent_id
              FROM messages m
              JOIN conversations c ON c.id = m.conversation_id
-             WHERE m.role IN ('assistant', 'tool')
+             WHERE m.generated_media = 1
+                OR m.role = 'assistant'
+                OR (m.role = 'tool' AND lower(m.content) LIKE '%generat%')
              ORDER BY m.created_at DESC
              LIMIT ?`
         ).all(searchQuery ? -1 : Math.max(queryLimit * 3, 100)) as {
@@ -449,8 +484,15 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 ...parseJsonStringArray(row.image_urls_json).map((url) => artifactFromUrl(url, 'image')),
                 ...parseJsonStringArray(row.video_urls_json).map((url) => artifactFromUrl(url, 'video')),
                 ...parseJsonStringArray(row.audio_urls_json).map((url) => artifactFromUrl(url, 'audio')),
-                ...fileArtifactsFromText(row.content),
-            ])
+                // Generated media is persisted in the typed media columns.
+                // A bare media path in assistant prose may simply describe a
+                // file the model is about to inspect, so only documents from
+                // message text remain eligible here.
+                ...fileArtifactsFromText(row.content).filter((artifact) => artifact.kind === 'file'),
+            ]).filter((artifact) => {
+                const firstContextUse = nonGeneratedArtifactFirstSeen.get(`${row.conversation_id}:${artifactKey(artifact)}`)
+                return firstContextUse === undefined || firstContextUse > row.created_at
+            })
             if (!artifacts.length) continue
             let conversationKeys = messageArtifactKeysByConversation.get(row.conversation_id)
             if (!conversationKeys) {

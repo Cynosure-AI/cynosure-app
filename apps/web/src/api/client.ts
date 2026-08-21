@@ -14,7 +14,7 @@ import type {
   TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatSendRequest, ConversationDto, ConversationMessagesResponse, DebugContextSnapshot } from '@shared/types'
+import type { ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationMessagesResponse, DebugContextSnapshot } from '@shared/types'
 
 function memorySpacePathId(id: string): string {
   return encodeURIComponent(encodeURIComponent(id))
@@ -118,6 +118,10 @@ export const api = {
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, request),
     getAttachmentConfig: () =>
       get<{ inlineAttachmentTextLimit: number }>('/api/chat/attachment-config'),
+    getMessageAttachments: (conversationId: string, messageId: string) =>
+      get<ChatResendAttachments>(
+        `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/attachments`
+      ),
     updateAttachmentConfig: (inlineAttachmentTextLimit: number) =>
       post<{ success: boolean; inlineAttachmentTextLimit: number }>('/api/chat/attachment-config', { inlineAttachmentTextLimit }),
     truncateFrom: (conversationId: string, messageId: string) =>

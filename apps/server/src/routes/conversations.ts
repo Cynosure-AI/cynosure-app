@@ -3,10 +3,11 @@ import { getDb } from '../db/database.js'
 import { getLatestPlanningState } from '../core/agent/planning-state.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { nanoid } from 'nanoid'
-import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from 'fs'
 import { basename, join, resolve } from 'path'
 import {
     cleanupConversationArtifacts,
+    artifactFileUrlToDataUrl,
     extractFilePathFromFileUrl,
     getConversationArtifactsDir,
     materializeMediaArtifacts,
@@ -175,6 +176,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 audio_urls_json: string | null
                 structured_content_json: string | null
                 context_tokens: number | null
+                generated_media: number
                 created_at: number
             }[]
 
@@ -184,8 +186,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     id, conversation_id, role, content, tool_calls_json, tool_call_id,
                     provider, model, prompt_tokens, completion_tokens, latency_ms,
                     image_urls_json, video_urls_json, agent_id, memory_sources_json, thinking,
-                    audio_urls_json, structured_content_json, context_tokens, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    audio_urls_json, structured_content_json, context_tokens, generated_media, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `)
 
             for (const row of messageRows) {
@@ -215,6 +217,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     audioUrlsJson,
                     row.structured_content_json,
                     row.context_tokens,
+                    row.generated_media,
                     row.created_at,
                 )
             }
@@ -492,6 +495,67 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             }),
         }
     })
+
+    // Resolve persisted attachments before retrying/editing a message. Stored
+    // /api/files URLs are only browser-facing references and cannot be sent to
+    // providers (or survive the subsequent history truncation) as-is.
+    app.get<{ Params: { id: string; messageId: string } }>(
+        '/conversations/:id/messages/:messageId/attachments',
+        async (req, reply) => {
+            const db = getDb()
+            const message = db.prepare(
+                `SELECT image_urls_json, audio_urls_json
+                 FROM messages
+                 WHERE id = ? AND conversation_id = ? AND role = 'user'`
+            ).get(req.params.messageId, req.params.id) as {
+                image_urls_json: string | null
+                audio_urls_json: string | null
+            } | undefined
+            if (!message) return reply.status(404).send({ error: 'Message not found' })
+
+            const resolveMedia = (json: string | null): string[] => {
+                if (!json) return []
+                let urls: unknown
+                try {
+                    urls = JSON.parse(json) as unknown
+                } catch {
+                    return []
+                }
+                if (!Array.isArray(urls)) return []
+                return urls
+                    .filter((url): url is string => typeof url === 'string')
+                    .map((url) => {
+                        const resolved = artifactFileUrlToDataUrl(url)
+                        if (resolved) return resolved
+                        if (url.startsWith('/api/files?')) {
+                            throw new Error('A persisted attachment is no longer available')
+                        }
+                        return url
+                    })
+            }
+
+            const attachmentRows = db.prepare(
+                `SELECT name, original_path
+                 FROM message_attachments
+                 WHERE message_id = ? AND conversation_id = ? AND kind = 'file'
+                 ORDER BY created_at ASC`
+            ).all(req.params.messageId, req.params.id) as { name: string; original_path: string | null }[]
+            const files = attachmentRows.map((row) => {
+                if (!row.original_path || !existsSync(row.original_path)) {
+                    throw new Error(`Persisted attachment "${row.name}" is no longer available`)
+                }
+                const encoded = readFileSync(row.original_path).toString('base64')
+                return { name: row.name, content: `data:application/octet-stream;base64,${encoded}` }
+            })
+            const imageDataUrls = resolveMedia(message.image_urls_json)
+            const audioDataUrls = resolveMedia(message.audio_urls_json)
+            return {
+                imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined,
+                audioDataUrls: audioDataUrls.length ? audioDataUrls : undefined,
+                files: files.length ? files : undefined,
+            }
+        }
+    )
 
     // GET /api/chat/conversations/:id/steps — get execution steps
     app.get<{ Params: { id: string } }>('/conversations/:id/steps', async (req) => {

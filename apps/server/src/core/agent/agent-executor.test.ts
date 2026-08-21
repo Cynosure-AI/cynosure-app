@@ -257,6 +257,42 @@ describe('AgentExecutor tool-loop safety', () => {
     expect(events.indexOf('write:start')).toBeGreaterThan(events.indexOf('read_b:end'))
   })
 
+  test('does not promote media returned by a read-only viewer into generated output', async () => {
+    const viewer: ToolDefinition = {
+      name: 'view_image', description: 'View an existing image', parameters: { type: 'object', properties: {} }, timeout: 1_000,
+      execute: async () => ({ success: true, output: 'Viewed image', images: ['/missing/reference.png'] }),
+    }
+    const generator: ToolDefinition = {
+      name: 'generate_image', description: 'Generate an image', parameters: { type: 'object', properties: {} }, timeout: 1_000,
+      execution: { readOnly: false },
+      execute: async () => ({ success: true, output: 'Generated image', images: ['/missing/generated.png'] }),
+    }
+    let call = 0
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      if (call++ === 0) {
+        yield {
+          toolCalls: [viewer, generator].map((tool) => ({
+            id: tool.name,
+            type: 'function' as const,
+            function: { name: tool.name, arguments: '{}' },
+          })),
+          done: true,
+        }
+      } else yield { content: 'done', done: true }
+    })())
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [viewer, generator], conversationId: 'media-origin', broadcast: vi.fn(), model: 'test',
+      saveMessages: false, emitEvents: false,
+    })
+
+    const result = await executor.run([{ role: 'user', content: 'go' }])
+
+    expect(result.images).toEqual(['/missing/generated.png'])
+    warn.mockRestore()
+  })
+
   test('throws a distinct error when tool rounds are exhausted', async () => {
     const tool: ToolDefinition = {
       name: 'again', description: 'again', parameters: { type: 'object', properties: {} }, timeout: 1_000,

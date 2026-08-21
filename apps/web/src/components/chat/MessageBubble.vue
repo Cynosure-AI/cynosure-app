@@ -270,6 +270,46 @@ const imageGridClass = computed(() => {
           @keydown.enter.ctrl.prevent="submitEdit"
           @keydown.escape="cancelEdit"
         />
+        <div
+          v-if="imageDataUrls?.length"
+          class="flex gap-2 mt-2 flex-wrap"
+        >
+          <img
+            v-for="(url, idx) in imageDataUrls"
+            :key="idx"
+            :src="url"
+            class="h-24 rounded-lg object-cover border border-white/20"
+            alt="Attached image"
+          >
+        </div>
+        <div
+          v-if="audioDataUrls?.length"
+          class="flex flex-col gap-2 mt-2"
+        >
+          <audio
+            v-for="(url, idx) in audioDataUrls"
+            :key="idx"
+            :src="url"
+            controls
+            class="max-w-full h-10"
+          />
+        </div>
+        <div
+          v-if="fileAttachments?.length"
+          class="flex gap-1.5 mt-2 flex-wrap"
+        >
+          <span
+            v-for="(file, idx) in fileAttachments"
+            :key="idx"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] bg-black/25 text-white/90 border border-white/15"
+          >
+            <Icon
+              icon="lucide:paperclip"
+              class="w-3 h-3 shrink-0 opacity-70"
+            />
+            <span class="truncate max-w-40">{{ file.name }}</span>
+          </span>
+        </div>
         <div class="flex gap-2 mt-2 justify-end">
           <button
             class="px-2.5 py-1 rounded-lg text-xs text-white/60 hover:text-white/90 transition-colors"
