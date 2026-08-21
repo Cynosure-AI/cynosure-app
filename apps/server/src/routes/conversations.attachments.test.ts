@@ -67,4 +67,43 @@ describe('conversation message attachment resolution', () => {
         expect(body.files[0].name).toBe('notes.txt')
         expect(Buffer.from(body.files[0].content.split(',')[1], 'base64').toString('utf8')).toBe('remember me')
     })
+
+    test('lists persisted document uploads with their conversation metadata', async () => {
+        const now = Date.now()
+        const db = getDb()
+        db.prepare(
+            `INSERT INTO agents (id, name, created_at, updated_at)
+             VALUES (?, ?, ?, ?)`,
+        ).run('agent-1', 'Researcher', now, now)
+        db.prepare(
+            `INSERT INTO conversations (id, title, agent_id, origin, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+        ).run('conversation-1', 'Quarterly research', 'agent-1', 'chat', now, now)
+        db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, created_at)
+             VALUES (?, ?, ?, ?, ?)`,
+        ).run('message-1', 'conversation-1', 'user', 'Review this.', now)
+        const files = await materializeFileAttachments([{ name: 'briefing.pdf', content: 'report contents' }], 'conversation-1')
+        persistMessageFileAttachments(db, 'message-1', 'conversation-1', files, now)
+
+        const app = Fastify()
+        await app.register(registerConversationRoutes, { prefix: '/api/chat' })
+        const response = await app.inject({
+            method: 'GET',
+            url: '/api/chat/uploads?search=quarterly',
+        })
+        await app.close()
+
+        expect(response.statusCode).toBe(200)
+        expect(response.json()).toMatchObject({
+            total: 1,
+            items: [{
+                name: 'briefing.pdf',
+                ext: 'pdf',
+                conversationId: 'conversation-1',
+                conversationTitle: 'Quarterly research',
+                agentName: 'Researcher',
+            }],
+        })
+    })
 })

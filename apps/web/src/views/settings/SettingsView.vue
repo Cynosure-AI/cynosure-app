@@ -526,17 +526,6 @@ function scoreSection(section: SettingsSection, query: string): number {
         aria-label="Settings"
         class="relative h-full max-h-[900px] w-full max-w-7xl overflow-hidden rounded-2xl border border-theme-700 bg-theme-950 shadow-2xl"
       >
-        <button
-          type="button"
-          class="absolute right-3 top-3 z-30 rounded-lg border border-theme-700 bg-theme-900/90 p-2 text-theme-400 shadow-lg transition hover:bg-theme-800 hover:text-theme-100"
-          aria-label="Close settings"
-          @click="closeSettings"
-        >
-          <Icon
-            icon="lucide:x"
-            class="h-4 w-4"
-          />
-        </button>
         <div class="flex h-full flex-col lg:flex-row">
           <aside class="shrink-0 border-b border-theme-800 bg-theme-950/60 lg:w-72 lg:border-b-0 lg:border-r">
             <header class=" p-4">
@@ -573,44 +562,57 @@ function scoreSection(section: SettingsSection, query: string): number {
           <main class="min-w-0 flex-1 overflow-y-auto">
             <!-- Sticky search bar -->
             <div class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 backdrop-blur-sm px-4 py-3 sm:px-6 lg:px-8">
-              <div class="mx-auto max-w-5xl">
-                <div class="relative">
-                  <Icon
-                    icon="lucide:search"
-                    class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
-                  />
-                  <input
-                    ref="searchInputRef"
-                    v-model="searchQuery"
-                    type="text"
-                    placeholder="Search settings..."
-                    class="w-full rounded-lg border border-theme-700 bg-theme-900/80 px-9 py-2.5 text-sm text-theme-100 placeholder-theme-600 outline-none transition focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
-                  >
-                  <kbd
-                    v-if="!isSearching"
-                    class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-theme-600 bg-theme-800 border border-theme-700 rounded"
-                  >
-                    /
-                  </kbd>
-                  <button
-                    v-if="isSearching"
-                    class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
-                    type="button"
-                    aria-label="Clear settings search"
-                    @click="clearSearch"
-                  >
+              <div class="mx-auto flex max-w-5xl items-start gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="relative">
                     <Icon
-                      icon="lucide:x"
-                      class="h-4 w-4"
+                      icon="lucide:search"
+                      class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
                     />
-                  </button>
+                    <input
+                      ref="searchInputRef"
+                      v-model="searchQuery"
+                      type="text"
+                      placeholder="Search settings..."
+                      class="w-full rounded-lg border border-theme-700 bg-theme-900/80 px-9 py-2.5 text-sm text-theme-100 placeholder-theme-600 outline-none transition focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+                    >
+                    <kbd
+                      v-if="!isSearching"
+                      class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-theme-600 bg-theme-800 border border-theme-700 rounded"
+                    >
+                      /
+                    </kbd>
+                    <button
+                      v-if="isSearching"
+                      class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
+                      type="button"
+                      aria-label="Clear settings search"
+                      @click="clearSearch"
+                    >
+                      <Icon
+                        icon="lucide:x"
+                        class="h-4 w-4"
+                      />
+                    </button>
+                  </div>
+                  <p
+                    v-if="isSearching"
+                    class="mt-2 text-xs text-theme-500"
+                  >
+                    {{ resultCountLabel }}
+                  </p>
                 </div>
-                <p
-                  v-if="isSearching"
-                  class="mt-2 text-xs text-theme-500"
+                <button
+                  type="button"
+                  class="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-theme-700 bg-theme-900/90 text-theme-400 shadow-sm transition hover:bg-theme-800 hover:text-theme-100"
+                  aria-label="Close settings"
+                  @click="closeSettings"
                 >
-                  {{ resultCountLabel }}
-                </p>
+                  <Icon
+                    icon="lucide:x"
+                    class="h-4 w-4"
+                  />
+                </button>
               </div>
             </div>
 
