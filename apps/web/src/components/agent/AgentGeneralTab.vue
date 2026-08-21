@@ -6,6 +6,7 @@ import type { AgentDefinition } from "../../api/types";
 import IconUpload from "../shared/IconUpload.vue";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import BaseCard from "../shared/BaseCard.vue";
+import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import PromptSmartTagPicker from "../shared/PromptSmartTagPicker.vue";
 import TagInput from "../shared/TagInput.vue";
 
@@ -132,17 +133,18 @@ onMounted(() =>
         />
       </div>
 
-      <label class="flex items-center gap-3 rounded-lg border border-theme-800 bg-theme-900/50 px-3 py-2 text-sm text-theme-300">
-        <input
-          :checked="agent.favorite"
-          type="checkbox"
-          class="h-4 w-4 rounded border-theme-600 bg-theme-900 text-amber-400 focus:ring-amber-400/50"
-          @change="emit('update', 'favorite', ($event.target as HTMLInputElement).checked)"
-        >
-        <span class="flex items-center gap-2">
+      <div class="flex items-center justify-between gap-4 rounded-lg border border-theme-800 bg-theme-900/50 px-3 py-2">
+        <span class="text-sm text-theme-300">
           Favorite this agent
         </span>
-      </label>
+        <ToggleSwitch
+          :model-value="agent.favorite"
+          label="Favorite this agent"
+          color="amber"
+          size="md"
+          @update:model-value="emit('update', 'favorite', $event)"
+        />
+      </div>
     </BaseCard>
 
     <!-- ── Model ─────────────────────────────────────────────── -->

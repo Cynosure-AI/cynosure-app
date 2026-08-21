@@ -105,6 +105,28 @@ describe('activity artifact discovery', () => {
             1,
             now + 5,
         )
+        db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+        ).run(
+            'created-document-tool-message',
+            'conversation-1',
+            'tool',
+            'Created DOCX document: /tmp/project-estimate.docx',
+            'create-docx-call',
+            now + 6,
+        )
+        db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+        ).run(
+            'parsed-document-tool-message',
+            'conversation-1',
+            'tool',
+            'Parsed DOCX document: /tmp/source-material.docx',
+            'parse-docx-call',
+            now + 7,
+        )
 
         const app = Fastify()
         await app.register(registerActivityRoutes, { prefix: '/api/activity' })
@@ -116,13 +138,17 @@ describe('activity artifact discovery', () => {
 
         expect(response.statusCode).toBe(200)
         const body = response.json() as { items: { sourceId?: string; artifacts?: { label: string }[] }[] }
-        expect(body.items).toHaveLength(2)
-        expect(body.items[0].sourceId).toBe('generated-tool-message')
+        expect(body.items).toHaveLength(3)
+        expect(body.items[0].sourceId).toBe('created-document-tool-message')
         expect(body.items[0].artifacts).toEqual([
+            expect.objectContaining({ label: 'project-estimate.docx' }),
+        ])
+        expect(body.items[1].sourceId).toBe('generated-tool-message')
+        expect(body.items[1].artifacts).toEqual([
             expect.objectContaining({ label: 'speech.wav' }),
         ])
-        expect(body.items[1].sourceId).toBe('message-1')
-        expect(body.items[1].artifacts).toEqual([
+        expect(body.items[2].sourceId).toBe('message-1')
+        expect(body.items[2].artifacts).toEqual([
             expect.objectContaining({ label: 'generated.png' }),
         ])
     })

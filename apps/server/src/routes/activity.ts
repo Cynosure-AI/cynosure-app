@@ -81,6 +81,8 @@ const fileArtifactPattern = new RegExp(
     'gi'
 )
 
+const generatedArtifactTextPattern = /\b(?:creat(?:e|ed|ing)|generat(?:e|ed|ing)|render(?:ed|ing)?|export(?:ed|ing)?|sav(?:e|ed|ing)|writ(?:e|ten|ing))\b/i
+
 function clampLimit(value: string | undefined): number {
     const parsed = Number.parseInt(value || '', 10)
     if (!Number.isFinite(parsed)) return 30
@@ -220,6 +222,10 @@ function fileArtifactsFromText(text: string): ActivityArtifact[] {
     }
 
     return artifacts
+}
+
+function toolOutputIndicatesGeneratedArtifact(text: string): boolean {
+    return generatedArtifactTextPattern.test(text)
 }
 
 function agentInfo(agentId: string | null): Pick<ActivityItem, 'agentName' | 'agentIconUrl'> {
@@ -429,12 +435,13 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         // legacy assistant rows that duplicated tool media are filtered too.
         const nonGeneratedArtifactFirstSeen = new Map<string, number>()
         const contextMediaRows = db.prepare(
-            `SELECT conversation_id, content, image_urls_json, video_urls_json, audio_urls_json, created_at
+            `SELECT conversation_id, role, content, image_urls_json, video_urls_json, audio_urls_json, created_at
              FROM messages
-             WHERE (role = 'user' OR (role = 'tool' AND generated_media = 0 AND lower(content) NOT LIKE '%generat%'))
+             WHERE (role = 'user' OR (role = 'tool' AND generated_media = 0))
                AND (image_urls_json IS NOT NULL OR video_urls_json IS NOT NULL OR audio_urls_json IS NOT NULL OR content LIKE '%/api/files?path=%' OR content GLOB '*/*.*')`
         ).all() as {
             conversation_id: string
+            role: string
             content: string
             image_urls_json: string | null
             video_urls_json: string | null
@@ -442,6 +449,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             created_at: number
         }[]
         for (const row of contextMediaRows) {
+            if (row.role === 'tool' && toolOutputIndicatesGeneratedArtifact(row.content)) continue
             const contextArtifacts = dedupeArtifacts([
                 ...parseJsonStringArray(row.image_urls_json).map((url) => artifactFromUrl(url, 'image')),
                 ...parseJsonStringArray(row.video_urls_json).map((url) => artifactFromUrl(url, 'video')),
@@ -459,27 +467,32 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
 
         const messageArtifactKeysByConversation = new Map<string, Set<string>>()
         const messageRows = db.prepare(
-            `SELECT m.id, m.conversation_id, m.content, m.image_urls_json, m.video_urls_json, m.audio_urls_json, m.created_at, c.title, c.agent_id
+            `SELECT m.id, m.conversation_id, m.role, m.content, m.image_urls_json, m.video_urls_json, m.audio_urls_json, m.generated_media, m.created_at, c.title, c.agent_id
              FROM messages m
              JOIN conversations c ON c.id = m.conversation_id
              WHERE m.generated_media = 1
                 OR m.role = 'assistant'
-                OR (m.role = 'tool' AND lower(m.content) LIKE '%generat%')
+                OR (m.role = 'tool' AND (m.content LIKE '%/api/files?path=%' OR m.content GLOB '*/*.*'))
              ORDER BY m.created_at DESC
              LIMIT ?`
         ).all(searchQuery ? -1 : Math.max(queryLimit * 3, 100)) as {
             id: string
             conversation_id: string
+            role: string
             content: string
             image_urls_json: string | null
             video_urls_json: string | null
             audio_urls_json: string | null
+            generated_media: number
             created_at: number
             title: string | null
             agent_id: string | null
         }[]
 
         for (const row of messageRows) {
+            if (row.role === 'tool' && row.generated_media !== 1 && !toolOutputIndicatesGeneratedArtifact(row.content)) {
+                continue
+            }
             const artifacts = dedupeArtifacts([
                 ...parseJsonStringArray(row.image_urls_json).map((url) => artifactFromUrl(url, 'image')),
                 ...parseJsonStringArray(row.video_urls_json).map((url) => artifactFromUrl(url, 'video')),
