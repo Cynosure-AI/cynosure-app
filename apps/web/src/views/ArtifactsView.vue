@@ -6,6 +6,7 @@ import type { ActivityArtifact, ActivityItem } from '../api/types'
 import ArtifactPreviewModal from '../components/shared/ArtifactPreviewModal.vue'
 
 type ArtifactFilter = 'all' | ActivityArtifact['kind']
+type ArtifactViewMode = 'grid' | 'list'
 
 interface ArtifactEntry {
   id: string
@@ -18,6 +19,7 @@ interface ArtifactEntry {
 
 const activityItems = ref<ActivityItem[]>([])
 const selectedFilter = ref<ArtifactFilter>('all')
+const viewMode = ref<ArtifactViewMode>('grid')
 const selectedEntry = ref<ArtifactEntry | null>(null)
 const searchQuery = ref('')
 const loading = ref(true)
@@ -230,37 +232,73 @@ onUnmounted(() => clearTimeout(searchTimer))
         </div>
       </header>
 
-      <div class="mb-6 flex items-center gap-2 overflow-x-auto pb-1">
-        <button
-          v-for="option in filterOptions"
-          :key="option.value"
-          type="button"
-          class="inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition"
-          :class="selectedFilter === option.value
-            ? 'border-accent-500/50 bg-accent-500/15 text-accent-200'
-            : 'border-theme-700 bg-theme-950/50 text-theme-400 hover:border-theme-600 hover:text-theme-200'"
-          @click="selectedFilter = option.value"
+      <div class="mb-6 flex items-center justify-between gap-3">
+        <div class="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
+          <button
+            v-for="option in filterOptions"
+            :key="option.value"
+            type="button"
+            class="inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition"
+            :class="selectedFilter === option.value
+              ? 'border-accent-500/50 bg-accent-500/15 text-accent-200'
+              : 'border-theme-700 bg-theme-950/50 text-theme-400 hover:border-theme-600 hover:text-theme-200'"
+            @click="selectedFilter = option.value"
+          >
+            <Icon
+              :icon="option.icon"
+              class="h-3.5 w-3.5"
+            />
+            {{ option.label }}
+            <span class="rounded-full bg-black/15 px-1.5 py-0.5 text-[10px]">{{ filterCount(option.value) }}</span>
+          </button>
+        </div>
+
+        <div
+          class="flex shrink-0 items-center rounded-lg border border-theme-700 bg-theme-950/70 p-1"
+          role="group"
+          aria-label="Artifact view layout"
         >
-          <Icon
-            :icon="option.icon"
-            class="h-3.5 w-3.5"
-          />
-          {{ option.label }}
-          <span class="rounded-full bg-black/15 px-1.5 py-0.5 text-[10px]">{{ filterCount(option.value) }}</span>
-        </button>
+          <button
+            v-for="mode in ([
+              { value: 'grid', label: 'Grid view', icon: 'lucide:grid-2x2' },
+              { value: 'list', label: 'List view', icon: 'lucide:list' },
+            ] as const)"
+            :key="mode.value"
+            type="button"
+            :title="mode.label"
+            :aria-label="mode.label"
+            :aria-pressed="viewMode === mode.value"
+            class="flex h-7 w-8 items-center justify-center rounded-md transition"
+            :class="viewMode === mode.value
+              ? 'bg-theme-700 text-theme-100 shadow-sm'
+              : 'text-theme-500 hover:bg-theme-800/70 hover:text-theme-200'"
+            @click="viewMode = mode.value"
+          >
+            <Icon
+              :icon="mode.icon"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+        </div>
       </div>
 
       <div
         v-if="loading"
-        class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+        :class="viewMode === 'grid'
+          ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
+          : 'space-y-2'"
       >
         <div
           v-for="index in 8"
           :key="index"
-          class="overflow-hidden rounded-2xl border border-theme-800 bg-theme-950/40"
+          class="overflow-hidden border border-theme-800 bg-theme-950/40"
+          :class="viewMode === 'grid' ? 'rounded-2xl' : 'flex h-24 rounded-xl'"
         >
-          <div class="aspect-4/3 animate-pulse bg-theme-800/60" />
-          <div class="space-y-2 p-4">
+          <div
+            class="shrink-0 animate-pulse bg-theme-800/60"
+            :class="viewMode === 'grid' ? 'aspect-4/3 w-full' : 'h-full w-24 sm:w-28'"
+          />
+          <div class="flex-1 space-y-2 p-4">
             <div class="h-3 w-2/3 animate-pulse rounded bg-theme-800" />
             <div class="h-2.5 w-1/2 animate-pulse rounded bg-theme-800/70" />
           </div>
@@ -310,16 +348,24 @@ onUnmounted(() => clearTimeout(searchTimer))
 
       <div
         v-else
-        class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+        :class="viewMode === 'grid'
+          ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
+          : 'space-y-2'"
       >
         <button
           v-for="entry in visibleEntries"
           :key="entry.id"
           type="button"
-          class="group overflow-hidden rounded-2xl border border-theme-800 bg-theme-950/45 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-theme-600 hover:shadow-xl hover:shadow-black/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/60"
+          class="group w-full overflow-hidden border border-theme-800 bg-theme-950/45 text-left shadow-sm transition duration-200 hover:border-theme-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/60"
+          :class="viewMode === 'grid'
+            ? 'rounded-2xl hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/15'
+            : 'flex min-h-20 rounded-xl hover:bg-theme-900/60'"
           @click="selectedEntry = entry"
         >
-          <div class="relative flex aspect-4/3 items-center justify-center overflow-hidden bg-theme-950">
+          <div
+            class="relative flex shrink-0 items-center justify-center overflow-hidden bg-theme-950"
+            :class="viewMode === 'grid' ? 'aspect-4/3 w-full' : 'h-20 w-20 self-stretch sm:h-24 sm:w-28'"
+          >
             <img
               v-if="entry.artifact.kind === 'image'"
               :src="entry.artifact.href"
@@ -337,20 +383,33 @@ onUnmounted(() => clearTimeout(searchTimer))
             />
             <div
               v-else
-              class="flex flex-col items-center gap-3 text-theme-500"
+              class="flex flex-col items-center text-theme-500"
+              :class="viewMode === 'grid' ? 'gap-3' : 'gap-1.5'"
             >
-              <div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-theme-800/80 ring-1 ring-theme-700/70 transition group-hover:text-accent-300">
+              <div
+                class="flex items-center justify-center bg-theme-800/80 ring-1 ring-theme-700/70 transition group-hover:text-accent-300"
+                :class="viewMode === 'grid' ? 'h-16 w-16 rounded-2xl' : 'h-10 w-10 rounded-xl'"
+              >
                 <Icon
                   :icon="artifactIcon(entry.artifact.kind)"
-                  class="h-7 w-7"
+                  :class="viewMode === 'grid' ? 'h-7 w-7' : 'h-5 w-5'"
                 />
               </div>
-              <span class="text-[11px] font-bold uppercase tracking-wider text-theme-600">{{ artifactTypeLabel(entry.artifact) }}</span>
+              <span
+                v-if="viewMode === 'grid'"
+                class="text-[11px] font-bold uppercase tracking-wider text-theme-600"
+              >{{ artifactTypeLabel(entry.artifact) }}</span>
             </div>
-            <span class="absolute left-3 top-3 rounded-md border border-white/10 bg-black/55 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white/85 backdrop-blur-sm">
+            <span
+              class="absolute rounded-md border border-white/10 bg-black/55 font-bold uppercase tracking-wider text-white/85 backdrop-blur-sm"
+              :class="viewMode === 'grid' ? 'left-3 top-3 px-2 py-1 text-[10px]' : 'left-1.5 top-1.5 px-1.5 py-0.5 text-[8px]'"
+            >
               {{ artifactTypeLabel(entry.artifact) }}
             </span>
-            <span class="absolute bottom-3 right-3 flex h-9 w-9 translate-y-1 items-center justify-center rounded-full bg-black/65 text-white opacity-0 shadow-lg backdrop-blur-sm transition group-hover:translate-y-0 group-hover:opacity-100">
+            <span
+              v-if="viewMode === 'grid'"
+              class="absolute bottom-3 right-3 flex h-9 w-9 translate-y-1 items-center justify-center rounded-full bg-black/65 text-white opacity-0 shadow-lg backdrop-blur-sm transition group-hover:translate-y-0 group-hover:opacity-100"
+            >
               <Icon
                 icon="lucide:maximize-2"
                 class="h-4 w-4"
@@ -358,12 +417,21 @@ onUnmounted(() => clearTimeout(searchTimer))
             </span>
           </div>
 
-          <div class="p-4">
+          <div
+            class="min-w-0 flex-1 p-4"
+            :class="{ 'flex flex-col justify-center': viewMode === 'list' }"
+          >
             <p
               class="truncate text-sm font-semibold text-theme-200"
               :title="entry.artifact.label"
             >
               {{ entry.artifact.label }}
+            </p>
+            <p
+              v-if="viewMode === 'list'"
+              class="mt-1 truncate text-xs text-theme-500"
+            >
+              {{ entry.conversationTitle }}
             </p>
             <div class="mt-2 flex items-center justify-between gap-3 text-[11px] text-theme-500">
               <span class="min-w-0 truncate">{{ entry.agentName || 'AI assistant' }}</span>
