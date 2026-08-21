@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { api } from '../../api/client'
+import { wsConnected } from '../../api/http'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
@@ -34,10 +35,14 @@ const editingTitle = ref('')
 const titleInputRef = ref<HTMLInputElement | null>(null)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let refreshTimer: ReturnType<typeof setTimeout> | null = null
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+let retryDelay = 500
+let disposed = false
 const liveCleanups: Array<() => void> = []
 
 const PAGE_SIZE = 50
 const MIN_SEARCH_LENGTH = 2
+const MAX_RETRY_DELAY = 5_000
 const awaitingIds = computed(() => new Set([
   ...props.awaitingConversationIds,
   ...agentStore.awaitingHITLConvIds,
@@ -127,11 +132,31 @@ async function load(reset = false, clearExisting = false): Promise<void> {
     const rows = response.items.map(mapRow)
     conversations.value = reset ? rows : [...conversations.value, ...rows]
     total.value = response.total
+    retryDelay = 500
+    clearRetry()
   } catch {
-    if (token === requestToken.value) loadError.value = true
+    if (token === requestToken.value) {
+      loadError.value = true
+      scheduleRetry()
+    }
   } finally {
     if (token === requestToken.value) loading.value = false
   }
+}
+
+function clearRetry(): void {
+  if (!retryTimer) return
+  clearTimeout(retryTimer)
+  retryTimer = null
+}
+
+function scheduleRetry(): void {
+  if (disposed || retryTimer) return
+  retryTimer = setTimeout(() => {
+    retryTimer = null
+    if (!disposed) void load(true)
+  }, retryDelay)
+  retryDelay = Math.min(retryDelay * 2, MAX_RETRY_DELAY)
 }
 
 function onScroll(event: Event): void {
@@ -209,6 +234,7 @@ watch(searchQuery, (query) => {
   if (searchTimer) clearTimeout(searchTimer)
   const trimmed = query.trim()
   if (trimmed.length > 0 && trimmed.length < MIN_SEARCH_LENGTH) {
+    clearRetry()
     requestToken.value += 1
     activeQuery.value = trimmed
     conversations.value = []
@@ -233,7 +259,15 @@ watch(() => chatStore.activeConversationId, (conversationId) => {
 
 watch(() => props.activeConversationIds.join('|'), scheduleRefresh)
 
+watch(wsConnected, (connected) => {
+  if (!connected || !loadError.value) return
+  clearRetry()
+  retryDelay = 500
+  void load(true)
+})
+
 onMounted(() => {
+  disposed = false
   document.addEventListener('click', closeMenu)
   liveCleanups.push(
     api.chat.onNewMessage(scheduleRefresh),
@@ -245,8 +279,10 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  disposed = true
   if (searchTimer) clearTimeout(searchTimer)
   if (refreshTimer) clearTimeout(refreshTimer)
+  clearRetry()
   requestToken.value += 1
   liveCleanups.forEach((cleanup) => cleanup())
   document.removeEventListener('click', closeMenu)
@@ -412,14 +448,16 @@ onBeforeUnmount(() => {
       >
         Loading chats…
       </p>
-      <button
+      <p
         v-if="loadError"
-        type="button"
-        class="w-full px-3 py-2 text-center text-xs text-red-400"
-        @click="load(true)"
+        class="flex items-center justify-center gap-1.5 px-3 py-2 text-center text-xs text-theme-500"
       >
-        Could not load chats · Retry
-      </button>
+        <Icon
+          icon="lucide:loader-circle"
+          class="h-3.5 w-3.5 animate-spin"
+        />
+        Connecting to chats…
+      </p>
     </div>
   </div>
 </template>

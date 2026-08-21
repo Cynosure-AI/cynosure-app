@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { api } from '../api/client'
-import type { ActivityArtifact, ActivityItem } from '../api/types'
+import type { ActivityArtifact, ActivityItem, ConversationUpload } from '../api/types'
 import ArtifactPreviewModal from '../components/shared/ArtifactPreviewModal.vue'
+import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
 
+type ArtifactPanel = 'generated' | 'uploads'
 type ArtifactFilter = 'all' | ActivityArtifact['kind']
 type ArtifactViewMode = 'grid' | 'list'
 
@@ -15,9 +18,38 @@ interface ArtifactEntry {
   agentName: string | null
   conversationTitle: string
   conversationId: string | null
+  sizeBytes?: number
+  chunkCount?: number
 }
 
+const sections = [
+  {
+    id: 'generated',
+    path: '/artifacts/generated',
+    label: 'Artifacts',
+    description: 'Browse images, videos, audio, and documents generated across your workspace.',
+    icon: 'lucide:sparkles',
+  },
+  {
+    id: 'uploads',
+    path: '/artifacts/uploads',
+    label: 'Uploads',
+    description: 'Browse durable copies of documents attached to your conversations.',
+    icon: 'lucide:paperclip',
+  },
+] as const
+
+const tabs: TabDef<ArtifactPanel>[] = sections.map((section) => ({
+  value: section.id,
+  label: section.label,
+  icon: section.icon,
+}))
+
+const route = useRoute()
+const router = useRouter()
+const activePanel = ref<ArtifactPanel>('generated')
 const activityItems = ref<ActivityItem[]>([])
+const uploadItems = ref<ConversationUpload[]>([])
 const selectedFilter = ref<ArtifactFilter>('all')
 const viewMode = ref<ArtifactViewMode>('grid')
 const selectedEntry = ref<ArtifactEntry | null>(null)
@@ -38,7 +70,9 @@ const filterOptions: { value: ArtifactFilter; label: string; icon: string }[] = 
   { value: 'file', label: 'Documents', icon: 'lucide:file-text' },
 ]
 
-const allEntries = computed<ArtifactEntry[]>(() => {
+const activeSection = computed(() => sections.find((section) => section.id === activePanel.value) || sections[0])
+
+const generatedEntries = computed<ArtifactEntry[]>(() => {
   const entries: ArtifactEntry[] = []
   const seen = new Set<string>()
 
@@ -59,18 +93,39 @@ const allEntries = computed<ArtifactEntry[]>(() => {
   return entries
 })
 
-const visibleEntries = computed(() => selectedFilter.value === 'all'
-  ? allEntries.value
-  : allEntries.value.filter((entry) => entry.artifact.kind === selectedFilter.value))
+const uploads = computed<ArtifactEntry[]>(() => uploadItems.value.map((upload) => ({
+  id: upload.id,
+  artifact: {
+    href: upload.href,
+    label: upload.name,
+    kind: 'file',
+    ext: upload.ext,
+  },
+  createdAt: upload.createdAt,
+  agentName: upload.agentName,
+  conversationTitle: upload.conversationTitle,
+  conversationId: upload.conversationId,
+  sizeBytes: upload.sizeBytes,
+  chunkCount: upload.chunkCount,
+})))
+
+const visibleEntries = computed(() => {
+  if (activePanel.value === 'uploads') return uploads.value
+  return selectedFilter.value === 'all'
+    ? generatedEntries.value
+    : generatedEntries.value.filter((entry) => entry.artifact.kind === selectedFilter.value)
+})
 
 const emptyTitle = computed(() => {
-  if (searchQuery.value) return 'No matching artifacts'
+  if (searchQuery.value) return activePanel.value === 'uploads' ? 'No matching uploads' : 'No matching artifacts'
+  if (activePanel.value === 'uploads') return 'No uploads yet'
   if (selectedFilter.value === 'all') return 'No artifacts yet'
   return `No ${filterOptions.find((option) => option.value === selectedFilter.value)?.label.toLowerCase() || 'artifacts'} yet`
 })
 
 const emptyDescription = computed(() => {
-  if (searchQuery.value) return 'Try a different search or artifact type.'
+  if (searchQuery.value) return `Try a different search${activePanel.value === 'generated' ? ' or artifact type' : ''}.`
+  if (activePanel.value === 'uploads') return 'Documents attached to chat messages will appear here and remain available for edits and retries.'
   if (selectedFilter.value !== 'all') {
     return hasMore.value
       ? 'Load more results to keep looking through your workspace history.'
@@ -80,8 +135,8 @@ const emptyDescription = computed(() => {
 })
 
 function filterCount(filter: ArtifactFilter): number {
-  if (filter === 'all') return allEntries.value.length
-  return allEntries.value.filter((entry) => entry.artifact.kind === filter).length
+  if (filter === 'all') return generatedEntries.value.length
+  return generatedEntries.value.filter((entry) => entry.artifact.kind === filter).length
 }
 
 function artifactIcon(kind: ActivityArtifact['kind']): string {
@@ -109,33 +164,50 @@ function formatDate(timestamp: number): string {
   })
 }
 
-async function loadArtifacts(reset = false): Promise<void> {
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`
+}
+
+async function loadEntries(reset = false): Promise<void> {
   if (!reset && (loading.value || loadingMore.value || !hasMore.value)) return
   const generation = reset ? ++loadGeneration : loadGeneration
-  const offset = reset ? 0 : activityItems.value.length
+  const offset = reset
+    ? 0
+    : activePanel.value === 'uploads' ? uploadItems.value.length : activityItems.value.length
 
   if (reset) {
     loading.value = true
     hasMore.value = false
+  } else {
+    loadingMore.value = true
   }
-  else loadingMore.value = true
   error.value = ''
 
   try {
-    const response = await api.activity.list({
-      limit: PAGE_SIZE,
-      offset,
-      types: ['artifact'],
-      search: searchQuery.value,
-    })
-    if (generation !== loadGeneration) return
-    activityItems.value = reset ? response.items : [...activityItems.value, ...response.items]
-    hasMore.value = Boolean(response.hasMore)
+    if (activePanel.value === 'uploads') {
+      const response = await api.chat.listUploads(PAGE_SIZE, offset, searchQuery.value)
+      if (generation !== loadGeneration) return
+      uploadItems.value = reset ? response.items : [...uploadItems.value, ...response.items]
+      hasMore.value = uploadItems.value.length < response.total
+    } else {
+      const response = await api.activity.list({
+        limit: PAGE_SIZE,
+        offset,
+        types: ['artifact'],
+        search: searchQuery.value,
+      })
+      if (generation !== loadGeneration) return
+      activityItems.value = reset ? response.items : [...activityItems.value, ...response.items]
+      hasMore.value = Boolean(response.hasMore)
+    }
   } catch (err) {
     if (generation !== loadGeneration) return
-    error.value = err instanceof Error ? err.message : 'Could not load artifacts.'
+    error.value = err instanceof Error ? err.message : `Could not load ${activePanel.value}.`
     if (reset) {
-      activityItems.value = []
+      if (activePanel.value === 'uploads') uploadItems.value = []
+      else activityItems.value = []
       hasMore.value = false
     }
   } finally {
@@ -146,10 +218,15 @@ async function loadArtifacts(reset = false): Promise<void> {
   }
 }
 
+function selectPanel(panel: ArtifactPanel): void {
+  const section = sections.find((candidate) => candidate.id === panel)
+  if (section && route.path !== section.path) void router.push(section.path)
+}
+
 function handleScroll(event: Event): void {
   const element = event.currentTarget as HTMLElement
   if (element.scrollHeight - element.scrollTop - element.clientHeight < 500) {
-    void loadArtifacts()
+    void loadEntries()
   }
 }
 
@@ -157,12 +234,22 @@ function clearSearch(): void {
   searchQuery.value = ''
 }
 
+watch(
+  () => route.params.section,
+  (sectionParam) => {
+    const section = Array.isArray(sectionParam) ? sectionParam[0] : sectionParam
+    activePanel.value = section === 'uploads' ? 'uploads' : 'generated'
+    selectedEntry.value = null
+    void loadEntries(true)
+  },
+  { immediate: true },
+)
+
 watch(searchQuery, () => {
   clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => void loadArtifacts(true), 250)
+  searchTimer = setTimeout(() => void loadEntries(true), 250)
 })
 
-onMounted(() => void loadArtifacts(true))
 onUnmounted(() => clearTimeout(searchTimer))
 </script>
 
@@ -171,27 +258,20 @@ onUnmounted(() => clearTimeout(searchTimer))
     class="h-full overflow-y-auto"
     @scroll="handleScroll"
   >
-    <div class="mx-auto max-w-7xl px-5 py-7 md:px-8 md:py-9">
-      <header class="mb-7 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-accent-400">
-            <Icon
-              icon="lucide:sparkles"
-              class="h-3.5 w-3.5"
-            />
-            AI output library
-          </div>
-          <h1 class="text-2xl font-bold text-theme-100 md:text-3xl">
+    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 px-5 pt-5 backdrop-blur-sm md:px-8 md:pt-6">
+      <div class="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div class="min-w-0">
+          <h1 class="text-2xl font-bold text-theme-100">
             Artifacts
           </h1>
-          <p class="mt-1.5 max-w-xl text-sm leading-6 text-theme-500">
-            Browse images, videos, audio, and documents generated across your workspace.
+          <p class="mt-1 text-sm leading-relaxed text-theme-500">
+            {{ activeSection.description }}
           </p>
         </div>
 
-        <div class="flex w-full items-center gap-2 lg:w-auto">
-          <label class="relative min-w-0 flex-1 lg:w-80 lg:flex-none">
-            <span class="sr-only">Search artifacts</span>
+        <div class="flex w-full shrink-0 items-center gap-2 sm:w-auto">
+          <label class="relative min-w-0 flex-1 sm:w-80 sm:flex-none">
+            <span class="sr-only">Search {{ activePanel === 'uploads' ? 'uploads' : 'artifacts' }}</span>
             <Icon
               icon="lucide:search"
               class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
@@ -199,7 +279,7 @@ onUnmounted(() => clearTimeout(searchTimer))
             <input
               v-model="searchQuery"
               type="search"
-              placeholder="Search files, agents, or conversations"
+              :placeholder="activePanel === 'uploads' ? 'Search uploads or conversations' : 'Search files, agents, or conversations'"
               class="h-10 w-full rounded-xl border border-theme-700 bg-theme-950/70 pl-9 pr-9 text-sm text-theme-200 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
             >
             <button
@@ -217,11 +297,11 @@ onUnmounted(() => clearTimeout(searchTimer))
           </label>
           <button
             type="button"
-            title="Refresh artifacts"
-            aria-label="Refresh artifacts"
+            :title="`Refresh ${activePanel}`"
+            :aria-label="`Refresh ${activePanel}`"
             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-theme-700 bg-theme-950/70 text-theme-400 transition hover:border-theme-600 hover:text-theme-100"
             :disabled="loading"
-            @click="loadArtifacts(true)"
+            @click="loadEntries(true)"
           >
             <Icon
               icon="lucide:refresh-cw"
@@ -230,10 +310,22 @@ onUnmounted(() => clearTimeout(searchTimer))
             />
           </button>
         </div>
-      </header>
+      </div>
 
+      <TabBar
+        :model-value="activePanel"
+        :tabs="tabs"
+        class="mx-auto mt-4 max-w-7xl"
+        @update:model-value="selectPanel"
+      />
+    </header>
+
+    <div class="mx-auto max-w-7xl px-5 py-6 md:px-8">
       <div class="mb-6 flex items-center justify-between gap-3">
-        <div class="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
+        <div
+          v-if="activePanel === 'generated'"
+          class="flex min-w-0 items-center gap-2 overflow-x-auto pb-1"
+        >
           <button
             v-for="option in filterOptions"
             :key="option.value"
@@ -251,6 +343,16 @@ onUnmounted(() => clearTimeout(searchTimer))
             {{ option.label }}
             <span class="rounded-full bg-black/15 px-1.5 py-0.5 text-[10px]">{{ filterCount(option.value) }}</span>
           </button>
+        </div>
+        <div
+          v-else
+          class="flex min-w-0 items-center gap-2 text-xs text-theme-500"
+        >
+          <Icon
+            icon="lucide:shield-check"
+            class="h-4 w-4 shrink-0 text-accent-400"
+          />
+          <span>Stored copies used when messages are edited or retried</span>
         </div>
 
         <div
@@ -314,7 +416,7 @@ onUnmounted(() => clearTimeout(searchTimer))
           class="mb-3 h-8 w-8 text-red-400"
         />
         <p class="font-medium text-theme-200">
-          Couldn't load artifacts
+          Couldn't load {{ activePanel === 'uploads' ? 'uploads' : 'artifacts' }}
         </p>
         <p class="mt-1 max-w-md text-sm text-theme-500">
           {{ error }}
@@ -322,7 +424,7 @@ onUnmounted(() => clearTimeout(searchTimer))
         <button
           type="button"
           class="mt-4 rounded-lg bg-theme-800 px-4 py-2 text-sm text-theme-200 hover:bg-theme-700"
-          @click="loadArtifacts(true)"
+          @click="loadEntries(true)"
         >
           Try again
         </button>
@@ -334,7 +436,7 @@ onUnmounted(() => clearTimeout(searchTimer))
       >
         <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-theme-800/70 text-theme-500">
           <Icon
-            :icon="searchQuery ? 'lucide:search-x' : 'lucide:shapes'"
+            :icon="searchQuery ? 'lucide:search-x' : activePanel === 'uploads' ? 'lucide:paperclip' : 'lucide:shapes'"
             class="h-7 w-7"
           />
         </div>
@@ -434,7 +536,10 @@ onUnmounted(() => clearTimeout(searchTimer))
               {{ entry.conversationTitle }}
             </p>
             <div class="mt-2 flex items-center justify-between gap-3 text-[11px] text-theme-500">
-              <span class="min-w-0 truncate">{{ entry.agentName || 'AI assistant' }}</span>
+              <span class="min-w-0 truncate">
+                {{ entry.agentName || (activePanel === 'uploads' ? 'Free Chat' : 'AI assistant') }}
+                <template v-if="entry.sizeBytes != null"> · {{ formatBytes(entry.sizeBytes) }}</template>
+              </span>
               <span class="shrink-0">{{ formatDate(entry.createdAt) }}</span>
             </div>
           </div>
@@ -449,7 +554,7 @@ onUnmounted(() => clearTimeout(searchTimer))
           icon="lucide:loader-2"
           class="h-4 w-4 animate-spin"
         />
-        Loading more artifacts…
+        Loading more {{ activePanel === 'uploads' ? 'uploads' : 'artifacts' }}…
       </div>
       <div
         v-else-if="hasMore"
@@ -458,7 +563,7 @@ onUnmounted(() => clearTimeout(searchTimer))
         <button
           type="button"
           class="rounded-xl border border-theme-700 bg-theme-950/50 px-4 py-2 text-sm text-theme-300 hover:border-theme-600 hover:text-theme-100"
-          @click="loadArtifacts()"
+          @click="loadEntries()"
         >
           Load more
         </button>

@@ -2,7 +2,7 @@ import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscri
 import type {
   LLMProviderConfig, McpServerInfo, McpRegistryResponse,
   AgentDefinition, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob,
-  AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
+  AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, ConversationUpload, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
   MetricsSummary, PlanningState,
   ModelListType,
   ModelInfo,
@@ -85,6 +85,11 @@ export const api = {
       return get<{ items: { id: string; title: string; agent_id: string | null; ma_workspace_id: string | null; origin: string; pinned: number; last_read_at: number | null; created_at: number; updated_at: number; last_user_message: string | null }[]; total: number }>(
         `/api/chat/conversations?${params}`
       )
+    },
+    listUploads: (limit: number, offset: number, search?: string) => {
+      const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+      if (search?.trim()) params.set('search', search.trim())
+      return get<{ items: ConversationUpload[]; total: number }>(`/api/chat/uploads?${params}`)
     },
     getMessages: (conversationId: string) =>
       get<ConversationMessagesResponse>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),

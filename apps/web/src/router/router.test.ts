@@ -26,5 +26,6 @@ describe('router onboarding guard', () => {
     const { default: router } = await import('./index')
     await router.push('/artifacts')
     expect(router.currentRoute.value.name).toBe('artifacts')
+    expect(router.currentRoute.value.path).toBe('/artifacts/generated')
   })
 })

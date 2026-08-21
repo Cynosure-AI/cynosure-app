@@ -4,13 +4,14 @@ import { getLatestPlanningState } from '../core/agent/planning-state.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { nanoid } from 'nanoid'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from 'fs'
-import { basename, join, resolve } from 'path'
+import { basename, extname, join, resolve } from 'path'
 import {
     cleanupConversationArtifacts,
     artifactFileUrlToDataUrl,
     extractFilePathFromFileUrl,
     getConversationArtifactsDir,
     materializeMediaArtifacts,
+    toFileUrl,
     type MediaArtifactKind,
 } from '../core/artifacts/image-artifacts.js'
 import { deleteConversationAttachmentIndexes, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
@@ -340,6 +341,66 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             }
         }
     )
+
+    // GET /api/chat/uploads — list durable document attachments across conversations.
+    app.get<{ Querystring: { limit?: string; offset?: string; search?: string } }>('/uploads', async (req) => {
+        const db = getDb()
+        const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || '60', 10) || 60))
+        const offset = Math.max(0, parseInt(req.query.offset || '0', 10) || 0)
+        const search = req.query.search?.trim()
+        const conditions = ["a.kind = 'file'", 'a.original_path IS NOT NULL']
+        const params: unknown[] = []
+
+        if (search) {
+            conditions.push("(a.name COLLATE NOCASE LIKE ? ESCAPE '\\' OR c.title COLLATE NOCASE LIKE ? ESCAPE '\\' OR ag.name COLLATE NOCASE LIKE ? ESCAPE '\\')")
+            const pattern = `%${escapeSqlLike(search)}%`
+            params.push(pattern, pattern, pattern)
+        }
+
+        const from = `
+            FROM message_attachments a
+            JOIN conversations c ON c.id = a.conversation_id
+            LEFT JOIN agents ag ON ag.id = c.agent_id
+            WHERE ${conditions.join(' AND ')}
+        `
+        const total = (db.prepare(`SELECT COUNT(*) AS count ${from}`).get(...params) as { count: number }).count
+        const rows = db.prepare(`
+            SELECT a.id, a.name, a.original_path, a.size_bytes, a.chunk_count, a.created_at,
+                   c.id AS conversation_id, c.title AS conversation_title,
+                   c.agent_id, ag.name AS agent_name
+            ${from}
+            ORDER BY a.created_at DESC, a.id DESC
+            LIMIT ? OFFSET ?
+        `).all(...params, limit, offset) as {
+            id: string
+            name: string
+            original_path: string
+            size_bytes: number | null
+            chunk_count: number | null
+            created_at: number
+            conversation_id: string
+            conversation_title: string
+            agent_id: string | null
+            agent_name: string | null
+        }[]
+
+        return {
+            items: rows.map((row) => ({
+                id: row.id,
+                name: row.name,
+                href: toFileUrl(row.original_path),
+                ext: extname(row.name).replace(/^\./, '').toLowerCase(),
+                sizeBytes: row.size_bytes ?? 0,
+                chunkCount: row.chunk_count ?? 0,
+                createdAt: row.created_at,
+                conversationId: row.conversation_id,
+                conversationTitle: row.conversation_title,
+                agentId: row.agent_id,
+                agentName: row.agent_name,
+            })),
+            total,
+        }
+    })
 
     // GET /api/chat/conversations — list (optionally filtered by agent_id or ma_workspace_id)
     // Supports pagination via ?limit=N&offset=N — when limit is set, returns { items, total }

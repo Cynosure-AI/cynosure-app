@@ -73,6 +73,10 @@ const router = createRouter({
     // Artifacts
     {
       path: '/artifacts',
+      redirect: '/artifacts/generated'
+    },
+    {
+      path: '/artifacts/:section(generated|uploads)',
       name: 'artifacts',
       component: () => import('@/views/ArtifactsView.vue')
     },

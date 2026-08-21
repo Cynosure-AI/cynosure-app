@@ -298,6 +298,20 @@ export interface ActivityArtifact {
     ext: string
 }
 
+export interface ConversationUpload {
+    id: string
+    name: string
+    href: string
+    ext: string
+    sizeBytes: number
+    chunkCount: number
+    createdAt: number
+    conversationId: string
+    conversationTitle: string
+    agentId: string | null
+    agentName: string | null
+}
+
 export interface ActivityItem {
     id: string
     kind: ActivityKind
