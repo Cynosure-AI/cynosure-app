@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { nextTick } from 'vue'
 
 const apiMocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -15,11 +16,13 @@ vi.mock('../utils/electron-prefs', () => ({
 }))
 
 import { usePreferencesStore } from './preferences.store'
+import { SK_RECENT_CHAT_FILTER } from '../utils/storage-keys'
 
 describe('preferences profile', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    localStorage.clear()
   })
 
   test('loads the user name and avatar together', async () => {
@@ -44,5 +47,16 @@ describe('preferences profile', () => {
     expect(apiMocks.update).toHaveBeenCalledWith({ name: ' Grace ', avatarUrl: null })
     expect(store.userName).toBe('Grace')
     expect(store.userAvatarUrl).toBeNull()
+  })
+
+  test('restores and persists the recent chat filter', async () => {
+    localStorage.setItem(SK_RECENT_CHAT_FILTER, 'agent')
+    const store = usePreferencesStore()
+
+    expect(store.recentChatFilter).toBe('agent')
+
+    store.recentChatFilter = 'all'
+    await nextTick()
+    expect(localStorage.getItem(SK_RECENT_CHAT_FILTER)).toBe('all')
   })
 })

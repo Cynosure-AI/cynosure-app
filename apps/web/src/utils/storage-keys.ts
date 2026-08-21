@@ -49,6 +49,7 @@ export const SK_SIDEBAR_COLLAPSED = 'sidebar-collapsed'
 export const SK_ACTIVE_AGENT = 'cy-active-agent'
 export const SK_AGENTS_VIEW_MODE = 'agents-view-mode'
 export const SK_ACTIVITY_LOG_FILTERS = 'cy-activity-log-filters'
+export const SK_RECENT_CHAT_FILTER = 'cy-recent-chat-filter'
 export const SK_CHAT_DRAFT_PREFIX = 'cy-chat-draft:'
 
 /**
@@ -79,6 +80,7 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_MEMORY_GRAPH_NODE_SPACING,
     SK_MEMORY_GRAPH_EDGE_LABELS,
     SK_MEMORY_GRAPH_EDGE_PATH_TYPE,
+    SK_RECENT_CHAT_FILTER,
     SK_WHISPER_MODEL,
     SK_WHISPER_ENABLED,
     SK_WHISPER_QUANTIZATION,
