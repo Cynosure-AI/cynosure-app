@@ -139,6 +139,13 @@ function pricingTooltip(model: ModelListItem): string | undefined {
   return lines.length ? lines.join("\n") : undefined;
 }
 
+function pricingTagVariant(model: ModelListItem): SelectOption['tagVariant'] {
+  const output = (model.outputModalities || []).map((item) => item.toLowerCase());
+  if (output.includes('transcription')) return 'blue';
+  if (output.includes('image')) return 'green';
+  return 'default';
+}
+
 function mergeModelItems(existing: ModelListItem, incoming: ModelListItem): ModelListItem {
   const pricing = existing.pricing || incoming.pricing
     ? {
@@ -153,6 +160,8 @@ function mergeModelItems(existing: ModelListItem, incoming: ModelListItem): Mode
   return {
     ...existing,
     ...incoming,
+    name: incoming.name || existing.name,
+    contextLength: incoming.contextLength ?? existing.contextLength,
     inputModalities: incoming.inputModalities?.length ? incoming.inputModalities : existing.inputModalities,
     outputModalities: incoming.outputModalities?.length ? incoming.outputModalities : existing.outputModalities,
     supportsToolCalls: incoming.supportsToolCalls ?? existing.supportsToolCalls,
@@ -416,7 +425,7 @@ const groups = computed((): SelectOptionGroup[] => {
         label: favorite.model,
         imgSrc: provider ? logoUrl(provider.type) : favorite.imgSrc,
         tag: costTag,
-        tagVariant: "default" as const,
+        tagVariant: model ? pricingTagVariant(model) : "default" as const,
         tooltip: model ? pricingTooltip(model) : favorite.tooltip,
         ...favoriteAction(favorite.providerId, favorite.model, favorite.modelType || "llm"),
       };
@@ -478,7 +487,7 @@ const groups = computed((): SelectOptionGroup[] => {
             label: model.id,
             imgSrc: logoUrl(provider.type),
             tag: costTag,
-            tagVariant: 'default',
+            tagVariant: pricingTagVariant(model),
             tooltip: pricingTooltip(model),
             ...favoriteAction(provider.id, model.id, modelType),
           });

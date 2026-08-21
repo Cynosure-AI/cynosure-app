@@ -41,6 +41,17 @@ describe('reranker model pricing', () => {
 })
 
 describe('extended model pricing', () => {
+  test('shows the generated-image price ahead of input and variant SKUs', () => {
+    expect(compactPricingTag({
+      id: 'x-ai/grok-imagine-image-2.0',
+      outputModalities: ['image'],
+      pricing: {
+        image: 0.04,
+        skus: { input_image_per_image: 0.01, output_image_low_1k_per_image: 0.04 },
+      },
+    })).toBe('$0.04/img')
+  })
+
   test('formats explicit audio-duration SKUs without treating them as tokens', () => {
     expect(compactPricingTag({
       id: 'openai/whisper-large-v3',

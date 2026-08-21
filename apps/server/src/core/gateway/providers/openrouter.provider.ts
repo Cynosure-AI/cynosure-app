@@ -64,6 +64,27 @@ interface OpenRouterModel {
     }
 }
 
+interface OpenRouterImageModel {
+    id: string
+    name?: string
+    endpoints?: string
+    architecture?: {
+        input_modalities?: unknown
+        output_modalities?: unknown
+    }
+}
+
+interface OpenRouterImagePricingLine {
+    billable?: unknown
+    unit?: unknown
+    cost_usd?: unknown
+    variant?: unknown
+}
+
+interface OpenRouterImageEndpoint {
+    pricing?: OpenRouterImagePricingLine[]
+}
+
 /**
  * OpenRouter provider — uses the OpenAI-compatible Chat Completions API
  * at https://openrouter.ai/api/v1.
@@ -75,6 +96,8 @@ export class OpenRouterProvider extends BaseLLMProvider {
     readonly config: LLMProviderConfig
     private client: OpenAI
     private modelsCache: { models: OpenRouterModel[]; ts: number } | null = null
+    private imageModelsCache: { models: ModelListItem[]; ts: number } | null = null
+    private imageModelsPromise: Promise<ModelListItem[]> | null = null
     protected get defaultBaseUrl(): string { return 'https://openrouter.ai/api/v1' }
 
     /** Whether this provider supports OpenRouter's native reasoning parameter */
@@ -151,6 +174,17 @@ export class OpenRouterProvider extends BaseLLMProvider {
     private getOutputModalities(model: OpenRouterModel | undefined): string[] {
         const modalities = this.getModalities(model?.output_modalities ?? model?.architecture?.output_modalities)
         return modalities.length ? modalities : this.getModalitiesFromDescriptor(model, 'output')
+    }
+
+    private modelListOutputModality(type?: ModelListType): string {
+        switch (type) {
+            case 'embedding': return 'embeddings'
+            case 'image': return 'image'
+            case 'video': return 'video'
+            case 'reranker': return 'rerank'
+            case 'transcription': return 'transcription'
+            default: return 'text'
+        }
     }
 
     private modelSupportsToolCalls(model: OpenRouterModel | undefined): boolean | undefined {
@@ -251,6 +285,84 @@ export class OpenRouterProvider extends BaseLLMProvider {
         return Object.keys(result).length ? result : undefined
     }
 
+    private imagePricingFromEndpoints(endpoints: OpenRouterImageEndpoint[]): ModelPricing | undefined {
+        const pricing: ModelPricing = {}
+        const skus: Record<string, number> = {}
+        const outputImagePrices: number[] = []
+
+        for (const endpoint of endpoints) {
+            for (const line of endpoint.pricing ?? []) {
+                if (typeof line.billable !== 'string' || typeof line.unit !== 'string') continue
+                const cost = this.parsePrice(line.cost_usd)
+                if (cost == null) continue
+
+                const billable = line.billable.toLowerCase()
+                const unit = line.unit.toLowerCase()
+                const variant = typeof line.variant === 'string' && line.variant.trim()
+                    ? `_${line.variant.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_')}`
+                    : ''
+                const sku = `${billable}${variant}_per_${unit}`
+                skus[sku] = cost
+                if (billable === 'output_image' && unit === 'image') outputImagePrices.push(cost)
+            }
+        }
+
+        // The compact picker price should represent generated output. The generic
+        // models feed's `image` field can instead be the input-reference charge.
+        if (outputImagePrices.length) pricing.image = Math.min(...outputImagePrices)
+        if (Object.keys(skus).length) pricing.skus = skus
+        return Object.keys(pricing).length ? pricing : undefined
+    }
+
+    private async fetchImageEndpointPricing(path: string): Promise<ModelPricing | undefined> {
+        try {
+            const data = await this.requestOpenRouter<{ endpoints?: OpenRouterImageEndpoint[] }>(path)
+            return this.imagePricingFromEndpoints(Array.isArray(data.endpoints) ? data.endpoints : [])
+        } catch {
+            return undefined
+        }
+    }
+
+    private async listImageModelItems(): Promise<ModelListItem[]> {
+        if (this.imageModelsCache && Date.now() - this.imageModelsCache.ts < MODEL_CACHE_TTL_MS) {
+            return this.imageModelsCache.models
+        }
+        if (this.imageModelsPromise) return this.imageModelsPromise
+
+        this.imageModelsPromise = (async () => {
+            const data = await this.requestOpenRouter<{ data?: OpenRouterImageModel[] }>('/images/models')
+            const imageModels = Array.isArray(data.data) ? data.data : []
+            const models: ModelListItem[] = []
+            // Avoid opening dozens of endpoint requests at once while still keeping
+            // picker refreshes reasonably quick.
+            for (let index = 0; index < imageModels.length; index += 8) {
+                const batch = imageModels.slice(index, index + 8)
+                models.push(...await Promise.all(batch.map(async (model): Promise<ModelListItem> => {
+                    const inputModalities = this.getModalities(model.architecture?.input_modalities)
+                    const outputModalities = this.getModalities(model.architecture?.output_modalities)
+                    const endpointPath = (model.endpoints || `/images/models/${model.id}/endpoints`)
+                        .replace(/^\/api\/v1(?=\/)/, '')
+                    return {
+                        id: model.id,
+                        name: model.name,
+                        inputModalities: inputModalities.length ? inputModalities : undefined,
+                        outputModalities: outputModalities.length ? outputModalities : ['image'],
+                        pricing: await this.fetchImageEndpointPricing(endpointPath)
+                    }
+                })))
+            }
+            models.sort((a, b) => a.id.localeCompare(b.id))
+            this.imageModelsCache = { models, ts: Date.now() }
+            return models
+        })()
+
+        try {
+            return await this.imageModelsPromise
+        } finally {
+            this.imageModelsPromise = null
+        }
+    }
+
     private toModelListItem(model: OpenRouterModel): ModelListItem {
         const inputModalities = this.getInputModalities(model)
         const outputModalities = this.getOutputModalities(model)
@@ -321,6 +433,17 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
 
         return undefined
+    }
+
+    private audioInputPart(url: string): Record<string, unknown> | null {
+        const match = url.match(/^data:audio\/([^;,]+)(?:;[^,]*)?;base64,(.+)$/i)
+        if (!match) return null
+        const subtype = match[1].toLowerCase()
+        const format = subtype === 'mpeg' ? 'mp3' : subtype === 'x-m4a' ? 'm4a' : subtype
+        return {
+            type: 'input_audio',
+            input_audio: { data: match[2], format }
+        }
     }
 
     private async requestOpenRouter<T>(
@@ -473,7 +596,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
             }
 
             // multimodal user message
-            const parts: OpenAI.Chat.ChatCompletionContentPart[] = (
+            const parts = (
                 msg.content as ContentPart[]
             ).map((part) => {
                 if (part.type === 'text') {
@@ -485,13 +608,13 @@ export class OpenRouterProvider extends BaseLLMProvider {
                         image_url: { url: part.image_url.url }
                     }
                 }
-                // audio_url → fallback to text
-                return {
-                    type: 'text' as const,
-                    text: `[Audio: ${(part as { type: 'audio_url'; audio_url: { url: string } }).audio_url.url}]`
-                }
+                const url = (part as { type: 'audio_url'; audio_url: { url: string } }).audio_url.url
+                return this.audioInputPart(url) || { type: 'text' as const, text: `[Audio: ${url}]` }
             })
-            return [{ role: 'user' as const, content: parts }]
+            return [{
+                role: 'user' as const,
+                content: parts as unknown as OpenAI.Chat.ChatCompletionContentPart[]
+            }]
         })
     }
 
@@ -512,7 +635,6 @@ export class OpenRouterProvider extends BaseLLMProvider {
             const imageParams = params as Record<string, unknown>
             imageParams.modalities = imageModalities
         }
-
         // Send reasoning parameter for OpenRouter native thinking support
         if (this.supportsReasoningParam) {
             params.reasoning = request.thinkingEnabled === false
@@ -827,17 +949,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
     async listModels(type?: ModelListType): Promise<string[]> {
         const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
 
-        const modality = type === 'embedding'
-            ? 'embeddings'
-            : type === 'video'
-                ? 'video'
-                : type === 'reranker'
-                    ? 'rerank'
-                    : type === 'transcription'
-                        ? 'transcription'
-                        : type === 'image'
-                            ? 'image'
-                            : 'text'
+        const modality = this.modelListOutputModality(type)
         const url = `${baseUrl}/models?output_modalities=${modality}`
 
         const res = await fetch(url, {
@@ -859,6 +971,8 @@ export class OpenRouterProvider extends BaseLLMProvider {
     }
 
     async listModelItems(type?: ModelListType): Promise<ModelListItem[]> {
+        if (type === 'image') return await this.listImageModelItems()
+
         if (type === 'video') {
             const models = await this.listVideoModels()
             return models.map((model) => ({
@@ -873,15 +987,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
 
         const baseUrl = this.config.baseUrl.replace(/\/+$/, '')
-        const modality = type === 'embedding'
-            ? 'embeddings'
-            : type === 'reranker'
-                ? 'rerank'
-                : type === 'transcription'
-                    ? 'transcription'
-                    : type === 'image'
-                        ? 'image'
-                        : 'text'
+        const modality = this.modelListOutputModality(type)
         const res = await fetch(`${baseUrl}/models?output_modalities=${modality}`, {
             headers: this.config.apiKey
                 ? { Authorization: `Bearer ${this.config.apiKey}` }
@@ -1003,6 +1109,10 @@ export class OpenRouterProvider extends BaseLLMProvider {
                     pricing ??= {}
                     pricing.skus = { ...(pricing.skus ?? {}), ...skus }
                 }
+            }
+            if (outputModalities.includes('image')) {
+                const dedicatedPricing = await this.fetchImageEndpointPricing(`/images/models/${modelId}/endpoints`)
+                if (dedicatedPricing) pricing = dedicatedPricing
             }
             return {
                 id: modelId,

@@ -78,6 +78,37 @@ describe('ProviderModelSelect favorites', () => {
     ])
   })
 
+  test('colors image pricing green and transcription pricing blue', async () => {
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockImplementation(async (_providerId, type) => {
+      if (type === 'image') return [{
+        id: 'image/model', outputModalities: ['image'], pricing: { image: 0.04 },
+      }]
+      if (type === 'transcription') return [{
+        id: 'transcription/model', outputModalities: ['transcription'],
+        pricing: { skus: { per_audio_minute: 0.0015 } },
+      }]
+      return []
+    })
+
+    const wrapper = mount(ProviderModelSelect, {
+      props: {
+        providerId: 'color-provider',
+        modelValue: '',
+        providers: [{ id: 'color-provider', name: 'OpenRouter', type: 'openrouter', defaultModel: '' }],
+        modelTypes: ['image', 'transcription'],
+      },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+    await wrapper.get('[role="combobox"]').trigger('click')
+
+    const image = wrapper.findAll('[role="option"]').find((row) => row.text().includes('image/model'))!
+    const transcription = wrapper.findAll('[role="option"]').find((row) => row.text().includes('transcription/model'))!
+    expect(image.html()).toContain('bg-emerald-500/10')
+    expect(transcription.html()).toContain('bg-blue-500/10')
+  })
+
   test('does not let another mounted selector overwrite a versioned favorite', async () => {
     localStorage.setItem(SK_PROVIDER_MODEL_FAVORITES, JSON.stringify([{
       providerId: 'deepseek-provider',

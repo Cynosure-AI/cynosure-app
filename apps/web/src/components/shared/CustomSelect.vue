@@ -18,8 +18,8 @@ export interface SelectOption {
   disabled?: boolean;
   /** Small badge shown to the right of the label (e.g. "+3") */
   tag?: string;
-  /** Visual variant for the tag badge (default = violet, cyan = bright cyan) */
-  tagVariant?: 'default' | 'cyan';
+  /** Visual variant for the tag badge. */
+  tagVariant?: 'default' | 'cyan' | 'green' | 'blue';
   /** Iconify icon name shown as a small badge instead of text */
   tagIconName?: string;
   actionIconName?: string;
@@ -171,6 +171,13 @@ const sizeClasses: Record<
 };
 
 const currentSizeClasses = computed(() => sizeClasses[props.size]);
+
+function tagVariantClasses(variant: SelectOption['tagVariant']): string {
+  if (variant === 'cyan') return 'bg-cyan-500/10 text-cyan-400'
+  if (variant === 'green') return 'bg-emerald-500/10 text-emerald-400'
+  if (variant === 'blue') return 'bg-blue-500/10 text-blue-400'
+  return 'bg-violet-500/10 text-violet-400'
+}
 
 function open(): void {
   filterQuery.value = "";
@@ -339,7 +346,7 @@ onBeforeUnmount(() =>
       <span
         v-else-if="showSelectedTag && selectedOption?.tag"
         class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full"
-        :class="selectedOption.tagVariant === 'cyan' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-violet-500/10 text-violet-400'"
+        :class="tagVariantClasses(selectedOption.tagVariant)"
       >
         {{ selectedOption.tag }}
       </span>
@@ -483,7 +490,7 @@ onBeforeUnmount(() =>
             <span
               v-else-if="opt.tag"
               class="shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full"
-              :class="opt.tagVariant === 'cyan' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-violet-500/10 text-violet-400'"
+              :class="tagVariantClasses(opt.tagVariant)"
             >
               {{ opt.tag }}
             </span>

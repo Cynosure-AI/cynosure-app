@@ -87,6 +87,10 @@ export function formatSkuCost(key: string, value: number): string {
   if (normalizedKey.startsWith("per_")) {
     return `${formatMoney(value)} / ${humanizePricingKey(key.replace(/^per_/, "")).toLowerCase()}`;
   }
+  const unitPrice = normalizedKey.match(/^(.+)_per_(.+)$/);
+  if (unitPrice) {
+    return `${formatMoney(value)} / ${humanizePricingKey(unitPrice[2]).toLowerCase()}`;
+  }
   if (normalizedKey === "generate" || normalizedKey.includes("request")) {
     return `${formatMoney(value)} each`;
   }
