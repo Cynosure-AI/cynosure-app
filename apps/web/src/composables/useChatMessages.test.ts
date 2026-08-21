@@ -8,6 +8,7 @@ import type { ReasoningEffort } from '@shared/types'
 const mocks = vi.hoisted(() => ({
   chat: {
     send: vi.fn(),
+    getMessageAttachments: vi.fn(),
     truncateFrom: vi.fn(),
     cancelStream: vi.fn(),
     cancelPostActions: vi.fn(),
@@ -97,6 +98,7 @@ describe('chat message actions', () => {
       autoRouterModel: 'agent-router-model',
     })
     mocks.chat.send.mockResolvedValue(undefined)
+    mocks.chat.getMessageAttachments.mockResolvedValue({})
     mocks.chat.truncateFrom.mockResolvedValue(undefined)
     mocks.chat.cancelPostActions.mockResolvedValue(undefined)
   })
@@ -157,6 +159,7 @@ describe('chat message actions', () => {
 
   test('retries a user message by truncating later history and sending it again', async () => {
     const state = setup()
+    mocks.chat.getMessageAttachments.mockResolvedValue({ imageDataUrls: ['image'] })
     state.messages.value = [
       { id: 'user', role: 'user', content: 'Try again', createdAt: 10, imageDataUrls: ['image'] },
       { id: 'assistant', role: 'assistant', content: 'Old answer', createdAt: 11 },
@@ -165,6 +168,7 @@ describe('chat message actions', () => {
     await state.api.retryFromMessage('user')
 
     expect(mocks.chat.truncateFrom).toHaveBeenCalledWith('conversation', 'user')
+    expect(mocks.chat.getMessageAttachments).toHaveBeenCalledWith('conversation', 'user')
     expect(mocks.agentStore.truncateConversationExecution).toHaveBeenCalledWith('conversation', 10)
     expect(mocks.chat.send).toHaveBeenCalledWith('conversation', expect.objectContaining({
       content: 'Try again',
@@ -197,6 +201,37 @@ describe('chat message actions', () => {
 
     expect(mocks.chat.truncateFrom).toHaveBeenCalledOnce()
     expect(mocks.chat.send).toHaveBeenCalledWith('conversation', expect.objectContaining({ content: 'Edited' }))
+  })
+
+  test('resolves and preserves every attachment type before editing truncates history', async () => {
+    const state = setup()
+    state.messages.value = [
+      {
+        id: 'user',
+        role: 'user',
+        content: 'Original',
+        imageDataUrls: ['/api/files?path=image'],
+        audioDataUrls: ['/api/files?path=audio'],
+        fileAttachments: [{ name: 'notes.txt' }],
+        createdAt: 10,
+      },
+    ]
+    mocks.chat.getMessageAttachments.mockResolvedValue({
+      imageDataUrls: ['data:image/png;base64,image'],
+      audioDataUrls: ['data:audio/wav;base64,audio'],
+      files: [{ name: 'notes.txt', content: 'notes' }],
+    })
+
+    await state.api.editMessage('user', 'Edited')
+
+    expect(mocks.chat.getMessageAttachments.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.chat.truncateFrom.mock.invocationCallOrder[0])
+    expect(mocks.chat.send).toHaveBeenCalledWith('conversation', expect.objectContaining({
+      content: 'Edited',
+      imageDataUrls: ['data:image/png;base64,image'],
+      audioDataUrls: ['data:audio/wav;base64,audio'],
+      files: [{ name: 'notes.txt', content: 'notes' }],
+    }))
   })
 
   test('cancels the active stream, local execution state, HITL, and post-actions', () => {

@@ -166,11 +166,12 @@ export function useChatMessages(
         if (idx === -1) return
         const msg = messages.value[idx]
         if (msg.role !== 'user') return
+        const attachments = await api.chat.getMessageAttachments(conversationId, messageId)
         await api.chat.truncateFrom(conversationId, messageId)
         messages.value.splice(idx)
         streaming.clearConversationStreamState(conversationId)
         agentStore.truncateConversationExecution(conversationId, msg.createdAt)
-        await sendMessage(msg.content, msg.imageDataUrls, undefined, msg.audioDataUrls)
+        await sendMessage(msg.content, attachments.imageDataUrls, attachments.files, attachments.audioDataUrls)
     }
 
     async function editMessage(messageId: string, newContent: string): Promise<void> {
@@ -180,11 +181,12 @@ export function useChatMessages(
         if (idx === -1) return
         const msg = messages.value[idx]
         if (msg.role !== 'user') return
+        const attachments = await api.chat.getMessageAttachments(conversationId, messageId)
         await api.chat.truncateFrom(conversationId, messageId)
         messages.value.splice(idx)
         streaming.clearConversationStreamState(conversationId)
         agentStore.truncateConversationExecution(conversationId, msg.createdAt)
-        await sendMessage(newContent, msg.imageDataUrls, undefined, msg.audioDataUrls)
+        await sendMessage(newContent, attachments.imageDataUrls, attachments.files, attachments.audioDataUrls)
     }
 
     function cancelStream(): void {

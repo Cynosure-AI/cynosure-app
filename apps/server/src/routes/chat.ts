@@ -22,7 +22,7 @@ import type {
 } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
-import { materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer } from '../core/artifacts/image-artifacts.js'
+import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
 import { buildAttachmentContext, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
 import {
@@ -217,6 +217,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     return withConversationLock(conversationId, async () => {
       const { content, messageId: providedMsgId, imageDataUrls, audioDataUrls, files } = req.body
       const normalizedContent = content.trim() || (audioDataUrls?.length ? 'Transcribe the attached audio.' : content)
+      // Browser-facing artifact URLs are relative API routes. Resolve them for
+      // providers as a defensive fallback (edits normally use the dedicated
+      // attachment-resolution endpoint before truncating the old message).
+      const providerImageDataUrls = imageDataUrls?.map((url) => artifactFileUrlToDataUrl(url) || url)
+      const providerAudioDataUrls = audioDataUrls?.map((url) => artifactFileUrlToDataUrl(url) || url)
       const run = req.body.run
       const {
         model,
@@ -253,10 +258,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       // Persist user-uploaded images as file artifacts and keep only file URLs in DB.
       // We still use inline data URLs for the immediate provider request in this send call.
-      let storedImageUrls = imageDataUrls
-      if (imageDataUrls?.length) {
+      let storedImageUrls = providerImageDataUrls
+      if (providerImageDataUrls?.length) {
         try {
-          const artifacts = await materializeImageArtifacts(imageDataUrls, conversationId)
+          const artifacts = await materializeImageArtifacts(providerImageDataUrls, conversationId)
           storedImageUrls = artifacts.map((artifact) => artifact.url)
         } catch (err) {
           console.warn('[chat] Failed to materialize user images, keeping original URLs:', err)
@@ -265,10 +270,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       // Persist audio beside the other conversation artifacts. Keep the original
       // data URLs only for the immediate provider request below.
-      let storedAudioUrls = audioDataUrls
-      if (audioDataUrls?.length) {
+      let storedAudioUrls = providerAudioDataUrls
+      if (providerAudioDataUrls?.length) {
         try {
-          const artifacts = await materializeAudioArtifacts(audioDataUrls, conversationId)
+          const artifacts = await materializeAudioArtifacts(providerAudioDataUrls, conversationId)
           storedAudioUrls = artifacts.map((artifact) => artifact.url)
         } catch (err) {
           console.warn('[chat] Failed to materialize user audio, keeping original URLs:', err)
@@ -284,7 +289,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       // Build content (text + optional images + optional audio + optional files)
       let userContent: string | ContentPart[]
-      if (imageDataUrls?.length || audioDataUrls?.length || files?.length) {
+      if (providerImageDataUrls?.length || providerAudioDataUrls?.length || files?.length) {
         const parts: ContentPart[] = [{ type: 'text', text: normalizedContent }]
         if (storedFileAttachments.length) {
           for (const file of storedFileAttachments) {
@@ -306,13 +311,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             })
           }
         }
-        if (imageDataUrls?.length) {
-          for (const url of imageDataUrls) {
+        if (providerImageDataUrls?.length) {
+          for (const url of providerImageDataUrls) {
             parts.push({ type: 'image_url', image_url: { url } })
           }
         }
-        if (audioDataUrls?.length) {
-          for (const url of audioDataUrls) {
+        if (providerAudioDataUrls?.length) {
+          for (const url of providerAudioDataUrls) {
             parts.push({ type: 'audio_url', audio_url: { url } })
           }
         }
@@ -345,7 +350,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       let messages: ChatMessage[] = history.messages
 
       // Replace last user message with multimodal version if images/files/audio present
-      if (imageDataUrls?.length || audioDataUrls?.length || files?.length) {
+      if (providerImageDataUrls?.length || providerAudioDataUrls?.length || files?.length) {
         messages[messages.length - 1] = {
           ...messages[messages.length - 1],
           content: userContent
@@ -497,7 +502,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           const submittedJob = await gateway.generateVideo(buildVideoGenerationRequest({
             model: responseModel,
             prompt: normalizedContent,
-            imageDataUrls,
+            imageDataUrls: providerImageDataUrls,
             videoModel,
             signal: abortController.signal,
           }), responseProvider)
@@ -518,14 +523,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           const assistantNow = Date.now()
           const assistantContent = 'Generated video.'
           db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, video_urls_json, agent_id, provider, model, latency_ms, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            `INSERT INTO messages (id, conversation_id, role, content, video_urls_json, generated_media, agent_id, provider, model, latency_ms, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           ).run(
             assistantMsgId,
             conversationId,
             'assistant',
             assistantContent,
             JSON.stringify(videoUrls),
+            1,
             agentId,
             responseProvider,
             responseModel,
@@ -557,7 +563,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
 
         if (isTranscriptionOutputModel) {
-          if (!audioDataUrls?.length) {
+          if (!providerAudioDataUrls?.length) {
             throw new Error('Transcription models require an attached audio file.')
           }
 
@@ -578,7 +584,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           let promptTokens = 0
           let completionTokens = 0
           let totalTokens = 0
-          for (const audioUrl of audioDataUrls) {
+          for (const audioUrl of providerAudioDataUrls) {
             const transcription = await gateway.transcribeAudio({
               model: responseModel,
               inputAudio: audioInputFromDataUrl(audioUrl),
@@ -733,8 +739,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const assistantMsgId = nanoid()
         const assistantNow = Date.now()
         db.prepare(
-          `INSERT INTO messages (id, conversation_id, role, content, thinking, image_urls_json, memory_sources_json, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO messages (id, conversation_id, role, content, thinking, image_urls_json, generated_media, memory_sources_json, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
           assistantMsgId,
           conversationId,
@@ -742,6 +748,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           result.content,
           result.thinking || null,
           result.images.length ? JSON.stringify(result.images) : null,
+          result.images.length ? 1 : 0,
           null,
           agentId,
           responseProvider,

@@ -89,6 +89,12 @@ export interface ChatAttachmentInput {
   content: string
 }
 
+export interface ChatResendAttachments {
+  imageDataUrls?: string[]
+  audioDataUrls?: string[]
+  files?: ChatAttachmentInput[]
+}
+
 export interface ChatSendRequest {
   content: string
   messageId?: string

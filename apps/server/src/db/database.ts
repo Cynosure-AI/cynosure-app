@@ -97,6 +97,7 @@ function createTables(db: Database.Database): void {
       audio_urls_json TEXT,
       structured_content_json TEXT,
       context_tokens INTEGER,
+      generated_media INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
@@ -403,6 +404,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('messages', 'ma_agent_name', 'TEXT')
   addColumnIfMissing('messages', 'ma_invocation_id', 'TEXT')
   addColumnIfMissing('messages', 'structured_content_json', 'TEXT')
+  addColumnIfMissing('messages', 'generated_media', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('execution_steps', 'ma_invocation_id', 'TEXT')
   addColumnIfMissing('notifications', 'scheduled_at', 'INTEGER')
   addColumnIfMissing('notifications', 'delivered_at', 'INTEGER')
