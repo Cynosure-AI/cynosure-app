@@ -5,6 +5,7 @@ import { useAgentStore } from '../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
 import ToolSelector from '../shared/ToolSelector.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
+import BaseCard from '../shared/BaseCard.vue'
 import { isAutoManagedBuiltInToolName, memoryAutomaticToolStates } from '../../utils/internal-tools'
 
 const props = defineProps<{ agent: AgentDefinition }>()
@@ -76,7 +77,7 @@ function removeMissing() {
 
 <template>
   <div class="flex flex-col h-[75vh]">
-    <div class="mb-3 shrink-0 rounded-lg border border-theme-700 bg-theme-900/70 px-4 py-3">
+    <BaseCard class="mb-3 shrink-0 px-5 py-4">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
@@ -100,7 +101,7 @@ function removeMissing() {
           @update:model-value="emit('update', 'autoToolRouting', $event)"
         />
       </div>
-    </div>
+    </BaseCard>
 
     <!-- Missing tools warning -->
     <div

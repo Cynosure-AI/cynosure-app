@@ -31,6 +31,14 @@ const agentSpaceExists = computed(() =>
   allSpaces.value.some(s => s.relativePath === agentSpacePath.value)
 )
 
+const agentSpace = computed(() =>
+  allSpaces.value.find(s => s.relativePath === agentSpacePath.value)
+)
+
+const agentSpaceAssigned = computed(() =>
+  Boolean(agentSpace.value && assignedIds.value.has(agentSpace.value.id))
+)
+
 const visibleSpaces = computed(() =>
   allSpaces.value.filter((space) => {
     if (space.isDefault) return true
@@ -128,6 +136,17 @@ async function createAgentMemorySpace() {
   } finally {
     creatingAgentSpace.value = false
   }
+}
+
+async function toggleAgentMemorySpace(enabled: boolean) {
+  if (enabled) {
+    await createAgentMemorySpace()
+    return
+  }
+
+  const space = agentSpace.value
+  if (!space) return
+  emit('update', 'memorySpaces', (props.agent.memorySpaces ?? []).filter(id => id !== space.id))
 }
 
 function memorySpaceScopeIds(space: MemorySpace): string[] {
@@ -236,16 +255,13 @@ onMounted(() => loadSpaces())
         Select memory folders to give this agent access to shared knowledge.
       </p>
 
-      <div
-        v-if="!agentSpaceExists"
-        class="mb-3 rounded-lg border border-theme-800 bg-theme-900/50 p-3 flex items-center justify-between gap-3"
-      >
+      <div class="mb-3 rounded-lg border border-theme-800 bg-theme-900/50 p-3 flex items-center justify-between gap-3">
         <div class="min-w-0">
           <div class="text-theme-200">
             Create Memory Space for Agent
           </div>
           <div class="text-[11px] text-theme-500 truncate">
-            Creates <span class="font-mono text-theme-400">{{ agentSpacePath }}</span> and assigns it here.
+            {{ agentSpaceExists ? 'Assigns' : 'Creates' }} <span class="font-mono text-theme-400">{{ agentSpacePath }}</span>{{ agentSpaceExists ? ' to this agent.' : ' and assigns it here.' }}
           </div>
           <div
             v-if="createAgentSpaceError"
@@ -254,18 +270,14 @@ onMounted(() => loadSpaces())
             {{ createAgentSpaceError }}
           </div>
         </div>
-        <button
+        <ToggleSwitch
+          :model-value="agentSpaceAssigned"
           :disabled="creatingAgentSpace || spacesLoading"
-          class="px-3 py-1.5 rounded-lg text-xs font-medium bg-accent-600 text-white hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 shrink-0"
-          @click="createAgentMemorySpace"
-        >
-          <Icon
-            :icon="creatingAgentSpace ? 'lucide:loader-2' : 'lucide:folder-plus'"
-            class="w-3.5 h-3.5"
-            :class="{ 'animate-spin': creatingAgentSpace }"
-          />
-          Create
-        </button>
+          label="Create and assign agent memory space"
+          color="accent"
+          size="md"
+          @update:model-value="toggleAgentMemorySpace"
+        />
       </div>
 
       <!-- Count + select all/none -->
