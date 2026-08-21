@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import { storeToRefs } from "pinia";
 import { useRoute, useRouter } from "vue-router";
 import { useProviderStore } from "../../stores/provider.store";
 import { useNotificationStore } from "../../stores/notification.store";
@@ -25,6 +26,7 @@ const agentDefs = useAgentDefinitionsStore();
 const chatStore = useChatStore();
 const memoryJobsStore = useMemoryJobsStore();
 const preferencesStore = usePreferencesStore();
+const { recentChatFilter } = storeToRefs(preferencesStore);
 const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar();
 const { logoIconUrl, logoTextUrl } = useAppBranding();
 
@@ -34,7 +36,6 @@ const showNotifications = ref(false);
 const workspaceOpen = ref(true);
 const recentChatsOpen = ref(true);
 const recentFilterMenuOpen = ref(false);
-const recentChatFilter = ref<"all" | "agent">("all");
 const bellBtnRef = ref<HTMLElement | null>(null);
 const notifPopoverStyle = computed(() => {
   if (!bellBtnRef.value) return {};
@@ -98,16 +99,9 @@ function closeRecentFilterMenu(): void {
 }
 
 function setRecentChatFilter(filter: "all" | "agent"): void {
-  if (filter === "agent" && !chatStore.activeAgentId) return;
   recentChatFilter.value = filter;
   recentFilterMenuOpen.value = false;
 }
-
-watch(() => chatStore.activeAgentId, (agentId) => {
-  if (!agentId && recentChatFilter.value === "agent") {
-    recentChatFilter.value = "all";
-  }
-});
 
 function formatTimeAgo(ts: number): string {
   const diff = Date.now() - ts;
@@ -538,16 +532,15 @@ const chatRoute = computed(() =>
               type="button"
               role="menuitemradio"
               :aria-checked="recentChatFilter === 'agent'"
-              :disabled="!chatStore.activeAgentId"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-              :title="chatStore.activeAgentId ? 'Show chats for the active agent' : 'Select an agent first'"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+              :title="chatStore.activeAgentId ? 'Show chats for the active agent' : 'Show Free Chat conversations'"
               @click="setRecentChatFilter('agent')"
             >
               <Icon
-                icon="lucide:bot"
+                :icon="chatStore.activeAgentId ? 'lucide:bot' : 'lucide:message-square'"
                 class="h-3.5 w-3.5 text-theme-500"
               />
-              <span class="flex-1">Agent Only</span>
+              <span class="flex-1">Selected Agent</span>
               <Icon
                 v-if="recentChatFilter === 'agent'"
                 icon="lucide:check"
@@ -560,7 +553,7 @@ const chatRoute = computed(() =>
           v-if="recentChatsOpen && !sidebarCollapsed"
           :awaiting-conversation-ids="awaitingConversationIds"
           :active-conversation-ids="runningConversationIds"
-          :agent-id="recentChatFilter === 'agent' ? chatStore.activeAgentId || undefined : undefined"
+          :agent-id="recentChatFilter === 'agent' ? chatStore.activeAgentId : undefined"
         />
       </section>
     </nav>

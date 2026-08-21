@@ -10,7 +10,7 @@ import { useChatStore, type Conversation } from '../../stores/chat.store'
 const props = withDefaults(defineProps<{
   awaitingConversationIds?: string[]
   activeConversationIds?: string[]
-  agentId?: string
+  agentId?: string | null
 }>(), {
   awaitingConversationIds: () => [],
   activeConversationIds: () => [],
@@ -69,9 +69,9 @@ const visibleConversations = computed(() => {
   // optimistic source when the sidebar is explicitly filtered to that agent.
   // Merging it into the default view makes agent-only chats flash before the
   // global sidebar query has returned.
-  if (!activeQuery.value && props.agentId) {
+  if (!activeQuery.value && props.agentId !== undefined) {
     for (const conversation of chatStore.conversations) {
-      if (conversation.agentId !== props.agentId) continue
+      if ((conversation.agentId ?? null) !== props.agentId) continue
       merged.set(conversation.id, conversation)
     }
   }
@@ -264,7 +264,11 @@ onBeforeUnmount(() => {
         <input
           v-model="searchQuery"
           type="search"
-          :placeholder="agentId ? 'Filter this agent’s chats…' : 'Filter all chats…'"
+          :placeholder="agentId === undefined
+            ? 'Filter all chats…'
+            : agentId === null
+              ? 'Filter Free Chat conversations…'
+              : 'Filter this agent’s chats…'"
           aria-label="Filter recent chats"
           class="w-full rounded-lg border border-theme-800 bg-theme-900/70 py-1.5 pl-8 pr-3 text-xs text-theme-300 outline-none transition placeholder:text-theme-600 focus:border-theme-600"
         >
