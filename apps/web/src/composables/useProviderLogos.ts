@@ -12,6 +12,7 @@ import ollamaLogo from '../assets/img/provider-logos/ollama.png'
 import ollamaLogoDark from '../assets/img/provider-logos/ollama-dark.png'
 import openrouterLogo from '../assets/img/provider-logos/openrouter.png'
 import openrouterLogoDark from '../assets/img/provider-logos/openrouter-dark.png'
+import requestyLogo from '../assets/img/provider-logos/requesty.png'
 import groqLogo from '../assets/img/provider-logos/groq.png'
 import mistralLogo from '../assets/img/provider-logos/mistral.png'
 
@@ -23,6 +24,7 @@ const providerLogos: Record<string, { light: string; dark: string }> = {
     grok: { light: grokLogo, dark: grokLogoDark },
     ollama: { light: ollamaLogo, dark: ollamaLogoDark },
     openrouter: { light: openrouterLogo, dark: openrouterLogoDark },
+    requesty: { light: requestyLogo, dark: requestyLogo },
     groq: { light: groqLogo, dark: groqLogo },
     mistral: { light: mistralLogo, dark: mistralLogo },
 }

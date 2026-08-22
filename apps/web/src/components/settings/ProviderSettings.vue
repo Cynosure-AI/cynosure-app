@@ -50,6 +50,7 @@ const defaultBaseUrls: Record<ProviderType, string> = {
   grok: 'https://api.x.ai/v1',
   ollama: 'http://localhost:11434/v1',
   openrouter: 'https://openrouter.ai/api/v1',
+  requesty: 'https://router.requesty.ai/v1',
   groq: 'https://api.groq.com/openai/v1',
   mistral: 'https://api.mistral.ai/v1'
 }
@@ -62,6 +63,7 @@ const defaultModels: Record<ProviderType, string> = {
   grok: 'grok-3-mini',
   ollama: '',
   openrouter: 'openai/gpt-4o',
+  requesty: 'openai/gpt-4o',
   groq: 'llama-3.3-70b-versatile',
   mistral: 'mistral-large-latest'
 }
@@ -162,6 +164,7 @@ async function addProvider(): Promise<void> {
       newProvider.type === 'grok' ||
       newProvider.type === 'ollama' ||
       newProvider.type === 'openrouter' ||
+      newProvider.type === 'requesty' ||
       newProvider.type === 'groq' ||
       newProvider.type === 'mistral'
   }
@@ -307,6 +310,9 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
               </option>
               <option value="openrouter">
                 OpenRouter
+              </option>
+              <option value="requesty">
+                Requesty
               </option>
               <option value="groq">
                 Groq
@@ -465,6 +471,9 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
                   </option>
                   <option value="openrouter">
                     OpenRouter
+                  </option>
+                  <option value="requesty">
+                    Requesty
                   </option>
                   <option value="groq">
                     Groq

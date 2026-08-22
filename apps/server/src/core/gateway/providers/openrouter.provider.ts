@@ -94,11 +94,18 @@ interface OpenRouterImageEndpoint {
  */
 export class OpenRouterProvider extends BaseLLMProvider {
     readonly config: LLMProviderConfig
-    private client: OpenAI
+    protected client: OpenAI
     private modelsCache: { models: OpenRouterModel[]; ts: number } | null = null
     private imageModelsCache: { models: ModelListItem[]; ts: number } | null = null
     private imageModelsPromise: Promise<ModelListItem[]> | null = null
     protected get defaultBaseUrl(): string { return 'https://openrouter.ai/api/v1' }
+
+    protected get defaultHeaders(): Record<string, string> {
+        return {
+            'HTTP-Referer': 'https://cynosure.app',
+            'X-OpenRouter-Title': 'Cynosure'
+        }
+    }
 
     /** Whether this provider supports OpenRouter's native reasoning parameter */
     protected get supportsReasoningParam(): boolean { return true }
@@ -110,10 +117,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
         this.client = new OpenAI({
             apiKey: config.apiKey || 'not-set',
             baseURL: baseUrl,
-            defaultHeaders: {
-                'HTTP-Referer': 'https://cynosure.app',
-                'X-OpenRouter-Title': 'Cynosure'
-            }
+            defaultHeaders: this.defaultHeaders
         })
     }
 
@@ -409,7 +413,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
     }
 
-    private async getImageGenerationModalities(modelId: string): Promise<string[] | undefined> {
+    protected async getImageGenerationModalities(modelId: string): Promise<string[] | undefined> {
         await ensurePricingLoaded().catch(() => { /* best-effort capability metadata */ })
         const modelsDevModalities = getModelOutputModalities(this.config.type, modelId)
             ?.map((item) => item.toLowerCase())
@@ -433,6 +437,16 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
 
         return undefined
+    }
+
+    protected addReasoningParams(
+        params: Record<string, unknown>,
+        request: CompletionRequest
+    ): void {
+        if (!this.supportsReasoningParam) return
+        params.reasoning = request.thinkingEnabled === false
+            ? { enabled: false }
+            : { effort: request.reasoningEffort ?? 'medium' }
     }
 
     private audioInputPart(url: string): Record<string, unknown> | null {
@@ -635,12 +649,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
             const imageParams = params as Record<string, unknown>
             imageParams.modalities = imageModalities
         }
-        // Send reasoning parameter for OpenRouter native thinking support
-        if (this.supportsReasoningParam) {
-            params.reasoning = request.thinkingEnabled === false
-                ? { enabled: false }
-                : { effort: request.reasoningEffort ?? 'medium' }
-        }
+        this.addReasoningParams(params, request)
 
         if (request.tools?.length) {
             params.tools = this.formatToolsForProvider(request.tools) as unknown as OpenAI.Chat.ChatCompletionTool[]
@@ -678,7 +687,9 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
         // Extract native reasoning from OpenRouter response (reasoning field or reasoning_details)
         let nativeReasoning = ''
-        if (msg?.reasoning && typeof msg.reasoning === 'string') {
+        if (msg?.reasoning_content && typeof msg.reasoning_content === 'string') {
+            nativeReasoning = msg.reasoning_content
+        } else if (msg?.reasoning && typeof msg.reasoning === 'string') {
             nativeReasoning = msg.reasoning
         } else if (Array.isArray(msg?.reasoning_details)) {
             for (const detail of msg.reasoning_details as Array<Record<string, unknown>>) {
@@ -743,12 +754,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
             imageParams.modalities = imageModalities
         }
 
-        // Send reasoning parameter for OpenRouter native thinking support
-        if (this.supportsReasoningParam) {
-            params.reasoning = request.thinkingEnabled === false
-                ? { enabled: false }
-                : { effort: request.reasoningEffort ?? 'medium' }
-        }
+        this.addReasoningParams(params, request)
 
         if (request.tools?.length) {
             params.tools = this.formatToolsForProvider(request.tools) as unknown as OpenAI.Chat.ChatCompletionTool[]
@@ -830,7 +836,10 @@ export class OpenRouterProvider extends BaseLLMProvider {
             // OpenRouter sends the same text in BOTH delta.reasoning AND delta.reasoning_details,
             // so we only consume delta.reasoning to avoid doubling.
             const deltaAny = delta as Record<string, unknown> | undefined
-            if (deltaAny?.reasoning && typeof deltaAny.reasoning === 'string') {
+            if (deltaAny?.reasoning_content && typeof deltaAny.reasoning_content === 'string') {
+                nativeReasoningDetected = true
+                yield { thinking: deltaAny.reasoning_content, done: false }
+            } else if (deltaAny?.reasoning && typeof deltaAny.reasoning === 'string') {
                 nativeReasoningDetected = true
                 yield { thinking: deltaAny.reasoning, done: false }
             } else if (Array.isArray(deltaAny?.reasoning_details)) {
