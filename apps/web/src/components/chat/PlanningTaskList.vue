@@ -62,31 +62,33 @@ function itemClass(item: PlanningTaskItem): string {
       </button>
     </div>
 
-    <div class="grid min-h-0 flex-1 gap-1 overflow-y-auto p-2">
+    <div class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
       <div
         v-for="item in state.items"
         :key="item.id"
-        class="h-8 flex items-center gap-2 min-w-0 rounded-md px-1"
+        class="group flex min-w-0 items-start gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-theme-900/60"
         :title="item.note ? `${item.title} — ${item.note}` : item.title"
       >
         <Icon
           :icon="statusMeta[item.status].icon"
-          class="w-3.5 h-3.5 shrink-0"
+          class="mt-0.5 h-3.5 w-3.5 shrink-0"
           :class="statusMeta[item.status].cls"
         />
-        <div class="flex flex-col min-w-0 flex-1 gap-0.5">
-          <span
-            class="text-xs truncate min-w-0"
+
+        <div class="min-w-0 flex-1">
+          <div
+            class="line-clamp-2 text-xs font-medium leading-[1.35]"
             :class="itemClass(item)"
           >
             {{ item.title }}
-          </span>
-          <span
+          </div>
+
+          <div
             v-if="item.note"
-            class="text-[11px] text-theme-500 truncate min-w-0 hidden sm:block whitespace-pre-wrap"
+            class="mt-1 line-clamp-2 whitespace-pre-line text-[11px] leading-[1.4] text-theme-500"
           >
             {{ item.note }}
-          </span>
+          </div>
         </div>
       </div>
     </div>
