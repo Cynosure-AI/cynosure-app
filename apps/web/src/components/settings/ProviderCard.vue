@@ -26,6 +26,7 @@ function getProviderIcon(type: string): string {
     grok: 'X',
     ollama: 'O',
     openrouter: 'R',
+    requesty: 'R',
     groq: 'G',
     mistral: 'M'
   }

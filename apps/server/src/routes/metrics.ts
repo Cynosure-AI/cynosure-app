@@ -160,25 +160,25 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             prompt_tokens: number
             completion_tokens: number
         }[]
-        const nativeOpenRouterCosts = new Map<string, ModelCost | null>()
+        const nativeGatewayCosts = new Map<string, ModelCost | null>()
         const gateway = getGateway()
         for (const row of assistantCostRows) {
             const providerInfo = providerInfoMap.get(row.provider)
             const key = `${row.provider}\u0000${row.model}`
-            if (providerInfo?.type !== 'openrouter' || nativeOpenRouterCosts.has(key)) continue
+            if (!['openrouter', 'requesty'].includes(providerInfo?.type || '') || nativeGatewayCosts.has(key)) continue
             try {
                 const info = await gateway.getModelInfo(row.model, row.provider)
-                nativeOpenRouterCosts.set(key, modelCostFromPricing(info.pricing))
+                nativeGatewayCosts.set(key, modelCostFromPricing(info.pricing))
             } catch {
-                nativeOpenRouterCosts.set(key, null)
+                nativeGatewayCosts.set(key, null)
             }
         }
         const modelCostTotals = new Map<string, number>()
         for (const row of assistantCostRows) {
             const providerType = providerTypeMap.get(row.provider) ?? row.provider
             const nativeKey = `${row.provider}\u0000${row.model}`
-            const pricing = nativeOpenRouterCosts.has(nativeKey)
-                ? nativeOpenRouterCosts.get(nativeKey)
+            const pricing = nativeGatewayCosts.has(nativeKey)
+                ? nativeGatewayCosts.get(nativeKey)
                 : getModelCost(providerType, row.model)
             if (!pricing) continue
             const key = `${row.provider}\u0000${row.model}`
@@ -305,8 +305,8 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
 
             const providerType = providerTypeMap.get(row.provider) ?? row.provider
             const nativeKey = `${row.provider}\u0000${row.model}`
-            const pricing = nativeOpenRouterCosts.has(nativeKey)
-                ? nativeOpenRouterCosts.get(nativeKey)
+            const pricing = nativeGatewayCosts.has(nativeKey)
+                ? nativeGatewayCosts.get(nativeKey)
                 : getModelCost(providerType, row.model)
             const cost = pricing
                 ? estimateTokenCost(pricing, row.prompt_tokens, row.completion_tokens)
@@ -377,7 +377,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
 
         // ── Assemble response ───────────────────────────────────────────────
 
-        // Calculate per-model estimates using native OpenRouter prices when
+        // Calculate per-model estimates using native gateway prices when
         // available and models.dev for the remaining providers.
         const modelUsageWithCost = modelUsage.map(m => {
             const providerInfo = providerInfoMap.get(m.provider)
