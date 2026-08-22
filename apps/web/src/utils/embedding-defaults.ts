@@ -4,6 +4,7 @@ type ProviderType = LLMProviderConfig['type']
 
 const DEFAULT_EMBEDDING_MODELS: Partial<Record<ProviderType, string>> = {
   openrouter: 'qwen/qwen3-embedding-8b',
+  requesty: 'openai/text-embedding-3-small',
   openai: 'text-embedding-3-small',
   google: 'google-embedding-001',
 }
