@@ -215,6 +215,40 @@ onMounted(() => loadSpaces())
       </div>
     </BaseCard>
 
+    <!-- Agent Memory Space -->
+    <BaseCard class="p-5">
+      <div class="flex items-start justify-between gap-4">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            <Icon
+              icon="lucide:folder-plus"
+              class="w-4 h-4 text-accent-400"
+            />
+            <h3 class="text-sm font-medium text-theme-200">
+              Create Memory Space for Agent
+            </h3>
+          </div>
+          <p class="text-xs text-theme-500 leading-relaxed">
+            {{ agentSpaceExists ? 'Assigns' : 'Creates' }} <span class="font-mono text-theme-400">{{ agentSpacePath }}</span>{{ agentSpaceExists ? ' to this agent.' : ' and assigns it here.' }}
+          </p>
+          <p
+            v-if="createAgentSpaceError"
+            class="text-[11px] text-red-400 mt-1"
+          >
+            {{ createAgentSpaceError }}
+          </p>
+        </div>
+        <ToggleSwitch
+          :model-value="agentSpaceAssigned"
+          :disabled="creatingAgentSpace || spacesLoading"
+          label="Create and assign agent memory space"
+          color="accent"
+          class="mt-0.5"
+          @update:model-value="toggleAgentMemorySpace"
+        />
+      </div>
+    </BaseCard>
+
     <!-- Memory Spaces -->
     <BaseCard class="p-5">
       <div class="flex items-center justify-between mb-1">
@@ -255,31 +289,6 @@ onMounted(() => loadSpaces())
         Select memory folders to give this agent access to shared knowledge.
       </p>
 
-      <div class="mb-3 rounded-lg border border-theme-800 bg-theme-900/50 p-3 flex items-center justify-between gap-3">
-        <div class="min-w-0">
-          <div class="text-theme-200">
-            Create Memory Space for Agent
-          </div>
-          <div class="text-[11px] text-theme-500 truncate">
-            {{ agentSpaceExists ? 'Assigns' : 'Creates' }} <span class="font-mono text-theme-400">{{ agentSpacePath }}</span>{{ agentSpaceExists ? ' to this agent.' : ' and assigns it here.' }}
-          </div>
-          <div
-            v-if="createAgentSpaceError"
-            class="text-[11px] text-red-400 mt-1"
-          >
-            {{ createAgentSpaceError }}
-          </div>
-        </div>
-        <ToggleSwitch
-          :model-value="agentSpaceAssigned"
-          :disabled="creatingAgentSpace || spacesLoading"
-          label="Create and assign agent memory space"
-          color="accent"
-          size="md"
-          @update:model-value="toggleAgentMemorySpace"
-        />
-      </div>
-
       <!-- Count + select all/none -->
       <div
         v-if="allSpaces.length > 0"
@@ -288,20 +297,22 @@ onMounted(() => loadSpaces())
         <span class="text-theme-500">
           {{ assignedSpaces.length === allSpaces.length ? 'All folders selected' : `${assignedSpaces.length}/${allSpaces.length} selected` }}
         </span>
-        <button
-          v-if="assignedSpaces.length < allSpaces.length"
-          class="text-accent-400 hover:text-accent-300 transition-colors"
-          @click="selectAll"
-        >
-          Select all
-        </button>
-        <button
-          v-else
-          class="text-theme-400 hover:text-theme-200 transition-colors"
-          @click="deselectAll"
-        >
-          Deselect all
-        </button>
+        <div class="flex items-center gap-3">
+          <button
+            v-if="assignedSpaces.length < allSpaces.length"
+            class="text-accent-400 hover:text-accent-300 transition-colors"
+            @click="selectAll"
+          >
+            Select all
+          </button>
+          <button
+            v-if="assignedSpaces.length > 0"
+            class="text-theme-400 hover:text-theme-200 transition-colors"
+            @click="deselectAll"
+          >
+            Deselect all
+          </button>
+        </div>
       </div>
 
       <!-- Unified folder list -->

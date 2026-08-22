@@ -91,6 +91,6 @@ describe('ArtifactPreviewModal', () => {
 
     const chatLink = [...document.body.querySelectorAll('a')]
       .find((link) => link.textContent?.includes('Go to chat'))
-    expect(chatLink?.getAttribute('href')).toBe('/triggers/chat/conversation-1')
+    expect(chatLink?.getAttribute('href')).toBe('/chat/conversation-1')
   })
 })

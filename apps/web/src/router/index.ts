@@ -13,30 +13,50 @@ const router = createRouter({
       name: 'onboarding',
       component: () => import('@/views/OnboardingView.vue')
     },
-    // Triggers
+    // Chat
     {
       path: '/chat',
-      redirect: '/triggers/chat'
-    },
-    {
-      path: '/triggers/chat',
       name: 'triggers-chat',
       component: () => import('@/views/triggers/ChatView.vue')
     },
     {
-      path: '/triggers/chat/:conversationId',
+      path: '/chat/:conversationId',
       name: 'conversation',
       component: () => import('@/views/triggers/ChatView.vue')
     },
+    // Legacy trigger-prefixed URLs
     {
-      path: '/triggers/cron',
+      path: '/triggers/chat',
+      redirect: { name: 'triggers-chat' }
+    },
+    {
+      path: '/triggers/chat/:conversationId',
+      redirect: (to) => ({
+        name: 'conversation',
+        params: { conversationId: to.params.conversationId }
+      })
+    },
+    // Scheduled jobs
+    {
+      path: '/cron',
       name: 'triggers-cron',
       component: () => import('@/views/triggers/CronView.vue')
     },
     {
-      path: '/triggers/cron/:id',
+      path: '/cron/:id',
       name: 'cron-detail',
       component: () => import('@/views/triggers/CronDetailView.vue')
+    },
+    {
+      path: '/triggers/cron',
+      redirect: { name: 'triggers-cron' }
+    },
+    {
+      path: '/triggers/cron/:id',
+      redirect: (to) => ({
+        name: 'cron-detail',
+        params: { id: to.params.id }
+      })
     },
     {
       path: '/triggers/channels',

@@ -142,7 +142,7 @@ async function navigateToNotification(notif: {
   if (notif.conversationId) {
     await chatStore.setActiveAgent(notif.agentId || null);
     await chatStore.selectConversation(notif.conversationId);
-    router.push(`/triggers/chat/${notif.conversationId}`);
+    router.push(`/chat/${encodeURIComponent(notif.conversationId)}`);
   } else if (notif.agentId) {
     router.push(`/agents/${notif.agentId}`);
   }
@@ -155,7 +155,7 @@ function isActive(path: string, exact = false): boolean {
 
 const chatRoute = computed(() =>
   chatStore.activeConversationId
-    ? `/triggers/chat/${chatStore.activeConversationId}`
+    ? `/chat/${encodeURIComponent(chatStore.activeConversationId)}`
     : "/chat",
 );
 </script>
@@ -404,7 +404,7 @@ const chatRoute = computed(() =>
         <RouterLink
           :to="chatRoute"
           class="nav-item"
-          :class="{ active: isActive('/triggers/chat') }"
+          :class="{ active: isActive('/chat') }"
         >
           <Icon
             icon="lucide:message-square"
@@ -439,7 +439,7 @@ const chatRoute = computed(() =>
         >
           <HoverTooltip
             v-for="item in [
-              { to: '/triggers/cron', icon: 'lucide:calendar-clock', label: 'Schedule' },
+              { to: '/cron', icon: 'lucide:calendar-clock', label: 'Schedule' },
               { to: '/agents', icon: 'lucide:bot', label: 'Agents' },
               { to: '/artifacts', icon: 'lucide:shapes', label: 'Artifacts' },
               { to: '/memory-spaces', icon: 'lucide:brain', label: 'Memories' },

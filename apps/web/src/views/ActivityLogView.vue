@@ -409,7 +409,7 @@ async function openItem(item: ActivityItem) {
     return;
   }
   if (item.conversationId) {
-    router.push(`/triggers/chat/${item.conversationId}`);
+    router.push(`/chat/${encodeURIComponent(item.conversationId)}`);
   } else if (item.agentId) {
     router.push(`/agents/${item.agentId}`);
   }

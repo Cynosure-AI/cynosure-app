@@ -28,4 +28,28 @@ describe('router onboarding guard', () => {
     expect(router.currentRoute.value.name).toBe('artifacts')
     expect(router.currentRoute.value.path).toBe('/artifacts/generated')
   })
+
+  test('uses clean canonical URLs for chat and scheduled jobs', async () => {
+    localStorage.setItem(SK_ONBOARDING_COMPLETE, 'true')
+    const { default: router } = await import('./index')
+
+    await router.push('/chat/conversation-1')
+    expect(router.currentRoute.value.name).toBe('conversation')
+    expect(router.currentRoute.value.path).toBe('/chat/conversation-1')
+
+    await router.push('/cron/job-1')
+    expect(router.currentRoute.value.name).toBe('cron-detail')
+    expect(router.currentRoute.value.path).toBe('/cron/job-1')
+  })
+
+  test('redirects legacy trigger-prefixed URLs to clean URLs', async () => {
+    localStorage.setItem(SK_ONBOARDING_COMPLETE, 'true')
+    const { default: router } = await import('./index')
+
+    await router.push('/triggers/chat/conversation-1')
+    expect(router.currentRoute.value.path).toBe('/chat/conversation-1')
+
+    await router.push('/triggers/cron/job-1')
+    expect(router.currentRoute.value.path).toBe('/cron/job-1')
+  })
 })

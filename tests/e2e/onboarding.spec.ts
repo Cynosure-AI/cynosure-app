@@ -15,7 +15,7 @@ test('a new installation can enter and leave onboarding', async ({ page }) => {
   await expect(page.getByText('Add a provider first')).toBeVisible()
 
   await page.getByRole('button', { name: /Skip setup/i }).click()
-  await expect(page).toHaveURL(/\/triggers\/chat$/)
+  await expect(page).toHaveURL(/\/chat$/)
   await expect.poll(() => page.evaluate(() => localStorage.getItem('cy-onboarding-complete'))).toBe('true')
 
   const userSettings = await page.request.get('http://127.0.0.1:3199/api/user-settings')
