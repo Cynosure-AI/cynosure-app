@@ -91,7 +91,7 @@ async function saveCronJob() {
       enabled: true,
     })
     showAddCron.value = false
-    router.push(`/triggers/cron/${created.id}`)
+    router.push(`/cron/${encodeURIComponent(created.id)}`)
   } finally {
     cronSaving.value = false
   }
@@ -135,7 +135,7 @@ async function duplicateCronJob(job: CronJob) {
       notificationCondition: job.notificationCondition,
     })
     await loadSchedules()
-    router.push(`/triggers/cron/${created.id}`)
+    router.push(`/cron/${encodeURIComponent(created.id)}`)
   } finally {
     duplicatingNow.value.delete(job.id)
     duplicatingNow.value = new Set(duplicatingNow.value)
@@ -174,7 +174,7 @@ const tableColumns: Column<CronJob>[] = [
 ]
 
 function openCronJob(job: CronJob) {
-  router.push(`/triggers/cron/${job.id}`)
+  router.push(`/cron/${encodeURIComponent(job.id)}`)
 }
 
 function openAgentDetails(agentId: string) {

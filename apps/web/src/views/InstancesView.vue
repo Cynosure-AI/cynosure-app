@@ -86,12 +86,12 @@ async function loadData(): Promise<void> {
 
 async function openConversation(conversationId: string | null, agentId: string | null): Promise<void> {
   if (!conversationId) {
-    router.push(agentId ? `/agents/${agentId}` : "/triggers/chat");
+    router.push(agentId ? `/agents/${agentId}` : "/chat");
     return;
   }
   await chatStore.setActiveAgent(agentId || null);
   await chatStore.selectConversation(conversationId);
-  router.push(`/triggers/chat/${conversationId}`);
+  router.push(`/chat/${encodeURIComponent(conversationId)}`);
 }
 
 async function openInstance(instance: AgentInstance): Promise<void> {

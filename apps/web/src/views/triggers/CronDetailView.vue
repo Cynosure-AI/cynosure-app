@@ -145,7 +145,7 @@ async function loadJob() {
     allChannels.value = channels;
     const found = jobs.find((j) => j.id === jobId.value);
     if (!found) {
-      router.push("/triggers/cron");
+      router.push("/cron");
       return;
     }
     job.value = found;
@@ -205,7 +205,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
           <div class="flex items-center gap-3">
             <button
               class="p-1.5 text-theme-500 hover:text-theme-300 transition-colors"
-              @click="router.push('/triggers/cron')"
+              @click="router.push('/cron')"
             >
               <Icon
                 icon="lucide:arrow-left"

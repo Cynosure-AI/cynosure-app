@@ -72,7 +72,7 @@ async function openNotification(n: (typeof notificationStore.notifications)[0]) 
   if (n.conversationId) {
     await chatStore.setActiveAgent(n.agentId || null);
     await chatStore.selectConversation(n.conversationId);
-    router.push(`/triggers/chat/${n.conversationId}`);
+    router.push(`/chat/${encodeURIComponent(n.conversationId)}`);
   } else if (n.agentId) {
     router.push(`/agents/${n.agentId}`);
   }
