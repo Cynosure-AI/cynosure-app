@@ -9,6 +9,28 @@ vi.mock('../model-dev-fetcher.js', () => metadataMocks)
 
 import { LLMGateway } from './gateway.js'
 import type { BaseLLMProvider, ModelListItem } from './providers/base.provider.js'
+import { RequestyProvider } from './providers/requesty.provider.js'
+
+describe('LLMGateway provider registration', () => {
+    test('creates the dedicated Requesty adapter', () => {
+        const gateway = new LLMGateway()
+        gateway.registerProvider({
+            id: 'requesty-1',
+            name: 'Requesty',
+            type: 'requesty',
+            baseUrl: '',
+            apiKey: 'test-key',
+            defaultModel: 'openai/gpt-4o',
+            availableModels: [],
+            supportsStreaming: true,
+            supportsToolCalls: true,
+            supportsVision: true,
+        })
+
+        expect(gateway.getProvider('requesty-1')).toBeInstanceOf(RequestyProvider)
+        expect(gateway.getProvider('requesty-1')?.config.baseUrl).toBe('https://router.requesty.ai/v1')
+    })
+})
 
 describe('LLMGateway model metadata enrichment', () => {
     beforeEach(() => {

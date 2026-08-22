@@ -302,6 +302,7 @@ const defaultBaseUrls: Record<ProviderType, string> = {
   grok: 'https://api.x.ai/v1',
   ollama: 'http://localhost:11434/v1',
   openrouter: 'https://openrouter.ai/api/v1',
+  requesty: 'https://router.requesty.ai/v1',
   groq: 'https://api.groq.com/openai/v1',
   mistral: 'https://api.mistral.ai/v1',
 }
@@ -314,6 +315,7 @@ const defaultModels: Record<ProviderType, string> = {
   grok: 'grok-3-mini',
   ollama: '',
   openrouter: 'openai/gpt-4o',
+  requesty: 'openai/gpt-4o',
   groq: 'llama-3.3-70b-versatile',
   mistral: 'mistral-large-latest',
 }
@@ -326,6 +328,7 @@ const providerOptions: { value: ProviderType; label: string }[] = [
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'google', label: 'Google Gemini' },
   { value: 'openrouter', label: 'OpenRouter' },
+  { value: 'requesty', label: 'Requesty' },
   { value: 'groq', label: 'Groq' },
   { value: 'mistral', label: 'Mistral' },
   { value: 'grok', label: 'Grok (xAI)' },
@@ -340,6 +343,7 @@ function onTypeChange() {
   if (form.type === 'google') form.name = 'Google Gemini'
   if (form.type === 'lmstudio') form.name = 'LM Studio'
   if (form.type === 'openrouter') form.name = 'OpenRouter'
+  if (form.type === 'requesty') form.name = 'Requesty'
   fetchedModels.value = []
   error.value = ''
 }
@@ -403,7 +407,7 @@ async function addProvider() {
       availableModels: [],
       supportsStreaming: true,
       supportsToolCalls: true,
-      supportsVision: ['openai', 'google', 'grok', 'ollama', 'lmstudio', 'openrouter', 'groq', 'mistral'].includes(form.type),
+      supportsVision: ['openai', 'google', 'grok', 'ollama', 'lmstudio', 'openrouter', 'requesty', 'groq', 'mistral'].includes(form.type),
     }
     await providerStore.addProvider(config)
     lastAddedProvider.value = form.name

@@ -4,7 +4,7 @@ Open-source AI agent platform with tool use, memory, multi-provider LLM support,
 
 ## Features
 
-- **Multi-provider LLM support** — OpenAI, Anthropic, Google Gemini, Groq, Grok, Ollama, LM Studio, OpenRouter, Mistral
+- **Multi-provider LLM support** — OpenAI, Anthropic, Google Gemini, Groq, Grok, Ollama, LM Studio, OpenRouter, Requesty, Mistral
 - **Streaming chat** — Real-time token streaming with image/file attachments and voice input (local Whisper STT)
 - **Tool system** — Built-in tools + [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) servers, discoverable via a built-in registry browser
 - **Agents** — Reusable AI presets with custom system prompts, model selection, tool access, and sub-agent orchestration

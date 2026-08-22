@@ -109,7 +109,7 @@ const sections: SettingsSection[] = [
     categoryId: 'providers',
     label: 'Provider management',
     description: 'Add, edit, test, remove, and configure LLM providers.',
-    terms: ['ai', 'llm', 'provider', 'providers', 'add provider', 'edit provider', 'remove provider', 'test connection', 'api key', 'base url', 'default model', 'models', 'openai', 'anthropic', 'google', 'gemini', 'grok', 'lm studio', 'ollama', 'openrouter', 'groq', 'mistral']
+    terms: ['ai', 'llm', 'provider', 'providers', 'add provider', 'edit provider', 'remove provider', 'test connection', 'api key', 'base url', 'default model', 'models', 'openai', 'anthropic', 'google', 'gemini', 'grok', 'lm studio', 'ollama', 'openrouter', 'requesty', 'groq', 'mistral']
   },
   {
     id: 'embedding-model',

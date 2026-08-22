@@ -26,6 +26,7 @@ import { LMStudioProvider } from './providers/lmstudio.provider.js'
 import { GrokProvider } from './providers/grok.provider.js'
 import { OllamaProvider } from './providers/ollama.provider.js'
 import { OpenRouterProvider } from './providers/openrouter.provider.js'
+import { RequestyProvider } from './providers/requesty.provider.js'
 import { GroqProvider } from './providers/groq.provider.js'
 import { MistralProvider } from './providers/mistral.provider.js'
 
@@ -59,6 +60,8 @@ export class LLMGateway {
         return new OllamaProvider(config)
       case 'openrouter':
         return new OpenRouterProvider(config)
+      case 'requesty':
+        return new RequestyProvider(config)
       case 'groq':
         return new GroqProvider(config)
       case 'mistral':
