@@ -67,7 +67,7 @@ function insertSmartTag(tag: string): void {
       ref="textareaRef"
       v-model="draft"
       placeholder="Optional system instructions..."
-      rows="20"
+      rows="30"
       class="w-full bg-theme-800 border border-theme-700 rounded-lg px-3 py-2 text-sm text-theme-100 font-mono resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
     />
 
