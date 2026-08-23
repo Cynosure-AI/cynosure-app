@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { createHash } from 'crypto'
+import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 import { getEntityGraphStore } from './entity-graph.js'
@@ -128,13 +129,19 @@ export function moveMemoryGraphSource(sourceSpaceId: string, sourceFileName: str
              evidence, confidence, mention_count, first_seen_at, last_seen_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(edge_id, source_kind, source_id) DO UPDATE SET
+            source_document_id = CASE WHEN excluded.source_document_id != '' THEN excluded.source_document_id ELSE entity_graph_edge_evidence.source_document_id END,
+            source_content_hash = CASE WHEN excluded.source_content_hash != '' THEN excluded.source_content_hash ELSE entity_graph_edge_evidence.source_content_hash END,
+            source_chunk_index = COALESCE(excluded.source_chunk_index, entity_graph_edge_evidence.source_chunk_index),
             evidence = CASE WHEN excluded.evidence != '' THEN excluded.evidence ELSE entity_graph_edge_evidence.evidence END,
             confidence = MAX(entity_graph_edge_evidence.confidence, excluded.confidence),
             mention_count = entity_graph_edge_evidence.mention_count + excluded.mention_count,
             first_seen_at = MIN(entity_graph_edge_evidence.first_seen_at, excluded.first_seen_at),
             last_seen_at = MAX(entity_graph_edge_evidence.last_seen_at, excluded.last_seen_at)
         `).run(
-          row.id, row.edge_id, row.source_kind, newSourceId,
+          // The prior evidence row still owns row.id until it is deleted below.
+          // A fresh id lets the source-level UNIQUE upsert merge retries or
+          // duplicate legacy/scoped evidence without hitting the PK first.
+          nanoid(), row.edge_id, row.source_kind, newSourceId,
           row.source_document_id || '', row.source_content_hash || '', row.source_chunk_index ?? null, row.evidence,
           row.confidence, row.mention_count, row.first_seen_at, row.last_seen_at,
         )

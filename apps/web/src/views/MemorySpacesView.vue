@@ -899,20 +899,20 @@ onMounted(() => loadSpaces());
 
       <ModalDialog
         :show="showDeleteConfirm"
-        title="Archive Memory Folder"
-        icon="lucide:archive"
+        title="Remove Memory Folder"
+        icon="lucide:trash-2"
         icon-color="red"
         @close="showDeleteConfirm = false"
       >
         <p class="text-theme-400 leading-relaxed">
-          Archive <strong class="text-theme-200">{{ pendingDeleteSpace?.name }}</strong>? Its folder will be moved to the memory trash and its indexed chunks will be removed.
+          Remove <strong class="text-theme-200">{{ pendingDeleteSpace?.name }}</strong>? Its folder will be moved to the memory trash and its indexes will be removed.
         </p>
         <template #actions>
           <button
             class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
             @click="deleteSpace(pendingDeleteSpace!)"
           >
-            Archive Folder
+            Remove Folder
           </button>
           <button
             class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"
