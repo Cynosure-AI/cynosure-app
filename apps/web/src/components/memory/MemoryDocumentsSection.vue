@@ -287,11 +287,11 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
             <button
               :disabled="space.isDefault"
               class="p-1 text-theme-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-colors disabled:opacity-20 disabled:hover:text-theme-600"
-              title="Archive folder"
+              title="Remove folder"
               @click.stop="emit('delete-folder', space)"
             >
               <Icon
-                icon="lucide:archive"
+                icon="lucide:trash-2"
                 class="w-3.5 h-3.5"
               />
             </button>

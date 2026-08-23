@@ -6,6 +6,7 @@ import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 import DataTable, { type Column } from "../shared/DataTable.vue";
+import ModalDialog from "../shared/ModalDialog.vue";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
 
@@ -76,8 +77,8 @@ const columns: Column<DocumentRow>[] = [
   { key: "fileName", label: "File", width: "minmax(260px, 2fr)", sortable: true, sortValue: (file) => file.fileName },
   { key: "modifiedAt", label: "Modified", width: "140px", sortable: true, sortValue: (file) => file.modifiedAt },
   { key: "chunkCount", label: "Chunks", width: "96px", sortable: true, sortValue: (file) => file.chunkCount || 0 },
-  { key: "entityIndexed", label: "Graph", width: "88px", sortable: true, sortValue: (file) => file.entityIndexed },
-  { key: "status", label: "Status", width: "140px", sortable: true, sortValue: (file) => file.status },
+  { key: "entityIndexed", label: "Relationships", width: "120px", sortable: true, sortValue: (file) => file.entityIndexed },
+  { key: "status", label: "Vector index", width: "160px", sortable: true, sortValue: (file) => file.status },
   { key: "actions", label: "Actions", width: "190px", class: "text-right" },
 ];
 
@@ -232,7 +233,7 @@ async function cancelJob(job?: MemoryIndexJob) {
   }
 }
 
-// --- Bulk archive ---
+// --- Bulk removal ---
 async function deleteSelectedFiles() {
   if (selectedFiles.value.size === 0) return;
   deleting.value = true;
@@ -400,9 +401,9 @@ function statusClass(status: MemoryFileStatus["status"]) {
 
 function statusLabel(status: MemoryFileStatus["status"]) {
   switch (status) {
-    case "indexed": return "Indexed";
-    case "needs_reindex": return "Needs re-index";
-    case "not_indexed": return "Not indexed";
+    case "indexed": return "Vector indexed";
+    case "needs_reindex": return "Needs vector re-index";
+    case "not_indexed": return "Not vector indexed";
     default: return "Not supported";
   }
 }
@@ -439,7 +440,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
 </script>
 
 <template>
-  <div class="min-w-0 overflow-hidden">
+  <div class="min-w-0">
     <!-- Folder header -->
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
@@ -461,8 +462,8 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <button
           type="button"
           :disabled="currentSpace?.isDefault"
-          :title="currentSpace?.isDefault ? 'Cannot archive the default memory folder' : 'Archive folder'"
-          :aria-label="currentSpace?.isDefault ? 'Default memory folder cannot be archived' : `Archive ${currentSpace?.name || 'folder'}`"
+          :title="currentSpace?.isDefault ? 'Cannot remove the default memory folder' : 'Remove folder'"
+          :aria-label="currentSpace?.isDefault ? 'Default memory folder cannot be removed' : `Remove ${currentSpace?.name || 'folder'}`"
           class="p-1 text-theme-500 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-theme-500"
           @click="emit('deleteSpace')"
         >
@@ -482,7 +483,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             icon="lucide:refresh-cw"
             class="w-4 h-4"
           />
-          Re-index {{ needsAttentionCount }}
+          Index vectors for {{ needsAttentionCount }}
         </button>
         <button
           :disabled="uploading"
@@ -562,76 +563,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         </template>
       </div>
       <div class="flex items-center gap-2">
-        <template v-if="selectedFiles.size > 0">
-          <button
-            class="flex items-center gap-1 px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
-            @click="selectedFiles = new Set()"
-          >
-            Clear
-          </button>
-          <button
-            v-if="!allFilteredSelected"
-            class="flex items-center gap-1 px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
-            @click="selectAll"
-          >
-            Select all {{ filteredFiles.length }}
-          </button>
-          <button
-            v-if="spaces.length > 1"
-            :disabled="moving"
-            class="flex items-center gap-1 px-2 py-1 text-xs bg-accent-500/10 text-accent-400 hover:bg-accent-500/20 rounded transition-colors"
-            @click="showMoveDialog = true"
-          >
-            <Icon
-              :icon="moving ? 'lucide:loader-2' : 'lucide:move-right'"
-              class="w-3.5 h-3.5"
-              :class="{ 'animate-spin': moving }"
-            />
-            Move {{ selectedFiles.size }}
-          </button>
-          <button
-            v-if="selectedEntityIndexableFiles.length > 0"
-            :disabled="selectedEntityIndexableIdleCount === 0"
-            class="flex items-center gap-1 px-2 py-1 text-xs bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded transition-colors disabled:opacity-50"
-            title="Integrate selected indexed documents into the entity graph"
-            @click="entityIndexSelected"
-          >
-            <Icon
-              :icon="selectedEntityIndexableIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
-              class="w-3.5 h-3.5"
-              :class="{ 'animate-spin': selectedEntityIndexableIdleCount === 0 }"
-            />
-            Entity index {{ selectedEntityIndexableIdleCount || selectedEntityIndexableFiles.length }}
-          </button>
-          <button
-            v-if="selectedIndexedFiles.length > 0"
-            :disabled="droppingIndexes"
-            class="flex items-center gap-1 px-2 py-1 text-xs bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded transition-colors disabled:opacity-50"
-            title="Remove vectors, index tracking, and entity graph data while keeping the source files"
-            @click="dropSelectedIndexes"
-          >
-            <Icon
-              :icon="droppingIndexes ? 'lucide:loader-2' : 'lucide:database-x'"
-              class="w-3.5 h-3.5"
-              :class="{ 'animate-spin': droppingIndexes }"
-            />
-            Drop index {{ selectedIndexedFiles.length }}
-          </button>
-          <button
-            :disabled="deleting"
-            class="flex items-center gap-1 px-2 py-1 text-xs bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded transition-colors"
-            title="Move the selected source files to hidden trash and remove their indexes"
-            @click="deleteSelectedFiles"
-          >
-            <Icon
-              :icon="deleting ? 'lucide:loader-2' : 'lucide:trash-2'"
-              class="w-3.5 h-3.5"
-              :class="{ 'animate-spin': deleting }"
-            />
-            Archive {{ selectedFiles.size }}
-          </button>
-        </template>
-        <template v-else-if="files.length > 0">
+        <template v-if="selectedFiles.size === 0 && files.length > 0">
           <button
             class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
             @click="selectAllOnPage"
@@ -678,6 +610,90 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           class="w-full pl-9 pr-3 py-2 text-sm bg-theme-900/60 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-600 transition-colors"
           @input="page = 0"
         >
+      </div>
+    </div>
+
+    <!-- Floating bulk actions: pinned inside the document area while scrolling. -->
+    <div
+      v-if="selectedFiles.size > 0"
+      class="pointer-events-none sticky top-[calc(100vh_-_8rem)] z-30 h-0 sm:top-[calc(100vh_-_5.5rem)]"
+    >
+      <div class="pointer-events-auto mx-auto flex w-fit max-w-full items-center overflow-x-auto rounded-xl border border-theme-700/80 bg-theme-950/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl">
+        <span class="shrink-0 border-r border-theme-800 px-3 text-xs font-medium text-theme-300">
+          {{ selectedFiles.size }} selected
+        </span>
+        <button
+          v-if="!allFilteredSelected"
+          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-theme-400 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          @click="selectAll"
+        >
+          Select all {{ filteredFiles.length }}
+        </button>
+        <button
+          v-if="spaces.length > 1"
+          :disabled="moving"
+          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-accent-400 transition-colors hover:bg-accent-500/10 disabled:opacity-50"
+          @click="showMoveDialog = true"
+        >
+          <Icon
+            :icon="moving ? 'lucide:loader-2' : 'lucide:folder-input'"
+            class="h-3.5 w-3.5"
+            :class="{ 'animate-spin': moving }"
+          />
+          Move
+        </button>
+        <button
+          v-if="selectedEntityIndexableFiles.length > 0"
+          :disabled="selectedEntityIndexableIdleCount === 0"
+          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
+          title="Extract entities and relationships from the selected vector-indexed documents"
+          @click="entityIndexSelected"
+        >
+          <Icon
+            :icon="selectedEntityIndexableIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
+            class="h-3.5 w-3.5"
+            :class="{ 'animate-spin': selectedEntityIndexableIdleCount === 0 }"
+          />
+          Extract relationships
+        </button>
+        <button
+          v-if="selectedIndexedFiles.length > 0"
+          :disabled="droppingIndexes"
+          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-orange-400 transition-colors hover:bg-orange-500/10 disabled:opacity-50"
+          title="Remove vector and relationship indexes while keeping the source files"
+          @click="dropSelectedIndexes"
+        >
+          <Icon
+            :icon="droppingIndexes ? 'lucide:loader-2' : 'lucide:database-x'"
+            class="h-3.5 w-3.5"
+            :class="{ 'animate-spin': droppingIndexes }"
+          />
+          Remove indexes
+        </button>
+        <button
+          :disabled="deleting"
+          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+          title="Remove the selected source files and their indexes"
+          @click="deleteSelectedFiles"
+        >
+          <Icon
+            :icon="deleting ? 'lucide:loader-2' : 'lucide:trash-2'"
+            class="h-3.5 w-3.5"
+            :class="{ 'animate-spin': deleting }"
+          />
+          Remove
+        </button>
+        <button
+          class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-l border-theme-800 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          title="Clear selection"
+          aria-label="Clear selection"
+          @click="selectedFiles = new Set()"
+        >
+          <Icon
+            icon="lucide:x"
+            class="h-4 w-4"
+          />
+        </button>
       </div>
     </div>
 
@@ -763,7 +779,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <div
           v-if="file.supported"
           class="flex items-center"
-          :title="file.entityIndexed ? 'Entity indexed' : file.status === 'indexed' ? 'Not entity indexed' : 'Entity indexing requires regular indexing first'"
+          :title="file.entityIndexed ? 'Relationships extracted' : file.status === 'indexed' ? 'Relationships not extracted' : 'Relationship extraction requires a vector index first'"
         >
           <Icon
             :icon="file.entityIndexed ? 'lucide:network' : 'lucide:network-x'"
@@ -812,7 +828,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           <button
             v-if="file.supported && (file.status === 'needs_reindex' || file.status === 'not_indexed')"
             class="flex items-center gap-1 rounded px-2 py-1 text-xs bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors disabled:opacity-50"
-            :title="isJobRunning('reindex', file.fileName) ? 'Cancel re-index' : 'Re-index this file'"
+            :title="isJobRunning('reindex', file.fileName) ? 'Cancel vector indexing' : 'Build the vector index for this file'"
             @click="isJobRunning('reindex', file.fileName) ? cancelJob(runningJob('reindex', file.fileName)) : reindexFile(file.fileName)"
           >
             <Icon
@@ -820,14 +836,14 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
               class="h-3.5 w-3.5"
               :class="{ 'animate-spin': isJobRunning('reindex', file.fileName) }"
             />
-            {{ isJobRunning("reindex", file.fileName) ? "Cancel" : "Re-index" }}
+            {{ isJobRunning("reindex", file.fileName) ? "Cancel" : "Index vectors" }}
           </button>
 
           <button
             v-else-if="file.supported && file.status === 'indexed'"
             class="p-1 text-theme-600 hover:text-theme-400 transition-colors opacity-0 group-hover:opacity-100"
             :class="{ 'opacity-100 text-orange-400 hover:text-orange-300': isJobRunning('reindex', file.fileName) }"
-            :title="isJobRunning('reindex', file.fileName) ? 'Cancel re-index' : 'Force re-index'"
+            :title="isJobRunning('reindex', file.fileName) ? 'Cancel vector indexing' : 'Rebuild vector index'"
             @click="isJobRunning('reindex', file.fileName) ? cancelJob(runningJob('reindex', file.fileName)) : reindexFile(file.fileName)"
           >
             <Icon
@@ -841,7 +857,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             v-if="file.supported && file.status === 'indexed'"
             class="p-1 text-theme-600 hover:text-emerald-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
             :class="{ 'opacity-100 text-emerald-400': isJobRunning('entity-index', file.fileName) }"
-            :title="isJobRunning('entity-index', file.fileName) ? 'Cancel entity indexing' : 'Entity index'"
+            :title="isJobRunning('entity-index', file.fileName) ? 'Cancel relationship extraction' : 'Extract entities and relationships'"
             @click="isJobRunning('entity-index', file.fileName) ? cancelJob(runningJob('entity-index', file.fileName)) : entityIndexFile(file.fileName)"
           >
             <Icon
@@ -873,56 +889,52 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
     >
 
     <!-- Move Dialog -->
-    <Teleport to="body">
-      <div
-        v-if="showMoveDialog"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-        @click.self="showMoveDialog = false"
-      >
-        <div class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-md shadow-xl">
-          <h3 class="text-base font-medium text-theme-200 mb-2">
-            Move {{ selectedFiles.size }} file{{ selectedFiles.size !== 1 ? "s" : "" }}
-          </h3>
-          <p class="text-sm text-theme-500 mb-4">
-            Select the target memory folder:
-          </p>
-          <div class="space-y-2 max-h-60 overflow-y-auto">
-            <button
-              v-for="space in spaces.filter((s) => s.id !== spaceId)"
-              :key="space.id"
-              :disabled="moving"
-              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-theme-800 hover:border-accent-500/50 hover:bg-accent-500/5 transition-colors text-left disabled:opacity-50"
-              @click="moveSelectedFiles(space.id)"
-            >
-              <Icon
-                icon="lucide:database"
-                class="w-4 h-4 text-theme-400 shrink-0"
-              />
-              <div class="flex-1 min-w-0">
-                <div class="text-sm text-theme-200 truncate">
-                  {{ space.name }}
-                </div>
-                <div class="text-xs text-theme-500">
-                  {{ space.fileCount }} file{{ space.fileCount !== 1 ? "s" : "" }}
-                </div>
-              </div>
-              <Icon
-                :icon="moving ? 'lucide:loader-2' : 'lucide:chevron-right'"
-                class="w-4 h-4 text-theme-600 shrink-0"
-                :class="{ 'animate-spin': moving }"
-              />
-            </button>
+    <ModalDialog
+      :show="showMoveDialog"
+      :title="`Move ${selectedFiles.size} file${selectedFiles.size !== 1 ? 's' : ''}`"
+      icon="lucide:folder-input"
+      max-width="max-w-2xl"
+      max-height="max-h-[85vh]"
+      @close="showMoveDialog = false"
+    >
+      <p class="mb-4 text-sm text-theme-500">
+        Select the destination memory folder.
+      </p>
+      <div class="grid max-h-[55vh] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+        <button
+          v-for="space in spaces.filter((s) => s.id !== spaceId)"
+          :key="space.id"
+          :disabled="moving"
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-theme-800 hover:border-accent-500/50 hover:bg-accent-500/5 transition-colors text-left disabled:opacity-50"
+          @click="moveSelectedFiles(space.id)"
+        >
+          <Icon
+            icon="lucide:folder"
+            class="w-4 h-4 text-theme-400 shrink-0"
+          />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm text-theme-200 truncate">
+              {{ space.name }}
+            </div>
+            <div class="text-xs text-theme-500">
+              {{ space.fileCount }} file{{ space.fileCount !== 1 ? "s" : "" }}
+            </div>
           </div>
-          <div class="flex justify-end mt-4">
-            <button
-              class="px-3 py-1.5 text-sm text-theme-400 hover:text-theme-200"
-              @click="showMoveDialog = false"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+          <Icon
+            :icon="moving ? 'lucide:loader-2' : 'lucide:chevron-right'"
+            class="w-4 h-4 text-theme-600 shrink-0"
+            :class="{ 'animate-spin': moving }"
+          />
+        </button>
       </div>
-    </Teleport>
+      <template #actions>
+        <button
+          class="w-full rounded-xl bg-theme-800 px-4 py-3 text-center text-sm font-medium text-theme-300 transition-colors hover:bg-theme-700"
+          @click="showMoveDialog = false"
+        >
+          Cancel
+        </button>
+      </template>
+    </ModalDialog>
   </div>
 </template>

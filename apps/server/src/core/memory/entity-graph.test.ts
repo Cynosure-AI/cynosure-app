@@ -6,6 +6,7 @@ let testDb: Database.Database
 vi.mock('../../db/database.js', () => ({ getDb: () => testDb }))
 
 import { EntityGraphStore } from './entity-graph.js'
+import { moveMemoryGraphSource } from './memory-entity-indexer.js'
 
 beforeEach(() => {
     testDb = new Database(':memory:')
@@ -47,6 +48,53 @@ beforeEach(() => {
 afterEach(() => testDb.close())
 
 describe('entity graph identity and provenance scope', () => {
+    test('remaps memory evidence to a new space without reusing its primary key', () => {
+        const graph = new EntityGraphStore()
+        const edge = graph.upsertEdge({
+            from: { name: 'Carmen', type: 'person' },
+            relation: 'related_to',
+            to: { name: 'Family profile', type: 'artifact' },
+            evidence: 'Carmen appears in the family profile.',
+            sourceDocumentId: 'doc-1',
+            sourceContentHash: 'hash-1',
+            sourceChunkIndex: 2,
+        }, 'memory', 'memory:space-a:profile.md')!
+        const prior = testDb.prepare('SELECT id FROM entity_graph_edge_evidence WHERE edge_id = ?').get(edge.id) as { id: string }
+
+        expect(() => moveMemoryGraphSource('space-a', 'profile.md', 'space-b', 'profile.md')).not.toThrow()
+
+        const moved = testDb.prepare('SELECT * FROM entity_graph_edge_evidence WHERE edge_id = ?').all(edge.id) as Array<Record<string, unknown>>
+        expect(moved).toHaveLength(1)
+        expect(moved[0]).toMatchObject({
+            source_id: 'memory:space-b:profile.md',
+            source_document_id: 'doc-1',
+            source_content_hash: 'hash-1',
+            source_chunk_index: 2,
+        })
+        expect(moved[0].id).not.toBe(prior.id)
+    })
+
+    test('merges evidence when the remap target already exists', () => {
+        const graph = new EntityGraphStore()
+        const relation = {
+            from: { name: 'Cynosure', type: 'project' as const },
+            relation: 'uses',
+            to: { name: 'SQLite', type: 'technology' as const },
+        }
+        const edge = graph.upsertEdge({ ...relation, evidence: 'Source evidence.' }, 'memory', 'memory:space-a:architecture.md')!
+        graph.upsertEdge({ ...relation, evidence: 'Target evidence.' }, 'memory', 'memory:space-b:architecture.md')
+
+        expect(() => moveMemoryGraphSource('space-a', 'architecture.md', 'space-b', 'architecture.md')).not.toThrow()
+
+        const evidence = testDb.prepare('SELECT * FROM entity_graph_edge_evidence WHERE edge_id = ?').all(edge.id) as Array<Record<string, unknown>>
+        expect(evidence).toHaveLength(1)
+        expect(evidence[0]).toMatchObject({
+            source_id: 'memory:space-b:architecture.md',
+            mention_count: 2,
+            evidence: 'Source evidence.',
+        })
+    })
+
     test('returns claim coordinates only while their source document version is current', () => {
         const graph = new EntityGraphStore()
         testDb.prepare(`
