@@ -10,4 +10,13 @@ contextBridge.exposeInMainWorld('electron', {
     // Reliable UI prefs persistence (bypasses Electron's LevelDB localStorage quirks)
     getUiPrefs: (): Record<string, string> => ipcRenderer.sendSync('get-ui-prefs'),
     setUiPrefs: (prefs: Record<string, string>) => ipcRenderer.sendSync('set-ui-prefs', prefs),
+    getUpdateState: () => ipcRenderer.invoke('updater:get-state'),
+    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+    downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+    installUpdate: () => ipcRenderer.invoke('updater:install'),
+    onUpdateState: (listener: (state: unknown) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, state: unknown) => listener(state)
+        ipcRenderer.on('updater:state', handler)
+        return () => ipcRenderer.removeListener('updater:state', handler)
+    },
 })
