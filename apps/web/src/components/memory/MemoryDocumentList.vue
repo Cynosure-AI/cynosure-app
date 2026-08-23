@@ -420,7 +420,9 @@ watch(
   () => {
     files.value = [];
     selectedFiles.value = new Set();
-    jobs.value = [];
+    // Restore active work immediately from the app-wide poller while the
+    // space-specific request refreshes the authoritative job list.
+    jobs.value = memoryJobsStore.activeJobs.filter((job) => job.spaceId === props.spaceId);
     handledTerminalJobIds.value = new Set();
     showEditorModal.value = false;
     editorFileName.value = "";
@@ -779,16 +781,26 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <div
           v-if="file.supported"
           class="flex items-center gap-1.5"
-          :title="file.entityIndexed ? 'Relationships extracted' : file.status === 'indexed' ? 'Relationships not extracted' : 'Relationship extraction requires a vector index first'"
+          :title="isJobRunning('entity-index', file.fileName) ? 'Extracting entities and relationships' : file.entityIndexed ? 'Relationships extracted' : file.status === 'indexed' ? 'Relationships not extracted' : 'Relationship extraction requires a vector index first'"
         >
           <Icon
-            :icon="file.entityIndexed ? 'lucide:network' : 'lucide:network-x'"
+            :icon="isJobRunning('entity-index', file.fileName) ? 'lucide:loader-2' : file.entityIndexed ? 'lucide:network' : 'lucide:network-x'"
             class="h-3.5 w-3.5"
-            :class="file.entityIndexed ? 'text-green-400' : 'text-theme-700'"
+            :class="[
+              isJobRunning('entity-index', file.fileName) ? 'animate-spin text-emerald-400' : '',
+              !isJobRunning('entity-index', file.fileName) && file.entityIndexed ? 'text-green-400' : '',
+              !isJobRunning('entity-index', file.fileName) && !file.entityIndexed ? 'text-theme-700' : '',
+            ]"
           />
 
           <span
-            v-if="file.entityIndexed"
+            v-if="isJobRunning('entity-index', file.fileName)"
+            class="text-[11px] text-emerald-500"
+          >
+            Analysing
+          </span>
+          <span
+            v-else-if="file.entityIndexed"
             class="text-[11px] text-green-600"
           >
             Analysed
