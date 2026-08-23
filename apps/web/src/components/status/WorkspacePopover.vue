@@ -4,7 +4,7 @@ import type { CSSProperties } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { api } from '../../api/client'
-import { usePreferencesStore } from '../../stores/preferences.store'
+import { useAppUpdater } from '../../composables/useAppUpdater'
 
 const props = withDefaults(defineProps<{
   show: boolean
@@ -19,8 +19,8 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ close: [] }>()
 const router = useRouter()
-const preferencesStore = usePreferencesStore()
 const appVersion = ref<string | null>(null)
+const { state: updateState, progressPercent, download, install } = useAppUpdater()
 const popoverStyle = ref<CSSProperties>({})
 
 const setupLinks = [
@@ -142,8 +142,39 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
+        <div
+          v-if="['available', 'downloading', 'downloaded'].includes(updateState.status)"
+          class="mt-1 border-t border-theme-800 px-1 pt-2"
+        >
+          <button
+            type="button"
+            class="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-theme-200 transition hover:bg-theme-800 disabled:cursor-default disabled:hover:bg-transparent"
+            :disabled="updateState.status === 'downloading'"
+            @click="updateState.status === 'available' ? download() : updateState.status === 'downloaded' ? install() : undefined"
+          >
+            <Icon
+              :icon="updateState.status === 'downloaded' ? 'lucide:badge-check' : updateState.status === 'downloading' ? 'lucide:loader-circle' : 'lucide:download'"
+              class="h-5 w-5 shrink-0 text-accent-400"
+              :class="{ 'animate-spin': updateState.status === 'downloading' }"
+            />
+            <span class="min-w-0 flex-1">
+              <span class="block font-medium">
+                {{ updateState.status === 'downloaded' ? 'Install and restart' : updateState.status === 'downloading' ? `Downloading update… ${progressPercent}%` : 'Update available' }}
+              </span>
+              <span class="block text-[11px] text-theme-500">
+                Version {{ updateState.availableVersion }}
+              </span>
+            </span>
+            <Icon
+              v-if="updateState.status !== 'downloading'"
+              icon="lucide:chevron-right"
+              class="h-4 w-4 text-theme-600"
+            />
+          </button>
+        </div>
+
         <div class="mt-1 border-t border-theme-800 px-3 pb-1 pt-3 text-[10px] text-theme-600">
-          Cynosure <span v-if="appVersion">v{{ appVersion }}</span>
+          Cynosure <span v-if="updateState.currentVersion || appVersion">v{{ updateState.currentVersion || appVersion }}</span>
         </div>
       </div>
     </Transition>

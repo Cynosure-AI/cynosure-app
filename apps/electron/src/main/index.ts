@@ -9,6 +9,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import ElectronStore from 'electron-store'
 import appIcon from '../../build/icon.png?asset'
 import trayProgressIcon from '../../build/tray_progress.png?asset'
+import { checkForUpdates, initializeUpdater } from './updater'
 
 // ── Configuration ──────────────────────────────────────────────────────────────
 
@@ -446,6 +447,8 @@ app.whenReady().then(async () => {
         event.returnValue = null
     })
 
+    initializeUpdater()
+
     registerAppProtocol()
 
     // Start the server in the background — the UI handles reconnection.
@@ -460,6 +463,9 @@ app.whenReady().then(async () => {
     // once the server is ready. This avoids a blank wait while MCPs load.
     mainWindow = createWindow()
     tray = createTray(mainWindow)
+
+    // Check after the first window exists so the renderer receives every state change.
+    void checkForUpdates()
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {

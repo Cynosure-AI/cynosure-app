@@ -6,6 +6,13 @@ directories:
   buildResources: build
   output: release
 
+# electron-builder writes app-update.yml into the packaged app and generates
+# latest.yml/latest-linux.yml beside the installers. The generic provider is
+# hosted manually; upload the metadata and artifacts together.
+publish:
+  provider: generic
+  url: https://cometcms.banjocomet.com/media/cynosure/
+
 files:
   - out/**/*
 
@@ -36,7 +43,9 @@ linux:
   icon: build/icon.png
 
 mac:
-  target: dmg
+  target:
+    - dmg
+    - zip
   icon: build/icon.icns
 
 win:
