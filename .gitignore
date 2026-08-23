@@ -51,3 +51,6 @@ coverage/
 playwright-report/
 test-results/
 .tmp/
+
+# Internal Repos
+docs
