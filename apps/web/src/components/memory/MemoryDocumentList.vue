@@ -778,14 +778,21 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       <template #col-entityIndexed="{ item: file }">
         <div
           v-if="file.supported"
-          class="flex items-center"
+          class="flex items-center gap-1.5"
           :title="file.entityIndexed ? 'Relationships extracted' : file.status === 'indexed' ? 'Relationships not extracted' : 'Relationship extraction requires a vector index first'"
         >
           <Icon
             :icon="file.entityIndexed ? 'lucide:network' : 'lucide:network-x'"
             class="h-3.5 w-3.5"
-            :class="file.entityIndexed ? 'text-emerald-400' : 'text-theme-700'"
+            :class="file.entityIndexed ? 'text-green-400' : 'text-theme-700'"
           />
+
+          <span
+            v-if="file.entityIndexed"
+            class="text-[11px] text-green-600"
+          >
+            Analysed
+          </span>
         </div>
       </template>
 
