@@ -675,7 +675,16 @@ onMounted(() => {
         >
           <div class="rounded-2xl border border-indigo-500/25 bg-indigo-950/10 overflow-hidden">
             <!-- Header -->
-            <div class="w-full flex items-center gap-2.5 px-3 py-2.5">
+            <div
+              role="button"
+              tabindex="0"
+              class="w-full flex cursor-pointer items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-indigo-500/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400/60"
+              :aria-expanded="!collapsedSubAgentGroups.has(entry.key)"
+              :aria-label="`${collapsedSubAgentGroups.has(entry.key) ? 'Expand' : 'Collapse'} ${entry.agentName || entry.codename} sub-agent steps`"
+              @click="toggleSubAgentCollapsed(entry.key)"
+              @keydown.enter.self.prevent="toggleSubAgentCollapsed(entry.key)"
+              @keydown.space.self.prevent="toggleSubAgentCollapsed(entry.key)"
+            >
               <!-- Sub-agent avatar -->
               <div class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-indigo-500/30 bg-theme-800">
                 <img
@@ -712,7 +721,7 @@ onMounted(() => {
                 v-if="!collapsedSubAgentGroups.has(entry.key)"
                 class="w-7 h-7 rounded-lg flex items-center justify-center text-indigo-400/50 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors shrink-0"
                 :title="fullHeightSubAgentGroups.has(entry.key) ? 'Collapse to compact view' : 'Expand to full height'"
-                @click="toggleSubAgentFullHeight(entry.key)"
+                @click.stop="toggleSubAgentFullHeight(entry.key)"
               >
                 <Icon
                   :icon="fullHeightSubAgentGroups.has(entry.key) ? 'lucide:minimize-2' : 'lucide:maximize-2'"
@@ -723,7 +732,7 @@ onMounted(() => {
               <button
                 class="w-7 h-7 rounded-lg flex items-center justify-center text-indigo-400/50 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors shrink-0"
                 :title="collapsedSubAgentGroups.has(entry.key) ? 'Expand sub-agent steps' : 'Collapse sub-agent steps'"
-                @click="toggleSubAgentCollapsed(entry.key)"
+                @click.stop="toggleSubAgentCollapsed(entry.key)"
               >
                 <Icon
                   :icon="collapsedSubAgentGroups.has(entry.key) ? 'lucide:chevron-down' : 'lucide:chevron-up'"
