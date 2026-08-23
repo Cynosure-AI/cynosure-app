@@ -10,6 +10,7 @@ import AgentToolsTab from '../components/agent/AgentToolsTab.vue'
 import AgentMemoryTab from '../components/agent/AgentMemoryTab.vue'
 import AgentSubAgentsTab from '../components/agent/AgentSubAgentsTab.vue'
 import AgentAdvancedTab from '../components/agent/AgentAdvancedTab.vue'
+import ResponsiveSectionLayout from '../components/shared/ResponsiveSectionLayout.vue'
 
 type AgentSectionId = 'general' | 'tools' | 'sub-agents' | 'memory' | 'advanced'
 
@@ -27,6 +28,7 @@ const agentDefs = useAgentDefinitionsStore()
 const chatStore = useChatStore()
 
 const activeSectionId = ref<AgentSectionId>('general')
+const mobileDetailOpen = ref(false)
 
 const agentId = computed(() => route.params.id as string)
 const agent = computed(() => agentDefs.get(agentId.value))
@@ -93,6 +95,11 @@ function sectionButtonClass(id: AgentSectionId): string {
     ? 'bg-theme-800 text-theme-100 shadow-[inset_3px_0_0_var(--color-accent-500,#3b82f6)]'
     : 'text-theme-400 hover:bg-theme-800/70 hover:text-theme-200'
 }
+
+function selectSection(id: AgentSectionId): void {
+  activeSectionId.value = id
+  mobileDetailOpen.value = true
+}
 </script>
 
 <template>
@@ -100,8 +107,12 @@ function sectionButtonClass(id: AgentSectionId): string {
     v-if="agent"
     class="h-full overflow-hidden"
   >
-    <div class="flex h-full flex-col lg:flex-row">
-      <aside class="shrink-0 border-b border-theme-800 bg-theme-950/60 lg:w-72 lg:border-b-0 lg:border-r">
+    <ResponsiveSectionLayout
+      :detail-open="mobileDetailOpen"
+      mobile-back-label="Agent sections"
+      @back="mobileDetailOpen = false"
+    >
+      <template #sidebar>
         <header class="p-4">
           <button
             class="mb-4 flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-300"
@@ -170,24 +181,28 @@ function sectionButtonClass(id: AgentSectionId): string {
           </div>
         </header>
 
-        <nav class="flex gap-1 overflow-x-auto px-3 py-3 lg:block lg:space-y-1 lg:overflow-x-visible lg:p-4">
+        <nav class="space-y-1 p-4">
           <button
             v-for="section in sections"
             :key="section.id"
-            class="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all lg:w-full"
+            class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-all"
             :class="sectionButtonClass(section.id)"
-            @click="activeSectionId = section.id"
+            @click="selectSection(section.id)"
           >
             <Icon
               :icon="section.icon"
               class="h-4.5 w-4.5 shrink-0"
             />
             <span class="whitespace-nowrap">{{ section.label }}</span>
+            <Icon
+              icon="lucide:chevron-right"
+              class="ml-auto h-4 w-4 text-theme-600 lg:hidden"
+            />
           </button>
         </nav>
-      </aside>
+      </template>
 
-      <main class="min-w-0 flex-1 overflow-y-auto">
+      <main class="h-full min-w-0 overflow-y-auto">
         <div class="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
           <section class="scroll-mt-4">
             <div class="mb-5 flex items-start gap-3">
@@ -225,6 +240,6 @@ function sectionButtonClass(id: AgentSectionId): string {
           </section>
         </div>
       </main>
-    </div>
+    </ResponsiveSectionLayout>
   </div>
 </template>
