@@ -1,15 +1,21 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { api } from '../../../api/client'
-import TabBar, { type TabDef } from '../../shared/TabBar.vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
 import McpBrowseTab from './McpBrowseTab.vue'
 import McpInstalledTab from './McpInstalledTab.vue'
 
-const { servers, actionError, authInProgress, loadServers, refreshAll } = useMcpServers()
+const { actionError, authInProgress, loadServers, refreshAll } = useMcpServers()
 
 type McpTab = 'browse' | 'installed'
-const activeTab = ref<McpTab>('installed')
+
+const props = defineProps<{
+  modelValue: McpTab
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: McpTab]
+}>()
 
 const cleanups: (() => void)[] = []
 
@@ -35,23 +41,13 @@ onUnmounted(() => {
 
 <template>
   <div>
-    <!-- Tabs -->
-    <TabBar
-      v-model="activeTab"
-      :tabs="[
-        { value: 'installed', label: 'Installed', icon: 'lucide:plug', badge: servers.length || undefined } as TabDef<McpTab>,
-        { value: 'browse', label: 'Browse Registry', icon: 'lucide:search' } as TabDef<McpTab>,
-      ]"
-      class="mb-5"
-    />
-
     <McpBrowseTab
-      v-if="activeTab === 'browse'"
-      @go-to-installed="activeTab = 'installed'"
+      v-if="props.modelValue === 'browse'"
+      @go-to-installed="emit('update:modelValue', 'installed')"
     />
     <McpInstalledTab
-      v-else-if="activeTab === 'installed'"
-      @go-to-browse="activeTab = 'browse'"
+      v-else
+      @go-to-browse="emit('update:modelValue', 'browse')"
     />
   </div>
 </template>
