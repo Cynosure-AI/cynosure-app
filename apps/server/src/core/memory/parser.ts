@@ -31,6 +31,7 @@ export interface RetrievedChunk {
   sectionPath?: string
   contentHash?: string
   documentId?: string
+  documentRef?: string
   revision?: string
 }
 

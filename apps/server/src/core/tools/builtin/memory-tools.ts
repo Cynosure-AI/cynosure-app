@@ -9,7 +9,6 @@ import { getEntityGraphStore, type EntityEdge, type EntityNode, type EntityType 
 import { deleteMemoryGraphSource } from '../../memory/memory-entity-indexer.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
 import {
-    formatMemoryDocumentRef,
     memoryDocumentRefMatchesContentHash,
     parseMemoryDocumentRef,
     type ParsedMemoryDocumentRef,
@@ -42,7 +41,7 @@ async function reindexMemoryFile(
     spaceId: string,
     fileName: string,
     signal?: AbortSignal,
-): Promise<{ chunkCount: number; revision: string; documentId: string }> {
+): Promise<{ chunkCount: number; revision: string; documentId: string; documentRef: string }> {
     const folderPath = getMemorySpaceFolderPath(spaceId)
     if (!folderPath) throw new Error('Memory folder has no folder configured')
     cancelMemoryIndexJobsForFile(spaceId, fileName)
@@ -50,7 +49,7 @@ async function reindexMemoryFile(
     const result = await memory.reindexFile(folderPath, fileName, spaceId, { signal })
     const ref = memory.getDocumentReference(spaceId, result.fileName)
     if (!ref) throw new Error('Memory was indexed but its document reference could not be loaded')
-    return { chunkCount: result.chunkCount, revision: ref.revision, documentId: ref.documentId }
+    return { chunkCount: result.chunkCount, revision: ref.revision, documentId: ref.documentId, documentRef: ref.documentRef }
 }
 
 export const MEMORY_READ_TOOL_NAMES = [
@@ -483,12 +482,15 @@ function resolveMemoryDocumentRef(
     if (!parsed) {
         return { error: 'Invalid documentRef. Read or list memories again to get a current reference.' }
     }
-    const matches = getDb().prepare(`
-        SELECT document_id FROM memory_file_index
-        WHERE document_id LIKE ?
-        ORDER BY created_at DESC
-        LIMIT 2
-    `).all(`${parsed.documentIdPrefix}%`) as Array<{ document_id: string }>
+    const matches = parsed.kind === 'stable'
+        ? getDb().prepare('SELECT document_id FROM memory_file_index WHERE document_ref = ? LIMIT 2')
+            .all(parsed.value) as Array<{ document_id: string }>
+        : getDb().prepare(`
+            SELECT document_id FROM memory_file_index
+            WHERE document_id LIKE ?
+            ORDER BY created_at DESC
+            LIMIT 2
+        `).all(`${parsed.documentIdPrefix}%`) as Array<{ document_id: string }>
     if (matches.length > 1) {
         return { error: 'The documentRef is ambiguous. Read or list memories again to get a current reference.' }
     }
@@ -516,9 +518,12 @@ function resolveMemoryDocumentRef(
 
 function verifyDocumentRef(content: string, resolved: ResolvedMemoryDocument): string | undefined {
     const actualHash = createHash('sha256').update(content).digest('hex')
-    return memoryDocumentRefMatchesContentHash(resolved.documentRef, actualHash)
+    const matchesIndexedRevision = resolved.documentRef.kind === 'stable'
+        ? actualHash === resolved.revision.toLowerCase()
+        : memoryDocumentRefMatchesContentHash(resolved.documentRef, actualHash)
+    return matchesIndexedRevision
         ? undefined
-        : 'Memory changed since this documentRef was issued. Retrieve it again before retrying the update.'
+        : 'Memory changed outside the index while this update was being prepared. Retrieve it again before retrying.'
 }
 
 async function commitMemoryMutation(
@@ -526,7 +531,7 @@ async function commitMemoryMutation(
     previousContent: string,
     nextContent: string,
     signal?: AbortSignal,
-): Promise<{ chunkCount: number; revision: string; documentId: string }> {
+): Promise<{ chunkCount: number; revision: string; documentId: string; documentRef: string }> {
     writeTextFile(resolved.folderPath, resolved.fileName, nextContent)
     let indexed: Awaited<ReturnType<typeof reindexMemoryFile>>
     try {
@@ -622,7 +627,7 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
             const lines = pageFiles.map((file) => {
                 const ref = file.spaceId ? mem.getDocumentReference(file.spaceId, file.sourceFile) : undefined
                 const location = file.spaceId ? `, folder=${spaceMap.get(file.spaceId) || file.spaceId}` : ''
-                const identity = ref ? `, documentRef=${formatMemoryDocumentRef(ref.documentId, ref.revision)}` : ''
+                const identity = ref ? `, documentRef=${ref.documentRef}` : ''
                 return `- ${file.sourceFile} (${file.chunkCount} chunk${file.chunkCount !== 1 ? 's' : ''}${location}${identity})`
             })
 
@@ -716,7 +721,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
                 ? `\n\n(Showing Parts ${requestedMinIndex + 1}-${cappedMax + 1} of requested Parts ${requestedMinIndex + 1}-${requestedMaxIndex + 1}; capped at 20 chunks per call. Call again with a later range to continue.)`
                 : ''
             const identity = documentRef
-                ? `[Document: documentRef=${formatMemoryDocumentRef(documentRef.documentId, documentRef.revision)}]\n\n`
+                ? `[Document: documentRef=${documentRef.documentRef}]\n\n`
                 : ''
             return { success: true, output: identity + formatted + capNote }
         }
@@ -786,7 +791,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
                 const parts: string[] = []
                 const spaceName = r.spaceId ? spaceMap.get(r.spaceId) || r.spaceId : undefined
                 const ref = r.sourceFile && r.spaceId ? mem.getDocumentReference(r.spaceId, r.sourceFile) : undefined
-                if (ref) parts.push(`[documentRef=${formatMemoryDocumentRef(ref.documentId, ref.revision)}]`)
+                if (ref) parts.push(`[documentRef=${ref.documentRef}]`)
                 if (r.sourceFile) {
                     const total = countMap.get(`${r.sourceFile}\u0000${r.spaceId || ''}`)
                     const label = spaceName ? `${spaceName} · ${r.sourceFile}` : r.sourceFile
@@ -1121,7 +1126,7 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
 
             return {
                 success: true,
-                output: `Memory "${uniqueName}" created and indexed in "${resolved.spaceName}" (documentRef=${formatMemoryDocumentRef(indexed.documentId, indexed.revision)}, chunks=${indexed.chunkCount}).`
+                output: `Memory "${uniqueName}" created and indexed in "${resolved.spaceName}" (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).`
             }
         }
     }
@@ -1132,7 +1137,7 @@ function memoryMutationSchema(extra: Record<string, unknown> = {}, extraRequired
         type: 'object',
         additionalProperties: false,
         properties: {
-            documentRef: { type: 'string', description: 'Opaque document reference returned by the most recent memory read. Pass it back unchanged.' },
+            documentRef: { type: 'string', description: 'Stable document reference returned by memory reads (for example project-notes#4k8z2q). It remains unchanged after updates.' },
             content: { type: 'string', description: 'Content to write.' },
             ...extra,
         },
@@ -1174,7 +1179,7 @@ export function makeMemoryAppendTool(opts: MemoryToolOptions): ToolDefinition {
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_append',
-        description: 'Append content to an existing memory document without modifying its current text. Read the document first and pass its documentRef unchanged.',
+        description: 'Append content to an existing memory document without modifying its current text. Use its stable documentRef from any prior memory result or creation response.',
         parameters: memoryMutationSchema(),
         timeout: 120_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
@@ -1186,7 +1191,7 @@ export function makeMemoryAppendTool(opts: MemoryToolOptions): ToolDefinition {
                     fileContent.trimEnd() + '\n\n' + input.content.trim() + '\n',
                     signal,
                 )
-                return { success: true, output: `Content appended to "${resolved.fileName}" in "${resolved.spaceName}" and indexed (documentRef=${formatMemoryDocumentRef(indexed.documentId, indexed.revision)}, chunks=${indexed.chunkCount}).` }
+                return { success: true, output: `Content appended to "${resolved.fileName}" in "${resolved.spaceName}" and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
             })
         },
     }
@@ -1197,14 +1202,14 @@ export function makeMemoryReplaceAllTool(opts: MemoryToolOptions): ToolDefinitio
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_replace_all',
-        description: 'Replace an entire existing memory document. Read it first and pass its documentRef unchanged so stale edits can be rejected.',
+        description: 'Replace an entire existing memory document using its stable documentRef. Retrieve it first when the replacement depends on its current contents.',
         parameters: memoryMutationSchema(),
         timeout: 120_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
             const input = params as { documentRef: string; content: string }
             return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
                 const indexed = await commitMemoryMutation(resolved, fileContent, input.content, signal)
-                return { success: true, output: `Memory "${resolved.fileName}" fully replaced in "${resolved.spaceName}" and indexed (documentRef=${formatMemoryDocumentRef(indexed.documentId, indexed.revision)}, chunks=${indexed.chunkCount}).` }
+                return { success: true, output: `Memory "${resolved.fileName}" fully replaced in "${resolved.spaceName}" and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
             })
         },
     }
@@ -1241,7 +1246,7 @@ export function makeMemoryReplaceRangeTool(opts: MemoryToolOptions): ToolDefinit
                 const replaced = replaceChunkRangeInText(fileContent, chunks, input.content)
                 if ('error' in replaced) return { success: false, output: replaced.error }
                 const indexed = await commitMemoryMutation(resolved, fileContent, replaced.content, signal)
-                return { success: true, output: `Parts ${replaced.startIndex + 1}-${replaced.endIndex + 1} in "${resolved.fileName}" replaced and indexed (documentRef=${formatMemoryDocumentRef(indexed.documentId, indexed.revision)}, chunks=${indexed.chunkCount}).` }
+                return { success: true, output: `Parts ${replaced.startIndex + 1}-${replaced.endIndex + 1} in "${resolved.fileName}" replaced and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
             })
         },
     }
@@ -1252,7 +1257,7 @@ function memoryRemovalSchema(withRange: boolean): Record<string, unknown> {
         type: 'object',
         additionalProperties: false,
         properties: {
-            documentRef: { type: 'string', description: 'Opaque document reference returned by the most recent memory read. Pass it back unchanged.' },
+            documentRef: { type: 'string', description: 'Stable document reference returned by memory reads (for example project-notes#4k8z2q). It remains unchanged after updates.' },
             ...(withRange ? {
                 partStart: { type: 'integer', minimum: 1, description: 'First 1-based Part number to remove.' },
                 partEnd: { type: 'integer', minimum: 1, description: 'Last 1-based Part number to remove, inclusive.' },
@@ -1269,7 +1274,7 @@ export function makeMemoryRemoveAllTool(opts: MemoryToolOptions): ToolDefinition
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_remove_all',
-        description: 'Forget an entire memory document. Read it first and pass its documentRef unchanged. This archives the source in hidden trash and removes its retrieval and graph indexes.',
+        description: 'Forget an entire memory document using its stable documentRef. This archives the source in hidden trash and removes its retrieval and graph indexes.',
         parameters: memoryRemovalSchema(false),
         timeout: 30_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
@@ -1314,7 +1319,7 @@ export function makeMemoryRemoveRangeTool(opts: MemoryToolOptions): ToolDefiniti
                     return { success: true, output: `Parts ${input.partStart}-${input.partEnd} removed; the empty memory was forgotten (${deleted.deletedChunks} indexed chunks and ${deleted.deletedEdges} graph edges removed).` }
                 }
                 const indexed = await commitMemoryMutation(resolved, fileContent, removed.content, signal)
-                return { success: true, output: `Parts ${input.partStart}-${input.partEnd} removed and indexed (documentRef=${formatMemoryDocumentRef(indexed.documentId, indexed.revision)}, chunks=${indexed.chunkCount}).` }
+                return { success: true, output: `Parts ${input.partStart}-${input.partEnd} removed and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
             })
         },
     }

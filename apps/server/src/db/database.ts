@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
 import { getAppDataDir, getDefaultMemorySpaceDir } from '../core/data-dir.js'
+import { createStableMemoryDocumentRef } from '../core/memory/memory-reference.js'
 
 let db: Database.Database | null = null
 
@@ -312,6 +313,7 @@ function createTables(db: Database.Database): void {
 
     CREATE TABLE IF NOT EXISTS memory_file_index (
       document_id TEXT NOT NULL DEFAULT '',
+      document_ref TEXT NOT NULL DEFAULT '',
       space_id TEXT NOT NULL,
       file_name TEXT NOT NULL,
       content_hash TEXT NOT NULL DEFAULT '',
@@ -425,6 +427,26 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('memory_file_index', 'document_id', "TEXT NOT NULL DEFAULT ''")
   db.prepare("UPDATE memory_file_index SET document_id = lower(hex(randomblob(16))) WHERE document_id = ''").run()
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_mfi_document_id ON memory_file_index(document_id)')
+  addColumnIfMissing('memory_file_index', 'document_ref', "TEXT NOT NULL DEFAULT ''")
+  const documentsWithoutStableRefs = db.prepare(`
+    SELECT document_id, file_name, created_at FROM memory_file_index WHERE document_ref = ''
+  `).all() as Array<{ document_id: string; file_name: string; created_at: number }>
+  const documentRefExists = db.prepare('SELECT 1 FROM memory_file_index WHERE document_ref = ?')
+  const saveDocumentRef = db.prepare('UPDATE memory_file_index SET document_ref = ? WHERE document_id = ?')
+  for (const document of documentsWithoutStableRefs) {
+    let collisionAttempt = 0
+    let documentRef: string
+    do {
+      documentRef = createStableMemoryDocumentRef(
+        document.file_name,
+        document.document_id,
+        document.created_at,
+        collisionAttempt++,
+      )
+    } while (documentRefExists.get(documentRef))
+    saveDocumentRef.run(documentRef, document.document_id)
+  }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_mfi_document_ref ON memory_file_index(document_ref) WHERE document_ref != ''")
 
   // Migrate persisted selections from the former mode-switching memory tools
   // to the operation-specific contracts. Preserve order and remove duplicates.
