@@ -98,10 +98,29 @@ function selectSpace(spaceId: string) {
   emit("update:selectedSpaceId", spaceId);
 }
 
+function isDocumentDrag(e: DragEvent): boolean {
+  return e.dataTransfer?.types.includes(DOCUMENT_DRAG_MIME) ?? false;
+}
+
+function isFileDrag(e: DragEvent): boolean {
+  return !isDocumentDrag(e) && (e.dataTransfer?.types.includes("Files") ?? false);
+}
+
 function onDragEnter(e: DragEvent, spaceId?: string) {
+  if (spaceId) {
+    if (!isDocumentDrag(e)) return;
+    e.preventDefault();
+    // A document is already in the selected folder, so it cannot be moved there.
+    if (isDocumentDrag(e) && spaceId === props.selectedSpaceId) return;
+    dropTargetSpaceId.value = spaceId;
+    return;
+  }
+
+  // The document pane is an upload target for OS files only. In-app document
+  // drags must pass over it without activating the upload treatment.
+  if (!isFileDrag(e)) return;
   e.preventDefault();
-  if (spaceId) dropTargetSpaceId.value = spaceId;
-  else dragCounter.value++;
+  dragCounter.value++;
 }
 
 function onDragLeave(e: DragEvent, spaceId?: string) {
@@ -113,7 +132,13 @@ function onDragLeave(e: DragEvent, spaceId?: string) {
   }
 }
 
-function onDragOver(e: DragEvent) {
+function onDragOver(e: DragEvent, spaceId?: string) {
+  if (spaceId && !isDocumentDrag(e)) return;
+  if (isDocumentDrag(e) && (!spaceId || spaceId === props.selectedSpaceId)) {
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "none";
+    return;
+  }
+  if (!isDocumentDrag(e) && !isFileDrag(e)) return;
   e.preventDefault();
   if (e.dataTransfer) {
     e.dataTransfer.dropEffect = e.dataTransfer.types.includes(DOCUMENT_DRAG_MIME) ? "move" : "copy";
@@ -121,32 +146,30 @@ function onDragOver(e: DragEvent) {
 }
 
 async function onFolderDrop(e: DragEvent, targetSpaceId: string) {
+  const documentPayload = e.dataTransfer?.getData(DOCUMENT_DRAG_MIME);
+  if (!documentPayload) return;
   e.preventDefault();
   dropTargetSpaceId.value = null;
-  const documentPayload = e.dataTransfer?.getData(DOCUMENT_DRAG_MIME);
-  if (documentPayload) {
-    try {
-      const parsed = JSON.parse(documentPayload) as DocumentDragPayload;
-      const sourceSpaceId = typeof parsed.sourceSpaceId === "string" ? parsed.sourceSpaceId : props.selectedSpaceId;
-      const sourceFiles = Array.isArray(parsed.sourceFiles)
-        ? parsed.sourceFiles.filter((value): value is string => typeof value === "string")
-        : [];
-      if (!sourceSpaceId || sourceSpaceId === targetSpaceId || sourceFiles.length === 0) return;
-      if (sourceSpaceId === props.selectedSpaceId) {
-        await docList.value?.moveGroupsToSpace(targetSpaceId, sourceFiles);
-      } else {
-        await api.memorySpaces.moveGroups(sourceSpaceId, sourceFiles, targetSpaceId);
-        emit("refresh-spaces");
-      }
-    } catch {
-      /* ignore malformed drag payload */
+  try {
+    const parsed = JSON.parse(documentPayload) as DocumentDragPayload;
+    const sourceSpaceId = typeof parsed.sourceSpaceId === "string" ? parsed.sourceSpaceId : props.selectedSpaceId;
+    const sourceFiles = Array.isArray(parsed.sourceFiles)
+      ? parsed.sourceFiles.filter((value): value is string => typeof value === "string")
+      : [];
+    if (!sourceSpaceId || sourceSpaceId === targetSpaceId || sourceFiles.length === 0) return;
+    if (sourceSpaceId === props.selectedSpaceId) {
+      await docList.value?.moveGroupsToSpace(targetSpaceId, sourceFiles);
+    } else {
+      await api.memorySpaces.moveGroups(sourceSpaceId, sourceFiles, targetSpaceId);
+      emit("refresh-spaces");
     }
-    return;
+  } catch {
+    /* ignore malformed drag payload */
   }
-  await onFileDrop(e, targetSpaceId);
 }
 
 async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
+  if (!isFileDrag(e)) return;
   e.preventDefault();
   dragCounter.value = 0;
   dropTargetSpaceId.value = null;
@@ -160,28 +183,7 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
 }
 </script>
 <template>
-  <div
-    class="relative p-4 sm:p-6 lg:p-8"
-    @dragenter="onDragEnter($event)"
-    @dragleave="onDragLeave($event)"
-    @dragover="onDragOver($event)"
-    @drop="onFileDrop($event)"
-  >
-    <div
-      v-if="dragCounter > 0 && selectedSpaceId && !dropTargetSpaceId"
-      class="absolute inset-4 z-40 flex items-center justify-center bg-accent-500/10 border-2 border-dashed border-accent-500/40 rounded-xl pointer-events-none sm:inset-6 lg:inset-8"
-    >
-      <div class="text-center">
-        <Icon
-          icon="lucide:upload-cloud"
-          class="w-12 h-12 text-accent-400 mx-auto mb-2"
-        />
-        <p class="text-accent-300 font-medium">
-          Drop files into {{ selectedSpace?.name || "selected folder" }}
-        </p>
-      </div>
-    </div>
-
+  <div class="p-4 sm:p-6 lg:p-8">
     <div class="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
       <div class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45">
         <div class="flex items-center justify-between px-4 py-3 border-b border-theme-800 bg-theme-900/50">
@@ -213,6 +215,7 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
           <div
             v-for="space in visibleSpaces"
             :key="space.id"
+            :data-space-id="space.id"
             class="group flex items-center gap-2 px-3 py-2.5 border-b border-theme-900/70 last:border-b-0 transition-colors"
             :class="[
               selectedSpaceId === space.id ? 'bg-accent-500/12 text-theme-100' : 'hover:bg-theme-800/35 text-theme-300',
@@ -220,7 +223,7 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
             ]"
             @dragenter.stop="onDragEnter($event, space.id)"
             @dragleave.stop="onDragLeave($event, space.id)"
-            @dragover.stop="onDragOver($event)"
+            @dragover.stop="onDragOver($event, space.id)"
             @drop.stop="onFolderDrop($event, space.id)"
           >
             <!-- Indent spacer, change this to adjust starting padding -->
@@ -296,15 +299,39 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
         </div>
       </div>
 
-      <MemoryDocumentList
+      <div
         v-if="selectedSpaceId"
-        ref="docList"
-        :space-id="selectedSpaceId"
-        :spaces="spaces"
-        @edit-space="selectedSpace && emit('edit-folder', selectedSpace)"
-        @delete-space="selectedSpace && emit('delete-folder', selectedSpace)"
-        @spaces-changed="emit('refresh-spaces')"
-      />
+        data-testid="memory-document-drop-zone"
+        class="relative min-w-0"
+        @dragenter="onDragEnter($event)"
+        @dragleave="onDragLeave($event)"
+        @dragover="onDragOver($event)"
+        @drop="onFileDrop($event)"
+      >
+        <div
+          v-if="dragCounter > 0 && !dropTargetSpaceId"
+          class="absolute inset-0 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-accent-500/40 bg-accent-500/10 pointer-events-none"
+        >
+          <div class="text-center">
+            <Icon
+              icon="lucide:upload-cloud"
+              class="w-12 h-12 text-accent-400 mx-auto mb-2"
+            />
+            <p class="text-accent-300 font-medium">
+              Drop files into {{ selectedSpace?.name || "selected folder" }}
+            </p>
+          </div>
+        </div>
+
+        <MemoryDocumentList
+          ref="docList"
+          :space-id="selectedSpaceId"
+          :spaces="spaces"
+          @edit-space="selectedSpace && emit('edit-folder', selectedSpace)"
+          @delete-space="selectedSpace && emit('delete-folder', selectedSpace)"
+          @spaces-changed="emit('refresh-spaces')"
+        />
+      </div>
     </div>
   </div>
 </template>
