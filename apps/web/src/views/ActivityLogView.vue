@@ -354,7 +354,9 @@ function formatClock(ts: number): string {
 
 const groupedItems = computed(() => {
   const groups: { label: string; items: ActivityItem[] }[] = [];
-  const activeItems = filteredItems.value.filter(isActiveWork);
+  const activeItems = filteredItems.value
+    .filter(isActiveWork)
+    .sort((a, b) => Number(a.status === "queued") - Number(b.status === "queued"));
   if (activeItems.length) groups.push({ label: "Active now", items: activeItems });
   for (const item of filteredItems.value.filter((entry) => !isActiveWork(entry))) {
     const label = formatDateLabel(item.createdAt);

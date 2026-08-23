@@ -55,6 +55,16 @@ describe('InputBar drafts', () => {
     expect(localStorage.getItem(draftKey)).toBe('Edited draft')
   })
 
+  test('auto-sizes the composer when restoring a saved draft', () => {
+    const draftKey = `${SK_CHAT_DRAFT_PREFIX}conversation:conversation-1`
+    localStorage.setItem(draftKey, 'A restored draft that spans multiple lines')
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(120)
+
+    const wrapper = mountInputBar()
+
+    expect(wrapper.get<HTMLTextAreaElement>('textarea').element.style.height).toBe('120px')
+  })
+
   test('keeps separate drafts for each conversation', async () => {
     const wrapper = mountInputBar()
     await wrapper.get('textarea').setValue('Conversation one')

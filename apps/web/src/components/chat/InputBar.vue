@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useChatStore } from '../../stores/chat.store'
 import { SK_CHAT_DRAFT_PREFIX } from '../../utils/storage-keys'
 import { Icon } from '@iconify/vue'
@@ -201,6 +201,12 @@ watch(inputText, () => {
 watch(draftStorageKey, (newKey, oldKey) => {
   persistDraft(oldKey, inputText.value)
   inputText.value = readDraft(newKey)
+})
+
+onMounted(() => {
+  // The initial draft is read before the textarea exists, so its watcher does
+  // not run on mount. Size the now-mounted composer to the restored content.
+  autoResize()
 })
 
 onBeforeUnmount(() => {
