@@ -9,10 +9,11 @@ import SpeechToTextSettings from '../../components/settings/SpeechToTextSettings
 import GeneralSettings from '../../components/settings/AppearanceSettings.vue'
 import BackupSettings from '../../components/settings/BackupSettings.vue'
 import ResetDataSettings from '../../components/settings/ResetDataSettings.vue'
+import AboutSettings from '../../components/settings/AboutSettings.vue'
 import ResponsiveSectionLayout from '../../components/shared/ResponsiveSectionLayout.vue'
 import ChannelsView from '../triggers/ChannelsView.vue'
 
-type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'general' | 'backup' | 'reset-data'
+type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'general' | 'backup' | 'reset-data' | 'about'
 
 interface SettingsCategory {
   id: SettingsCategoryId
@@ -95,6 +96,13 @@ const categories: SettingsCategory[] = [
     description: 'Clear selected data areas, derived indexes, or the whole local workspace.',
     icon: 'lucide:trash-2',
     component: ResetDataSettings
+  },
+  {
+    id: 'about',
+    label: 'About',
+    description: 'View the installed Cynosure version and manage desktop app updates.',
+    icon: 'lucide:info',
+    component: AboutSettings
   }
 ]
 
@@ -294,6 +302,13 @@ const sections: SettingsSection[] = [
     label: 'Reset Data',
     description: 'Permanently delete selected data areas or return Cynosure to a clean state.',
     terms: ['reset', 'factory reset', 'wipe', 'delete all', 'clean state', 'start over', 'clear data', 'partial reset', 'memory reset', 'entity graph', 'clear entity graph', 'relationships', 'entities', 'clear vector database', 'vector indexes', 'vectors', 'delete embeddings', 'drop vectors']
+  },
+  {
+    id: 'about',
+    categoryId: 'about',
+    label: 'About Cynosure',
+    description: 'View the current version and check, download, or install desktop updates.',
+    terms: ['about', 'version', 'update', 'updates', 'upgrade', 'download update', 'install update', 'up to date']
   }
 ]
 
