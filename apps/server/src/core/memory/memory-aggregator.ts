@@ -3,7 +3,6 @@ import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces, getAssignedOrDefaultSpaces } from './memory-space-scope.js'
 import type { RetrievedChunk } from './parser.js'
 import { getEntityGraphStore, type GraphWalkResult } from './entity-graph.js'
-import { formatMemoryDocumentRef } from './memory-reference.js'
 
 export interface AggregatedMemory {
   permanent: RetrievedChunk[]
@@ -127,6 +126,7 @@ export class MemoryAggregator {
         if (chunk.sourceFile) {
           const ref = permanentMem.getDocumentReference(chunk.spaceId, chunk.sourceFile)
           chunk.documentId = ref?.documentId
+          chunk.documentRef = ref?.documentRef
           chunk.revision = ref?.revision
         }
       }
@@ -180,8 +180,8 @@ export class MemoryAggregator {
             if (c.sectionPath && c.sectionPath !== c.documentTitle) {
               parts.push(`[Section: ${c.sectionPath}]`)
             }
-            if (c.documentId && c.revision) {
-              parts.push(`[documentRef=${formatMemoryDocumentRef(c.documentId, c.revision)}]`)
+            if (c.documentRef) {
+              parts.push(`[documentRef=${c.documentRef}]`)
             }
           } else if (c.spaceName) {
             parts.push(`[${c.spaceName}]`)

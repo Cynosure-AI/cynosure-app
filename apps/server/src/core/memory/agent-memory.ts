@@ -22,6 +22,8 @@ import { existsSync, readFileSync } from 'fs'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 import { cancelMemoryIndexJobsForFile, startMemoryIndexJob } from './memory-index-jobs.js'
 import { getActivePermanentMemoryTableName } from './memory-index-manifest.js'
+import { randomBytes } from 'node:crypto'
+import { createStableMemoryDocumentRef } from './memory-reference.js'
 
 export interface ReindexFileResult {
     fileName: string
@@ -30,6 +32,7 @@ export interface ReindexFileResult {
 
 export interface MemoryDocumentReference {
     documentId: string
+    documentRef: string
     spaceId: string
     fileName: string
     revision: string
@@ -52,10 +55,24 @@ function upsertFileIndex(
     try {
         const db = getDb()
         const now = Date.now()
+        const existing = db.prepare(`
+            SELECT document_id, document_ref FROM memory_file_index WHERE space_id = ? AND file_name = ?
+        `).get(spaceId, fileName) as { document_id: string; document_ref: string } | undefined
+        const documentId = existing?.document_id || randomBytes(16).toString('hex')
+        let collisionAttempt = 0
+        let documentRef = existing?.document_ref || ''
+        while (!documentRef) {
+            const candidate = createStableMemoryDocumentRef(fileName, documentId, now, collisionAttempt++)
+            if (!db.prepare('SELECT 1 FROM memory_file_index WHERE document_ref = ?').get(candidate)) documentRef = candidate
+        }
         db.prepare(`
-            INSERT INTO memory_file_index (document_id, space_id, file_name, content_hash, chunk_count, last_indexed_at, created_at)
-            VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?)
+            INSERT INTO memory_file_index (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(space_id, file_name) DO UPDATE SET
+                document_ref = CASE
+                    WHEN memory_file_index.document_ref = '' THEN excluded.document_ref
+                    ELSE memory_file_index.document_ref
+                END,
                 entity_indexed_at = CASE
                     WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.entity_indexed_at
                     ELSE 0
@@ -63,7 +80,7 @@ function upsertFileIndex(
                 content_hash = excluded.content_hash,
                 chunk_count = excluded.chunk_count,
                 last_indexed_at = excluded.last_indexed_at
-        `).run(spaceId, fileName, contentHash, chunkCount, now, now)
+        `).run(documentId, documentRef, spaceId, fileName, contentHash, chunkCount, now, now)
     } catch {
         /* non-fatal */
     }
@@ -78,6 +95,7 @@ function removeFileIndex(spaceId: string, fileName: string): void {
 
 interface FileIndexMoveCandidate {
     documentId: string
+    documentRef: string
     spaceId: string
     fileName: string
     contentHash: string
@@ -253,11 +271,12 @@ export class AgentMemory {
     getDocumentReference(spaceId: string, fileName: string): MemoryDocumentReference | undefined {
         try {
             const row = getDb().prepare(`
-                SELECT document_id, space_id, file_name, content_hash, chunk_count
+                SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count
                 FROM memory_file_index
                 WHERE space_id = ? AND file_name = ?
             `).get(spaceId, fileName) as {
                 document_id: string
+                document_ref: string
                 space_id: string
                 file_name: string
                 content_hash: string
@@ -265,6 +284,7 @@ export class AgentMemory {
             } | undefined
             return row ? {
                 documentId: row.document_id,
+                documentRef: row.document_ref,
                 spaceId: row.space_id,
                 fileName: row.file_name,
                 revision: row.content_hash,
@@ -278,11 +298,12 @@ export class AgentMemory {
     getDocumentReferenceById(documentId: string): MemoryDocumentReference | undefined {
         try {
             const row = getDb().prepare(`
-                SELECT document_id, space_id, file_name, content_hash, chunk_count
+                SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count
                 FROM memory_file_index
                 WHERE document_id = ?
             `).get(documentId) as {
                 document_id: string
+                document_ref: string
                 space_id: string
                 file_name: string
                 content_hash: string
@@ -290,6 +311,7 @@ export class AgentMemory {
             } | undefined
             return row ? {
                 documentId: row.document_id,
+                documentRef: row.document_ref,
                 spaceId: row.space_id,
                 fileName: row.file_name,
                 revision: row.content_hash,
@@ -392,13 +414,14 @@ export class AgentMemory {
 
         const db = getDb()
         const candidates = db.prepare(`
-            SELECT document_id, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at
+            SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at
             FROM memory_file_index
             WHERE content_hash = ?
               AND NOT (space_id = ? AND file_name = ?)
             ORDER BY last_indexed_at DESC
         `).all(contentHash, targetSpaceId, targetFileName) as {
             document_id: string
+            document_ref: string
             space_id: string
             file_name: string
             content_hash: string
@@ -411,6 +434,7 @@ export class AgentMemory {
         const candidate = candidates
             .map((row): FileIndexMoveCandidate => ({
                 documentId: row.document_id,
+                documentRef: row.document_ref,
                 spaceId: row.space_id,
                 fileName: row.file_name,
                 contentHash: row.content_hash,
@@ -448,10 +472,11 @@ export class AgentMemory {
                 .run(candidate.spaceId, candidate.fileName)
             db.prepare(`
                 INSERT OR REPLACE INTO memory_file_index
-                    (document_id, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 candidate.documentId,
+                candidate.documentRef,
                 targetSpaceId,
                 targetFileName,
                 candidate.contentHash,
