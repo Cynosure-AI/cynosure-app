@@ -9,6 +9,7 @@ import SpeechToTextSettings from '../../components/settings/SpeechToTextSettings
 import GeneralSettings from '../../components/settings/AppearanceSettings.vue'
 import BackupSettings from '../../components/settings/BackupSettings.vue'
 import ResetDataSettings from '../../components/settings/ResetDataSettings.vue'
+import ResponsiveSectionLayout from '../../components/shared/ResponsiveSectionLayout.vue'
 import ChannelsView from '../triggers/ChannelsView.vue'
 
 type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'general' | 'backup' | 'reset-data'
@@ -35,6 +36,7 @@ const router = useRouter()
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const settingsPanelRef = ref<HTMLElement | null>(null)
+const mobileDetailOpen = ref(false)
 
 const categories: SettingsCategory[] = [
   {
@@ -390,6 +392,7 @@ onUnmounted(() => {
 })
 
 function selectCategory(category: SettingsCategoryId): void {
+  mobileDetailOpen.value = true
   router.replace({
     query: {
       ...route.query,
@@ -526,21 +529,40 @@ function scoreSection(section: SettingsSection, query: string): number {
         aria-label="Settings"
         class="relative h-full max-h-[900px] w-full max-w-7xl overflow-hidden rounded-2xl border border-theme-700 bg-theme-950 shadow-2xl"
       >
-        <div class="flex h-full flex-col lg:flex-row">
-          <aside class="shrink-0 border-b border-theme-800 bg-theme-950/60 lg:w-72 lg:border-b-0 lg:border-r">
-            <header class=" p-4">
-              <h1 class="text-2xl font-bold text-theme-100">
-                Settings
-              </h1>
-              <p class="mt-1 text-sm leading-relaxed text-theme-500">
-                Configure Cynosure, AI behavior, and your workspace.
-              </p>
+        <ResponsiveSectionLayout
+          :detail-open="mobileDetailOpen"
+          mobile-back-label="All settings"
+          @back="mobileDetailOpen = false"
+        >
+          <template #sidebar>
+            <header class="p-4">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <h1 class="text-2xl font-bold text-theme-100">
+                    Settings
+                  </h1>
+                  <p class="mt-1 text-sm leading-relaxed text-theme-500">
+                    Configure Cynosure, AI behavior, and your workspace.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-theme-700 bg-theme-900/90 text-theme-400 transition hover:bg-theme-800 hover:text-theme-100 lg:hidden"
+                  aria-label="Close settings"
+                  @click="closeSettings"
+                >
+                  <Icon
+                    icon="lucide:x"
+                    class="h-4 w-4"
+                  />
+                </button>
+              </div>
             </header>
-            <nav class="flex gap-1 overflow-x-auto px-3 py-3 lg:block lg:space-y-1 lg:overflow-x-visible lg:p-4">
+            <nav class="space-y-1 p-4">
               <button
                 v-for="category in categories"
                 :key="category.id"
-                class="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all lg:w-full"
+                class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-all"
                 :class="categoryButtonClass(category.id)"
                 @click="selectCategory(category.id)"
               >
@@ -549,17 +571,23 @@ function scoreSection(section: SettingsSection, query: string): number {
                   class="h-4.5 w-4.5 shrink-0"
                 />
                 <span class="whitespace-nowrap">{{ category.label }}</span>
-                <span
-                  v-if="isSearching && matchCountByCategory.get(category.id)"
-                  class="ml-auto text-[10px] font-medium bg-accent-600/20 text-accent-400 px-1.5 py-0.5 rounded-full leading-none"
-                >
-                  {{ matchCountByCategory.get(category.id) }}
+                <span class="ml-auto flex items-center gap-2">
+                  <span
+                    v-if="isSearching && matchCountByCategory.get(category.id)"
+                    class="rounded-full bg-accent-600/20 px-1.5 py-0.5 text-[10px] font-medium leading-none text-accent-400"
+                  >
+                    {{ matchCountByCategory.get(category.id) }}
+                  </span>
+                  <Icon
+                    icon="lucide:chevron-right"
+                    class="h-4 w-4 text-theme-600 lg:hidden"
+                  />
                 </span>
               </button>
             </nav>
-          </aside>
+          </template>
 
-          <main class="min-w-0 flex-1 overflow-y-auto">
+          <main class="h-full min-w-0 overflow-y-auto">
             <!-- Sticky search bar -->
             <div class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 backdrop-blur-sm px-4 py-3 sm:px-6 lg:px-8">
               <div class="mx-auto flex max-w-5xl items-start gap-2">
@@ -669,7 +697,7 @@ function scoreSection(section: SettingsSection, query: string): number {
               </div>
             </div>
           </main>
-        </div>
+        </ResponsiveSectionLayout>
       </section>
     </div>
   </Teleport>

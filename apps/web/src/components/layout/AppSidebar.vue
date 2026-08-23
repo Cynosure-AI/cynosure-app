@@ -386,7 +386,7 @@ const chatRoute = computed(() =>
           @click="toggleCollapse"
         >
           <Icon
-            icon="lucide:menu"
+            :icon="sidebarCollapsed ? 'lucide:menu' : 'lucide:panel-left-close'"
             class="w-4 h-4"
           />
         </button>
@@ -782,15 +782,6 @@ const chatRoute = computed(() =>
   }
 
   .sidebar-collapsed .brand-logo-glitch-wrap {
-    flex: none;
-    padding-left: 0;
-  }
-
-  .sidebar-collapsed .brand-logo-icon {
-    display: block;
-  }
-
-  .sidebar-collapsed .brand-logo-text {
     display: none;
   }
 
