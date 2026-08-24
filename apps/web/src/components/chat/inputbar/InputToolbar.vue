@@ -259,7 +259,7 @@ async function toggleMic(): Promise<void> {
     <!-- Mobile: provider/model selector as a button that opens a modal -->
     <button
       v-if="currentProviderId"
-      class="lg:hidden max-w-44 flex items-center gap-1 px-2 py-1.5 rounded-lg text-theme-300 hover:text-theme-100 transition-colors shrink min-w-0"
+      class="chat-model-select-trigger lg:hidden max-w-44 flex items-center gap-1 px-2 py-1.5 text-theme-300 hover:text-theme-100 transition-colors shrink min-w-0"
       aria-label="Select provider and model"
       @click="showModelModal = true"
     >
@@ -296,6 +296,7 @@ async function toggleMic(): Promise<void> {
             :drop-up="true"
             align="center"
             size="sm"
+            :bare-trigger="true"
             @change="onModelProviderOverride"
           />
         </div>
@@ -513,6 +514,20 @@ async function toggleMic(): Promise<void> {
 </template>
 
 <style scoped>
+.chat-model-select-trigger,
+.chat-model-select-trigger:hover,
+.chat-model-select-trigger:focus,
+.chat-model-select-trigger:focus-visible {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.chat-model-select-trigger:focus-visible {
+  text-decoration: underline;
+}
+
 @keyframes whisper-glow {
   0%,
   100% {

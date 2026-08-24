@@ -49,6 +49,7 @@ const props = withDefaults(
     align?: "left" | "center" | "right";
     dropdownWidth?: string;
     size?: SelectSize;
+    bareTrigger?: boolean;
     onlyShowAvailableModels?: boolean;
     refreshKey?: string | number;
   }>(),
@@ -69,6 +70,7 @@ const props = withDefaults(
     align: "left",
     dropdownWidth: "w-full",
     size: "sm",
+    bareTrigger: false,
     onlyShowAvailableModels: false,
     refreshKey: 0,
   },
@@ -527,6 +529,7 @@ function onSelectionChange(value: string): void {
     :align="align"
     :dropdown-width="dropdownWidth"
     :size="size"
+    :bare-trigger="bareTrigger"
     :sticky-group-headers="true"
     :show-selected-tag="false"
     @update:model-value="onSelectionChange"
