@@ -72,7 +72,7 @@ describe('automatic memory routing visibility', () => {
         )
     })
 
-    test('emits the fused retrieval score used for the visible memory match', async () => {
+    test('emits semantic similarity instead of the small RRF ranking score', async () => {
         const candidate = {
             id: 'memory-1',
             text: 'Deployment uses the blue environment.',
@@ -80,9 +80,10 @@ describe('automatic memory routing visibility', () => {
             sourceFile: 'deployment.md',
             spaceName: 'Default',
             chunkIndex: 0,
-            score: 0.72,
-            rerankerScore: 0.72,
-            scoreType: 'reranker' as const,
+            score: 0.02,
+            denseScore: 0.81,
+            fusionScore: 0.02,
+            scoreType: 'fusion' as const,
         }
         memoryMocks.aggregate.mockResolvedValue({ permanent: [candidate], graph: undefined })
         memoryMocks.format.mockReturnValue('formatted memory')
@@ -114,8 +115,8 @@ describe('automatic memory routing visibility', () => {
         const args = JSON.parse((gathered!.toolCalls as Array<{ arguments: string }>)[0].arguments)
         expect(args).toMatchObject({
             type: 'memory',
-            matchScore: 1,
-            scoreType: 'fusion',
+            matchScore: 0.81,
+            scoreType: 'dense',
         })
         expect(args).not.toHaveProperty('rerankerScore')
     })

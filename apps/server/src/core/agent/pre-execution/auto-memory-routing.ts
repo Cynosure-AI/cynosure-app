@@ -413,22 +413,26 @@ function emitMemoryRoutingSelection(
     emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed' | 'disabled' | 'empty-scope' | 'no-query',
     graphContext?: string,
 ): void {
-    const toolCalls = memories.map((memory) => ({
-        name: memoryLabel(memory),
-        arguments: JSON.stringify({
-            type: 'memory',
-            contextPhase,
-            sourceFile: memory.sourceFile,
-            folderPath: memory.spaceName,
-            chunkIndex: memory.chunkIndex,
-            content: memory.text,
-            // Multi-query retrieval is combined with reciprocal-rank fusion,
-            // which intentionally replaces incomparable reranker/dense scores.
-            // Send the score that actually produced the displayed rank.
-            matchScore: memory.rerankerScore ?? memory.score,
-            scoreType: memory.rerankerScore !== undefined ? 'reranker' : memory.scoreType,
-        }),
-    }))
+    const toolCalls = memories.map((memory) => {
+        const visibleMatch = memoryVisibleMatch(memory)
+        return {
+            name: memoryLabel(memory),
+            arguments: JSON.stringify({
+                type: 'memory',
+                contextPhase,
+                sourceFile: memory.sourceFile,
+                folderPath: memory.spaceName,
+                chunkIndex: memory.chunkIndex,
+                content: memory.text,
+                // Hybrid retrieval is ranked by a reciprocal-rank-fusion value,
+                // whose small magnitude (commonly 0.01-0.03) is not a semantic
+                // percentage. Show cosine similarity, like tool routing does,
+                // while leaving the fusion score in charge of result ordering.
+                matchScore: visibleMatch.score,
+                scoreType: visibleMatch.scoreType,
+            }),
+        }
+    })
 
     if (graphContext) {
         toolCalls.push({
@@ -457,6 +461,19 @@ function emitMemoryRoutingSelection(
             }),
         }],
     })
+}
+
+function memoryVisibleMatch(memory: RetrievedChunk): {
+    score: number
+    scoreType: 'dense' | 'fusion' | 'reranker' | undefined
+} {
+    if (typeof memory.rerankerScore === 'number' && Number.isFinite(memory.rerankerScore)) {
+        return { score: memory.rerankerScore, scoreType: 'reranker' }
+    }
+    if (typeof memory.denseScore === 'number' && Number.isFinite(memory.denseScore)) {
+        return { score: memory.denseScore, scoreType: 'dense' }
+    }
+    return { score: memory.score, scoreType: memory.scoreType }
 }
 
 function memoryEmptyLabel(reason?: string): string {

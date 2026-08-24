@@ -222,7 +222,6 @@ watch(
               <details
                 v-for="(message, index) in activeRound.request.messages"
                 :key="index"
-                open
                 class="rounded-lg border border-theme-700 bg-theme-850"
               >
                 <summary class="cursor-pointer px-3 py-2 text-xs font-semibold uppercase tracking-wide text-theme-400">
@@ -233,7 +232,6 @@ watch(
 
               <details
                 v-if="assistantResponse"
-                open
                 class="rounded-lg border border-emerald-500/30 bg-emerald-500/5"
               >
                 <summary class="cursor-pointer px-3 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-400">
