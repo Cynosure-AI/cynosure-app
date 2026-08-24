@@ -109,6 +109,41 @@ describe('DataTable', () => {
     expect(wrapper.findAll('.text-right')).toHaveLength(2)
   })
 
+  test('grows content-sized columns from their declared minimums', () => {
+    const fluidColumns: Column<Item>[] = [
+      { key: 'name', label: 'Name', minWidth: '100px', grow: 2 },
+      { key: 'enabled', label: 'Enabled', minWidth: '70px' },
+    ]
+    const wrapper = mount(DataTable<Item>, {
+      props: {
+        items: [{ id: 'a', name: 'Alpha', enabled: true }],
+        columns: fluidColumns,
+      },
+    })
+
+    expect(wrapper.get('.dt-grid').attributes('style')).toContain(
+      '--dt-cols: minmax(100px, 2fr) minmax(70px, 1fr)',
+    )
+    expect(wrapper.get('.dt-content').attributes('style')).toContain('--dt-min-width: 226px')
+  })
+
+  test('keeps a zero-growth column at its minimum width', () => {
+    const fluidColumns: Column<Item>[] = [
+      { key: 'name', label: 'Name', minWidth: '100px', grow: 2 },
+      { key: 'enabled', label: 'Enabled', minWidth: '70px', grow: 0 },
+    ]
+    const wrapper = mount(DataTable<Item>, {
+      props: {
+        items: [{ id: 'a', name: 'Alpha', enabled: true }],
+        columns: fluidColumns,
+      },
+    })
+
+    expect(wrapper.get('.dt-grid').attributes('style')).toContain(
+      '--dt-cols: minmax(100px, 2fr) 70px',
+    )
+  })
+
   test('renders a loading state when there are no items yet', () => {
     const wrapper = mount(DataTable<Item>, {
       props: { items: [], columns, loading: true },
