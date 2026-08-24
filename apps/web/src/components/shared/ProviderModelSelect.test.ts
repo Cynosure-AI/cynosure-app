@@ -82,6 +82,45 @@ describe('ProviderModelSelect favorites', () => {
     ])
   })
 
+  test('shortens agent and provider defaults only in the collapsed trigger', async () => {
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockResolvedValue([])
+
+    const wrapper = mount(ProviderModelSelect, {
+      props: {
+        providerId: '',
+        modelValue: '',
+        providers: [{
+          id: 'openrouter-1',
+          name: 'OpenRouter',
+          type: 'openrouter',
+          defaultModel: 'deepseek/deepseek-v4-flash-0731',
+        }],
+        includeDefault: true,
+        defaultLabel: 'deepseek/deepseek-v4-flash-0731',
+      },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[role="combobox"]').text()).toContain('deepseek-v4-flash-0731')
+    expect(wrapper.get('[role="combobox"]').text()).not.toContain('deepseek/deepseek-v4-flash-0731')
+
+    await wrapper.get('[role="combobox"]').trigger('click')
+    expect(wrapper.findAll('[role="option"]')[0].text())
+      .toContain('deepseek/deepseek-v4-flash-0731')
+
+    await wrapper.setProps({ providerId: 'openrouter-1' })
+    expect(wrapper.get('[role="combobox"]').text())
+      .toContain('OpenRouter (deepseek-v4-flash-0731)')
+    expect(wrapper.get('[role="combobox"]').text())
+      .not.toContain('deepseek/deepseek-v4-flash-0731')
+
+    const providerDefault = wrapper.findAll('[role="option"]')
+      .find((option) => option.text().includes('OpenRouter'))!
+    expect(providerDefault.text()).toContain('deepseek/deepseek-v4-flash-0731')
+  })
+
   test('colors image pricing green and transcription pricing blue', async () => {
     const store = useProviderStore()
     store.listModelItems = vi.fn().mockImplementation(async (_providerId, type) => {

@@ -383,9 +383,22 @@ const selectedEncoded = computed(() =>
   encode(props.providerId || "", props.modelValue || ""),
 );
 
-const selectedTriggerLabel = computed(() =>
-  props.modelValue ? shortModelLabel(props.modelValue) : undefined,
-);
+const selectedTriggerLabel = computed(() => {
+  if (props.modelValue) return shortModelLabel(props.modelValue);
+
+  if (!props.providerId && props.includeDefault) {
+    return shortModelLabel(props.defaultLabel);
+  }
+
+  if (props.providerId && props.includeProviderDefault) {
+    const provider = props.providers.find((item) => item.id === props.providerId);
+    if (provider) {
+      return `${provider.name}${provider.defaultModel ? ` (${shortModelLabel(provider.defaultModel)})` : ""}`;
+    }
+  }
+
+  return undefined;
+});
 
 const groups = computed((): SelectOptionGroup[] => {
   const topOptions: SelectOption[] = [];
