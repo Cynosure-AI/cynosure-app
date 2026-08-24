@@ -6,7 +6,12 @@ import { Icon } from '@iconify/vue'
 export interface Column<TItem = unknown> {
   key: string
   label: string
+  /** Complete CSS grid track. Kept for fixed/fully custom column layouts. */
   width?: string  // e.g., '120px', 'minmax(0,1.75fr)'
+  /** Minimum track size. When set, the column grows into otherwise unused space. */
+  minWidth?: string
+  /** Share of unused space received by a minWidth column. */
+  grow?: number
   class?: string   // Custom CSS classes for column content
   sortable?: boolean
   sortValue?: (item: TItem) => string | number | boolean | null | undefined
@@ -104,11 +109,20 @@ function withFrMinimum(width: string, minPx = 150): string {
 
 const gridColsTemplate = computed(() => {
   const columnWidths = props.columns
-    .map(col => withFrMinimum(col.width || 'minmax(0, 1fr)'))
+    .map(columnTrack)
     .join(' ')
   const selectionWidth = props.selectionColumn?.width || '40px'
   return showSelectableColumn.value ? `${selectionWidth} ${columnWidths}` : columnWidths
 })
+
+function columnTrack(column: Column<T>): string {
+  if (column.minWidth) {
+    if (column.grow === 0) return column.minWidth
+    const grow = Math.max(0.01, column.grow ?? 1)
+    return `minmax(${column.minWidth}, ${grow}fr)`
+  }
+  return withFrMinimum(column.width || 'minmax(0, 1fr)')
+}
 
 function minimumWidthPx(width: string, fallback = 150): number {
   const value = withFrMinimum(width).trim()
@@ -121,7 +135,7 @@ function minimumWidthPx(width: string, fallback = 150): number {
 // Row borders live outside the grid itself. Give their shared wrapper the same
 // minimum width as the columns so separators and expanded rows span overflow.
 const gridMinWidth = computed(() => {
-  const widths = props.columns.map(column => minimumWidthPx(column.width || 'minmax(0, 1fr)'))
+  const widths = props.columns.map(column => minimumWidthPx(column.minWidth || column.width || 'minmax(0, 1fr)'))
   if (showSelectableColumn.value) {
     widths.unshift(minimumWidthPx(props.selectionColumn?.width || '40px', 40))
   }

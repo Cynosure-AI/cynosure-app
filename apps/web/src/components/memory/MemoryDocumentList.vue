@@ -74,12 +74,12 @@ const selectedFileIds = computed({
 });
 
 const columns: Column<DocumentRow>[] = [
-  { key: "fileName", label: "File", width: "minmax(260px, 2fr)", sortable: true, sortValue: (file) => file.fileName },
-  { key: "modifiedAt", label: "Modified", width: "140px", sortable: true, sortValue: (file) => file.modifiedAt },
-  { key: "chunkCount", label: "Chunks", width: "96px", sortable: true, sortValue: (file) => file.chunkCount || 0 },
-  { key: "entityIndexed", label: "Relationships", width: "120px", sortable: true, sortValue: (file) => file.entityIndexed },
-  { key: "status", label: "Vector index", width: "160px", sortable: true, sortValue: (file) => file.status },
-  { key: "actions", label: "Actions", width: "190px", class: "text-right" },
+  { key: "fileName", label: "File", minWidth: "220px", grow: 3, sortable: true, sortValue: (file) => file.fileName },
+  { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
+  { key: "chunkCount", label: "Chunks", minWidth: "70px", grow: 0, sortable: true, sortValue: (file) => file.chunkCount || 0 },
+  { key: "entityIndexed", label: "Relationships", minWidth: "112px", sortable: true, sortValue: (file) => file.entityIndexed },
+  { key: "status", label: "Vector index", minWidth: "146px", grow: 1.15, sortable: true, sortValue: (file) => file.status },
+  { key: "actions", label: "Actions", minWidth: "140px" },
 ];
 
 const allFilteredSelected = computed(
@@ -829,7 +829,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
 
       <template #col-actions="{ item: file }">
         <div
-          class="flex items-center justify-end gap-1"
+          class="flex items-center justify-start gap-1"
           @click.stop
         >
           <button
