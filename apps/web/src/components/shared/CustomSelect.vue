@@ -58,6 +58,8 @@ const props = withDefaults(
     align?: "left" | "center" | "right";
     /** Show the selected option's tag in the closed trigger */
     showSelectedTag?: boolean;
+    /** Optional label override used only by the closed trigger. */
+    selectedLabel?: string;
     /** Render the trigger like clickable text instead of a boxed form control. */
     bareTrigger?: boolean;
     /**
@@ -78,6 +80,7 @@ const props = withDefaults(
     stickyGroupHeaders: false,
     align: "left",
     showSelectedTag: true,
+    selectedLabel: undefined,
     bareTrigger: false,
     size: "sm",
   },
@@ -337,7 +340,7 @@ onBeforeUnmount(() =>
 
       <!-- Label -->
       <span class="flex-1 text-left truncate">
-        {{ selectedOption?.label ?? placeholder }}
+        {{ selectedLabel ?? selectedOption?.label ?? placeholder }}
       </span>
 
       <span

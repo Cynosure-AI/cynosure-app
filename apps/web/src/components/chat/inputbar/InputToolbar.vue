@@ -18,6 +18,7 @@ import ModelSelectorModal from "../modals/ModelSelectorModal.vue";
 import {
   modelPricingSummary,
 } from "../../../utils/model-pricing";
+import { shortModelLabel } from "../../../utils/model-label";
 
 defineProps<{
   canSend: boolean;
@@ -113,7 +114,8 @@ const formattedExtraCosts = computed(() => pricingSummary.value.extraRows);
 const formattedSkuCosts = computed(() => pricingSummary.value.skuRows);
 
 const mobileModelLabel = computed(() => {
-  return chatStore.resolvedModelProvider?.model || "Default";
+  const model = chatStore.resolvedModelProvider?.model;
+  return model ? shortModelLabel(model) : "Default";
 });
 
 const hasPendingHITLForActiveConversation = computed(() => {
