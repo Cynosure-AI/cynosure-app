@@ -126,14 +126,14 @@ const hasPendingHITLForActiveConversation = computed(() => {
 
 const showCancelButton = computed(() => chatStore.activeConversationHasRunningInstance);
 
-function onCancelClick(): void {
+async function onCancelClick(): Promise<void> {
   if (
     chatStore.activeConversationHasRunningInstance ||
     chatStore.activeConversationIsStreaming ||
     agentStore.activeConversationIsExecuting ||
     hasPendingHITLForActiveConversation.value
   ) {
-    chatStore.cancelStream();
+    await chatStore.cancelStream();
     return;
   }
   chatStore.cancelPostActions();
