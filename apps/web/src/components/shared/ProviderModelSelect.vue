@@ -13,6 +13,7 @@ import {
   compactPricingTag,
   pricingTooltipLines,
 } from "../../utils/model-pricing";
+import { shortModelLabel } from "../../utils/model-label";
 
 interface ProviderModelSelection {
   providerId: string;
@@ -382,6 +383,10 @@ const selectedEncoded = computed(() =>
   encode(props.providerId || "", props.modelValue || ""),
 );
 
+const selectedTriggerLabel = computed(() =>
+  props.modelValue ? shortModelLabel(props.modelValue) : undefined,
+);
+
 const groups = computed((): SelectOptionGroup[] => {
   const topOptions: SelectOption[] = [];
   const providerById = new Map(
@@ -530,6 +535,7 @@ function onSelectionChange(value: string): void {
     :dropdown-width="dropdownWidth"
     :size="size"
     :bare-trigger="bareTrigger"
+    :selected-label="selectedTriggerLabel"
     :sticky-group-headers="true"
     :show-selected-tag="false"
     @update:model-value="onSelectionChange"

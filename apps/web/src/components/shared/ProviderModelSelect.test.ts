@@ -60,15 +60,19 @@ describe('ProviderModelSelect favorites', () => {
     const wrapper = mount(ProviderModelSelect, {
       props: {
         providerId: 'openrouter-1',
-        modelValue: '',
+        modelValue: 'speech/model',
         providers: [{ id: 'openrouter-1', name: 'OpenRouter', type: 'openrouter', defaultModel: 'text/model' }],
         modelTypes: ['llm', 'image', 'video', 'transcription'],
       },
       global: { stubs: { Icon: true } },
     })
     await flushPromises()
+    expect(wrapper.get('[role="combobox"]').text()).toContain('model')
+    expect(wrapper.get('[role="combobox"]').text()).not.toContain('speech/model')
     await wrapper.get('[role="combobox"]').trigger('click')
-    const row = wrapper.findAll('[role="option"]').find((option) => option.text().includes('speech/model'))!
+    const row = wrapper.findAll('[role="option"]')
+      .find((option) => (option.attributes('data-value') || '').includes('speech/model'))!
+    expect(row.text()).toContain('speech/model')
     expect(row.text()).toContain('$')
     expect(row.text()).not.toContain('Transcription')
     await row.get('[aria-label="Add to favorites"]').trigger('click')
@@ -103,8 +107,10 @@ describe('ProviderModelSelect favorites', () => {
     await flushPromises()
     await wrapper.get('[role="combobox"]').trigger('click')
 
-    const image = wrapper.findAll('[role="option"]').find((row) => row.text().includes('image/model'))!
-    const transcription = wrapper.findAll('[role="option"]').find((row) => row.text().includes('transcription/model'))!
+    const image = wrapper.findAll('[role="option"]')
+      .find((row) => (row.attributes('data-value') || '').includes('image/model'))!
+    const transcription = wrapper.findAll('[role="option"]')
+      .find((row) => (row.attributes('data-value') || '').includes('transcription/model'))!
     expect(image.html()).toContain('bg-emerald-500/10')
     expect(transcription.html()).toContain('bg-blue-500/10')
   })
