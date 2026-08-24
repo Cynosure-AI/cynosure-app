@@ -8,8 +8,8 @@ vi.mock('../api/client', () => ({
 
 import { useChatStreaming } from './useChatStreaming'
 
-function setup() {
-  const activeConversationId = ref<string | null>('conversation')
+function setup(activeId = 'conversation') {
+  const activeConversationId = ref<string | null>(activeId)
   const messages = ref<DisplayMessage[]>([])
   const conversations = ref([{ id: 'conversation', title: 'Conversation' }])
   const contextWindow = ref<number | null>(null)
@@ -19,6 +19,74 @@ function setup() {
 }
 
 describe('chat streaming completion', () => {
+  test('keeps the visible conversation identity when a cron stream runs concurrently', () => {
+    const { messages, streaming } = setup('chat-conversation')
+
+    // A subscribed background run starts first and must remain buffer-only.
+    streaming.handleStreamStart({
+      streamId: 'cron-stream',
+      conversationId: 'cron-conversation',
+      agentId: 'housekeeper',
+      agentName: 'Entity Housekeeper',
+    })
+    streaming.handleStreamStart({
+      streamId: 'chat-stream',
+      conversationId: 'chat-conversation',
+      agentId: 'chat-agent',
+      agentName: 'Cyno Chat',
+    })
+
+    // Tool use completes the first round. The reset creates the message that
+    // receives the final answer and previously copied the cron agent identity.
+    streaming.handleStreamChunk({
+      streamId: 'chat-stream',
+      conversationId: 'chat-conversation',
+      content: 'Calling tools',
+    })
+    streaming.handleStreamReset({ streamId: 'chat-stream', conversationId: 'chat-conversation' })
+    streaming.handleStreamChunk({
+      streamId: 'chat-stream',
+      conversationId: 'chat-conversation',
+      content: 'Correct conversation output',
+    })
+
+    expect(messages.value.at(-1)).toMatchObject({
+      content: 'Correct conversation output',
+      agentId: 'chat-agent',
+      agentName: 'Cyno Chat',
+    })
+    expect(messages.value.at(-1)?.agentName).not.toBe('Entity Housekeeper')
+  })
+
+  test('ignores late events from an older stream in the same conversation', () => {
+    const { messages, streaming } = setup()
+
+    streaming.handleStreamStart({ streamId: 'old-stream', conversationId: 'conversation' })
+    streaming.handleStreamStart({ streamId: 'current-stream', conversationId: 'conversation' })
+    streaming.handleStreamChunk({
+      streamId: 'old-stream',
+      conversationId: 'conversation',
+      content: 'stale',
+    })
+    streaming.handleStreamEnd({ streamId: 'old-stream', conversationId: 'conversation' })
+    streaming.handleStreamChunk({
+      streamId: 'current-stream',
+      conversationId: 'conversation',
+      content: 'current',
+    })
+
+    expect(streaming.streamBuffers.get('conversation')).toMatchObject({
+      streamId: 'current-stream',
+      content: 'current',
+      active: true,
+    })
+    expect(messages.value.at(-1)).toMatchObject({
+      streamId: 'current-stream',
+      content: 'current',
+      isStreaming: true,
+    })
+  })
+
   test('invalidates active stream state when a stream finishes', () => {
     const { messages, streaming } = setup()
     const isActiveConversationStreaming = computed(() => {

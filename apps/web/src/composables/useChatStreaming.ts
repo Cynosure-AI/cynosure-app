@@ -328,7 +328,10 @@ export function useChatStreaming(
     }
 
     function handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
-        if (!primaryStreamId.value) {
+        // These refs describe the stream in the visible chat only. Background
+        // runs are retained in streamBuffers, but must never replace the active
+        // conversation's identity (a cron run used to leak its agent here).
+        if (data.conversationId === activeConversationId.value) {
             primaryStreamId.value = data.streamId
             primaryStreamAgent.value = { agentId: data.agentId, agentName: data.agentName, agentIconUrl: data.agentIconUrl }
         }
@@ -405,7 +408,8 @@ export function useChatStreaming(
 
     function handleStreamChunk(data: { streamId: string; conversationId: string; content: string }): void {
         const buf = streamBuffers.get(data.conversationId)
-        if (buf) buf.content += data.content
+        if (buf?.streamId !== data.streamId) return
+        buf.content += data.content
 
         if (data.conversationId === activeConversationId.value) {
             streamingContent.value += data.content
@@ -418,7 +422,8 @@ export function useChatStreaming(
 
     function handleStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void {
         const buf = streamBuffers.get(data.conversationId)
-        if (buf) buf.thinking += data.thinking
+        if (buf?.streamId !== data.streamId) return
+        buf.thinking += data.thinking
 
         if (data.conversationId === activeConversationId.value) {
             streamingThinking.value += data.thinking
@@ -431,13 +436,12 @@ export function useChatStreaming(
 
     function handleStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void {
         const buf = streamBuffers.get(data.conversationId)
-        if (buf) {
-            const existing = new Set(buf.images)
-            for (const image of data.images) {
-                if (!existing.has(image)) {
-                    existing.add(image)
-                    buf.images.push(image)
-                }
+        if (buf?.streamId !== data.streamId) return
+        const existing = new Set(buf.images)
+        for (const image of data.images) {
+            if (!existing.has(image)) {
+                existing.add(image)
+                buf.images.push(image)
             }
         }
 
@@ -451,13 +455,12 @@ export function useChatStreaming(
 
     function handleStreamVideos(data: { streamId: string; conversationId: string; videos: string[] }): void {
         const buf = streamBuffers.get(data.conversationId)
-        if (buf) {
-            const existing = new Set(buf.videos)
-            for (const video of data.videos) {
-                if (!existing.has(video)) {
-                    existing.add(video)
-                    buf.videos.push(video)
-                }
+        if (buf?.streamId !== data.streamId) return
+        const existing = new Set(buf.videos)
+        for (const video of data.videos) {
+            if (!existing.has(video)) {
+                existing.add(video)
+                buf.videos.push(video)
             }
         }
 
@@ -471,6 +474,7 @@ export function useChatStreaming(
 
     function handleStreamReset(data: { streamId: string; conversationId: string }): void {
         let buf = streamBuffers.get(data.conversationId)
+        if (buf && buf.streamId !== data.streamId) return
         if (buf) {
             buf.content = ''
             buf.thinking = ''
@@ -480,9 +484,6 @@ export function useChatStreaming(
         } else {
             buf = {
                 streamId: data.streamId, conversationId: data.conversationId, content: '', thinking: '', images: [], videos: [], active: true,
-                agentId: primaryStreamAgent.value.agentId,
-                agentName: primaryStreamAgent.value.agentName,
-                agentIconUrl: primaryStreamAgent.value.agentIconUrl,
                 createdAt: Date.now()
             }
             streamBuffers.set(data.conversationId, buf)
@@ -502,9 +503,12 @@ export function useChatStreaming(
                         role: 'assistant',
                         content: '',
                         streamId: data.streamId,
-                        agentId: primaryStreamAgent.value.agentId,
-                        agentName: primaryStreamAgent.value.agentName,
-                        agentIconUrl: primaryStreamAgent.value.agentIconUrl,
+                        agentId: buf.agentId,
+                        agentName: buf.agentName,
+                        agentIconUrl: buf.agentIconUrl,
+                        maCodename: buf.maCodename,
+                        maAgentName: buf.maAgentName,
+                        maInvocationId: buf.maInvocationId,
                         createdAt: Date.now(),
                         isStreaming: true
                     }
@@ -523,9 +527,12 @@ export function useChatStreaming(
                     role: 'assistant',
                     content: '',
                     streamId: data.streamId,
-                    agentId: primaryStreamAgent.value.agentId,
-                    agentName: primaryStreamAgent.value.agentName,
-                    agentIconUrl: primaryStreamAgent.value.agentIconUrl,
+                    agentId: buf.agentId,
+                    agentName: buf.agentName,
+                    agentIconUrl: buf.agentIconUrl,
+                    maCodename: buf.maCodename,
+                    maAgentName: buf.maAgentName,
+                    maInvocationId: buf.maInvocationId,
                     createdAt: Date.now(),
                     isStreaming: true
                 }
@@ -548,9 +555,11 @@ export function useChatStreaming(
         usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number
         contextTokens?: number; images?: string[]
     }): void {
-        streamBuffers.delete(data.conversationId)
+        const buf = streamBuffers.get(data.conversationId)
+        if (buf && buf.streamId !== data.streamId) return
+        if (buf?.streamId === data.streamId) streamBuffers.delete(data.conversationId)
 
-        if (data.streamId === primaryStreamId.value) {
+        if (data.conversationId === activeConversationId.value && data.streamId === primaryStreamId.value) {
             primaryStreamId.value = null
             primaryStreamAgent.value = {}
         }
@@ -604,9 +613,11 @@ export function useChatStreaming(
     }
 
     function handleStreamError(data: { streamId: string; conversationId: string; error: string }): void {
-        streamBuffers.delete(data.conversationId)
+        const buf = streamBuffers.get(data.conversationId)
+        if (buf && buf.streamId !== data.streamId) return
+        if (buf?.streamId === data.streamId) streamBuffers.delete(data.conversationId)
 
-        if (data.streamId === primaryStreamId.value) {
+        if (data.conversationId === activeConversationId.value && data.streamId === primaryStreamId.value) {
             primaryStreamId.value = null
             primaryStreamAgent.value = {}
         }
