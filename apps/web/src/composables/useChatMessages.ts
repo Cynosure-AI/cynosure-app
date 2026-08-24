@@ -12,7 +12,7 @@ export interface ChatMessagesApi {
     sendMessage(content: string, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void>
     retryFromMessage(messageId: string): Promise<void>
     editMessage(messageId: string, newContent: string): Promise<void>
-    cancelStream(): void
+    cancelStream(): Promise<void>
     cancelPostActions(convId?: string): void
 }
 
@@ -189,11 +189,11 @@ export function useChatMessages(
         await sendMessage(newContent, attachments.imageDataUrls, attachments.files, attachments.audioDataUrls)
     }
 
-    function cancelStream(): void {
+    async function cancelStream(): Promise<void> {
         const id = streaming.primaryStreamId.value || streaming.currentStreamId.value
         const convId = activeConversationId.value
         if (id || convId) {
-            api.chat.cancelStream(id || '', convId || undefined)
+            await api.chat.cancelStream(id || '', convId || undefined)
         }
 
         if (convId) {

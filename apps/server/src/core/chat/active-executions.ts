@@ -41,7 +41,12 @@ export function cancelChatExecution(executionId: string): boolean {
         interruptPlanningRun(execution.planningRunId, { error: 'Interrupted before completion.' })
     }
     controller.abort()
+    // Cancellation is terminal from the user's perspective. Remove both registry
+    // entries atomically so instance polling cannot advertise an aborted run as
+    // active while the request stack is still unwinding. The route's eventual
+    // unregister call is intentionally idempotent.
     activeAbortControllers.delete(executionId)
+    activeChatExecutions.delete(executionId)
     return true
 }
 

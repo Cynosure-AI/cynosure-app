@@ -100,6 +100,7 @@ describe('chat message actions', () => {
     mocks.chat.send.mockResolvedValue(undefined)
     mocks.chat.getMessageAttachments.mockResolvedValue({})
     mocks.chat.truncateFrom.mockResolvedValue(undefined)
+    mocks.chat.cancelStream.mockResolvedValue(undefined)
     mocks.chat.cancelPostActions.mockResolvedValue(undefined)
   })
 
@@ -234,13 +235,22 @@ describe('chat message actions', () => {
     }))
   })
 
-  test('cancels the active stream, local execution state, HITL, and post-actions', () => {
+  test('waits for cancellation before clearing local execution state, HITL, and post-actions', async () => {
     const state = setup()
     state.streaming.primaryStreamId.value = 'stream'
+    let resolveCancellation!: () => void
+    mocks.chat.cancelStream.mockReturnValueOnce(new Promise<void>((resolve) => {
+      resolveCancellation = resolve
+    }))
 
-    state.api.cancelStream()
+    const cancellation = state.api.cancelStream()
 
     expect(mocks.chat.cancelStream).toHaveBeenCalledWith('stream', 'conversation')
+    expect(state.streaming.clearConversationStreamState).not.toHaveBeenCalled()
+
+    resolveCancellation()
+    await cancellation
+
     expect(state.streaming.clearConversationStreamState).toHaveBeenCalledWith('conversation')
     expect(mocks.agentStore.setConversationExecutionState).toHaveBeenCalledWith('conversation', false)
     expect(mocks.agentStore.dismissHITLByConversation).toHaveBeenCalledWith('conversation')

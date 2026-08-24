@@ -667,8 +667,8 @@ export const useChatStore = defineStore('chat', () => {
     retryFromMessage: chatMessages.retryFromMessage,
     editMessage: chatMessages.editMessage,
     forkConversationFromMessage,
-    cancelStream(): void {
-      chatMessages.cancelStream()
+    async cancelStream(): Promise<void> {
+      await chatMessages.cancelStream()
       // Ensure post-actions are cleared locally so the conversation unlocks.
       const id = activeConversationId.value
       if (id) {

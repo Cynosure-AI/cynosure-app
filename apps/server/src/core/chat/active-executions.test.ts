@@ -44,6 +44,7 @@ describe('active chat execution lifecycle', () => {
         expect(cancelChatExecution('execution')).toBe(true)
         expect(controller.signal.aborted).toBe(true)
         expect(planningMocks.interrupt).toHaveBeenCalledWith('plan', { error: 'Interrupted before completion.' })
+        expect(listActiveChatExecutions()).toEqual([])
         expect(cancelChatExecution('execution')).toBe(false)
     })
 
@@ -55,6 +56,7 @@ describe('active chat execution lifecycle', () => {
 
         expect(cancelChatExecutionByConversation('conversation')).toBe(true)
         expect(controller.signal.aborted).toBe(true)
+        expect(listActiveChatExecutions()).toEqual([])
         expect(cancelChatExecutionByConversation('missing')).toBe(false)
     })
 })
