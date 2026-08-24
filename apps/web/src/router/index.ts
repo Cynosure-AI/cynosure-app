@@ -160,7 +160,14 @@ const router = createRouter({
     {
       path: '/settings/channels/:id',
       name: 'settings-channel-detail',
-      component: () => import('@/views/triggers/ChannelDetailView.vue')
+      redirect: (to) => ({
+        name: 'settings',
+        query: {
+          ...to.query,
+          category: 'channels',
+          channel: String(to.params.id),
+        },
+      })
     },
     {
       path: '/settings/memory',

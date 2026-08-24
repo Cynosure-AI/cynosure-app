@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import type { AgentDefinition, ChannelDefinition, ChannelType } from '../../api/types'
 import { Icon } from '@iconify/vue'
@@ -11,7 +11,9 @@ import AgentSelect from '../../components/shared/AgentSelect.vue'
 import MultiSelect from '../../components/shared/MultiSelect.vue'
 import SettingsSubheading from '../../components/settings/SettingsSubheading.vue'
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
+import ChannelDetailView from './ChannelDetailView.vue'
 
+const route = useRoute()
 const router = useRouter()
 const props = withDefaults(defineProps<{
   embedded?: boolean
@@ -23,11 +25,11 @@ const props = withDefaults(defineProps<{
 const channels = ref<ChannelDefinition[]>([])
 const allAgents = ref<AgentDefinition[]>([])
 const loading = ref(true)
+const selectedChannelId = ref<string | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | undefined
 
-// Dialog state
+// Add dialog state
 const showAddDialog = ref(false)
-const editingId = ref<string | null>(null)
 const dlgName = ref('')
 const dlgType = ref<ChannelType>('telegram')
 const dlgAgentId = ref('')
@@ -78,6 +80,23 @@ function showSection(id: string): boolean {
   return props.visibleSections.length === 0 || props.visibleSections.includes(id)
 }
 
+function openChannelEditor(channelId: string) {
+  selectedChannelId.value = channelId
+}
+
+async function closeChannelEditor() {
+  selectedChannelId.value = null
+  if (typeof route.query.channel === 'string') {
+    await router.replace({
+      query: {
+        ...route.query,
+        channel: undefined,
+      },
+    })
+  }
+  await loadChannels()
+}
+
 function resetDialog() {
   dlgName.value = ''
   dlgType.value = 'telegram'
@@ -88,7 +107,6 @@ function resetDialog() {
   dlgTestResult.value = null
   dlgAllowedAgentIds.value = []
   dlgAllowedTelegramUserIds.value = ''
-  editingId.value = null
 }
 
 async function openAddDialog() {
@@ -134,23 +152,14 @@ async function testConnection() {
 async function saveChannel() {
   dlgSaving.value = true
   try {
-    if (editingId.value) {
-      await api.channels.update(editingId.value, {
-        name: dlgName.value.trim(),
-        agentId: dlgAgentId.value,
-        config: buildConfig(),
-        enabled: dlgEnabled.value
-      })
-    } else {
-      if (!dlgAgentId.value) return
-      await api.channels.create({
-        name: dlgName.value.trim() || `${dlgType.value} channel`,
-        type: dlgType.value,
-        agentId: dlgAgentId.value,
-        config: buildConfig(),
-        enabled: dlgEnabled.value
-      })
-    }
+    if (!dlgAgentId.value) return
+    await api.channels.create({
+      name: dlgName.value.trim() || `${dlgType.value} channel`,
+      type: dlgType.value,
+      agentId: dlgAgentId.value,
+      config: buildConfig(),
+      enabled: dlgEnabled.value
+    })
     showAddDialog.value = false
     await loadChannels()
   } finally {
@@ -192,6 +201,12 @@ onMounted(() => {
   pollTimer = setInterval(loadChannels, 5_000)
 })
 
+watch(() => route.query.channel, (channelId) => {
+  if (typeof channelId === 'string' && channelId) {
+    selectedChannelId.value = channelId
+  }
+}, { immediate: true })
+
 onUnmounted(() => {
   clearInterval(pollTimer)
 })
@@ -199,7 +214,17 @@ onUnmounted(() => {
 
 <template>
   <div :class="props.embedded ? '' : 'h-full overflow-y-auto'">
-    <div :class="props.embedded ? 'max-w-none' : 'max-w-3xl mx-auto py-8 px-6'">
+    <ChannelDetailView
+      v-if="selectedChannelId"
+      :channel-id="selectedChannelId"
+      @close="closeChannelEditor"
+      @saved="loadChannels"
+    />
+
+    <div
+      v-else
+      :class="props.embedded ? 'max-w-none' : 'max-w-3xl mx-auto py-8 px-6'"
+    >
       <div
         v-if="!props.embedded"
         class="flex items-center justify-between mb-6"
@@ -295,9 +320,10 @@ onUnmounted(() => {
         <div
           v-for="ch in channels"
           :key="ch.id"
+          data-testid="channel-row"
           class="flex items-center gap-4 px-5 py-4 rounded-xl border bg-theme-800/60 group cursor-pointer hover:border-theme-600 transition-colors"
           :class="ch.enabled ? 'border-theme-700' : 'border-theme-700/50 opacity-60'"
-          @click="router.push(`/settings/channels/${ch.id}`)"
+          @click="openChannelEditor(ch.id)"
         >
           <!-- Channel type icon -->
           <div class="shrink-0">
@@ -358,7 +384,8 @@ onUnmounted(() => {
               <button
                 class="p-1.5 rounded-lg hover:bg-theme-800 text-theme-500 hover:text-theme-200 transition-colors"
                 title="Edit"
-                @click.stop="router.push(`/settings/channels/${ch.id}`)"
+                :aria-label="`Edit ${ch.name}`"
+                @click.stop="openChannelEditor(ch.id)"
               >
                 <Icon
                   icon="lucide:pencil"
@@ -410,7 +437,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Add / Edit Channel Dialog -->
+    <!-- Add Channel Dialog -->
     <Teleport to="body">
       <div
         v-if="showAddDialog"
@@ -419,7 +446,7 @@ onUnmounted(() => {
       >
         <div class="w-full max-w-lg bg-theme-900 border border-theme-800 rounded-2xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
           <h2 class="text-lg font-semibold text-theme-100 mb-4">
-            {{ editingId ? 'Edit Channel' : 'Add Channel' }}
+            Add Channel
           </h2>
 
           <!-- Channel name -->
@@ -442,7 +469,6 @@ onUnmounted(() => {
               v-for="opt in channelTypeOptions"
               :key="opt.value"
               type="button"
-              :disabled="!!editingId"
               class="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm transition-colors"
               :class="dlgType === opt.value
                 ? 'border-accent-500 bg-accent-500/10 text-accent-400'
@@ -629,7 +655,7 @@ onUnmounted(() => {
               class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
               @click="saveChannel"
             >
-              {{ dlgSaving ? 'Saving…' : editingId ? 'Save Changes' : 'Create Channel' }}
+              {{ dlgSaving ? 'Saving…' : 'Create Channel' }}
             </button>
           </div>
         </div>

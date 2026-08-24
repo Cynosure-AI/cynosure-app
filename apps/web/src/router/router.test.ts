@@ -52,4 +52,17 @@ describe('router onboarding guard', () => {
     await router.push('/triggers/cron/job-1')
     expect(router.currentRoute.value.path).toBe('/cron/job-1')
   })
+
+  test('keeps channel details inside the settings dialog', async () => {
+    localStorage.setItem(SK_ONBOARDING_COMPLETE, 'true')
+    const { default: router } = await import('./index')
+
+    await router.push('/settings/channels/channel-1')
+
+    expect(router.currentRoute.value.name).toBe('settings')
+    expect(router.currentRoute.value.query).toMatchObject({
+      category: 'channels',
+      channel: 'channel-1',
+    })
+  })
 })

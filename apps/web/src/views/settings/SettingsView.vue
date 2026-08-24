@@ -412,6 +412,7 @@ function selectCategory(category: SettingsCategoryId): void {
     query: {
       ...route.query,
       category,
+      channel: category === 'channels' ? route.query.channel : undefined,
       search: undefined
     }
   })
