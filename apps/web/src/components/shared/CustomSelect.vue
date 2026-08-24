@@ -58,6 +58,8 @@ const props = withDefaults(
     align?: "left" | "center" | "right";
     /** Show the selected option's tag in the closed trigger */
     showSelectedTag?: boolean;
+    /** Render the trigger like clickable text instead of a boxed form control. */
+    bareTrigger?: boolean;
     /**
      * Trigger button size:
      * - 'xs' — extra compact (text-xs, py-1, px-2)
@@ -76,6 +78,7 @@ const props = withDefaults(
     stickyGroupHeaders: false,
     align: "left",
     showSelectedTag: true,
+    bareTrigger: false,
     size: "sm",
   },
 );
@@ -302,8 +305,13 @@ onBeforeUnmount(() =>
       role="combobox"
       :aria-expanded="isOpen"
       tabindex="0"
-      class="w-full flex items-center gap-2 bg-theme-900 border border-theme-600 text-theme-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-accent-500 cursor-pointer select-none"
-      :class="currentSizeClasses.trigger"
+      class="custom-select-trigger w-full flex items-center gap-2 text-theme-300 focus:outline-none cursor-pointer select-none"
+      :class="[
+        currentSizeClasses.trigger,
+        bareTrigger
+          ? 'custom-select-trigger--bare focus-visible:underline'
+          : 'bg-theme-900 border border-theme-600 rounded-lg focus:ring-1 focus:ring-accent-500',
+      ]"
       @click="toggle"
       @keydown="handleKeydown"
     >
@@ -530,6 +538,16 @@ onBeforeUnmount(() =>
 </template>
 
 <style scoped>
+.custom-select-trigger--bare,
+.custom-select-trigger--bare:hover,
+.custom-select-trigger--bare:focus,
+.custom-select-trigger--bare:focus-visible {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
 @media (max-width: 767px) {
   .select-group-header {
     position: static;
