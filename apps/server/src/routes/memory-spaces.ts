@@ -31,10 +31,10 @@ import {
     type MemorySpaceFolderData,
 } from '../core/memory/memory-space-folders.js'
 import {
-    deleteMemoryGraphSource,
-    deleteMemoryGraphSpace,
-    indexMemoryFileIntoEntityGraph,
-    moveMemoryGraphSource,
+    deleteMemoryKnowledgeSource,
+    deleteMemoryKnowledgeSpace,
+    indexMemoryFileIntoKnowledge,
+    moveMemoryKnowledgeSource,
 } from '../core/memory/memory-entity-indexer.js'
 import {
     cancelMemoryIndexJob,
@@ -43,6 +43,7 @@ import {
     startMemoryIndexJob,
     cancelMemoryIndexJobsForFile,
 } from '../core/memory/memory-index-jobs.js'
+import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION } from '../core/memory/memory-knowledge.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -87,6 +88,7 @@ export interface MemoryFileStatus {
     lastIndexedAt?: number
     entityIndexed: boolean
     entityIndexedAt?: number
+    tags: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +286,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             await rag.deleteByFilter(getActivePermanentMemoryTableName(), lanceDbEqFilter('spaceId', target.id))
             stopWatchingMemorySpace(target.id)
             // Remove the space's entity-graph edges (and prune orphaned nodes).
-            deleteMemoryGraphSpace(target.id)
+            deleteMemoryKnowledgeSpace(target.id)
         }
         archiveMemorySpaceFolder(row)
         const deleteRows = db.transaction(() => {
@@ -309,6 +311,44 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         return listMemoryIndexJobs(row.id)
     })
 
+    // POST /api/memory-spaces/:id/knowledge/rebuild — migrate every current
+    // source document in a space into the versioned knowledge projection.
+    // Jobs are durable, bounded by the shared worker pool, and independently
+    // retryable; source files and their current RAG index remain untouched.
+    app.post<{ Params: { id: string } }>('/:id/knowledge/rebuild', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
+        const mem = getAgentMemory()
+        const indexedFiles = mem.getFileIndex(row.id)
+        const jobs = []
+        const skipped: Array<{ fileName: string; reason: string }> = []
+        for (const [fileName] of indexedFiles) {
+            const status = mem.checkFileStatus(row.id, fileName, row.folder_path)
+            if (status !== 'current') {
+                skipped.push({ fileName, reason: status })
+                continue
+            }
+            jobs.push(startMemoryIndexJob({
+                kind: 'entity-index',
+                spaceId: row.id,
+                fileName,
+                run: async (signal, reportProgress) => ({
+                    success: true,
+                    ...(await indexMemoryFileIntoKnowledge({
+                        folderPath: row.folder_path,
+                        spaceId: row.id,
+                        fileName,
+                        replaceExisting: true,
+                        signal,
+                        onExtractionProgress: reportProgress,
+                    })),
+                }),
+            }))
+        }
+        return { success: true, scheduled: jobs.length, jobs, skipped }
+    })
+
     // GET /api/memory-spaces/:id/files — list files in folder with index status
     app.get<{ Params: { id: string } }>('/:id/files', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
@@ -318,6 +358,10 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const mem = getAgentMemory()
         const fileIndex = mem.getFileIndex(row.id)
         const filesOnDisk = listFilesInFolder(row.folder_path)
+        const currentKnowledgeFiles = new Set((getDb().prepare(`
+            SELECT file_name FROM memory_knowledge_index_runs
+            WHERE space_id = ? AND pipeline_version = ? AND status = 'active'
+        `).all(row.id, MEMORY_KNOWLEDGE_PIPELINE_VERSION) as Array<{ file_name: string }>).map((item) => item.file_name))
 
         const result: MemoryFileStatus[] = filesOnDisk.map(f => {
             if (!f.supported) {
@@ -330,6 +374,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     textDirect: false,
                     status: 'unsupported' as const,
                     entityIndexed: false,
+                    tags: [],
                 }
             }
             const indexed = fileIndex.get(f.fileName)
@@ -343,6 +388,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     textDirect: f.textDirect,
                     status: 'not_indexed' as const,
                     entityIndexed: false,
+                    tags: [],
                 }
             }
             const currentHash = computeFileHash(f.filePath)
@@ -357,12 +403,21 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                 status,
                 chunkCount: indexed.chunkCount,
                 lastIndexedAt: indexed.lastIndexedAt,
-                entityIndexed: status === 'indexed' && indexed.entityIndexedAt > 0,
+                entityIndexed: status === 'indexed' && indexed.entityIndexedAt > 0 && currentKnowledgeFiles.has(f.fileName),
                 entityIndexedAt: indexed.entityIndexedAt || undefined,
+                tags: status === 'indexed' ? indexed.tags : [],
             }
         })
 
         return result.sort((a, b) => b.modifiedAt - a.modifiedAt || a.fileName.localeCompare(b.fileName))
+    })
+
+    // GET /api/memory-spaces/:id/files/:fileName/knowledge-preview — a small,
+    // source-specific summary for the document list hover popover.
+    app.get<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/knowledge-preview', async (req, reply) => {
+        const row = loadSpaceRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Space not found' })
+        return getMemoryKnowledgeStore().documentExtractionPreview(row.id, req.params.fileName, 15)
     })
 
     // POST /api/memory-spaces/:id/files/:fileName/reindex — re-index a specific file
@@ -398,7 +453,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         })
     })
 
-    // POST /api/memory-spaces/:id/files/:fileName/entity-index — integrate one indexed document into the entity graph
+    // Compatibility route: extract one indexed document into governed knowledge.
     app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/entity-index', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
@@ -407,13 +462,13 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const mem = getAgentMemory()
         const status = mem.checkFileStatus(row.id, req.params.fileName, row.folder_path)
         if (status !== 'current') {
-            return reply.status(409).send({ error: status === 'not_indexed' ? 'File must be indexed before entity indexing.' : 'File must be re-indexed before entity indexing.' })
+            return reply.status(409).send({ error: status === 'not_indexed' ? 'File must be indexed before knowledge extraction.' : 'File must be re-indexed before knowledge extraction.' })
         }
 
         try {
             return {
                 success: true,
-                ...(await indexMemoryFileIntoEntityGraph({
+                ...(await indexMemoryFileIntoKnowledge({
                     folderPath: row.folder_path,
                     spaceId: row.id,
                     fileName: req.params.fileName,
@@ -421,11 +476,11 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                 })),
             }
         } catch (err) {
-            return reply.status(500).send({ error: (err as Error).message || 'Failed to entity-index file' })
+            return reply.status(500).send({ error: (err as Error).message || 'Failed to extract knowledge from file' })
         }
     })
 
-    // POST /api/memory-spaces/:id/files/:fileName/entity-index-job — start a background entity graph indexing job
+    // Compatibility route: start a background knowledge-extraction job.
     app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/entity-index-job', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
@@ -434,21 +489,22 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const mem = getAgentMemory()
         const status = mem.checkFileStatus(row.id, req.params.fileName, row.folder_path)
         if (status !== 'current') {
-            return reply.status(409).send({ error: status === 'not_indexed' ? 'File must be indexed before entity indexing.' : 'File must be re-indexed before entity indexing.' })
+            return reply.status(409).send({ error: status === 'not_indexed' ? 'File must be indexed before knowledge extraction.' : 'File must be re-indexed before knowledge extraction.' })
         }
 
         return startMemoryIndexJob({
             kind: 'entity-index',
             spaceId: row.id,
             fileName: req.params.fileName,
-            run: async (signal) => ({
+            run: async (signal, reportProgress) => ({
                 success: true,
-                ...(await indexMemoryFileIntoEntityGraph({
+                ...(await indexMemoryFileIntoKnowledge({
                     folderPath: row.folder_path,
                     spaceId: row.id,
                     fileName: req.params.fileName,
                     replaceExisting: true,
                     signal,
+                    onExtractionProgress: reportProgress,
                 })),
             }),
         })
@@ -461,7 +517,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
         const mem = getAgentMemory()
         await mem.deleteSourceFile(req.params.fileName, row.id)
-        deleteMemoryGraphSource(row.id, req.params.fileName)
+        deleteMemoryKnowledgeSource(row.id, req.params.fileName)
         return { success: true }
     })
 
@@ -564,7 +620,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
 
             getDb().prepare('UPDATE memory_file_index SET file_name = ? WHERE space_id = ? AND file_name = ?')
                 .run(nextFileName, row.id, currentFileName)
-            moveMemoryGraphSource(row.id, currentFileName, row.id, nextFileName)
+            moveMemoryKnowledgeSource(row.id, currentFileName, row.id, nextFileName)
 
             return { success: true, fileName: nextFileName }
         } catch (err) {
@@ -680,7 +736,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const mem = getAgentMemory()
         for (const sf of sourceFiles) {
             await mem.deleteSourceFile(sf, row.id)
-            deleteMemoryGraphSource(row.id, sf)
+            deleteMemoryKnowledgeSource(row.id, sf)
         }
         return { success: true }
     })
@@ -699,7 +755,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const chunksDeleted = await getAgentMemory().dropSourceIndexes(sourceFiles, row.id)
         let graphEdgesDeleted = 0
         for (const sourceFile of sourceFiles) {
-            graphEdgesDeleted += deleteMemoryGraphSource(row.id, sourceFile).edgesDeleted
+            graphEdgesDeleted += deleteMemoryKnowledgeSource(row.id, sourceFile).edgesDeleted
         }
 
         return {
@@ -778,7 +834,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     existingIndex.created_at,
                 )
             }
-            moveMemoryGraphSource(source.id, sf, target.id, uniqueName)
+            moveMemoryKnowledgeSource(source.id, sf, target.id, uniqueName)
         }
 
         return { success: true, moved: sourceFiles.length, renamed: renamedCount }

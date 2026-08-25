@@ -475,6 +475,12 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const removeMemoryJobUpdatedListener = eventBus.on('memory:job-updated', (data: unknown) => {
     broadcast('memory:job-updated', data)
   })
+  const removeMemoryGraphResetListener = eventBus.on('memory:graph-reset', (data: unknown) => {
+    broadcast('memory:graph-reset', data)
+  })
+  const removeChatExecutionStateListener = eventBus.on('chat:execution-state', (data: unknown) => {
+    broadcast('chat:execution-state', data)
+  })
 
   // Persist execution steps to DB for reload survival
   const stepPersistenceCleanups = setupExecutionStepPersistence(eventBus)
@@ -550,6 +556,8 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       }
       removePlanningStateListener()
       removeMemoryJobUpdatedListener()
+      removeMemoryGraphResetListener()
+      removeChatExecutionStateListener()
       for (const cleanup of stepPersistenceCleanups) {
         cleanup()
       }

@@ -21,7 +21,8 @@ export interface RetrievedChunk {
   rerankerScore?: number
   denseScore?: number
   fusionScore?: number
-  scoreType?: 'dense' | 'fusion' | 'reranker'
+  lexicalScore?: number
+  scoreType?: 'dense' | 'lexical' | 'fusion' | 'reranker' | 'entity-resolution'
   sourceFile?: string
   chunkIndex?: number
   spaceId?: string
@@ -230,16 +231,17 @@ export class MemoryParser {
 
     const { vector } = await embedder.embed(query)
     const candidateCount = reranker.getCandidateCount(topK)
-    const results = (await ragStore.hybridSearch(tableName, vector, query, candidateCount, filter))
+    const [denseCandidates, lexicalCandidates] = await Promise.all([
+      ragStore.search(tableName, vector, candidateCount, filter),
+      ragStore.lexicalSearch(tableName, query, candidateCount, filter),
+    ])
+    const results = fuseRetrievalChannels([denseCandidates, lexicalCandidates], candidateCount)
       .filter((result) => isRetrievableChunk(result.text))
     const ranked = await reranker.rerank(query, results, topK).catch((err) => {
       console.warn('[memory-reranker] Rerank failed, using hybrid ranking:', err)
       return results.slice(0, topK)
     })
-    const minMatchThreshold = reranker.getMinMatchThreshold()
-    const filtered = ranked.filter((r) => passesRetrievalThreshold(r, minMatchThreshold))
-
-    return filtered.map((r) => ({
+    return ranked.map((r) => ({
       id: r.id,
       text: r.text,
       source: r.source,
@@ -247,6 +249,7 @@ export class MemoryParser {
       rerankerScore: r.rerankerScore,
       denseScore: r.denseScore,
       fusionScore: r.fusionScore,
+      lexicalScore: r.lexicalScore,
       scoreType: r.scoreType,
       documentTitle: r.documentTitle,
       sectionPath: r.sectionPath,
@@ -342,6 +345,38 @@ export class MemoryParser {
   }
 }
 
+/**
+ * Deterministic reciprocal-rank fusion across independently budgeted channels.
+ * Raw dense/BM25 scores remain available for diagnostics; neither is treated
+ * as a percentage or compared directly to the other.
+ */
+export function fuseRetrievalChannels(channels: SearchResult[][], limit: number, rankConstant = 60): SearchResult[] {
+  const fused = new Map<string, SearchResult & { fusedScore: number }>()
+  for (const channel of channels) {
+    channel.forEach((candidate, index) => {
+      const contribution = 1 / (rankConstant + index + 1)
+      const current = fused.get(candidate.id)
+      if (!current) {
+        fused.set(candidate.id, { ...candidate, fusedScore: contribution })
+        return
+      }
+      current.fusedScore += contribution
+      current.denseScore ??= candidate.denseScore
+      current.lexicalScore ??= candidate.lexicalScore
+    })
+  }
+
+  return Array.from(fused.values())
+    .sort((a, b) => b.fusedScore - a.fusedScore || b.createdAt - a.createdAt || a.id.localeCompare(b.id))
+    .slice(0, Math.max(0, limit))
+    .map(({ fusedScore, ...candidate }) => ({
+      ...candidate,
+      score: fusedScore,
+      fusionScore: fusedScore,
+      scoreType: 'fusion' as const,
+    }))
+}
+
 /** Reject markup fragments and other chunks that carry no searchable meaning. */
 export function isRetrievableChunk(value: string): boolean {
   const text = value.trim()
@@ -351,13 +386,6 @@ export function isRetrievableChunk(value: string): boolean {
     .replace(/[`*_~>\-|=+:.\s]/g, '')
   if (withoutMarkdown.length < 3) return false
   return /[\p{L}\p{N}]/u.test(withoutMarkdown)
-}
-
-export function passesRetrievalThreshold(result: SearchResult, rerankerThreshold: number): boolean {
-  // Thresholds are calibrated for a particular reranker. Applying the same
-  // value to cosine similarity or RRF scores is mathematically invalid.
-  if (typeof result.rerankerScore !== 'number') return true
-  return Number.isFinite(result.rerankerScore) && result.rerankerScore >= rerankerThreshold
 }
 
 export function inferDocumentTitle(text: string, sourceFile?: string): string {

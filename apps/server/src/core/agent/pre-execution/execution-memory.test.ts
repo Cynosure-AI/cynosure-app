@@ -30,6 +30,7 @@ describe('retrieved memory context messages', () => {
             },
             conversationId: 'conversation-1',
             userQuery: 'How should I deploy?',
+            retrievalQueries: ['How should I deploy?', 'deployment procedure'],
             gateway: {} as LLMGateway,
         })
 
@@ -40,5 +41,9 @@ describe('retrieved memory context messages', () => {
         expect(messages[0].content).toContain('Remembered deployment detail.')
         expect(messages[0].content).not.toContain('untrusted')
         expect(messages[0].metadata).toEqual({ contextKind: 'retrieved-memory', untrusted: true })
+        expect(routingMocks.apply).toHaveBeenCalledWith(expect.objectContaining({
+            userQuery: 'How should I deploy?',
+            retrievalQueries: ['How should I deploy?', 'deployment procedure'],
+        }))
     })
 })

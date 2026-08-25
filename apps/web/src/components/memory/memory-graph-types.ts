@@ -12,13 +12,13 @@ export type FlowNodeData = {
 };
 
 export type FlowEdgeData = {
-  labels: string[];
+  relationships: { id: string; label: string }[];
   labelGroups: {
     fromNodeId: string;
     toNodeId: string;
     fromName: string;
     toName: string;
-    labels: string[];
+    relationships: { id: string; label: string }[];
   }[];
   isBidirectional: boolean;
   edgeIds: string[];

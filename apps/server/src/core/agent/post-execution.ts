@@ -95,9 +95,6 @@ export interface GenerateTitleOpts {
 const MAX_TITLE_CHARS = 70
 const MIN_TITLE_WORDS = 2
 const MAX_TITLE_WORDS = 8
-// Some models use part of the completion budget for hidden reasoning even when
-// thinking is disabled. The title validator below still limits visible output.
-const TITLE_MAX_TOKENS = 256
 
 export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     const { conversationId, userMessage, assistantResponse, broadcast, providerId, model } = opts
@@ -113,11 +110,10 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
             messages: buildTitleMessages(userMessage, assistantResponse),
             model: titleTarget.model,
             signal,
-            maxTokens: TITLE_MAX_TOKENS,
             thinkingEnabled: false
         }, titleTarget.providerId)
 
-        const title = normalizeGeneratedTitle(result.content, userMessage)
+        const title = normalizeGeneratedTitle(result.content)
         if (title) {
             updateConversationTitle(db, conversationId, title, broadcast)
             return
@@ -138,26 +134,13 @@ function buildTitleMessages(userMessage: string, assistantResponse: string) {
     return [
         {
             role: 'system' as const,
-            content: [
-                'You create concise, useful chat sidebar titles.',
-                `Return exactly one title, ${MIN_TITLE_WORDS}-${MAX_TITLE_WORDS} words, no quotes, no trailing punctuation.`,
-                'Name the actual task or topic. Do not copy the opening words of the user message.',
-                'Prefer noun phrases such as "Postgres Migration Plan" or action phrases such as "Fix OAuth Callback Error".',
-                'Avoid vague titles: "Help With Code", "Question About This", "User Request", "Conversation Summary".'
-            ].join('\n')
+            content: `Create a useful ${MIN_TITLE_WORDS}-${MAX_TITLE_WORDS} word title for a chat conversation. Return only the title, without quotes or ending punctuation.`
         },
         {
             role: 'user' as const,
             content: [
-                'Create a title for this conversation.',
-                '',
-                '<user_message>',
-                limitForTitlePrompt(userMessage, 1200),
-                '</user_message>',
-                '',
-                '<assistant_response>',
-                limitForTitlePrompt(assistantResponse, 1600),
-                '</assistant_response>'
+                `User: ${limitForTitlePrompt(userMessage, 800)}`,
+                `Assistant: ${limitForTitlePrompt(assistantResponse, 800)}`
             ].join('\n')
         }
     ]
@@ -178,9 +161,9 @@ function normalizeSourceText(value: string): string {
         .trim()
 }
 
-function normalizeGeneratedTitle(rawContent: string | undefined, userMessage: string): string | null {
+function normalizeGeneratedTitle(rawContent: string | undefined): string | null {
     const title = cleanGeneratedTitle(extractTitleCandidate(rawContent))
-    if (!isUsableTitle(title, userMessage)) return null
+    if (!isUsableTitle(title)) return null
     return title
 }
 
@@ -188,24 +171,12 @@ function extractTitleCandidate(rawContent: string | undefined): string {
     const raw = (rawContent || '').trim()
     if (!raw) return ''
 
-    const jsonTitle = parseJsonTitle(raw)
-    if (jsonTitle) return jsonTitle
-
     return raw
         .replace(/^```(?:json|text)?/i, '')
         .replace(/```$/i, '')
         .split(/\r?\n/)
         .map((line) => line.trim())
         .find(Boolean) || ''
-}
-
-function parseJsonTitle(raw: string): string | null {
-    try {
-        const parsed = JSON.parse(raw) as { title?: unknown }
-        return typeof parsed.title === 'string' ? parsed.title : null
-    } catch {
-        return null
-    }
 }
 
 function cleanGeneratedTitle(value: string): string {
@@ -220,34 +191,13 @@ function cleanGeneratedTitle(value: string): string {
         .trim()
 }
 
-function isUsableTitle(title: string, userMessage: string): boolean {
+function isUsableTitle(title: string): boolean {
     if (!title) return false
     if (/[{}\[\]\n\r]/.test(title)) return false
 
     const words = title.split(/\s+/).filter(Boolean)
     if (words.length < MIN_TITLE_WORDS || words.length > MAX_TITLE_WORDS) return false
-
-    const lowered = title.toLowerCase()
-    if (/^(help|question|request|conversation|chat|user request|summary)\b/.test(lowered)) return false
-    if (isCopiedOpening(title, userMessage)) return false
-
     return true
-}
-
-function isCopiedOpening(title: string, userMessage: string): boolean {
-    const titleWords = toComparableWords(title)
-    if (titleWords.length > 5) return false
-
-    const openingWords = toComparableWords(userMessage).slice(0, titleWords.length)
-    return titleWords.length > 0 && titleWords.join(' ') === openingWords.join(' ')
-}
-
-function toComparableWords(value: string): string[] {
-    return value
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, ' ')
-        .split(/\s+/)
-        .filter(Boolean)
 }
 
 function resolveTitleTarget(

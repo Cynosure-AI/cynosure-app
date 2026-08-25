@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   agentStore: {
     clearExecutionState: vi.fn(),
     setConversationExecutionState: vi.fn(),
+    prepareConversationExecution: vi.fn(),
+    stopConversationExecution: vi.fn(),
+    reconcileStoppedExecution: vi.fn(),
     isConversationExecuting: vi.fn(() => false),
     truncateConversationExecution: vi.fn(),
     dismissHITLByConversation: vi.fn(),
@@ -100,7 +103,7 @@ describe('chat message actions', () => {
     mocks.chat.send.mockResolvedValue(undefined)
     mocks.chat.getMessageAttachments.mockResolvedValue({})
     mocks.chat.truncateFrom.mockResolvedValue(undefined)
-    mocks.chat.cancelStream.mockResolvedValue(undefined)
+    mocks.chat.cancelStream.mockResolvedValue({ success: true, executionIds: [] })
     mocks.chat.cancelPostActions.mockResolvedValue(undefined)
   })
 
@@ -235,25 +238,24 @@ describe('chat message actions', () => {
     }))
   })
 
-  test('waits for cancellation before clearing local execution state, HITL, and post-actions', async () => {
+  test('latches local execution off immediately and reconciles server execution ids', async () => {
     const state = setup()
     state.streaming.primaryStreamId.value = 'stream'
-    let resolveCancellation!: () => void
-    mocks.chat.cancelStream.mockReturnValueOnce(new Promise<void>((resolve) => {
+    let resolveCancellation!: (result: { success: boolean; executionIds: string[] }) => void
+    mocks.chat.cancelStream.mockReturnValueOnce(new Promise<{ success: boolean; executionIds: string[] }>((resolve) => {
       resolveCancellation = resolve
     }))
 
     const cancellation = state.api.cancelStream()
 
     expect(mocks.chat.cancelStream).toHaveBeenCalledWith('stream', 'conversation')
-    expect(state.streaming.clearConversationStreamState).not.toHaveBeenCalled()
+    expect(state.streaming.clearConversationStreamState).toHaveBeenCalledWith('conversation')
+    expect(mocks.agentStore.stopConversationExecution).toHaveBeenCalledWith('conversation', ['stream'])
 
-    resolveCancellation()
+    resolveCancellation({ success: true, executionIds: ['stream', 'linked-stream'] })
     await cancellation
 
-    expect(state.streaming.clearConversationStreamState).toHaveBeenCalledWith('conversation')
-    expect(mocks.agentStore.setConversationExecutionState).toHaveBeenCalledWith('conversation', false)
-    expect(mocks.agentStore.dismissHITLByConversation).toHaveBeenCalledWith('conversation')
+    expect(mocks.agentStore.reconcileStoppedExecution).toHaveBeenCalledWith('conversation', ['stream', 'linked-stream'])
     expect(mocks.chat.cancelPostActions).toHaveBeenCalledWith('conversation')
   })
 })

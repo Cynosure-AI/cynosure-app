@@ -37,7 +37,9 @@ export interface SearchResult {
   denseScore?: number
   /** Reciprocal-rank-fusion relevance returned by LanceDB hybrid search. */
   fusionScore?: number
-  scoreType: 'dense' | 'fusion' | 'reranker'
+  /** BM25 relevance from a lexical-only candidate channel. */
+  lexicalScore?: number
+  scoreType: 'dense' | 'lexical' | 'fusion' | 'reranker'
   rerankerScore?: number
   createdAt: number
   documentTitle?: string
@@ -59,6 +61,17 @@ export interface RAGOptimizeResult {
     oldVersionsRemoved: number
   }
   error?: string
+}
+
+const SEARCH_KEYWORDS_MARKER = '\n\uE000'
+
+/** Attach derived keywords to the lexical search surface without changing the
+ * text that was embedded for semantic retrieval. Reapplying replaces the old
+ * keyword block, and an empty list restores the original search text. */
+export function withSearchKeywords(searchText: string, keywords: string[]): string {
+  const markerIndex = searchText.indexOf(SEARCH_KEYWORDS_MARKER)
+  const base = markerIndex >= 0 ? searchText.slice(0, markerIndex) : searchText
+  return keywords.length ? `${base}${SEARCH_KEYWORDS_MARKER}${keywords.join(' · ')}` : base
 }
 
 // ---------------------------------------------------------------------------
@@ -374,6 +387,57 @@ export class RAGStore {
     return mapped
   }
 
+  /** Pure lexical BM25 search used as an independently budgeted candidate channel. */
+  async lexicalSearch(
+    tableName: string,
+    queryText: string,
+    topK: number = 5,
+    filter?: string
+  ): Promise<SearchResult[]> {
+    const table = await this.openExistingTable(tableName)
+    if (!table || !queryText.trim()) return []
+    const fieldNames = await this.getFieldNames(table, tableName)
+    const cols = ['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', '_score']
+    if (fieldNames.has('spaceId')) cols.push('spaceId')
+
+    if (!this.ftsIndexCurrent.has(tableName)) await this.rebuildFtsIndex(tableName)
+    await this.ensureSpaceIdIndex(table, tableName)
+
+    try {
+      let query = table.search(queryText, 'fts', 'searchText')
+        .select(cols)
+        .limit(topK)
+      if (filter) query = query.where(filter)
+      const results = await query.toArray()
+
+      return results
+        .filter((r) => r.id !== '__seed__')
+        .map((r) => {
+          const lexicalScore = typeof r._score === 'number'
+            ? r._score
+            : typeof r._relevance_score === 'number' ? r._relevance_score : undefined
+          return {
+            id: r.id as string,
+            text: r.text as string,
+            source: r.source as string,
+            sourceFile: r.sourceFile as string | undefined,
+            chunkIndex: r.chunkIndex != null ? (r.chunkIndex as number) : undefined,
+            spaceId: (r.spaceId as string | undefined) || undefined,
+            score: lexicalScore ?? 0,
+            lexicalScore,
+            scoreType: 'lexical' as const,
+            documentTitle: (r.documentTitle as string | undefined) || undefined,
+            sectionPath: (r.sectionPath as string | undefined) || undefined,
+            contentHash: (r.contentHash as string | undefined) || undefined,
+            createdAt: r.createdAt as number
+          }
+        })
+    } catch (err) {
+      console.warn('[rag] Lexical search failed:', err)
+      return []
+    }
+  }
+
   /**
    * Hybrid search: vector similarity + full-text (BM25) merged via native RRF.
    *
@@ -414,9 +478,9 @@ export class RAGStore {
       return results
         .filter((r) => r.id !== '__seed__')
         .map((r) => {
-          const fusionScore = typeof r._relevance_score === 'number'
-            ? r._relevance_score
-            : undefined
+          const fusionScore = typeof r._score === 'number'
+            ? r._score
+            : typeof r._relevance_score === 'number' ? r._relevance_score : undefined
           const denseScore = typeof r._distance === 'number' ? 1 - r._distance : undefined
           return {
             id: r.id as string,
@@ -724,6 +788,42 @@ export class RAGStore {
     } catch (err) {
       console.error('[rag] updateSourceFile error:', (err as Error).message)
     }
+  }
+
+  /** Update chunk keyword surfaces used by FTS/BM25. Rows whose content hash
+   * no longer matches the analyzed chunk are skipped to avoid applying stale
+   * analysis after a concurrent document edit. */
+  async updateChunkSearchKeywords(
+    tableName: string,
+    filter: string,
+    chunks: Map<number, { contentHash: string; keywords: string[] }>,
+  ): Promise<number> {
+    if (!this.db || !filter || chunks.size === 0) return 0
+    const table = await this.openExistingTable(tableName)
+    if (!table) return 0
+    const rows = await table.query()
+      .select(['id', 'text', 'searchText', 'chunkIndex', 'contentHash'])
+      .where(filter)
+      .toArray()
+    let updated = 0
+    for (const row of rows) {
+      if (row.id === '__seed__' || row.chunkIndex == null) continue
+      const analyzed = chunks.get(Number(row.chunkIndex))
+      if (!analyzed || String(row.contentHash || '') !== analyzed.contentHash) continue
+      const currentSearchText = String(row.searchText || row.text || '')
+      const nextSearchText = withSearchKeywords(currentSearchText, analyzed.keywords)
+      if (nextSearchText === currentSearchText) continue
+      await table.update({
+        where: lanceDbEqFilter('id', String(row.id)),
+        values: { searchText: nextSearchText },
+      })
+      updated++
+    }
+    if (updated > 0) {
+      this.ftsIndexCurrent.delete(tableName)
+      this.scheduleFtsRebuild(tableName)
+    }
+    return updated
   }
 }
 

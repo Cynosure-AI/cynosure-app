@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
-import type { EntityGraphEdge, EntityGraphNode, EntityGraphResponse } from "../../api/types";
+import { api } from "../../api/client";
+import type { EntityGraphEdge, EntityGraphNode, EntityGraphResponse, KnowledgeSourceChunk } from "../../api/types";
 import DataTable, { type Column } from "../shared/DataTable.vue";
-import EntityGraphSearchBox from "./EntityGraphSearchBox.vue";
+import KnowledgeGraphSearchBox from "./KnowledgeGraphSearchBox.vue";
 
 const props = defineProps<{
   graph: EntityGraphResponse | null;
   graphLoading: boolean;
   graphQuery: string;
   graphSuggestions: EntityGraphNode[];
+  walkNodes: EntityGraphNode[];
 }>();
 
 const emit = defineEmits<{
@@ -17,6 +19,7 @@ const emit = defineEmits<{
   "load-graph": [query?: string];
   "clear-walk": [];
   "select-suggestion": [node: EntityGraphNode];
+  "remove-selected-node": [nodeId: string];
   "edit-edge": [edge: EntityGraphEdge];
   "delete-edge": [edge: EntityGraphEdge];
   "delete-edges": [ids: string[]];
@@ -26,6 +29,8 @@ const PAGE_SIZE = 30;
 const selectedIds = ref<string[]>([]);
 const currentPage = ref(0);
 const visibleEdges = ref<EntityGraphEdge[]>([]);
+const hydratedSourceChunks = ref<Record<string, KnowledgeSourceChunk>>({});
+const loadingSourceChunkIds = ref<Set<string>>(new Set());
 
 const columns: Column<EntityGraphEdge>[] = [
   { key: "fromName", label: "From", width: "minmax(0, 1.5fr)", sortable: true },
@@ -65,8 +70,37 @@ function edgeMatchesQuery(edge: EntityGraphEdge, query: string): boolean {
     edge.fromName,
     edge.relation,
     edge.toName,
-    edge.evidence || "",
+    edge.note || "",
+    edge.sourceChunk?.text || "",
   ].some((value) => value.toLowerCase().includes(trimmed));
+}
+
+function sourceChunkText(chunk: KnowledgeSourceChunk): string {
+  return hydratedSourceChunks.value[chunk.textUnitId]?.text || chunk.text;
+}
+
+function sourceChunkLoading(chunk: KnowledgeSourceChunk): boolean {
+  return loadingSourceChunkIds.value.has(chunk.textUnitId);
+}
+
+async function hydrateSourceChunk(chunk: KnowledgeSourceChunk, event: Event): Promise<void> {
+  if (!(event.currentTarget as HTMLDetailsElement).open) return;
+  if (chunk.text || hydratedSourceChunks.value[chunk.textUnitId] || loadingSourceChunkIds.value.has(chunk.textUnitId)) return;
+
+  loadingSourceChunkIds.value = new Set(loadingSourceChunkIds.value).add(chunk.textUnitId);
+  try {
+    const hydrated = await api.memory.getKnowledgeSourceChunk(chunk.textUnitId);
+    hydratedSourceChunks.value = { ...hydratedSourceChunks.value, [chunk.textUnitId]: hydrated };
+  } catch {
+    hydratedSourceChunks.value = {
+      ...hydratedSourceChunks.value,
+      [chunk.textUnitId]: { ...chunk, text: "Source chunk unavailable." },
+    };
+  } finally {
+    const next = new Set(loadingSourceChunkIds.value);
+    next.delete(chunk.textUnitId);
+    loadingSourceChunkIds.value = next;
+  }
 }
 
 const filteredEdges = computed(() =>
@@ -140,9 +174,10 @@ function handleBulkDelete() {
         class="flex items-start gap-2"
         @submit.prevent="emit('load-graph', graphQuery)"
       >
-        <EntityGraphSearchBox
+        <KnowledgeGraphSearchBox
           :model-value="graphQuery"
           :suggestions="graphSuggestions"
+          :selected-node-ids="walkNodes.map((node) => node.id)"
           placeholder="Search relationships"
           @update:model-value="emit('update:graphQuery', $event)"
           @select-suggestion="emit('select-suggestion', $event)"
@@ -157,7 +192,7 @@ function handleBulkDelete() {
           />
         </button>
         <button
-          v-if="graphQuery.trim() || graph?.seedNodes.length"
+          v-if="graphQuery.trim() || walkNodes.length"
           type="button"
           class="p-2 text-theme-500 hover:text-theme-200 transition-colors"
           title="Show full graph"
@@ -184,13 +219,16 @@ function handleBulkDelete() {
 
     <template v-else-if="graph">
       <div
-        v-if="graph.seedNodes.length"
+        v-if="walkNodes.length"
         class="mb-4 flex flex-wrap gap-2"
       >
-        <span
-          v-for="node in graph.seedNodes"
+        <button
+          v-for="node in walkNodes"
           :key="node.id"
+          type="button"
           class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/30 bg-accent-500/10 px-2 py-1 text-xs text-accent-200"
+          :title="`Remove ${node.name} from the graph walk`"
+          @click="emit('remove-selected-node', node.id)"
         >
           <Icon
             icon="lucide:sparkles"
@@ -198,7 +236,11 @@ function handleBulkDelete() {
           />
           {{ node.name }}
           <span class="text-accent-300/70">{{ node.type }}</span>
-        </span>
+          <Icon
+            icon="lucide:x"
+            class="h-3 w-3 text-accent-300/70"
+          />
+        </button>
       </div>
 
       <!-- Bulk action bar -->
@@ -333,10 +375,30 @@ function handleBulkDelete() {
 
         <template #row-expand="{ item }">
           <div
-            v-if="item.evidence"
-            class="pl-19 pr-5 pb-3 text-xs text-theme-500 leading-relaxed"
+            v-if="item.note || item.sourceChunk"
+            class="space-y-2 pl-19 pr-5 pb-3 text-xs leading-relaxed"
           >
-            {{ item.evidence }}
+            <p
+              v-if="item.note"
+              class="text-theme-300"
+            >
+              {{ item.note }}
+            </p>
+            <details
+              v-if="item.sourceChunk"
+              class="rounded-md border border-theme-800 bg-theme-950/60 p-2"
+              @toggle="hydrateSourceChunk(item.sourceChunk, $event)"
+            >
+              <summary class="cursor-pointer text-[11px] font-medium text-accent-400">
+                Source chunk {{ item.sourceChunk.chunkIndex + 1 }}
+                <template v-if="item.sourceChunk.sectionPath || item.sourceChunk.documentTitle">
+                  · {{ item.sourceChunk.sectionPath || item.sourceChunk.documentTitle }}
+                </template>
+              </summary>
+              <div class="mt-2 whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-theme-500">
+                {{ sourceChunkLoading(item.sourceChunk) ? "Loading source chunkâ€¦" : sourceChunkText(item.sourceChunk) }}
+              </div>
+            </details>
           </div>
         </template>
       </DataTable>

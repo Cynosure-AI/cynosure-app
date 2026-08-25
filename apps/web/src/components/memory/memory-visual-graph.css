@@ -327,7 +327,7 @@
   border-radius: 7px;
   background: var(--memory-flow-edge-label-bg);
   box-shadow: 0 8px 18px var(--memory-flow-shadow);
-  pointer-events: none;
+  pointer-events: auto;
   transition:
     opacity 130ms ease,
     filter 130ms ease;
@@ -387,6 +387,16 @@
   line-height: 1.2;
   text-align: center;
   white-space: normal;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.memory-graph-panel .entity-edge-label-row:hover,
+.memory-graph-panel .entity-edge-label-row-selected {
+  background: color-mix(in srgb, var(--color-accent-500) 22%, transparent);
+  color: var(--color-accent-100);
 }
 
 .memory-graph-panel .entity-node-body {

@@ -441,7 +441,8 @@ onUnmounted(() => {
     <Teleport to="body">
       <div
         v-if="showAddDialog"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        class="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        :class="props.embedded ? 'z-200' : 'z-50'"
         @click.self="showAddDialog = false"
       >
         <div class="w-full max-w-lg bg-theme-900 border border-theme-800 rounded-2xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
@@ -668,6 +669,7 @@ onUnmounted(() => {
       title="Delete Channel"
       icon="lucide:trash-2"
       icon-color="red"
+      :layer="props.embedded ? 'nested' : 'default'"
       @close="showDeleteConfirm = false"
     >
       <p class="text-theme-400 leading-relaxed">

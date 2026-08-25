@@ -51,6 +51,12 @@ const instances = ref<AgentInstance[]>([]);
 let instancePollTimer: ReturnType<typeof setInterval> | undefined;
 let unsubHITLRequest: (() => void) | undefined;
 let unsubExecutionUpdate: (() => void) | undefined;
+let unsubStreamStart: (() => void) | undefined;
+let unsubStreamEnd: (() => void) | undefined;
+let unsubStreamError: (() => void) | undefined;
+let unsubChatExecutionState: (() => void) | undefined;
+let instanceLoadRevision = 0;
+const terminalChatConversations = new Map<string, number>();
 
 const hasAwaitingApproval = computed(() =>
   instances.value.some((i) => i.status === "awaiting-approval"),
@@ -64,11 +70,37 @@ const awaitingConversationIds = computed(() => instances.value
   .map((instance) => instance.conversationId as string));
 
 async function loadInstances() {
+  const revision = ++instanceLoadRevision;
   try {
-    instances.value = await api.instances.list();
+    const active = await api.instances.list();
+    if (revision === instanceLoadRevision) {
+      const now = Date.now();
+      for (const [conversationId, expiresAt] of terminalChatConversations) {
+        if (expiresAt <= now) terminalChatConversations.delete(conversationId);
+      }
+      instances.value = active.filter((instance) =>
+        instance.type !== "chat" ||
+        !instance.conversationId ||
+        !terminalChatConversations.has(instance.conversationId),
+      );
+    }
   } catch {
     // silently ignore
   }
+}
+
+function removeFinishedChatInstance(data: { streamId: string; conversationId: string }) {
+  // Invalidate an older in-flight poll before applying the terminal websocket
+  // event. Otherwise its stale response can bring the spinner back after stop.
+  instanceLoadRevision++;
+  terminalChatConversations.set(data.conversationId, Date.now() + 10_000);
+  instances.value = instances.value.filter((instance) =>
+    instance.type !== "chat" || (
+      instance.id !== `chat-${data.streamId}` &&
+      instance.conversationId !== data.conversationId
+    ),
+  );
+  void loadInstances();
 }
 
 onMounted(() => {
@@ -83,6 +115,20 @@ onMounted(() => {
     if (d.event === "step:status" && d.data?.status !== "awaiting-approval")
       loadInstances();
   });
+  unsubStreamStart = api.chat.onStreamStart((data) => {
+    terminalChatConversations.delete(data.conversationId);
+    void loadInstances();
+  });
+  unsubStreamEnd = api.chat.onStreamEnd(removeFinishedChatInstance);
+  unsubStreamError = api.chat.onStreamError(removeFinishedChatInstance);
+  unsubChatExecutionState = api.chat.onExecutionState((data) => {
+    if (data.state === "running") {
+      terminalChatConversations.delete(data.conversationId);
+      void loadInstances();
+      return;
+    }
+    removeFinishedChatInstance({ streamId: data.executionId, conversationId: data.conversationId });
+  });
   document.addEventListener("click", closeRecentFilterMenu);
 });
 
@@ -91,6 +137,10 @@ onUnmounted(() => {
   memoryJobsStore.stopPolling();
   unsubHITLRequest?.();
   unsubExecutionUpdate?.();
+  unsubStreamStart?.();
+  unsubStreamEnd?.();
+  unsubStreamError?.();
+  unsubChatExecutionState?.();
   document.removeEventListener("click", closeRecentFilterMenu);
 });
 
@@ -441,8 +491,8 @@ const chatRoute = computed(() =>
             v-for="item in [
               { to: '/cron', icon: 'lucide:calendar-clock', label: 'Schedule' },
               { to: '/agents', icon: 'lucide:bot', label: 'Agents' },
-              { to: '/artifacts', icon: 'lucide:shapes', label: 'Artifacts' },
               { to: '/memory-spaces', icon: 'lucide:brain', label: 'Memories' },
+              { to: '/artifacts', icon: 'lucide:shapes', label: 'Artifacts' },
             ]"
             :key="item.to"
             placement="right"

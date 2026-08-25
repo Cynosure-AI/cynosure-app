@@ -19,11 +19,16 @@ const props = withDefaults(
     disabled?: boolean
     /** Max height CSS class for the dropdown list (default: 'max-h-52') */
     maxHeight?: string
+    /** Show Select All / Unselect All actions inside the dropdown. */
+    showBulkActions?: boolean
+    /** Summary shown when every available option is selected. */
+    allSelectedLabel?: string
   }>(),
   {
     placeholder: 'Select...',
     minSelected: 0,
     maxHeight: 'max-h-52',
+    allSelectedLabel: '',
   },
 )
 
@@ -44,6 +49,11 @@ const filteredOptions = computed(() => {
 })
 
 const summary = computed(() => {
+  if (
+    props.allSelectedLabel
+    && props.options.length > 0
+    && props.options.every((option) => props.modelValue.includes(option.value))
+  ) return props.allSelectedLabel
   const labels = props.modelValue.map(
     (v) => props.options.find((o) => o.value === v)?.label ?? v,
   )
@@ -65,6 +75,14 @@ function toggle(value: string) {
     next = [...props.modelValue, value]
   }
   emit('update:modelValue', next)
+}
+
+function selectAll() {
+  emit('update:modelValue', props.options.map((option) => option.value))
+}
+
+function unselectAll() {
+  emit('update:modelValue', props.options.slice(0, props.minSelected).map((option) => option.value))
 }
 
 function handleClickOutside(e: MouseEvent) {
@@ -103,6 +121,26 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
       v-if="isOpen"
       class="absolute z-10 mt-1 w-full rounded border border-theme-700 bg-theme-900 shadow-lg"
     >
+      <div
+        v-if="showBulkActions && options.length"
+        class="flex items-center justify-between gap-2 border-b border-theme-700 px-2 py-1.5"
+      >
+        <button
+          type="button"
+          class="text-xs text-accent-400 hover:text-accent-300"
+          @click="selectAll"
+        >
+          Select All
+        </button>
+        <button
+          type="button"
+          class="text-xs text-theme-400 hover:text-theme-200"
+          @click="unselectAll"
+        >
+          Unselect All
+        </button>
+      </div>
+
       <!-- Filter input -->
       <div
         v-if="options.length > 8"

@@ -71,4 +71,20 @@ describe('sub-agent execution', () => {
         )
         expect(mocks.executorConfig).toEqual(expect.objectContaining({ signal: toolScope.signal }))
     })
+
+    test('declares conservative behavior hints for delegated execution', () => {
+        const [tool] = buildSubAgentTools({
+            subAgents: [{ agentId: 'worker' }],
+            conversationId: 'conversation',
+            broadcast: vi.fn(),
+        })
+
+        expect(tool.execution).toEqual({ readOnly: false })
+        expect(tool.annotations).toEqual({
+            readOnlyHint: false,
+            destructiveHint: true,
+            idempotentHint: false,
+            openWorldHint: true,
+        })
+    })
 })

@@ -9,6 +9,7 @@ describe('tool approval policy', () => {
         expect(isSystemAutoApprovedTool('memory_remove_all')).toBe(false)
         expect(isSystemAutoApprovedTool('relationship_graph_assert')).toBe(false)
         expect(isSystemAutoApprovedTool('relationship_graph_delete')).toBe(false)
+        expect(isSystemAutoApprovedTool('relationship_entity_merge')).toBe(false)
     })
 
     test('uses safe MCP read-only hints as an auto-approval default', () => {

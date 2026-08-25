@@ -57,7 +57,7 @@ const categories: SettingsCategory[] = [
   {
     id: 'memory',
     label: 'Memory',
-    description: 'Tune embeddings, entity extraction, reranking, chunking, OCR, and vector storage.',
+    description: 'Tune embeddings, knowledge extraction, reranking, chunking, and vector storage.',
     icon: 'lucide:brain',
     component: MemorySettings
   },
@@ -150,13 +150,6 @@ const sections: SettingsSection[] = [
     terms: ['chunking', 'chunk size', 'chunk overlap', 'tokens', 'documents', 'split documents']
   },
   {
-    id: 'ocr',
-    categoryId: 'memory',
-    label: 'OCR for Document Images',
-    description: 'Extract visible text from images embedded in uploaded documents.',
-    terms: ['ocr', 'document images', 'parser', 'scanned documents', 'ocr language', 'languages', 'pdf', 'docx', 'pptx']
-  },
-  {
     id: 'auto-router',
     categoryId: 'chat',
     label: 'Context Routing Model',
@@ -173,9 +166,9 @@ const sections: SettingsSection[] = [
   {
     id: 'entity-graph-extraction',
     categoryId: 'memory',
-    label: 'Entity Extraction Model',
-    description: 'Provider and model used when explicit document entity indexing creates entity graph relationships.',
-    terms: ['entity graph', 'entity extraction', 'entity extraction model', 'relationships', 'relation extraction', 'memory graph', 'document indexing']
+    label: 'Knowledge Extraction Model',
+    description: 'Provider and model used when document analysis creates grounded knowledge and relationships.',
+    terms: ['knowledge graph', 'knowledge extraction', 'entity extraction', 'relationships', 'relation extraction', 'memory graph', 'document indexing']
   },
   {
     id: 'context-strategy',

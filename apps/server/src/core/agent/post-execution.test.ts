@@ -34,7 +34,7 @@ describe('title generation', () => {
     gateway.getLastUsedProvider.mockClear()
   })
 
-  test('allows enough completion budget for models that use hidden reasoning tokens', async () => {
+  test('generates a title without imposing a completion token limit', async () => {
     const broadcast = vi.fn()
 
     await generateTitle({
@@ -44,10 +44,12 @@ describe('title generation', () => {
       broadcast,
     })
 
-    expect(complete).toHaveBeenCalledWith(expect.objectContaining({
-      maxTokens: 256,
+    const request = complete.mock.calls[0][0]
+    expect(request).toMatchObject({
+      model: 'reasoning-model',
       thinkingEnabled: false,
-    }), 'groq')
+    })
+    expect(request).not.toHaveProperty('maxTokens')
     expect(run).toHaveBeenCalledWith(
       'Fix Persistent Chat Drafts',
       expect.any(Number),

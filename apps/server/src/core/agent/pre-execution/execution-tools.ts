@@ -1,4 +1,4 @@
-import { BUILTIN_NAMESPACE_ID, getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
+import { BUILTIN_NAMESPACE_ID, getBuiltInMemoryReadToolKeys, getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
 import { applyAutoToolRouting, emitAutoToolRoutingSkipped } from './auto-tool-routing.js'
 import { isRuntimeMemoryEnabled, type ExecutionMemorySpaceRef } from './execution-memory.js'
 import type { ExecutionPreset } from '../execution-preset.js'
@@ -7,6 +7,7 @@ import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolRegistry } from '../../tools/tool-registry.js'
 import { isScheduleToolName } from '../../tools/builtin/schedule-tools.js'
+import type { RequestedToolEffect } from './task-context.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -31,6 +32,10 @@ export interface ResolveExecutionToolsInput {
     hydrationAgentId?: string
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
     eventMeta?: Record<string, unknown>
+    requestedToolEffect?: RequestedToolEffect
+    /** Bypass the external catalogue for deterministic memory-only fast paths. */
+    suppressAutoTools?: boolean
+    debugContextEnabled?: boolean
 }
 
 export interface ResolvedExecutionTools {
@@ -60,18 +65,20 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         memorySpaceOverrides,
         hydrationAgentId,
         eventMeta,
+        requestedToolEffect = 'read',
+        suppressAutoTools = false,
+        debugContextEnabled,
     } = input
 
-    const routingEnabled = isToolRoutingEnabled(preset, autoToolRouting)
+    const routingEnabled = !suppressAutoTools && isToolRoutingEnabled(preset, autoToolRouting)
     const configuredToolKeys = preset.tools || []
     const toolKeys = routingEnabled
         ? toolRegistry.listRegisteredTools().map((tool) => tool.key)
         : configuredToolKeys
 
-    let tools: RegistryAwareToolDefinition[] = filterToolsForExecutionPreset(
-        preset,
-        toolRegistry.resolveForExecution(toolKeys),
-    )
+    let tools: RegistryAwareToolDefinition[] = suppressAutoTools
+        ? filterToolsForExecutionPreset(preset, toolRegistry.resolveForExecution(preferredToolKeys ?? []))
+        : filterToolsForExecutionPreset(preset, toolRegistry.resolveForExecution(toolKeys))
     const preferredToolNames = routingEnabled
         ? filterToolsForExecutionPreset(preset, toolRegistry.resolveForExecution(preferredToolKeys ?? []))
             .map((tool) => tool.name)
@@ -92,17 +99,22 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             usedToolNames,
             eventMeta,
             signal,
+            requestedToolEffect,
+            debugContextEnabled,
         }) as RegistryAwareToolDefinition[]
     } else {
         emitAutoToolRoutingSkipped(conversationId, 'disabled', eventMeta)
     }
 
     if (isRuntimeMemoryEnabled(preset, autoMemory, memorySpaceOverrides)) {
-        const memoryTools = toolRegistry.resolveForExecution(getBuiltInMemoryToolKeys())
+        const memoryToolKeys = requestedToolEffect === 'read'
+            ? getBuiltInMemoryReadToolKeys()
+            : getBuiltInMemoryToolKeys()
+        const memoryTools = toolRegistry.resolveForExecution(memoryToolKeys)
         tools = dedupeToolsByName([...memoryTools, ...tools])
     }
 
-    const effectiveSubAgents = includeSubAgents
+    const effectiveSubAgents = includeSubAgents && !suppressAutoTools
         ? (subAgentAssignments ?? preset.subAgents)
         : []
     const hasSubAgents = effectiveSubAgents.length > 0
@@ -117,6 +129,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
                 conversationId,
                 broadcast,
                 signal,
+                eventMeta,
             }),
         ]
     }

@@ -85,7 +85,7 @@ export function useChatMessages(
         })
 
         agentStore.clearExecutionState()
-        agentStore.setConversationExecutionState(conversationId, true)
+        agentStore.prepareConversationExecution(conversationId)
 
         streaming.streamingContent.value = ''
         streaming.streamingThinking.value = ''
@@ -192,12 +192,10 @@ export function useChatMessages(
     async function cancelStream(): Promise<void> {
         const id = streaming.primaryStreamId.value || streaming.currentStreamId.value
         const convId = activeConversationId.value
-        if (id || convId) {
-            await api.chat.cancelStream(id || '', convId || undefined)
-        }
-
         if (convId) {
+            agentStore.stopConversationExecution(convId, id ? [id] : [])
             streaming.clearConversationStreamState(convId)
+            cancelPostActions(convId)
         } else {
             streaming.isStreaming.value = false
             streaming.currentStreamId.value = null
@@ -214,14 +212,12 @@ export function useChatMessages(
             streaming.streamingContent.value = ''
             streaming.streamingThinking.value = ''
         }
-        if (convId) {
-            agentStore.setConversationExecutionState(convId, false)
-            agentStore.dismissHITLByConversation(convId)
+
+        if (id || convId) {
+            const result = await api.chat.cancelStream(id || '', convId || undefined)
+            if (convId) agentStore.reconcileStoppedExecution(convId, result.executionIds)
         }
 
-        if (convId) {
-            cancelPostActions()
-        }
     }
 
     function cancelPostActions(convId?: string): void {

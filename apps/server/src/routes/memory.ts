@@ -8,16 +8,28 @@ import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/rer
 import { getMemoryRetrievalConfig, saveMemoryRetrievalConfig, type MemoryRetrievalConfig } from '../core/memory/retrieval-config.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
-import { getEntityGraphStore, type EntityType, type ImportanceLevel } from '../core/memory/entity-graph.js'
+import type { EntityType, ImportanceLevel } from '../core/memory/knowledge-types.js'
 import { getMemoryEntityExtractionConfig, saveMemoryEntityExtractionConfig, type MemoryEntityExtractionConfig } from '../core/memory/memory-entity-indexer.js'
 import { dropConversationAttachmentIndex } from '../core/artifacts/attachment-rag.js'
 import { getDb } from '../db/database.js'
+import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_VECTOR_TABLE } from '../core/memory/memory-knowledge.js'
 import { activatePermanentMemoryIndex, DEFAULT_PERMANENT_MEMORY_TABLE, getActivePermanentMemoryTableName, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
+import { beginMemoryReembedding, finishMemoryReembedding } from '../core/memory/reembedding-operation.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import OpenAI from 'openai'
 import { GoogleGenAI } from '@google/genai'
 
 type BroadcastFn = (event: string, data: unknown) => void
+
+function markMemoryIndexesForRebuild(): void {
+  // Preserve document_id/document_ref so the next source re-index replaces the
+  // same governed knowledge revision instead of creating a parallel document.
+  getDb().prepare(`
+    UPDATE memory_file_index
+    SET content_hash = '', chunk_count = 0, last_indexed_at = 0,
+        entity_indexed_at = 0, tags_json = '[]'
+  `).run()
+}
 
 async function detectEmbeddingDimensions(providerId: string | undefined, model: string): Promise<number> {
   const provider = providerId
@@ -94,6 +106,31 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     }
   })
 
+  // GET /api/memory/knowledge/stats — inspect the authoritative derived knowledge plane.
+  app.get('/knowledge/stats', async () => ({
+    pipelineVersion: MEMORY_KNOWLEDGE_PIPELINE_VERSION,
+    ...getMemoryKnowledgeStore().stats(),
+  }))
+
+  // POST /api/memory/knowledge/search — evidence-oriented diagnostics. This
+  // returns exact source chunks as well as the selected assertion projection.
+  app.post<{ Body: { query: string; spaceIds: string[]; limit?: number } }>('/knowledge/search', async (req, reply) => {
+    const query = req.body.query?.trim()
+    const spaceIds = Array.from(new Set((req.body.spaceIds || []).filter((id): id is string => typeof id === 'string' && id.trim().length > 0)))
+    if (!query) return reply.status(400).send({ error: 'A non-empty query is required' })
+    if (!spaceIds.length) return reply.status(400).send({ error: 'At least one memory space is required' })
+    const known = getDb().prepare(`SELECT id FROM memory_spaces WHERE id IN (${spaceIds.map(() => '?').join(', ')})`).all(...spaceIds) as Array<{ id: string }>
+    if (known.length !== spaceIds.length) return reply.status(404).send({ error: 'Memory space not found' })
+    return getMemoryKnowledgeStore().search(query, spaceIds, Math.min(50, Math.max(1, req.body.limit || 8)))
+  })
+
+  // GET /api/memory/knowledge/chunks/:id — lazily hydrate an exact source chunk for graph provenance.
+  app.get<{ Params: { id: string } }>('/knowledge/chunks/:id', async (req, reply) => {
+    const chunk = getMemoryKnowledgeStore().getSourceChunk(req.params.id)
+    if (!chunk) return reply.status(404).send({ error: 'Knowledge source chunk not found' })
+    return chunk
+  })
+
   // GET /api/memory/retrieval/config — get automatic memory retrieval limits
   app.get('/retrieval/config', async () => {
     return getMemoryRetrievalConfig()
@@ -105,43 +142,39 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     return { success: true, ...config }
   })
 
-  // GET /api/memory/graph — inspect the lightweight entity graph
-  app.get<{ Querystring: { query?: string; nodeId?: string; limit?: string; view?: string; minImportance?: string } }>('/graph', async (req) => {
-    const graph = getEntityGraphStore()
+  // GET /api/memory/graph — inspect the authoritative knowledge graph projection.
+  app.get<{ Querystring: { query?: string; nodeId?: string; nodeIds?: string; limit?: string; view?: string; minImportance?: string; spaceIds?: string } }>('/graph', async (req, reply) => {
+    const knowledge = getMemoryKnowledgeStore()
     const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 5000)
     const minImportance = Math.min(Math.max(Number(req.query.minImportance) || 0, 0), 3) as ImportanceLevel
-    const nodeId = req.query.nodeId?.trim()
-    if (nodeId) {
-      const seed = graph.getNode(nodeId)
-      const walk = graph.walk(seed ? [seed.id] : [], 2, limit, minImportance)
-      return {
-        stats: graph.stats(),
-        seedNodes: walk.seedNodes,
-        nodes: walk.nodes,
-        edges: walk.edges
-      }
+    const nodeIds = (req.query.nodeIds || '').split(',').map((id) => id.trim()).filter(Boolean).slice(0, 50)
+    const explicitlyEmpty = req.query.spaceIds === '__none__'
+    const spaceIds = explicitlyEmpty
+      ? []
+      : Array.from(new Set((req.query.spaceIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, 100)
+    if (spaceIds.length) {
+      const known = getDb().prepare(`SELECT id FROM memory_spaces WHERE id IN (${spaceIds.map(() => '?').join(', ')})`).all(...spaceIds) as Array<{ id: string }>
+      if (known.length !== spaceIds.length) return reply.status(404).send({ error: 'Memory space not found' })
     }
-    const query = req.query.query?.trim()
-    if (query) {
-      const seeds = graph.findSeedNodes(query, [], 12)
-      const walk = graph.focusedWalk(seeds.map((node) => node.id), query, 1, limit, minImportance)
+    if (explicitlyEmpty) {
       return {
-        stats: graph.stats(),
-        seedNodes: walk.seedNodes,
-        nodes: walk.nodes,
-        edges: walk.edges
-      }
-    }
-    if (req.query.view === 'relationships') {
-      return {
-        stats: graph.stats(),
+        stats: { nodeCount: 0, edgeCount: 0, recentEdgeCount: 0 },
         seedNodes: [],
-        ...graph.listRelationships(limit)
+        nodes: [],
+        edges: [],
       }
     }
-    const overview = graph.listTopNodeOverview(limit, minImportance)
+    const overview = knowledge.browseGraph({
+      query: req.query.query?.trim(),
+      nodeId: req.query.nodeId?.trim(),
+      nodeIds,
+      spaceIds,
+      limit,
+      minImportance,
+      depth: 2,
+    })
     return {
-      stats: graph.stats(),
+      stats: knowledge.graphStats(spaceIds),
       seedNodes: overview.seedNodes,
       nodes: overview.nodes,
       edges: overview.edges
@@ -149,11 +182,12 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   })
 
   // GET /api/memory/graph/suggestions — autocomplete entity names
-  app.get<{ Querystring: { query?: string; limit?: string } }>('/graph/suggestions', async (req) => {
-    const graph = getEntityGraphStore()
+  app.get<{ Querystring: { query?: string; limit?: string; spaceIds?: string } }>('/graph/suggestions', async (req) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20)
+    if (req.query.spaceIds === '__none__') return { suggestions: [] }
+    const spaceIds = Array.from(new Set((req.query.spaceIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, 100)
     return {
-      suggestions: graph.suggestNodes(req.query.query?.trim() || '', limit)
+      suggestions: getMemoryKnowledgeStore().suggestNodes(req.query.query?.trim() || '', limit, spaceIds)
     }
   })
 
@@ -166,13 +200,20 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     if (name !== undefined && name.length === 0) {
       return reply.status(400).send({ error: 'Entity name cannot be empty' })
     }
+    const allowedEntityTypes: EntityType[] = ['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other']
+    if (req.body.type !== undefined && !allowedEntityTypes.includes(req.body.type as EntityType)) {
+      return reply.status(400).send({ error: 'Entity type is not valid' })
+    }
 
     try {
-      const updated = getEntityGraphStore().updateNode(req.params.id, {
+      const knowledge = getMemoryKnowledgeStore()
+      const existing = knowledge.getNode(req.params.id)
+      if (!existing) return reply.status(404).send({ error: 'Entity not found' })
+      const updated = knowledge.updateEntity(req.params.id, {
         name,
         type: req.body.type as EntityType | undefined,
         aliases: Array.isArray(req.body.aliases) ? req.body.aliases : undefined,
-        importance: typeof req.body.importance === 'number' ? req.body.importance as 0 | 1 | 2 | 3 : undefined
+        importance: typeof req.body.importance === 'number' ? req.body.importance as 0 | 1 | 2 | 3 : undefined,
       })
       if (!updated) return reply.status(404).send({ error: 'Entity not found' })
       return updated
@@ -190,25 +231,34 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
 
   // DELETE /api/memory/graph/nodes/:id — manually remove an entity and its relationships
   app.delete<{ Params: { id: string } }>('/graph/nodes/:id', async (req, reply) => {
-    const deleted = getEntityGraphStore().deleteNode(req.params.id)
+    const deleted = getMemoryKnowledgeStore().retractEntityById(req.params.id)
     if (!deleted) return reply.status(404).send({ error: 'Entity not found' })
     return { success: true }
+  })
+
+  // POST /api/memory/graph/nodes/delete — atomically retract multiple entities.
+  app.post<{ Body: { ids?: string[] } }>('/graph/nodes/delete', async (req, reply) => {
+    const ids = Array.from(new Set((req.body.ids || []).filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))))
+    if (!ids.length) return reply.status(400).send({ error: 'At least one entity ID is required' })
+    if (ids.length > 500) return reply.status(400).send({ error: 'At most 500 entities can be deleted at once' })
+    const deleted = getMemoryKnowledgeStore().retractEntitiesByIds(ids)
+    if (deleted !== ids.length) return reply.status(404).send({ error: 'One or more entities no longer exist; nothing was deleted' })
+    return { success: true, deleted }
   })
 
   // PATCH /api/memory/graph/edges/:id — manually correct a relationship
   app.patch<{
     Params: { id: string }
-    Body: { relation?: string; evidence?: string; confidence?: number; importance?: number }
+    Body: { relation?: string; note?: string; importance?: number }
   }>('/graph/edges/:id', async (req, reply) => {
     const relation = req.body.relation?.trim()
     if (relation !== undefined && relation.length === 0) {
       return reply.status(400).send({ error: 'Relation cannot be empty' })
     }
-    const updated = getEntityGraphStore().updateEdge(req.params.id, {
+    const updated = getMemoryKnowledgeStore().updateEdge(req.params.id, {
       relation,
-      evidence: req.body.evidence,
-      confidence: req.body.confidence,
-      importance: typeof req.body.importance === 'number' ? req.body.importance as 0 | 1 | 2 | 3 : undefined
+      note: req.body.note,
+      importance: typeof req.body.importance === 'number' ? req.body.importance as 0 | 1 | 2 | 3 : undefined,
     })
     if (!updated) return reply.status(404).send({ error: 'Relationship not found' })
     return updated
@@ -216,14 +266,24 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
 
   // DELETE /api/memory/graph/edges/:id — manually remove a relationship
   app.delete<{ Params: { id: string } }>('/graph/edges/:id', async (req, reply) => {
-    const result = getEntityGraphStore().deleteEdge(req.params.id)
+    const result = getMemoryKnowledgeStore().deleteEdge(req.params.id)
     if (!result.edgeDeleted) return reply.status(404).send({ error: 'Relationship not found' })
     return { success: true, orphanedNodeIds: result.orphanedNodeIds }
   })
 
-  // DELETE /api/memory/graph — clear all entity graph nodes and relationships
+  // POST /api/memory/graph/edges/delete — atomically retract multiple relationships.
+  app.post<{ Body: { ids?: string[] } }>('/graph/edges/delete', async (req, reply) => {
+    const ids = Array.from(new Set((req.body.ids || []).filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))))
+    if (!ids.length) return reply.status(400).send({ error: 'At least one relationship ID is required' })
+    if (ids.length > 1000) return reply.status(400).send({ error: 'At most 1,000 relationships can be deleted at once' })
+    const deleted = getMemoryKnowledgeStore().deleteEdgesByIds(ids)
+    if (deleted !== ids.length) return reply.status(404).send({ error: 'One or more relationships no longer exist; nothing was deleted' })
+    return { success: true, deleted }
+  })
+
+  // DELETE /api/memory/graph — clear the governed knowledge graph.
   app.delete('/graph', async () => {
-    const deleted = getEntityGraphStore().deleteAll()
+    const deleted = await getMemoryKnowledgeStore().reset()
     return { success: true, ...deleted }
   })
 
@@ -239,7 +299,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   // POST /api/memory/embeddings/configure — configure embeddings
   app.post<{
     Body: { providerId?: string; baseUrl?: string; apiKey?: string; model?: string; dimensions?: number; reembed?: boolean }
-  }>('/embeddings/configure', async (req) => {
+  }>('/embeddings/configure', async (req, reply) => {
     const embedder = getEmbeddingProvider()
     const oldConfig = embedder.getConfig()
     const { reembed, ...configOpts } = req.body
@@ -254,24 +314,31 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       oldConfig.dimensions !== newDimensions
 
     if (embeddingChanged && reembed) {
+      const reembedding = beginMemoryReembedding()
+      if (!reembedding) {
+        return reply.code(409).send({ error: 'A memory re-embedding operation is already running' })
+      }
+      const { signal } = reembedding
       // Blue/green re-embedding: build and verify an isolated table, then swap.
       // The active provider and table remain available throughout staging.
       const rag = getRAGStore()
       const activeTable = getActivePermanentMemoryTableName()
-      const existingDocs = await rag.listDocuments(activeTable)
-      const chunksToReembed = existingDocs.filter(d => d.id !== '__seed__')
       const migrationEmbedder = new EmbeddingProvider()
-      migrationEmbedder.configure(resolvedConfig, false)
       const migrationId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
       const stagingTable = `permanent_memory_v_${migrationId}`
       let activated = false
+      let totalChunks = 0
 
       try {
+        const existingDocs = await rag.listDocuments(activeTable)
+        const chunksToReembed = existingDocs.filter(d => d.id !== '__seed__')
+        migrationEmbedder.configure(resolvedConfig, false)
         // Re-embed in batches
         const BATCH_SIZE = 32
         let totalReembedded = 0
-        const totalChunks = chunksToReembed.length
+        totalChunks = chunksToReembed.length
         await rag.ensureTable(stagingTable, newDimensions)
+        signal.throwIfAborted()
 
         broadcast('memory:reembed-progress', { current: 0, total: totalChunks, status: 'started' })
 
@@ -280,7 +347,9 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
           const texts = batch.map(d => d.searchText || d.text)
 
           try {
-            const embeddings = await migrationEmbedder.embedBatch(texts)
+            signal.throwIfAborted()
+            const embeddings = await migrationEmbedder.embedBatch(texts, signal)
+            signal.throwIfAborted()
             if (embeddings.length !== batch.length || embeddings.some((item) => item.vector.length !== newDimensions)) {
               throw new Error(`Embedding batch ${i / BATCH_SIZE + 1} returned invalid dimensions or row count`)
             }
@@ -300,6 +369,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
               embeddingModel: embeddings[j].model
             }))
             await rag.addDocuments(stagingTable, docs, newDimensions)
+            signal.throwIfAborted()
             totalReembedded += docs.length
             broadcast('memory:reembed-progress', { current: totalReembedded, total: totalChunks, status: 'in-progress' })
           } catch (err) {
@@ -308,29 +378,47 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
         }
 
         const stagedDocs = await rag.listDocuments(stagingTable)
+        signal.throwIfAborted()
         if (stagedDocs.length !== totalChunks) {
           throw new Error(`Staging verification failed: expected ${totalChunks} chunks, found ${stagedDocs.length}`)
         }
         await rag.rebuildFtsIndex(stagingTable)
+        signal.throwIfAborted()
 
         // Attachment vectors use the old dimensions, so invalidate them before
         // publishing the new provider/index pair.
         await dropConversationAttachmentIndex()
+        signal.throwIfAborted()
         activatePermanentMemoryIndex(stagingTable, resolvedConfig)
         embedder.configure(resolvedConfig, false)
         activated = true
         if (activeTable !== stagingTable) await rag.deleteTable(activeTable)
+        let knowledgeProjection: { runs: number; documents: number } | undefined
+        let knowledgeProjectionError: string | undefined
+        try {
+          await rag.deleteTable(MEMORY_KNOWLEDGE_VECTOR_TABLE)
+          getMemoryKnowledgeStore().markSearchProjectionsPending()
+          knowledgeProjection = await getMemoryKnowledgeStore().reindexAllActiveSearchProjections(signal)
+        } catch (error) {
+          if (signal.aborted || (error as Error).name === 'AbortError') throw error
+          knowledgeProjectionError = error instanceof Error ? error.message : String(error)
+        }
+        signal.throwIfAborted()
         broadcast('memory:reembed-progress', { current: totalReembedded, total: totalChunks, status: 'completed' })
-        return { success: true, vectorsDropped: false, reembedded: true, reembeddedCount: totalReembedded, dimensions: newDimensions }
+        return { success: true, vectorsDropped: false, reembedded: true, reembeddedCount: totalReembedded, dimensions: newDimensions, knowledgeProjection, knowledgeProjectionError }
       } catch (err) {
         if (!activated) await rag.deleteTable(stagingTable).catch(() => undefined)
+        const cancelled = signal.aborted || (err as Error).name === 'AbortError'
         broadcast('memory:reembed-progress', {
           current: 0,
-          total: chunksToReembed.length,
-          status: 'failed',
-          error: err instanceof Error ? err.message : String(err),
+          total: totalChunks,
+          status: cancelled ? 'cancelled' : 'failed',
+          error: cancelled ? 'Cancelled by user' : err instanceof Error ? err.message : String(err),
         })
+        if (cancelled) return reply.code(409).send({ error: 'Memory re-embedding was cancelled' })
         throw err
+      } finally {
+        finishMemoryReembedding(reembedding)
       }
     }
 
@@ -341,8 +429,10 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       if (activeTable !== DEFAULT_PERMANENT_MEMORY_TABLE) {
         await rag.deleteTable(DEFAULT_PERMANENT_MEMORY_TABLE)
       }
+      await rag.deleteTable(MEMORY_KNOWLEDGE_VECTOR_TABLE)
+      getMemoryKnowledgeStore().markSearchProjectionsPending()
       await dropConversationAttachmentIndex()
-      getDb().prepare('DELETE FROM memory_file_index').run()
+      markMemoryIndexesForRebuild()
       activatePermanentMemoryIndex(DEFAULT_PERMANENT_MEMORY_TABLE, resolvedConfig)
       embedder.configure(resolvedConfig, false)
     } else {
@@ -364,21 +454,23 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const activeTable = getActivePermanentMemoryTableName()
     await rag.deleteTable(activeTable)
     setActivePermanentMemoryTableName(DEFAULT_PERMANENT_MEMORY_TABLE)
+    await rag.deleteTable(MEMORY_KNOWLEDGE_VECTOR_TABLE)
+    getMemoryKnowledgeStore().markSearchProjectionsPending()
     await dropConversationAttachmentIndex()
-    getDb().prepare('DELETE FROM memory_file_index').run()
+    markMemoryIndexesForRebuild()
     return { success: true }
   })
 
-  // GET /api/memory/entity-extraction/config — get LLM target for memory entity extraction
+  // Compatibility route: get the LLM target for knowledge extraction.
   app.get('/entity-extraction/config', async () => {
     return getMemoryEntityExtractionConfig()
   })
 
-  // POST /api/memory/entity-extraction/configure — set LLM target for memory entity extraction
+  // Compatibility route: set the LLM target for knowledge extraction.
   app.post<{ Body: MemoryEntityExtractionConfig }>('/entity-extraction/configure', async (req, reply) => {
     const providerId = req.body.providerId?.trim()
     if (providerId && !getGateway().getProvider(providerId)) {
-      return reply.status(400).send({ error: 'Entity extraction provider not found' })
+      return reply.status(400).send({ error: 'Knowledge extraction provider not found' })
     }
     const config = saveMemoryEntityExtractionConfig({
       providerId,
@@ -423,28 +515,6 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const parser = getMemoryParser()
     parser.refreshConfig()
     return { success: true, chunkSize, chunkOverlap }
-  })
-
-  // GET /api/memory/parser/config — get document parser config (OCR etc.)
-  app.get('/parser/config', async () => {
-    const db = getDb()
-    const row = db.prepare("SELECT value_json FROM settings WHERE key = 'documentParser'").get() as { value_json: string } | undefined
-    if (row) {
-      const cfg = JSON.parse(row.value_json) as { ocrEnabled: boolean; ocrLanguage?: string }
-      return { ocrEnabled: cfg.ocrEnabled, ocrLanguage: cfg.ocrLanguage || 'eng' }
-    }
-    return { ocrEnabled: false, ocrLanguage: 'eng' }
-  })
-
-  // POST /api/memory/parser/configure — set document parser config
-  app.post<{ Body: { ocrEnabled: boolean; ocrLanguage?: string } }>('/parser/configure', async (req) => {
-    const { ocrEnabled, ocrLanguage } = req.body
-    const lang = (ocrLanguage || 'eng').trim()
-    const db = getDb()
-    db.prepare(
-      "INSERT OR REPLACE INTO settings (key, value_json) VALUES ('documentParser', ?)"
-    ).run(JSON.stringify({ ocrEnabled: !!ocrEnabled, ocrLanguage: lang }))
-    return { success: true, ocrEnabled: !!ocrEnabled, ocrLanguage: lang }
   })
 
   // GET /api/memory/reranker/config — get optional external reranker config

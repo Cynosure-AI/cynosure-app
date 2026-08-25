@@ -22,9 +22,11 @@ import "@vue-flow/controls/dist/style.css";
 import "./memory-visual-graph.css";
 import type { EntityGraphEdge, EntityGraphNode, EntityGraphResponse } from "../../api/types";
 import type { FlowEdgeData, FlowNodeData, GraphEdgePathType } from "./memory-graph-types";
-import EntityGraphSearchBox from "./EntityGraphSearchBox.vue";
+import KnowledgeGraphSearchBox from "./KnowledgeGraphSearchBox.vue";
+import MemoryGraphInspector from "./MemoryGraphInspector.vue";
 
 type FactLevelFilter = 0 | 1 | 2 | 3;
+type GraphEntityLimit = 100 | 200 | 300 | 500 | null;
 
 const props = defineProps<{
   flowId: string;
@@ -33,12 +35,14 @@ const props = defineProps<{
   graphQuery: string;
   graphSearchQuery: string;
   graphSuggestions: EntityGraphNode[];
+  walkNodes: EntityGraphNode[];
   graphFlowNodes: Node<FlowNodeData>[];
   graphFlowEdges: Edge<FlowEdgeData>[];
   nodeSpacing: number;
   edgeLabelsVisible: boolean;
   edgePathType: GraphEdgePathType;
   factLevel: FactLevelFilter;
+  entityLimit: GraphEntityLimit;
 }>();
 
 const edgePathModes: { id: GraphEdgePathType; label: string; icon: string }[] = [
@@ -54,23 +58,37 @@ const factLevelOptions: { value: FactLevelFilter; label: string }[] = [
   { value: 3, label: "Core" },
 ];
 
+const entityLimitOptions: { value: GraphEntityLimit; label: string }[] = [
+  { value: 100, label: "100" },
+  { value: 200, label: "200" },
+  { value: 300, label: "300" },
+  { value: 500, label: "500" },
+  { value: null, label: "All" },
+];
+
 const emit = defineEmits<{
   "update:graphQuery": [value: string];
   "update:nodeSpacing": [value: number];
   "update:edgeLabelsVisible": [value: boolean];
   "update:edgePathType": [value: GraphEdgePathType];
   "update:factLevel": [value: FactLevelFilter];
+  "update:entityLimit": [value: GraphEntityLimit];
   "load-graph": [query?: string];
   "clear-walk": [];
   "select-suggestion": [node: EntityGraphNode];
+  "explore-node": [node: EntityGraphNode];
+  "remove-selected-node": [nodeId: string];
   "relayout": [];
   "edit-node": [node: EntityGraphNode];
   "delete-node": [node: EntityGraphNode];
   "delete-nodes": [nodes: EntityGraphNode[]];
+  "edit-edge": [edge: EntityGraphEdge];
+  "delete-edge": [edge: EntityGraphEdge];
   "focus-node": [nodeId: string | null];
 }>();
 
 const selectedNodeId = ref<string | null>(null);
+const selectedEdgeId = ref<string | null>(null);
 const { getSelectedNodes, removeSelectedElements } = useVueFlow(props.flowId);
 
 const selectedFlowNode = computed(() =>
@@ -91,60 +109,11 @@ const selectedGraphNodes = computed(() =>
     .filter((node): node is EntityGraphNode => Boolean(node)),
 );
 
-const selectedGraphNode = computed(() =>
-  selectedGraphNodes.value.length === 1 ? selectedGraphNodes.value[0] : null,
+const selectedGraphEdge = computed(() =>
+  props.graph?.edges.find((edge) => edge.id === selectedEdgeId.value) || null,
 );
 
-const selectedNodeIds = computed(() => new Set(selectedGraphNodes.value.map((node) => node.id)));
-
-const sidebarVisible = computed(() => selectedGraphNodes.value.length > 0);
-
-const sidebarTitle = computed(() => {
-  if (selectedGraphNode.value) return selectedGraphNode.value.name;
-  return `${formatCount(selectedGraphNodes.value.length)} entities selected`;
-});
-
-const isWalkView = computed(() => Boolean(props.graphSearchQuery.trim()));
-
-const selectedMentionCount = computed(() =>
-  selectedGraphNodes.value.reduce((total, node) => total + node.mentionCount, 0),
-);
-
-const selectedSourceCount = computed(() =>
-  selectedGraphNodes.value.reduce((total, node) => total + node.sourceCount, 0),
-);
-
-const selectedNodeAliases = computed(() => selectedGraphNode.value?.aliases || []);
-
-const selectedOrigins = computed(() => {
-  const origins = new Map<string, { sourceKind: string; sourceId: string; label: string; count: number; lastSeenAt: number }>();
-  for (const node of selectedGraphNodes.value) {
-    for (const origin of node.origins || []) {
-      const key = `${origin.sourceKind}:${origin.sourceId}`;
-      const existing = origins.get(key);
-      if (existing) {
-        existing.count += origin.count;
-        existing.lastSeenAt = Math.max(existing.lastSeenAt, origin.lastSeenAt);
-      } else {
-        origins.set(key, { ...origin });
-      }
-    }
-  }
-  return [...origins.values()]
-    .sort((a, b) => b.lastSeenAt - a.lastSeenAt || b.count - a.count)
-    .slice(0, 8);
-});
-
-const selectedNodeRelationships = computed(() => {
-  if (selectedNodeIds.value.size === 0 || !props.graph) return [];
-  return props.graph.edges
-    .filter((edge) => selectedNodeIds.value.has(edge.fromNodeId) || selectedNodeIds.value.has(edge.toNodeId))
-    .sort((a, b) => {
-      const confidenceDelta = (b.confidence || 0) - (a.confidence || 0);
-      if (confidenceDelta !== 0) return confidenceDelta;
-      return relationSortName(a).localeCompare(relationSortName(b));
-    });
-});
+const isWalkView = computed(() => Boolean(props.graphSearchQuery.trim() || props.walkNodes.length));
 
 watch(() => props.graph, () => {
   clearSelection();
@@ -163,30 +132,14 @@ function formatCount(value: number): string {
   return new Intl.NumberFormat().format(value);
 }
 
-function formatRelation(relation: string): string {
-  return relation.replace(/_/g, " ");
-}
-
-function formatConfidence(value: number): string {
-  return `${Math.round((value || 0) * 100)}%`;
-}
-
-function formatOriginKind(kind: string): string {
-  if (kind === "memory") return "Memory";
-  if (kind === "conversation") return "Chat";
-  return kind.replace(/_/g, " ");
+function changeEntityLimit(event: Event): void {
+  const value = (event.target as HTMLSelectElement).value;
+  emit("update:entityLimit", value === "all" ? null : Number(value) as GraphEntityLimit);
+  emit("load-graph", props.graphQuery);
 }
 
 function importanceLabel(level: number): string {
   return ["temporary", "minor", "useful", "core"][level] ?? "minor";
-}
-
-function importanceName(level: number): string {
-  return ["conversational", "mildly interesting", "useful durable fact", "core fact"][level] ?? "unknown";
-}
-
-function relationSortName(edge: EntityGraphEdge): string {
-  return `${edge.fromName} ${edge.toName}`;
 }
 
 function changeFactLevel(event: Event): void {
@@ -196,22 +149,24 @@ function changeFactLevel(event: Event): void {
 }
 
 function selectGraphNode(event: { node: Node<FlowNodeData> }): void {
+  selectedEdgeId.value = null;
   selectedNodeId.value = event.node.id;
   emit("focus-node", event.node.id);
 }
 
-function clearSelection(): void {
+function selectGraphEdge(edgeId: string, event: MouseEvent): void {
+  event.stopPropagation();
+  selectedEdgeId.value = edgeId;
   selectedNodeId.value = null;
   removeSelectedElements();
   emit("focus-node", null);
 }
 
-function deleteSelectedNodes(): void {
-  if (selectedGraphNodes.value.length === 1) {
-    emit("delete-node", selectedGraphNodes.value[0]);
-    return;
-  }
-  emit("delete-nodes", selectedGraphNodes.value);
+function clearSelection(): void {
+  selectedNodeId.value = null;
+  selectedEdgeId.value = null;
+  removeSelectedElements();
+  emit("focus-node", null);
 }
 
 function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBezierPath> {
@@ -263,9 +218,10 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
         class="flex items-start gap-2"
         @submit.prevent="emit('load-graph', graphQuery)"
       >
-        <EntityGraphSearchBox
+        <KnowledgeGraphSearchBox
           :model-value="graphQuery"
           :suggestions="graphSuggestions"
+          :selected-node-ids="walkNodes.map((node) => node.id)"
           placeholder="Search entities"
           @update:model-value="emit('update:graphQuery', $event)"
           @select-suggestion="emit('select-suggestion', $event)"
@@ -294,10 +250,32 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
       </form>
     </div>
 
-    <p class="mb-4 text-xs text-theme-500">
+    <p class="mb-4 flex flex-wrap items-center gap-1 text-xs text-theme-500">
       <span v-if="graph">
         Showing {{ formatCount(graph.nodes.length) }} of {{ formatCount(graph.stats.nodeCount) }} entities,
         {{ formatCount(graph.edges.length) }} of {{ formatCount(graph.stats.edgeCount) }} relations.
+        <span class="ml-1">Maximum entities</span>
+        <select
+          :value="entityLimit ?? 'all'"
+          class="h-6 rounded border border-theme-700/60 bg-theme-950/70 px-1.5 text-xs text-theme-300 outline-none transition-colors focus:border-accent-500"
+          aria-label="Maximum entities to show"
+          title="Maximum entities to show"
+          @change="changeEntityLimit"
+        >
+          <option
+            v-for="option in entityLimitOptions"
+            :key="option.label"
+            :value="option.value ?? 'all'"
+          >
+            {{ option.label }}
+          </option>
+        </select>
+        <span
+          v-if="entityLimit !== null && graph.stats.nodeCount > graph.nodes.length"
+          class="ml-1"
+        >
+          Connected neighborhoods are prioritized; standalone entries are omitted.
+        </span>
       </span>
       <span v-else>
         Search walks outward from matching entities and refocuses the canvas on that neighborhood.
@@ -317,13 +295,16 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
 
     <template v-else-if="graph">
       <div
-        v-if="isWalkView && graph.seedNodes.length"
+        v-if="walkNodes.length"
         class="mb-4 flex flex-wrap gap-2"
       >
-        <span
-          v-for="node in graph.seedNodes"
+        <button
+          v-for="node in walkNodes"
           :key="node.id"
+          type="button"
           class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/30 bg-accent-500/10 px-2 py-1 text-xs text-accent-200"
+          :title="`Remove ${node.name} from the graph walk`"
+          @click="emit('remove-selected-node', node.id)"
         >
           <Icon
             icon="lucide:sparkles"
@@ -331,7 +312,11 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           />
           {{ node.name }}
           <span class="text-accent-300/70">{{ node.type }}</span>
-        </span>
+          <Icon
+            icon="lucide:x"
+            class="h-3 w-3 text-accent-300/70"
+          />
+        </button>
       </div>
 
       <div
@@ -343,9 +328,9 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
 
       <div
         v-else
-        class="memory-graph-panel relative h-[calc(100vh-255px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
+        class="memory-graph-panel isolate relative h-[calc(100vh-255px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
       >
-        <div class="absolute top-2 right-2 z-10 flex flex-wrap items-center justify-end gap-2 bg-theme-900/80 backdrop-blur-sm border border-theme-700/60 rounded-lg px-3 py-1.5">
+        <div class="absolute top-2 left-2 z-10 flex flex-wrap items-center justify-start gap-2 bg-theme-900/80 backdrop-blur-sm border border-theme-700/60 rounded-lg px-3 py-1.5">
           <label class="flex items-center gap-2">
             <Icon
               icon="lucide:filter"
@@ -437,6 +422,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           :max-zoom="1.8"
           class="entity-flow"
           @node-click="selectGraphNode"
+          @node-double-click="emit('explore-node', $event.node.data.entity)"
         >
           <template #edge-stacked="edgeProps">
             <BaseEdge
@@ -472,27 +458,33 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
                       />
                       <span>{{ group.toName }}</span>
                     </div>
-                    <div
-                      v-for="(label, index) in group.labels"
-                      :key="`${label}-${index}`"
+                    <button
+                      v-for="relationship in group.relationships"
+                      :key="relationship.id"
+                      type="button"
                       class="entity-edge-label-row"
+                      :class="{ 'entity-edge-label-row-selected': selectedEdgeId === relationship.id }"
+                      @click="selectGraphEdge(relationship.id, $event)"
                     >
-                      {{ label }}
-                    </div>
+                      {{ relationship.label }}
+                    </button>
                   </div>
                 </template>
                 <template v-else>
-                  <div
-                    v-for="(label, index) in edgeProps.data.labels"
-                    :key="`${label}-${index}`"
+                  <button
+                    v-for="(relationship, index) in edgeProps.data.relationships"
+                    :key="relationship.id"
+                    type="button"
                     class="entity-edge-label-row"
+                    :class="{ 'entity-edge-label-row-selected': selectedEdgeId === relationship.id }"
+                    @click="selectGraphEdge(relationship.id, $event)"
                   >
-                    {{ label }}
+                    {{ relationship.label }}
                     <hr
-                      v-if="+index < edgeProps.data.labels.length - 1"
+                      v-if="+index < edgeProps.data.relationships.length - 1"
                       class="entity-edge-label-separator mt-1 mb-0 border-theme-700/50"
                     >
-                  </div>
+                  </button>
                 </template>
               </div>
             </EdgeLabelRenderer>
@@ -586,167 +578,19 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           <Controls />
         </VueFlow>
 
-        <aside
-          v-if="sidebarVisible"
-          class="entity-node-sidebar"
-        >
-          <header class="entity-node-sidebar-header">
-            <div class="min-w-0">
-              <h3 class="entity-node-sidebar-title">
-                {{ sidebarTitle }}
-              </h3>
-              <div class="entity-node-sidebar-meta">
-                <span>{{ selectedGraphNode?.type || "selection" }}</span>
-                <span v-if="selectedGraphNode">{{ importanceName(selectedGraphNode.importance) }}</span>
-                <span>{{ formatCount(selectedMentionCount) }} mentions</span>
-                <span>{{ formatCount(selectedSourceCount) }} sources</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              class="entity-node-sidebar-close"
-              title="Close"
-              @click="clearSelection"
-            >
-              <Icon
-                icon="lucide:x"
-                class="h-4 w-4"
-              />
-            </button>
-          </header>
-
-          <div
-            v-if="selectedNodeAliases.length"
-            class="entity-node-sidebar-aliases"
-          >
-            <span
-              v-for="alias in selectedNodeAliases"
-              :key="alias"
-              class="entity-node-sidebar-alias"
-            >
-              {{ alias }}
-            </span>
-          </div>
-
-          <div
-            v-if="selectedGraphNodes.length > 1"
-            class="entity-node-sidebar-selection-list"
-          >
-            <span
-              v-for="node in selectedGraphNodes"
-              :key="node.id"
-              class="entity-node-sidebar-selection-item"
-            >
-              {{ node.name }}
-            </span>
-          </div>
-
-          <div class="entity-node-sidebar-actions">
-            <button
-              v-if="selectedGraphNode"
-              type="button"
-              class="entity-node-sidebar-action"
-              @click="emit('edit-node', selectedGraphNode)"
-            >
-              <Icon
-                icon="lucide:pencil"
-                class="h-4 w-4"
-              />
-              Edit
-            </button>
-            <button
-              type="button"
-              class="entity-node-sidebar-action entity-node-sidebar-action-danger"
-              @click="deleteSelectedNodes"
-            >
-              <Icon
-                icon="lucide:trash-2"
-                class="h-4 w-4"
-              />
-              {{ selectedGraphNodes.length > 1 ? `Delete ${selectedGraphNodes.length}` : "Delete" }}
-            </button>
-          </div>
-
-          <div class="entity-node-sidebar-divider" />
-
-          <div class="entity-node-sidebar-section-header">
-            <span>Origins</span>
-            <span>{{ formatCount(selectedOrigins.length) }}</span>
-          </div>
-
-          <div
-            v-if="selectedOrigins.length"
-            class="entity-node-sidebar-list"
-          >
-            <div
-              v-for="origin in selectedOrigins"
-              :key="`${origin.sourceKind}:${origin.sourceId}`"
-              class="entity-node-sidebar-relation"
-            >
-              <div class="entity-node-sidebar-relation-path">
-                <Icon
-                  :icon="origin.sourceKind === 'memory' ? 'lucide:file-text' : 'lucide:message-circle'"
-                  class="h-3 w-3 shrink-0 text-theme-600"
-                />
-                <span>{{ origin.label }}</span>
-              </div>
-              <div class="entity-node-sidebar-relation-detail">
-                <span>{{ formatOriginKind(origin.sourceKind) }}</span>
-                <span>{{ formatCount(origin.count) }} mentions</span>
-              </div>
-            </div>
-          </div>
-
-          <div
-            v-else
-            class="entity-node-sidebar-empty"
-          >
-            No origin data for this selection.
-          </div>
-
-          <div class="entity-node-sidebar-divider" />
-
-          <div class="entity-node-sidebar-section-header">
-            <span>Relationships</span>
-            <span>{{ formatCount(selectedNodeRelationships.length) }}</span>
-          </div>
-
-          <div
-            v-if="selectedNodeRelationships.length"
-            class="entity-node-sidebar-list"
-          >
-            <div
-              v-for="edge in selectedNodeRelationships"
-              :key="edge.id"
-              class="entity-node-sidebar-relation"
-            >
-              <div class="entity-node-sidebar-relation-path">
-                <span>{{ edge.fromName }}</span>
-                <Icon
-                  icon="lucide:arrow-right"
-                  class="h-3 w-3 shrink-0 text-theme-600"
-                />
-                <span>{{ edge.toName }}</span>
-              </div>
-              <div class="entity-node-sidebar-relation-detail">
-                <span>{{ formatRelation(edge.relation) }}</span>
-                <span
-                  class="entity-sidebar-importance"
-                  :class="`entity-sidebar-importance-${edge.importance}`"
-                  :title="importanceName(edge.importance)"
-                >{{ importanceLabel(edge.importance) }}</span>
-                <span>{{ formatConfidence(edge.confidence) }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div
-            v-else
-            class="entity-node-sidebar-empty"
-          >
-            No relationships for this entity.
-          </div>
-        </aside>
+        <MemoryGraphInspector
+          v-if="selectedGraphNodes.length || selectedGraphEdge"
+          :selected-graph-nodes="selectedGraphNodes"
+          :selected-graph-edge="selectedGraphEdge"
+          :graph-edges="graph?.edges || []"
+          @close="clearSelection"
+          @explore-node="emit('explore-node', $event)"
+          @edit-node="emit('edit-node', $event)"
+          @delete-node="emit('delete-node', $event)"
+          @delete-nodes="emit('delete-nodes', $event)"
+          @edit-edge="emit('edit-edge', $event)"
+          @delete-edge="emit('delete-edge', $event)"
+        />
       </div>
     </template>
   </div>

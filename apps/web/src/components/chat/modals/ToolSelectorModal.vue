@@ -36,6 +36,10 @@ const automaticToolStates = computed(() => ({
     active: hasMemoryScope.value,
     criteria: 'memory folder selected',
   },
+  relationship_entity_merge: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
   attachment_list_documents: {
     active: hasConversationAttachment.value,
     criteria: 'large indexed attachment available',

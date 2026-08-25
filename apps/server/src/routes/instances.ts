@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { getActiveCronRuns, cancelCronRun } from '../core/triggers/cron-scheduler.js'
+import { getActiveCronRuns, cancelAllCronRuns, cancelCronRun } from '../core/triggers/cron-scheduler.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { cancelChatExecution, listActiveChatExecutions } from '../core/chat/active-executions.js'
 import { cancelPostActions } from '../core/agent/post-execution.js'
@@ -102,6 +102,28 @@ export function listActiveInstances(): ActiveInstance[] {
     }
 
     return instances
+}
+
+export interface StopAllInstanceResult {
+    chats: number
+    cronRuns: number
+    channelRuns: number
+}
+
+/** Cancel current agent work while leaving cron schedules and channel connections enabled. */
+export function stopAllActiveInstances(): StopAllInstanceResult {
+    let chats = 0
+    for (const execution of listActiveChatExecutions()) {
+        clearPendingHITLForConversation(execution.conversationId)
+        if (cancelChatExecution(execution.id)) chats++
+        cancelPostActions(execution.conversationId)
+    }
+
+    return {
+        chats,
+        cronRuns: cancelAllCronRuns(),
+        channelRuns: getChannelManager().cancelAllExecutions(),
+    }
 }
 
 export async function registerInstanceRoutes(app: FastifyInstance): Promise<void> {

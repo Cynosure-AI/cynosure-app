@@ -17,6 +17,8 @@ export function makeNotificationTool(opts: NotificationToolOptions): ToolDefinit
     const { agentId, conversationId, broadcast } = opts
     return {
         name: 'create_app_notification',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
         description:
             'Create an immediate in-app notification for the user. Use this when you find something noteworthy, need the user to act, or need important/immediate awareness.',
         parameters: {

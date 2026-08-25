@@ -362,6 +362,15 @@ export interface MemoryFileStatus {
     lastIndexedAt?: number
     entityIndexed: boolean
     entityIndexedAt?: number
+    tags: string[]
+}
+
+export interface MemoryDocumentKnowledgePreview {
+    items: Array<{
+        kind: 'relationship' | 'entity'
+        label: string
+    }>
+    total: number
 }
 
 export interface MemoryIndexJob<T = unknown> {
@@ -369,13 +378,36 @@ export interface MemoryIndexJob<T = unknown> {
     kind: 'reindex' | 'entity-index'
     spaceId: string
     fileName: string
-    status: 'queued' | 'running' | 'completed' | 'cancelled' | 'error'
+    status: 'queued' | 'running' | 'retrying' | 'completed' | 'cancelled' | 'error' | 'dead_letter'
     createdAt: number
     updatedAt: number
+    attempt: number
+    maxAttempts: number
+    nextAttemptAt?: number
+    progressCurrent?: number
+    progressTotal?: number
     result?: T
     error?: string
 }
 
+export interface MemoryKnowledgeStats {
+    pipelineVersion: string
+    active_runs: number
+    active_text_units: number
+    entities: number
+    active_mentions: number
+    active_assertions: number
+    disputed_assertions: number
+    verified_evidence: number
+    unmanaged_predicates: number
+    indexed_documents: number
+    covered_documents: number
+    projection_ready_runs: number
+    projection_error_runs: number
+    ambiguous_mentions: number
+}
+
+/** Compatibility name used by the existing /api/memory/graph contract. */
 export interface EntityGraphNode {
     id: string
     name: string
@@ -392,12 +424,25 @@ export interface EntityGraphNode {
 
 export type EntityGraphNodeType = EntityGraphNode['type']
 
+export interface KnowledgeSourceChunk {
+    textUnitId: string
+    href: string
+    documentId: string
+    fileName: string
+    chunkIndex: number
+    documentTitle: string
+    sectionPath: string
+    text: string
+    notes: string[]
+}
+
 export interface EntityGraphOrigin {
     sourceKind: string
     sourceId: string
     label: string
     count: number
     lastSeenAt: number
+    chunks: KnowledgeSourceChunk[]
 }
 
 export interface EntityGraphEdge {
@@ -408,10 +453,15 @@ export interface EntityGraphEdge {
     toName: string
     relation: string
     importance: 0 | 1 | 2 | 3
-    confidence: number
-    evidence: string
+    assertionStatus?: 'active' | 'superseded' | 'disputed' | 'retracted' | 'retired' | 'staging'
+    note?: string
     sourceKind: string
     sourceId: string
+    sourceDocumentId?: string
+    sourceContentHash?: string
+    sourceChunkIndex?: number
+    sourceChunk?: KnowledgeSourceChunk
+    sourceIds?: string[]
     mentionCount: number
     firstSeenAt: number
     lastSeenAt: number
@@ -445,6 +495,13 @@ export interface AgentInstance {
     startedAt: number
     intervalMinutes: number
     status: 'running' | 'awaiting-approval'
+}
+
+export interface ChatExecutionState {
+    executionId: string
+    conversationId: string
+    agentId: string | null
+    state: 'running' | 'stopped' | 'finished'
 }
 
 export interface CronJob {
@@ -487,6 +544,19 @@ export interface ExecutionStepRecord {
 
 export type PlanningTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
 export type PlanningRunStatus = 'running' | 'completed' | 'cancelled' | 'error'
+
+export interface StopAllActivityResult {
+    success: boolean
+    total: number
+    counts: {
+        chats: number
+        cronRuns: number
+        channelRuns: number
+        memoryJobs: number
+        memoryReembedding: number
+        postActions: number
+    }
+}
 
 export interface PlanningTaskItem {
     id: string

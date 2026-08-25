@@ -22,7 +22,9 @@ let pollTimer: ReturnType<typeof setInterval> | undefined;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
 let unsubHITLRequest: (() => void) | undefined;
 let unsubExecutionUpdate: (() => void) | undefined;
+let unsubChatExecutionState: (() => void) | undefined;
 let unsubMemoryJobUpdate: (() => void) | undefined;
+let dataLoadRevision = 0;
 
 type WorkEntry =
   | { kind: "instance"; id: string; instance: AgentInstance; startedAt: number; requiresAttention: boolean }
@@ -71,16 +73,19 @@ const queuedEntries = computed<MemoryEntry[]>(() =>
 const queuedCount = computed(() => queuedEntries.value.length);
 
 async function loadData(): Promise<void> {
+  const revision = ++dataLoadRevision;
   try {
     refreshing.value = true;
     const [active] = await Promise.all([
       api.instances.list(),
       memoryJobsStore.refresh(),
     ]);
-    instances.value = active;
+    if (revision === dataLoadRevision) instances.value = active;
   } finally {
-    loading.value = false;
-    refreshing.value = false;
+    if (revision === dataLoadRevision) {
+      loading.value = false;
+      refreshing.value = false;
+    }
   }
 }
 
@@ -159,12 +164,15 @@ function instanceTypeClass(type: AgentInstance["type"]): string {
 }
 
 function memoryJobTitle(job: MemoryIndexJob): string {
-  const action = job.kind === "entity-index" ? "Extracting entities from" : "Indexing";
+  const progress = job.kind === "entity-index" && job.progressCurrent && job.progressTotal
+    ? ` (batch ${job.progressCurrent}/${job.progressTotal})`
+    : "";
+  const action = job.kind === "entity-index" ? `Extracting knowledge${progress} from` : "Indexing";
   return `${action} ${job.fileName}`;
 }
 
 function memoryJobLabel(job: MemoryIndexJob): string {
-  return job.kind === "entity-index" ? "Entity extraction" : "Memory indexing";
+  return job.kind === "entity-index" ? "Knowledge extraction" : "Memory indexing";
 }
 
 function memoryJobIcon(job: MemoryIndexJob): string {
@@ -203,6 +211,7 @@ function entryStatusClass(entry: WorkEntry): string {
 function statusText(entry: WorkEntry): string {
   if (entry.kind === "instance") return entry.instance.status;
   if (entry.job.status === "queued") return "Queued";
+  if (entry.job.status === "retrying") return `Retrying (${entry.job.attempt}/${entry.job.maxAttempts})`;
   return entry.job.status;
 }
 
@@ -219,6 +228,9 @@ onMounted(() => {
       void loadData();
     }
   });
+  unsubChatExecutionState = api.chat.onExecutionState(() => {
+    void loadData();
+  });
   unsubMemoryJobUpdate = api.memorySpaces.onJobUpdated((job) => {
     memoryJobsStore.upsertJob(job);
   });
@@ -229,6 +241,7 @@ onUnmounted(() => {
   clearInterval(tickTimer);
   unsubHITLRequest?.();
   unsubExecutionUpdate?.();
+  unsubChatExecutionState?.();
   unsubMemoryJobUpdate?.();
 });
 </script>

@@ -57,6 +57,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         thinkingEnabled,
         eventMeta,
         inlineAttachmentTextLimit,
+        debugContextEnabled,
     } = input
     const selectedToolKeys = stripRuntimeMemoryToolKeys(input.selectedToolKeys ?? [])
     const hasRequestToolSelection = input.selectedToolKeys !== undefined
@@ -115,6 +116,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         memorySpaceOverrides,
         eventMeta,
         inlineAttachmentTextLimit,
+        debugContextEnabled,
     })
 
     const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id

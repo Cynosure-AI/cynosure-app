@@ -15,10 +15,13 @@ export interface ResolveMemoryContextInput {
     autoMemory?: boolean
     memorySpaceOverrides?: ExecutionMemorySpaceRef[]
     userQuery?: string
+    /** Original request plus optional same-language retrieval expansions. */
+    retrievalQueries?: string[]
     recentMessages?: ChatMessage[]
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
+    debugContextEnabled?: boolean
 }
 
 export function isAutoMemoryEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
@@ -52,9 +55,11 @@ export async function resolveMemorySystemMessages(input: ResolveMemoryContextInp
         autoMemory,
         memorySpaceOverrides,
         userQuery,
+        retrievalQueries,
         recentMessages,
         eventMeta,
         signal,
+        debugContextEnabled,
     } = input
 
     if (!isAutoMemoryEnabled(preset, autoMemory)) {
@@ -70,6 +75,7 @@ export async function resolveMemorySystemMessages(input: ResolveMemoryContextInp
         enabled: true,
         conversationId,
         userQuery,
+        retrievalQueries,
         recentMessages,
         gateway,
         providerId,
@@ -78,6 +84,7 @@ export async function resolveMemorySystemMessages(input: ResolveMemoryContextInp
         memorySpaceIds: memorySpaceOverrides?.map((space) => space.id),
         eventMeta,
         signal,
+        debugContextEnabled,
     })
 
     return memoryContext ? [{

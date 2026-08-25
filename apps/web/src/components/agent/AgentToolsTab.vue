@@ -38,6 +38,10 @@ const automaticToolStates = computed(() => ({
     active: hasMemoryScope.value,
     criteria: 'memory folder selected',
   },
+  relationship_entity_merge: {
+    active: hasMemoryScope.value,
+    criteria: 'memory folder selected',
+  },
   attachment_list_documents: {
     active: false,
     criteria: 'large indexed attachment available during chat',

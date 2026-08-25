@@ -16,6 +16,7 @@ const props = withDefaults(defineProps<{
   maxWidth: 260,
   block: false,
 })
+const emit = defineEmits<{ show: [] }>()
 
 const triggerRef = ref<HTMLElement | null>(null)
 const hovered = ref(false)
@@ -71,6 +72,7 @@ function onEnter(e: MouseEvent) {
   hoverTick.value++
   hovered.value = true
   mousePos.value = { x: e.clientX, y: e.clientY }
+  emit('show')
 }
 
 function onMove(e: MouseEvent) {

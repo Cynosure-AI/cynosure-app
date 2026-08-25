@@ -1,5 +1,5 @@
 import Fastify from 'fastify'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -49,6 +49,23 @@ describe('memory search routes', () => {
 
     expect(response.statusCode).toBe(404)
     expect(response.json()).toEqual({ error: 'Memory space not found' })
+    await app.close()
+  })
+
+  test('drops knowledge-v2 vectors and marks their projections pending', async () => {
+    const { getRAGStore } = await import('../../../src/core/memory/rag.js')
+    const { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_VECTOR_TABLE } = await import('../../../src/core/memory/memory-knowledge.js')
+    const rag = getRAGStore()
+    const knowledge = getMemoryKnowledgeStore()
+    const deleteTable = vi.spyOn(rag, 'deleteTable').mockResolvedValue(undefined)
+    const markPending = vi.spyOn(knowledge, 'markSearchProjectionsPending')
+    const app = await createApp()
+
+    const response = await app.inject({ method: 'POST', url: '/api/memory/embeddings/drop' })
+
+    expect(response.statusCode).toBe(200)
+    expect(deleteTable).toHaveBeenCalledWith(MEMORY_KNOWLEDGE_VECTOR_TABLE)
+    expect(markPending).toHaveBeenCalledOnce()
     await app.close()
   })
 })

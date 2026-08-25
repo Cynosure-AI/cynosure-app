@@ -4,9 +4,9 @@ import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getMemorySpaceFolderPath } from './memory-space-scope.js'
 import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
 import {
-    deleteMemoryGraphSource,
-    indexMemoryContentIntoEntityGraph,
-    moveMemoryGraphSource,
+    deleteMemoryKnowledgeSource,
+    indexMemoryContentIntoKnowledge,
+    moveMemoryKnowledgeSource,
 } from './memory-entity-indexer.js'
 import {
     writeTextFile,
@@ -77,6 +77,10 @@ function upsertFileIndex(
                     WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.entity_indexed_at
                     ELSE 0
                 END,
+                tags_json = CASE
+                    WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.tags_json
+                    ELSE '[]'
+                END,
                 content_hash = excluded.content_hash,
                 chunk_count = excluded.chunk_count,
                 last_indexed_at = excluded.last_indexed_at
@@ -102,7 +106,17 @@ interface FileIndexMoveCandidate {
     chunkCount: number
     lastIndexedAt: number
     entityIndexedAt: number
+    tags: string[]
     createdAt: number
+}
+
+function parseDocumentTags(value: unknown): string[] {
+    try {
+        const parsed = JSON.parse(typeof value === 'string' ? value : '[]') as unknown
+        return Array.isArray(parsed) ? parsed.filter((tag): tag is string => typeof tag === 'string') : []
+    } catch {
+        return []
+    }
 }
 
 /**
@@ -114,9 +128,9 @@ export class AgentMemory {
     private parser = getMemoryParser()
 
     /**
-     * The graph is a rebuildable derivative of the indexed document. Remove
-     * stale claims first, then repopulate best-effort. A provider failure must
-     * never make the source document unavailable to RAG.
+     * Knowledge projections are rebuildable derivatives of the indexed
+     * document. Extraction stages a complete revision and atomically publishes
+     * it, so a provider failure leaves the prior searchable projection intact.
      */
     private scheduleDerivedGraphRefresh(
         content: string,
@@ -125,9 +139,6 @@ export class AgentMemory {
         replacedSourceFiles: string[] = [fileName],
     ): void {
         try {
-            for (const priorFileName of Array.from(new Set(replacedSourceFiles.filter(Boolean)))) {
-                deleteMemoryGraphSource(spaceId, priorFileName)
-            }
             getDb().prepare(`
                 UPDATE memory_file_index SET entity_indexed_at = 0
                 WHERE space_id = ? AND file_name = ?
@@ -137,13 +148,22 @@ export class AgentMemory {
                 spaceId,
                 fileName,
                 replaceExisting: true,
-                run: (jobSignal) => indexMemoryContentIntoEntityGraph({
-                    content,
-                    spaceId,
-                    fileName,
-                    replaceExisting: true,
-                    signal: jobSignal,
-                }),
+                run: async (jobSignal, reportProgress) => {
+                    const result = await indexMemoryContentIntoKnowledge({
+                        content,
+                        spaceId,
+                        fileName,
+                        replaceExisting: true,
+                        signal: jobSignal,
+                        onExtractionProgress: reportProgress,
+                    })
+                    // Converted/renamed source projections are retired only
+                    // after the replacement revision is fully published.
+                    for (const priorFileName of Array.from(new Set(replacedSourceFiles.filter(Boolean)))) {
+                        if (priorFileName !== fileName) deleteMemoryKnowledgeSource(spaceId, priorFileName)
+                    }
+                    return result
+                },
             })
         } catch (err) {
             console.warn(`[memory] Document indexed, but graph derivation could not be scheduled for ${spaceId}/${fileName}:`, err)
@@ -397,7 +417,7 @@ export class AgentMemory {
 
     /**
      * Re-map an existing index entry to a new file path when the file content
-     * hash proves it was moved or renamed. This keeps vectors and entity graph
+     * hash proves it was moved or renamed. This keeps vectors and knowledge
      * edges intact, avoiding a full re-index after filesystem moves.
      */
     async remapMovedFileByHash(
@@ -414,7 +434,7 @@ export class AgentMemory {
 
         const db = getDb()
         const candidates = db.prepare(`
-            SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at
+            SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, tags_json, created_at
             FROM memory_file_index
             WHERE content_hash = ?
               AND NOT (space_id = ? AND file_name = ?)
@@ -428,6 +448,7 @@ export class AgentMemory {
             chunk_count: number
             last_indexed_at: number
             entity_indexed_at: number
+            tags_json: string
             created_at: number
         }[]
 
@@ -441,6 +462,7 @@ export class AgentMemory {
                 chunkCount: row.chunk_count,
                 lastIndexedAt: row.last_indexed_at,
                 entityIndexedAt: row.entity_indexed_at || 0,
+                tags: parseDocumentTags(row.tags_json),
                 createdAt: row.created_at,
             }))
             .find((row) => {
@@ -472,8 +494,8 @@ export class AgentMemory {
                 .run(candidate.spaceId, candidate.fileName)
             db.prepare(`
                 INSERT OR REPLACE INTO memory_file_index
-                    (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, tags_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 candidate.documentId,
                 candidate.documentRef,
@@ -483,12 +505,13 @@ export class AgentMemory {
                 candidate.chunkCount,
                 candidate.lastIndexedAt,
                 candidate.entityIndexedAt,
+                JSON.stringify(candidate.tags),
                 candidate.createdAt || Date.now(),
             )
         })
         moveIndex()
 
-        moveMemoryGraphSource(candidate.spaceId, candidate.fileName, targetSpaceId, targetFileName)
+        moveMemoryKnowledgeSource(candidate.spaceId, candidate.fileName, targetSpaceId, targetFileName)
         cancelMemoryIndexJobsForFile(candidate.spaceId, candidate.fileName)
         return { remapped: true, fromSpaceId: candidate.spaceId, fromFileName: candidate.fileName }
     }
@@ -573,15 +596,15 @@ export class AgentMemory {
     // File index read helpers
     // -----------------------------------------------------------------------
 
-    getFileIndex(spaceId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number }> {
+    getFileIndex(spaceId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number; tags: string[] }> {
         try {
             const db = getDb()
             const rows = db
-                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at FROM memory_file_index WHERE space_id = ?')
-                .all(spaceId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number }[]
-            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number }>()
+                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, tags_json FROM memory_file_index WHERE space_id = ?')
+                .all(spaceId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number; tags_json: string }[]
+            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number; tags: string[] }>()
             for (const row of rows) {
-                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, entityIndexedAt: row.entity_indexed_at || 0 })
+                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, entityIndexedAt: row.entity_indexed_at || 0, tags: parseDocumentTags(row.tags_json) })
             }
             return map
         } catch {
@@ -589,14 +612,14 @@ export class AgentMemory {
         }
     }
 
-    getFileIndexEntry(spaceId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number } | undefined {
+    getFileIndexEntry(spaceId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number; tags: string[] } | undefined {
         try {
             const db = getDb()
             const row = db
-                .prepare('SELECT content_hash, chunk_count, last_indexed_at, entity_indexed_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
-                .get(spaceId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number } | undefined
+                .prepare('SELECT content_hash, chunk_count, last_indexed_at, entity_indexed_at, tags_json FROM memory_file_index WHERE space_id = ? AND file_name = ?')
+                .get(spaceId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number; tags_json: string } | undefined
             if (!row) return undefined
-            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, entityIndexedAt: row.entity_indexed_at || 0 }
+            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, entityIndexedAt: row.entity_indexed_at || 0, tags: parseDocumentTags(row.tags_json) }
         } catch {
             return undefined
         }

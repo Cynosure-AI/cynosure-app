@@ -94,6 +94,15 @@ class ChannelManager {
         return false
     }
 
+    /** Cancel active agent executions without disconnecting their channels. */
+    cancelAllExecutions(): number {
+        let cancelled = 0
+        for (const execution of this.getActiveExecutions()) {
+            if (this.cancelExecution(execution.id)) cancelled++
+        }
+        return cancelled
+    }
+
     /** Cancel channel executions when the UI only knows the conversation ID
      * (notably during pre-execution, before chat:stream-start publishes a stream ID). */
     cancelExecutionByConversation(conversationId: string): boolean {

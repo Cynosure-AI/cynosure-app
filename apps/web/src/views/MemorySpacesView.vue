@@ -1,34 +1,30 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { MarkerType, useVueFlow, type Edge, type Node } from "@vue-flow/core";
 import { Icon } from "@iconify/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { api } from "../api/client";
 import type { EntityGraphEdge, EntityGraphNode, EntityGraphNodeType, EntityGraphResponse, MemorySpace } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
+import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiSelect.vue";
 import TabBar, { type TabDef } from "../components/shared/TabBar.vue";
 import MemoryDocumentsSection from "../components/memory/MemoryDocumentsSection.vue";
 import MemoryRelationshipsSection from "../components/memory/MemoryRelationshipsSection.vue";
 import MemoryVisualGraphSection from "../components/memory/MemoryVisualGraphSection.vue";
-import type { FlowEdgeData, FlowNodeData, GraphEdgePathType } from "../components/memory/memory-graph-types";
+import type { GraphEdgePathType } from "../components/memory/memory-graph-types";
 import { syncPrefsToElectron } from "../utils/electron-prefs";
+import { selectConnectedGraph } from "../utils/memory-graph-selection";
+import { MEMORY_GRAPH_FLOW_ID as ENTITY_FLOW_ID, useMemoryGraphLayout } from "../composables/useMemoryGraphLayout";
 import { SK_MEMORY_GRAPH_EDGE_LABELS, SK_MEMORY_GRAPH_EDGE_PATH_TYPE, SK_MEMORY_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
-const ENTITY_FLOW_ID = "memory-entity-graph";
 const VISUAL_GRAPH_RELATION_LIMIT = 500;
-const VISUAL_GRAPH_ENTITY_LIMIT = 100;
+const ALL_GRAPH_LIMIT = 5000;
 const RELATIONSHIPS_GRAPH_LIMIT = 5000;
 
 type MemoryPanel = "documents" | "relationships" | "visual";
 type GraphViewMode = "relationships" | "visual";
 type FactLevelFilter = 0 | 1 | 2 | 3;
-type FlowPoint = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
+type GraphEntityLimit = 100 | 200 | 300 | 500 | null;
 
 const ENTITY_NODE_TYPES: EntityGraphNodeType[] = [
   "person",
@@ -55,15 +51,15 @@ const memorySections = [
   {
     id: "relationships",
     path: "/memory-spaces/relationships",
-    label: "Relationships",
-    description: "Inspect, correct, and delete extracted entity connections.",
+    label: "Knowledge",
+    description: "Inspect, correct, and manage facts extracted from memory.",
     icon: "lucide:git-branch",
   },
   {
     id: "visual",
     path: "/memory-spaces/visual-graph",
-    label: "Visual Graph",
-    description: "Explore entities as a spatial graph with more room to breathe.",
+    label: "Knowledge Graph",
+    description: "Explore extracted knowledge as a spatial graph with more room to breathe.",
     icon: "lucide:network",
   },
 ] as const;
@@ -77,6 +73,8 @@ const memoryTabs: TabDef<MemoryPanel>[] = memorySections.map((section) => ({
 const spaces = ref<MemorySpace[]>([]);
 const spacesLoading = ref(false);
 const selectedSpaceId = ref<string | null>(null);
+const graphSelectedSpaceIds = ref<string[]>([]);
+const graphSpaceSelectionInitialized = ref(false);
 const showCreateDialog = ref(false);
 const editingSpace = ref<MemorySpace | null>(null);
 const parentForCreate = ref<MemorySpace | null>(null);
@@ -91,9 +89,11 @@ const graphLoading = ref(false);
 const graphQuery = ref("");
 const graphSearchQuery = ref("");
 const graphSuggestions = ref<EntityGraphNode[]>([]);
+const graphSelectedNodes = ref<EntityGraphNode[]>([]);
 const graphLimit = ref<number | null>(null);
 const graphView = ref<GraphViewMode | null>(null);
 const graphFactLevel = ref<FactLevelFilter>(0);
+const graphEntityLimit = ref<GraphEntityLimit>(100);
 const editingNode = ref<EntityGraphNode | null>(null);
 const editingEdge = ref<EntityGraphEdge | null>(null);
 const pendingDeleteNode = ref<EntityGraphNode | null>(null);
@@ -103,24 +103,18 @@ const nodeName = ref("");
 const nodeType = ref<EntityGraphNodeType>("other");
 const nodeAliases = ref("");
 const edgeRelation = ref("");
-const edgeEvidence = ref("");
-const edgeConfidence = ref(70);
-const graphFlowNodes = ref<Node<FlowNodeData>[]>([]);
-const graphFlowEdges = ref<Edge<FlowEdgeData>[]>([]);
+const edgeNote = ref("");
+const graphOperationError = ref("");
+const graphMutationPending = ref(false);
 const nodeSpacing = useLocalStorage(SK_MEMORY_GRAPH_NODE_SPACING, 1.0);
 const showGraphEdgeLabels = useLocalStorage(SK_MEMORY_GRAPH_EDGE_LABELS, true);
 const graphEdgePathType = useLocalStorage<GraphEdgePathType>(SK_MEMORY_GRAPH_EDGE_PATH_TYPE, "bezier");
-const focusedGraphNodeId = ref<string | null>(null);
 
 const route = useRoute();
 const router = useRouter();
-const { fitView } = useVueFlow(ENTITY_FLOW_ID);
-let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk-api").default>> | null = null;
 let graphSuggestionTimer: number | null = null;
 let graphSuggestionRequest = 0;
 let graphRequest = 0;
-let graphLayoutRequest = 0;
-let fitGraphAfterLayout = false;
 let inFlightGraphKey = "";
 
 const panelByRouteSegment: Record<string, MemoryPanel> = {
@@ -146,321 +140,50 @@ const activeGraph = computed(() =>
 const selectedSpace = computed(() =>
   spaces.value.find((s) => s.id === selectedSpaceId.value) || null,
 );
+const graphSpaceOptions = computed<MultiSelectOption[]>(() => spaces.value.map((space) => ({
+  value: space.id,
+  label: space.name,
+})));
 
-async function getElk() {
-  if (!elkPromise) {
-    elkPromise = import("elkjs/lib/elk-api").then(({ default: ELK }) => new ELK({
-      workerUrl: "/elk-worker.min.js",
-    }));
-  }
-  return elkPromise;
-}
-
-async function layoutGraph() {
-  const requestId = ++graphLayoutRequest;
-  const currentGraph = activePanel.value === "visual" ? activeGraph.value : null;
-  if (!currentGraph) {
-    graphFlowNodes.value = [];
-    graphFlowEdges.value = [];
-    return;
-  }
-
-  const nodeLabels = new Map<string, EntityGraphNode>();
-  for (const node of currentGraph.nodes) nodeLabels.set(node.id, node);
-  for (const edge of currentGraph.edges) {
-    if (!nodeLabels.has(edge.fromNodeId)) nodeLabels.set(edge.fromNodeId, fallbackGraphNode(edge.fromNodeId, edge.fromName));
-    if (!nodeLabels.has(edge.toNodeId)) nodeLabels.set(edge.toNodeId, fallbackGraphNode(edge.toNodeId, edge.toName));
-  }
-
-  const seedIds = new Set(currentGraph.seedNodes.map((node) => node.id));
-  const dimensions = new Map<string, { width: number; height: number }>(
-    [...nodeLabels.entries()].map(([id, node]) => [id, nodeDimensions(node.name, node.importance)]),
-  );
-
-  const elk = await getElk();
-  const layout = await elk.layout({
-    id: "entity-root",
-    layoutOptions: {
-      "elk.algorithm": "stress",
-      "elk.stress.desiredEdgeLength": String(Math.round(280 * nodeSpacing.value)),
-      "elk.spacing.nodeNode": String(Math.round(120 * nodeSpacing.value)),
-      "elk.separateConnectedComponents": "true",
-      "elk.disco.componentCompaction.strategy": "POLYOMINO",
-      "elk.randomSeed": "7",
-    },
-    children: [...nodeLabels.keys()].map((id) => ({
-      id,
-      width: dimensions.get(id)?.width || 150,
-      height: dimensions.get(id)?.height || 44,
-    })),
-    edges: currentGraph.edges.map((edge) => ({
-      id: edge.id,
-      sources: [edge.fromNodeId],
-      targets: [edge.toNodeId],
-    })),
-  });
-
-  const positions = new Map<string, { x: number; y: number }>((layout.children || []).map((child) => [
-    child.id,
-    { x: Math.round(child.x || 0), y: Math.round(child.y || 0) },
-  ]));
-  const points = new Map<string, FlowPoint>();
-  for (const [id, position] of positions.entries()) {
-    const size = dimensions.get(id) || { width: 150, height: 44 };
-    points.set(id, { ...position, ...size });
-  }
-
-  const edgeGroups = new Map<string, EntityGraphEdge[]>();
-  for (const edge of currentGraph.edges) {
-    const key = edgePairKey(edge.fromNodeId, edge.toNodeId);
-    if (!edgeGroups.has(key)) edgeGroups.set(key, []);
-    edgeGroups.get(key)!.push(edge);
-  }
-
-  const connectedHandles = new Map<string, Set<string>>();
-  const edges: Edge<FlowEdgeData>[] = Array.from(edgeGroups.values()).map((group) => {
-    const edge = group[0];
-    const labelGroups = groupedEdgeLabels(group);
-    const isBidirectional = labelGroups.length > 1;
-    const isFocusHighlighted = isGraphEdgeFocusHighlighted(edge.fromNodeId, edge.toNodeId);
-    const isFocusDimmed = Boolean(focusedGraphNodeId.value) && !isFocusHighlighted;
-    const handles = closestHandles(points.get(edge.fromNodeId), points.get(edge.toNodeId));
-    if (!connectedHandles.has(edge.fromNodeId)) connectedHandles.set(edge.fromNodeId, new Set());
-    if (!connectedHandles.has(edge.toNodeId)) connectedHandles.set(edge.toNodeId, new Set());
-    connectedHandles.get(edge.fromNodeId)!.add(handles.sourceHandle);
-    connectedHandles.get(edge.toNodeId)!.add(handles.targetHandle);
-    return {
-      id: group.map((item) => item.id).join("__"),
-      type: "stacked",
-      source: edge.fromNodeId,
-      target: edge.toNodeId,
-      sourceHandle: handles.sourceHandle,
-      targetHandle: handles.targetHandle,
-      markerEnd: MarkerType.ArrowClosed,
-      markerStart: isBidirectional ? MarkerType.ArrowClosed : undefined,
-      class: [
-        "entity-flow-edge",
-        isFocusHighlighted ? "entity-flow-edge-focus-highlighted" : "",
-        isFocusDimmed ? "entity-flow-edge-focus-dimmed" : "",
-      ].filter(Boolean).join(" "),
-      data: {
-        labels: labelGroups.flatMap((item) => item.labels),
-        labelGroups,
-        isBidirectional,
-        edgeIds: group.map((item) => item.id),
-        fromNodeId: edge.fromNodeId,
-        toNodeId: edge.toNodeId,
-        isFocusHighlighted,
-        isFocusDimmed,
-      },
-      style: { stroke: "var(--memory-flow-edge)", strokeWidth: 1.8 },
-    };
-  });
-
-  const nodes: Node<FlowNodeData>[] = [];
-  for (const [id, entity] of nodeLabels.entries()) {
-    const isFocusHighlighted = isGraphNodeFocusHighlighted(id, currentGraph.edges);
-    const isFocusDimmed = Boolean(focusedGraphNodeId.value) && !isFocusHighlighted;
-    nodes.push({
-      id,
-      type: "entity",
-      position: positions.get(id) || { x: 0, y: 0 },
-      class: [
-        "entity-flow-node",
-        entityTypeClass(entity.type),
-        seedIds.has(id) ? "entity-flow-node-seed" : "",
-        isFocusHighlighted ? "entity-flow-node-focus-highlighted" : "",
-        isFocusDimmed ? "entity-flow-node-focus-dimmed" : "",
-      ].filter(Boolean).join(" "),
-      data: {
-        entity,
-        label: entity.name,
-        isSeed: seedIds.has(id),
-        connectedHandles: connectedHandles.get(id) ?? new Set(),
-        isFocusHighlighted,
-        isFocusDimmed,
-      },
-    });
-  }
-  if (requestId !== graphLayoutRequest) return;
-  graphFlowNodes.value = nodes;
-  graphFlowEdges.value = edges;
-}
-
-function isGraphNodeFocusHighlighted(nodeId: string, edges: EntityGraphEdge[]): boolean {
-  const focusedId = focusedGraphNodeId.value;
-  if (!focusedId) return false;
-  if (nodeId === focusedId) return true;
-  return edges.some((edge) =>
-    (edge.fromNodeId === focusedId && edge.toNodeId === nodeId)
-    || (edge.toNodeId === focusedId && edge.fromNodeId === nodeId),
-  );
-}
-
-function isGraphEdgeFocusHighlighted(fromNodeId: string, toNodeId: string): boolean {
-  const focusedId = focusedGraphNodeId.value;
-  return Boolean(focusedId && (fromNodeId === focusedId || toNodeId === focusedId));
-}
-
-function setFocusedGraphNode(nodeId: string | null): void {
-  if (focusedGraphNodeId.value === nodeId) return;
-  focusedGraphNodeId.value = nodeId;
-  applyGraphFocusState();
-}
-
-function applyGraphFocusState(): void {
-  const currentGraph = activeGraph.value;
-  if (!currentGraph) return;
-  const seedIds = new Set(currentGraph.seedNodes.map((node) => node.id));
-  const nextNodes: Node<FlowNodeData>[] = [];
-  for (const node of graphFlowNodes.value) {
-    if (!node.data) {
-      nextNodes.push(node as Node<FlowNodeData>);
-      continue;
-    }
-    const entity = node.data.entity;
-    const isFocusHighlighted = isGraphNodeFocusHighlighted(node.id, currentGraph.edges);
-    const isFocusDimmed = Boolean(focusedGraphNodeId.value) && !isFocusHighlighted;
-    nextNodes.push({
-      ...node,
-      class: [
-        "entity-flow-node",
-        entityTypeClass(entity.type),
-        seedIds.has(node.id) ? "entity-flow-node-seed" : "",
-        isFocusHighlighted ? "entity-flow-node-focus-highlighted" : "",
-        isFocusDimmed ? "entity-flow-node-focus-dimmed" : "",
-      ].filter(Boolean).join(" "),
-      data: {
-        ...node.data,
-        isFocusHighlighted,
-        isFocusDimmed,
-      },
-    } as Node<FlowNodeData>);
-  }
-  graphFlowNodes.value = nextNodes;
-
-  const nextEdges: Edge<FlowEdgeData>[] = [];
-  for (const edge of graphFlowEdges.value) {
-    const isFocusHighlighted = isGraphEdgeFocusHighlighted(edge.data?.fromNodeId || edge.source, edge.data?.toNodeId || edge.target);
-    const isFocusDimmed = Boolean(focusedGraphNodeId.value) && !isFocusHighlighted;
-    nextEdges.push({
-      ...edge,
-      class: [
-        "entity-flow-edge",
-        isFocusHighlighted ? "entity-flow-edge-focus-highlighted" : "",
-        isFocusDimmed ? "entity-flow-edge-focus-dimmed" : "",
-      ].filter(Boolean).join(" "),
-      data: edge.data ? {
-        ...edge.data,
-        isFocusHighlighted,
-        isFocusDimmed,
-      } : edge.data,
-    } as Edge<FlowEdgeData>);
-  }
-  graphFlowEdges.value = nextEdges;
-}
-
-function fallbackGraphNode(id: string, name: string): EntityGraphNode {
-  return {
-    id,
-    name,
-    normalizedName: name.toLowerCase(),
-    type: "other",
-    aliases: [],
-    importance: 1,
-    mentionCount: 0,
-    sourceCount: 0,
-    origins: [],
-    firstSeenAt: 0,
-    lastSeenAt: 0,
-  };
-}
-
-function nodeDimensions(label: string, importance: number = 1): { width: number; height: number } {
-  const baseHeight = label.length > 18 ? 56 : 44;
-  const importanceScale = 1 + (importance * 0.1);
-  return {
-    width: Math.max(150, Math.min(250, label.length * 8 + 54)) * importanceScale,
-    height: baseHeight * importanceScale,
-  };
-}
-
-function edgePairKey(fromNodeId: string, toNodeId: string): string {
-  return [fromNodeId, toNodeId].sort().join("<->");
-}
-
-function groupedEdgeLabels(edges: EntityGraphEdge[]): FlowEdgeData["labelGroups"] {
-  const groups = new Map<string, FlowEdgeData["labelGroups"][number]>();
-  for (const edge of edges) {
-    const key = `${edge.fromNodeId}->${edge.toNodeId}`;
-    if (!groups.has(key)) {
-      groups.set(key, {
-        fromNodeId: edge.fromNodeId,
-        toNodeId: edge.toNodeId,
-        fromName: edge.fromName,
-        toName: edge.toName,
-        labels: [],
-      });
-    }
-    groups.get(key)!.labels.push(formatRelation(edge.relation));
-  }
-  return [...groups.values()];
-}
-
-function closestHandles(source?: FlowPoint, target?: FlowPoint): { sourceHandle: string; targetHandle: string } {
-  if (!source || !target) return { sourceHandle: "source-bottom", targetHandle: "target-top" };
-  const sourceCenter = { x: source.x + source.width / 2, y: source.y + source.height / 2 };
-  const targetCenter = { x: target.x + target.width / 2, y: target.y + target.height / 2 };
-  const dx = targetCenter.x - sourceCenter.x;
-  const dy = targetCenter.y - sourceCenter.y;
-
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    return dx >= 0
-      ? { sourceHandle: "source-right", targetHandle: "target-left" }
-      : { sourceHandle: "source-left", targetHandle: "target-right" };
-  }
-
-  return dy >= 0
-    ? { sourceHandle: "source-bottom", targetHandle: "target-top" }
-    : { sourceHandle: "source-top", targetHandle: "target-bottom" };
-}
-
-watch([activeGraph, () => activePanel.value], async () => {
-  await layoutGraph();
-  if (!fitGraphAfterLayout || activePanel.value !== "visual" || graphFlowNodes.value.length === 0) return;
-  fitGraphAfterLayout = false;
-  await nextTick();
-  window.setTimeout(() => {
-    fitView({ padding: 0.18, duration: 320 }).catch(() => undefined);
-  }, 40);
+const visualGraph = computed(() => activePanel.value === "visual" ? activeGraph.value : null);
+const {
+  flowNodes: graphFlowNodes,
+  flowEdges: graphFlowEdges,
+  focusedNodeId: focusedGraphNodeId,
+  fit: relayout,
+  requestFit: requestGraphFit,
+  setFocusedNode: setFocusedGraphNode,
+} = useMemoryGraphLayout({
+  graph: visualGraph,
+  nodeSpacing,
+  formatRelation,
 });
 
 watch([nodeSpacing, showGraphEdgeLabels, graphEdgePathType], () => {
   syncPrefsToElectron();
 });
 
-async function relayout() {
-  await layoutGraph();
-  if (graphFlowNodes.value.length === 0) return;
-  await nextTick();
-  window.setTimeout(() => {
-    fitView({ padding: 0.18, duration: 320 }).catch(() => undefined);
-  }, 40);
-}
-
 async function loadSpaces() {
   spacesLoading.value = true;
   try {
+    const previousSpaceIds = spaces.value.map((space) => space.id);
+    const previouslySelectedAll = !graphSpaceSelectionInitialized.value
+      || (previousSpaceIds.length > 0 && previousSpaceIds.every((id) => graphSelectedSpaceIds.value.includes(id)));
     const loaded = await api.memorySpaces.list();
     spaces.value = [...loaded].sort((a, b) => {
       if (a.isDefault) return -1;
       if (b.isDefault) return 1;
       return (a.relativePath || "").localeCompare(b.relativePath || "");
     });
+    graphSelectedSpaceIds.value = previouslySelectedAll
+      ? spaces.value.map((space) => space.id)
+      : graphSelectedSpaceIds.value.filter((id) => spaces.value.some((space) => space.id === id));
+    graphSpaceSelectionInitialized.value = true;
     if (!selectedSpaceId.value && spaces.value.length > 0) selectedSpaceId.value = spaces.value[0].id;
     if (selectedSpaceId.value && !spaces.value.some((s) => s.id === selectedSpaceId.value)) {
       selectedSpaceId.value = spaces.value[0]?.id || null;
     }
+    if (activeGraphView.value) await loadGraph();
   } catch {
     spaces.value = [];
   }
@@ -537,47 +260,41 @@ function formatRelation(relation: string): string {
   return relation.replace(/_/g, " ");
 }
 
-function entityTypeClass(type: EntityGraphNodeType): string {
-  return `entity-flow-node-type-${type}`;
-}
 
 function capVisualGraph(nextGraph: EntityGraphResponse, view: GraphViewMode): EntityGraphResponse {
-  if (view !== "visual" || nextGraph.nodes.length <= VISUAL_GRAPH_ENTITY_LIMIT) return nextGraph;
-
-  const seedIds = new Set(nextGraph.seedNodes.map((node) => node.id));
-  const visibleNodes = [...nextGraph.nodes]
-    .sort((a, b) => {
-      const seedDelta = Number(seedIds.has(b.id)) - Number(seedIds.has(a.id));
-      if (seedDelta !== 0) return seedDelta;
-      if (b.importance !== a.importance) return b.importance - a.importance;
-      if (b.mentionCount !== a.mentionCount) return b.mentionCount - a.mentionCount;
-      if (b.sourceCount !== a.sourceCount) return b.sourceCount - a.sourceCount;
-      return b.lastSeenAt - a.lastSeenAt;
-    })
-    .slice(0, VISUAL_GRAPH_ENTITY_LIMIT);
-  const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
-
-  return {
-    ...nextGraph,
-    seedNodes: nextGraph.seedNodes.filter((node) => visibleNodeIds.has(node.id)),
-    nodes: visibleNodes,
-    edges: nextGraph.edges.filter((edge) => visibleNodeIds.has(edge.fromNodeId) && visibleNodeIds.has(edge.toNodeId)),
-  };
+  const entityLimit = graphEntityLimit.value;
+  if (view !== "visual" || entityLimit === null || nextGraph.nodes.length <= entityLimit) return nextGraph;
+  return selectConnectedGraph(nextGraph, entityLimit);
 }
 
-async function loadGraph(query = graphQuery.value, nodeId?: string) {
+async function loadGraph(
+  query = graphQuery.value,
+  nodeIds = graphSelectedNodes.value.map((node) => node.id),
+  spaceIds = graphSelectedSpaceIds.value,
+) {
   const trimmedQuery = query.trim();
-  const limit = activePanel.value === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_RELATION_LIMIT;
+  const limit = activePanel.value === "relationships"
+    ? RELATIONSHIPS_GRAPH_LIMIT
+    : graphEntityLimit.value === null
+      ? ALL_GRAPH_LIMIT
+      : Math.max(VISUAL_GRAPH_RELATION_LIMIT, graphEntityLimit.value);
   const view = activeGraphView.value || "visual";
   const minImportance = view === "visual" ? graphFactLevel.value : null;
-  const requestKey = `${view}:${trimmedQuery}:${nodeId || ""}:${limit}:${minImportance ?? "all"}`;
+  const requestKey = `${view}:${trimmedQuery}:${[...nodeIds].sort().join(",")}:${[...spaceIds].sort().join(",")}:${limit}:${minImportance ?? "all"}`;
   if (graphLoading.value && inFlightGraphKey === requestKey) return;
   const requestId = ++graphRequest;
   inFlightGraphKey = requestKey;
   graphLoading.value = true;
   graphSuggestions.value = [];
   try {
-    const nextGraph = await api.memory.getGraph(trimmedQuery || undefined, limit, view, nodeId, minImportance);
+    const nextGraph = await api.memory.getGraph(
+      trimmedQuery || undefined,
+      limit,
+      view,
+      nodeIds,
+      minImportance,
+      graphSpaceSelectionInitialized.value ? spaceIds : undefined,
+    );
     if (requestId !== graphRequest) return;
     focusedGraphNodeId.value = null;
     graph.value = capVisualGraph(nextGraph, view);
@@ -597,11 +314,24 @@ async function loadGraph(query = graphQuery.value, nodeId?: string) {
   }
 }
 
+async function updateGraphSpaceSelection(spaceIds: string[]) {
+  graphSelectedSpaceIds.value = spaceIds;
+  graphSelectedNodes.value = [];
+  await loadGraph(graphQuery.value, [], spaceIds);
+}
+
 async function clearGraphWalk() {
   graphQuery.value = "";
   graphSearchQuery.value = "";
   graphSuggestions.value = [];
-  await loadGraph("");
+  graphSelectedNodes.value = [];
+  await loadGraph("", []);
+}
+
+async function submitGraphSearch(query = graphQuery.value) {
+  const trimmedQuery = query.trim();
+  if (trimmedQuery) graphSelectedNodes.value = [];
+  await loadGraph(trimmedQuery, trimmedQuery ? [] : graphSelectedNodes.value.map((node) => node.id));
 }
 
 async function loadGraphSuggestions(query = graphQuery.value) {
@@ -613,7 +343,11 @@ async function loadGraphSuggestions(query = graphQuery.value) {
 
   const requestId = ++graphSuggestionRequest;
   try {
-    const result = await api.memory.getGraphSuggestions(trimmed, 8);
+    const result = await api.memory.getGraphSuggestions(
+      trimmed,
+      8,
+      graphSpaceSelectionInitialized.value ? graphSelectedSpaceIds.value : undefined,
+    );
     if (requestId !== graphSuggestionRequest) return;
     graphSuggestions.value = result.suggestions;
   } catch {
@@ -622,9 +356,17 @@ async function loadGraphSuggestions(query = graphQuery.value) {
 }
 
 async function selectGraphSuggestion(node: EntityGraphNode) {
-  graphQuery.value = node.name;
+  if (!graphSelectedNodes.value.some((selected) => selected.id === node.id)) {
+    graphSelectedNodes.value = [...graphSelectedNodes.value, node];
+  }
+  graphQuery.value = "";
   graphSuggestions.value = [];
-  await loadGraph(node.name, node.id);
+  await loadGraph("", graphSelectedNodes.value.map((selected) => selected.id));
+}
+
+async function removeSelectedGraphNode(nodeId: string) {
+  graphSelectedNodes.value = graphSelectedNodes.value.filter((node) => node.id !== nodeId);
+  await loadGraph("", graphSelectedNodes.value.map((node) => node.id));
 }
 
 watch(graphQuery, (query) => {
@@ -664,30 +406,47 @@ function confirmDeleteNodes(nodes: EntityGraphNode[]) {
 }
 
 async function deleteNode(node: EntityGraphNode) {
-  pendingDeleteNode.value = null;
-  await api.memory.deleteGraphNode(node.id);
-  await loadGraph();
+  graphOperationError.value = "";
+  graphMutationPending.value = true;
+  try {
+    await api.memory.deleteGraphNode(node.id);
+    pendingDeleteNode.value = null;
+    graphSelectedNodes.value = graphSelectedNodes.value.filter((selected) => selected.id !== node.id);
+    await loadGraph();
+  } catch (error) {
+    graphOperationError.value = error instanceof Error ? error.message : "Could not delete the entity.";
+  } finally {
+    graphMutationPending.value = false;
+  }
 }
 
 async function deleteNodes(nodes: EntityGraphNode[]) {
-  pendingDeleteNodes.value = [];
-  await Promise.all(nodes.map(node => api.memory.deleteGraphNode(node.id)));
-  await loadGraph();
+  graphOperationError.value = "";
+  graphMutationPending.value = true;
+  try {
+    const deletedIds = new Set(nodes.map((node) => node.id));
+    await api.memory.deleteGraphNodes([...deletedIds]);
+    pendingDeleteNodes.value = [];
+    graphSelectedNodes.value = graphSelectedNodes.value.filter((selected) => !deletedIds.has(selected.id));
+    await loadGraph();
+  } catch (error) {
+    graphOperationError.value = error instanceof Error ? error.message : "Could not delete the selected entities.";
+  } finally {
+    graphMutationPending.value = false;
+  }
 }
 
 function openEditEdge(edge: EntityGraphEdge) {
   editingEdge.value = edge;
   edgeRelation.value = edge.relation;
-  edgeEvidence.value = edge.evidence || "";
-  edgeConfidence.value = Math.round((edge.confidence || 0.7) * 100);
+  edgeNote.value = edge.note || "";
 }
 
 async function saveEdge() {
   if (!editingEdge.value || !edgeRelation.value.trim()) return;
   await api.memory.updateGraphEdge(editingEdge.value.id, {
     relation: edgeRelation.value.trim(),
-    evidence: edgeEvidence.value,
-    confidence: edgeConfidence.value / 100,
+    note: edgeNote.value,
   });
   editingEdge.value = null;
   await loadGraph();
@@ -698,14 +457,30 @@ function confirmDeleteEdge(edge: EntityGraphEdge) {
 }
 
 async function deleteEdge(edge: EntityGraphEdge) {
-  pendingDeleteEdge.value = null;
-  await api.memory.deleteGraphEdge(edge.id);
-  await loadGraph();
+  graphOperationError.value = "";
+  graphMutationPending.value = true;
+  try {
+    await api.memory.deleteGraphEdge(edge.id);
+    pendingDeleteEdge.value = null;
+    await loadGraph();
+  } catch (error) {
+    graphOperationError.value = error instanceof Error ? error.message : "Could not delete the relationship.";
+  } finally {
+    graphMutationPending.value = false;
+  }
 }
 
 async function deleteEdges(ids: string[]) {
-  await Promise.all(ids.map(id => api.memory.deleteGraphEdge(id)));
-  await loadGraph();
+  graphOperationError.value = "";
+  graphMutationPending.value = true;
+  try {
+    await api.memory.deleteGraphEdges(ids);
+    await loadGraph();
+  } catch (error) {
+    graphOperationError.value = error instanceof Error ? error.message : "Could not delete the selected relationships.";
+  } finally {
+    graphMutationPending.value = false;
+  }
 }
 
 function selectPanel(panel: MemoryPanel) {
@@ -720,8 +495,12 @@ watch(
     const panel = panelByRouteSegment[section || "documents"] || "documents";
     const enteringVisual = panel === "visual" && activePanel.value !== "visual";
     activePanel.value = panel;
-    if (enteringVisual) fitGraphAfterLayout = true;
-    const expectedGraphLimit = panel === "relationships" ? RELATIONSHIPS_GRAPH_LIMIT : VISUAL_GRAPH_RELATION_LIMIT;
+    if (enteringVisual) requestGraphFit();
+    const expectedGraphLimit = panel === "relationships"
+      ? RELATIONSHIPS_GRAPH_LIMIT
+      : graphEntityLimit.value === null
+        ? ALL_GRAPH_LIMIT
+        : Math.max(VISUAL_GRAPH_RELATION_LIMIT, graphEntityLimit.value);
     const expectedGraphView: GraphViewMode = panel === "relationships" ? "relationships" : "visual";
     if ((panel === "relationships" || panel === "visual") && (!graph.value || graphLimit.value !== expectedGraphLimit || graphView.value !== expectedGraphView)) await loadGraph();
   },
@@ -746,6 +525,16 @@ onMounted(() => loadSpaces());
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-2 self-start">
+              <MultiSelect
+                v-if="activePanel === 'relationships' || activePanel === 'visual'"
+                :model-value="graphSelectedSpaceIds"
+                :options="graphSpaceOptions"
+                placeholder="No memory folders"
+                all-selected-label="All memory folders"
+                show-bulk-actions
+                class="min-w-64"
+                @update:model-value="updateGraphSpaceSelection"
+              />
               <button
                 v-if="activePanel === 'documents'"
                 class="flex items-center gap-2 rounded-lg bg-accent-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500"
@@ -760,7 +549,7 @@ onMounted(() => loadSpaces());
               <button
                 v-if="activePanel === 'relationships' || activePanel === 'visual'"
                 class="p-2 text-theme-500 transition-colors hover:text-theme-200"
-                title="Refresh entity graph"
+                title="Refresh knowledge graph"
                 @click="loadGraph()"
               >
                 <Icon
@@ -779,6 +568,24 @@ onMounted(() => loadSpaces());
             @update:model-value="selectPanel"
           />
         </header>
+
+        <div
+          v-if="graphOperationError && (activePanel === 'relationships' || activePanel === 'visual')"
+          class="mx-4 mt-4 flex items-start justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300 sm:mx-6 lg:mx-8"
+          role="alert"
+        >
+          <span>{{ graphOperationError }}</span>
+          <button
+            class="shrink-0 text-red-400 transition-colors hover:text-red-200"
+            title="Dismiss"
+            @click="graphOperationError = ''"
+          >
+            <Icon
+              icon="lucide:x"
+              class="h-4 w-4"
+            />
+          </button>
+        </div>
 
         <div
           v-if="spacesLoading && spaces.length === 0"
@@ -809,9 +616,11 @@ onMounted(() => loadSpaces());
           :graph="activeGraph"
           :graph-loading="graphLoading"
           :graph-suggestions="graphSuggestions"
-          @load-graph="loadGraph"
+          :walk-nodes="graphSelectedNodes"
+          @load-graph="submitGraphSearch"
           @clear-walk="clearGraphWalk"
           @select-suggestion="selectGraphSuggestion"
+          @remove-selected-node="removeSelectedGraphNode"
           @edit-edge="openEditEdge"
           @delete-edge="confirmDeleteEdge"
           @delete-edges="deleteEdges"
@@ -824,6 +633,7 @@ onMounted(() => loadSpaces());
           v-model:edge-labels-visible="showGraphEdgeLabels"
           v-model:edge-path-type="graphEdgePathType"
           v-model:fact-level="graphFactLevel"
+          v-model:entity-limit="graphEntityLimit"
           :flow-id="ENTITY_FLOW_ID"
           :graph-search-query="graphSearchQuery"
           :graph="activeGraph"
@@ -831,13 +641,18 @@ onMounted(() => loadSpaces());
           :graph-flow-nodes="graphFlowNodes"
           :graph-flow-edges="graphFlowEdges"
           :graph-suggestions="graphSuggestions"
-          @load-graph="loadGraph"
+          :walk-nodes="graphSelectedNodes"
+          @load-graph="submitGraphSearch"
           @clear-walk="clearGraphWalk"
           @select-suggestion="selectGraphSuggestion"
+          @explore-node="selectGraphSuggestion"
+          @remove-selected-node="removeSelectedGraphNode"
           @relayout="relayout"
           @edit-node="openEditNode"
+          @edit-edge="openEditEdge"
           @delete-node="confirmDeleteNode"
           @delete-nodes="confirmDeleteNodes"
+          @delete-edge="confirmDeleteEdge"
           @focus-node="setFocusedGraphNode"
         />
       </main>
@@ -1019,23 +834,12 @@ onMounted(() => loadSpaces());
                 >
               </div>
               <div>
-                <label class="block text-xs text-theme-400 mb-1">Evidence</label>
+                <label class="block text-xs text-theme-400 mb-1">Note</label>
                 <textarea
-                  v-model="edgeEvidence"
+                  v-model="edgeNote"
                   rows="3"
                   class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500 resize-none"
                 />
-              </div>
-              <div>
-                <label class="block text-xs text-theme-400 mb-1">Confidence: {{ edgeConfidence }}%</label>
-                <input
-                  v-model.number="edgeConfidence"
-                  type="range"
-                  min="10"
-                  max="100"
-                  step="5"
-                  class="w-full accent-accent-500"
-                >
               </div>
             </div>
             <div class="flex justify-end gap-2 mt-5">
@@ -1069,7 +873,8 @@ onMounted(() => loadSpaces());
         </p>
         <template #actions>
           <button
-            class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
+            :disabled="graphMutationPending"
+            class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 disabled:cursor-wait disabled:opacity-60 text-white rounded-xl text-center font-medium transition-colors"
             @click="pendingDeleteNode && deleteNode(pendingDeleteNode)"
           >
             Delete Entity
@@ -1095,7 +900,8 @@ onMounted(() => loadSpaces());
         </p>
         <template #actions>
           <button
-            class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
+            :disabled="graphMutationPending"
+            class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 disabled:cursor-wait disabled:opacity-60 text-white rounded-xl text-center font-medium transition-colors"
             @click="pendingDeleteNodes.length && deleteNodes(pendingDeleteNodes)"
           >
             Delete Entities
@@ -1124,7 +930,8 @@ onMounted(() => loadSpaces());
         </p>
         <template #actions>
           <button
-            class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
+            :disabled="graphMutationPending"
+            class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 disabled:cursor-wait disabled:opacity-60 text-white rounded-xl text-center font-medium transition-colors"
             @click="pendingDeleteEdge && deleteEdge(pendingDeleteEdge)"
           >
             Delete Relationship

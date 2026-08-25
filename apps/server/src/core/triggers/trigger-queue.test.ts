@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { enqueueCoalescedTrigger } from './trigger-queue.js'
+import { cancelPendingCoalescedTriggers, enqueueCoalescedTrigger } from './trigger-queue.js'
 
 function deferred() {
     let resolve!: () => void
@@ -16,6 +16,18 @@ async function flushQueue(): Promise<void> {
 }
 
 describe('coalesced trigger queue', () => {
+    test('drops matching pending follow-up runs', async () => {
+        const gate = deferred()
+        const pending = vi.fn()
+        enqueueCoalescedTrigger('cron:scheduled', async () => gate.promise)
+        enqueueCoalescedTrigger('cron:scheduled', pending)
+
+        expect(cancelPendingCoalescedTriggers('cron:')).toBe(1)
+        gate.resolve()
+        await flushQueue()
+        expect(pending).not.toHaveBeenCalled()
+    })
+
     test('coalesces bursts into one pending run using the latest runner', async () => {
         const gate = deferred()
         const calls: string[] = []

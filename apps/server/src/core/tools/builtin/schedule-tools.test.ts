@@ -9,6 +9,13 @@ describe('schedule built-in tools', () => {
         expect(tools.find((tool) => tool.name === 'schedule_delete')?.annotations?.destructiveHint).toBe(true)
         for (const tool of tools) {
             expect(tool.parameters).toMatchObject({ type: 'object', additionalProperties: false })
+            expect(tool.annotations).toEqual(expect.objectContaining({
+                readOnlyHint: expect.any(Boolean),
+                destructiveHint: expect.any(Boolean),
+                idempotentHint: expect.any(Boolean),
+                openWorldHint: expect.any(Boolean),
+            }))
+            expect(tool.execution?.readOnly).toBe(tool.annotations?.readOnlyHint)
         }
     })
 
