@@ -28,11 +28,13 @@ describe('useAppUpdater', () => {
       status: 'downloading',
       currentVersion: '2.0.0',
       availableVersion: '2.1.0',
-      progress: 42.4
+      progress: 42.4,
+      changelogMarkdown: '# Version 2.1.0\n\n- New feature'
     })
 
     expect(updater.state.status).toBe('downloading')
     expect(updater.progressPercent.value).toBe(42)
+    expect(updater.state.changelogMarkdown).toContain('New feature')
   })
 
   it('stays unavailable outside Electron', async () => {

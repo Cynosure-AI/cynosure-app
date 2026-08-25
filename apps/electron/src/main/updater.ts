@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, net } from 'electron'
 import electronUpdater, { type ProgressInfo, type UpdateInfo } from 'electron-updater'
 
 const DEFAULT_UPDATE_URL = 'https://cometcms.banjocomet.com/media/cynosure/'
@@ -21,6 +21,7 @@ export interface UpdateState {
     transferred?: number
     total?: number
     message?: string
+    changelogMarkdown?: string
 }
 
 const { autoUpdater } = electronUpdater
@@ -31,6 +32,7 @@ let state: UpdateState = {
     message: app.isPackaged ? undefined : 'Updates are available in packaged desktop builds.'
 }
 let initialized = false
+let updateFeedUrl = DEFAULT_UPDATE_URL
 
 function publishState(patch: Partial<UpdateState>): void {
     state = { ...state, ...patch }
@@ -64,6 +66,22 @@ function errorMessage(error: Error): string {
     return message || 'The update server could not be reached.'
 }
 
+async function fetchChangelog(version: string): Promise<void> {
+    try {
+        const response = await net.fetch(new URL('CHANGELOG.md', updateFeedUrl).toString())
+        if (!response.ok) return
+
+        const changelogMarkdown = (await response.text()).trim()
+        if (!changelogMarkdown) return
+
+        // A newer check may have completed while the changelog request was in flight.
+        if (state.availableVersion !== version) return
+        publishState({ changelogMarkdown })
+    } catch {
+        // Changelog details are optional and must not turn a valid update into an error.
+    }
+}
+
 export function initializeUpdater(): void {
     if (initialized) return
     initialized = true
@@ -94,21 +112,22 @@ export function initializeUpdater(): void {
 
     if (!app.isPackaged) return
 
-    const updateUrl = (process.env.CYNOSURE_UPDATE_URL || DEFAULT_UPDATE_URL).replace(/\/?$/, '/')
-    autoUpdater.setFeedURL({ provider: 'generic', url: updateUrl })
+    updateFeedUrl = (process.env.CYNOSURE_UPDATE_URL || DEFAULT_UPDATE_URL).replace(/\/?$/, '/')
+    autoUpdater.setFeedURL({ provider: 'generic', url: updateFeedUrl })
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = false
 
     autoUpdater.on('checking-for-update', () => {
-        publishState({ status: 'checking', progress: undefined, message: undefined })
+        publishState({ status: 'checking', progress: undefined, message: undefined, changelogMarkdown: undefined })
     })
     autoUpdater.on('update-available', (info) => {
         updateVersion(info)
         publishState({ status: 'available', progress: undefined, message: undefined })
+        void fetchChangelog(info.version)
     })
     autoUpdater.on('update-not-available', (info) => {
         updateVersion(info)
-        publishState({ status: 'up-to-date', progress: undefined, message: undefined })
+        publishState({ status: 'up-to-date', progress: undefined, message: undefined, changelogMarkdown: undefined })
     })
     autoUpdater.on('download-progress', updateProgress)
     autoUpdater.on('update-downloaded', (info) => {

@@ -1,9 +1,11 @@
 <script setup lang="ts">
+/* eslint-disable vue/no-v-html -- changelog HTML is sanitized by renderMarkdown. */
 import { computed, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { api } from '../../api/client'
 import { useAppBranding } from '../../composables/useAppBranding'
 import { useAppUpdater } from '../../composables/useAppUpdater'
+import { handleMarkdownClick, renderMarkdown } from '../../utils/markdown'
 import BaseCard from '../shared/BaseCard.vue'
 import SettingsSubheading from './SettingsSubheading.vue'
 
@@ -15,6 +17,9 @@ const { logoIconUrl } = useAppBranding()
 const { state, isElectron, progressPercent, check, download, install } = useAppUpdater()
 
 const showAbout = computed(() => props.visibleSections.length === 0 || props.visibleSections.includes('about'))
+const renderedChangelog = computed(() => state.changelogMarkdown
+  ? renderMarkdown(state.changelogMarkdown)
+  : '')
 const statusIcon = computed(() => ({
   available: 'lucide:download',
   downloading: 'lucide:loader-circle',
@@ -128,6 +133,17 @@ onMounted(async () => {
           >
             Check for updates
           </button>
+        </div>
+
+        <div
+          v-if="renderedChangelog && ['available', 'downloading', 'downloaded'].includes(state.status)"
+          class="mt-5 border-t border-theme-700 pt-5"
+        >
+          <div
+            class="msg-markdown text-sm text-theme-300"
+            @click="handleMarkdownClick"
+            v-html="renderedChangelog"
+          />
         </div>
       </div>
     </BaseCard>
