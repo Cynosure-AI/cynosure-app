@@ -1,4 +1,5 @@
 import { getGateway } from '../gateway/gateway.js'
+import { recordAuxiliaryModelUsage } from '../usage-metering.js'
 import type { KnowledgeExtractedChunkTags, KnowledgeExtractedEntity, KnowledgeExtractedMention, KnowledgeExtractedRelation } from './memory-knowledge.js'
 import type { EntityType, ImportanceLevel } from './knowledge-types.js'
 
@@ -156,6 +157,15 @@ export async function extractKnowledgeFromContent(opts: {
         { role: 'user', content: segment.content },
       ],
     }, provider.config.id)
+
+    recordAuxiliaryModelUsage({
+      kind: 'entity-extraction',
+      provider: provider.config.id,
+      model: response.model || opts.model || provider.config.defaultModel,
+      inputTokens: response.usage?.promptTokens,
+      outputTokens: response.usage?.completionTokens,
+      requestCount: 1,
+    })
 
     for (const item of parseJsonArray(response.content)) {
       if (!item || typeof item !== 'object') continue

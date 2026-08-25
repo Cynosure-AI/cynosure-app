@@ -264,7 +264,7 @@ async function confirmReset(): Promise<void> {
             <span>Chat models</span><span class="text-theme-300">{{ formatCost(metrics.totals.chatEstimatedCost) }}</span>
           </div>
           <div class="flex justify-between text-theme-400 mb-0.5">
-            <span>Embeddings + rerankers</span><span class="text-theme-300">{{ formatCost(metrics.totals.auxiliaryEstimatedCost) }}</span>
+            <span>Auxiliary models</span><span class="text-theme-300">{{ formatCost(metrics.totals.auxiliaryEstimatedCost) }}</span>
           </div>
           <div class="flex justify-between text-theme-400">
             <span>Avg latency</span><span class="text-theme-300">{{ metrics.totals.avgLatencyMs.toLocaleString() }}ms</span>
@@ -340,16 +340,16 @@ async function confirmReset(): Promise<void> {
         </div>
       </BaseCard>
 
-      <!-- Embedding / Reranker Usage -->
+      <!-- Embedding / Reranker / Entity Extraction Usage -->
       <BaseCard class="p-4">
         <h3 class="text-xs font-medium text-theme-400 mb-3">
-          Embeddings &amp; Rerankers
+          Auxiliary Models
         </h3>
         <div
           v-if="!metrics.auxiliaryModelUsage.length"
           class="text-xs text-theme-600 py-4 text-center"
         >
-          No embedding or reranker data
+          No auxiliary model data
         </div>
         <div
           v-else
@@ -370,7 +370,7 @@ async function confirmReset(): Promise<void> {
               />
             </div>
             <div class="text-[10px] text-theme-600 mt-0.5">
-              {{ m.kind === 'embedding' ? 'Embedding' : 'Reranker' }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
+              {{ m.kind === 'embedding' ? 'Embedding' : m.kind === 'reranker' ? 'Reranker' : 'Entity extraction' }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
                 class="text-amber-500/80 ml-1"

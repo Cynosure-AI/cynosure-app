@@ -621,7 +621,7 @@ export interface MetricsSummary {
         estimatedCost: number | null
     }[]
     auxiliaryModelUsage: {
-        kind: 'embedding' | 'reranker'
+        kind: 'embedding' | 'reranker' | 'entity-extraction'
         provider: string
         model: string
         requestCount: number
