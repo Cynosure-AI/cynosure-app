@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDb, getDb } from '../db/database.js'
 import { registerActivityRoutes } from './activity.js'
+import { registerActiveChatExecution, unregisterActiveChatExecution } from '../core/chat/active-executions.js'
 
 describe('activity artifact discovery', () => {
     let directory = ''
@@ -151,5 +152,30 @@ describe('activity artifact discovery', () => {
         expect(body.items[2].artifacts).toEqual([
             expect.objectContaining({ label: 'generated.png' }),
         ])
+    })
+
+    test('stops active server work through one endpoint', async () => {
+        const controller = new AbortController()
+        registerActiveChatExecution({
+            id: 'stop-all-chat',
+            conversationId: 'stop-all-conversation',
+            agentId: null,
+            model: null,
+            startedAt: Date.now(),
+        }, controller)
+
+        const app = Fastify()
+        await app.register(registerActivityRoutes, { prefix: '/api/activity' })
+        const response = await app.inject({ method: 'POST', url: '/api/activity/stop-all' })
+        await app.close()
+        unregisterActiveChatExecution('stop-all-chat')
+
+        expect(response.statusCode).toBe(200)
+        expect(response.json()).toMatchObject({
+            success: true,
+            total: 1,
+            counts: { chats: 1 },
+        })
+        expect(controller.signal.aborted).toBe(true)
     })
 })

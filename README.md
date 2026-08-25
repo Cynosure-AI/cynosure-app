@@ -8,12 +8,18 @@ Open-source AI agent platform with tool use, memory, multi-provider LLM support,
 - **Streaming chat** — Real-time token streaming with image/file attachments and voice input (local Whisper STT)
 - **Tool system** — Built-in tools + [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) servers, discoverable via a built-in registry browser
 - **Agents** — Reusable AI presets with custom system prompts, model selection, tool access, and sub-agent orchestration
-- **Memory spaces** — RAG-powered knowledge retrieval with configurable embedding models, chunking, and OCR
+- **Memory spaces** — Hybrid RAG retrieval plus a source-grounded knowledge graph with manual corrections and portable backups
 - **Messaging channels** — Telegram, Discord, and Slack integrations so agents can respond remotely
 - **Triggers** — Cron jobs for automated, unattended agent execution
 - **Human-in-the-loop** — Granular approval gates for tool execution (per-tool, per-session, or always)
 - **Desktop app** — Electron wrapper that bundles the server and UI into a single self-contained package (AppImage, deb, exe)
 - **Backup & restore** — Export/import your entire configuration (agents, providers, memory, channels, etc.)
+
+### Memory lifecycle
+
+Memory source files are authoritative. Search vectors are rebuildable, while knowledge-graph backups also preserve manual corrections, entity merges, retractions, and manually created relationships. Restored documents keep their stable IDs but are marked for search re-indexing before normal chunk retrieval resumes.
+
+Version 2.1 replaces the legacy entity-graph store. Existing legacy graph rows are intentionally removed during upgrade; re-extract knowledge from the source memory documents afterward.
 
 ## Monorepo Structure
 

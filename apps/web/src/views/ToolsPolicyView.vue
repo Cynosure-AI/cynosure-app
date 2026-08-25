@@ -181,7 +181,7 @@ function toolCategory(tool: ToolInfo): string {
   const name = tool.name
   if (tool.namespace.id.startsWith('mcp:')) return 'MCP'
   if (name.startsWith('memory_')) return 'Memory'
-  if (name.startsWith('relationship_graph_')) return 'Relationships'
+  if (name.startsWith('relationship_graph_') || name === 'relationship_entity_merge') return 'Relationships'
   if (name.startsWith('todo_')) return 'Planning'
   if (name.startsWith('attachment_')) return 'Attachment'
   return 'Built-In'

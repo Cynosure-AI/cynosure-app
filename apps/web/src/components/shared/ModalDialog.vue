@@ -19,6 +19,8 @@ const props = defineProps<{
   overflowVisible?: boolean
   /** Allow body slot to overflow instead of clipping with vertical scrolling */
   bodyOverflowVisible?: boolean
+  /** Raise dialogs opened from inside another modal above their parent overlay. */
+  layer?: 'default' | 'nested'
 }>()
 
 const emit = defineEmits<{
@@ -92,7 +94,9 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       v-if="show"
-      class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      class="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      :class="layer === 'nested' ? 'z-[1000]' : 'z-30'"
+      :style="layer === 'nested' ? { zIndex: 1000 } : undefined"
       @click.self="close"
     >
       <div

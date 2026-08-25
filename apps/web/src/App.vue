@@ -111,6 +111,7 @@ onMounted(async () => {
     api.chat.onStreamUsage((data) => chatStore.handleStreamUsage(data)),
     api.chat.onStreamEnd((data) => chatStore.handleStreamEnd(data)),
     api.chat.onStreamError((data) => chatStore.handleStreamError(data)),
+    api.chat.onExecutionState((data) => chatStore.handleChatExecutionState(data)),
     api.chat.onSubAgentStreamStart((data) => chatStore.handleSubAgentStreamStart(data)),
     api.chat.onSubAgentStreamChunk((data) => chatStore.handleSubAgentStreamChunk(data)),
     api.chat.onSubAgentStreamThinking((data) => chatStore.handleSubAgentStreamThinking(data)),

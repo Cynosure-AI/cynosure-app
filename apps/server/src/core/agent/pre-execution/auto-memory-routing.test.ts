@@ -120,4 +120,106 @@ describe('automatic memory routing visibility', () => {
         })
         expect(args).not.toHaveProperty('rerankerScore')
     })
+
+    test('always searches the original request before complementary expansions', async () => {
+        memoryMocks.aggregate.mockResolvedValue({ permanent: [], graph: undefined })
+
+        await applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-4',
+            userQuery: 'Was weißt du über meine beste Freundin?',
+            retrievalQueries: ['Informationen über enge persönliche Beziehungen'],
+            gateway: {} as LLMGateway,
+        })
+
+        expect(memoryMocks.aggregate.mock.calls.map(([query]) => query)).toEqual([
+            'Was weißt du über meine beste Freundin?',
+            'Informationen über enge persönliche Beziehungen',
+        ])
+    })
+
+    test('curates graph edges together with chunks instead of injecting the whole walk', async () => {
+        const edge = (id: string, relation: string) => ({
+            id,
+            fromNodeId: `${id}-from`,
+            toNodeId: `${id}-to`,
+            fromName: id === 'best' ? 'Caroline' : 'Andi',
+            toName: id === 'best' ? 'Andi' : 'Salzburg',
+            relation,
+            importance: 3,
+            confidence: 0.95,
+            evidence: `${relation} evidence`,
+            sourceKind: 'memory',
+            sourceId: `memory:persons:${id}.md`,
+            mentionCount: 1,
+            firstSeenAt: 1,
+            lastSeenAt: 1,
+        })
+        memoryMocks.aggregate.mockResolvedValue({
+            permanent: [],
+            graph: { seedNodes: [], nodes: [], edges: [edge('best', 'best_friend_of'), edge('city', 'lives_in')] },
+        })
+        memoryMocks.format.mockImplementation((memory: { graph?: { edges: Array<{ id: string }> } }) => (
+            memory.graph?.edges.map(({ id }) => id).join(',') || ''
+        ))
+        const gateway = {
+            complete: vi.fn().mockResolvedValue({
+                toolCalls: [{ function: {
+                    name: 'select_memory_context',
+                    arguments: JSON.stringify({ memoryIds: [], graphEdgeIds: ['g1'], answerable: true }),
+                } }],
+            }),
+        } as unknown as LLMGateway
+
+        await expect(applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-5',
+            userQuery: 'Who is explicitly the best friend?',
+            gateway,
+        })).resolves.toBe('best')
+    })
+
+    test('runs one corrective retrieval when candidates do not directly answer the request', async () => {
+        const chunk = (id: string, text: string) => ({
+            id,
+            text,
+            source: 'memory',
+            sourceFile: `${id}.md`,
+            chunkIndex: 0,
+            score: 0.8,
+            denseScore: 0.8,
+            scoreType: 'dense' as const,
+        })
+        memoryMocks.aggregate.mockImplementation(async (query: string) => ({
+            permanent: query.includes('Caroline')
+                ? [chunk('caroline', 'Caroline is explicitly Andi’s best friend.')]
+                : [chunk('sandra', 'Sandra is a close friend of Andi.')],
+            graph: undefined,
+        }))
+        memoryMocks.format.mockImplementation((memory: { permanent: Array<{ id: string }> }) => (
+            memory.permanent.map(({ id }) => id).join(',')
+        ))
+        const gateway = {
+            complete: vi.fn()
+                .mockResolvedValueOnce({ toolCalls: [{ function: {
+                    name: 'select_memory_context',
+                    arguments: JSON.stringify({
+                        memoryIds: [], graphEdgeIds: [], answerable: false,
+                        correctiveQuery: 'Caroline beste Freundin BFF',
+                    }),
+                } }] })
+                .mockResolvedValueOnce({ toolCalls: [{ function: {
+                    name: 'select_memory_context',
+                    arguments: JSON.stringify({ memoryIds: ['m2'], graphEdgeIds: [], answerable: true }),
+                } }] }),
+        } as unknown as LLMGateway
+
+        await expect(applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-6',
+            userQuery: 'Wer ist ausdrücklich die beste Freundin?',
+            gateway,
+        })).resolves.toBe('caroline')
+        expect(memoryMocks.aggregate).toHaveBeenCalledTimes(2)
+    })
 })

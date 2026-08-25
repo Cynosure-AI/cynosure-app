@@ -1,15 +1,25 @@
 import { nanoid } from 'nanoid'
 import { getEventBus } from '../../telemetry/event-bus.js'
+import { completeWithDebugCapture } from '../../chat/debug-context.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolDefinition } from '../../gateway/providers/base.provider.js'
 
 const TASK_CONTEXT_TOOL_NAME = 'set_task_context'
 const TURN_CHAR_LIMIT = 500
 const MAX_ROUTER_QUERY_LENGTH = 2_000
+const MAX_MEMORY_EXPANSIONS = 2
+
+export type RequestedToolEffect = 'read' | 'write' | 'destructive'
 
 export interface TaskContext {
     toolQuery?: string
+    /** Backwards-compatible primary expansion. The original request is always searched separately. */
     memoryQuery?: string
+    memoryQueries: string[]
+    requestedToolEffect: RequestedToolEffect
+    /** Clear memory lookups do not need the external tool catalogue routed. */
+    skipToolRouting: boolean
+    fastPath?: boolean
 }
 
 export interface BuildTaskContextInput {
@@ -25,6 +35,7 @@ export interface BuildTaskContextInput {
     }
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
+    debugContextEnabled?: boolean
 }
 
 export async function buildTaskContext(input: BuildTaskContextInput): Promise<TaskContext | null> {
@@ -34,17 +45,27 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
     const taskId = `auto_router_${nanoid()}`
     emitTaskContextStatus(input.conversationId, taskId, input.eventMeta)
 
+    const deterministic = buildDeterministicTaskContext(currentRequest, input.enabledModes)
+    if (deterministic) {
+        emitTaskContextSelection(input.conversationId, taskId, deterministic, input.eventMeta)
+        return deterministic
+    }
+
     try {
-        const result = await input.gateway.complete({
+        const request: Parameters<LLMGateway['complete']>[0] = {
             messages: [
                 {
                     role: 'system',
                     content: [
                         'You prepare routing queries before the main assistant run.',
-                        'Given the current request and recent conversation, call set_task_context with one query for each enabled auto mode.',
+                        'Given the current request and recent conversation, call set_task_context with a structured retrieval plan.',
                         ...enabledQueryInstructions(input.enabledModes),
-                        'Each query must be specific to what that subsystem needs to retrieve or select.',
-                        'Do not copy the user request verbatim unless it is already the best possible retrieval query.',
+                        'The original request is always searched separately. Generate only complementary expansions.',
+                        'Keep expansions in the request language and preserve exact names, quoted phrases, identifiers, relationship terms, and constraints.',
+                        'Never broaden a specific relationship or operation into generic related topics.',
+                        'toolQuery must describe only capabilities required to perform the request, not nouns merely mentioned in it.',
+                        'Set requiresExternalTools=false when memory retrieval alone can answer the request.',
+                        'Classify the maximum requested side effect as read, write, or destructive.',
                         'Do not include disabled auto modes.',
                         'Do not add execution instructions or answer the user.',
                         'Do not answer the user. Keep the context specific and omit irrelevant conversation details. /no_think',
@@ -62,15 +83,24 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                 },
             ],
             model: input.model,
-            maxTokens: 700,
+            maxTokens: 400,
             tools: [buildTaskContextTool(input.enabledModes)],
             toolChoice: { type: 'function', name: TASK_CONTEXT_TOOL_NAME },
             thinkingEnabled: false,
             signal: input.signal,
-        }, input.providerId)
+        }
+        const result = await completeWithDebugCapture({
+            enabled: input.debugContextEnabled,
+            conversationId: input.conversationId,
+            phase: 'task-context',
+            label: 'Retrieval and tool query planning',
+            gateway: input.gateway,
+            providerId: input.providerId,
+            request,
+        })
 
         const contextCall = result.toolCalls?.find((call) => call.function.name === TASK_CONTEXT_TOOL_NAME)
-        const parsed = contextCall ? parseTaskContextArguments(contextCall.function.arguments, input.enabledModes) : null
+        const parsed = contextCall ? parseTaskContextArguments(contextCall.function.arguments, input.enabledModes, currentRequest) : null
         emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta, parsed ? undefined : 'none-generated')
         return parsed
     } catch (err) {
@@ -90,13 +120,25 @@ function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes'
             description: 'A compact semantic query optimized for selecting relevant tools and tool namespaces.',
         }
         required.push('toolQuery')
+        properties.requestedToolEffect = {
+            type: 'string',
+            enum: ['read', 'write', 'destructive'],
+            description: 'Maximum side effect explicitly required by the user request.',
+        }
+        properties.requiresExternalTools = {
+            type: 'boolean',
+            description: 'False when automatic memory context alone is sufficient and no external capability is required.',
+        }
+        required.push('requestedToolEffect', 'requiresExternalTools')
     }
     if (enabledModes.memories) {
-        properties.memoryQuery = {
-            type: 'string',
-            description: 'A compact semantic query optimized for memory retrieval.',
+        properties.memoryQueries = {
+            type: 'array',
+            description: 'Zero to two compact retrieval expansions in the original language. Do not repeat the original request.',
+            items: { type: 'string' },
+            maxItems: MAX_MEMORY_EXPANSIONS,
         }
-        required.push('memoryQuery')
+        required.push('memoryQueries')
     }
 
     return {
@@ -113,21 +155,92 @@ function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes'
     }
 }
 
-function parseTaskContextArguments(raw: string, enabledModes: BuildTaskContextInput['enabledModes']): TaskContext | null {
+function parseTaskContextArguments(
+    raw: string,
+    enabledModes: BuildTaskContextInput['enabledModes'],
+    originalRequest: string,
+): TaskContext | null {
     try {
-        const parsed = JSON.parse(raw) as { toolQuery?: unknown; memoryQuery?: unknown }
+        const parsed = JSON.parse(raw) as {
+            toolQuery?: unknown
+            memoryQuery?: unknown
+            memoryQueries?: unknown
+            requestedToolEffect?: unknown
+            requiresExternalTools?: unknown
+        }
         const toolQuery = enabledModes.tools && typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : ''
-        const memoryQuery = enabledModes.memories && typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : ''
+        const legacyMemoryQuery = typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : ''
+        const memoryQueries = enabledModes.memories
+            ? normalizeMemoryQueries(Array.isArray(parsed.memoryQueries) ? parsed.memoryQueries : [legacyMemoryQuery])
+            : []
 
         if (enabledModes.tools && !toolQuery) return null
-        if (enabledModes.memories && !memoryQuery) return null
+        const modelEffect = isRequestedToolEffect(parsed.requestedToolEffect) ? parsed.requestedToolEffect : 'read'
+        const requestedToolEffect = maxRequestedToolEffect(
+            maxRequestedToolEffect(modelEffect, inferRequestedToolEffect(toolQuery)),
+            inferRequestedToolEffect(originalRequest),
+        )
         return {
             toolQuery: toolQuery ? toolQuery.slice(0, MAX_ROUTER_QUERY_LENGTH) : undefined,
-            memoryQuery: memoryQuery ? memoryQuery.slice(0, MAX_ROUTER_QUERY_LENGTH) : undefined,
+            memoryQuery: memoryQueries[0],
+            memoryQueries,
+            requestedToolEffect,
+            skipToolRouting: enabledModes.tools ? parsed.requiresExternalTools === false : true,
         }
     } catch {
         return null
     }
+}
+
+function normalizeMemoryQueries(values: unknown[]): string[] {
+    return values
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim().slice(0, MAX_ROUTER_QUERY_LENGTH))
+        .filter(Boolean)
+        .filter((value, index, all) => all.indexOf(value) === index)
+        .slice(0, MAX_MEMORY_EXPANSIONS)
+}
+
+function buildDeterministicTaskContext(
+    request: string,
+    enabledModes: BuildTaskContextInput['enabledModes'],
+): TaskContext | null {
+    if (!enabledModes.memories || !isClearMemoryLookup(request)) return null
+    return {
+        memoryQuery: request,
+        memoryQueries: [],
+        requestedToolEffect: 'read',
+        skipToolRouting: true,
+        fastPath: true,
+    }
+}
+
+function isClearMemoryLookup(request: string): boolean {
+    if (request.length > 240 || inferRequestedToolEffect(request) !== 'read') return false
+    const normalized = request.toLocaleLowerCase()
+    const personalReference = /\b(my|our|mine|meine|mein|meinen|meiner|unser|unsere|mich|mir)\b/i.test(normalized)
+    const memoryReference = /\b(remember|memory|previous|prior|erinner|wei(?:ß|ss)t du|wei(?:ß|ss)t du noch|what do you know|was wei(?:ß|ss)t du)\b/i.test(normalized)
+    return personalReference && memoryReference
+}
+
+export function inferRequestedToolEffect(request: string): RequestedToolEffect {
+    const normalized = request.toLocaleLowerCase()
+    if (/(delete|remove|erase|destroy|cancel|revoke|lösch|loesch|entfern|widerruf|kündig|kuendig)\w*/i.test(normalized)) {
+        return 'destructive'
+    }
+    if (/\b(create|add|append|update|edit|change|write|save|send|post|upload|schedule|book|notify|reply|forward|erstell|hinzufüg|anfueg|aktualisier|änder|aender|schreib|speicher|send|verschick|buch|benachrichtig|antwort)\w*/i.test(normalized)) {
+        return 'write'
+    }
+    return 'read'
+}
+
+function isRequestedToolEffect(value: unknown): value is RequestedToolEffect {
+    return value === 'read' || value === 'write' || value === 'destructive'
+}
+
+function maxRequestedToolEffect(a: RequestedToolEffect, b: RequestedToolEffect): RequestedToolEffect {
+    const rank: Record<RequestedToolEffect, number> = { read: 0, write: 1, destructive: 2 }
+    return rank[a] >= rank[b] ? a : b
 }
 
 function buildRecentConversationBlock(messages: ChatMessage[]): string {
@@ -171,7 +284,7 @@ function enabledQueryInstructions(modes: BuildTaskContextInput['enabledModes']):
             ? '- toolQuery: what capabilities, services, filesystems, APIs, or operations should be selected as tools for this task.'
             : '',
         modes.memories
-            ? '- memoryQuery: what remembered knowledge, entities, locations, user preferences, prior project facts, documents, or account-specific context should be retrieved.'
+            ? '- memoryQueries: up to two precise alternative searches that complement the unchanged original request.'
             : '',
     ].filter(Boolean)
 }
@@ -205,6 +318,10 @@ function emitTaskContextSelection(
                 type: 'task-context',
                 toolQuery: context?.toolQuery,
                 memoryQuery: context?.memoryQuery,
+                memoryQueries: context?.memoryQueries,
+                requestedToolEffect: context?.requestedToolEffect,
+                skipToolRouting: context?.skipToolRouting,
+                fastPath: context?.fastPath,
                 emptyReason,
                 content: emptyReason ? taskContextEmptyContent(emptyReason) : undefined,
             })),

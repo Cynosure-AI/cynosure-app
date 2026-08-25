@@ -50,6 +50,10 @@ export interface DebugContextMessage {
 
 export interface DebugContextRound {
   round: number
+  /** Execution phase that issued this model request. Older captures default to main-agent. */
+  phase?: 'task-context' | 'memory-curation' | 'tool-curation' | 'main-agent'
+  label?: string
+  providerId?: string
   capturedAt: number
   request: {
     messages: DebugContextMessage[]
@@ -59,6 +63,7 @@ export interface DebugContextRound {
     maxTokens?: number
     thinkingEnabled?: boolean
     reasoningEffort?: ReasoningEffort
+    toolChoice?: { type: 'function'; name: string }
   }
   response?: {
     content: string

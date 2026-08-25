@@ -64,6 +64,7 @@ export function oneOffCronExpression(runAt: string, now = Date.now()): { schedul
 function createTool(opts: ScheduleToolOptions): ToolDefinition {
     return {
         name: 'schedule_create',
+        execution: { readOnly: false },
         description: `Create a scheduled job for this agent. Use runAt for an exact one-time future run, or schedule for a recurring cron expression. The server's current local date-time is ${new Date().toString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'}). The executing agent must already have any tools needed by the future task.`,
         parameters: {
             type: 'object',
@@ -78,7 +79,7 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
             additionalProperties: false,
         },
         timeout: 5_000,
-        annotations: { destructiveHint: false, idempotentHint: false, openWorldHint: false },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
         execute: async (params: unknown) => {
             const contextFailure = requireAgentContext(opts.agentId)
             if (contextFailure) return contextFailure
@@ -137,6 +138,7 @@ function listTool(opts: ScheduleToolOptions): ToolDefinition {
 function updateTool(opts: ScheduleToolOptions): ToolDefinition {
     return {
         name: 'schedule_update',
+        execution: { readOnly: false },
         description: 'Update a scheduled job owned by this agent. Only supplied fields are changed. Use runAt to turn it into an exact one-time job, or schedule to set a recurring cron expression.',
         parameters: {
             type: 'object',
@@ -153,7 +155,7 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
             additionalProperties: false,
         },
         timeout: 5_000,
-        annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         execute: async (params: unknown) => {
             const contextFailure = requireAgentContext(opts.agentId)
             if (contextFailure) return contextFailure
@@ -195,6 +197,7 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
 function deleteTool(opts: ScheduleToolOptions): ToolDefinition {
     return {
         name: 'schedule_delete',
+        execution: { readOnly: false },
         description: 'Permanently delete a scheduled job owned by this agent.',
         parameters: {
             type: 'object',
@@ -203,7 +206,7 @@ function deleteTool(opts: ScheduleToolOptions): ToolDefinition {
             additionalProperties: false,
         },
         timeout: 5_000,
-        annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
         execute: async (params: unknown) => {
             const contextFailure = requireAgentContext(opts.agentId)
             if (contextFailure) return contextFailure

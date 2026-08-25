@@ -2,7 +2,8 @@ import { getAgentMemory } from './agent-memory.js'
 import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces, getAssignedOrDefaultSpaces } from './memory-space-scope.js'
 import type { RetrievedChunk } from './parser.js'
-import { getEntityGraphStore, type GraphWalkResult } from './entity-graph.js'
+import type { GraphWalkResult } from './knowledge-types.js'
+import { getMemoryKnowledgeStore } from './memory-knowledge.js'
 
 export interface AggregatedMemory {
   permanent: RetrievedChunk[]
@@ -33,6 +34,8 @@ export class MemoryAggregator {
       permanentTopK?: number
       /** Add a small, source-grounded relationship supplement to RAG passages. */
       includeGraph?: boolean
+      /** Query enriched only for graph entity/relation resolution. */
+      graphQuery?: string
     }
   ): Promise<AggregatedMemory> {
     const permanentMem = getAgentMemory()
@@ -87,7 +90,7 @@ export class MemoryAggregator {
         return true
       })
 
-    const dedupedPermanent = dedup(permanent)
+    let dedupedPermanent = dedup(permanent)
 
     // Enrich chunks with totalChunks per source file
     const uniqueSourceKeys = [...new Set(
@@ -132,21 +135,32 @@ export class MemoryAggregator {
       }
     }
 
+    // Audited manual corrections/retractions supersede the exact old source
+    // claim. Do not inject the containing stale chunk beside its correction.
+    dedupedPermanent = getMemoryKnowledgeStore().filterManuallySupersededChunks(dedupedPermanent)
+
     let graphWalk: GraphWalkResult | undefined
     if (opts?.includeGraph === true && scopedSpaces.length > 0) {
       try {
-        const graph = getEntityGraphStore()
-        const seedNodes = graph.findSeedNodes(query, dedupedPermanent.map((chunk) => chunk.text), 8)
-        graphWalk = seedNodes.length > 0
-          ? graph.focusedWalk(seedNodes.map((node) => node.id), query, 1, 8, 0, {
-            // The graph may bridge from a retrieved document to another
-            // document, but never outside the caller's memory-space boundary.
-            sourceIdPrefixes: scopedSpaces.map((space) => `memory:${space.id}:`),
-            contextText: [query, ...dedupedPermanent.map((chunk) => chunk.text)].join(' '),
-          })
-          : undefined
+        const graphQuery = opts.graphQuery?.trim() || query
+        const knowledge = getMemoryKnowledgeStore()
+        const scopedSpaceIds = scopedSpaces.map((space) => space.id)
+        const knowledgeResult = await knowledge.search(graphQuery, scopedSpaceIds, 8, {
+          // Natural-language turns often contain an exact first name among
+          // unrelated instruction words. Return every same-name identity for
+          // curation instead of letting a generic semantic neighbor become
+          // the graph seed.
+          allowAmbiguousExactMatches: true,
+        })
+        graphWalk = knowledgeResult.graph
+
+        // Graph candidates carry their own source-grounded contextual note. Do not
+        // inject their complete source chunks into the ordinary candidate
+        // pool before graph curation; that previously promoted rejected graph
+        // neighbors as if they were independently reranked document matches.
+
       } catch (err) {
-        console.warn('[memory-aggregator] Entity graph enrichment failed; returning semantic memory only:', err)
+        console.warn('[memory-aggregator] Knowledge enrichment failed; returning semantic memory only:', err)
       }
     }
 
@@ -193,7 +207,7 @@ export class MemoryAggregator {
     }
 
     if (memory.graph && memory.graph.edges.length > 0) {
-      sections.push(getEntityGraphStore().formatWalk(memory.graph))
+      sections.push(getMemoryKnowledgeStore().formatWalk(memory.graph))
     }
 
     return sections.join('\n\n')

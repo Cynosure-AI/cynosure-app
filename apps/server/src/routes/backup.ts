@@ -27,6 +27,13 @@ import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-schedu
 import { dropConversationAttachmentIndex, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
 import { DEFAULT_PERMANENT_MEMORY_TABLE, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
+import { getMemoryKnowledgeStore } from '../core/memory/memory-knowledge.js'
+import {
+    createMemoryKnowledgeBackup,
+    memoryKnowledgeBackupCount,
+    restoreMemoryKnowledgeBackup,
+    type MemoryKnowledgeBackup,
+} from '../core/memory/memory-knowledge-backup.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -77,6 +84,14 @@ interface MemoryFileBackup {
     archiveName: string
 }
 
+interface MemoryFileIdentityBackup {
+    document_id: string
+    document_ref: string
+    space_id: string
+    file_name: string
+    created_at: number
+}
+
 interface MemorySpaceBackupRow extends Record<string, unknown> {
     id?: unknown
     name?: unknown
@@ -86,12 +101,6 @@ interface MemorySpaceBackupRow extends Record<string, unknown> {
     is_default?: unknown
     sort_order?: unknown
     created_at?: unknown
-}
-
-interface EntityGraphBackup {
-    nodes: Record<string, unknown>[]
-    edges: Record<string, unknown>[]
-    evidence: Record<string, unknown>[]
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -153,36 +162,10 @@ function getChannelRows(): unknown[] {
     return db.prepare('SELECT * FROM channels ORDER BY created_at').all()
 }
 
-function getEntityGraphRows(): EntityGraphBackup {
-    const db = getDb()
-    return {
-        nodes: db.prepare('SELECT * FROM entity_graph_nodes ORDER BY last_seen_at DESC').all() as Record<string, unknown>[],
-        edges: db.prepare('SELECT * FROM entity_graph_edges ORDER BY last_seen_at DESC').all() as Record<string, unknown>[],
-        evidence: db.prepare('SELECT * FROM entity_graph_edge_evidence ORDER BY last_seen_at DESC').all() as Record<string, unknown>[]
-    }
-}
-
-function getEntityGraphBackup(zip: AdmZip): EntityGraphBackup | null {
-    const combinedEntry = zip.getEntry('entity-graph/graph.json') || zip.getEntry('memory/entity_graph.json')
-    if (combinedEntry) {
-        const graph = JSON.parse(combinedEntry.getData().toString('utf-8')) as Partial<EntityGraphBackup>
-        return {
-            nodes: Array.isArray(graph.nodes) ? graph.nodes : [],
-            edges: Array.isArray(graph.edges) ? graph.edges : [],
-            evidence: Array.isArray(graph.evidence) ? graph.evidence : []
-        }
-    }
-
-    const nodesEntry = zip.getEntry('entity-graph/nodes.json') || zip.getEntry('memory/entity_graph_nodes.json')
-    const edgesEntry = zip.getEntry('entity-graph/edges.json') || zip.getEntry('memory/entity_graph_edges.json')
-    const evidenceEntry = zip.getEntry('entity-graph/evidence.json')
-    if (!nodesEntry && !edgesEntry) return null
-
-    return {
-        nodes: nodesEntry ? JSON.parse(nodesEntry.getData().toString('utf-8')) as Record<string, unknown>[] : [],
-        edges: edgesEntry ? JSON.parse(edgesEntry.getData().toString('utf-8')) as Record<string, unknown>[] : [],
-        evidence: evidenceEntry ? JSON.parse(evidenceEntry.getData().toString('utf-8')) as Record<string, unknown>[] : []
-    }
+function getMemoryKnowledgeBackup(zip: AdmZip): MemoryKnowledgeBackup | null {
+    const entry = zip.getEntry('knowledge/knowledge.json')
+    if (!entry) return null
+    return JSON.parse(entry.getData().toString('utf-8')) as MemoryKnowledgeBackup
 }
 
 function normalizeBackupRelativePath(value: string): string {
@@ -229,6 +212,7 @@ async function resetVectorIndexes(): Promise<void> {
 async function resetMemorySpaces(db = getDb()): Promise<void> {
     await stopAllMemorySpaceWatchers()
     await resetVectorIndexes()
+    await getMemoryKnowledgeStore().reset()
     db.prepare('DELETE FROM agent_memory_spaces').run()
     db.prepare('DELETE FROM memory_spaces').run()
 
@@ -241,10 +225,8 @@ async function resetMemorySpaces(db = getDb()): Promise<void> {
     watchMemorySpace('default', getDefaultMemorySpaceDir())
 }
 
-function resetEntityGraph(db = getDb()): void {
-    db.prepare('DELETE FROM entity_graph_edge_evidence').run()
-    db.prepare('DELETE FROM entity_graph_edges').run()
-    db.prepare('DELETE FROM entity_graph_nodes').run()
+async function resetEntityGraph(): Promise<void> {
+    await getMemoryKnowledgeStore().reset()
 }
 
 async function resetConversations(db = getDb()): Promise<void> {
@@ -341,7 +323,7 @@ async function resetSelectedModules(modules: ResetModule[]): Promise<Record<stri
     await run('usage', () => resetUsage(db))
     await run('memory', () => resetMemorySpaces(db))
     await run('vectors', resetVectorIndexes)
-    await run('entityGraph', () => resetEntityGraph(db))
+    await run('entityGraph', resetEntityGraph)
     await run('settings', () => resetSettings(db))
     await run('channels', () => resetChannels(db))
     await run('agents', () => resetAgents(db))
@@ -387,15 +369,16 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
         const settings = count('settings')
         const approvals = count('tool_approvals')
         const cronJobs = count('cron_jobs')
-        const graphNodes = count('entity_graph_nodes')
-        const graphEdges = count('entity_graph_edges')
-        const graphEvidence = count('entity_graph_edge_evidence')
         const conversations = count('conversations')
         const messages = count('messages')
         const attachments = count('message_attachments')
         const tasks = count('tasks')
         const executionLogs = count('execution_logs')
         const executionSteps = count('execution_steps')
+        const knowledgeEntities = count('memory_knowledge_entities')
+        const knowledgeRelationships = count('memory_knowledge_assertions')
+        const knowledgeEvidence = count('memory_knowledge_assertion_evidence')
+        const knowledgeRows = knowledgeEntities + knowledgeRelationships + knowledgeEvidence
 
         const modules: Record<string, BackupSummaryModule> = {
             agents: { count: count('agents') },
@@ -411,8 +394,12 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 details: { spaces: memorySpaces.length, documents: memoryDocuments }
             },
             entityGraph: {
-                count: graphNodes + graphEdges + graphEvidence,
-                details: { entities: graphNodes, relationships: graphEdges, evidence: graphEvidence }
+                count: knowledgeRows,
+                details: {
+                    entities: knowledgeEntities,
+                    relationships: knowledgeRelationships,
+                    evidence: knowledgeEvidence,
+                }
             },
             conversations: {
                 count: conversations,
@@ -539,6 +526,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         }
                     })
                 const assignments = db.prepare('SELECT * FROM agent_memory_spaces').all()
+                const fileIndex = db.prepare(`
+                    SELECT document_id, document_ref, space_id, file_name, created_at
+                    FROM memory_file_index ORDER BY created_at
+                `).all() as MemoryFileIdentityBackup[]
                 const files: MemoryFileBackup[] = []
 
                 for (const space of spaces) {
@@ -553,20 +544,17 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     }
                 }
 
-                archive.append(JSON.stringify({ spaces, assignments }, null, 2), { name: 'memory/spaces.json' })
+                archive.append(JSON.stringify({ spaces, assignments, fileIndex }, null, 2), { name: 'memory/spaces.json' })
                 archive.append(JSON.stringify({ files }, null, 2), { name: 'memory/files.json' })
                 manifest.modules.memory = { count: files.length }
             }
 
-            // --- Entity graph ---
+            // --- Governed knowledge state ---
             if (requested.includes('entityGraph')) {
-                const graph = getEntityGraphRows()
-                archive.append(JSON.stringify(graph.nodes, null, 2), { name: 'entity-graph/nodes.json' })
-                archive.append(JSON.stringify(graph.edges, null, 2), { name: 'entity-graph/edges.json' })
-                archive.append(JSON.stringify(graph.evidence, null, 2), { name: 'entity-graph/evidence.json' })
-                manifest.modules.entityGraph = { count: graph.nodes.length + graph.edges.length + graph.evidence.length }
+                const knowledge = createMemoryKnowledgeBackup()
+                archive.append(JSON.stringify(knowledge), { name: 'knowledge/knowledge.json' })
+                manifest.modules.entityGraph = { count: memoryKnowledgeBackupCount(knowledge) }
             }
-
             // --- Conversations (agent-linked chat history) ---
             if (requested.includes('conversations')) {
                 const db = getDb()
@@ -643,6 +631,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
         const manifest = JSON.parse(
             manifestEntry.getData().toString('utf-8')
         ) as BackupManifest
+        const knowledgeBackup = getMemoryKnowledgeBackup(zip)
 
         // Determine which modules to restore (from form field or restore all available)
         const modulesField = data.fields?.modules
@@ -657,7 +646,9 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
 
         const db = getDb()
         const results: Record<string, { restored: number; errors: string[] }> = {}
-        const restoreModules = requestedModules.filter((module) => manifest.modules[module] || (module === 'entityGraph' && getEntityGraphBackup(zip)))
+        const restoreModules = requestedModules.filter((module) =>
+            Boolean(manifest.modules[module]) && (module !== 'entityGraph' || Boolean(knowledgeBackup))
+        )
         let restoreIndex = 0
         const emitRestoreProgress = (module: string, status: 'started' | 'completed' | 'failed') => {
             if (!broadcast) return
@@ -989,6 +980,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             try {
                 await stopAllMemorySpaceWatchers()
 
+                // Memory replacement must not leave facts from the previous
+                // workspace addressable under reused space IDs such as default.
+                await getMemoryKnowledgeStore().reset()
+
                 // Reset LanceDB to avoid stale index references from previous state
                 const ragStore = getRAGStore()
                 await ragStore.close()
@@ -1013,9 +1008,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 const spacesEntry = zip.getEntry('memory/spaces.json')
                 const spaceIdMap = new Map<string, string>()
                 if (spacesEntry) {
-                    const { spaces, assignments } = JSON.parse(spacesEntry.getData().toString('utf-8')) as {
+                    const { spaces, assignments, fileIndex } = JSON.parse(spacesEntry.getData().toString('utf-8')) as {
                         spaces: MemorySpaceBackupRow[]
                         assignments: Record<string, unknown>[]
+                        fileIndex?: MemoryFileIdentityBackup[]
                     }
                     for (const sp of spaces) {
                         const importedId = String(sp.id || '')
@@ -1044,6 +1040,15 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         const mappedSpaceId = spaceIdMap.get(String(asg.space_id || '')) || asg.space_id
                         db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
                             .run(asg.agent_id, mappedSpaceId)
+                    }
+                    for (const file of fileIndex || []) {
+                        const mappedSpaceId = spaceIdMap.get(file.space_id) || file.space_id
+                        db.prepare(`
+                            INSERT OR REPLACE INTO memory_file_index
+                                (document_id, document_ref, space_id, file_name, content_hash,
+                                 chunk_count, last_indexed_at, entity_indexed_at, tags_json, created_at)
+                            VALUES (?, ?, ?, ?, '', 0, 0, 0, '[]', ?)
+                        `).run(file.document_id, file.document_ref, mappedSpaceId, file.file_name, file.created_at || Date.now())
                     }
                 } else {
                     ensureDefaultMemorySpace(db)
@@ -1093,109 +1098,15 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             emitRestoreProgress('memory', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
-        // --- Restore Entity graph ---
-        if (requestedModules.includes('entityGraph') && (manifest.modules.entityGraph || getEntityGraphBackup(zip))) {
+        // --- Restore governed knowledge, including manual corrections ---
+        if (requestedModules.includes('entityGraph') && manifest.modules.entityGraph && knowledgeBackup) {
             const res = { restored: 0, errors: [] as string[] }
             emitRestoreProgress('entityGraph', 'started')
             try {
-                const graph = getEntityGraphBackup(zip)
-                if (graph) {
-                    db.prepare('DELETE FROM entity_graph_edge_evidence').run()
-                    db.prepare('DELETE FROM entity_graph_edges').run()
-                    db.prepare('DELETE FROM entity_graph_nodes').run()
-
-                    for (const node of graph.nodes) {
-                        try {
-                            db.prepare(`
-                                INSERT OR REPLACE INTO entity_graph_nodes
-                                    (id, name, normalized_name, type, aliases_json, importance, mention_count, source_count, first_seen_at, last_seen_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            `).run(
-                                node.id,
-                                node.name || '',
-                                node.normalized_name || '',
-                                node.type || 'other',
-                                node.aliases_json || '[]',
-                                node.importance ?? 1,
-                                node.mention_count ?? 1,
-                                node.source_count ?? 1,
-                                node.first_seen_at || Date.now(),
-                                node.last_seen_at || Date.now()
-                            )
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`Entity graph node ${node.id}: ${(e as Error).message}`)
-                        }
-                    }
-
-                    for (const edge of graph.edges) {
-                        try {
-                            db.prepare(`
-                                INSERT OR REPLACE INTO entity_graph_edges
-                                    (id, from_node_id, to_node_id, relation, importance, confidence, evidence, source_kind, source_id, mention_count, first_seen_at, last_seen_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            `).run(
-                                edge.id,
-                                edge.from_node_id,
-                                edge.to_node_id,
-                                edge.relation || '',
-                                edge.importance ?? 1,
-                                edge.confidence ?? 0.7,
-                                edge.evidence || '',
-                                edge.source_kind || 'conversation',
-                                edge.source_id || '',
-                                edge.mention_count ?? 1,
-                                edge.first_seen_at || Date.now(),
-                                edge.last_seen_at || Date.now()
-                            )
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`Entity graph edge ${edge.id}: ${(e as Error).message}`)
-                        }
-                    }
-
-                    const evidenceRows = graph.evidence.length > 0
-                        ? graph.evidence
-                        : graph.edges.map((edge) => ({
-                            id: `legacy-${edge.id}`,
-                            edge_id: edge.id,
-                            source_kind: edge.source_kind,
-                            source_id: edge.source_id,
-                            source_document_id: '',
-                            source_content_hash: '',
-                            source_chunk_index: null,
-                            evidence: edge.evidence,
-                            confidence: edge.confidence,
-                            mention_count: edge.mention_count,
-                            first_seen_at: edge.first_seen_at,
-                            last_seen_at: edge.last_seen_at,
-                        }))
-                    for (const evidence of evidenceRows) {
-                        try {
-                            db.prepare(`
-                                INSERT OR REPLACE INTO entity_graph_edge_evidence
-                                    (id, edge_id, source_kind, source_id, source_document_id, source_content_hash,
-                                     source_chunk_index, evidence, confidence, mention_count, first_seen_at, last_seen_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            `).run(
-                                evidence.id,
-                                evidence.edge_id,
-                                evidence.source_kind || 'conversation',
-                                evidence.source_id || '',
-                                evidence.source_document_id || '',
-                                evidence.source_content_hash || '',
-                                evidence.source_chunk_index ?? null,
-                                evidence.evidence || '',
-                                evidence.confidence ?? 0.7,
-                                evidence.mention_count ?? 1,
-                                evidence.first_seen_at || Date.now(),
-                                evidence.last_seen_at || Date.now(),
-                            )
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`Entity graph evidence ${evidence.id}: ${(e as Error).message}`)
-                        }
-                    }
+                const restored = await restoreMemoryKnowledgeBackup(knowledgeBackup, db)
+                res.restored = restored.restored
+                if (restored.projectionError) {
+                    res.errors.push(`Knowledge search projection: ${restored.projectionError}`)
                 }
             } catch (e) {
                 res.errors.push((e as Error).message)
@@ -1538,12 +1449,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             manifestEntry.getData().toString('utf-8')
         ) as BackupManifest
 
-        if (!manifest.modules.entityGraph) {
-            const graph = getEntityGraphBackup(zip)
-            if (graph && (graph.nodes.length > 0 || graph.edges.length > 0)) {
-                manifest.modules.entityGraph = { count: graph.nodes.length + graph.edges.length + graph.evidence.length }
-            }
-        }
+        // Old entity-graph payloads cannot be mixed into the governed schema.
+        // New backups advertise this module only when the versioned knowledge
+        // payload is present.
+        if (!getMemoryKnowledgeBackup(zip)) delete manifest.modules.entityGraph
 
         return manifest
     })

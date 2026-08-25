@@ -1,7 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../api/client'
-import type { ExecutionStepRecord, PlanningState } from '../api/types'
+import type { ChatExecutionState, ExecutionStepRecord, PlanningState } from '../api/types'
 import { isAutoManagedBuiltInToolName } from '../utils/internal-tools'
 
 export interface ToolNamespace {
@@ -87,6 +87,11 @@ export const useAgentStore = defineStore('agent', () => {
   // Per-conversation execution state for background support
   const executionConversationId = ref<string | null>(null)
   const executingConversationIds = ref<Set<string>>(new Set())
+  /** Conversation-level kill latch. Only an explicit new send clears it. */
+  const stoppedConversationIds = new Set<string>()
+  const executionIdByConversation = new Map<string, string>()
+  const stoppedExecutionIds = new Set<string>()
+  const pendingNewConversationStarts = new Set<string>()
   /** The conversation the user is currently viewing — used to filter live events. */
   const activeViewConversationId = ref<string | null>(null)
   const stepsPerConversation = new Map<string, ExecutionStep[]>()
@@ -323,6 +328,10 @@ export const useAgentStore = defineStore('agent', () => {
     const taskId = eventData.taskId as string | undefined
     const convId = eventData.conversationId as string | undefined
     if (!convId) return
+    const executionId = eventData.executionId as string | undefined
+    if (stoppedConversationIds.has(convId) || (executionId && stoppedExecutionIds.has(executionId))) return
+    const currentExecutionId = executionIdByConversation.get(convId)
+    if (executionId && currentExecutionId && executionId !== currentExecutionId) return
 
     const viewingConvId = activeViewConversationId.value
     if (viewingConvId && convId !== viewingConvId && !executingConversationIds.value.has(convId)) {
@@ -418,6 +427,7 @@ export const useAgentStore = defineStore('agent', () => {
   function handlePlanningStateUpdated(data: unknown): void {
     const state = data as PlanningState | null
     if (!state?.conversationId) return
+    if (stoppedConversationIds.has(state.conversationId)) return
     planningPerConversation.set(state.conversationId, state)
     pruneConversationCache()
     if (activeViewConversationId.value === state.conversationId) {
@@ -504,6 +514,7 @@ export const useAgentStore = defineStore('agent', () => {
 
   function setConversationExecutionState(conversationId: string, executing: boolean, taskId?: string | null): void {
     if (executing) {
+      if (stoppedConversationIds.has(conversationId)) return
       executionConversationId.value = conversationId
       executingConversationIds.value = new Set([...executingConversationIds.value, conversationId])
       if (activeViewConversationId.value === conversationId) {
@@ -524,8 +535,69 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  /** Open a new execution generation. This is called only from an explicit send. */
+  function prepareConversationExecution(conversationId: string): void {
+    stoppedConversationIds.delete(conversationId)
+    executionIdByConversation.delete(conversationId)
+    pendingNewConversationStarts.add(conversationId)
+    setConversationExecutionState(conversationId, true)
+  }
+
+  /** Permanently latch this conversation off until prepareConversationExecution. */
+  function recordStoppedExecutionIds(executionIds: string[]): void {
+    for (const executionId of executionIds) stoppedExecutionIds.add(executionId)
+    while (stoppedExecutionIds.size > 200) {
+      const oldest = stoppedExecutionIds.values().next().value
+      if (oldest) stoppedExecutionIds.delete(oldest)
+      else break
+    }
+  }
+
+  /** Permanently latch this conversation off until prepareConversationExecution. */
+  function stopConversationExecution(conversationId: string, executionIds: string[] = []): void {
+    recordStoppedExecutionIds(executionIds)
+    const currentExecutionId = executionIdByConversation.get(conversationId)
+    if (currentExecutionId) recordStoppedExecutionIds([currentExecutionId])
+    stoppedConversationIds.add(conversationId)
+    pendingNewConversationStarts.delete(conversationId)
+    setConversationExecutionState(conversationId, false)
+    dismissHITLByConversation(conversationId)
+  }
+
+  function reconcileStoppedExecution(conversationId: string, executionIds: string[]): void {
+    recordStoppedExecutionIds(executionIds)
+    if (pendingNewConversationStarts.has(conversationId)) return
+    stopConversationExecution(conversationId, executionIds)
+  }
+
+  function handleChatExecutionState(data: ChatExecutionState): void {
+    if (data.state === 'running') {
+      if (stoppedConversationIds.has(data.conversationId) || stoppedExecutionIds.has(data.executionId)) return
+      executionIdByConversation.set(data.conversationId, data.executionId)
+      pendingNewConversationStarts.delete(data.conversationId)
+      setConversationExecutionState(data.conversationId, true)
+      return
+    }
+
+    // A delayed terminal event from a killed generation must not terminate a
+    // newer user-initiated send that is waiting to start.
+    if (stoppedExecutionIds.has(data.executionId) && pendingNewConversationStarts.has(data.conversationId)) return
+    const currentExecutionId = executionIdByConversation.get(data.conversationId)
+    if (currentExecutionId && currentExecutionId !== data.executionId) return
+    stopConversationExecution(data.conversationId, [data.executionId])
+  }
+
   function isConversationExecuting(conversationId: string | null | undefined): boolean {
     return Boolean(conversationId && executingConversationIds.value.has(conversationId))
+  }
+
+  function isConversationStopped(conversationId: string | null | undefined, executionId?: string): boolean {
+    return Boolean(
+      conversationId && (
+        stoppedConversationIds.has(conversationId) ||
+        (executionId && stoppedExecutionIds.has(executionId))
+      )
+    )
   }
 
   async function restoreForConversation(conversationId: string): Promise<void> {
@@ -605,6 +677,7 @@ export const useAgentStore = defineStore('agent', () => {
   async function loadPlanningStateFromApi(conversationId: string): Promise<void> {
     try {
       const state = await api.chat.getPlanningState(conversationId)
+      if (stoppedConversationIds.has(conversationId)) return
       planningPerConversation.set(conversationId, state)
       if (activeViewConversationId.value === conversationId) {
         planningState.value = state
@@ -652,7 +725,12 @@ export const useAgentStore = defineStore('agent', () => {
     clearExecutionState,
     clearPlanningState,
     setConversationExecutionState,
+    prepareConversationExecution,
+    stopConversationExecution,
+    reconcileStoppedExecution,
+    handleChatExecutionState,
     isConversationExecuting,
+    isConversationStopped,
     restoreForConversation,
     setActiveViewConversation,
   }

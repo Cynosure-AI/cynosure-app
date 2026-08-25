@@ -18,6 +18,8 @@ export function makeSearchAvailableMcpToolsTool(
 
     return {
         name: TOOL_SEARCH_TOOL_NAME,
+        execution: { readOnly: true },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         description:
             'IMPORTANT TOOL: Search and load additional available tools when the current tools are insufficient or the wrong ones. Use this before saying a capability is unavailable.',
         timeout: 1_000,

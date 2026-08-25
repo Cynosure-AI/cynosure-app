@@ -38,7 +38,8 @@ describe('ToolExecutionCard', () => {
     })
 
     const summary = wrapper.get('button').text()
-    expect(summary).toContain('Gathered Memory Context')
+    expect(summary).toContain('Gathered Context')
+    expect(summary).toContain('Memory chunks')
     expect(summary).toContain('Communication Personality Analysis.md')
     expect(summary).not.toContain('Default')
     expect(summary.match(/Communication Personality Analysis\.md/g)).toHaveLength(1)
@@ -110,9 +111,87 @@ describe('ToolExecutionCard', () => {
       },
     })
 
-    expect(wrapper.get('button').text()).toContain('Entity Graph Context')
+    expect(wrapper.get('button').text()).toContain('Gathered Context')
+    expect(wrapper.get('button').text()).toContain('Entity relationships')
     await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain('Entity relationships')
     expect(wrapper.text()).toContain(graphContext)
+  })
+
+  test('groups gathered context into tools, memory chunks, and entity relationships', async () => {
+    const contextArguments = (type: string, extras: Record<string, unknown> = {}) => JSON.stringify({
+      type,
+      contextPhase: 'gathered-context',
+      ...extras,
+    })
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1,
+        isActive: false,
+        steps: [
+          {
+            iteration: 1,
+            status: 'curating-tools',
+            timestamp: Date.now(),
+            toolCalls: [{ name: 'web_search', arguments: contextArguments('tool-router') }],
+          },
+          {
+            iteration: 1,
+            status: 'curating-memory',
+            timestamp: Date.now() + 1,
+            toolCalls: [
+              { name: 'Default - people.md - part 1/1', arguments: contextArguments('memory', { sourceFile: 'people.md', content: 'People memory' }) },
+              { name: 'Entity Graph Context', arguments: contextArguments('memory', { memoryKind: 'entity-graph', content: 'Caroline -> best friend of -> Andi' }) },
+            ],
+          },
+        ],
+      },
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+
+    expect(wrapper.get('button').text()).toContain('Gathered Context')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain('Tools')
+    expect(wrapper.text()).toContain('Memory chunks')
+    expect(wrapper.text()).toContain('Entity relationships')
+    expect(wrapper.text().indexOf('Entity relationships')).toBeLessThan(wrapper.text().indexOf('Memory chunks'))
+  })
+
+  test('shows rejected entity candidates under the finalized entity relationship channel', async () => {
+    const graphArgs = (phase: string) => JSON.stringify({
+      type: 'memory', memoryKind: 'entity-graph', contextPhase: phase,
+      content: 'Unrelated graph relationship',
+    })
+    const memoryArgs = (phase: string) => JSON.stringify({
+      type: 'memory', contextPhase: phase, sourceFile: 'selected.md', content: 'Selected memory',
+    })
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1,
+        isActive: false,
+        steps: [
+          {
+            iteration: 1, status: 'routing-memory', timestamp: Date.now(),
+            toolCalls: [
+              { name: 'selected.md', arguments: memoryArgs('gathered-results') },
+              { name: 'Entity Graph Context', arguments: graphArgs('gathered-results') },
+            ],
+          },
+          {
+            iteration: 1, status: 'curating-memory', timestamp: Date.now() + 1,
+            toolCalls: [{ name: 'selected.md', arguments: memoryArgs('gathered-context') }],
+          },
+        ],
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain('Entity relationships')
+    const rejected = wrapper.findAll('.line-through').find((element) => element.text().includes('Entity Graph Context'))
+    expect(rejected?.exists()).toBe(true)
   })
 
   test('shows the memory match score supplied by fused retrieval', async () => {

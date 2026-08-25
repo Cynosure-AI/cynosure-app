@@ -6,6 +6,8 @@ import { MAX_AUTO_DISCOVERED_TOOLS, routeTools, routeToolsLexically, shouldRoute
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../../tools/tool-registry.js'
+import type { RequestedToolEffect } from './task-context.js'
+import { completeWithDebugCapture } from '../../chat/debug-context.js'
 
 const TOOL_CONTEXT_SELECTION_TOOL_NAME = 'select_tool_context'
 const TOOL_DESCRIPTION_CHAR_LIMIT = 800
@@ -26,6 +28,8 @@ export interface ApplyAutoToolRoutingInput {
     /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
+    requestedToolEffect?: RequestedToolEffect
+    debugContextEnabled?: boolean
 }
 
 interface ToolContextSelection {
@@ -47,15 +51,22 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         usedToolNames,
         eventMeta,
         signal,
+        requestedToolEffect,
+        debugContextEnabled,
     } = input
 
-    if (!shouldRouteTools(tools, userQuery, { enabled })) {
+    const protectedNames = collectProtectedToolNames(recentMessages || [], preferredToolNames, usedToolNames)
+    const eligibleTools = requestedToolEffect
+        ? filterToolsForRequestedEffect(tools, requestedToolEffect, protectedNames)
+        : tools
+
+    if (!shouldRouteTools(eligibleTools, userQuery, { enabled })) {
         emitAutoToolRoutingSkipped(
             conversationId,
-            !tools.length ? 'no-tools' : !userQuery?.trim() ? 'no-query' : 'disabled',
+            !eligibleTools.length ? 'no-tools' : !userQuery?.trim() ? 'no-query' : 'disabled',
             eventMeta,
         )
-        return tools
+        return eligibleTools
     }
 
     const taskId = `router_${nanoid()}`
@@ -65,7 +76,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         const routedTools = await routeTools({
             userQuery: userQuery || '',
             recentMessages: recentMessages || [],
-            allTools: tools,
+            allTools: eligibleTools,
             mcpMetadata,
             preferredToolNames,
             usedToolNames,
@@ -80,18 +91,24 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             eventMeta,
             routedTools.length ? undefined : 'none-found',
         )
-        emitToolRoutingStatus(conversationId, taskId, 'curating-tools', 'Curating tool context...', eventMeta)
-        const curatedTools = await curateRoutedTools({
-            gateway,
-            providerId,
-            model,
-            userQuery: userQuery || '',
-            recentMessages: recentMessages || [],
-            routedTools,
-            preferredToolNames,
-            usedToolNames,
-            signal,
-        })
+        const curatedTools = requestedToolEffect !== undefined && routedTools.length <= 3
+            ? routedTools
+            : await (async () => {
+                emitToolRoutingStatus(conversationId, taskId, 'curating-tools', 'Curating tool context...', eventMeta)
+                return curateRoutedTools({
+                    conversationId,
+                    gateway,
+                    providerId,
+                    model,
+                    userQuery: userQuery || '',
+                    recentMessages: recentMessages || [],
+                    routedTools,
+                    preferredToolNames,
+                    usedToolNames,
+                    signal,
+                    debugContextEnabled,
+                })
+            })()
         emitToolRoutingSelection(
             conversationId,
             taskId,
@@ -107,7 +124,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         const fallbackTools = routeToolsLexically({
             userQuery: userQuery || '',
             recentMessages: recentMessages || [],
-            allTools: tools,
+            allTools: eligibleTools,
             mcpMetadata,
             preferredToolNames,
             usedToolNames,
@@ -124,6 +141,20 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
     }
 }
 
+export function filterToolsForRequestedEffect<T extends ToolDefinition>(
+    tools: T[],
+    requestedEffect: RequestedToolEffect,
+    protectedNames: Set<string> = new Set(),
+): T[] {
+    if (requestedEffect === 'destructive') return tools
+    return tools.filter((tool) => {
+        if (protectedNames.has(tool.name)) return true
+        const destructive = tool.annotations?.destructiveHint === true || /(^|_)(delete|remove|destroy|revoke|cancel)(_|$)/i.test(tool.name)
+        if (requestedEffect === 'write') return !destructive
+        return tool.execution?.readOnly === true || (tool.annotations?.readOnlyHint === true && !destructive)
+    })
+}
+
 export function emitAutoToolRoutingSkipped(
     _conversationId: string,
     _reason: 'disabled' | 'no-query' | 'no-tools',
@@ -134,6 +165,7 @@ export function emitAutoToolRoutingSkipped(
 }
 
 async function curateRoutedTools(input: {
+    conversationId: string
     gateway: LLMGateway
     providerId?: string
     model?: string
@@ -143,6 +175,7 @@ async function curateRoutedTools(input: {
     preferredToolNames?: Set<string>
     usedToolNames?: Set<string>
     signal?: AbortSignal
+    debugContextEnabled?: boolean
 }): Promise<RoutedToolDefinition[]> {
     const protectedNames = collectProtectedToolNames(input.recentMessages, input.preferredToolNames, input.usedToolNames)
     const curatableTools = input.routedTools.filter((tool) => !protectedNames.has(tool.name))
@@ -150,7 +183,7 @@ async function curateRoutedTools(input: {
 
     try {
         const candidateIds = curatableTools.map((_, index) => toolCandidateId(index))
-        const result = await input.gateway.complete({
+        const request: Parameters<LLMGateway['complete']>[0] = {
             messages: [
                 {
                     role: 'system',
@@ -181,7 +214,16 @@ async function curateRoutedTools(input: {
             toolChoice: { type: 'function', name: TOOL_CONTEXT_SELECTION_TOOL_NAME },
             thinkingEnabled: false,
             signal: input.signal,
-        }, input.providerId)
+        }
+        const result = await completeWithDebugCapture({
+            enabled: input.debugContextEnabled,
+            conversationId: input.conversationId,
+            phase: 'tool-curation',
+            label: 'Tool candidate curation',
+            gateway: input.gateway,
+            providerId: input.providerId,
+            request,
+        })
 
         const selectionCall = result.toolCalls?.find((call) => call.function.name === TOOL_CONTEXT_SELECTION_TOOL_NAME)
         const selection = selectionCall ? parseToolContextSelection(selectionCall.function.arguments, candidateIds) : null

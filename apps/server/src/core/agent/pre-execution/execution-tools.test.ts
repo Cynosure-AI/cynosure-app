@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import type { RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ExecutionPreset } from '../execution-preset.js'
 import { filterToolsForExecutionPreset } from './execution-tools.js'
+import { getBuiltInMemoryReadToolKeys, getBuiltInMemoryToolKeys } from '../../tools/built-in-tools.js'
 
 function tool(name: string, namespaceId = 'builtin', originalName = name): RegistryAwareToolDefinition {
     return {
@@ -36,5 +37,15 @@ describe('agent-required execution tools', () => {
 
     test('keeps scheduling tools available to saved agents', () => {
         expect(filterToolsForExecutionPreset(preset('agent-1'), tools)).toEqual(tools)
+    })
+
+    test('keeps the automatic read recovery set smaller than the mutation-capable memory set', () => {
+        expect(getBuiltInMemoryReadToolKeys()).toEqual([
+            'builtin::memory_list_documents',
+            'builtin::memory_retrieve_chunks',
+            'builtin::memory_semantic_search',
+            'builtin::relationship_graph_search',
+        ])
+        expect(getBuiltInMemoryReadToolKeys().length).toBeLessThan(getBuiltInMemoryToolKeys().length)
     })
 })

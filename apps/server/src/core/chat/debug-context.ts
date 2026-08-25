@@ -5,7 +5,8 @@ import type {
     DebugContextTool,
     ReasoningEffort,
 } from '@shared/types'
-import type { ChatMessage, ToolDefinition, ToolCall } from '../gateway/providers/base.provider.js'
+import type { LLMGateway } from '../gateway/gateway.js'
+import type { ChatMessage, CompletionRequest, CompletionResponse, ToolDefinition, ToolCall } from '../gateway/providers/base.provider.js'
 
 const MAX_CAPTURED_CONVERSATIONS = 20
 const captures = new Map<string, DebugContextSnapshot>()
@@ -20,6 +21,9 @@ export interface BeginDebugContextInput {
 }
 
 export interface DebugModelRequest {
+    phase?: DebugContextRound['phase']
+    label?: string
+    providerId?: string
     messages: ChatMessage[]
     tools: ToolDefinition[]
     model?: string
@@ -27,6 +31,7 @@ export interface DebugModelRequest {
     maxTokens?: number
     thinkingEnabled?: boolean
     reasoningEffort?: ReasoningEffort
+    toolChoice?: { type: 'function'; name: string }
 }
 
 export interface DebugModelResponse {
@@ -76,6 +81,17 @@ export function beginDebugContextCapture(input: BeginDebugContextInput): void {
     })
 }
 
+export function updateDebugContextCapture(
+    conversationId: string,
+    metadata: Partial<Omit<BeginDebugContextInput, 'conversationId' | 'executionId'>>,
+): void {
+    const snapshot = captures.get(conversationId)
+    if (!snapshot) return
+    Object.assign(snapshot, metadata)
+    snapshot.updatedAt = Date.now()
+    touch(conversationId, snapshot)
+}
+
 export function recordDebugModelRequest(conversationId: string, request: DebugModelRequest): number | undefined {
     const snapshot = captures.get(conversationId)
     if (!snapshot) return undefined
@@ -83,6 +99,9 @@ export function recordDebugModelRequest(conversationId: string, request: DebugMo
     const roundIndex = snapshot.rounds.length
     const round: DebugContextRound = {
         round: roundIndex + 1,
+        phase: request.phase,
+        label: request.label,
+        providerId: request.providerId,
         capturedAt: Date.now(),
         request: {
             messages: clone(request.messages),
@@ -92,6 +111,7 @@ export function recordDebugModelRequest(conversationId: string, request: DebugMo
             maxTokens: request.maxTokens,
             thinkingEnabled: request.thinkingEnabled,
             reasoningEffort: request.reasoningEffort,
+            toolChoice: request.toolChoice,
         },
     }
     snapshot.rounds.push(round)
@@ -116,6 +136,51 @@ export function recordDebugModelResponse(
     }
     snapshot.updatedAt = Date.now()
     touch(conversationId, snapshot)
+}
+
+/** Capture a non-streaming auxiliary model call in the same format as agent rounds. */
+export async function completeWithDebugCapture(input: {
+    enabled?: boolean
+    conversationId: string
+    phase: Exclude<DebugContextRound['phase'], undefined | 'main-agent'>
+    label: string
+    gateway: LLMGateway
+    providerId?: string
+    request: CompletionRequest
+}): Promise<CompletionResponse> {
+    const roundIndex = input.enabled
+        ? recordDebugModelRequest(input.conversationId, {
+            phase: input.phase,
+            label: input.label,
+            providerId: input.providerId,
+            messages: input.request.messages,
+            tools: input.request.tools || [],
+            model: input.request.model,
+            temperature: input.request.temperature,
+            maxTokens: input.request.maxTokens,
+            thinkingEnabled: input.request.thinkingEnabled,
+            reasoningEffort: input.request.reasoningEffort,
+            toolChoice: input.request.toolChoice,
+        })
+        : undefined
+    try {
+        const result = await input.gateway.complete(input.request, input.providerId)
+        recordDebugModelResponse(input.conversationId, roundIndex, {
+            content: result.content,
+            thinking: result.thinking || '',
+            toolCalls: result.toolCalls,
+            images: result.images,
+            usage: result.usage,
+        })
+        return result
+    } catch (err) {
+        recordDebugModelResponse(input.conversationId, roundIndex, {
+            content: '',
+            thinking: '',
+            error: err instanceof Error ? err.message : String(err),
+        })
+        throw err
+    }
 }
 
 export function getDebugContextCapture(conversationId: string): DebugContextSnapshot | null {

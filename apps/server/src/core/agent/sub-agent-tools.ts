@@ -24,6 +24,8 @@ interface SubAgentToolOptions {
     broadcast: BroadcastFn
     /** Abort signal for cancellation */
     signal?: AbortSignal
+    /** Root execution metadata propagated through delegated work. */
+    eventMeta?: Record<string, unknown>
 }
 
 /**
@@ -34,7 +36,7 @@ interface SubAgentToolOptions {
  * sub-agent's own tools, provider, and model.
  */
 export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition[] {
-    const { subAgents, conversationId, broadcast, signal } = options
+    const { subAgents, conversationId, broadcast, signal, eventMeta: rootEventMeta } = options
     const availableSubAgents = subAgents
         .map((assignment) => {
             const agentData = getAgent(assignment.agentId)
@@ -48,6 +50,8 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
 
     return [{
         name: 'spawn_subagent',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
         description: `Spawn one of the configured sub-agents by internal name. Available agents: ${nameList}. The sub-agent has no memory of prior conversation — provide everything it needs.`,
         parameters: {
             type: 'object',
@@ -70,6 +74,8 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
         },
         timeout: SUB_AGENT_TIMEOUT_MS,
         execute: async (params: unknown, executionSignal?: AbortSignal): Promise<ToolResult> => {
+            const activeSignal = executionSignal ?? signal
+            activeSignal?.throwIfAborted()
             const { internalName, instructions, context } = params as { internalName: string; instructions: string; context?: string }
             const selected = availableSubAgents.find(({ agentData }) => agentData.internalName === internalName)
 
@@ -84,6 +90,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             const { agentData } = selected
             const invocationId = nanoid()
             const eventMeta = {
+                ...rootEventMeta,
                 maCodename: agentData.internalName,
                 maAgentName: agentData.name,
                 maInvocationId: invocationId,
@@ -105,11 +112,13 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 autoMemory: agentData.autoMemory === true,
                 memorySpaceOverrides: getAssignedOrDefaultSpaces(agentData.id),
                 eventMeta,
-                signal: executionSignal ?? signal,
+                signal: activeSignal,
             })
+            activeSignal?.throwIfAborted()
             const gateway = getGateway()
             const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id
             const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(prepared.model, responseProvider)
+            activeSignal?.throwIfAborted()
             const responseTools = responseSupportsToolCalls ? prepared.tools : []
 
             // Sub-agent executor emits EventBus step events (for timeline cards)
@@ -129,7 +138,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 maxRounds: SUB_AGENT_MAX_ROUNDS,
                 thinkingEnabled: agentData.thinkingEnabled !== false,
                 reasoningEffort: agentData.reasoningEffort,
-                signal: executionSignal ?? signal,
+                signal: activeSignal,
                 streamMode: 'per-round',
                 streamEventPrefix: 'chat:subagent-stream',
                 saveMessages: true,
@@ -145,10 +154,12 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     ...prepared.systemMessages,
                     { role: 'user', content: userMessage },
                 ])
+                activeSignal?.throwIfAborted()
 
                 // Save sub-agent's final response as an assistant message
                 // (intermediate rounds are saved by the executor via saveMessages: true)
                 if (result.content || result.images.length) {
+                    activeSignal?.throwIfAborted()
                     const db = getDb()
                     db.prepare(
                         `INSERT INTO messages (

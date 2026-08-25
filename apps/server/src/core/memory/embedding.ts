@@ -163,12 +163,13 @@ export class EmbeddingProvider {
     return null
   }
 
-  async embed(text: string): Promise<EmbeddingResult> {
-    const results = await this.embedBatch([text])
+  async embed(text: string, signal?: AbortSignal): Promise<EmbeddingResult> {
+    const results = await this.embedBatch([text], signal)
     return results[0]
   }
 
-  async embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
+  async embedBatch(texts: string[], signal?: AbortSignal): Promise<EmbeddingResult[]> {
+    signal?.throwIfAborted()
     const googleClient = this.getGoogleClient()
     if (googleClient) {
       const response = await googleClient.models.embedContent({
@@ -178,6 +179,7 @@ export class EmbeddingProvider {
           outputDimensionality: this.dimensions
         }
       })
+      signal?.throwIfAborted()
 
       const embeddings = response.embeddings || []
       if (embeddings.length !== texts.length) {
@@ -206,11 +208,15 @@ export class EmbeddingProvider {
 
     const client = this.getClient()
 
-    const response = await client.embeddings.create({
-      model: this.model,
-      input: texts,
-      dimensions: this.dimensions
-    })
+    const response = await client.embeddings.create(
+      {
+        model: this.model,
+        input: texts,
+        dimensions: this.dimensions
+      },
+      { signal }
+    )
+    signal?.throwIfAborted()
 
     const usage = (response as { usage?: { prompt_tokens?: number; total_tokens?: number } }).usage
     recordAuxiliaryModelUsage({

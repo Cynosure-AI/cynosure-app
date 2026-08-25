@@ -289,6 +289,8 @@ export function makeAttachmentTools(conversationId: string): ToolDefinition[] {
     return [
         {
             name: 'attachment_list_documents',
+            execution: { readOnly: true },
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             description: 'List the indexed file/document attachments available in the current conversation.',
             parameters: { type: 'object', properties: {} },
             timeout: 10_000,
@@ -299,6 +301,8 @@ export function makeAttachmentTools(conversationId: string): ToolDefinition[] {
         },
         {
             name: 'attachment_search',
+            execution: { readOnly: true },
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             description: 'Search indexed file/document attachments in this conversation for information relevant to a query. Use this when the visible context does not contain enough detail from an attached document.',
             parameters: {
                 type: 'object',
@@ -326,6 +330,8 @@ export function makeAttachmentTools(conversationId: string): ToolDefinition[] {
         },
         {
             name: 'attachment_retrieve_chunks',
+            execution: { readOnly: true },
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             description: 'Retrieve neighboring chunks from an indexed conversation attachment by attachmentId and zero-based chunk range. Use this to expand around a relevant search result or inspect a document section.',
             parameters: {
                 type: 'object',

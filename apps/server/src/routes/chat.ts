@@ -28,6 +28,7 @@ import { buildAttachmentContext, indexConversationAttachment, listConversationFi
 import {
   cancelChatExecution,
   cancelChatExecutionByConversation,
+  getChatExecutionIdsByConversation,
   registerActiveChatExecution,
   unregisterActiveChatExecution,
   updateActiveChatExecution,
@@ -36,7 +37,7 @@ import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
 import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageArtifactsSystemHint } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemorySpaceOverrides, resolveToolSelection } from '../core/chat/run-config.js'
-import { beginDebugContextCapture, getDebugContextCapture } from '../core/chat/debug-context.js'
+import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
 import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -214,7 +215,35 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     Body: ChatSendRequest
   }>('/conversations/:id/send', async (req) => {
     const conversationId = req.params.id
+    const initialConversation = getDb().prepare('SELECT agent_id FROM conversations WHERE id = ?')
+      .get(conversationId) as { agent_id: string | null } | undefined
+    const initialAgentId = initialConversation?.agent_id || null
+    const initialAgent = initialAgentId ? getAgent(initialAgentId) : null
+    const abortController = new AbortController()
+    const streamId = nanoid()
+    const executionId = streamId
+    const executionBroadcast: BroadcastFn = (event, data) => {
+      const payload = data && typeof data === 'object'
+        ? { ...(data as Record<string, unknown>), executionId }
+        : data
+      const terminalEvent = event.endsWith('-end') || event.endsWith('-error')
+      if (abortController.signal.aborted && !terminalEvent) return
+      broadcast(event, payload)
+    }
+
+    // Registration happens before the conversation lock and before any async
+    // preflight work. There is no window in which Stop can miss this request
+    // and allow it to register itself later as a seemingly new execution.
+    registerActiveChatExecution({
+      id: executionId,
+      conversationId,
+      agentId: initialAgentId,
+      model: req.body.run.model || initialAgent?.model || null,
+      startedAt: Date.now(),
+    }, abortController)
+
     return withConversationLock(conversationId, async () => {
+      abortController.signal.throwIfAborted()
       const { content, messageId: providedMsgId, imageDataUrls, audioDataUrls, files } = req.body
       const normalizedContent = content.trim() || (audioDataUrls?.length ? 'Transcribe the attached audio.' : content)
       // Browser-facing artifact URLs are relative API routes. Resolve them for
@@ -262,8 +291,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       if (providerImageDataUrls?.length) {
         try {
           const artifacts = await materializeImageArtifacts(providerImageDataUrls, conversationId)
+          abortController.signal.throwIfAborted()
           storedImageUrls = artifacts.map((artifact) => artifact.url)
         } catch (err) {
+          if (abortController.signal.aborted) throw err
           console.warn('[chat] Failed to materialize user images, keeping original URLs:', err)
         }
       }
@@ -274,8 +305,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       if (providerAudioDataUrls?.length) {
         try {
           const artifacts = await materializeAudioArtifacts(providerAudioDataUrls, conversationId)
+          abortController.signal.throwIfAborted()
           storedAudioUrls = artifacts.map((artifact) => artifact.url)
         } catch (err) {
+          if (abortController.signal.aborted) throw err
           console.warn('[chat] Failed to materialize user audio, keeping original URLs:', err)
         }
       }
@@ -283,8 +316,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const storedFileAttachments = files?.length
         ? await materializeFileAttachments(files, conversationId)
         : []
+      abortController.signal.throwIfAborted()
       for (const attachment of storedFileAttachments) {
         attachment.chunkCount = await indexConversationAttachment(conversationId, attachment)
+        abortController.signal.throwIfAborted()
       }
 
       // Build content (text + optional images + optional audio + optional files)
@@ -369,31 +404,30 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       // Resolve memory space overrides (request body ids -> { id, name } objects)
       const memorySpaceOverrides = resolveMemorySpaceOverrides(db, reqMemorySpaceIds)
 
-      // Create AbortController early so sub-agent tools can receive the signal
-      const abortController = new AbortController()
       const usedToolNames = new Set<string>()
-      const streamId = nanoid()
-      const executionId = streamId
 
-      registerActiveChatExecution({
-        id: executionId,
-        conversationId,
-        agentId,
-        model: model || resolvedAgent?.model || null,
-        startedAt: Date.now()
-      }, abortController)
+      if (reqDebugMode === true) {
+        beginDebugContextCapture({
+          conversationId,
+          executionId,
+          providerId: providerOverride || resolvedAgent?.providerId,
+          model: model || resolvedAgent?.model,
+          contextStrategy: reqContextStrategy || 'sliding-window',
+        })
+      }
 
       let planned: Awaited<ReturnType<typeof planExecution>>
       try {
         planned = await planExecution({
           resolvedAgent,
           conversationId,
-          broadcast,
+          broadcast: executionBroadcast,
           abortSignal: abortController.signal,
           gateway,
           toolRegistry,
           messages,
           userText: normalizedContent,
+          eventMeta: { executionId },
           run: {
             providerOverride: providerOverride || undefined,
             modelOverride: model || undefined,
@@ -410,13 +444,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
             reasoningEffort: reqReasoningEffort,
             inlineAttachmentTextLimit,
+            debugContextEnabled: reqDebugMode === true,
           },
         })
       } catch (err) {
         unregisterActiveChatExecution(executionId)
         if ((err as Error).name === 'AbortError' || abortController.signal.aborted) {
-          getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
-          broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
+          getEventBus().emit('task:error', { conversationId, executionId, error: 'Cancelled' })
+          executionBroadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
           return { streamId }
         }
         throw err
@@ -437,8 +472,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if (planningRunId) {
           interruptPlanningRun(planningRunId, { error: 'Interrupted before completion.' })
         }
-        getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
-        broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
+        getEventBus().emit('task:error', { conversationId, executionId, error: 'Cancelled' })
+        executionBroadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
         return { streamId }
       }
       const tools: RegistryAwareToolDefinition[] = plannedTools
@@ -448,11 +483,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         messages = planned.messages
 
         const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(responseModel, responseProvider)
+        abortController.signal.throwIfAborted()
         const hasConversationFileAttachments = listConversationFileAttachments(db, conversationId).length > 0
         if (responseSupportsToolCalls && hasConversationFileAttachments) {
           tools.push(...makeAttachmentTools(conversationId))
         }
         messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, normalizedContent, db))
+        abortController.signal.throwIfAborted()
         messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
         // Persist the full session config with RESOLVED model/provider so it can
@@ -477,20 +514,21 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         )
 
         const resolvedModelInfo = await gateway.getModelInfo(responseModel, responseProvider).catch(() => null)
+        abortController.signal.throwIfAborted()
         const isVideoOutputModel = resolvedModelInfo?.outputModalities
           ?.some((modality) => modality.toLowerCase() === 'video') === true
         const isTranscriptionOutputModel = resolvedModelInfo?.outputModalities
           ?.some((modality) => modality.toLowerCase() === 'transcription') === true
         if (isVideoOutputModel) {
           attemptedVideoOutput = true
-          broadcast('chat:stream-start', {
+          executionBroadcast('chat:stream-start', {
             streamId,
             conversationId,
             agentId: agentId || undefined,
             agentName: chatAgentName,
             agentIconUrl: chatAgentIconUrl,
           })
-          broadcast('chat:stream-chunk', {
+          executionBroadcast('chat:stream-chunk', {
             streamId,
             conversationId,
             content: 'Generating video...',
@@ -507,7 +545,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             signal: abortController.signal,
           }), responseProvider)
           const completedJob = await pollVideoGeneration(gateway, responseProvider, submittedJob, abortController.signal)
+          abortController.signal.throwIfAborted()
           const videoContent = await gateway.getVideoGenerationContent(completedJob.id, 0, responseProvider)
+          abortController.signal.throwIfAborted()
           const videoArtifact = materializeMediaBuffer(
             videoContent.data,
             videoContent.contentType,
@@ -516,8 +556,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           )
           const videoUrls = [videoArtifact.url]
 
-          broadcast('chat:stream-videos', { streamId, conversationId, videos: videoUrls })
-          broadcast('chat:stream-end', { streamId, conversationId, model: responseModel })
+          executionBroadcast('chat:stream-videos', { streamId, conversationId, videos: videoUrls })
+          executionBroadcast('chat:stream-end', { streamId, conversationId, model: responseModel })
+          abortController.signal.throwIfAborted()
 
           const assistantMsgId = nanoid()
           const assistantNow = Date.now()
@@ -567,14 +608,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             throw new Error('Transcription models require an attached audio file.')
           }
 
-          broadcast('chat:stream-start', {
+          executionBroadcast('chat:stream-start', {
             streamId,
             conversationId,
             agentId: agentId || undefined,
             agentName: chatAgentName,
             agentIconUrl: chatAgentIconUrl,
           })
-          broadcast('chat:stream-chunk', {
+          executionBroadcast('chat:stream-chunk', {
             streamId,
             conversationId,
             content: 'Transcribing audio...',
@@ -585,11 +626,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           let completionTokens = 0
           let totalTokens = 0
           for (const audioUrl of providerAudioDataUrls) {
+            abortController.signal.throwIfAborted()
             const transcription = await gateway.transcribeAudio({
               model: responseModel,
               inputAudio: audioInputFromDataUrl(audioUrl),
               signal: abortController.signal,
             }, responseProvider)
+            abortController.signal.throwIfAborted()
             if (transcription.text.trim()) transcripts.push(transcription.text.trim())
             promptTokens += transcription.usage?.input_tokens ?? 0
             completionTokens += transcription.usage?.output_tokens ?? 0
@@ -599,12 +642,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           const assistantContent = transcripts.length
             ? transcripts.join('\n\n')
             : '(No transcription text returned.)'
-          broadcast('chat:stream-chunk', {
+          executionBroadcast('chat:stream-chunk', {
             streamId,
             conversationId,
             content: `\n\n${assistantContent}`,
           })
-          broadcast('chat:stream-end', { streamId, conversationId, model: responseModel })
+          executionBroadcast('chat:stream-end', { streamId, conversationId, model: responseModel })
+          abortController.signal.throwIfAborted()
 
           const assistantMsgId = nanoid()
           const assistantNow = Date.now()
@@ -683,6 +727,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             db,
             broadcast,
           })
+          abortController.signal.throwIfAborted()
           messages = compactResult.messages
           initialContextEstimate = compactResult.initialContextEstimate
         } else if (contextWindow) {
@@ -691,9 +736,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
 
         if (reqDebugMode === true) {
-          beginDebugContextCapture({
-            conversationId,
-            executionId,
+          updateDebugContextCapture(conversationId, {
             providerId: responseProvider,
             model: responseModel,
             contextWindow,
@@ -705,7 +748,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           gateway,
           tools,
           conversationId,
-          broadcast,
+          broadcast: executionBroadcast,
           providerId,
           model: responseModel,
           hitl: resolvedAgent ? !resolvedAgent.autoApproveTools : true,
@@ -725,9 +768,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           isPrimaryExecutor: true,
           usedToolNames,
           debugContextEnabled: reqDebugMode === true,
+          eventMeta: { executionId },
         })
 
         const result = await executor.run(messages)
+        abortController.signal.throwIfAborted()
         if (reqAutoToolRouting === true && executionConfig) {
           persistStickyUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
         }
@@ -783,15 +828,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
 
       } catch (err) {
-        if ((err as Error).name === 'AbortError') {
-          if (reqAutoToolRouting === true && executionConfig) {
-            persistStickyUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
-          }
+        if ((err as Error).name === 'AbortError' || abortController.signal.aborted) {
           if (planningRunId) {
             interruptPlanningRun(planningRunId, { error: 'Interrupted before completion.' })
           }
-          getEventBus().emit('task:error', { conversationId, error: 'Cancelled' })
-          broadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
+          getEventBus().emit('task:error', { conversationId, executionId, error: 'Cancelled' })
+          executionBroadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
           return { streamId }
         }
         if (planningRunId) {
@@ -829,26 +871,37 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       }
 
       return { streamId }
-    }) // end withConversationLock
+    }).catch((err: unknown) => {
+      if ((err as Error).name === 'AbortError' || abortController.signal.aborted) {
+        getEventBus().emit('task:error', { conversationId, executionId, error: 'Cancelled' })
+        executionBroadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
+        return { streamId }
+      }
+      throw err
+    }).finally(() => unregisterActiveChatExecution(executionId)) // end withConversationLock
   })
 
   // POST /api/chat/cancel — cancel an active stream / execution
   app.post<{ Body: { streamId?: string; conversationId?: string } }>('/cancel', async (req) => {
     const { streamId, conversationId } = req.body
+    const executionIds = new Set<string>()
     if (streamId) {
-      if (!cancelChatExecution(streamId)) {
+      if (cancelChatExecution(streamId)) {
+        executionIds.add(streamId)
+      } else {
         // Try cancelling a channel execution (Telegram/Discord/Slack)
         getChannelManager().cancelExecution(streamId)
       }
     }
     // Fallback: cancel by conversationId (handles post-reload or sub-agent-only streaming)
     if (conversationId) {
+      for (const executionId of getChatExecutionIdsByConversation(conversationId)) executionIds.add(executionId)
       clearPendingHITLForConversation(conversationId)
       cancelChatExecutionByConversation(conversationId)
       getChannelManager().cancelExecutionByConversation(conversationId)
       cancelPostActions(conversationId)
     }
-    return { success: true }
+    return { success: true, executionIds: Array.from(executionIds) }
   })
 
   // ─── Active post-actions query ────────────────────────────

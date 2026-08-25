@@ -5,8 +5,9 @@ import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getMemorySpaceFolderPath, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import { relativePathForFolder } from '../../memory/memory-space-folders.js'
 import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
-import { getEntityGraphStore, type EntityEdge, type EntityNode, type EntityType } from '../../memory/entity-graph.js'
-import { deleteMemoryGraphSource } from '../../memory/memory-entity-indexer.js'
+import type { EntityEdge, EntityNode, EntityType } from '../../memory/knowledge-types.js'
+import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
+import { deleteMemoryKnowledgeSource } from '../../memory/memory-entity-indexer.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
 import {
     memoryDocumentRefMatchesContentHash,
@@ -76,6 +77,7 @@ export const RELATIONSHIP_GRAPH_TOOL_NAMES = [
     'relationship_graph_search',
     'relationship_graph_assert',
     'relationship_graph_delete',
+    'relationship_entity_merge',
 ] as const
 export const RELATIONSHIP_GRAPH_READ_TOOL_NAMES = ['relationship_graph_search'] as const
 
@@ -123,11 +125,29 @@ function shortEntityGraphId(prefix: 'n' | 'e', id: string): string {
     return `${prefix}:${id.slice(0, ENTITY_GRAPH_SHORT_ID_LENGTH)}`
 }
 
+function entityGraphHandleSuffix(id: string): string {
+    return createHash('sha256').update(id).digest('hex').slice(0, ENTITY_GRAPH_SHORT_ID_LENGTH)
+}
+
+function entityGraphHandleSlug(name: string): string {
+    return name
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 48) || 'entity'
+}
+
+export function readableEntityGraphNodeId(name: string, id: string): string {
+    return `n:${entityGraphHandleSlug(name)}#${entityGraphHandleSuffix(id)}`
+}
+
 function resolveEntityGraphEdgeId(value: string): { id: string } | { error: string } {
     const trimmed = value.trim()
     const shortId = trimmed.startsWith('e:') ? trimmed.slice(2) : trimmed
     if (!trimmed.startsWith('e:') || shortId.length === 0) return { id: trimmed }
-    const rows = getDb().prepare('SELECT id FROM entity_graph_edges WHERE id LIKE ? ORDER BY last_seen_at DESC LIMIT 2').all(`${shortId}%`) as { id: string }[]
+    const rows = getDb().prepare(`SELECT id FROM memory_knowledge_assertions WHERE id LIKE ? AND status IN ('active', 'disputed') ORDER BY updated_at DESC LIMIT 2`).all(`${shortId}%`) as { id: string }[]
     if (rows.length === 1) return { id: rows[0].id }
     if (rows.length > 1) {
         return { error: `Multiple relationship graph edges match id prefix ${trimmed}. Use relationship_graph_search to get the full id, then retry.` }
@@ -135,21 +155,67 @@ function resolveEntityGraphEdgeId(value: string): { id: string } | { error: stri
     return { id: trimmed }
 }
 
+function resolveEntityGraphNodeIds(values: unknown, spaceIds: string[]): { ids: string[] } | { error: string } {
+    if (!Array.isArray(values)) return { error: 'entityIds must be an array containing at least one entity ID.' }
+    const requested = Array.from(new Set(values
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter(Boolean)))
+        .slice(0, 20)
+    if (requested.length < 1) return { error: 'Provide at least one entity ID to merge.' }
+    if (spaceIds.length === 0) return { error: 'No memory folder is selected for relationship graph access.' }
+    const scopePlaceholders = spaceIds.map(() => '?').join(', ')
+    const ids: string[] = []
+    let readableHandleRows: Array<{ id: string }> | undefined
+    for (const requestedId of requested) {
+        const isShort = requestedId.startsWith('n:')
+        const candidate = isShort ? requestedId.slice(2) : requestedId
+        if (!candidate) return { error: `Invalid entity ID "${requestedId}".` }
+        const readableSuffix = isShort && candidate.includes('#') ? candidate.slice(candidate.lastIndexOf('#') + 1) : ''
+        if (readableSuffix && !readableHandleRows) {
+            readableHandleRows = getDb().prepare(`
+                SELECT id FROM memory_knowledge_entities
+                WHERE status = 'active' AND namespace_id IN (${scopePlaceholders})
+                ORDER BY updated_at DESC
+              `).all(...spaceIds) as Array<{ id: string }>
+        }
+        const rows = readableSuffix
+            ? readableHandleRows!.filter((row) => entityGraphHandleSuffix(row.id) === readableSuffix)
+            : isShort
+              ? getDb().prepare(`
+                SELECT id FROM memory_knowledge_entities
+                WHERE status = 'active' AND namespace_id IN (${scopePlaceholders}) AND id LIKE ?
+                ORDER BY updated_at DESC LIMIT 2
+              `).all(...spaceIds, `${candidate}%`) as Array<{ id: string }>
+              : getDb().prepare(`
+                SELECT id FROM memory_knowledge_entities
+                WHERE status = 'active' AND namespace_id IN (${scopePlaceholders}) AND id = ?
+                LIMIT 1
+              `).all(...spaceIds, candidate) as Array<{ id: string }>
+        if (rows.length === 0) return { error: `No active entity matched ID ${requestedId}. Use relationship_graph_search to refresh the IDs.` }
+        if (rows.length > 1) return { error: `Multiple entities match ID ${requestedId}. Use relationship_graph_search to refresh the IDs and retry.` }
+        ids.push(rows[0].id)
+    }
+    const unique = Array.from(new Set(ids))
+    return unique.length >= 1 ? { ids: unique } : { error: 'The supplied IDs did not resolve to an active entity.' }
+}
+
 function formatEntityNode(node: EntityNode): string {
     const aliases = node.aliases.length ? ` aliases=${node.aliases.join(', ')}` : ''
     const importanceLabel = IMPORTANCE_LABELS[node.importance] ?? 'minor'
-    return `- [${importanceLabel}] ${node.name} (${node.type}, id=${shortEntityGraphId('n', node.id)}, mentions=${node.mentionCount}${aliases})`
+    return `- [${importanceLabel}] ${node.name} (${node.type}, id=${readableEntityGraphNodeId(node.name, node.id)}, mentions=${node.mentionCount}${aliases})`
 }
 
 function formatEntityEdge(edge: EntityEdge): string {
     const importanceLabel = IMPORTANCE_LABELS[edge.importance] ?? 'minor'
-    const evidence = edge.evidence ? ` Evidence: ${edge.evidence}` : ''
-    const part = edge.sourceChunkIndex !== undefined ? ` part=${edge.sourceChunkIndex + 1}.` : ''
+    const note = edge.note ? ` Note: ${edge.note}` : ''
+    const part = edge.sourceChunkIndex !== undefined ? `, part=${edge.sourceChunkIndex + 1}` : ''
     const sourceDocument = edge.sourceDocumentId
         ? getDb().prepare('SELECT file_name FROM memory_file_index WHERE document_id = ?').get(edge.sourceDocumentId) as { file_name: string } | undefined
         : undefined
-    const source = sourceDocument ? ` Source: ${sourceDocument.file_name}.${part}` : ''
-    return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${shortEntityGraphId('e', edge.id)}, confidence=${edge.confidence.toFixed(2)}, mentions=${edge.mentionCount}).${evidence}${source}`
+    const source = sourceDocument ? ` Source chunk: ${sourceDocument.file_name}${part}.` : ''
+    const relevance = edge.retrievalRelevance === undefined ? '' : `, relevance=${edge.retrievalRelevance.toFixed(2)}`
+    return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${shortEntityGraphId('e', edge.id)}${relevance}, mentions=${edge.mentionCount}).${note}${source}`
 }
 
 function normalizeEntityType(value: unknown): EntityType {
@@ -564,7 +630,7 @@ async function commitMemoryRemoval(
         throw new Error(`Memory removal failed and the previous source was restored: ${(err as Error).message}`)
     }
     try {
-        const { edgesDeleted } = deleteMemoryGraphSource(resolved.spaceId, resolved.fileName)
+        const { edgesDeleted } = deleteMemoryKnowledgeSource(resolved.spaceId, resolved.fileName)
         return { deletedChunks, deletedEdges: edgesDeleted }
     } catch (err) {
         console.warn('[memory-tools] Failed to remove derived graph data after memory removal:', err)
@@ -582,6 +648,7 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
     return {
         name: 'memory_list_documents',
         execution: { readOnly: true },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         description:
             'List memorised documents (source files) stored in your knowledge base. ' +
             'Returns document names, chunk counts, and ingestion dates. Paginated — max 100 per page. ' +
@@ -654,6 +721,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
     return {
         name: 'memory_retrieve_chunks',
         execution: { readOnly: true },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         description:
             'Retrieve additional chunks from a stored document by source file and part number range. ' +
             'Very useful to gather more detail of a section (e.g. "Part 4 - 6" when Part 5 matches). ' +
@@ -738,6 +806,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
     return {
         name: 'memory_semantic_search',
         execution: { readOnly: true },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         description:
             'Search through stored RAG memories using a semantic query. ' +
             'Use this to get a rough starting point for memories, which can then be refined or expanded using other tools. ' +
@@ -808,17 +877,14 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
                 return parts.join(' ')
             }).join('\n\n---\n\n')
 
-            const graph = getEntityGraphStore()
-            const seedNodes = graph.findSeedNodes(query, results.map((r) => r.text), 8)
             const graphSpaces = resolvedScope.space
                 ? [resolvedScope.space]
                 : (assignedSpaces.length > 0 ? assignedSpaces : getKnownSpaces())
-            const graphContext = seedNodes.length > 0 && graphSpaces.length > 0
-                ? graph.formatWalk(graph.focusedWalk(seedNodes.map((node) => node.id), query, 1, 8, 0, {
-                    sourceIdPrefixes: graphSpaces.map((space) => `memory:${space.id}:`),
-                    contextText: [query, ...results.map((r) => r.text)].join(' '),
-                }))
-                : ''
+            const knowledge = getMemoryKnowledgeStore()
+            const graphResult = graphSpaces.length > 0
+                ? await knowledge.search(query, graphSpaces.map((space) => space.id), 8)
+                : { graph: undefined }
+            const graphContext = graphResult.graph ? knowledge.formatWalk(graphResult.graph) : ''
             const graphSection = graphContext ? `\n\n---\n\n${graphContext}` : ''
 
             return { success: true, output: `Showing ${results.length} result${results.length !== 1 ? 's' : ''}${resolvedScope.space ? ` from "${resolvedScope.space.name}"` : ''}:\n\n${formatted}${graphSection}` }
@@ -830,13 +896,6 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
  * Create a `relationship_graph_search` tool that lets the LLM inspect known
  * relationships and their connected entities.
  */
-function relationshipGraphSourcePrefixes(assignedSpaces: MemorySpaceRef[]): string[] {
-    return assignedSpaces.flatMap((space) => [
-        `memory:${space.id}:`,
-        `memory-space:${space.id}:`,
-    ])
-}
-
 function resolveRelationshipGraphSpace(
     assignedSpaces: MemorySpaceRef[],
     folder?: string,
@@ -854,10 +913,11 @@ function resolveRelationshipGraphSpace(
 
 export function makeRelationshipGraphSearchTool(opts: MemoryToolOptions = {}): ToolDefinition {
     const assignedSpaces = opts.assignedSpaces || []
-    const sourceIdPrefixes = relationshipGraphSourcePrefixes(assignedSpaces)
+    const spaceIds = assignedSpaces.map((space) => space.id)
     return {
         name: 'relationship_graph_search',
         execution: { readOnly: true },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         description:
             'Search and inspect source-grounded relationships derived from memory documents, plus explicitly approved manual assertions. ' +
             'Use this to look up known people, organizations, projects, technologies, concepts, or relationships. ' +
@@ -867,41 +927,38 @@ export function makeRelationshipGraphSearchTool(opts: MemoryToolOptions = {}): T
             properties: {
                 query: { type: 'string', description: 'Entity name, alias, or natural-language phrase to search for.' },
                 depth: { type: 'number', description: 'Relationship walk depth from matched entities (default: 1 for focused query searches, max: 3).' },
-                limit: { type: 'number', description: 'Maximum number of nodes/edges to return (default: 20, max: 80).' },
+                limit: { type: 'number', description: 'Maximum number of focused relationships to return (default: 12, max: 80).' },
             },
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            if (sourceIdPrefixes.length === 0) {
+            if (spaceIds.length === 0) {
                 return { success: false, output: 'No memory folder is selected for relationship graph access.' }
             }
             const query = pickToolString(params, ['query', 'entity', 'name', 'search_query', 'searchQuery'])
             const { depth, limit } = (params || {}) as { depth?: number; limit?: number }
-            const graph = getEntityGraphStore()
-            const cappedLimit = Math.floor(clampToolNumber(limit, 20, 1, 80))
+            const knowledge = getMemoryKnowledgeStore()
+            const cappedLimit = Math.floor(clampToolNumber(limit, 12, 1, 80))
 
             if (query) {
-                const seedNodes = graph.findSeedNodes(query, [], Math.min(cappedLimit, 12))
-                if (seedNodes.length === 0) {
+                const walkDepth = Math.floor(clampToolNumber(depth, 1, 1, 3))
+                const result = await knowledge.search(query, spaceIds, cappedLimit, { depth: walkDepth })
+                const walk = result.graph
+                if (!walk || (walk.nodes.length === 0 && walk.edges.length === 0)) {
                     return { success: false, output: `No relationship graph nodes matched "${query}".` }
                 }
 
-                const walkDepth = Math.floor(clampToolNumber(depth, 1, 1, 3))
-                const walk = graph.focusedWalk(seedNodes.map((node) => node.id), query, walkDepth, cappedLimit, 0, { sourceIdPrefixes })
-                if (walk.edges.length === 0) {
-                    return { success: false, output: `No relationship graph entries in the selected memory folders matched "${query}".` }
-                }
                 const nodeLines = walk.nodes.slice(0, cappedLimit).map(formatEntityNode)
                 const edgeLines = walk.edges.slice(0, cappedLimit).map(formatEntityEdge)
                 const sections = [
-                    `Matched ${seedNodes.length} seed node${seedNodes.length !== 1 ? 's' : ''}; focused ${walkDepth} hop${walkDepth !== 1 ? 's' : ''}.`,
+                    `Matched ${walk.seedNodes.length} seed node${walk.seedNodes.length !== 1 ? 's' : ''}; focused ${walkDepth} hop${walkDepth !== 1 ? 's' : ''}.`,
                     nodeLines.length ? `Nodes:\n${nodeLines.join('\n')}` : '',
                     edgeLines.length ? `Relationships:\n${edgeLines.join('\n')}` : 'No relationships connected to the matched nodes.',
                 ].filter(Boolean)
                 return { success: true, output: sections.join('\n\n') }
             }
 
-            const snapshot = graph.list(cappedLimit, 0, sourceIdPrefixes)
+            const snapshot = knowledge.browseGraph({ limit: cappedLimit, spaceIds })
             if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {
                 return { success: false, output: 'No relationship graph entries are available in the selected memory folders.' }
             }
@@ -928,6 +985,8 @@ export function makeRelationshipGraphAssertTool(opts: MemoryToolOptions = {}): T
     const assignedSpaces = opts.assignedSpaces || []
     return {
         name: 'relationship_graph_assert',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
         description:
             'Assert or update a durable relationship in the relationship graph. ' +
             'Use this for stable facts the user explicitly wants remembered as connected entities. ' +
@@ -956,17 +1015,16 @@ export function makeRelationshipGraphAssertTool(opts: MemoryToolOptions = {}): T
                     },
                     required: ['name'],
                 },
-                confidence: { type: 'number', description: 'Confidence from 0.1 to 1.0 (default: 0.9 for explicit user-provided facts).' },
                 importance: { type: 'string', enum: IMPORTANCE_LABELS, description: 'Importance: temporary, minor, useful (durable fact), or core.' },
-                evidence: { type: 'string', description: 'Short evidence phrase explaining why this relationship is true.' },
+                note: { type: 'string', description: 'Short contextual note explaining the relationship.' },
                 folder: { type: 'string', description: 'Target memory folder name or ID. Required when multiple memory folders are selected.' },
             },
             required: ['from', 'relation', 'to'],
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { from, relation, to, confidence, importance, evidence, folder } = (params || {}) as {
-                from?: unknown; relation?: unknown; to?: unknown; confidence?: unknown; importance?: unknown; evidence?: unknown; folder?: string
+            const { from, relation, to, importance, note, folder } = (params || {}) as {
+                from?: unknown; relation?: unknown; to?: unknown; importance?: unknown; note?: unknown; folder?: string
             }
             const targetSpace = resolveRelationshipGraphSpace(assignedSpaces, folder)
             if ('error' in targetSpace) return { success: false, output: targetSpace.error }
@@ -980,18 +1038,81 @@ export function makeRelationshipGraphAssertTool(opts: MemoryToolOptions = {}): T
                 return { success: false, output: 'Cannot create a relationship from an entity to itself.' }
             }
 
-            const edge = getEntityGraphStore().upsertEdge({
-                action: 'assert',
+            const edge = getMemoryKnowledgeStore().assertRelationship({
+                spaceId: targetSpace.id,
                 from: fromEntity,
                 relation: rel,
                 to: toEntity,
-                confidence: clampToolNumber(confidence, 0.9, 0.1, 1),
                 importance: toImportanceValue(importance),
-                evidence: typeof evidence === 'string' ? evidence.replace(/\s+/g, ' ').trim().slice(0, 280) : '',
-            }, 'tool', `memory-space:${targetSpace.id}:relationship-assertions`)
+                note: typeof note === 'string' ? note.replace(/\s+/g, ' ').trim().slice(0, 600) : '',
+            })
 
             if (!edge) return { success: false, output: 'No relationship was created.' }
             return { success: true, output: `Relationship asserted:\n${formatEntityEdge(edge)}` }
+        },
+    }
+}
+
+/** Merge duplicate graph entities into an existing canonical owner or the first supplied entity ID. */
+export function makeRelationshipEntityMergeTool(opts: MemoryToolOptions = {}): ToolDefinition {
+    const spaceIds = (opts.assignedSpaces || []).map((space) => space.id)
+    return {
+        name: 'relationship_entity_merge',
+        description:
+            'Merge duplicate relationship graph entities. Provide entity IDs returned by relationship_graph_search and a new canonical mainName. ' +
+            'If mainName already belongs to an active entity in scope, that entity automatically remains stable; otherwise the first supplied ID remains stable. ' +
+            'All other entities are redirected into it, and their former names and aliases become normalized aliases. ' +
+            'Relationships, mentions, and resolution records are rewired; duplicate relationships are consolidated.',
+        parameters: {
+            type: 'object',
+            properties: {
+                entityIds: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    minItems: 1,
+                    maxItems: 20,
+                    description: 'One or more full or readable node IDs (n:entity_name#xxxxxxxx) from relationship_graph_search. Legacy short IDs remain accepted. One ID is sufficient when mainName already belongs to another active entity.',
+                },
+                mainName: { type: 'string', description: 'New canonical display name for the merged entity.' },
+            },
+            required: ['entityIds', 'mainName'],
+            additionalProperties: false,
+        },
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+        timeout: 30_000,
+        execute: async (params: unknown) => {
+            const { entityIds, mainName } = (params || {}) as { entityIds?: unknown; mainName?: unknown }
+            const resolved = resolveEntityGraphNodeIds(entityIds, spaceIds)
+            if ('error' in resolved) return { success: false, output: resolved.error }
+            const canonicalName = cleanEntityName(mainName)
+            if (!canonicalName) return { success: false, output: 'mainName is required.' }
+            try {
+                const result = await getMemoryKnowledgeStore().mergeEntities({
+                    entityIds: resolved.ids,
+                    canonicalName,
+                    spaceIds,
+                })
+                const aliases = result.entity.aliases.length ? result.entity.aliases.join(', ') : 'none'
+                return {
+                    success: true,
+                    output: [
+                        `Merged ${result.mergedEntityIds.length + 1} entities into ${result.entity.name} (${readableEntityGraphNodeId(result.entity.name, result.entity.id)}).`,
+                        `Aliases: ${aliases}.`,
+                        `Consolidated ${result.consolidatedAssertions} duplicate relationship${result.consolidatedAssertions === 1 ? '' : 's'}; retired ${result.retiredSelfRelationships} self-relationship${result.retiredSelfRelationships === 1 ? '' : 's'}.`,
+                    ].join('\n'),
+                }
+            } catch (error) {
+                const code = error instanceof Error ? error.message : ''
+                const messages: Record<string, string> = {
+                    ENTITY_MERGE_REQUIRES_MULTIPLE: 'Provide at least two distinct entities, either as IDs or as one ID plus an existing mainName owner.',
+                    ENTITY_MERGE_INVALID_NAME: 'mainName is not valid.',
+                    ENTITY_MERGE_ENTITY_NOT_FOUND: 'One or more entities no longer exist or were already merged. Search again and retry.',
+                    ENTITY_MERGE_CROSS_NAMESPACE: 'Entities from different memory folders cannot be merged.',
+                    ENTITY_MERGE_OUT_OF_SCOPE: 'One or more entities are outside the selected memory folder scope.',
+                }
+                return { success: false, output: messages[code] || `Entity merge failed: ${code || 'unknown error'}` }
+            }
         },
     }
 }
@@ -1002,9 +1123,11 @@ export function makeRelationshipGraphAssertTool(opts: MemoryToolOptions = {}): T
  */
 export function makeRelationshipGraphDeleteTool(opts: MemoryToolOptions = {}): ToolDefinition {
     const assignedSpaces = opts.assignedSpaces || []
-    const sourceIdPrefixes = relationshipGraphSourcePrefixes(assignedSpaces)
+    const spaceIds = assignedSpaces.map((space) => space.id)
     return {
         name: 'relationship_graph_delete',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
         description:
             'Delete an incorrect relationship from the relationship graph. ' +
             'Prefer edgeId from relationship_graph_search. If edgeId is unknown, provide from, relation, and to to delete an exact relationship triple.',
@@ -1033,18 +1156,18 @@ export function makeRelationshipGraphDeleteTool(opts: MemoryToolOptions = {}): T
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            if (sourceIdPrefixes.length === 0) {
+            if (spaceIds.length === 0) {
                 return { success: false, output: 'No memory folder is selected for relationship graph access.' }
             }
             const { edgeId, from, relation, to } = (params || {}) as {
                 edgeId?: string; from?: unknown; relation?: unknown; to?: unknown
             }
-            const graph = getEntityGraphStore()
+            const knowledge = getMemoryKnowledgeStore()
 
             if (edgeId?.trim()) {
                 const resolvedEdgeId = resolveEntityGraphEdgeId(edgeId)
                 if ('error' in resolvedEdgeId) return { success: false, output: resolvedEdgeId.error }
-                const result = graph.deleteEdgeEvidenceBySourcePrefixes(resolvedEdgeId.id, sourceIdPrefixes)
+                const result = knowledge.deleteEdge(resolvedEdgeId.id, spaceIds)
                 return result.edgeDeleted
                     ? { success: true, output: formatRelationshipGraphDeleteOutput(`Deleted relationship graph edge ${edgeId.trim()}.`, result.orphanedNodeIds.length) }
                     : { success: false, output: `No relationship found with id ${edgeId.trim()}.` }
@@ -1057,12 +1180,7 @@ export function makeRelationshipGraphDeleteTool(opts: MemoryToolOptions = {}): T
             const rel = cleanRelationName(relation)
             if (!rel) return { success: false, output: 'Provide edgeId, or a valid from/relation/to triple to delete.' }
 
-            const result = graph.deleteMatchingEdgeBySourcePrefixes({
-                action: 'delete',
-                from: fromEntity,
-                relation: rel,
-                to: toEntity,
-            }, sourceIdPrefixes)
+            const result = knowledge.deleteMatchingEdge(fromEntity.name, rel, toEntity.name, spaceIds)
             return result.edgeDeleted
                 ? { success: true, output: formatRelationshipGraphDeleteOutput('Deleted 1 matching relationship graph edge.', result.orphanedNodeIds.length) }
                 : { success: false, output: 'No matching relationship graph edge was found.' }
@@ -1084,6 +1202,8 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_create',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
         description:
             'Create a new memory entry with a title and content. ' +
             'Writes a Markdown file to the memory folder and indexes it for semantic retrieval. ' +
@@ -1179,6 +1299,8 @@ export function makeMemoryAppendTool(opts: MemoryToolOptions): ToolDefinition {
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_append',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
         description: 'Append content to an existing memory document without modifying its current text. Use its stable documentRef from any prior memory result or creation response.',
         parameters: memoryMutationSchema(),
         timeout: 120_000,
@@ -1202,6 +1324,8 @@ export function makeMemoryReplaceAllTool(opts: MemoryToolOptions): ToolDefinitio
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_replace_all',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
         description: 'Replace an entire existing memory document using its stable documentRef. Retrieve it first when the replacement depends on its current contents.',
         parameters: memoryMutationSchema(),
         timeout: 120_000,
@@ -1220,6 +1344,8 @@ export function makeMemoryReplaceRangeTool(opts: MemoryToolOptions): ToolDefinit
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_replace_range',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
         description: 'Replace a contiguous Part range in an existing memory document. First retrieve the current parts and pass the returned documentRef unchanged.',
         parameters: memoryMutationSchema({
             partStart: { type: 'integer', minimum: 1, description: 'First 1-based Part number to replace.' },
@@ -1274,6 +1400,8 @@ export function makeMemoryRemoveAllTool(opts: MemoryToolOptions): ToolDefinition
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_remove_all',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
         description: 'Forget an entire memory document using its stable documentRef. This archives the source in hidden trash and removes its retrieval and graph indexes.',
         parameters: memoryRemovalSchema(false),
         timeout: 30_000,
@@ -1292,6 +1420,8 @@ export function makeMemoryRemoveRangeTool(opts: MemoryToolOptions): ToolDefiniti
     const getKnownSpaces = createKnownMemorySpacesLoader()
     return {
         name: 'memory_remove_range',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
         description: 'Forget a contiguous Part range from a memory document. Retrieve the current parts first and pass the returned documentRef unchanged.',
         parameters: memoryRemovalSchema(true),
         timeout: 120_000,

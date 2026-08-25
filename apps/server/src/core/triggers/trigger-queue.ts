@@ -26,6 +26,18 @@ export function enqueueCoalescedTrigger(key: string, runner: () => Promise<void>
     void runQueue(key, state)
 }
 
+/** Drop pending follow-up runs without interrupting the runner already in flight. */
+export function cancelPendingCoalescedTriggers(prefix?: string): number {
+    let cancelled = 0
+    for (const [key, state] of queues) {
+        if (prefix && !key.startsWith(prefix)) continue
+        if (!state.pending) continue
+        state.pending = false
+        cancelled++
+    }
+    return cancelled
+}
+
 async function runQueue(key: string, state: QueueState): Promise<void> {
     state.running = true
     try {

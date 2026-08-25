@@ -24,21 +24,29 @@ describe('AgentExecutor cancellation', () => {
         return { success: true, output: 'unexpected' }
       },
     }
+    const laterTool = vi.fn(async () => ({ success: true, output: 'must not run' }))
+    const secondTool: ToolDefinition = {
+      name: 'later_tool',
+      description: 'Must remain behind the cancellation gate',
+      parameters: { type: 'object', properties: {} },
+      timeout: 60_000,
+      execution: { readOnly: true },
+      execute: laterTool,
+    }
 
     const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
       yield {
-        toolCalls: [{
-          id: 'call-1',
-          type: 'function',
-          function: { name: 'slow_tool', arguments: '{}' },
-        }],
+        toolCalls: [
+          { id: 'call-1', type: 'function', function: { name: 'slow_tool', arguments: '{}' } },
+          { id: 'call-2', type: 'function', function: { name: 'later_tool', arguments: '{}' } },
+        ],
         done: true,
       }
     })())
     const controller = new AbortController()
     const executor = new AgentExecutor({
       gateway: { streamComplete } as unknown as LLMGateway,
-      tools: [tool],
+      tools: [tool, secondTool],
       conversationId: 'conversation-1',
       broadcast: vi.fn(),
       model: 'test-model',
@@ -53,6 +61,7 @@ describe('AgentExecutor cancellation', () => {
 
     await expect(run).rejects.toMatchObject({ name: 'AbortError' })
     expect(toolSignal?.aborted).toBe(true)
+    expect(laterTool).not.toHaveBeenCalled()
     expect(streamComplete).toHaveBeenCalledTimes(1)
   })
 })
@@ -219,7 +228,7 @@ describe('AgentExecutor tool-loop safety', () => {
     expect(execute).not.toHaveBeenCalled()
   })
 
-  test('runs read-only calls concurrently but waits before a mutating call', async () => {
+  test('runs every tool sequentially so cancellation has a gate before each call', async () => {
     const events: string[] = []
     const makeRead = (name: string): ToolDefinition => ({
       name, description: name, parameters: { type: 'object', properties: {} }, timeout: 1_000,
@@ -252,7 +261,8 @@ describe('AgentExecutor tool-loop safety', () => {
     })
 
     await executor.run([{ role: 'user', content: 'go' }])
-    expect(events.slice(0, 2)).toEqual(['read_a:start', 'read_b:start'])
+    expect(events.slice(0, 2)).toEqual(['read_a:start', 'read_a:end'])
+    expect(events.indexOf('read_b:start')).toBeGreaterThan(events.indexOf('read_a:end'))
     expect(events.indexOf('write:start')).toBeGreaterThan(events.indexOf('read_a:end'))
     expect(events.indexOf('write:start')).toBeGreaterThan(events.indexOf('read_b:end'))
   })

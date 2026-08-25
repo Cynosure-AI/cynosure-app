@@ -5,7 +5,6 @@ import { usePreferencesStore } from '../../stores/preferences.store'
 import { api } from '../../api/client'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
-import MultiSelect from '../shared/MultiSelect.vue'
 import ProviderSelect from '../shared/ProviderSelect.vue'
 import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
@@ -47,11 +46,6 @@ const chunkSize = ref(512)
 const chunkOverlap = ref(64)
 const chunkSaving = ref(false)
 
-// Document parser state
-const ocrEnabled = ref(false)
-const ocrLanguage = ref('eng')
-const ocrSaving = ref(false)
-
 // Retrieval state
 const retrievalResultCount = ref(10)
 const retrievalSaving = ref(false)
@@ -61,52 +55,12 @@ const rerankEnabled = ref(false)
 const rerankProviderId = ref('')
 const rerankModel = ref('')
 const rerankCandidateCount = ref(50)
-const minMatchThresholdPercent = ref(30)
 const rerankSaving = ref(false)
 
 // Entity extraction state
 const entityExtractionProviderId = ref('')
 const entityExtractionModel = ref('')
 const entityExtractionSaving = ref(false)
-
-const OCR_LANGUAGE_OPTIONS = [
-  { value: 'eng', label: 'English', hint: 'eng' },
-  { value: 'deu', label: 'German', hint: 'deu' },
-  { value: 'fra', label: 'French', hint: 'fra' },
-  { value: 'spa', label: 'Spanish', hint: 'spa' },
-  { value: 'ita', label: 'Italian', hint: 'ita' },
-  { value: 'por', label: 'Portuguese', hint: 'por' },
-  { value: 'nld', label: 'Dutch', hint: 'nld' },
-  { value: 'pol', label: 'Polish', hint: 'pol' },
-  { value: 'rus', label: 'Russian', hint: 'rus' },
-  { value: 'jpn', label: 'Japanese', hint: 'jpn' },
-  { value: 'kor', label: 'Korean', hint: 'kor' },
-  { value: 'chi_sim', label: 'Chinese (Simplified)', hint: 'chi_sim' },
-  { value: 'chi_tra', label: 'Chinese (Traditional)', hint: 'chi_tra' },
-  { value: 'ara', label: 'Arabic', hint: 'ara' },
-  { value: 'hin', label: 'Hindi', hint: 'hin' },
-  { value: 'tur', label: 'Turkish', hint: 'tur' },
-  { value: 'swe', label: 'Swedish', hint: 'swe' },
-  { value: 'nor', label: 'Norwegian', hint: 'nor' },
-  { value: 'dan', label: 'Danish', hint: 'dan' },
-  { value: 'fin', label: 'Finnish', hint: 'fin' },
-  { value: 'ces', label: 'Czech', hint: 'ces' },
-  { value: 'ron', label: 'Romanian', hint: 'ron' },
-  { value: 'hun', label: 'Hungarian', hint: 'hun' },
-  { value: 'ukr', label: 'Ukrainian', hint: 'ukr' },
-  { value: 'tha', label: 'Thai', hint: 'tha' },
-  { value: 'vie', label: 'Vietnamese', hint: 'vie' },
-]
-
-const selectedOcrLangs = computed({
-  get: () => ocrLanguage.value.split('+').filter(Boolean),
-  set: (val: string[]) => { ocrLanguage.value = val.join('+') },
-})
-
-async function onOcrLangsUpdate(langs: string[]) {
-  selectedOcrLangs.value = langs
-  await saveOcrLanguage()
-}
 
 const embeddingProviders = computed(() => {
   const provider = providerStore.providers.find((candidate) => candidate.id === embProviderId.value)
@@ -145,7 +99,6 @@ onMounted(async () => {
   await loadEmbeddingConfig()
   await loadEntityExtractionConfig()
   await loadChunkingConfig()
-  await loadParserConfig()
   await loadRetrievalConfig()
   await loadRerankerConfig()
 })
@@ -188,14 +141,6 @@ async function saveChunking() {
   chunkSaving.value = false
 }
 
-async function loadParserConfig() {
-  try {
-    const config = await api.memory.getParserConfig()
-    ocrEnabled.value = config.ocrEnabled
-    ocrLanguage.value = config.ocrLanguage || 'eng'
-  } catch { /* defaults */ }
-}
-
 async function loadRerankerConfig() {
   try {
     const config = await api.memory.getRerankerConfig()
@@ -203,7 +148,6 @@ async function loadRerankerConfig() {
     rerankProviderId.value = config.providerId || openRouterProviders.value[0]?.id || ''
     rerankModel.value = config.model
     rerankCandidateCount.value = config.candidateCount
-    minMatchThresholdPercent.value = Math.round((config.minMatchThreshold ?? 0.3) * 100)
   } catch {
     rerankProviderId.value = openRouterProviders.value[0]?.id || ''
   }
@@ -260,23 +204,6 @@ async function saveEntityExtractionSelection(selection: { providerId: string; mo
   entityExtractionSaving.value = false
 }
 
-async function toggleOcr() {
-  ocrSaving.value = true
-  try {
-    const res = await api.memory.configureParser({ ocrEnabled: !ocrEnabled.value, ocrLanguage: ocrLanguage.value })
-    ocrEnabled.value = res.ocrEnabled
-  } catch { /* error handling */ }
-  ocrSaving.value = false
-}
-
-async function saveOcrLanguage() {
-  ocrSaving.value = true
-  try {
-    await api.memory.configureParser({ ocrEnabled: ocrEnabled.value, ocrLanguage: ocrLanguage.value.trim() || 'eng' })
-  } catch { /* error handling */ }
-  ocrSaving.value = false
-}
-
 async function saveReranker() {
   rerankSaving.value = true
   try {
@@ -284,14 +211,12 @@ async function saveReranker() {
       enabled: rerankEnabled.value,
       providerId: rerankProviderId.value || undefined,
       model: rerankModel.value,
-      candidateCount: rerankCandidateCount.value,
-      minMatchThreshold: minMatchThresholdPercent.value / 100
+      candidateCount: rerankCandidateCount.value
     })
     rerankEnabled.value = res.enabled
     rerankProviderId.value = res.providerId || rerankProviderId.value
     rerankModel.value = res.model
     rerankCandidateCount.value = res.candidateCount
-    minMatchThresholdPercent.value = Math.round(res.minMatchThreshold * 100)
   } catch { /* error handling */ }
   rerankSaving.value = false
 }
@@ -552,8 +477,8 @@ function cancelDrop() {
         />
       </div>
 
-      <div class="grid gap-3 sm:grid-cols-2">
-        <div class="sm:col-span-2">
+      <div class="space-y-3">
+        <div>
           <label class="block text-xs text-theme-400 mb-1">OpenRouter Provider / Model</label>
           <ProviderModelSelect
             :provider-id="rerankProviderId"
@@ -588,24 +513,6 @@ function cancelDrop() {
             Candidates fetched before reranking. Keep this above Results per Query to give the reranker a wider pool; lower values are automatically raised to the requested result count.
           </p>
         </div>
-
-        <div>
-          <div class="flex items-center justify-between gap-3 mb-1">
-            <label class="block text-xs text-theme-400">Minimum Match</label>
-            <span class="text-[11px] text-theme-500 whitespace-nowrap">{{ minMatchThresholdPercent }}%</span>
-          </div>
-          <input
-            v-model.number="minMatchThresholdPercent"
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            class="w-full accent-accent-500"
-          >
-          <p class="text-xs text-theme-500 mt-1">
-            Reranker results below this score are ignored. Calibrate this with representative queries; raw vector and fusion scores are not filtered by it.
-          </p>
-        </div>
       </div>
 
       <button
@@ -618,7 +525,7 @@ function cancelDrop() {
       </button>
     </BaseCard>
 
-    <!-- Entity Extraction Model -->
+    <!-- Knowledge Extraction Model -->
     <BaseCard
       v-if="showSection('entity-graph-extraction')"
       class="p-5 space-y-4"
@@ -632,10 +539,10 @@ function cancelDrop() {
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
-            Entity Extraction Model
+            Knowledge Extraction Model
           </h3>
           <p class="text-xs text-theme-500 mt-0.5">
-            Provider and model used when explicit document entity indexing extracts entities and relationships for the local entity graph.
+            Provider and model used when documents are analysed into facts for the local knowledge graph.
           </p>
         </div>
       </div>
@@ -660,13 +567,13 @@ function cancelDrop() {
           @change="saveEntityExtractionSelection"
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          This setting is used for explicit entity extraction calls. Leaving it on the default uses the server's active provider and that provider's default model.
+          This setting is used for explicit knowledge extraction. Leaving it on the default uses the server's active provider and that provider's default model.
         </p>
       </div>
     </BaseCard>
     
     <SettingsSubheading
-      v-if="showAnySection(['chunking', 'ocr'])"
+      v-if="showSection('chunking')"
       label="Document Processing"
     />
 
@@ -728,57 +635,13 @@ function cancelDrop() {
       </button>
     </BaseCard>
 
-    <!-- Document Parsing – OCR -->
-    <BaseCard
-      v-if="showSection('ocr')"
-      class="p-5 space-y-4"
-    >
-      <div class="flex items-center justify-between">
-        <div class="flex items-start gap-3 min-w-0">
-          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
-            <Icon
-              icon="lucide:scan-text"
-              class="w-5 h-5 text-theme-400"
-            />
-          </div>
-          <div>
-            <h3 class="text-sm font-medium text-theme-200">
-              OCR for Document Images
-            </h3>
-            <p class="text-xs text-theme-500 mt-0.5">
-              When enabled, images embedded in uploaded documents (PDFs, DOCX, PPTX, etc.) will be
-              processed with OCR to extract visible text. Useful for scanned documents and presentations with text inside images.
-            </p>
-          </div>
-        </div>
-        <ToggleSwitch
-          :model-value="ocrEnabled"
-          label="Enable document image OCR"
-          :disabled="ocrSaving"
-          class="shrink-0 ml-4"
-          @update:model-value="toggleOcr"
-        />
-      </div>
-
-      <!-- OCR Language Multi-select -->
-      <div v-if="ocrEnabled">
-        <label class="text-xs text-theme-400 mb-1 block">OCR Language(s)</label>
-        <MultiSelect
-          :model-value="selectedOcrLangs"
-          :options="OCR_LANGUAGE_OPTIONS"
-          :min-selected="1"
-          placeholder="Select languages..."
-          @update:model-value="onOcrLangsUpdate"
-        />
-      </div>
-    </BaseCard>
-
     <!-- Model change confirmation modal -->
     <ModalDialog
       :show="showDropConfirm"
       title="Embedding Model Changed"
       icon="lucide:alert-triangle"
       icon-color="amber"
+      layer="nested"
       @close="cancelDrop"
     >
       <p class="text-theme-400 leading-relaxed">

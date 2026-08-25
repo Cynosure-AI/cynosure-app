@@ -480,6 +480,9 @@ export class AgentExecutor {
     /** Emit an EventBus event if emission is enabled, merging eventMeta if configured. */
     private emit(event: string, payload: Record<string, unknown>): void {
         if (!this.config.emitEvents) return
+        // Once killed, this execution generation may only report its terminal
+        // error. Late tool/model events must never resurrect frontend state.
+        if (this.config.signal?.aborted && event !== 'task:error') return
         const meta = this.config.eventMeta
         getEventBus().emit(event, meta ? { ...payload, ...meta } : payload)
     }
@@ -525,6 +528,7 @@ export class AgentExecutor {
      * metadata so the Context Ring updates during long tool-running turns.
      */
     private publishContextUsage(conversationId: string, usage: Usage, contextTokens: number | undefined): void {
+        if (this.config.signal?.aborted) return
         if (contextTokens == null) return
 
         if (usage) {
@@ -554,6 +558,7 @@ export class AgentExecutor {
         stream: AsyncIterable<import('../gateway/providers/base.provider.js').StreamChunk>
         debugRoundIndex?: number
     } {
+        this.config.signal?.throwIfAborted()
         const { gateway, tools, model, temperature, thinkingEnabled, reasoningEffort, signal, providerId } = this.config
         const request = {
             messages: AgentExecutor.trimOldImages(messages),
@@ -566,6 +571,9 @@ export class AgentExecutor {
         }
         const debugRoundIndex = this.config.debugContextEnabled
             ? recordDebugModelRequest(this.config.conversationId, {
+                phase: 'main-agent',
+                label: 'Agent round',
+                providerId,
                 messages: request.messages,
                 tools: tools,
                 model,
@@ -756,6 +764,7 @@ export class AgentExecutor {
         let lastError: Error | undefined
 
         for (let attempt = 1; attempt <= MODEL_ROUND_MAX_ATTEMPTS; attempt++) {
+            this.config.signal?.throwIfAborted()
             if (this.config.streamMode === 'per-round') {
                 streamId = nanoid()
                 this.broadcastStreamStart(streamId)
@@ -765,6 +774,7 @@ export class AgentExecutor {
 
             const nextStream = this.createStream(messages)
             const result = await this.consumeStream(nextStream.stream, streamId, nextStream.debugRoundIndex)
+            this.config.signal?.throwIfAborted()
 
             if (!result.error) {
                 if (this.config.streamMode === 'per-round') {
@@ -842,45 +852,30 @@ export class AgentExecutor {
         })
     }
 
-    /**
-     * Execute explicitly read-only calls concurrently while preserving model
-     * order around planning, writes, and tools with unknown side effects.
+    /** Execute tool calls strictly in model order.
+     *
+     * A conversational Stop is an ultimate kill switch. Starting a concurrent
+     * read batch made later calls impossible to prevent once the batch had been
+     * launched. Sequential dispatch gives the abort signal a hard gate before
+     * every individual external action.
      */
     private async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolCallResult[]> {
-        const results = new Array<ToolCallResult>(toolCalls.length)
-
+        const results: ToolCallResult[] = []
         for (const tc of toolCalls) {
+            this.config.signal?.throwIfAborted()
             if (isVisibleExecutionTool(tc.function.name)) {
                 this.config.usedToolNames?.add(tc.function.name)
             }
+            results.push(await this.executeSingleToolCall(tc))
+            this.config.signal?.throwIfAborted()
         }
-
-        let readBatch: Array<{ index: number; toolCall: ToolCall }> = []
-        const flushReadBatch = async () => {
-            const batch = readBatch
-            readBatch = []
-            const batchResults = await Promise.all(batch.map(({ toolCall }) => this.executeSingleToolCall(toolCall)))
-            batchResults.forEach((result, index) => { results[batch[index].index] = result })
-        }
-
-        for (const [index, toolCall] of toolCalls.entries()) {
-            const tool = this.findToolForCall(toolCall.function.name)
-            const canRunConcurrently = !isPlanningToolName(toolCall.function.name) && tool?.execution?.readOnly === true
-            if (canRunConcurrently) {
-                readBatch.push({ index, toolCall })
-                continue
-            }
-            await flushReadBatch()
-            results[index] = await this.executeSingleToolCall(toolCall)
-        }
-        await flushReadBatch()
-
         return results
     }
 
     private async executeSingleToolCall(tc: ToolCall): Promise<ToolCallResult> {
         const { signal } = this.config
         try {
+            signal?.throwIfAborted()
             const args = JSON.parse(tc.function.arguments)
             const tool = this.findToolForCall(tc.function.name)
 
@@ -900,21 +895,21 @@ export class AgentExecutor {
 
             const timeoutSignal = AbortSignal.timeout(tool.timeout)
             const combined = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+            signal?.throwIfAborted()
             let execPromise = tool.execute(args, combined)
             execPromise = Promise.race([
                 execPromise,
                 new Promise<never>((_, reject) => {
-                    const onAbort = () => reject(new Error(
-                        signal?.aborted
-                            ? 'Tool execution cancelled'
-                            : `Tool "${tc.function.name}" timed out after ${Math.round(tool.timeout / 1000)}s`
-                    ))
+                    const onAbort = () => reject(signal?.aborted
+                        ? signal.reason || new DOMException('Cancelled', 'AbortError')
+                        : new Error(`Tool "${tc.function.name}" timed out after ${Math.round(tool.timeout / 1000)}s`))
                     if (combined.aborted) { onAbort(); return }
                     combined.addEventListener('abort', onAbort, { once: true })
                 })
             ])
 
             const res = await execPromise
+            signal?.throwIfAborted()
             if (typeof res === 'string') {
                 return { toolCallId: tc.id, name: tc.function.name, output: res, success: true }
             }
@@ -941,6 +936,7 @@ export class AgentExecutor {
                 content: res?.content,
             }
         } catch (err) {
+            if (signal?.aborted || (err as Error).name === 'AbortError') throw err
             return { toolCallId: tc.id, name: tc.function.name, output: `Error: ${(err as Error).message}`, success: false }
         }
     }

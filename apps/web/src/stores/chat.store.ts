@@ -1,7 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
-import type { MemorySpace, ModelPricing } from '../api/types'
+import type { ChatExecutionState, MemorySpace, ModelPricing } from '../api/types'
 import type { StoredMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
@@ -630,37 +630,74 @@ export const useChatStore = defineStore('chat', () => {
     modelInfoStatus,
     resolvedModelProvider,
     handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
+      if (agentStore.isConversationStopped(data.conversationId, data.streamId)) return
       streaming.handleStreamStart(data)
       agentStore.setConversationExecutionState(data.conversationId, true)
     },
-    handleStreamChunk: streaming.handleStreamChunk,
-    handleStreamThinking: streaming.handleStreamThinking,
-    handleStreamImages: streaming.handleStreamImages,
-    handleStreamVideos: streaming.handleStreamVideos,
-    handleStreamReset: streaming.handleStreamReset,
-    handleStreamUsage: streaming.handleStreamUsage,
+    handleStreamChunk(data: Parameters<typeof streaming.handleStreamChunk>[0]): void {
+      if (!agentStore.isConversationStopped(data.conversationId, data.streamId)) streaming.handleStreamChunk(data)
+    },
+    handleStreamThinking(data: Parameters<typeof streaming.handleStreamThinking>[0]): void {
+      if (!agentStore.isConversationStopped(data.conversationId, data.streamId)) streaming.handleStreamThinking(data)
+    },
+    handleStreamImages(data: Parameters<typeof streaming.handleStreamImages>[0]): void {
+      if (!agentStore.isConversationStopped(data.conversationId, data.streamId)) streaming.handleStreamImages(data)
+    },
+    handleStreamVideos(data: Parameters<typeof streaming.handleStreamVideos>[0]): void {
+      if (!agentStore.isConversationStopped(data.conversationId, data.streamId)) streaming.handleStreamVideos(data)
+    },
+    handleStreamReset(data: Parameters<typeof streaming.handleStreamReset>[0]): void {
+      if (!agentStore.isConversationStopped(data.conversationId, data.streamId)) streaming.handleStreamReset(data)
+    },
+    handleStreamUsage(data: Parameters<typeof streaming.handleStreamUsage>[0]): void {
+      if (!agentStore.isConversationStopped(data.conversationId)) streaming.handleStreamUsage(data)
+    },
     finalizeCurrentStreaming: streaming.finalizeCurrentStreaming,
     handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number; images?: string[] }): void {
       streaming.handleStreamEnd(data)
       // Clear execution state when the stream ends — the task:completed WS event
       // may arrive later or not at all, so ensure the conversation unlocks promptly.
-      agentStore.setConversationExecutionState(data.conversationId, false)
+      agentStore.handleChatExecutionState({
+        executionId: data.streamId,
+        conversationId: data.conversationId,
+        agentId: null,
+        state: data.cancelled ? 'stopped' : 'finished',
+      })
     },
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void {
       streaming.handleStreamError(data)
-      agentStore.setConversationExecutionState(data.conversationId, false)
+      agentStore.handleChatExecutionState({
+        executionId: data.streamId,
+        conversationId: data.conversationId,
+        agentId: null,
+        state: 'finished',
+      })
     },
-    handleSubAgentStreamStart: streaming.handleSubAgentStreamStart,
-    handleSubAgentStreamChunk: streaming.handleSubAgentStreamChunk,
-    handleSubAgentStreamThinking: streaming.handleSubAgentStreamThinking,
-    handleSubAgentStreamImages: streaming.handleSubAgentStreamImages,
-    handleSubAgentStreamEnd: streaming.handleSubAgentStreamEnd,
+    handleSubAgentStreamStart(data: Parameters<typeof streaming.handleSubAgentStreamStart>[0]): void {
+      if (!agentStore.isConversationStopped(data.conversationId)) streaming.handleSubAgentStreamStart(data)
+    },
+    handleSubAgentStreamChunk(data: Parameters<typeof streaming.handleSubAgentStreamChunk>[0]): void {
+      if (!agentStore.isConversationStopped(data.conversationId)) streaming.handleSubAgentStreamChunk(data)
+    },
+    handleSubAgentStreamThinking(data: Parameters<typeof streaming.handleSubAgentStreamThinking>[0]): void {
+      if (!agentStore.isConversationStopped(data.conversationId)) streaming.handleSubAgentStreamThinking(data)
+    },
+    handleSubAgentStreamImages(data: Parameters<typeof streaming.handleSubAgentStreamImages>[0]): void {
+      if (!agentStore.isConversationStopped(data.conversationId)) streaming.handleSubAgentStreamImages(data)
+    },
+    handleSubAgentStreamEnd(data: Parameters<typeof streaming.handleSubAgentStreamEnd>[0]): void {
+      if (!agentStore.isConversationStopped(data.conversationId)) streaming.handleSubAgentStreamEnd(data)
+    },
     handleTitleUpdated: streaming.handleTitleUpdated,
     handleNewMessage: streaming.handleNewMessage,
     handleCompactEvent: streaming.handleCompactEvent,
     handleCompactStart: streaming.handleCompactStart,
     handleCompactError: streaming.handleCompactError,
     handleChannelConversationState,
+    handleChatExecutionState(data: ChatExecutionState): void {
+      agentStore.handleChatExecutionState(data)
+      if (data.state !== 'running') streaming.clearConversationStreamState(data.conversationId)
+    },
 
     // Messages (delegated)
     sendMessage,
@@ -668,13 +705,12 @@ export const useChatStore = defineStore('chat', () => {
     editMessage: chatMessages.editMessage,
     forkConversationFromMessage,
     async cancelStream(): Promise<void> {
-      await chatMessages.cancelStream()
-      // Ensure post-actions are cleared locally so the conversation unlocks.
       const id = activeConversationId.value
       if (id) {
         postActionsMap.delete(id)
         postActionsTrigger.value++
       }
+      await chatMessages.cancelStream()
     },
     cancelPostActions(convId?: string): void {
       const id = convId || activeConversationId.value

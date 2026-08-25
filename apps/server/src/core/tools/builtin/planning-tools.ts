@@ -28,6 +28,8 @@ export function makePlanningTools(runId: string): ToolDefinition[] {
   return [
     {
       name: 'todo_write',
+      execution: { readOnly: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
       description: 'Create or replace the visible planning todo list for this request. Use only for complex or multi-step work.',
       timeout: 5_000,
       parameters: {
@@ -56,6 +58,8 @@ export function makePlanningTools(runId: string): ToolDefinition[] {
     },
     {
       name: 'todo_upsert',
+      execution: { readOnly: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       description: 'Update an existing visible planning todo item by taskId/title, or append it as a new ordered item if no match exists.',
       timeout: 5_000,
       parameters: {

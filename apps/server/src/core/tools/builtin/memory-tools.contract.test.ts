@@ -2,8 +2,19 @@ import { describe, expect, test } from 'vitest'
 import {
     MEMORY_TOOL_NAMES,
     makeMemoryAppendTool,
+    makeMemoryCreateTool,
+    makeMemoryListDocumentsTool,
+    makeMemoryRemoveAllTool,
+    makeMemoryRemoveRangeTool,
     makeMemoryReplaceAllTool,
     makeMemoryReplaceRangeTool,
+    makeMemoryRetrieveChunksTool,
+    makeMemorySearchTool,
+    makeRelationshipGraphAssertTool,
+    makeRelationshipGraphDeleteTool,
+    makeRelationshipGraphSearchTool,
+    makeRelationshipEntityMergeTool,
+    readableEntityGraphNodeId,
 } from './memory-tools.js'
 
 describe('memory mutation tool contracts', () => {
@@ -36,5 +47,53 @@ describe('memory mutation tool contracts', () => {
             'partStart',
             'partEnd',
         ])
+    })
+
+    test('exposes an explicit entity merge contract', () => {
+        const tool = makeRelationshipEntityMergeTool({})
+        expect(tool.name).toBe('relationship_entity_merge')
+        expect(tool.parameters).toMatchObject({
+            required: ['entityIds', 'mainName'],
+            additionalProperties: false,
+            properties: {
+                entityIds: { type: 'array', minItems: 1, maxItems: 20 },
+                mainName: { type: 'string' },
+            },
+        })
+        expect(tool.annotations?.destructiveHint).toBe(true)
+    })
+
+    test('formats stable, readable, lowercase tool-facing entity handles', () => {
+        const handle = readableEntityGraphNodeId('Andi Personalakte', 'n:aV61X33k')
+        expect(handle).toMatch(/^n:andi_personalakte#[a-f0-9]{8}$/)
+        expect(readableEntityGraphNodeId('Andi Personalakte', 'n:aV61X33k')).toBe(handle)
+        expect(readableEntityGraphNodeId('Andi Personalakte', 'n:different')).not.toBe(handle)
+    })
+
+    test('declares complete behavior annotations for every memory and relationship tool', () => {
+        const tools = [
+            makeMemoryListDocumentsTool({}),
+            makeMemoryRetrieveChunksTool({}),
+            makeMemorySearchTool({}),
+            makeMemoryCreateTool({}),
+            makeMemoryAppendTool({}),
+            makeMemoryReplaceAllTool({}),
+            makeMemoryReplaceRangeTool({}),
+            makeMemoryRemoveAllTool({}),
+            makeMemoryRemoveRangeTool({}),
+            makeRelationshipGraphSearchTool({}),
+            makeRelationshipGraphAssertTool({}),
+            makeRelationshipGraphDeleteTool({}),
+            makeRelationshipEntityMergeTool({}),
+        ]
+        for (const tool of tools) {
+            expect(tool.annotations, tool.name).toEqual(expect.objectContaining({
+                readOnlyHint: expect.any(Boolean),
+                destructiveHint: expect.any(Boolean),
+                idempotentHint: expect.any(Boolean),
+                openWorldHint: expect.any(Boolean),
+            }))
+            expect(tool.execution?.readOnly, tool.name).toBe(tool.annotations?.readOnlyHint)
+        }
     })
 })

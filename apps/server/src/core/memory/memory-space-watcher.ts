@@ -11,7 +11,7 @@ import chokidar, { type FSWatcher } from 'chokidar'
 import { existsSync } from 'fs'
 import { basename, resolve } from 'path'
 import { getAgentMemory } from './agent-memory.js'
-import { deleteMemoryGraphSource } from './memory-entity-indexer.js'
+import { deleteMemoryKnowledgeSource } from './memory-entity-indexer.js'
 
 const activeWatchers = new Map<string, FSWatcher>()
 const MOVE_GRACE_MS = 2_000
@@ -37,7 +37,7 @@ function pendingDeleteKey(spaceId: string, fileName: string): string {
 
 async function deleteIndexedFile(spaceId: string, fileName: string): Promise<void> {
     await getAgentMemory().deleteSourceFile(fileName, spaceId)
-    deleteMemoryGraphSource(spaceId, fileName)
+    deleteMemoryKnowledgeSource(spaceId, fileName)
 }
 
 function scheduleDelete(spaceId: string, fileName: string): void {

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest'
-import { inferDocumentTitle, inferSectionPath, isRetrievableChunk, passesRetrievalThreshold } from './parser.js'
+import { fuseRetrievalChannels, inferDocumentTitle, inferSectionPath, isRetrievableChunk } from './parser.js'
 import { hasExactMemorySpaceScope } from './memory-aggregator.js'
-import { splitEntityExtractionContent } from './entity-graph.js'
 import type { SearchResult } from './rag.js'
+import { withSearchKeywords } from './rag.js'
 
 function result(overrides: Partial<SearchResult>): SearchResult {
   return {
@@ -24,23 +24,9 @@ describe('memory retrieval policy', () => {
     expect(isRetrievableChunk('## Retrieval\nHybrid search finds documents.')).toBe(true)
   })
 
-  test('only applies a configured threshold to reranker scores', () => {
-    expect(passesRetrievalThreshold(result({ score: 0, scoreType: 'fusion' }), 0.3)).toBe(true)
-    expect(passesRetrievalThreshold(result({ rerankerScore: 0.29, scoreType: 'reranker' }), 0.3)).toBe(false)
-    expect(passesRetrievalThreshold(result({ rerankerScore: 0.31, scoreType: 'reranker' }), 0.3)).toBe(true)
-  })
-
   test('explicit memory scopes fail closed on missing IDs', () => {
     expect(hasExactMemorySpaceScope(['a', 'b'], [{ id: 'a' }, { id: 'b' }])).toBe(true)
     expect(hasExactMemorySpaceScope(['a', 'missing'], [{ id: 'a' }])).toBe(false)
-  })
-
-  test('entity extraction covers an entire long document at safe boundaries', () => {
-    const content = Array.from({ length: 120 }, (_, index) => `## Section ${index}\nFact ${index} relates to project ${index}.`).join('\n\n')
-    const chunks = splitEntityExtractionContent(content, 500)
-    expect(chunks.length).toBeGreaterThan(1)
-    expect(chunks.join('').replace(/\s/g, '')).toBe(content.replace(/\s/g, ''))
-    expect(chunks.every((chunk) => chunk.length <= 500)).toBe(true)
   })
 
   test('derives stable retrieval context from document structure', () => {
@@ -48,5 +34,27 @@ describe('memory retrieval policy', () => {
     expect(inferDocumentTitle(text, 'fallback.md')).toBe('Memory Architecture')
     expect(inferSectionPath(text, 'Memory Architecture')).toBe('Retrieval')
     expect(inferDocumentTitle('No heading here', 'project_notes.md')).toBe('project notes')
+  })
+
+  test('fuses independently budgeted dense and lexical candidates before reranking', () => {
+    const denseOnly = result({ id: 'dense', scoreType: 'dense', denseScore: 0.91, createdAt: 3 })
+    const bothDense = result({ id: 'both', scoreType: 'dense', denseScore: 0.84, createdAt: 2 })
+    const bothLexical = result({ id: 'both', scoreType: 'lexical', lexicalScore: 7.5, createdAt: 2 })
+    const exactName = result({ id: 'caroline', scoreType: 'lexical', lexicalScore: 9.2, createdAt: 1 })
+
+    const fused = fuseRetrievalChannels([[denseOnly, bothDense], [exactName, bothLexical]], 3)
+
+    expect(fused.map(({ id }) => id)).toEqual(['both', 'dense', 'caroline'])
+    expect(fused[0]).toMatchObject({ scoreType: 'fusion', denseScore: 0.84, lexicalScore: 7.5 })
+    expect(fused[2]?.lexicalScore).toBe(9.2)
+  })
+
+  test('adds and replaces lexical chunk keywords without changing base search text', () => {
+    const base = 'Document: Chantal\nRelationship details'
+    const tagged = withSearchKeywords(base, ['autonomy', 'communication'])
+
+    expect(tagged).toContain('autonomy · communication')
+    expect(withSearchKeywords(tagged, ['house renovation'])).toBe(withSearchKeywords(base, ['house renovation']))
+    expect(withSearchKeywords(tagged, [])).toBe(base)
   })
 })

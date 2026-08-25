@@ -5,7 +5,7 @@ import { getDb } from '../../db/database.js'
 import { getAgent } from '../agents/agent-store.js'
 import { runTriggerExecution } from './trigger-runner.js'
 import { getChannelManager } from '../channels/channel-manager.js'
-import { enqueueCoalescedTrigger } from './trigger-queue.js'
+import { cancelPendingCoalescedTriggers, enqueueCoalescedTrigger } from './trigger-queue.js'
 import { resolveChannelTarget } from './channel-target-resolver.js'
 import { getGateway } from '../gateway/gateway.js'
 import { cancelPostActions, generateTitle } from '../agent/post-execution.js'
@@ -421,6 +421,15 @@ export function cancelCronRun(jobId: string): boolean {
         return true
     }
     return false
+}
+
+/** Cancel all current cron executions and any coalesced follow-up runs. */
+export function cancelAllCronRuns(): number {
+    let cancelled = cancelPendingCoalescedTriggers('cron:')
+    for (const jobId of [...activeCronAbortControllers.keys()]) {
+        if (cancelCronRun(jobId)) cancelled++
+    }
+    return cancelled
 }
 
 /** Remove a scheduled cron job */

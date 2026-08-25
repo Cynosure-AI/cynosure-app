@@ -8,6 +8,7 @@ import { useAgentDefinitionsStore } from "../stores/agent-definitions.store";
 import { useMemoryJobsStore } from "../stores/memory-jobs.store";
 import { SK_ACTIVITY_LOG_FILTERS } from "../utils/storage-keys";
 import HoverMenu from "../components/shared/HoverMenu.vue";
+import ModalDialog from "../components/shared/ModalDialog.vue";
 
 const router = useRouter();
 const agentDefs = useAgentDefinitionsStore();
@@ -23,6 +24,10 @@ const searchQuery = ref("");
 const now = ref(Date.now());
 const stoppingIds = ref<Set<string>>(new Set());
 const cancellingJobIds = ref<Set<string>>(new Set());
+const showStopAllConfirm = ref(false);
+const stoppingAll = ref(false);
+const stopAllError = ref("");
+const stopAllMessage = ref("");
 const PAGE_SIZE = 30;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
@@ -31,10 +36,12 @@ let unsubNotification: (() => void) | undefined;
 let unsubMemoryJobUpdate: (() => void) | undefined;
 let unsubHITLRequest: (() => void) | undefined;
 let unsubExecutionUpdate: (() => void) | undefined;
+let unsubChatExecutionState: (() => void) | undefined;
 let activityLoadPromise: Promise<void> | undefined;
 let liveWorkRefreshPromise: Promise<void> | undefined;
 let activityLoadQueued = false;
 let activityLoadGeneration = 0;
+let stopAllMessageTimer: ReturnType<typeof setTimeout> | undefined;
 
 const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "instance", label: "Active", icon: "lucide:square-activity" },
@@ -122,11 +129,14 @@ function instanceActivityItem(instance: AgentInstance): ActivityItem {
 
 function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
   const entityJob = job.kind === "entity-index";
+  const batchProgress = entityJob && job.progressCurrent && job.progressTotal
+    ? ` (batch ${job.progressCurrent}/${job.progressTotal})`
+    : "";
   return {
     id: `live-memory:${job.id}`,
     kind: "memory",
-    title: `${entityJob ? "Extracting entities from" : "Indexing"} ${job.fileName}`,
-    description: job.fileName,
+    title: `${entityJob ? `Extracting knowledge${batchProgress} from` : "Search-indexing"} ${job.fileName}`,
+    description: entityJob && batchProgress ? `Extraction batch ${job.progressCurrent} of ${job.progressTotal}` : job.fileName,
     createdAt: job.createdAt,
     agentId: null,
     agentName: null,
@@ -134,7 +144,7 @@ function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
     conversationId: null,
     status: job.status,
     sourceId: job.id,
-    sourceLabel: entityJob ? "Entity extraction" : "Memory indexing",
+    sourceLabel: entityJob ? "Knowledge extraction" : "Search indexing",
   };
 }
 
@@ -352,17 +362,23 @@ function formatClock(ts: number): string {
   });
 }
 
+type ActivityGroupKind = "attention" | "active" | "queued" | "history";
+
 const groupedItems = computed(() => {
-  const groups: { label: string; items: ActivityItem[] }[] = [];
-  const activeItems = filteredItems.value
-    .filter(isActiveWork)
-    .sort((a, b) => Number(a.status === "queued") - Number(b.status === "queued"));
-  if (activeItems.length) groups.push({ label: "Active now", items: activeItems });
+  const groups: { label: string; kind: ActivityGroupKind; items: ActivityItem[] }[] = [];
+  const hitlItems = filteredItems.value.filter((item) => item.status === "awaiting-approval");
+  const queuedItems = filteredItems.value.filter((item) => isActiveWork(item) && item.status === "queued");
+  const activeItems = filteredItems.value.filter((item) =>
+    isActiveWork(item) && item.status !== "awaiting-approval" && item.status !== "queued",
+  );
+  if (hitlItems.length) groups.push({ label: "Needs your input", kind: "attention", items: hitlItems });
+  if (activeItems.length) groups.push({ label: "Active Now", kind: "active", items: activeItems });
+  if (queuedItems.length) groups.push({ label: "Queued", kind: "queued", items: queuedItems });
   for (const item of filteredItems.value.filter((entry) => !isActiveWork(entry))) {
     const label = formatDateLabel(item.createdAt);
     const last = groups[groups.length - 1];
     if (last?.label === label) last.items.push(item);
-    else groups.push({ label, items: [item] });
+    else groups.push({ label, kind: "history", items: [item] });
   }
   return groups;
 });
@@ -422,11 +438,49 @@ function isActiveInstance(item: ActivityItem): boolean {
 }
 
 function isActiveMemoryJob(item: ActivityItem): boolean {
-  return item.id.startsWith("live-memory:") && (item.status === "running" || item.status === "queued");
+  return item.id.startsWith("live-memory:")
+    && (item.status === "running" || item.status === "retrying" || item.status === "queued");
 }
 
 function isActiveWork(item: ActivityItem): boolean {
   return isActiveInstance(item) || isActiveMemoryJob(item);
+}
+
+const knownActiveWorkCount = computed(() => activeInstances.value.length + memoryJobsStore.activeJobs.length);
+
+function openStopAllConfirm(): void {
+  stopAllError.value = "";
+  showStopAllConfirm.value = true;
+}
+
+function closeStopAllConfirm(): void {
+  if (stoppingAll.value) return;
+  showStopAllConfirm.value = false;
+  stopAllError.value = "";
+}
+
+async function stopAllActivity(): Promise<void> {
+  if (stoppingAll.value) return;
+  stoppingAll.value = true;
+  stopAllError.value = "";
+  try {
+    const result = await api.activity.stopAll();
+    showStopAllConfirm.value = false;
+    stopAllMessage.value = result.total > 0
+      ? `Stopped ${result.total} active operation${result.total === 1 ? "" : "s"}.`
+      : "No active operations were running.";
+    clearTimeout(stopAllMessageTimer);
+    stopAllMessageTimer = setTimeout(() => {
+      stopAllMessage.value = "";
+    }, 4_000);
+    stoppingIds.value.clear();
+    cancellingJobIds.value.clear();
+    await loadActivity();
+  } catch (error) {
+    stopAllError.value = error instanceof Error ? error.message : "Could not stop all activity.";
+  } finally {
+    stoppingAll.value = false;
+  }
 }
 
 async function stopInstance(item: ActivityItem, event: Event): Promise<void> {
@@ -486,16 +540,21 @@ onMounted(() => {
       void loadActivity();
     }
   });
+  unsubChatExecutionState = api.chat.onExecutionState(() => {
+    void loadActivity();
+  });
 });
 
 onUnmounted(() => {
   clearInterval(refreshTimer);
   clearInterval(tickTimer);
   clearTimeout(searchTimer);
+  clearTimeout(stopAllMessageTimer);
   unsubNotification?.();
   unsubMemoryJobUpdate?.();
   unsubHITLRequest?.();
   unsubExecutionUpdate?.();
+  unsubChatExecutionState?.();
 });
 
 watch(selectedKinds, () => {
@@ -523,18 +582,42 @@ watch(searchQuery, () => {
           Active work and a timeline of completed chats, cron runs, memory indexing, artifacts, channels, and notifications.
         </p>
       </div>
-      <button
-        class="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 disabled:cursor-wait disabled:opacity-70 sm:w-auto"
-        :disabled="loading"
-        @click="loadActivity"
-      >
-        <Icon
-          icon="lucide:refresh-cw"
-          class="w-4 h-4"
-          :class="{ 'animate-spin': loading }"
-        />
-        Refresh
-      </button>
+      <div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-red-400/35 bg-red-400/10 px-3 py-2 text-[13px] font-semibold text-red-300 transition hover:border-red-300/55 hover:bg-red-400/20 hover:text-red-200 disabled:cursor-wait disabled:opacity-60 sm:flex-none"
+            :disabled="stoppingAll"
+            @click="openStopAllConfirm"
+          >
+            <Icon
+              :icon="stoppingAll ? 'lucide:loader-2' : 'lucide:square-stop'"
+              class="h-4 w-4"
+              :class="{ 'animate-spin': stoppingAll }"
+            />
+            Stop All
+          </button>
+          <button
+            class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 disabled:cursor-wait disabled:opacity-70 sm:flex-none"
+            :disabled="loading"
+            @click="loadActivity"
+          >
+            <Icon
+              icon="lucide:refresh-cw"
+              class="w-4 h-4"
+              :class="{ 'animate-spin': loading }"
+            />
+            Refresh
+          </button>
+        </div>
+        <p
+          v-if="stopAllMessage"
+          class="text-xs text-theme-400"
+          role="status"
+        >
+          {{ stopAllMessage }}
+        </p>
+      </div>
     </header>
 
     <div class="mb-5 mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center">
@@ -689,37 +772,44 @@ watch(searchQuery, () => {
       <section
         v-for="group in groupedItems"
         :key="group.label"
-        class="mb-3"
+        class="mb-2.5"
       >
-        <div class="sticky -top-6 z-[5] flex items-center gap-2 bg-theme-900 py-2.5 text-[10px] font-bold uppercase tracking-[0.065em] text-theme-500">
-          <span class="text-[15px]">{{ group.label }}</span>
-          <span class="font-semibold text-theme-600">{{ group.items.length }} events</span>
+        <div class="sticky -top-6 z-[5] flex items-center gap-2 bg-theme-900 py-1.5 text-[10px] font-bold uppercase tracking-[0.065em] text-theme-500">
+          <span
+            class="text-[13px]"
+            :class="{
+              'text-emerald-400': group.kind === 'active',
+              'text-amber-400': group.kind === 'attention',
+              'text-theme-400': group.kind === 'queued',
+            }"
+          >{{ group.label }}</span>
+          <span class="font-semibold text-theme-600">{{ group.items.length }}</span>
         </div>
 
-        <div class="flex flex-col gap-1.5">
+        <div class="flex flex-col gap-1">
           <article
             v-for="item in group.items"
             :key="item.id"
-            class="activity-row grid grid-cols-[1.75rem_minmax(0,1fr)] items-stretch gap-2.5 sm:grid-cols-[3.8rem_1.75rem_minmax(0,1fr)]"
+            class="activity-row grid grid-cols-[1.5rem_minmax(0,1fr)] items-stretch gap-2 sm:grid-cols-[3.35rem_1.5rem_minmax(0,1fr)]"
             :class="[kindClass(item), {
               'cursor-pointer': item.conversationId || item.agentId || isActiveMemoryJob(item),
               'activity-requires-attention': item.status === 'awaiting-approval',
             }]"
             @click="openItem(item)"
           >
-            <div class="hidden pt-2.5 text-right text-[11px] tabular-nums text-theme-500 sm:block">
+            <div class="hidden pt-2 text-right text-[10px] tabular-nums text-theme-500 sm:block">
               <span>{{ formatClock(item.createdAt) }}</span>
-              <small class="block text-[9px] text-theme-700">{{ formatTimeAgo(item.createdAt) }}</small>
+              <small class="block text-[8px] text-theme-700">{{ formatTimeAgo(item.createdAt) }}</small>
             </div>
 
-            <div class="relative mt-2 flex h-7 w-7 items-center justify-center rounded-full border text-[var(--activity-color)] activity-marker">
+            <div class="relative mt-1.5 flex h-6 w-6 items-center justify-center rounded-full border text-[var(--activity-color)] activity-marker">
               <Icon
                 :icon="kindIcon(item.kind)"
-                class="relative h-3.5 w-3.5"
+                class="relative h-3 w-3"
               />
             </div>
 
-            <div class="activity-card min-w-0 rounded-lg border border-theme-800 bg-theme-950 px-3 py-2 transition">
+            <div class="activity-card min-w-0 rounded-md border border-theme-800 bg-theme-950 px-2.5 py-1.5 transition">
               <div class="flex items-start justify-between gap-2">
                 <div class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <div class="flex shrink-0 items-center gap-1 text-[10px] text-theme-600">
@@ -731,7 +821,7 @@ watch(searchQuery, () => {
                     </span>
                   </div>
 
-                  <h2 class="min-w-0 text-[14px] font-bold leading-snug text-theme-100">
+                  <h2 class="min-w-0 text-[13px] font-semibold leading-snug text-theme-100">
                     {{ item.title }}
                   </h2>
                 </div>
@@ -777,7 +867,7 @@ watch(searchQuery, () => {
 
               <p
                 v-if="item.description"
-                class="mt-1 line-clamp-1 text-[12px] leading-5 text-theme-400 wrap-break-word"
+                class="mt-0.5 line-clamp-1 text-[11px] leading-4 text-theme-400 wrap-break-word"
               >
                 {{ item.description }}
               </p>
@@ -814,7 +904,7 @@ watch(searchQuery, () => {
                 </a>
               </div>
 
-              <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-theme-500">
+              <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] text-theme-500">
                 <span class="inline-flex items-center gap-1">
                   <Icon
                     icon="lucide:user-round"
@@ -868,6 +958,53 @@ watch(searchQuery, () => {
       </div>
     </div>
   </div>
+
+  <ModalDialog
+    :show="showStopAllConfirm"
+    title="Stop all activity?"
+    icon="lucide:square-stop"
+    icon-color="red"
+    @close="closeStopAllConfirm"
+  >
+    <p class="text-sm leading-6 text-theme-300">
+      This cancels all work currently running on the server, including chats, cron runs, channel agents,
+      search indexing and knowledge extraction, vector re-embedding, and post-actions.
+    </p>
+    <p class="mt-3 text-xs leading-5 text-theme-500">
+      {{ knownActiveWorkCount > 0 ? `${knownActiveWorkCount} active operation${knownActiveWorkCount === 1 ? '' : 's'} currently visible.` : 'The server will also check for background work not currently visible in this view.' }}
+      Cron schedules and channel connections will remain enabled.
+    </p>
+    <p
+      v-if="stopAllError"
+      class="mt-3 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-xs text-red-300"
+      role="alert"
+    >
+      {{ stopAllError }}
+    </p>
+    <template #actions>
+      <button
+        type="button"
+        class="rounded-lg border border-theme-700 px-4 py-2 text-sm text-theme-300 transition hover:bg-theme-800 hover:text-theme-100 disabled:opacity-60"
+        :disabled="stoppingAll"
+        @click="closeStopAllConfirm"
+      >
+        Keep Running
+      </button>
+      <button
+        type="button"
+        class="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-wait disabled:bg-theme-700 disabled:text-theme-500"
+        :disabled="stoppingAll"
+        @click="stopAllActivity"
+      >
+        <Icon
+          :icon="stoppingAll ? 'lucide:loader-2' : 'lucide:square-stop'"
+          class="h-4 w-4"
+          :class="{ 'animate-spin': stoppingAll }"
+        />
+        {{ stoppingAll ? "Stopping..." : "Stop Everything Running" }}
+      </button>
+    </template>
+  </ModalDialog>
 </template>
 
 <style scoped>

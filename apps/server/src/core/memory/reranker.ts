@@ -8,7 +8,6 @@ export interface MemoryRerankerConfig {
   providerId?: string
   model: string
   candidateCount: number
-  minMatchThreshold: number
 }
 
 interface OpenRouterRerankResponse {
@@ -19,28 +18,21 @@ interface OpenRouterRerankResponse {
 }
 
 const SETTINGS_KEY = 'memoryReranker'
-export const MEMORY_MIN_MATCH_THRESHOLD = 0.3
 const DEFAULT_CONFIG: MemoryRerankerConfig = {
   enabled: false,
   model: '',
-  candidateCount: 50,
-  minMatchThreshold: MEMORY_MIN_MATCH_THRESHOLD
+  candidateCount: 50
 }
 
 function normalizeConfig(config: Partial<MemoryRerankerConfig> | undefined): MemoryRerankerConfig {
   const candidateCount = Number.isFinite(config?.candidateCount)
     ? Math.round(config!.candidateCount as number)
     : DEFAULT_CONFIG.candidateCount
-  const minMatchThreshold = Number.isFinite(config?.minMatchThreshold)
-    ? config!.minMatchThreshold as number
-    : DEFAULT_CONFIG.minMatchThreshold
-
   return {
     enabled: !!config?.enabled,
     providerId: config?.providerId?.trim() || undefined,
     model: config?.model?.trim() || '',
-    candidateCount: Math.min(100, Math.max(3, candidateCount)),
-    minMatchThreshold: Math.min(1, Math.max(0, minMatchThreshold))
+    candidateCount: Math.min(100, Math.max(3, candidateCount))
   }
 }
 
@@ -66,10 +58,6 @@ export class MemoryReranker {
   getCandidateCount(topK: number): number {
     const config = this.getConfig()
     return config.enabled ? Math.max(topK, config.candidateCount) : topK
-  }
-
-  getMinMatchThreshold(): number {
-    return this.getConfig().minMatchThreshold
   }
 
   async rerank(query: string, results: SearchResult[], topK: number): Promise<SearchResult[]> {

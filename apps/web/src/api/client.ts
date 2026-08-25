@@ -1,8 +1,8 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
   LLMProviderConfig, McpServerInfo, McpRegistryResponse,
-  AgentDefinition, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob,
-  AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, ConversationUpload, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
+  AgentDefinition, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk,
+  AgentInstance, ChatExecutionState, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
   MetricsSummary, PlanningState,
   ModelListType,
   ModelInfo,
@@ -139,11 +139,13 @@ export const api = {
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/fork`,
         { messageId }
       ),
-    cancelStream: (streamId: string, conversationId?: string) => post<void>('/api/chat/cancel', { streamId: streamId || undefined, conversationId: conversationId || undefined }),
+    cancelStream: (streamId: string, conversationId?: string) => post<{ success: boolean; executionIds: string[] }>('/api/chat/cancel', { streamId: streamId || undefined, conversationId: conversationId || undefined }),
     subscribeLiveConversations: (conversationIds: string[]) => subscribeWsConversations(conversationIds),
     onChannelConversationState: (
       cb: (data: { conversationId: string; agentId: string; running: boolean }) => void
     ) => onWsEvent('channel:conversation-state', cb as WsHandler),
+    onExecutionState: (cb: (data: ChatExecutionState) => void) =>
+      onWsEvent('chat:execution-state', cb as WsHandler),
 
     // Stream event listeners — via WebSocket
     onStreamStart: (cb: (data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }) => void) =>
@@ -300,46 +302,54 @@ export const api = {
       get<{ chunkSize: number; chunkOverlap: number }>('/api/memory/chunking/config'),
     configureChunking: (opts: { chunkSize: number; chunkOverlap: number }) =>
       post<{ success: boolean; chunkSize: number; chunkOverlap: number }>('/api/memory/chunking/configure', opts),
-    getParserConfig: () =>
-      get<{ ocrEnabled: boolean; ocrLanguage: string }>('/api/memory/parser/config'),
-    configureParser: (opts: { ocrEnabled: boolean; ocrLanguage?: string }) =>
-      post<{ success: boolean; ocrEnabled: boolean; ocrLanguage: string }>('/api/memory/parser/configure', opts),
     getRetrievalConfig: () =>
       get<{ resultCount: number }>('/api/memory/retrieval/config'),
     configureRetrieval: (opts: { resultCount: number }) =>
       post<{ success: boolean; resultCount: number }>('/api/memory/retrieval/configure', opts),
     getRerankerConfig: () =>
-      get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number; minMatchThreshold: number }>('/api/memory/reranker/config'),
-    configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number; minMatchThreshold: number }) =>
-      post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number; minMatchThreshold: number }>('/api/memory/reranker/configure', opts),
-    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual', nodeId?: string, minImportance?: number | null) => {
+      get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
+    configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>
+      post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/configure', opts),
+    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual', nodeIds?: string[], minImportance?: number | null, spaceIds?: string[]) => {
       const params = new URLSearchParams()
       if (query) params.set('query', query)
-      if (nodeId) params.set('nodeId', nodeId)
+      if (nodeIds?.length) params.set('nodeIds', nodeIds.join(','))
       if (limit) params.set('limit', String(limit))
       if (view) params.set('view', view)
       if (minImportance !== undefined && minImportance !== null) params.set('minImportance', String(minImportance))
+      if (spaceIds) params.set('spaceIds', spaceIds.length ? spaceIds.join(',') : '__none__')
       const qs = params.toString()
       return get<EntityGraphResponse>(`/api/memory/graph${qs ? `?${qs}` : ''}`)
     },
-    getGraphSuggestions: (query: string, limit?: number) => {
+    getGraphSuggestions: (query: string, limit?: number, spaceIds?: string[]) => {
       const params = new URLSearchParams()
       params.set('query', query)
       if (limit) params.set('limit', String(limit))
+      if (spaceIds) params.set('spaceIds', spaceIds.length ? spaceIds.join(',') : '__none__')
       return get<EntityGraphSuggestionsResponse>(`/api/memory/graph/suggestions?${params.toString()}`)
     },
     updateGraphNode: (id: string, data: { name?: string; type?: EntityGraphResponse['nodes'][number]['type']; aliases?: string[]; importance?: number }) =>
       patch<EntityGraphResponse['nodes'][number]>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`, data),
     deleteGraphNode: (id: string) =>
       del<{ success: boolean }>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`),
-    updateGraphEdge: (id: string, data: { relation?: string; evidence?: string; confidence?: number; importance?: number }) =>
+    deleteGraphNodes: (ids: string[]) =>
+      post<{ success: boolean; deleted: number }>('/api/memory/graph/nodes/delete', { ids }),
+    updateGraphEdge: (id: string, data: { relation?: string; note?: string; importance?: number }) =>
       patch<EntityGraphResponse['edges'][number]>(`/api/memory/graph/edges/${encodeURIComponent(id)}`, data),
     deleteGraphEdge: (id: string) =>
       del<{ success: boolean; orphanedNodeIds: string[] }>(`/api/memory/graph/edges/${encodeURIComponent(id)}`),
+    deleteGraphEdges: (ids: string[]) =>
+      post<{ success: boolean; deleted: number }>('/api/memory/graph/edges/delete', { ids }),
     clearGraph: () =>
       del<{ success: boolean; nodesDeleted: number; edgesDeleted: number }>('/api/memory/graph'),
+    getKnowledgeStats: () =>
+      get<MemoryKnowledgeStats>('/api/memory/knowledge/stats'),
+    getKnowledgeSourceChunk: (textUnitId: string) =>
+      get<KnowledgeSourceChunk>(`/api/memory/knowledge/chunks/${encodeURIComponent(textUnitId)}`),
     onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>
-      onWsEvent('memory:reembed-progress', cb as WsHandler)
+      onWsEvent('memory:reembed-progress', cb as WsHandler),
+    onGraphReset: (cb: (data: { resetAt: number }) => void) =>
+      onWsEvent('memory:graph-reset', cb as WsHandler)
   },
 
   memorySpaces: {
@@ -358,8 +368,17 @@ export const api = {
     /** List files in the space folder with their index status. Hash computation is async server-side. */
     listFiles: (spaceId: string) =>
       get<MemoryFileStatus[]>(`/api/memory-spaces/${memorySpacePathId(spaceId)}/files`),
+    getDocumentKnowledgePreview: (spaceId: string, fileName: string) =>
+      get<MemoryDocumentKnowledgePreview>(
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/knowledge-preview`
+      ),
     listJobs: (spaceId: string) =>
       get<MemoryIndexJob[]>(`/api/memory-spaces/${memorySpacePathId(spaceId)}/jobs`),
+    rebuildKnowledge: (spaceId: string) =>
+      post<{ success: boolean; scheduled: number; jobs: MemoryIndexJob[]; skipped: Array<{ fileName: string; reason: string }> }>(
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/knowledge/rebuild`,
+        {}
+      ),
     getJob: (jobId: string) =>
       get<MemoryIndexJob>(`/api/memory-spaces/jobs/${encodeURIComponent(jobId)}`),
     cancelJob: (jobId: string) =>
@@ -377,12 +396,12 @@ export const api = {
         {}
       ),
     entityIndexFile: (spaceId: string, fileName: string) =>
-      post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; entityIndexedAt: number }>(
+      post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; entityIndexedAt: number; tags: string[] }>(
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/entity-index`,
         {}
       ),
     startEntityIndexFile: (spaceId: string, fileName: string) =>
-      post<MemoryIndexJob<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; entityIndexedAt: number }>>(
+      post<MemoryIndexJob<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; entityIndexedAt: number; tags: string[] }>>(
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/entity-index-job`,
         {}
       ),
@@ -498,6 +517,7 @@ export const api = {
       const qs = params.toString()
       return get<{ items: ActivityItem[]; hasMore?: boolean; total?: number; totalsByKind?: ActivityTotalsByKind }>(`/api/activity${qs ? `?${qs}` : ''}`)
     },
+    stopAll: () => post<StopAllActivityResult>('/api/activity/stop-all', {}),
   },
 
   instances: {

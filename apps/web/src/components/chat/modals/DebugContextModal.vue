@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
-import type { DebugContextSnapshot } from '@shared/types'
+import type { DebugContextRound, DebugContextSnapshot } from '@shared/types'
 import { api } from '../../../api/client'
 import ModalDialog from '../../shared/ModalDialog.vue'
 
@@ -48,6 +48,16 @@ function formatTime(value?: number): string {
 function pretty(value: unknown): string {
   if (typeof value === 'string') return value
   return JSON.stringify(value, null, 2)
+}
+
+function roundTabLabel(round: DebugContextRound, index: number): string {
+  if (round.phase === 'task-context') return 'Query plan'
+  if (round.phase === 'memory-curation') return 'Memory verify'
+  if (round.phase === 'tool-curation') return 'Tool curate'
+  const agentRound = snapshot.value?.rounds
+    .slice(0, index + 1)
+    .filter((item) => !item.phase || item.phase === 'main-agent').length || 1
+  return `Agent ${agentRound}`
 }
 
 async function refresh(): Promise<void> {
@@ -204,7 +214,7 @@ watch(
             :class="selectedRound === index ? 'bg-accent-600 text-white' : 'bg-theme-850 text-theme-400 hover:bg-theme-800'"
             @click="selectedRound = index"
           >
-            Round {{ round.round }}
+            {{ roundTabLabel(round, index) }}
           </button>
         </div>
 
@@ -215,7 +225,7 @@ watch(
                 icon="lucide:arrow-up-to-line"
                 class="h-4 w-4 text-sky-400"
               />
-              Context sequence · {{ activeRound.request.messages.length }} input messages · {{ activeRound.request.tools.length }} tools
+              {{ activeRound.label || 'Context sequence' }} · {{ activeRound.request.messages.length }} input messages · {{ activeRound.request.tools.length }} tools
             </h4>
 
             <div class="max-h-[58vh] space-y-2 overflow-y-auto pr-1">

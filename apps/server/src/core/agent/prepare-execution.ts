@@ -14,7 +14,7 @@ import { resolveExecutionTools } from './pre-execution/execution-tools.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemorySystemMessages } from './pre-execution/execution-memory.js'
 import { ensureOversizedAttachmentsIndexed } from './pre-execution/execution-attachments.js'
-import { buildTaskContext } from './pre-execution/task-context.js'
+import { buildTaskContext, inferRequestedToolEffect } from './pre-execution/task-context.js'
 import { getAssignedOrDefaultSpaces, type MemorySpaceRef } from '../memory/memory-space-scope.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
@@ -82,6 +82,8 @@ export interface PrepareExecutionInput {
     eventMeta?: Record<string, unknown>
     /** Inline text threshold; larger conversation attachments are indexed before execution. */
     inlineAttachmentTextLimit?: number
+    /** Capture auxiliary pre-turn model calls in the Debug Context inspector. */
+    debugContextEnabled?: boolean
 }
 
 export interface PreparedExecution {
@@ -152,9 +154,13 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         enabledModes: autoModes,
         eventMeta: input.eventMeta,
         signal: input.signal,
+        debugContextEnabled: input.debugContextEnabled,
     })
-    const toolRoutingQuery = taskContext?.toolQuery || input.userQuery
-    const memoryRoutingQuery = taskContext?.memoryQuery || input.userQuery
+    const toolRoutingQuery = uniqueQueries([input.userQuery, taskContext?.toolQuery]).join('\n') || input.userQuery
+    const memoryRoutingQueries = uniqueQueries([
+        input.userQuery,
+        ...(taskContext?.memoryQueries || (taskContext?.memoryQuery ? [taskContext.memoryQuery] : [])),
+    ])
     // Query rewriting complements recent conversational context; it does not
     // replace it. Follow-ups and pronouns still need the original turns.
     const routingMessages = input.recentMessages
@@ -178,6 +184,8 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         resolvedProviderId: taskContextRouter.providerId,
         resolvedModel: taskContextRouter.model,
         userQuery: toolRoutingQuery,
+        requestedToolEffect: taskContext?.requestedToolEffect || inferRequestedToolEffect(input.userQuery || ''),
+        suppressAutoTools: taskContext?.skipToolRouting === true,
         recentMessages: routingMessages,
         usedToolNames: input.usedToolNames,
         preferredToolKeys: input.preferredToolKeys,
@@ -186,6 +194,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         includeSubAgents: input.includeSubAgents,
         subAgentAssignments: input.subAgentAssignments,
         signal: input.signal,
+        debugContextEnabled: input.debugContextEnabled,
         memorySpaceOverrides,
         hydrationAgentId: input.hydrationAgentId,
         eventMeta: input.eventMeta,
@@ -197,10 +206,12 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         model: taskContextRouter.model,
         autoMemory: input.autoMemory,
         memorySpaceOverrides,
-        userQuery: memoryRoutingQuery,
+        userQuery: input.userQuery,
+        retrievalQueries: memoryRoutingQueries,
         recentMessages: routingMessages,
         eventMeta: input.eventMeta,
         signal: input.signal,
+        debugContextEnabled: input.debugContextEnabled,
     }), attachmentPreparation])
 
     const promptMessages = await resolveSystemPromptMessages({
@@ -232,6 +243,13 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         systemMessages,
         hasSubAgents: toolLayer.hasSubAgents,
     }
+}
+
+function uniqueQueries(values: Array<string | undefined>): string[] {
+    return values
+        .map((value) => value?.trim() || '')
+        .filter(Boolean)
+        .filter((value, index, all) => all.indexOf(value) === index)
 }
 
 function resolveSelectedMemoryFolderNames(

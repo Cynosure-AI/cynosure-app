@@ -6,6 +6,7 @@ import type { EntityGraphNode } from "../../api/types";
 const props = defineProps<{
   modelValue: string;
   suggestions: EntityGraphNode[];
+  selectedNodeIds?: string[];
   placeholder?: string;
 }>();
 
@@ -16,18 +17,22 @@ const emit = defineEmits<{
 
 const activeIndex = ref(0);
 const hasQuery = computed(() => props.modelValue.trim().length > 0);
-const showSuggestions = computed(() => hasQuery.value && props.suggestions.length > 0);
+const availableSuggestions = computed(() => {
+  const selectedIds = new Set(props.selectedNodeIds || []);
+  return props.suggestions.filter((node) => !selectedIds.has(node.id));
+});
+const showSuggestions = computed(() => hasQuery.value && availableSuggestions.value.length > 0);
 
 watch(() => props.suggestions, () => {
   activeIndex.value = 0;
 });
 
 function clampActiveIndex() {
-  if (props.suggestions.length === 0) {
+  if (availableSuggestions.value.length === 0) {
     activeIndex.value = 0;
     return;
   }
-  activeIndex.value = Math.min(Math.max(activeIndex.value, 0), props.suggestions.length - 1);
+  activeIndex.value = Math.min(Math.max(activeIndex.value, 0), availableSuggestions.value.length - 1);
 }
 
 function selectNode(node: EntityGraphNode) {
@@ -37,7 +42,7 @@ function selectNode(node: EntityGraphNode) {
 function selectActiveSuggestion() {
   if (!showSuggestions.value) return false;
   clampActiveIndex();
-  const node = props.suggestions[activeIndex.value];
+  const node = availableSuggestions.value[activeIndex.value];
   if (!node) return false;
   selectNode(node);
   return true;
@@ -46,12 +51,12 @@ function selectActiveSuggestion() {
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === "ArrowDown" && showSuggestions.value) {
     event.preventDefault();
-    activeIndex.value = (activeIndex.value + 1) % props.suggestions.length;
+    activeIndex.value = (activeIndex.value + 1) % availableSuggestions.value.length;
     return;
   }
   if (event.key === "ArrowUp" && showSuggestions.value) {
     event.preventDefault();
-    activeIndex.value = (activeIndex.value - 1 + props.suggestions.length) % props.suggestions.length;
+    activeIndex.value = (activeIndex.value - 1 + availableSuggestions.value.length) % availableSuggestions.value.length;
     return;
   }
   if (event.key === "Enter" && selectActiveSuggestion()) {
@@ -71,7 +76,7 @@ function handleKeydown(event: KeyboardEvent) {
       :value="modelValue"
       type="text"
       class="w-72 max-w-full pl-8 pr-3 py-2 text-sm bg-theme-950 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-600 focus:outline-none focus:border-theme-600"
-      :placeholder="placeholder || 'Search entities'"
+      :placeholder="placeholder || 'Search knowledge entities'"
       @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       @keydown="handleKeydown"
     >
@@ -80,7 +85,7 @@ function handleKeydown(event: KeyboardEvent) {
       class="absolute left-0 top-full z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-theme-700 bg-theme-950 shadow-2xl"
     >
       <button
-        v-for="(node, index) in suggestions"
+        v-for="(node, index) in availableSuggestions"
         :key="node.id"
         type="button"
         class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100"

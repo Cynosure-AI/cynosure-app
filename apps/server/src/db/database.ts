@@ -320,6 +320,7 @@ function createTables(db: Database.Database): void {
       chunk_count INTEGER NOT NULL DEFAULT 0,
       last_indexed_at INTEGER NOT NULL DEFAULT 0,
       entity_indexed_at INTEGER NOT NULL DEFAULT 0,
+      tags_json TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL,
       PRIMARY KEY (space_id, file_name)
     );
@@ -333,61 +334,228 @@ function createTables(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_ams_agent ON agent_memory_spaces(agent_id);
     CREATE INDEX IF NOT EXISTS idx_ams_space ON agent_memory_spaces(space_id);
 
-    CREATE TABLE IF NOT EXISTS entity_graph_nodes (
+    -- Source documents and their revisions remain the
+    -- authority; every entity, assertion, and search projection is derived
+    -- from a versioned indexing run and can be rebuilt without data loss.
+    CREATE TABLE IF NOT EXISTS memory_knowledge_index_runs (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
+      document_id TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      pipeline_version TEXT NOT NULL,
+      prompt_version TEXT NOT NULL,
+      extractor_provider_id TEXT NOT NULL DEFAULT '',
+      extractor_model TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'staging'
+        CHECK(status IN ('staging', 'active', 'retired', 'failed')),
+      started_at INTEGER NOT NULL,
+      completed_at INTEGER,
+      activated_at INTEGER,
+      search_projection_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(search_projection_status IN ('pending', 'ready', 'error')),
+      search_projection_error TEXT,
+      error TEXT,
+      UNIQUE(document_id, content_hash, pipeline_version)
+    );
+    CREATE INDEX IF NOT EXISTS idx_mkir_document ON memory_knowledge_index_runs(document_id, status);
+    CREATE INDEX IF NOT EXISTS idx_mkir_scope ON memory_knowledge_index_runs(space_id, status);
+
+    CREATE TABLE IF NOT EXISTS memory_knowledge_text_units (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES memory_knowledge_index_runs(id) ON DELETE CASCADE,
+      document_id TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      text_hash TEXT NOT NULL,
+      document_title TEXT NOT NULL DEFAULT '',
+      section_path TEXT NOT NULL DEFAULT '',
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      UNIQUE(run_id, chunk_index)
+    );
+    CREATE INDEX IF NOT EXISTS idx_mktu_revision ON memory_knowledge_text_units(document_id, content_hash, chunk_index);
+    CREATE INDEX IF NOT EXISTS idx_mktu_scope ON memory_knowledge_text_units(space_id, file_name);
+
+    CREATE TABLE IF NOT EXISTS memory_knowledge_entities (
+      id TEXT PRIMARY KEY,
+      namespace_id TEXT NOT NULL,
+      canonical_name TEXT NOT NULL,
       normalized_name TEXT NOT NULL,
-      type TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      identity_hint TEXT NOT NULL DEFAULT '',
+      normalized_identity_hint TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('active', 'merged', 'retired')),
+      merged_into_id TEXT REFERENCES memory_knowledge_entities(id),
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_mke_name ON memory_knowledge_entities(namespace_id, normalized_name, entity_type, status);
+    CREATE INDEX IF NOT EXISTS idx_mke_identity ON memory_knowledge_entities(namespace_id, normalized_identity_hint, status);
+
+    CREATE TABLE IF NOT EXISTS memory_knowledge_entity_aliases (
+      id TEXT PRIMARY KEY,
+      entity_id TEXT NOT NULL REFERENCES memory_knowledge_entities(id) ON DELETE CASCADE,
+      display_alias TEXT NOT NULL,
+      normalized_alias TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'extraction',
+      confidence REAL NOT NULL DEFAULT 0.7,
+      created_at INTEGER NOT NULL,
+      UNIQUE(entity_id, normalized_alias)
+    );
+    CREATE INDEX IF NOT EXISTS idx_mkea_alias ON memory_knowledge_entity_aliases(normalized_alias);
+
+    CREATE TABLE IF NOT EXISTS memory_knowledge_entity_resolution_decisions (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES memory_knowledge_index_runs(id) ON DELETE CASCADE,
+      surface TEXT NOT NULL,
+      normalized_surface TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      identity_hint TEXT NOT NULL DEFAULT '',
+      selected_entity_id TEXT REFERENCES memory_knowledge_entities(id),
+      candidate_ids_json TEXT NOT NULL DEFAULT '[]',
+      decision TEXT NOT NULL CHECK(decision IN ('created', 'resolved', 'ambiguous', 'rejected', 'manual')),
+      confidence REAL NOT NULL DEFAULT 0,
+      rationale TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_mkerd_run ON memory_knowledge_entity_resolution_decisions(run_id);
+
+    CREATE TABLE IF NOT EXISTS memory_knowledge_entity_mentions (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES memory_knowledge_index_runs(id) ON DELETE CASCADE,
+      text_unit_id TEXT NOT NULL REFERENCES memory_knowledge_text_units(id) ON DELETE CASCADE,
+      entity_id TEXT REFERENCES memory_knowledge_entities(id),
+      surface TEXT NOT NULL,
+      normalized_surface TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      span_start INTEGER,
+      span_end INTEGER,
+      resolution_confidence REAL NOT NULL DEFAULT 0,
+      resolution_status TEXT NOT NULL DEFAULT 'unresolved'
+        CHECK(resolution_status IN ('resolved', 'ambiguous', 'unresolved', 'rejected', 'manual')),
+      context_text TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      UNIQUE(run_id, text_unit_id, normalized_surface, entity_type, span_start)
+    );
+    CREATE INDEX IF NOT EXISTS idx_mkem_entity ON memory_knowledge_entity_mentions(entity_id);
+    CREATE INDEX IF NOT EXISTS idx_mkem_surface ON memory_knowledge_entity_mentions(normalized_surface);
+
+    CREATE TABLE IF NOT EXISTS memory_knowledge_predicates (
+      id TEXT PRIMARY KEY,
+      canonical_name TEXT NOT NULL UNIQUE,
       aliases_json TEXT NOT NULL DEFAULT '[]',
-      importance INTEGER NOT NULL DEFAULT 1,
-      mention_count INTEGER NOT NULL DEFAULT 1,
-      source_count INTEGER NOT NULL DEFAULT 1,
-      first_seen_at INTEGER NOT NULL,
-      last_seen_at INTEGER NOT NULL,
-      UNIQUE(normalized_name, type)
+      subject_types_json TEXT NOT NULL DEFAULT '[]',
+      object_types_json TEXT NOT NULL DEFAULT '[]',
+      inverse_predicate_id TEXT REFERENCES memory_knowledge_predicates(id),
+      symmetric INTEGER NOT NULL DEFAULT 0,
+      temporal INTEGER NOT NULL DEFAULT 0,
+      cardinality TEXT NOT NULL DEFAULT 'many'
+        CHECK(cardinality IN ('many', 'one_per_subject', 'one_per_pair')),
+      contradiction_policy TEXT NOT NULL DEFAULT 'coexist'
+        CHECK(contradiction_policy IN ('coexist', 'dispute', 'supersede_same_source')),
+      managed INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_egn_name ON entity_graph_nodes(normalized_name);
-    CREATE INDEX IF NOT EXISTS idx_egn_type ON entity_graph_nodes(type);
-    CREATE INDEX IF NOT EXISTS idx_egn_seen ON entity_graph_nodes(last_seen_at);
 
-    CREATE TABLE IF NOT EXISTS entity_graph_edges (
+    CREATE TABLE IF NOT EXISTS memory_knowledge_assertions (
       id TEXT PRIMARY KEY,
-      from_node_id TEXT NOT NULL REFERENCES entity_graph_nodes(id) ON DELETE CASCADE,
-      to_node_id TEXT NOT NULL REFERENCES entity_graph_nodes(id) ON DELETE CASCADE,
-      relation TEXT NOT NULL,
+      namespace_id TEXT NOT NULL,
+      subject_entity_id TEXT NOT NULL REFERENCES memory_knowledge_entities(id),
+      predicate_id TEXT NOT NULL REFERENCES memory_knowledge_predicates(id),
+      object_entity_id TEXT REFERENCES memory_knowledge_entities(id),
+      object_value_json TEXT,
+      normalized_object_key TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('staging', 'active', 'superseded', 'disputed', 'retracted', 'retired')),
       importance INTEGER NOT NULL DEFAULT 1,
-      confidence REAL NOT NULL DEFAULT 0.7,
-      evidence TEXT NOT NULL DEFAULT '',
-      source_kind TEXT NOT NULL DEFAULT 'conversation',
-      source_id TEXT NOT NULL DEFAULT '',
-      mention_count INTEGER NOT NULL DEFAULT 1,
-      first_seen_at INTEGER NOT NULL,
-      last_seen_at INTEGER NOT NULL,
-      UNIQUE(from_node_id, relation, to_node_id)
+      valid_from INTEGER,
+      valid_to INTEGER,
+      observed_at INTEGER NOT NULL,
+      superseded_by_id TEXT REFERENCES memory_knowledge_assertions(id),
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      CHECK((object_entity_id IS NOT NULL) != (object_value_json IS NOT NULL))
     );
-    CREATE INDEX IF NOT EXISTS idx_ege_from ON entity_graph_edges(from_node_id);
-    CREATE INDEX IF NOT EXISTS idx_ege_to ON entity_graph_edges(to_node_id);
-    CREATE INDEX IF NOT EXISTS idx_ege_relation ON entity_graph_edges(relation);
-    CREATE INDEX IF NOT EXISTS idx_ege_seen ON entity_graph_edges(last_seen_at);
+    CREATE INDEX IF NOT EXISTS idx_mka_subject ON memory_knowledge_assertions(namespace_id, subject_entity_id, predicate_id, status);
+    CREATE INDEX IF NOT EXISTS idx_mka_object ON memory_knowledge_assertions(namespace_id, object_entity_id, status);
+    CREATE INDEX IF NOT EXISTS idx_mka_predicate ON memory_knowledge_assertions(predicate_id, status);
+    CREATE INDEX IF NOT EXISTS idx_mka_validity ON memory_knowledge_assertions(status, valid_from, valid_to);
 
-    CREATE TABLE IF NOT EXISTS entity_graph_edge_evidence (
+    CREATE TABLE IF NOT EXISTS memory_knowledge_assertion_evidence (
       id TEXT PRIMARY KEY,
-      edge_id TEXT NOT NULL REFERENCES entity_graph_edges(id) ON DELETE CASCADE,
-      source_kind TEXT NOT NULL DEFAULT 'conversation',
-      source_id TEXT NOT NULL DEFAULT '',
-      source_document_id TEXT NOT NULL DEFAULT '',
-      source_content_hash TEXT NOT NULL DEFAULT '',
-      source_chunk_index INTEGER,
-      evidence TEXT NOT NULL DEFAULT '',
-      confidence REAL NOT NULL DEFAULT 0.7,
-      mention_count INTEGER NOT NULL DEFAULT 1,
-      first_seen_at INTEGER NOT NULL,
-      last_seen_at INTEGER NOT NULL,
-      UNIQUE(edge_id, source_kind, source_id)
+      assertion_id TEXT NOT NULL REFERENCES memory_knowledge_assertions(id) ON DELETE CASCADE,
+      run_id TEXT NOT NULL REFERENCES memory_knowledge_index_runs(id) ON DELETE CASCADE,
+      text_unit_id TEXT NOT NULL REFERENCES memory_knowledge_text_units(id) ON DELETE CASCADE,
+      quote TEXT NOT NULL,
+      span_start INTEGER NOT NULL,
+      span_end INTEGER NOT NULL,
+      extractor_confidence REAL NOT NULL DEFAULT 0.5,
+      entity_resolution_confidence REAL NOT NULL DEFAULT 0,
+      source_trust REAL NOT NULL DEFAULT 1,
+      entailment_score REAL,
+      quote_verified INTEGER NOT NULL DEFAULT 0,
+      note TEXT NOT NULL DEFAULT '',
+      pipeline_version TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(assertion_id, run_id, text_unit_id, span_start, span_end)
     );
-    CREATE INDEX IF NOT EXISTS idx_egee_edge ON entity_graph_edge_evidence(edge_id);
-    CREATE INDEX IF NOT EXISTS idx_egee_source ON entity_graph_edge_evidence(source_id);
+    CREATE INDEX IF NOT EXISTS idx_mkae_assertion ON memory_knowledge_assertion_evidence(assertion_id);
+    CREATE INDEX IF NOT EXISTS idx_mkae_run ON memory_knowledge_assertion_evidence(run_id);
+    CREATE INDEX IF NOT EXISTS idx_mkae_text_unit ON memory_knowledge_assertion_evidence(text_unit_id);
 
+    CREATE TABLE IF NOT EXISTS memory_knowledge_assertion_corrections (
+      id TEXT PRIMARY KEY,
+      assertion_id TEXT NOT NULL REFERENCES memory_knowledge_assertions(id) ON DELETE CASCADE,
+      action TEXT NOT NULL CHECK(action IN ('update', 'retract')),
+      prior_predicate_id TEXT,
+      predicate_id TEXT,
+      evidence_text TEXT,
+      confidence REAL,
+      importance INTEGER,
+      rationale TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_mkac_assertion ON memory_knowledge_assertion_corrections(assertion_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS memory_index_jobs (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      status TEXT NOT NULL
+        CHECK(status IN ('queued', 'running', 'retrying', 'completed', 'cancelled', 'error', 'dead_letter')),
+      attempt INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      next_attempt_at INTEGER,
+      result_json TEXT,
+      error TEXT,
+      progress_current INTEGER,
+      progress_total INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      started_at INTEGER,
+      completed_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_mij_queue ON memory_index_jobs(status, next_attempt_at, created_at);
+    CREATE INDEX IF NOT EXISTS idx_mij_file ON memory_index_jobs(space_id, file_name, kind);
+
+  `)
+
+  // Knowledge is now the only graph implementation. These compatibility
+  // tables are derived data, so removing them is safe and intentionally final.
+  db.exec(`
+    DROP TABLE IF EXISTS entity_graph_edge_evidence;
+    DROP TABLE IF EXISTS entity_graph_edges;
+    DROP TABLE IF EXISTS entity_graph_nodes;
   `)
 
   // Migrations for existing databases
@@ -417,14 +585,20 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('tasks', 'updated_at', 'INTEGER')
   db.prepare('UPDATE tasks SET updated_at = created_at WHERE updated_at IS NULL').run()
 
-  // Entity graph: add importance column for LLM-assigned importance scores
-  addColumnIfMissing('entity_graph_nodes', 'importance', 'INTEGER NOT NULL DEFAULT 1')
-  addColumnIfMissing('entity_graph_edges', 'importance', 'INTEGER NOT NULL DEFAULT 1')
-  addColumnIfMissing('entity_graph_edge_evidence', 'source_document_id', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('entity_graph_edge_evidence', 'source_content_hash', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('entity_graph_edge_evidence', 'source_chunk_index', 'INTEGER')
   addColumnIfMissing('memory_file_index', 'entity_indexed_at', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('memory_file_index', 'tags_json', "TEXT NOT NULL DEFAULT '[]'")
+  addColumnIfMissing('memory_index_jobs', 'progress_current', 'INTEGER')
+  addColumnIfMissing('memory_index_jobs', 'progress_total', 'INTEGER')
   addColumnIfMissing('memory_file_index', 'document_id', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('memory_knowledge_index_runs', 'search_projection_status', "TEXT NOT NULL DEFAULT 'pending'")
+  addColumnIfMissing('memory_knowledge_index_runs', 'search_projection_error', 'TEXT')
+  addColumnIfMissing('memory_knowledge_entity_mentions', 'note', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('memory_knowledge_assertion_evidence', 'note', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('memory_knowledge_text_units', 'tags_json', "TEXT NOT NULL DEFAULT '[]'")
+  // v4 grounds extracted knowledge to complete source chunks. Purge legacy
+  // verbatim quotes and model-authored confidence values during migration.
+  db.prepare("UPDATE memory_knowledge_assertion_evidence SET quote = '', extractor_confidence = 1 WHERE quote != '' OR extractor_confidence != 1").run()
+  db.prepare('UPDATE memory_knowledge_assertion_corrections SET confidence = NULL WHERE confidence IS NOT NULL').run()
   db.prepare("UPDATE memory_file_index SET document_id = lower(hex(randomblob(16))) WHERE document_id = ''").run()
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_mfi_document_id ON memory_file_index(document_id)')
   addColumnIfMissing('memory_file_index', 'document_ref', "TEXT NOT NULL DEFAULT ''")
@@ -472,42 +646,6 @@ function createTables(db: Database.Database): void {
       if (JSON.stringify(deduped) !== JSON.stringify(current)) updateAgentTools.run(JSON.stringify(deduped), row.id)
     } catch { /* keep malformed legacy values untouched */ }
   }
-
-  // Preserve the legacy edge source as its first evidence observation. New
-  // assertions are stored one-per-source instead of overwriting provenance.
-  db.exec(`
-    INSERT OR IGNORE INTO entity_graph_edge_evidence
-      (id, edge_id, source_kind, source_id, evidence, confidence, mention_count, first_seen_at, last_seen_at)
-    SELECT lower(hex(randomblob(16))), id, source_kind, source_id, evidence, confidence,
-           mention_count, first_seen_at, last_seen_at
-    FROM entity_graph_edges
-  `)
-  // Pre-provenance memory claims remain stored but cannot be trusted as model
-  // context. Mark their documents for a one-time entity re-index in the UI.
-  db.exec(`
-    UPDATE memory_file_index AS m
-    SET entity_indexed_at = 0
-    WHERE EXISTS (
-      SELECT 1
-      FROM entity_graph_edge_evidence ev
-      WHERE ev.source_kind = 'memory'
-        AND ev.source_document_id = ''
-        AND ev.source_content_hash = ''
-        AND (
-          ev.source_id = 'memory:' || m.space_id || ':' || m.file_name
-          OR ev.source_id = 'memory:' || m.file_name
-        )
-    )
-  `)
-  db.exec(`
-    UPDATE entity_graph_nodes
-    SET source_count = (
-      SELECT COUNT(DISTINCT ev.source_kind || char(0) || ev.source_id)
-      FROM entity_graph_edges e
-      JOIN entity_graph_edge_evidence ev ON ev.edge_id = e.id
-      WHERE e.from_node_id = entity_graph_nodes.id OR e.to_node_id = entity_graph_nodes.id
-    )
-  `)
 
   ensureDefaultMemorySpace(db)
 

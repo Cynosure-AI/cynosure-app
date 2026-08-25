@@ -1,7 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getAgent } from '../core/agents/agent-store.js'
-import { listActiveInstances } from './instances.js'
+import { listActiveInstances, stopAllActiveInstances } from './instances.js'
+import { cancelAllMemoryIndexJobs } from '../core/memory/memory-index-jobs.js'
+import { cancelActiveMemoryReembedding } from '../core/memory/reembedding-operation.js'
+import { cancelPostActions, getAllActiveActions } from '../core/agent/post-execution.js'
 
 type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat' | 'channels'
 
@@ -259,6 +262,22 @@ function activitySearchText(item: ActivityItem): string {
 }
 
 export async function registerActivityRoutes(app: FastifyInstance): Promise<void> {
+    app.post('/stop-all', async () => {
+        const instances = stopAllActiveInstances()
+        const memoryJobs = cancelAllMemoryIndexJobs()
+        const memoryReembedding = cancelActiveMemoryReembedding() ? 1 : 0
+        let postActions = 0
+        for (const conversationId of Object.keys(getAllActiveActions())) {
+            if (cancelPostActions(conversationId)) postActions++
+        }
+        const counts = { ...instances, memoryJobs, memoryReembedding, postActions }
+        return {
+            success: true,
+            total: Object.values(counts).reduce((sum, count) => sum + count, 0),
+            counts,
+        }
+    })
+
     app.get<{ Querystring: { limit?: string; offset?: string; types?: string; search?: string } }>('/', async (req) => {
         const db = getDb()
         const limit = clampLimit(req.query.limit)

@@ -16,7 +16,7 @@ vi.mock('../tool-router.js', () => ({
     routeToolsLexically: routerMocks.lexical,
 }))
 
-import { applyAutoToolRouting } from './auto-tool-routing.js'
+import { applyAutoToolRouting, filterToolsForRequestedEffect } from './auto-tool-routing.js'
 
 function tool(name: string): RegistryAwareToolDefinition {
     return {
@@ -26,6 +26,14 @@ function tool(name: string): RegistryAwareToolDefinition {
         timeout: 1_000,
         execute: async () => ({ success: true, output: 'ok' }),
     } as RegistryAwareToolDefinition
+}
+
+function annotatedTool(name: string, readOnly: boolean, destructive = false): RegistryAwareToolDefinition {
+    return {
+        ...tool(name),
+        execution: { readOnly },
+        annotations: { readOnlyHint: readOnly, destructiveHint: destructive },
+    }
 }
 
 describe('automatic tool routing', () => {
@@ -138,5 +146,17 @@ describe('automatic tool routing', () => {
             signal: controller.signal,
         })).rejects.toMatchObject({ name: 'AbortError' })
         expect(routerMocks.lexical).not.toHaveBeenCalled()
+    })
+
+    test('hard-gates mutating and destructive tools for read-only requests', () => {
+        const tools = [
+            annotatedTool('memory_search', true),
+            annotatedTool('memory_create', false),
+            annotatedTool('memory_delete', false, true),
+        ]
+
+        expect(filterToolsForRequestedEffect(tools, 'read').map(({ name }) => name)).toEqual(['memory_search'])
+        expect(filterToolsForRequestedEffect(tools, 'write').map(({ name }) => name)).toEqual(['memory_search', 'memory_create'])
+        expect(filterToolsForRequestedEffect(tools, 'destructive')).toEqual(tools)
     })
 })
