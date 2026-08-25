@@ -18,6 +18,7 @@ export interface UpdateState {
   transferred?: number
   total?: number
   message?: string
+  changelogMarkdown?: string
 }
 
 interface ElectronUpdaterApi {
