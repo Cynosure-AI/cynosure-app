@@ -110,9 +110,12 @@ watch(() => props.searchOpen, (open) => {
   })
 }, { immediate: true })
 
-watch(searchResults, (results) => {
-  currentSearchResultIndex.value = results.length ? 0 : -1
-  if (results[0]) scrollToSearchResult(results[0])
+watch(searchResults, (results, previousResults) => {
+  const previousMessageId = previousResults[currentSearchResultIndex.value]
+  const preservedIndex = previousMessageId ? results.indexOf(previousMessageId) : -1
+  currentSearchResultIndex.value = preservedIndex >= 0
+    ? preservedIndex
+    : results.length ? 0 : -1
 })
 
 watch(activeSearchMessageId, (messageId) => {
