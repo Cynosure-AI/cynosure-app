@@ -11,7 +11,7 @@ import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-to
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
-import { trimMessagesToContextLimit, estimateTotalTokens } from '../core/agent/context-trimmer.js'
+import { trimMessagesToContextLimit, estimateTotalTokens, estimateToolDefinitionTokens } from '../core/agent/context-trimmer.js'
 import type {
   ChatMessage,
   ContentPart,
@@ -731,8 +731,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           messages = compactResult.messages
           initialContextEstimate = compactResult.initialContextEstimate
         } else if (contextWindow) {
-          initialContextEstimate = estimateTotalTokens(messages)
-          messages = trimMessagesToContextLimit(messages, contextWindow, undefined, contextStrategy)
+          initialContextEstimate = estimateTotalTokens(messages) + estimateToolDefinitionTokens(tools)
+          messages = trimMessagesToContextLimit(messages, contextWindow, {
+            tools,
+            thinkingEnabled: reqThinkingEnabled !== undefined
+              ? reqThinkingEnabled
+              : (resolvedAgent?.thinkingEnabled !== false),
+            reasoningEffort: reqReasoningEffort ?? resolvedAgent?.reasoningEffort,
+            strategy: contextStrategy,
+          })
         }
 
         if (reqDebugMode === true) {
