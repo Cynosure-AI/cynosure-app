@@ -60,22 +60,66 @@ describe('PreTurnContextTimeline', () => {
     })
 
     await wrapper.get('button').trigger('click')
-    expect(wrapper.text()).toContain('Prepared search context')
-    expect(wrapper.text()).toContain('AI preselected 2 MCPs/toolsets')
-    expect(wrapper.text()).toContain('Found 2 tool candidates')
-    expect(wrapper.text()).toContain('AI selected 1 tool')
+    expect(wrapper.text()).toContain('AI wrote retrieval queries')
+    expect(wrapper.text()).toContain('LLM-generated routing intent')
+    expect(wrapper.text()).toContain('AI selected 2 MCPs/toolsets')
+    expect(wrapper.text()).toContain('Semantic search found 2 tool candidates')
+    expect(wrapper.text()).toContain('Semantic search matched 1 tool')
 
-    const preselectionStep = wrapper.findAll('li').find((item) => item.text().includes('AI preselected 2 MCPs/toolsets'))!
+    const preselectionStep = wrapper.findAll('li').find((item) => item.text().includes('AI selected 2 MCPs/toolsets'))!
     expect(preselectionStep.text()).not.toContain('Filesystem')
     await preselectionStep.get('button').trigger('click')
     expect(preselectionStep.text()).toContain('Filesystem')
     expect(preselectionStep.text()).toContain('Documents')
 
-    const foundStep = wrapper.findAll('li').find((item) => item.text().includes('Found 2 tool candidates'))!
+    const foundStep = wrapper.findAll('li').find((item) => item.text().includes('Semantic search found 2 tool candidates'))!
     expect(foundStep.text()).not.toContain('read_file')
     await foundStep.get('button').trigger('click')
     expect(foundStep.text()).toContain('read_file')
     expect(foundStep.text()).toContain('92%')
     expect(foundStep.text()).toContain('parse_document')
+  })
+
+  test('does not count an empty memory result as a selected memory item', async () => {
+    const memorySteps = [
+      {
+        iteration: 0,
+        status: 'routing-memory',
+        timestamp: 1_700_000_000_400,
+        toolCalls: Array.from({ length: 9 }, (_, index) => ({
+          name: `memory-${index + 1}.md`,
+          arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-results', selectionMethod: 'retrieval', matchScore: .9 - index / 20 }),
+        })),
+      },
+      {
+        iteration: 0,
+        status: 'curating-memory',
+        timestamp: 1_700_000_000_500,
+        toolCalls: [{
+          name: 'No relevant memories',
+          arguments: JSON.stringify({
+            type: 'memory',
+            contextPhase: 'gathered-context',
+            selectionMethod: 'llm',
+            emptyReason: 'none-relevant',
+            content: 'Auto memory found candidates, but the curation step selected none as useful for this turn.',
+          }),
+        }],
+      },
+    ]
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: { steps: memorySteps, isActive: false },
+      global: { stubs: { Icon: true } },
+    })
+
+    expect(wrapper.get('button').text()).not.toContain('memory item')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain('Memory retrieval found 9 matches')
+    expect(wrapper.text()).toContain('AI selected no memory items')
+    expect(wrapper.text()).toContain('LLM decision')
+
+    const selectionStep = wrapper.findAll('li').find((item) => item.text().includes('AI selected no memory items'))!
+    await selectionStep.get('button').trigger('click')
+    expect(selectionStep.text()).toContain('No relevant memories')
   })
 })

@@ -13,7 +13,7 @@ type TimelineItem = {
   icon: string
   tone: ContextKind
   timestamp: number
-  details: Array<{ name: string; content?: string; score?: string; selected?: boolean }>
+  details: Array<{ name: string; content?: string; score?: string; selected?: boolean; empty?: boolean }>
   pending: boolean
 }
 
@@ -26,14 +26,14 @@ const expanded = ref(false)
 const expandedItems = reactive(new Set<string>())
 
 const STATUS_LABELS: Record<string, { label: string; icon: string; tone: ContextKind }> = {
-  'building-task-context': { label: 'Preparing search context', icon: 'lucide:compass', tone: 'context' },
+  'building-task-context': { label: 'AI writing retrieval queries', icon: 'lucide:compass', tone: 'context' },
   'indexing-attachments': { label: 'Indexing attachments', icon: 'lucide:paperclip', tone: 'attachments' },
   'indexing-tools': { label: 'Indexing tool definitions', icon: 'lucide:database-zap', tone: 'tools' },
-  'routing-tools': { label: 'Gathering tools context', icon: 'lucide:route', tone: 'tools' },
-  'finding-tools': { label: 'Finding required tools', icon: 'lucide:search-check', tone: 'tools' },
+  'routing-tools': { label: 'AI selecting MCPs/toolsets', icon: 'lucide:route', tone: 'toolsets' },
+  'finding-tools': { label: 'Ranking tools', icon: 'lucide:search-check', tone: 'tools' },
   'curating-tools': { label: 'AI selecting tools', icon: 'lucide:list-checks', tone: 'tools' },
-  'routing-memory': { label: 'Querying memory', icon: 'lucide:brain-circuit', tone: 'memory' },
-  'curating-memory': { label: 'AI selecting memory', icon: 'lucide:list-checks', tone: 'memory' },
+  'routing-memory': { label: 'Searching memory index', icon: 'lucide:brain-circuit', tone: 'memory' },
+  'curating-memory': { label: 'AI curating memory evidence', icon: 'lucide:list-checks', tone: 'memory' },
 }
 
 function parseArgs(call: ToolCall): Record<string, unknown> {
@@ -68,6 +68,19 @@ function phaseOf(calls: ToolCall[]): string {
   return text(parseArgs(calls[0]).contextPhase) || ''
 }
 
+function methodOf(calls: ToolCall[], kind: ContextKind, phase: string): string {
+  const explicit = text(parseArgs(calls[0]).selectionMethod)
+  if (explicit) return explicit
+  if (kind === 'toolsets') return 'llm'
+  if (kind === 'tools') return calls.some((call) => typeof parseArgs(call).routerScore === 'number') ? 'semantic' : 'lexical'
+  if (kind === 'memory' || kind === 'entities') return phase === 'gathered-context' ? 'llm' : 'retrieval'
+  return ''
+}
+
+function isEmptyCall(call: ToolCall): boolean {
+  return Boolean(text(parseArgs(call).emptyReason))
+}
+
 function displayName(call: ToolCall): string {
   const args = parseArgs(call)
   if (args.type === 'memory') return text(args.sourceFile) || call.name
@@ -79,17 +92,28 @@ function plural(count: number, singular: string, pluralValue = `${singular}s`): 
   return `${count} ${count === 1 ? singular : pluralValue}`
 }
 
-function contextLabel(kind: ContextKind, phase: string, count: number): string {
-  if (kind === 'toolsets') return `AI preselected ${plural(count, 'MCP/toolset', 'MCPs/toolsets')}`
-  if (kind === 'tools') return phase === 'gathered-context'
-    ? `AI selected ${plural(count, 'tool')}`
-    : `Found ${plural(count, 'tool candidate')}`
-  if (kind === 'memory') return phase === 'gathered-context'
-    ? `AI selected ${plural(count, 'memory item')}`
-    : `Found ${plural(count, 'memory match', 'memory matches')}`
+function contextLabel(kind: ContextKind, phase: string, count: number, method: string, emptyReason?: string): string {
+  if (kind === 'toolsets') return `AI selected ${plural(count, 'MCP/toolset', 'MCPs/toolsets')}`
+  if (kind === 'tools') {
+    const prefix = method === 'lexical' ? 'Lexical search' : 'Semantic search'
+    return phase === 'gathered-context'
+      ? `${prefix} matched ${plural(count, 'tool')}`
+      : `${prefix} found ${plural(count, 'tool candidate')}`
+  }
+  if (kind === 'memory') return emptyReason === 'routing-failed'
+    ? 'Memory retrieval failed'
+    : phase === 'gathered-context' && method === 'retrieval'
+      ? 'Memory retrieval found no matches'
+      : phase === 'gathered-context'
+    ? method === 'llm'
+      ? `AI selected ${count ? plural(count, 'memory item') : 'no memory items'}`
+      : `Ranking fallback selected ${plural(count, 'memory item')}`
+    : `Memory retrieval found ${plural(count, 'match', 'matches')}`
   if (kind === 'entities') return phase === 'gathered-context'
-    ? `AI selected ${plural(count, 'entity relationship')}`
-    : `Found ${plural(count, 'entity relationship')}`
+    ? method === 'llm'
+      ? `AI selected ${count ? plural(count, 'entity relationship') : 'no entity relationships'}`
+      : `Ranking fallback selected ${plural(count, 'entity relationship')}`
+    : `Knowledge retrieval found ${plural(count, 'entity relationship')}`
   if (kind === 'attachments') return `Indexed ${plural(count, 'attachment')}`
   return 'Prepared search context'
 }
@@ -101,7 +125,8 @@ function callDetails(calls: ToolCall[], selected?: boolean): TimelineItem['detai
       name: displayName(call),
       content: text(args.content) || text(args.toolQuery) || text(args.memoryQuery),
       score: score(args.routerScore ?? args.rerankerScore ?? args.matchScore),
-      selected,
+      selected: selected && !isEmptyCall(call),
+      empty: isEmptyCall(call),
     }
   })
 }
@@ -113,14 +138,41 @@ const items = computed<TimelineItem[]>(() => {
     const taskCalls = calls.filter((call) => ['task-context', 'auto-router'].includes(String(parseArgs(call).type)))
     if (taskCalls.length) {
       const args = parseArgs(taskCalls[0])
+      const taskMethod = text(args.selectionMethod) || (args.fastPath === true ? 'deterministic' : 'llm')
+      const emptyReason = text(args.emptyReason)
+      const memoryQueries = Array.isArray(args.memoryQueries)
+        ? args.memoryQueries.map(text).filter((query): query is string => Boolean(query))
+        : [text(args.memoryQuery)].filter((query): query is string => Boolean(query))
       const details = [
-        text(args.toolQuery) ? { name: 'Tools query', content: text(args.toolQuery) } : null,
-        text(args.memoryQuery) ? { name: 'Memory query', content: text(args.memoryQuery) } : null,
+        text(args.toolQuery) ? { name: 'Tool retrieval query', content: text(args.toolQuery) } : null,
+        ...memoryQueries.map((query, index) => ({
+          name: memoryQueries.length === 1 ? 'Memory retrieval expansion' : `Memory retrieval expansion ${index + 1}`,
+          content: query,
+        })),
         !text(args.toolQuery) && !text(args.memoryQuery) && text(args.content)
           ? { name: 'Context', content: text(args.content) }
           : null,
       ].filter((value): value is NonNullable<typeof value> => Boolean(value))
-      result.push({ key: `${stepIndex}-task`, label: 'Prepared search context', icon: 'lucide:compass', tone: 'context', timestamp: step.timestamp, details, pending: false })
+      result.push({
+        key: `${stepIndex}-task`,
+        label: emptyReason === 'routing-failed'
+          ? 'AI retrieval planning failed'
+          : emptyReason === 'none-generated'
+            ? 'AI returned no retrieval plan'
+            : taskMethod === 'deterministic'
+              ? 'Used direct retrieval query'
+              : 'AI wrote retrieval queries',
+        summary: taskMethod === 'deterministic'
+          ? 'Rule-based fast path'
+          : emptyReason
+            ? 'LLM routing step'
+            : 'LLM-generated routing intent',
+        icon: 'lucide:compass',
+        tone: 'context',
+        timestamp: step.timestamp,
+        details,
+        pending: false,
+      })
     }
 
     const contextCalls = calls.filter((call) => ['toolset-router', 'tool-router', 'memory', 'attachment-index'].includes(String(parseArgs(call).type)))
@@ -128,10 +180,23 @@ const items = computed<TimelineItem[]>(() => {
     contextCalls.forEach((call) => groups.set(kindOf(call), [...(groups.get(kindOf(call)) || []), call]))
     for (const [kind, groupedCalls] of groups) {
       const phase = phaseOf(groupedCalls)
+      const method = methodOf(groupedCalls, kind, phase)
+      const count = groupedCalls.filter((call) => !isEmptyCall(call)).length
+      const emptyReason = text(parseArgs(groupedCalls[0]).emptyReason)
       result.push({
         key: `${stepIndex}-${kind}-${phase}`,
-        label: contextLabel(kind, phase, groupedCalls.length),
-        summary: phase === 'gathered-context' ? 'Selected for this turn' : undefined,
+        label: contextLabel(kind, phase, count, method, emptyReason),
+        summary: method === 'llm'
+          ? 'LLM decision'
+          : method === 'semantic'
+            ? 'Embedding similarity'
+            : method === 'lexical'
+              ? 'Lexical matching'
+              : method === 'ranked-fallback'
+                ? 'AI curation unavailable'
+                : method === 'retrieval'
+                  ? 'Memory index retrieval'
+                  : undefined,
         icon: kind === 'toolsets' ? 'lucide:boxes' : phase === 'gathered-context' ? 'lucide:check' : kind === 'memory' ? 'lucide:brain' : kind === 'entities' ? 'lucide:network' : 'lucide:package-search',
         tone: kind,
         timestamp: step.timestamp,
@@ -165,8 +230,8 @@ const isPending = computed(() => props.isActive && items.value.some((item) => it
 
 function uniqueSelected(kind: ContextKind): string[] {
   return [...new Set(items.value
-    .filter((item) => item.tone === kind && item.details.some((detail) => detail.selected))
-    .flatMap((item) => item.details.filter((detail) => detail.selected).map((detail) => detail.name)))]
+    .filter((item) => item.tone === kind && item.details.some((detail) => detail.selected && !detail.empty))
+    .flatMap((item) => item.details.filter((detail) => detail.selected && !detail.empty).map((detail) => detail.name)))]
 }
 
 function toggleItem(key: string): void {

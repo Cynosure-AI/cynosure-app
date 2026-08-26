@@ -111,7 +111,7 @@ describe('automatic tool routing', () => {
         )
         expect(selectionEvents[0]?.toolCalls).toEqual([{
             name: 'GitHub MCP',
-            arguments: JSON.stringify({ type: 'toolset-router', namespaceId: 'mcp:github' }),
+            arguments: JSON.stringify({ type: 'toolset-router', namespaceId: 'mcp:github', selectionMethod: 'llm' }),
         }])
     })
 
