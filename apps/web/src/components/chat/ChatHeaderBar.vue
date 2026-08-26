@@ -15,7 +15,7 @@ defineProps<{
   planningTaskCount: number;
 }>();
 
-defineEmits<{ toggleTaskList: [] }>();
+defineEmits<{ toggleTaskList: []; searchChat: [] }>();
 
 const chatStore = useChatStore();
 const providerStore = useProviderStore();
@@ -158,7 +158,7 @@ async function newChat(): Promise<void> {
       <span class="hidden sm:inline">New Chat</span>
     </button>
 
-    <ChatSettingsMenu />
+    <ChatSettingsMenu @search="$emit('searchChat')" />
 
     <DebugContextModal
       v-model="debugContextOpen"
