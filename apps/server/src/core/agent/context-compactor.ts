@@ -1,8 +1,14 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
-import { estimateTotalTokens } from './context-trimmer.js'
+import {
+    assertHistoryBudget,
+    calculateContextBudget,
+    estimateToolDefinitionTokens,
+    estimateTotalTokens,
+} from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import type { ChatMessage, ContentPart } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, ContentPart, ToolDefinition } from '../gateway/providers/base.provider.js'
+import type { ReasoningEffort } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -11,13 +17,6 @@ type BroadcastFn = (event: string, data: unknown) => void
  * These system messages are UI-only and must never be forwarded to an LLM.
  */
 export const COMPACT_EVENT_PREFIX = '[CONTEXT_COMPACT_EVENT] '
-
-/**
- * Fraction of context window after which to trigger compaction. 
- * This should be high enough to avoid excessive summarisation, but low enough to prevent hitting hard limits.
- */
-const COMPACTION_CONTEXT_THRESHOLD = 0.75
-
 
 /**
  * Minimal row shape the compactor needs from the message history.
@@ -39,6 +38,10 @@ export interface CompactStrategyInput {
     /** Sub-agent-filtered rows — used to replay messages after the last compact event. */
     filteredRows: CompactHistoryRow[]
     contextWindow: number
+    tools: ToolDefinition[]
+    thinkingEnabled?: boolean
+    reasoningEffort?: ReasoningEffort
+    requestedOutputTokens?: number
     gateway: LLMGateway
     providerId: string | undefined
     responseModel: string
@@ -126,6 +129,10 @@ export async function applyCompactStrategy({
     historyRows,
     filteredRows,
     contextWindow,
+    tools,
+    thinkingEnabled,
+    reasoningEffort,
+    requestedOutputTokens,
     gateway,
     providerId,
     responseModel,
@@ -135,8 +142,7 @@ export async function applyCompactStrategy({
     db,
     broadcast,
 }: CompactStrategyInput): Promise<{ messages: ChatMessage[]; initialContextEstimate: number }> {
-    const maxTokens = Math.floor(contextWindow * COMPACTION_CONTEXT_THRESHOLD)
-    const initialEstimate = estimateTotalTokens(messages)
+    const initialEstimate = estimateTotalTokens(messages) + estimateToolDefinitionTokens(tools)
 
     // Locate the most recent compact event marker in the raw history
     let lastCompactEvent: { summary: string; compactedMessageCount: number; model: string } | null = null
@@ -172,8 +178,21 @@ export async function applyCompactStrategy({
         workingMessages = messages
     }
 
-    // If context fits, nothing to do
-    if (estimateTotalTokens(workingMessages) <= maxTokens) {
+    // Use the same budget as the executor so compaction reacts to routed and
+    // dynamically available tool schemas instead of a message-only threshold.
+    const contextBudget = calculateContextBudget({
+        contextWindow,
+        messages: workingMessages,
+        tools,
+        requestedOutputTokens,
+        thinkingEnabled,
+        reasoningEffort,
+    })
+    assertHistoryBudget(contextBudget)
+    const historyTokens = estimateTotalTokens(
+        workingMessages.filter((message) => message.role !== 'system'),
+    )
+    if (historyTokens <= contextBudget.availableHistory) {
         return { messages: workingMessages, initialContextEstimate: initialEstimate }
     }
 
