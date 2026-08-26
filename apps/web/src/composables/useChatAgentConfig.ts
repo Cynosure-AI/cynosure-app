@@ -4,7 +4,7 @@ import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import type { Conversation, DisplayMessage } from '../stores/chat.store'
 import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { SK_ACTIVE_AGENT, SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
-import { isAutoManagedBuiltInToolName } from '../utils/internal-tools'
+import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/internal-tools'
 
 interface ChatPreset {
     tools: string[]
@@ -148,7 +148,7 @@ export function useChatAgentConfig(
     function selectableToolKeys(): Set<string> {
         return new Set(
             agentStore.availableTools
-                .filter((tool) => !(tool.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(tool.name)))
+                .filter((tool) => !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name)))
                 .map((tool) => tool.key)
         )
     }
@@ -454,7 +454,7 @@ export function useChatAgentConfig(
         if (!agentStore.availableTools.length) return [...new Set(names)]
         const selectableKeys = new Set(
             agentStore.availableTools
-                .filter((tool) => !(tool.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(tool.name)))
+                .filter((tool) => !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name)))
                 .map((tool) => tool.key)
         )
         return normalizeToolKeys(names, true).filter((name) => selectableKeys.has(name))

@@ -2,7 +2,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../api/client'
 import type { ChatExecutionState, ExecutionStepRecord, PlanningState } from '../api/types'
-import { isAutoManagedBuiltInToolName } from '../utils/internal-tools'
+import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/internal-tools'
 
 export interface ToolNamespace {
   id: string
@@ -81,7 +81,7 @@ export const useAgentStore = defineStore('agent', () => {
   const selectedToolNames = ref<string[]>([])
 
   function isSelectableTool(tool: ToolInfo): boolean {
-    return !(tool.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(tool.name))
+    return !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name))
   }
 
   // Per-conversation execution state for background support
@@ -136,7 +136,7 @@ export const useAgentStore = defineStore('agent', () => {
 
     const availableKeys = new Set(
       availableTools.value
-        .filter((tool) => !(tool.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(tool.name)))
+        .filter((tool) => !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name)))
         .map((tool) => tool.key)
     )
     const filtered = selectedToolNames.value.filter((name) => availableKeys.has(name))

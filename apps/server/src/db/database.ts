@@ -6,6 +6,19 @@ import { createStableMemoryDocumentRef } from '../core/memory/memory-reference.j
 
 let db: Database.Database | null = null
 
+function migrateBuiltInToolKey(key: string): string {
+  if (!key.startsWith('builtin::')) return key
+  const name = key.slice('builtin::'.length)
+  const category = name.startsWith('memory_') || name.startsWith('knowledge_')
+    ? 'memory'
+    : name.startsWith('schedule_')
+      ? 'scheduling'
+      : name === 'create_app_notification' || name === 'notify_user_on_channel'
+        ? 'notifications'
+        : 'utility'
+  return `builtin:${category}::${name}`
+}
+
 function getDbPath(): string {
   const dbDir = join(getAppDataDir(), 'sqlite')
   mkdirSync(dbDir, { recursive: true })
@@ -625,15 +638,15 @@ function createTables(db: Database.Database): void {
       if (!Array.isArray(current)) continue
       const migrated = current.flatMap((key) => {
         if (key === 'builtin::memory_update') return [
-          'builtin::memory_append',
-          'builtin::memory_replace_range',
-          'builtin::memory_replace_all',
+          'builtin:memory::memory_append',
+          'builtin:memory::memory_replace_range',
+          'builtin:memory::memory_replace_all',
         ]
         if (key === 'builtin::memory_remove') return [
-          'builtin::memory_remove_range',
-          'builtin::memory_remove_all',
+          'builtin:memory::memory_remove_range',
+          'builtin:memory::memory_remove_all',
         ]
-        return typeof key === 'string' ? [key] : []
+        return typeof key === 'string' ? [migrateBuiltInToolKey(key)] : []
       })
       const deduped = Array.from(new Set(migrated))
       if (JSON.stringify(deduped) !== JSON.stringify(current)) updateAgentTools.run(JSON.stringify(deduped), row.id)
@@ -683,6 +696,25 @@ function createTables(db: Database.Database): void {
   // Conversation unread tracking
   addColumnIfMissing('conversations', 'last_read_at', 'INTEGER')
   addColumnIfMissing('conversations', 'execution_config_json', "TEXT NOT NULL DEFAULT '{}'")
+
+  // Split the former single built-in namespace into UI categories while
+  // preserving tool selections stored in conversations and scheduled jobs.
+  for (const table of ['conversations', 'cron_jobs'] as const) {
+    const rows = db.prepare(`SELECT id, execution_config_json FROM ${table}`).all() as Array<{ id: string; execution_config_json: string }>
+    const update = db.prepare(`UPDATE ${table} SET execution_config_json = ? WHERE id = ?`)
+    for (const row of rows) {
+      try {
+        const config = JSON.parse(row.execution_config_json || '{}') as { allowedTools?: unknown }
+        if (!Array.isArray(config.allowedTools)) continue
+        const allowedTools = Array.from(new Set(config.allowedTools
+          .filter((key): key is string => typeof key === 'string')
+          .map(migrateBuiltInToolKey)))
+        if (JSON.stringify(allowedTools) !== JSON.stringify(config.allowedTools)) {
+          update.run(JSON.stringify({ ...config, allowedTools }), row.id)
+        }
+      } catch { /* keep malformed legacy values untouched */ }
+    }
+  }
   addColumnIfMissing('conversations', 'metadata_json', "TEXT NOT NULL DEFAULT '{}'")
 }
 
