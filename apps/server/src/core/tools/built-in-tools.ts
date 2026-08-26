@@ -8,6 +8,7 @@ import {
 } from "../memory/memory-space-scope.js";
 import { getToolRegistry, type ToolNamespace } from "./tool-registry.js";
 import { makeNotificationTool } from "./builtin/notification.js";
+import { makeChannelNotificationTool } from "./builtin/channel-notification.js";
 import { makeScheduleTools, SCHEDULE_TOOL_NAMES } from "./builtin/schedule-tools.js";
 import {
     makeMemoryListDocumentsTool,
@@ -29,6 +30,7 @@ import {
 } from "./builtin/memory-tools.js";
 export {
     makeNotificationTool,
+    makeChannelNotificationTool,
     makeMemoryListDocumentsTool,
     makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
@@ -48,6 +50,7 @@ export {
     SCHEDULE_TOOL_NAMES,
 };
 export type { NotificationToolOptions } from "./builtin/notification.js";
+export type { ChannelNotificationToolOptions } from "./builtin/channel-notification.js";
 export {
     MEMORY_READ_TOOL_NAMES,
     MEMORY_WRITE_TOOL_NAMES,
@@ -89,6 +92,9 @@ const BUILTIN_TOOL_HYDRATORS = {
         agentId: ctx.agentId || "",
         conversationId: ctx.conversationId,
         broadcast: ctx.broadcast,
+    }),
+    notify_user_on_channel: (ctx: BuiltInHydrationContext) => makeChannelNotificationTool({
+        agentId: ctx.agentId || "",
     }),
     schedule_create: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[0],
     schedule_list: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[1],
