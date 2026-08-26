@@ -232,9 +232,16 @@ export function trimMessagesToContextLimit(
             budget,
         )
     }
+    const keptHistoryTokens = estimateTotalTokens(keptMsgs)
+    if (keptHistoryTokens > budget.availableHistory) {
+        throw new ContextBudgetExceededError(
+            `Context budget configuration error: the latest indivisible request/tool-result group requires ~${keptHistoryTokens} tokens, but only ${budget.availableHistory} history tokens are available.`,
+            budget,
+        )
+    }
     if (trimmedCount === 0) return messages
 
-    const trimmedTokens = totalHistoryTokens - estimateTotalTokens(keptMsgs)
+    const trimmedTokens = totalHistoryTokens - keptHistoryTokens
 
     if (strategy === 'truncate-middle' && headLength < keptMsgs.length) {
         const tailMsg = keptMsgs[headLength]
