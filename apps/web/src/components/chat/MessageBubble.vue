@@ -17,6 +17,7 @@ const props = defineProps<{
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
   messageId?: string
+  createdAt?: number
   thinking?: string
   imageDataUrls?: string[]
   videoDataUrls?: string[]
@@ -112,6 +113,17 @@ const renderedContent = computed(() => {
 })
 
 const isUser = computed(() => props.role === 'user')
+const formattedCreatedAt = computed(() => {
+  if (props.createdAt === undefined) return ''
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(props.createdAt)
+})
+const createdAtIso = computed(() => props.createdAt === undefined ? '' : new Date(props.createdAt).toISOString())
 const userInitial = computed(() => prefs.userName.trim().charAt(0).toLocaleUpperCase() || 'U')
 const isForkable = computed(() =>  props.role === 'assistant') //Could also include user too though it doesn't make as much sense since user messages are editable
 const hasAssistantImages = computed(() => !isUser.value && Boolean(props.imageDataUrls?.length))
@@ -226,6 +238,13 @@ const imageGridClass = computed(() => {
           />
         </button>
       </div>
+      <time
+        v-if="isUser && formattedCreatedAt && !isEditing"
+        :datetime="createdAtIso"
+        class="absolute -bottom-2 right-2 rounded-md bg-theme-700/90 px-1.5 py-0.5 text-[10px] leading-none text-theme-300 opacity-0 shadow-sm transition-opacity group-hover/msg:opacity-100"
+      >
+        {{ formattedCreatedAt }}
+      </time>
       <!-- Thinking block (detailed mode only) -->
       <div
         v-if="!isUser && thinking"
