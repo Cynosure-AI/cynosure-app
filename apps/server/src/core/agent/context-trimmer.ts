@@ -152,7 +152,7 @@ export function calculateContextBudget(options: ContextBudgetOptions): ContextBu
     }
 }
 
-function assertHistoryBudget(budget: ContextBudget): void {
+export function assertHistoryBudget(budget: ContextBudget): void {
     if (budget.availableHistory > 0) return
     const fixedReserve = budget.outputReserve + budget.reasoningReserve + budget.safetyMargin
     const inputBudget = budget.contextWindow - fixedReserve
