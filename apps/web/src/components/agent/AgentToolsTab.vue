@@ -6,7 +6,7 @@ import { Icon } from '@iconify/vue'
 import ToolSelector from '../shared/ToolSelector.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import BaseCard from '../shared/BaseCard.vue'
-import { isAutoManagedBuiltInToolName, memoryAutomaticToolStates } from '../../utils/internal-tools'
+import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId, memoryAutomaticToolStates } from '../../utils/internal-tools'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -67,7 +67,7 @@ const automaticToolStates = computed(() => ({
 const missingTools = computed(() => {
   const availableKeys = new Set(
     agentStore.availableTools
-      .filter(t => !(t.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(t.name)))
+      .filter(t => !(isBuiltInNamespaceId(t.namespace.id) && isAutoManagedBuiltInToolName(t.name)))
       .map(t => t.key)
   )
   return props.agent.tools.filter(name => !availableKeys.has(name))

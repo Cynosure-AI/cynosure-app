@@ -15,6 +15,7 @@ import { getCronJobsForAgent, unscheduleCronJob } from '../core/triggers/cron-sc
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
+import { BUILTIN_NAMESPACES } from '../core/tools/built-in-tools.js'
 import { makePlanningTools } from '../core/tools/builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
@@ -190,41 +191,41 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
         const items = registry.listRegisteredTools()
         const dynamicBuiltIns = [
             ...makePlanningTools('').map((tool) => ({
-                key: `builtin::${tool.name}`,
+                key: `${BUILTIN_NAMESPACES.utility.id}::${tool.name}`,
                 name: tool.name,
                 executionName: tool.name,
                 description: tool.description,
                 parameters: tool.parameters,
-                namespace: { id: 'builtin', label: 'Built-In' },
+                namespace: BUILTIN_NAMESPACES.utility,
                 ambiguous: false,
             })),
             ...makeAttachmentTools('').map((tool) => ({
-                key: `builtin::${tool.name}`,
+                key: `${BUILTIN_NAMESPACES.utility.id}::${tool.name}`,
                 name: tool.name,
                 executionName: tool.name,
                 description: tool.description,
                 parameters: tool.parameters,
-                namespace: { id: 'builtin', label: 'Built-In' },
+                namespace: BUILTIN_NAMESPACES.utility,
                 ambiguous: false,
             })),
             // These tools are dynamically created at execution time but should
             // appear in tool views so users can understand and configure them.
             {
-                key: `builtin::${TOOL_SEARCH_TOOL_NAME}`,
+                key: `${BUILTIN_NAMESPACES.utility.id}::${TOOL_SEARCH_TOOL_NAME}`,
                 name: TOOL_SEARCH_TOOL_NAME,
                 executionName: TOOL_SEARCH_TOOL_NAME,
                 description: 'Search and load additional available tools when the current tools are insufficient. Used by the auto-tool mode.',
                 parameters: { type: 'object', properties: { requested_capability: { type: 'string' }, limit: { type: 'number' } }, required: ['requested_capability'] },
-                namespace: { id: 'builtin', label: 'Built-In' },
+                namespace: BUILTIN_NAMESPACES.utility,
                 ambiguous: false,
             },
             {
-                key: 'builtin::spawn_subagent',
+                key: `${BUILTIN_NAMESPACES.utility.id}::spawn_subagent`,
                 name: 'spawn_subagent',
                 executionName: 'spawn_subagent',
                 description: 'Spawn a configured sub-agent by internal name to delegate a task.',
                 parameters: { type: 'object', properties: { internalName: { type: 'string' }, instructions: { type: 'string' }, context: { type: 'string' } }, required: ['internalName', 'instructions'] },
-                namespace: { id: 'builtin', label: 'Built-In' },
+                namespace: BUILTIN_NAMESPACES.utility,
                 ambiguous: false,
             },
         ]

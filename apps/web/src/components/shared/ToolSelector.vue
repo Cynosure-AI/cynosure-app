@@ -5,7 +5,7 @@ import { Icon } from '@iconify/vue'
 import CollapsibleSection from './CollapsibleSection.vue'
 import HoverTooltip from './HoverTooltip.vue'
 import ToolBehaviorBadges from './ToolBehaviorBadges.vue'
-import { isAutoManagedBuiltInToolName } from '../../utils/internal-tools'
+import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../../utils/internal-tools'
 
 const props = withDefaults(
   defineProps<{
@@ -46,13 +46,13 @@ function isSelected(tool: ToolInfo): boolean {
 }
 
 function isAutoManagedTool(tool: ToolInfo): boolean {
-  if (tool.namespace.id !== 'builtin') return false
+  if (!isBuiltInNamespaceId(tool.namespace.id)) return false
   if (isAutoManagedBuiltInToolName(tool.name)) return true
   return (tool.name.startsWith('knowledge_') || tool.name === 'knowledge_entity_merge') && automaticToolState(tool).active
 }
 
 function toolRequirement(tool: ToolInfo): { met: boolean; criteria: string } | undefined {
-  if (tool.namespace.id !== 'builtin') return undefined
+  if (!isBuiltInNamespaceId(tool.namespace.id)) return undefined
   return props.toolRequirements[tool.name]
 }
 
@@ -135,8 +135,8 @@ const groupedTools = computed<NamespaceGroup[]>(() => {
   }
   return Array.from(groups.values()).sort((a, b) => {
     // Built-in tools always appear first
-    if (a.namespace.id === 'builtin' && b.namespace.id !== 'builtin') return -1
-    if (a.namespace.id !== 'builtin' && b.namespace.id === 'builtin') return 1
+    if (isBuiltInNamespaceId(a.namespace.id) && !isBuiltInNamespaceId(b.namespace.id)) return -1
+    if (!isBuiltInNamespaceId(a.namespace.id) && isBuiltInNamespaceId(b.namespace.id)) return 1
     return a.namespace.label.localeCompare(b.namespace.label)
   })
 })
@@ -327,7 +327,7 @@ onBeforeUnmount(() => {
                   >
                     <p
                       class="text-[11px] uppercase tracking-wider "
-                      :class="group.namespace.id === 'builtin' ? 'text-accent-400' : ''"
+                      :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-400' : ''"
                     >
                       {{ group.namespace.label }}
                     </p>

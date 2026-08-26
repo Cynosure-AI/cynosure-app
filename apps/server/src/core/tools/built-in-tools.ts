@@ -69,7 +69,19 @@ export {
 type BroadcastFn = (event: string, data: unknown) => void;
 
 export const BUILTIN_NAMESPACE_ID = "builtin";
-const BUILTIN_NAMESPACE: ToolNamespace = { id: BUILTIN_NAMESPACE_ID, label: "Built-in" };
+export const BUILTIN_NAMESPACE_IDS = {
+    memory: "builtin:memory",
+    scheduling: "builtin:scheduling",
+    notifications: "builtin:notifications",
+    utility: "builtin:utility",
+} as const;
+
+export const BUILTIN_NAMESPACES = {
+    memory: { id: BUILTIN_NAMESPACE_IDS.memory, label: "Built-In: Memory" },
+    scheduling: { id: BUILTIN_NAMESPACE_IDS.scheduling, label: "Built-In: Scheduling" },
+    notifications: { id: BUILTIN_NAMESPACE_IDS.notifications, label: "Built-In: Notifications" },
+    utility: { id: BUILTIN_NAMESPACE_IDS.utility, label: "Built-In: Utility" },
+} as const satisfies Record<string, ToolNamespace>;
 
 type BuiltInToolSpec = Pick<
     ToolDefinition,
@@ -140,6 +152,21 @@ export const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_HYDRATORS);
 
 export type BuiltinToolName = keyof typeof BUILTIN_TOOL_HYDRATORS;
 
+export function getBuiltInNamespace(toolName: string): ToolNamespace {
+    if (MEMORY_TOOL_NAMES.includes(toolName as never) || KNOWLEDGE_TOOL_NAMES.includes(toolName as never)) {
+        return BUILTIN_NAMESPACES.memory;
+    }
+    if (SCHEDULE_TOOL_NAMES.includes(toolName as never)) return BUILTIN_NAMESPACES.scheduling;
+    if (toolName === 'create_app_notification' || toolName === 'notify_user_on_channel') {
+        return BUILTIN_NAMESPACES.notifications;
+    }
+    return BUILTIN_NAMESPACES.utility;
+}
+
+export function getBuiltInToolKey(toolName: string): string {
+    return `${getBuiltInNamespace(toolName).id}::${toolName}`;
+}
+
 function getBuiltInToolSpecs(): BuiltInToolSpec[] {
     const specContext: BuiltInHydrationContext = {
         conversationId: "",
@@ -161,20 +188,20 @@ function getBuiltInToolSpecs(): BuiltInToolSpec[] {
 }
 
 export function isBuiltInMemoryToolKey(toolKey: string): boolean {
-    return MEMORY_TOOL_NAMES.some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+    return MEMORY_TOOL_NAMES.some((toolName) => toolKey === getBuiltInToolKey(toolName));
 }
 
 export function getBuiltInMemoryToolKeys(): string[] {
-    return [...MEMORY_TOOL_NAMES, ...KNOWLEDGE_TOOL_NAMES].map((toolName) => `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+    return [...MEMORY_TOOL_NAMES, ...KNOWLEDGE_TOOL_NAMES].map(getBuiltInToolKey);
 }
 
 export function getBuiltInMemoryReadToolKeys(): string[] {
     return [...MEMORY_READ_TOOL_NAMES, 'knowledge_search']
-        .map((toolName) => `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+        .map(getBuiltInToolKey);
 }
 
 export function isBuiltInKnowledgeToolKey(toolKey: string): boolean {
-    return KNOWLEDGE_TOOL_NAMES.some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+    return KNOWLEDGE_TOOL_NAMES.some((toolName) => toolKey === getBuiltInToolKey(toolName));
 }
 
 /**
@@ -191,7 +218,7 @@ export function registerBuiltInTools(): void {
     });
 
     for (const tool of getBuiltInToolSpecs()) {
-        registry.register({ ...tool, execute: stub }, BUILTIN_NAMESPACE);
+        registry.register({ ...tool, execute: stub }, getBuiltInNamespace(tool.name));
     }
 }
 
