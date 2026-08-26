@@ -22,6 +22,7 @@ vi.mock('./rag.js', () => ({
 
 import { closeDb, getDb } from '../../db/database.js'
 import { MemoryKnowledgeStore } from './memory-knowledge.js'
+import { planReusableKnowledgeChunks } from './memory-knowledge-extraction.js'
 import { createMemoryKnowledgeBackup, restoreMemoryKnowledgeBackup } from './memory-knowledge-backup.js'
 import type { PreparedMemoryChunk } from './parser.js'
 import { getEventBus } from '../telemetry/event-bus.js'
@@ -67,6 +68,61 @@ afterEach(() => {
 })
 
 describe('memory knowledge v3', () => {
+    test('reuses unchanged chunk knowledge across a partial document edit', () => {
+        addDocument('doc-incremental', 'incremental.md', 'revision-1')
+        const originalChunks = [
+            { ...chunk('Ada uses TypeScript.', 0), contentHash: 'stable-ada' },
+            { ...chunk('Bob uses Python.', 1), contentHash: 'stable-bob' },
+        ]
+        store.publishDocument({
+            documentId: 'doc-incremental', contentHash: 'revision-1', spaceId: 'test-space',
+            fileName: 'incremental.md', sourceId: 'memory:test-space:incremental.md', chunks: originalChunks,
+            relations: [
+                { from: { name: 'Ada', type: 'person' }, relation: 'uses', to: { name: 'TypeScript', type: 'technology' }, sourceChunkIndex: 0, note: 'Ada uses TypeScript.' },
+                { from: { name: 'Bob', type: 'person' }, relation: 'uses', to: { name: 'Python', type: 'technology' }, sourceChunkIndex: 1, note: 'Bob uses Python.' },
+            ],
+            chunkTags: [
+                { sourceChunkIndex: 0, tags: ['ada', 'typescript'] },
+                { sourceChunkIndex: 1, tags: ['bob', 'python'] },
+            ],
+        })
+
+        const revisedChunks = [
+            { ...chunk('New project context.', 0), contentHash: 'new-context' },
+            { ...chunk('Ada uses TypeScript.', 1), contentHash: 'stable-ada' },
+        ]
+        const plan = planReusableKnowledgeChunks('doc-incremental', revisedChunks)
+        expect(plan.chunksToExtract.map((item) => item.chunkIndex)).toEqual([0])
+        expect(plan.reusableChunks).toEqual([{ sourceChunkIndex: 1, priorTextUnitId: expect.any(String) }])
+        expect(plan.chunkTags).toEqual([{ sourceChunkIndex: 1, tags: ['ada', 'typescript'] }])
+
+        getDb().prepare(`UPDATE memory_file_index SET content_hash = 'revision-2' WHERE document_id = 'doc-incremental'`).run()
+        store.publishDocument({
+            documentId: 'doc-incremental', contentHash: 'revision-2', spaceId: 'test-space',
+            fileName: 'incremental.md', sourceId: 'memory:test-space:incremental.md', chunks: revisedChunks,
+            relations: [{
+                from: { name: 'Cynosure', type: 'project' }, relation: 'has_goal',
+                to: { name: 'New project context', type: 'concept' }, sourceChunkIndex: 0,
+                note: 'Cynosure has new project context.',
+            }],
+            chunkTags: [...plan.chunkTags, { sourceChunkIndex: 0, tags: ['project context'] }],
+            reusableChunks: plan.reusableChunks,
+        })
+
+        const edges = store.browseGraph({ spaceIds: ['test-space'] }).edges
+        expect(edges.some((edge) => edge.fromName === 'Ada' && edge.toName === 'TypeScript' && edge.sourceChunk?.chunkIndex === 1)).toBe(true)
+        expect(edges.some((edge) => edge.fromName === 'Cynosure' && edge.toName === 'New project context')).toBe(true)
+        expect(edges.some((edge) => edge.fromName === 'Bob' || edge.toName === 'Python')).toBe(false)
+        expect(getDb().prepare(`
+            SELECT chunk_index, tags_json FROM memory_knowledge_text_units
+            WHERE run_id = (SELECT id FROM memory_knowledge_index_runs WHERE document_id = 'doc-incremental' AND status = 'active')
+            ORDER BY chunk_index
+        `).all()).toEqual([
+            { chunk_index: 0, tags_json: '["project context"]' },
+            { chunk_index: 1, tags_json: '["ada","typescript"]' },
+        ])
+    })
+
     test('backs up and restores manual knowledge corrections', async () => {
         addDocument('doc-backup', 'backup.md', 'revision-1')
         store.publishDocument({
