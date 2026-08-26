@@ -34,6 +34,7 @@ type ContextSection = {
   status: string
   phase: string
   kind: ContextSectionKind | null
+  timestamp: number
   calls: ToolCall[]
   executions: ToolExecution[]
 }
@@ -47,6 +48,8 @@ type ExecutionSection = {
   rows: (ToolExecution | ContextRow)[]
   compactContext?: boolean
   isLoading?: boolean
+  timestamp?: number
+  tone?: 'cyan' | 'green' | 'violet'
 }
 
 const props = defineProps<{
@@ -227,6 +230,16 @@ function prettifyJson(text: string): string {
 
 function formatElapsed(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+
+function formatTimestamp(timestamp?: number): string {
+  if (!timestamp) return ''
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(timestamp)
 }
 
 function visibleToolCalls(calls: ToolCall[] = []): ToolCall[] {
@@ -565,6 +578,10 @@ const taskContext = computed(() => {
   }
 })
 
+const taskContextTimestamp = computed(() =>
+  props.steps.find((step) => step.status === 'building-task-context' || step.toolCalls?.some(isTaskContextCall))?.timestamp,
+)
+
 const taskContextQueries = computed(() => [
   { label: 'Tools', value: taskContext.value?.toolQuery ?? '' },
   { label: 'Memory', value: taskContext.value?.memoryQuery ?? '' },
@@ -586,6 +603,7 @@ const contextSections = computed<ContextSection[]>(() => props.steps
       status: step.status,
       phase: contextPhase(channelCalls[0]),
       kind,
+      timestamp: step.timestamp,
       calls: channelCalls,
       executions: buildExecutions(channelCalls),
     }))
@@ -665,6 +683,8 @@ const executionSections = computed<ExecutionSection[]>(() => {
       rows: section.rows,
       compactContext: true,
       isLoading: props.isActive && index === mergedContextSections.value.length - 1 && section.phase === 'gathered-results',
+      timestamp: section.timestamp,
+      tone: section.kind === 'entity' ? 'violet' : 'green',
       }))
   }
 
@@ -719,7 +739,10 @@ const hasDisplayableActivity = computed(() =>
           <button
             v-bind="triggerAttrs"
             class="w-full flex items-center gap-2 px-3 py-2 rounded-2xl text-[13px] font-medium transition-all group shadow-sm"
-            :class="headerButtonClass(isExpanded)"
+            :class="[
+              headerButtonClass(isExpanded),
+              { '!rounded-b-none': isExpanded && isRoutingStatus },
+            ]"
             @click="toggle"
           >
             <Icon
@@ -813,11 +836,18 @@ const hasDisplayableActivity = computed(() =>
           </p>
         </div>
 
-        <div class="mt-1.5 ml-3 space-y-2">
+        <div
+          class="mt-1.5 ml-3 space-y-2"
+          :class="{ 'context-timeline': isRoutingStatus }"
+        >
           <div
             v-if="routingStatusSteps.length && (isToolRouting || isMemoryRouting || mergedContextSections.length)"
-            class="rounded-lg border border-sky-400/25 bg-sky-500/5 px-2.5 py-2 dark:border-sky-500/20 dark:bg-sky-500/5"
+            class="context-timeline-item context-timeline-item--cyan rounded-lg border border-sky-400/25 bg-sky-500/5 px-2.5 py-2 dark:border-sky-500/20 dark:bg-sky-500/5"
           >
+            <div class="mb-1 flex items-center justify-between gap-3">
+              <span class="text-[11px] font-semibold text-cyan-700 dark:text-cyan-200">Gathering context</span>
+              <time class="text-[10px] tabular-nums text-theme-600">{{ formatTimestamp(routingStatusSteps[0]?.timestamp) }}</time>
+            </div>
             <div
               v-for="step in routingStatusSteps"
               :key="`${step.status}-${step.timestamp}`"
@@ -838,7 +868,7 @@ const hasDisplayableActivity = computed(() =>
 
           <div
             v-if="isTaskContext && taskContext"
-            class="rounded-lg border border-cyan-300/30 bg-cyan-50/80 px-3 py-2 dark:border-cyan-500/15 dark:bg-cyan-500/5"
+            class="context-timeline-item context-timeline-item--cyan rounded-lg border border-cyan-300/30 bg-cyan-50/80 px-3 py-2 dark:border-cyan-500/15 dark:bg-cyan-500/5"
           >
             <div class="flex items-center gap-1.5 mb-1.5">
               <Icon
@@ -846,6 +876,7 @@ const hasDisplayableActivity = computed(() =>
                 class="w-3 h-3 text-cyan-600 dark:text-cyan-300"
               />
               <span class="text-[11px] font-medium text-cyan-700 dark:text-cyan-200">Preparing context</span>
+              <time class="ml-auto text-[10px] tabular-nums text-theme-600">{{ formatTimestamp(taskContextTimestamp) }}</time>
             </div>
 
             <div
@@ -877,7 +908,9 @@ const hasDisplayableActivity = computed(() =>
           <div
             v-for="section in executionSections"
             :key="section.key"
-            :class="section.compactContext ? ['rounded-lg border px-2.5 py-2', section.class] : 'space-y-1.5'"
+            :class="section.compactContext
+              ? ['context-timeline-item rounded-lg border px-2.5 py-2', `context-timeline-item--${section.tone || 'cyan'}`, section.class]
+              : 'space-y-1.5'"
           >
             <div
               v-if="section.compactContext"
@@ -889,6 +922,7 @@ const hasDisplayableActivity = computed(() =>
                 :class="section.iconClass"
               />
               <span class="text-[11px] font-semibold text-theme-300">{{ section.title }}</span>
+              <time class="ml-auto text-[10px] tabular-nums text-theme-600">{{ formatTimestamp(section.timestamp) }}</time>
             </div>
 
             <div :class="section.compactContext ? 'space-y-1.5' : 'space-y-1.5'">
@@ -994,3 +1028,77 @@ const hasDisplayableActivity = computed(() =>
     @close="lightboxSrc = null"
   />
 </template>
+
+<style scoped>
+.context-timeline {
+  position: relative;
+  margin-top: 0;
+  margin-left: 0;
+  padding: 1rem 0.75rem 0.85rem 3rem;
+  border: 1px solid color-mix(in srgb, var(--color-theme-700) 45%, transparent);
+  border-top: 0;
+  border-radius: 0 0 0.9rem 0.9rem;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-theme-900) 42%, transparent),
+    color-mix(in srgb, var(--color-theme-950) 18%, transparent)
+  );
+}
+
+.context-timeline::before {
+  content: '';
+  position: absolute;
+  top: 1.25rem;
+  bottom: 1.35rem;
+  left: 1.55rem;
+  width: 1px;
+  background: linear-gradient(180deg, rgb(34 211 238 / 0.8), rgb(52 211 153 / 0.65) 58%, rgb(167 139 250 / 0.75));
+}
+
+.context-timeline-item {
+  position: relative;
+  margin-bottom: 0.85rem;
+}
+
+.context-timeline-item:last-child {
+  margin-bottom: 0;
+}
+
+.context-timeline-item::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: 0.7rem;
+  left: -1.85rem;
+  width: 0.72rem;
+  height: 0.72rem;
+  border: 3px solid var(--color-theme-900);
+  border-radius: 9999px;
+  background: rgb(34 211 238);
+  box-shadow: 0 0 0 2px rgb(34 211 238 / 0.32), 0 0 12px rgb(34 211 238 / 0.32);
+}
+
+.context-timeline-item--green::before {
+  background: rgb(52 211 153);
+  box-shadow: 0 0 0 2px rgb(52 211 153 / 0.3), 0 0 12px rgb(52 211 153 / 0.28);
+}
+
+.context-timeline-item--violet::before {
+  background: rgb(167 139 250);
+  box-shadow: 0 0 0 2px rgb(167 139 250 / 0.32), 0 0 12px rgb(167 139 250 / 0.3);
+}
+
+@media (max-width: 640px) {
+  .context-timeline {
+    padding-left: 2.4rem;
+  }
+
+  .context-timeline::before {
+    left: 1.2rem;
+  }
+
+  .context-timeline-item::before {
+    left: -1.6rem;
+  }
+}
+</style>
