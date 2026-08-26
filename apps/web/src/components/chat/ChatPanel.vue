@@ -13,6 +13,14 @@ import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import { Icon } from '@iconify/vue'
 import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
 
+const props = withDefaults(defineProps<{
+  searchOpen?: boolean
+}>(), {
+  searchOpen: false,
+})
+
+const emit = defineEmits<{ closeSearch: [] }>()
+
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
@@ -20,7 +28,96 @@ const scrollContainer = ref<HTMLDivElement | null>(null)
 const expandedFallback = ref<Set<string>>(new Set())
 const collapsedSubAgentGroups = reactive(new Set<string>())
 const fullHeightSubAgentGroups = reactive(new Set<string>())
+const searchInput = ref<HTMLInputElement | null>(null)
+const searchQuery = ref('')
+const currentSearchResultIndex = ref(-1)
 const SCROLL_BOTTOM_THRESHOLD = 72
+
+const searchResults = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase()
+  if (!props.searchOpen || !query) return []
+
+  return chatStore.messages
+    .filter(message =>
+      message.role !== 'system'
+      && message.role !== 'tool'
+      && message.content.toLocaleLowerCase().includes(query)
+    )
+    .map(message => message.id)
+})
+
+const activeSearchMessageId = computed(
+  () => searchResults.value[currentSearchResultIndex.value] ?? null
+)
+
+const searchResultLabel = computed(() => {
+  if (!searchQuery.value.trim()) return 'Type to search'
+  if (!searchResults.value.length) return 'No results'
+  return `${currentSearchResultIndex.value + 1} of ${searchResults.value.length}`
+})
+
+function findSearchMessageElement(messageId: string): HTMLElement | null {
+  const elements = scrollContainer.value?.querySelectorAll<HTMLElement>('[data-chat-search-message-id]')
+  if (!elements) return null
+  return Array.from(elements).find(
+    element => element.dataset.chatSearchMessageId === messageId
+  ) ?? null
+}
+
+function expandSearchResultContainer(messageId: string): void {
+  for (const entry of unifiedTimeline.value) {
+    if (
+      entry.type === 'sub-agent-group'
+      && entry.entries.some(inner => inner.type === 'message' && inner.msg.id === messageId)
+    ) {
+      collapsedSubAgentGroups.delete(entry.key)
+      return
+    }
+  }
+}
+
+function scrollToSearchResult(messageId: string): void {
+  expandSearchResultContainer(messageId)
+  nextTick(() => {
+    findSearchMessageElement(messageId)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    })
+  })
+}
+
+function moveSearchResult(direction: 1 | -1): void {
+  const count = searchResults.value.length
+  if (!count) return
+  currentSearchResultIndex.value = (
+    currentSearchResultIndex.value + direction + count
+  ) % count
+}
+
+function closeSearch(): void {
+  emit('closeSearch')
+}
+
+watch(() => props.searchOpen, (open) => {
+  if (!open) {
+    searchQuery.value = ''
+    currentSearchResultIndex.value = -1
+    return
+  }
+  nextTick(() => {
+    searchInput.value?.focus()
+    searchInput.value?.select()
+  })
+}, { immediate: true })
+
+watch(searchResults, (results) => {
+  currentSearchResultIndex.value = results.length ? 0 : -1
+  if (results[0]) scrollToSearchResult(results[0])
+})
+
+watch(activeSearchMessageId, (messageId) => {
+  if (messageId) scrollToSearchResult(messageId)
+})
 
 const conversationAgentId = computed(() => {
   if (!chatStore.activeConversationId) return chatStore.activeAgentId
@@ -651,6 +748,74 @@ onMounted(() => {
     ref="scrollContainer"
     class="flex-1 overflow-y-auto"
   >
+    <div
+      v-if="props.searchOpen"
+      role="search"
+      aria-label="Search current chat"
+      class="sticky top-0 z-30 flex justify-center px-3 pt-3 pointer-events-none"
+    >
+      <div class="pointer-events-auto flex w-full max-w-xl items-center gap-1.5 rounded-xl border border-theme-700 bg-theme-950/95 p-1.5 shadow-xl shadow-black/20 backdrop-blur">
+        <Icon
+          icon="lucide:search"
+          class="ml-1.5 h-3.5 w-3.5 shrink-0 text-theme-500"
+        />
+        <input
+          ref="searchInput"
+          v-model="searchQuery"
+          type="search"
+          class="min-w-0 flex-1 bg-transparent px-1 py-1 text-xs text-theme-200 outline-none placeholder:text-theme-600"
+          placeholder="Search this chat…"
+          aria-label="Search this chat"
+          @keydown.enter.prevent="moveSearchResult($event.shiftKey ? -1 : 1)"
+          @keydown.esc.prevent="closeSearch"
+        >
+        <span
+          class="min-w-16 text-right text-[10px] tabular-nums text-theme-500"
+          aria-live="polite"
+        >
+          {{ searchResultLabel }}
+        </span>
+        <button
+          type="button"
+          class="flex h-7 w-7 items-center justify-center rounded-lg text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-default disabled:opacity-30"
+          title="Previous result"
+          aria-label="Previous search result"
+          :disabled="!searchResults.length"
+          @click="moveSearchResult(-1)"
+        >
+          <Icon
+            icon="lucide:chevron-up"
+            class="h-3.5 w-3.5"
+          />
+        </button>
+        <button
+          type="button"
+          class="flex h-7 w-7 items-center justify-center rounded-lg text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-default disabled:opacity-30"
+          title="Next result"
+          aria-label="Next search result"
+          :disabled="!searchResults.length"
+          @click="moveSearchResult(1)"
+        >
+          <Icon
+            icon="lucide:chevron-down"
+            class="h-3.5 w-3.5"
+          />
+        </button>
+        <button
+          type="button"
+          class="flex h-7 w-7 items-center justify-center rounded-lg text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          title="Close search"
+          aria-label="Close chat search"
+          @click="closeSearch"
+        >
+          <Icon
+            icon="lucide:x"
+            class="h-3.5 w-3.5"
+          />
+        </button>
+      </div>
+    </div>
+
     <!-- Loading spinner for long conversations -->
     <div
       v-if="chatStore.loadingMessages"
@@ -803,6 +968,8 @@ onMounted(() => {
               >
                 <MessageBubble
                   v-if="inner.type === 'message'"
+                  :data-chat-search-message-id="inner.msg.id"
+                  :class="{ 'ring-1 ring-inset ring-accent-400/60 bg-accent-500/5': activeSearchMessageId === inner.msg.id }"
                   :role="inner.msg.role"
                   :message-id="inner.msg.id"
                   :created-at="inner.msg.createdAt"
@@ -886,6 +1053,8 @@ onMounted(() => {
         <!-- Regular message (user / assistant) -->
         <MessageBubble
           v-else-if="entry.type === 'message'"
+          :data-chat-search-message-id="entry.msg.id"
+          :class="{ 'ring-1 ring-inset ring-accent-400/60 bg-accent-500/5': activeSearchMessageId === entry.msg.id }"
           :role="entry.msg.role"
           :message-id="entry.msg.id"
           :created-at="entry.msg.createdAt"
