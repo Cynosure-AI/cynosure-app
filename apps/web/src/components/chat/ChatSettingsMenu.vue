@@ -7,6 +7,8 @@ import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useProviderStore } from '../../stores/provider.store'
 import ModalDialog from '../shared/ModalDialog.vue'
 
+const emit = defineEmits<{ search: [] }>()
+
 const chatStore = useChatStore()
 const agentDefs = useAgentDefinitionsStore()
 const providerStore = useProviderStore()
@@ -35,6 +37,11 @@ const activeConversation = computed(() => chatStore.activeConversation)
 const hasActiveChat = computed(() => Boolean(chatStore.activeConversationId))
 const activeConversationPinned = computed(() => activeConversation.value?.pinned === true)
 const hasAgentActions = computed(() => hasCustomConfig.value || canShowSaveAction.value)
+
+function openSearch(): void {
+  menuOpen.value = false
+  emit('search')
+}
 
 async function togglePin(): Promise<void> {
   const conversationId = chatStore.activeConversationId
@@ -139,6 +146,19 @@ async function saveAsNewAgent(): Promise<void> {
       <div class="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-theme-500">
         Chat
       </div>
+      <button
+        v-if="hasActiveChat"
+        type="button"
+        role="menuitem"
+        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+        @click="openSearch"
+      >
+        <Icon
+          icon="lucide:search"
+          class="h-3.5 w-3.5 text-theme-500"
+        />
+        Search
+      </button>
       <button
         v-if="hasActiveChat"
         type="button"
