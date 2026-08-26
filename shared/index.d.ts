@@ -51,7 +51,7 @@ export interface DebugContextMessage {
 export interface DebugContextRound {
   round: number
   /** Execution phase that issued this model request. Older captures default to main-agent. */
-  phase?: 'task-context' | 'memory-curation' | 'tool-curation' | 'main-agent'
+  phase?: 'task-context' | 'memory-curation' | 'tool-curation' | 'toolset-selection' | 'main-agent'
   label?: string
   providerId?: string
   capturedAt: number

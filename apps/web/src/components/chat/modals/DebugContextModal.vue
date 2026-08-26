@@ -54,6 +54,7 @@ function roundTabLabel(round: DebugContextRound, index: number): string {
   if (round.phase === 'task-context') return 'Query plan'
   if (round.phase === 'memory-curation') return 'Memory verify'
   if (round.phase === 'tool-curation') return 'Tool curate'
+  if (round.phase === 'toolset-selection') return 'Toolsets'
   const agentRound = snapshot.value?.rounds
     .slice(0, index + 1)
     .filter((item) => !item.phase || item.phase === 'main-agent').length || 1
