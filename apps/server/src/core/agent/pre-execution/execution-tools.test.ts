@@ -38,10 +38,10 @@ describe('agent-required execution tools', () => {
 
     test('keeps the automatic read recovery set smaller than the mutation-capable memory set', () => {
         expect(getBuiltInMemoryReadToolKeys()).toEqual([
-            'builtin::memory_list_documents',
-            'builtin::memory_retrieve_chunks',
-            'builtin::memory_semantic_search',
-            'builtin::knowledge_search',
+            'builtin:memory::memory_list_documents',
+            'builtin:memory::memory_retrieve_chunks',
+            'builtin:memory::memory_semantic_search',
+            'builtin:memory::knowledge_search',
         ])
         expect(getBuiltInMemoryReadToolKeys().length).toBeLessThan(getBuiltInMemoryToolKeys().length)
     })

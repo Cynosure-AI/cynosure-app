@@ -4,9 +4,9 @@
     "description": "Cynosure - local AI agent with tools, memories, and reasoning capabilities",
     "author": {
         "name": "Cynosure",
-        "email": "dev@cynosure.app"
+        "url": "https://github.com/andreasjhagen/Cynosure"
     },
-    "homepage": "https://github.com/Cynosure/Cynosure",
+    "homepage": "https://github.com/andreasjhagen/Cynosure",
     "main": "./out/main/index.js",
     "scripts": {
         "dev": "concurrently -k -n web,electron -c blue,green \"cd ../web && pnpm dev\" \"wait-on http://localhost:5173 && electron-vite dev\"",

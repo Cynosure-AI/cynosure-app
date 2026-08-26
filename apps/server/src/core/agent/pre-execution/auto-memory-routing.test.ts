@@ -49,6 +49,7 @@ describe('automatic memory routing visibility', () => {
             arguments: JSON.stringify({
                 type: 'memory',
                 memoryKind: 'knowledge',
+                selectionMethod: 'ranked-fallback',
                 contextPhase: 'gathered-context',
                 content: graphContext,
             }),

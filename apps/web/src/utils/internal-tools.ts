@@ -49,6 +49,10 @@ const AUTO_MANAGED_BUILT_IN_TOOL_NAMES = new Set([
   'spawn_subagent',
 ])
 
+export function isBuiltInNamespaceId(id?: string | null): boolean {
+  return id === 'builtin' || Boolean(id?.startsWith('builtin:'))
+}
+
 export function isInternalToolName(name?: string | null): boolean {
   if (!name) return false
   return INTERNAL_TOOL_NAMES.has(name) || INTERNAL_TOOL_PREFIXES.some((prefix) => name.startsWith(prefix))

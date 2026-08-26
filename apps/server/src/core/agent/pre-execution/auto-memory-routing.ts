@@ -95,7 +95,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
         signal?.throwIfAborted()
 
         if (!candidates.permanent.length && !candidates.graph?.edges.length) {
-            emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'none-found')
+            emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'none-found', undefined, 'retrieval')
             return null
         }
 
@@ -107,6 +107,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             eventMeta,
             undefined,
             formatGraphOnly(aggregator, candidates.graph),
+            'retrieval',
         )
         emitMemoryCurationStatus(conversationId, taskId, eventMeta)
         let selection = await selectMemoryContext({
@@ -142,6 +143,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
                 eventMeta,
                 undefined,
                 formatGraphOnly(aggregator, candidates.graph),
+                'retrieval',
             )
             selection = await selectMemoryContext({
                 conversationId,
@@ -184,13 +186,14 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             eventMeta,
             selectedMemory.permanent.length || graphContext ? undefined : 'none-relevant',
             graphContext,
+            selection ? 'llm' : 'ranked-fallback',
         )
         const formatted = aggregator.format(selectedMemory)
         return formatted || null
     } catch (err) {
         if ((err as Error).name === 'AbortError' || signal?.aborted) throw err
         console.warn('[memory-router] Routing failed, continuing without auto-memory:', err)
-        emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'routing-failed')
+        emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'routing-failed', undefined, 'routing-failed')
         return null
     }
 }
@@ -572,6 +575,7 @@ function emitMemoryRoutingSelection(
     eventMeta?: Record<string, unknown>,
     emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed' | 'disabled' | 'empty-scope' | 'no-query',
     graphContext?: string,
+    selectionMethod: 'retrieval' | 'llm' | 'ranked-fallback' | 'routing-failed' = contextPhase === 'gathered-results' ? 'retrieval' : 'llm',
 ): void {
     const toolCalls = memories.map((memory) => {
         const visibleMatch = memoryVisibleMatch(memory)
@@ -579,6 +583,7 @@ function emitMemoryRoutingSelection(
             name: memoryLabel(memory),
             arguments: JSON.stringify({
                 type: 'memory',
+                selectionMethod,
                 contextPhase,
                 sourceFile: memory.sourceFile,
                 folderPath: memory.spaceName,
@@ -600,6 +605,7 @@ function emitMemoryRoutingSelection(
             arguments: JSON.stringify({
                 type: 'memory',
                 memoryKind: 'knowledge',
+                selectionMethod,
                 contextPhase,
                 content: graphContext,
             }),
@@ -616,6 +622,7 @@ function emitMemoryRoutingSelection(
             arguments: JSON.stringify({
                 type: 'memory',
                 contextPhase,
+                selectionMethod,
                 emptyReason: emptyReason || 'none-selected',
                 content: memoryEmptyContent(emptyReason),
             }),

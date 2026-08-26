@@ -6,6 +6,7 @@ import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { wsConnected } from '../../api/http'
 import MessageBubble from '../chat/MessageBubble.vue'
 import ToolExecutionCard from '../chat/ToolExecutionCard.vue'
+import PreTurnContextTimeline from '../chat/PreTurnContextTimeline.vue'
 import ContextCompactCard from '../chat/ContextCompactCard.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
@@ -238,7 +239,7 @@ const unifiedTimeline = computed(() => {
       }
 
       result.push(
-        ...beforeAssistant.filter((entry) => !leadingToolGroups.includes(entry)),
+        ...beforeAssistant.filter((entry) => !leadingToolGroups.some((group) => group.key === entry.key)),
         assistantAndAfter[0],
         ...leadingToolGroups,
         ...assistantAndAfter.slice(1),
@@ -401,7 +402,56 @@ const unifiedTimeline = computed(() => {
     return result
   }
 
-  return groupSubAgentEntriesByTurn(orderedEntries)
+  function mergePreTurnGroupsForTurn(turnEntries: TimelineEntry[]): TimelineEntry[] {
+    const mergedByOwner = new Map<string, Extract<TimelineEntry, { type: 'tool-group' }>>()
+    const result: TimelineEntry[] = []
+
+    for (const entry of turnEntries) {
+      if (entry.type !== 'tool-group' || entry.group.iteration !== 0) {
+        result.push(entry)
+        continue
+      }
+
+      const firstStep = entry.group.steps[0]
+      const owner = entry.isSubAgent
+        ? firstStep?.maInvocationId ?? firstStep?.maCodename ?? firstStep?.maAgentName ?? 'sub-agent'
+        : 'main'
+      const existing = mergedByOwner.get(owner)
+      if (existing) {
+        existing.group.steps.push(...entry.group.steps)
+        existing.group.steps.sort((a, b) => a.timestamp - b.timestamp)
+        existing.group.ts = existing.group.steps[0].timestamp
+        existing.ts = existing.group.ts
+        existing.key = `${existing.key}-${entry.key}`
+        continue
+      }
+
+      const merged = { ...entry, group: { ...entry.group, steps: [...entry.group.steps] } }
+      mergedByOwner.set(owner, merged)
+      result.push(merged)
+    }
+
+    return result
+  }
+
+  function mergePreTurnGroupsByTurn(source: TimelineEntry[]): TimelineEntry[] {
+    const result: TimelineEntry[] = []
+    let turnEntries: TimelineEntry[] = []
+    const flushTurn = () => {
+      if (!turnEntries.length) return
+      result.push(...mergePreTurnGroupsForTurn(turnEntries))
+      turnEntries = []
+    }
+
+    for (const entry of source) {
+      if (entry.type === 'message' && entry.msg.role === 'user') flushTurn()
+      turnEntries.push(entry)
+    }
+    flushTurn()
+    return result
+  }
+
+  return groupSubAgentEntriesByTurn(mergePreTurnGroupsByTurn(orderedEntries))
 })
 
 /** Key of the last tool-group entry — only this one can show as "active" */
@@ -755,6 +805,7 @@ onMounted(() => {
                   v-if="inner.type === 'message'"
                   :role="inner.msg.role"
                   :message-id="inner.msg.id"
+                  :created-at="inner.msg.createdAt"
                   :content="inner.msg.content"
                   :thinking="inner.msg.thinking"
                   :image-data-urls="inner.msg.imageDataUrls"
@@ -775,6 +826,11 @@ onMounted(() => {
                   @retry="chatStore.retryFromMessage(inner.msg.id)"
                   @edit="(content) => chatStore.editMessage(inner.msg.id, content)"
                   @fork="chatStore.forkConversationFromMessage(inner.msg.id)"
+                />
+                <PreTurnContextTimeline
+                  v-else-if="inner.type === 'tool-group' && inner.group.iteration === 0"
+                  :steps="inner.group.steps"
+                  :is-active="agentStore.isExecuting && inner.key === lastToolGroupKey"
                 />
                 <ToolExecutionCard
                   v-else-if="inner.type === 'tool-group'"
@@ -832,6 +888,7 @@ onMounted(() => {
           v-else-if="entry.type === 'message'"
           :role="entry.msg.role"
           :message-id="entry.msg.id"
+          :created-at="entry.msg.createdAt"
           :content="entry.msg.content"
           :thinking="entry.msg.thinking"
           :image-data-urls="entry.msg.imageDataUrls"
@@ -855,6 +912,11 @@ onMounted(() => {
         />
 
         <!-- Tool execution group (from live execution steps) -->
+        <PreTurnContextTimeline
+          v-else-if="entry.type === 'tool-group' && entry.group.iteration === 0"
+          :steps="entry.group.steps"
+          :is-active="agentStore.isExecuting && entry.key === lastToolGroupKey"
+        />
         <ToolExecutionCard
           v-else-if="entry.type === 'tool-group'"
           :iteration="entry.group.iteration"

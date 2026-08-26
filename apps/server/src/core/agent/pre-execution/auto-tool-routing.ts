@@ -90,6 +90,14 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             signal,
             debugContextEnabled,
         })
+        emitToolsetRoutingSelection(
+            conversationId,
+            taskId,
+            selectedNamespaceIds,
+            eligibleTools,
+            mcpMetadata || [],
+            eventMeta,
+        )
         const namespaceFilteredTools = filterToolsByNamespace(eligibleTools, selectedNamespaceIds, protectedNames)
         emitToolRoutingStatus(
             conversationId,
@@ -116,6 +124,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             'gathered-context',
             eventMeta,
             routedTools.length ? undefined : 'none-found',
+            routedTools.some((tool) => typeof (tool as RoutedToolDefinition).routerScore === 'number') ? 'semantic' : 'lexical',
         )
         return routedTools
     } catch (err) {
@@ -136,6 +145,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             'gathered-context',
             eventMeta,
             fallbackTools.length ? undefined : 'routing-failed',
+            'lexical',
         )
         return fallbackTools
     }
@@ -367,6 +377,27 @@ function emitToolRoutingStatus(conversationId: string, taskId: string, status: s
     })
 }
 
+function emitToolsetRoutingSelection(
+    conversationId: string,
+    taskId: string,
+    selectedNamespaceIds: Set<string>,
+    tools: RegistryAwareToolDefinition[],
+    mcpMetadata: ToolNamespaceMetadata[],
+    eventMeta?: Record<string, unknown>,
+): void {
+    const candidatesById = new Map(buildToolsetCandidates(tools, mcpMetadata).map((candidate) => [candidate.id, candidate]))
+    getEventBus().emit('step:tools-chosen', {
+        conversationId,
+        taskId,
+        iteration: 0,
+        ...eventMeta,
+        toolCalls: [...selectedNamespaceIds].map((namespaceId) => ({
+            name: candidatesById.get(namespaceId)?.label || namespaceId,
+            arguments: JSON.stringify({ type: 'toolset-router', namespaceId, selectionMethod: 'llm' }),
+        })),
+    })
+}
+
 function emitToolRoutingSelection(
     conversationId: string,
     taskId: string,
@@ -374,6 +405,7 @@ function emitToolRoutingSelection(
     contextPhase: 'gathered-results' | 'gathered-context' = 'gathered-context',
     eventMeta?: Record<string, unknown>,
     emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed' | 'disabled' | 'no-query' | 'no-tools',
+    selectionMethod: 'semantic' | 'lexical' = 'semantic',
 ): void {
     const visibleTools = tools.filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
     getEventBus().emit('step:tools-chosen', {
@@ -385,13 +417,14 @@ function emitToolRoutingSelection(
             .map((tool) => ({
                 name: tool.name,
                 arguments: typeof (tool as RoutedToolDefinition).routerScore === 'number'
-                    ? JSON.stringify({ type: 'tool-router', contextPhase, routerScore: (tool as RoutedToolDefinition).routerScore })
-                    : JSON.stringify({ type: 'tool-router', contextPhase })
+                    ? JSON.stringify({ type: 'tool-router', contextPhase, selectionMethod, routerScore: (tool as RoutedToolDefinition).routerScore })
+                    : JSON.stringify({ type: 'tool-router', contextPhase, selectionMethod })
             })) : [{
                 name: toolEmptyLabel(emptyReason),
                 arguments: JSON.stringify({
                     type: 'tool-router',
                     contextPhase,
+                    selectionMethod,
                     emptyReason: emptyReason || 'none-selected',
                     content: toolEmptyContent(emptyReason),
                 }),

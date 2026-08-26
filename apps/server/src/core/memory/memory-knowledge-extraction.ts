@@ -4,7 +4,13 @@ import { createHash } from 'crypto'
 import { getDb } from '../../db/database.js'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 import { extractKnowledgeFromContent, mergeKnowledgeChunkTags } from './knowledge-extractor.js'
-import { getMemoryKnowledgeStore } from './memory-knowledge.js'
+import {
+  getMemoryKnowledgeStore,
+  MEMORY_KNOWLEDGE_PIPELINE_VERSION,
+  MEMORY_KNOWLEDGE_PROMPT_VERSION,
+  type KnowledgeExtractedChunkTags,
+  type ReusableKnowledgeChunk,
+} from './memory-knowledge.js'
 import { PLAIN_TEXT_EXTENSIONS, readTextFile } from './memory-file-manager.js'
 import { getMemoryParser, type PreparedMemoryChunk } from './parser.js'
 import { getRAGStore } from './rag.js'
@@ -20,6 +26,8 @@ export interface KnowledgeExtractionResult {
   documentId: string
   contentHash: string
   tags: string[]
+  chunksAnalyzed: number
+  chunksReused: number
 }
 
 export interface KnowledgeExtractionConfig {
@@ -28,6 +36,55 @@ export interface KnowledgeExtractionConfig {
 }
 
 const ENTITY_EXTRACTION_SETTINGS_KEY = 'memoryEntityExtraction'
+
+interface ReusableChunkPlan {
+  reusableChunks: ReusableKnowledgeChunk[]
+  chunkTags: KnowledgeExtractedChunkTags[]
+  chunksToExtract: PreparedMemoryChunk[]
+}
+
+/** Match exact chunks against the last compatible active extraction. Buckets
+ * make duplicate chunks occurrence-aware, while hashes allow unchanged chunks
+ * to move when an insertion shifts their numeric indexes. */
+export function planReusableKnowledgeChunks(documentId: string, chunks: PreparedMemoryChunk[]): ReusableChunkPlan {
+  const priorRun = getDb().prepare(`
+    SELECT id FROM memory_knowledge_index_runs
+    WHERE document_id = ? AND pipeline_version = ? AND prompt_version = ? AND status = 'active'
+    ORDER BY activated_at DESC LIMIT 1
+  `).get(documentId, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION) as { id: string } | undefined
+  if (!priorRun) return { reusableChunks: [], chunkTags: [], chunksToExtract: chunks }
+
+  const priorChunks = getDb().prepare(`
+    SELECT id, text_hash, tags_json FROM memory_knowledge_text_units
+    WHERE run_id = ? ORDER BY chunk_index
+  `).all(priorRun.id) as Array<{ id: string; text_hash: string; tags_json: string }>
+  const byHash = new Map<string, Array<{ id: string; tags: string[] }>>()
+  for (const prior of priorChunks) {
+    let tags: string[] = []
+    try {
+      const parsed = JSON.parse(prior.tags_json) as unknown
+      if (Array.isArray(parsed)) tags = parsed.filter((tag): tag is string => typeof tag === 'string')
+    } catch { /* malformed legacy tags are treated as empty */ }
+    const bucket = byHash.get(prior.text_hash)
+    if (bucket) bucket.push({ id: prior.id, tags })
+    else byHash.set(prior.text_hash, [{ id: prior.id, tags }])
+  }
+
+  const reusableChunks: ReusableKnowledgeChunk[] = []
+  const chunkTags: KnowledgeExtractedChunkTags[] = []
+  const chunksToExtract: PreparedMemoryChunk[] = []
+  for (const chunk of chunks) {
+    const matches = byHash.get(chunk.contentHash)
+    const match = matches?.shift()
+    if (!match) {
+      chunksToExtract.push(chunk)
+      continue
+    }
+    reusableChunks.push({ sourceChunkIndex: chunk.chunkIndex, priorTextUnitId: match.id })
+    chunkTags.push({ sourceChunkIndex: chunk.chunkIndex, tags: match.tags })
+  }
+  return { reusableChunks, chunkTags, chunksToExtract }
+}
 /** Extract each canonical RAG chunk independently. Entity-rich documents can
  * produce much more JSON than source text, so combining chunks risks hitting
  * the model's output limit. One chunk per batch also gives users meaningful,
@@ -212,15 +269,21 @@ export async function indexMemoryContentIntoKnowledge(opts: {
       documentId: indexedDocument.document_id,
       contentHash,
       tags: [],
+      chunksAnalyzed: 0,
+      chunksReused: 0,
     }
   }
-  const result = await extractKnowledgeFromContent({
-    segments: buildEntityExtractionSegments(chunks),
-    providerId: opts.providerId || configuredTarget.providerId,
-    model: opts.model || configuredTarget.model,
-    signal: opts.signal,
-    onProgress: opts.onExtractionProgress,
-  })
+  const reusePlan = planReusableKnowledgeChunks(indexedDocument.document_id, chunks)
+  const extracted = reusePlan.chunksToExtract.length > 0
+    ? await extractKnowledgeFromContent({
+        segments: buildEntityExtractionSegments(reusePlan.chunksToExtract),
+        providerId: opts.providerId || configuredTarget.providerId,
+        model: opts.model || configuredTarget.model,
+        signal: opts.signal,
+        onProgress: opts.onExtractionProgress,
+      })
+    : { relations: [], mentions: [], chunkTags: [] }
+  const chunkTags = [...reusePlan.chunkTags, ...extracted.chunkTags]
   opts.signal?.throwIfAborted()
   if (knowledge.getResetGeneration() !== resetGeneration) {
     throw new DOMException('Knowledge was reset during extraction', 'AbortError')
@@ -232,9 +295,10 @@ export async function indexMemoryContentIntoKnowledge(opts: {
     fileName: opts.fileName,
     sourceId,
     chunks,
-    relations: result.relations,
-    mentions: result.mentions,
-    chunkTags: result.chunkTags,
+    relations: extracted.relations,
+    mentions: extracted.mentions,
+    chunkTags,
+    reusableChunks: reusePlan.reusableChunks,
     extractorProviderId: opts.providerId || configuredTarget.providerId,
     extractorModel: opts.model || configuredTarget.model,
     validateBeforePublish: () => {
@@ -250,8 +314,8 @@ export async function indexMemoryContentIntoKnowledge(opts: {
   if (knowledge.getResetGeneration() !== resetGeneration) {
     throw new DOMException('Knowledge was reset during extraction', 'AbortError')
   }
-  const tags = mergeKnowledgeChunkTags(result.chunkTags)
-  const extractedTagsByChunk = new Map(result.chunkTags.map((item) => [item.sourceChunkIndex, item.tags]))
+  const tags = mergeKnowledgeChunkTags(chunkTags)
+  const extractedTagsByChunk = new Map(chunkTags.map((item) => [item.sourceChunkIndex, item.tags]))
   const chunkSearchKeywords = new Map(chunks.map((chunk) => [chunk.chunkIndex, {
     contentHash: chunk.contentHash,
     keywords: extractedTagsByChunk.get(chunk.chunkIndex) || [],
@@ -272,7 +336,7 @@ export async function indexMemoryContentIntoKnowledge(opts: {
   if (!markMemoryFileKnowledgeExtracted(opts.spaceId, opts.fileName, knowledgeExtractedAt, contentHash, tags)) {
     // A concurrent edit landed after extraction committed. Remove the now-stale
     // version only; never delete a newer extraction that may already exist.
-    knowledge.retireDocument(indexedDocument.document_id)
+    knowledge.retireRun(knowledgeResult.runId)
     throw new Error('MEMORY_KNOWLEDGE_SOURCE_CHANGED')
   }
   return {
@@ -284,6 +348,8 @@ export async function indexMemoryContentIntoKnowledge(opts: {
     documentId: indexedDocument.document_id,
     contentHash,
     tags,
+    chunksAnalyzed: reusePlan.chunksToExtract.length,
+    chunksReused: reusePlan.reusableChunks.length,
   }
 }
 

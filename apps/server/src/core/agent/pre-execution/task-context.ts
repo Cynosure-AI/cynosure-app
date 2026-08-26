@@ -47,7 +47,7 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
 
     const deterministic = buildDeterministicTaskContext(currentRequest, input.enabledModes)
     if (deterministic) {
-        emitTaskContextSelection(input.conversationId, taskId, deterministic, input.eventMeta)
+        emitTaskContextSelection(input.conversationId, taskId, deterministic, input.eventMeta, undefined, 'deterministic')
         return deterministic
     }
 
@@ -101,12 +101,12 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
 
         const contextCall = result.toolCalls?.find((call) => call.function.name === TASK_CONTEXT_TOOL_NAME)
         const parsed = contextCall ? parseTaskContextArguments(contextCall.function.arguments, input.enabledModes, currentRequest) : null
-        emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta, parsed ? undefined : 'none-generated')
+        emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta, parsed ? undefined : 'none-generated', 'llm')
         return parsed
     } catch (err) {
         if ((err as Error).name === 'AbortError' || input.signal?.aborted) throw err
         console.warn('[auto-router] Task context build failed, using original request in downstream routers:', err)
-        emitTaskContextSelection(input.conversationId, taskId, null, input.eventMeta, 'routing-failed')
+        emitTaskContextSelection(input.conversationId, taskId, null, input.eventMeta, 'routing-failed', 'llm')
         return null
     }
 }
@@ -306,6 +306,7 @@ function emitTaskContextSelection(
     context: TaskContext | null,
     eventMeta?: Record<string, unknown>,
     emptyReason?: 'none-generated' | 'routing-failed',
+    selectionMethod: 'llm' | 'deterministic' = 'llm',
 ): void {
     getEventBus().emit('step:tools-chosen', {
         conversationId,
@@ -316,6 +317,7 @@ function emitTaskContextSelection(
             name: 'Task context',
             arguments: JSON.stringify(stripUndefined({
                 type: 'task-context',
+                selectionMethod,
                 toolQuery: context?.toolQuery,
                 memoryQuery: context?.memoryQuery,
                 memoryQueries: context?.memoryQueries,
