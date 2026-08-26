@@ -115,6 +115,49 @@ describe('automatic tool routing', () => {
         }])
     })
 
+    test('runtime expansion repeats AI toolset selection before routing within the selected namespaces', async () => {
+        const github = namespacedTool('github_search', 'mcp:github', 'GitHub MCP')
+        const calendar = namespacedTool('calendar_list', 'mcp:calendar', 'Calendar MCP')
+        const weather = namespacedTool('weather_current', 'mcp:weather', 'Weather MCP')
+        const gateway = {
+            complete: vi.fn()
+                .mockResolvedValueOnce({ toolCalls: [{
+                    function: { name: 'select_toolsets', arguments: '{"namespaceIds":["mcp:github"]}' },
+                }] })
+                .mockResolvedValueOnce({ toolCalls: [{
+                    function: { name: 'select_toolsets', arguments: '{"namespaceIds":["mcp:calendar"]}' },
+                }] }),
+        } as unknown as LLMGateway
+        routerMocks.route.mockImplementation(async ({ allTools }) => allTools)
+
+        await applyAutoToolRouting({
+            enabled: true,
+            conversationId: 'conversation',
+            userQuery: 'inspect the repository',
+            gateway,
+            tools: [github, calendar, weather],
+        })
+
+        const expansion = routerMocks.route.mock.calls[0]?.[0]?.expandAvailableTools
+        expect(expansion).toBeTypeOf('function')
+
+        const expanded = await expansion({
+            requestedCapability: 'list my upcoming meetings',
+            availableTools: [calendar, weather],
+            limit: 4,
+        })
+
+        expect(expanded).toEqual([calendar])
+        expect(gateway.complete).toHaveBeenCalledTimes(2)
+        expect(routerMocks.route).toHaveBeenLastCalledWith(expect.objectContaining({
+            userQuery: 'list my upcoming meetings',
+            allTools: [calendar],
+            availableTools: [calendar, weather],
+            maxTools: 4,
+            includeExpansionTool: false,
+        }))
+    })
+
     test('treats an explicit empty toolset selection as no relevant tools', async () => {
         routerMocks.route.mockResolvedValue([])
         const gateway = {

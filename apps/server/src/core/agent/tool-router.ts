@@ -1,6 +1,9 @@
 import { createHash } from 'crypto'
 import { getEmbeddingProvider } from '../memory/embedding.js'
-import { makeSearchAvailableMcpToolsTool } from '../tools/builtin/expand-available-toolset.js'
+import {
+    makeSearchAvailableMcpToolsTool,
+    type SearchAvailableMcpTools,
+} from '../tools/builtin/expand-available-toolset.js'
 import {
     loadCachedRouterEmbeddings,
     loadCachedToolEmbeddings,
@@ -44,6 +47,10 @@ export interface RouteToolsInput {
     maxTools?: number
     contextWindowTurns?: number
     onStatus?: (status: 'indexing-tools' | 'finding-tools', message: string) => void
+    /** AI + retrieval-backed search used by the runtime expansion tool. */
+    expandAvailableTools?: SearchAvailableMcpTools
+    /** Disable attaching another expansion tool while fulfilling an expansion request. */
+    includeExpansionTool?: boolean
 }
 
 export function buildRouterQuery(
@@ -143,6 +150,8 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
         maxTools = MAX_AUTO_DISCOVERED_TOOLS,
         contextWindowTurns = CONTEXT_WINDOW_TURNS,
         onStatus,
+        expandAvailableTools,
+        includeExpansionTool = true,
     } = input
 
     const localTools = allTools.filter((tool) => !isMcpTool(tool))
@@ -176,13 +185,16 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
     const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, availableTools, maxTools, protectedNames, onStatus)
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
-    let routedTools: RoutedToolDefinition[] = []
+    let routedTools: RoutedToolDefinition[] = dedupeTools([...fixedTools, ...selectedTools, ...stickyTools])
+    if (!includeExpansionTool) return routedTools
+
     const searchTool = makeSearchAvailableMcpToolsTool({
         allTools: availableTools,
         getLoadedToolNames: () => new Set(routedTools.map(({ name }) => name)),
+        searchTools: expandAvailableTools,
     })
 
-    routedTools = dedupeTools([...fixedTools, ...selectedTools, ...stickyTools, searchTool])
+    routedTools = dedupeTools([...routedTools, searchTool])
     return routedTools
 }
 
@@ -267,6 +279,8 @@ export function routeToolsLexically(input: RouteToolsInput): RoutedToolDefinitio
         topK = MCP_CANDIDATE_COUNT,
         maxTools = MAX_AUTO_DISCOVERED_TOOLS,
         contextWindowTurns = CONTEXT_WINDOW_TURNS,
+        expandAvailableTools,
+        includeExpansionTool = true,
     } = input
     const query = buildRouterQuery(userQuery, recentMessages, contextWindowTurns)
     const localTools = allTools.filter((tool) => !isMcpTool(tool))
@@ -285,12 +299,15 @@ export function routeToolsLexically(input: RouteToolsInput): RoutedToolDefinitio
         .filter(({ name }) => !protectedNames.has(name))
     const discovered = lexicalToolRank(query, candidates, maxTools)
 
-    let routedTools: RoutedToolDefinition[] = []
+    let routedTools: RoutedToolDefinition[] = dedupeTools([...fixedTools, ...discovered, ...stickyTools])
+    if (!includeExpansionTool) return routedTools
+
     const searchTool = makeSearchAvailableMcpToolsTool({
         allTools,
         getLoadedToolNames: () => new Set(routedTools.map(({ name }) => name)),
+        searchTools: expandAvailableTools,
     })
-    routedTools = dedupeTools([...fixedTools, ...discovered, ...stickyTools, searchTool])
+    routedTools = dedupeTools([...routedTools, searchTool])
     return routedTools
 }
 

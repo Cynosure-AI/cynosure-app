@@ -1,6 +1,9 @@
 import { nanoid } from 'nanoid'
 import { getEventBus } from '../../telemetry/event-bus.js'
-import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
+import {
+    TOOL_SEARCH_TOOL_NAME,
+    type SearchAvailableMcpTools,
+} from '../../tools/builtin/expand-available-toolset.js'
 import { MCP_CANDIDATE_COUNT, routeTools, routeToolsLexically, shouldRouteTools, type RoutedToolDefinition } from './../tool-router.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
@@ -75,6 +78,16 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
     }
 
     const taskId = `router_${nanoid()}`
+    const expandAvailableTools = makeToolExpansionSearch({
+        conversationId,
+        gateway,
+        providerId,
+        model,
+        recentMessages: recentMessages || [],
+        mcpMetadata: mcpMetadata || [],
+        signal,
+        debugContextEnabled,
+    })
     try {
         signal?.throwIfAborted()
         emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Selecting required MCPs and toolsets...', eventMeta)
@@ -115,6 +128,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             preferredToolNames,
             usedToolNames,
             onStatus: (status, message) => emitToolRoutingStatus(conversationId, taskId, status, message, eventMeta),
+            expandAvailableTools,
         })
         signal?.throwIfAborted()
         emitToolRoutingSelection(
@@ -137,6 +151,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             mcpMetadata,
             preferredToolNames,
             usedToolNames,
+            expandAvailableTools,
         })
         emitToolRoutingSelection(
             conversationId,
@@ -148,6 +163,48 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             'lexical',
         )
         return fallbackTools
+    }
+}
+
+function makeToolExpansionSearch(input: {
+    conversationId: string
+    gateway: LLMGateway
+    providerId?: string
+    model?: string
+    recentMessages: ChatMessage[]
+    mcpMetadata: ToolNamespaceMetadata[]
+    signal?: AbortSignal
+    debugContextEnabled?: boolean
+}): SearchAvailableMcpTools {
+    return async ({ requestedCapability, availableTools, limit, signal }) => {
+        const expansionSignal = signal || input.signal
+        const selectedNamespaceIds = await selectToolsets({
+            conversationId: input.conversationId,
+            gateway: input.gateway,
+            providerId: input.providerId,
+            model: input.model,
+            userQuery: requestedCapability,
+            recentMessages: input.recentMessages,
+            tools: availableTools,
+            mcpMetadata: input.mcpMetadata,
+            signal: expansionSignal,
+            debugContextEnabled: input.debugContextEnabled,
+        })
+        const selectedTools = filterToolsByNamespace(
+            availableTools,
+            selectedNamespaceIds,
+            new Set(),
+        )
+
+        return routeTools({
+            userQuery: requestedCapability,
+            recentMessages: input.recentMessages,
+            allTools: selectedTools,
+            availableTools,
+            mcpMetadata: input.mcpMetadata.filter(({ id }) => selectedNamespaceIds.has(id)),
+            maxTools: limit,
+            includeExpansionTool: false,
+        } as Parameters<typeof routeTools>[0])
     }
 }
 
