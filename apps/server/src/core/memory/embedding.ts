@@ -73,10 +73,10 @@ export class EmbeddingProvider {
         } else {
           const defaultHeaders: Record<string, string> = {}
           if (provider.config.type === 'openrouter') {
-            defaultHeaders['HTTP-Referer'] = 'https://cynosure.app'
+            defaultHeaders['HTTP-Referer'] = 'https://github.com/andreasjhagen/Cynosure'
             defaultHeaders['X-OpenRouter-Title'] = 'Cynosure Embedder'
           } else if (provider.config.type === 'requesty') {
-            defaultHeaders['HTTP-Referer'] = 'https://cynosure.app'
+            defaultHeaders['HTTP-Referer'] = 'https://github.com/andreasjhagen/Cynosure'
             defaultHeaders['X-Title'] = 'Cynosure Embedder'
           }
           this.client = new OpenAI({
@@ -127,10 +127,10 @@ export class EmbeddingProvider {
 
     const defaultHeaders: Record<string, string> = {}
     if (provider.config.type === 'openrouter') {
-      defaultHeaders['HTTP-Referer'] = 'https://cynosure.app'
+      defaultHeaders['HTTP-Referer'] = 'https://github.com/andreasjhagen/Cynosure'
       defaultHeaders['X-OpenRouter-Title'] = 'Cynosure Embedder'
     } else if (provider.config.type === 'requesty') {
-      defaultHeaders['HTTP-Referer'] = 'https://cynosure.app'
+      defaultHeaders['HTTP-Referer'] = 'https://github.com/andreasjhagen/Cynosure'
       defaultHeaders['X-Title'] = 'Cynosure Embedder'
     }
 

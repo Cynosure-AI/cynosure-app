@@ -102,7 +102,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
     protected get defaultHeaders(): Record<string, string> {
         return {
-            'HTTP-Referer': 'https://cynosure.app',
+            'HTTP-Referer': 'https://github.com/andreasjhagen/Cynosure',
             'X-OpenRouter-Title': 'Cynosure'
         }
     }
