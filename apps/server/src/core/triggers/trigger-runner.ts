@@ -10,12 +10,16 @@ import type { AgentData } from '../agents/agent-store.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
 import { getAssignedOrDefaultSpaces } from '../memory/memory-space-scope.js'
 import { buildPersistedChatConfig } from '../chat/run-config.js'
+import { resolveMemorySpaceOverrides } from '../chat/run-config.js'
+import type { ConversationExecutionConfig } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
 export interface TriggerRunConfig {
     /** Agent definition (from getAgent) */
-    agent: AgentData
+    agent: AgentData | null
+    /** Frozen Free Chat configuration for an agentless trigger. */
+    executionConfig?: ConversationExecutionConfig
     /** User message content for this trigger execution */
     userContent: string
     /** Conversation origin label (e.g. 'cron') */
@@ -47,7 +51,8 @@ export interface TriggerRunResult {
  * for managing abort controllers and active-run tracking.
  */
 export async function runTriggerExecution(config: TriggerRunConfig): Promise<TriggerRunResult> {
-    const { agent, userContent, origin, title, systemPromptSuffix, broadcast, signal, logPrefix, onConversationCreated } = config
+    const { agent, executionConfig, userContent, origin, title, systemPromptSuffix, broadcast, signal, logPrefix, onConversationCreated } = config
+    if (!agent && !executionConfig) throw new Error('Trigger execution requires an agent or an execution configuration')
     const gateway = getGateway()
     const db = getDb()
 
@@ -55,7 +60,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     const conversationId = nanoid()
     db.prepare(
         'INSERT INTO conversations (id, title, agent_id, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(conversationId, title, agent.id, origin, Date.now(), Date.now())
+    ).run(conversationId, title, agent?.id ?? null, origin, Date.now(), Date.now())
 
     // Notify the caller and persist the trigger input before any fallible
     // context preparation. Failed/cancelled pre-turn work must still leave a
@@ -77,7 +82,9 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     let planningRunId: string | undefined
 
     try {
-        const memorySpaces = getAssignedOrDefaultSpaces(agent.id)
+        const memorySpaces = agent
+            ? getAssignedOrDefaultSpaces(agent.id)
+            : (resolveMemorySpaceOverrides(db, executionConfig?.memorySpaceIds) ?? [])
         const planned = await planExecution({
             resolvedAgent: agent,
             conversationId,
@@ -89,26 +96,36 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             userText: userContent,
             run: {
                 systemPromptSuffix,
+                providerOverride: executionConfig?.providerId || undefined,
+                modelOverride: executionConfig?.model || undefined,
+                systemPrompt: executionConfig?.systemPrompt,
+                requestedSubAgents: executionConfig?.subAgents,
+                selectedToolKeys: executionConfig?.allowedTools,
+                hasExplicitToolAllowlist: executionConfig ? executionConfig.autoToolRouting !== true : undefined,
                 memorySpaceOverrides: memorySpaces,
-                autoMemory: agent.autoMemory === true,
-                thinkingEnabled: agent.thinkingEnabled !== false,
+                autoToolRouting: executionConfig?.autoToolRouting ?? (agent?.autoToolRouting === true),
+                autoMemory: executionConfig?.autoMemory ?? (agent?.autoMemory === true),
+                autoRouterProviderId: executionConfig?.autoRouterProviderId,
+                autoRouterModel: executionConfig?.autoRouterModel,
+                thinkingEnabled: executionConfig?.thinkingEnabled ?? (agent?.thinkingEnabled !== false),
+                reasoningEffort: executionConfig?.reasoningEffort ?? agent?.reasoningEffort,
             },
         })
         planningRunId = planned.planningRunId
 
-        const executionConfig = buildPersistedChatConfig({
-            selectedToolKeys: agent.tools,
-            requestedSubAgents: agent.subAgents,
+        const persistedExecutionConfig = buildPersistedChatConfig({
+            selectedToolKeys: executionConfig?.allowedTools ?? agent?.tools ?? [],
+            requestedSubAgents: executionConfig?.subAgents ?? agent?.subAgents ?? [],
             requestedMemorySpaceIds: memorySpaces.map((space) => space.id),
             systemPrompt: planned.messages.find((message) => message.role === 'system')?.content.toString(),
             responseModel: planned.responseModel,
             responseProvider: planned.responseProvider,
-            thinkingEnabled: agent.thinkingEnabled !== false,
-            reasoningEffort: agent.reasoningEffort,
-            autoToolRouting: agent.autoToolRouting === true,
-            autoMemory: agent.autoMemory === true,
+            thinkingEnabled: executionConfig?.thinkingEnabled ?? (agent?.thinkingEnabled !== false),
+            reasoningEffort: executionConfig?.reasoningEffort ?? agent?.reasoningEffort,
+            autoToolRouting: executionConfig?.autoToolRouting ?? (agent?.autoToolRouting === true),
+            autoMemory: executionConfig?.autoMemory ?? (agent?.autoMemory === true),
         })
-        db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(JSON.stringify(executionConfig), conversationId)
+        db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(JSON.stringify(persistedExecutionConfig), conversationId)
 
         const messages: ChatMessage[] = planned.messages
         const executor = new AgentExecutor({
@@ -119,13 +136,13 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             providerId: planned.providerId,
             model: planned.responseModel,
             maxRounds: MAIN_AGENT_MAX_ROUNDS,
-            thinkingEnabled: agent.thinkingEnabled !== false,
-            reasoningEffort: agent.reasoningEffort,
+            thinkingEnabled: executionConfig?.thinkingEnabled ?? (agent?.thinkingEnabled !== false),
+            reasoningEffort: executionConfig?.reasoningEffort ?? agent?.reasoningEffort,
             streamMode: 'per-round',
-            hitl: !agent.autoApproveTools,
-            agentId: agent.id,
-            agentName: agent.name,
-            agentIconUrl: agent.iconUrl || null,
+            hitl: agent ? !agent.autoApproveTools : true,
+            agentId: agent?.id,
+            agentName: agent?.name,
+            agentIconUrl: agent?.iconUrl || null,
             signal,
             planningRunId,
             isPrimaryExecutor: true,
@@ -154,7 +171,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             )
         }
         if ((err as Error).name !== 'AbortError') {
-            console.error(`${logPrefix} Error running trigger for agent ${agent.id}:`, (err as Error).message)
+            console.error(`${logPrefix} Error running trigger${agent ? ` for agent ${agent.id}` : ''}:`, (err as Error).message)
             try {
                 getEventBus().emit('task:error', { taskId: '', conversationId, error: (err as Error).message })
             } catch { /* ignore */ }

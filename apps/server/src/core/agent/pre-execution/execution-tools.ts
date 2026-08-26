@@ -1,4 +1,4 @@
-import { BUILTIN_NAMESPACE_ID, getBuiltInMemoryReadToolKeys, getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
+import { getBuiltInMemoryReadToolKeys, getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
 import { applyAutoToolRouting, emitAutoToolRoutingSkipped } from './auto-tool-routing.js'
 import { isRuntimeMemoryEnabled, type ExecutionMemorySpaceRef } from './execution-memory.js'
 import type { ExecutionPreset } from '../execution-preset.js'
@@ -6,8 +6,8 @@ import type { SubAgentAssignment } from '../../agents/agent-store.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolRegistry } from '../../tools/tool-registry.js'
-import { isScheduleToolName } from '../../tools/builtin/schedule-tools.js'
 import type { RequestedToolEffect } from './task-context.js'
+import type { ConversationExecutionConfig } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -36,6 +36,8 @@ export interface ResolveExecutionToolsInput {
     /** Bypass the external catalogue for deterministic memory-only fast paths. */
     suppressAutoTools?: boolean
     debugContextEnabled?: boolean
+    /** Snapshot used when an agentless scheduling tool creates a durable job. */
+    scheduleExecutionConfig?: ConversationExecutionConfig
 }
 
 export interface ResolvedExecutionTools {
@@ -68,6 +70,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         requestedToolEffect = 'read',
         suppressAutoTools = false,
         debugContextEnabled,
+        scheduleExecutionConfig,
     } = input
 
     const routingEnabled = !suppressAutoTools && isToolRoutingEnabled(preset, autoToolRouting)
@@ -139,6 +142,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         conversationId,
         broadcast,
         memorySpaceOverrides,
+        scheduleExecutionConfig,
     })
 
     return {
@@ -148,15 +152,11 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
     }
 }
 
-/** Agentless conversations cannot own durable schedules. */
 export function filterToolsForExecutionPreset<T extends Pick<RegistryAwareToolDefinition, 'name' | 'originalName' | 'namespaceId'>>(
-    preset: ExecutionPreset,
+    _preset: ExecutionPreset,
     tools: T[],
 ): T[] {
-    if (preset.id !== '__agentless__') return tools
-    return tools.filter((tool) => (
-        tool.namespaceId !== BUILTIN_NAMESPACE_ID || !isScheduleToolName(tool.originalName ?? tool.name)
-    ))
+    return tools
 }
 
 function dedupeToolsByName(tools: RegistryAwareToolDefinition[]): RegistryAwareToolDefinition[] {

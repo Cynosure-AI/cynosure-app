@@ -164,7 +164,7 @@ async function save() {
   try {
     await api.cronJobs.update(jobId.value, {
       name: cronName.value.trim(),
-      agentId: cronAgentId.value,
+      ...(job.value.agentId ? { agentId: cronAgentId.value } : {}),
       schedule: expr.trim(),
       prompt: cronPrompt.value,
       enabled: cronEnabled.value,
@@ -280,10 +280,21 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <div>
               <label class="block text-xs text-theme-400 mb-1.5">Agent</label>
               <AgentSelect
+                v-if="job.agentId"
                 v-model="cronAgentId"
                 :agents="allAgents"
                 placeholder="Select an agent…"
               />
+              <div
+                v-else
+                class="flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-300"
+              >
+                <Icon
+                  icon="lucide:message-square"
+                  class="h-4 w-4 text-accent-400"
+                />
+                Free Chat configuration
+              </div>
             </div>
           </BaseCard>
 

@@ -13,6 +13,7 @@ import {
     isValidCronSchedule,
 } from '../core/triggers/cron-scheduler.js'
 import { getAgent } from '../core/agents/agent-store.js'
+import type { ConversationExecutionConfig } from '@shared/types'
 
 function getNextRunAt(schedule: string): number | null {
     try {
@@ -33,7 +34,7 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
             const agent = getAgent(job.agentId)
             return {
                 ...job,
-                agentName: agent?.name || 'Unknown',
+                agentName: job.agentId ? (agent?.name || 'Unknown') : 'Free Chat',
                 agentIconUrl: agent?.iconUrl || null,
                 isRunning: activeRuns.has(job.id),
                 nextRunAt: job.enabled ? getNextRunAt(job.schedule) : null,
@@ -42,22 +43,26 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
     })
 
     // POST /api/cron-jobs — create a new cron job
-    app.post<{ Body: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; notifyInApp?: boolean } }>('/', async (req, reply) => {
-        const { name, agentId, schedule, prompt, enabled, oneOff, outputChannelId, notificationMode, notificationCondition, notifyInApp } = req.body
-        if (!agentId || !schedule) {
+    app.post<{ Body: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; notifyInApp?: boolean; executionConfig?: ConversationExecutionConfig } }>('/', async (req, reply) => {
+        const { name, agentId, schedule, prompt, enabled, oneOff, outputChannelId, notificationMode, notificationCondition, notifyInApp, executionConfig } = req.body
+        if (!schedule || (!agentId && !executionConfig)) {
             reply.code(400)
-            return { error: 'agentId and schedule are required' }
+            return { error: 'schedule and either agentId or executionConfig are required' }
+        }
+        if (!agentId && (!executionConfig?.providerId || !executionConfig.model)) {
+            reply.code(400)
+            return { error: 'Agentless cron jobs require a resolved provider and model snapshot' }
         }
         if (!isValidCronSchedule(schedule)) {
             reply.code(400)
             return { error: 'Invalid cron schedule' }
         }
-        const agent = getAgent(agentId)
-        if (!agent) {
+        const agent = agentId ? getAgent(agentId) : null
+        if (agentId && !agent) {
             reply.code(404)
             return { error: 'Agent not found' }
         }
-        const job = createCronJob({ name, agentId, schedule, prompt: prompt || '', enabled, oneOff, outputChannelId, notificationMode, notificationCondition, notifyInApp })
+        const job = createCronJob({ name, agentId: agentId || '', schedule, prompt: prompt || '', enabled, oneOff, outputChannelId, notificationMode, notificationCondition, notifyInApp, executionConfig })
         if (job.enabled) scheduleCronJob(job.id)
         return job
     })

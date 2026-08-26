@@ -284,6 +284,7 @@ function createTables(db: Database.Database): void {
       one_off INTEGER NOT NULL DEFAULT 0,
       model_override TEXT NOT NULL DEFAULT '',
       provider_override TEXT NOT NULL DEFAULT '',
+      execution_config_json TEXT NOT NULL DEFAULT '{}',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -685,6 +686,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('cron_jobs', 'notification_condition', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('cron_jobs', 'notify_in_app', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('cron_jobs', 'last_run_at', 'INTEGER')
+  addColumnIfMissing('cron_jobs', 'execution_config_json', "TEXT NOT NULL DEFAULT '{}'")
 
   // Conversation unread tracking
   addColumnIfMissing('conversations', 'last_read_at', 'INTEGER')

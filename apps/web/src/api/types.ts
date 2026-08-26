@@ -1,3 +1,5 @@
+import type { ConversationExecutionConfig } from '@shared/types'
+
 // ── Provider / Chat ─────────────────────────────────────────────────────────
 
 export interface LLMProviderConfig {
@@ -522,6 +524,7 @@ export interface CronJob {
     agentIconUrl: string | null
     isRunning: boolean
     nextRunAt: number | null
+    executionConfig: ConversationExecutionConfig | null
 }
 
 export interface ExecutionStepRecord {

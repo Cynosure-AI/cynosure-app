@@ -133,6 +133,7 @@ async function duplicateCronJob(job: CronJob) {
       outputChannelId: job.outputChannelId,
       notificationMode: job.notificationMode,
       notificationCondition: job.notificationCondition,
+      executionConfig: job.executionConfig || undefined,
     })
     await loadSchedules()
     router.push(`/cron/${encodeURIComponent(created.id)}`)
