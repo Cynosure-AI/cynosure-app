@@ -90,6 +90,14 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             signal,
             debugContextEnabled,
         })
+        emitToolsetRoutingSelection(
+            conversationId,
+            taskId,
+            selectedNamespaceIds,
+            eligibleTools,
+            mcpMetadata || [],
+            eventMeta,
+        )
         const namespaceFilteredTools = filterToolsByNamespace(eligibleTools, selectedNamespaceIds, protectedNames)
         emitToolRoutingStatus(
             conversationId,
@@ -364,6 +372,27 @@ function emitToolRoutingStatus(conversationId: string, taskId: string, status: s
         status,
         message,
         ...eventMeta,
+    })
+}
+
+function emitToolsetRoutingSelection(
+    conversationId: string,
+    taskId: string,
+    selectedNamespaceIds: Set<string>,
+    tools: RegistryAwareToolDefinition[],
+    mcpMetadata: ToolNamespaceMetadata[],
+    eventMeta?: Record<string, unknown>,
+): void {
+    const candidatesById = new Map(buildToolsetCandidates(tools, mcpMetadata).map((candidate) => [candidate.id, candidate]))
+    getEventBus().emit('step:tools-chosen', {
+        conversationId,
+        taskId,
+        iteration: 0,
+        ...eventMeta,
+        toolCalls: [...selectedNamespaceIds].map((namespaceId) => ({
+            name: candidatesById.get(namespaceId)?.label || namespaceId,
+            arguments: JSON.stringify({ type: 'toolset-router', namespaceId }),
+        })),
     })
 }
 
