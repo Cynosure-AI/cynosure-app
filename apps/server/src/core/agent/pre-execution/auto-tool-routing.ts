@@ -124,6 +124,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             'gathered-context',
             eventMeta,
             routedTools.length ? undefined : 'none-found',
+            routedTools.some((tool) => typeof (tool as RoutedToolDefinition).routerScore === 'number') ? 'semantic' : 'lexical',
         )
         return routedTools
     } catch (err) {
@@ -144,6 +145,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             'gathered-context',
             eventMeta,
             fallbackTools.length ? undefined : 'routing-failed',
+            'lexical',
         )
         return fallbackTools
     }
@@ -391,7 +393,7 @@ function emitToolsetRoutingSelection(
         ...eventMeta,
         toolCalls: [...selectedNamespaceIds].map((namespaceId) => ({
             name: candidatesById.get(namespaceId)?.label || namespaceId,
-            arguments: JSON.stringify({ type: 'toolset-router', namespaceId }),
+            arguments: JSON.stringify({ type: 'toolset-router', namespaceId, selectionMethod: 'llm' }),
         })),
     })
 }
@@ -403,6 +405,7 @@ function emitToolRoutingSelection(
     contextPhase: 'gathered-results' | 'gathered-context' = 'gathered-context',
     eventMeta?: Record<string, unknown>,
     emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed' | 'disabled' | 'no-query' | 'no-tools',
+    selectionMethod: 'semantic' | 'lexical' = 'semantic',
 ): void {
     const visibleTools = tools.filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
     getEventBus().emit('step:tools-chosen', {
@@ -414,13 +417,14 @@ function emitToolRoutingSelection(
             .map((tool) => ({
                 name: tool.name,
                 arguments: typeof (tool as RoutedToolDefinition).routerScore === 'number'
-                    ? JSON.stringify({ type: 'tool-router', contextPhase, routerScore: (tool as RoutedToolDefinition).routerScore })
-                    : JSON.stringify({ type: 'tool-router', contextPhase })
+                    ? JSON.stringify({ type: 'tool-router', contextPhase, selectionMethod, routerScore: (tool as RoutedToolDefinition).routerScore })
+                    : JSON.stringify({ type: 'tool-router', contextPhase, selectionMethod })
             })) : [{
                 name: toolEmptyLabel(emptyReason),
                 arguments: JSON.stringify({
                     type: 'tool-router',
                     contextPhase,
+                    selectionMethod,
                     emptyReason: emptyReason || 'none-selected',
                     content: toolEmptyContent(emptyReason),
                 }),
