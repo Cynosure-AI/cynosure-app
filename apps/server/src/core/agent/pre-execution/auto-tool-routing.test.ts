@@ -10,6 +10,7 @@ const routerMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../tool-router.js', () => ({
+    MCP_CANDIDATE_COUNT: 8,
     MAX_AUTO_DISCOVERED_TOOLS: 6,
     shouldRouteTools: routerMocks.shouldRoute,
     routeTools: routerMocks.route,
@@ -26,6 +27,15 @@ function tool(name: string): RegistryAwareToolDefinition {
         timeout: 1_000,
         execute: async () => ({ success: true, output: 'ok' }),
     } as RegistryAwareToolDefinition
+}
+
+function namespacedTool(name: string, namespaceId: string, namespaceLabel: string): RegistryAwareToolDefinition {
+    return {
+        ...tool(name),
+        namespaceId,
+        namespaceLabel,
+        namespaceDescription: `${namespaceLabel} capabilities`,
+    }
 }
 
 function annotatedTool(name: string, readOnly: boolean, destructive = false): RegistryAwareToolDefinition {
@@ -59,16 +69,16 @@ describe('automatic tool routing', () => {
         expect(gateway.complete).not.toHaveBeenCalled()
     })
 
-    test('curates routed candidates while retaining explicitly selected and recently used tools', async () => {
-        const preferred = tool('preferred')
-        const used = tool('used')
-        const optionalA = tool('optional_a')
-        const optionalB = tool('optional_b')
-        routerMocks.route.mockResolvedValue([preferred, used, optionalA, optionalB])
+    test('asks the model to select toolsets before filtering tools and retains protected tools', async () => {
+        const preferred = namespacedTool('preferred', 'mcp:pinned', 'Pinned MCP')
+        const used = namespacedTool('used', 'mcp:recent', 'Recent MCP')
+        const optionalA = namespacedTool('optional_a', 'mcp:weather', 'Weather MCP')
+        const optionalB = namespacedTool('optional_b', 'mcp:github', 'GitHub MCP')
+        routerMocks.route.mockImplementation(async ({ allTools }) => allTools)
         const gateway = {
             complete: vi.fn().mockResolvedValue({
                 toolCalls: [{
-                    function: { name: 'select_tool_context', arguments: JSON.stringify({ toolIds: ['t2'] }) },
+                    function: { name: 'select_toolsets', arguments: JSON.stringify({ namespaceIds: ['mcp:github'] }) },
                 }],
             }),
         } as unknown as LLMGateway
@@ -87,21 +97,24 @@ describe('automatic tool routing', () => {
         })
 
         expect(result.map(({ name }) => name)).toEqual(['preferred', 'used', 'optional_b'])
+        expect(routerMocks.route).toHaveBeenCalledWith(expect.objectContaining({
+            allTools: [preferred, used, optionalB],
+        }))
         expect(gateway.complete).toHaveBeenCalledWith(
             expect.objectContaining({
                 thinkingEnabled: false,
-                toolChoice: { type: 'function', name: 'select_tool_context' },
+                toolChoice: { type: 'function', name: 'select_toolsets' },
             }),
             undefined,
         )
     })
 
-    test('treats an explicit empty curation selection as no relevant tools', async () => {
-        routerMocks.route.mockResolvedValue([tool('optional')])
+    test('treats an explicit empty toolset selection as no relevant tools', async () => {
+        routerMocks.route.mockResolvedValue([])
         const gateway = {
-            complete: vi.fn().mockResolvedValue({
-                toolCalls: [{ function: { name: 'select_tool_context', arguments: '{"toolIds":[]}' } }],
-            }),
+            complete: vi.fn().mockResolvedValue({ toolCalls: [{
+                function: { name: 'select_toolsets', arguments: '{"namespaceIds":[]}' },
+            }] }),
         } as unknown as LLMGateway
         const events: Array<Record<string, unknown>> = []
         getEventBus().on('step:tools-chosen', (event) => events.push(event as Record<string, unknown>))
@@ -113,12 +126,12 @@ describe('automatic tool routing', () => {
             gateway,
             tools: [tool('optional')],
         })).resolves.toEqual([])
-        expect(events.at(-1)?.toolCalls).toEqual([expect.objectContaining({ name: 'No tools selected' })])
+        expect(routerMocks.route).toHaveBeenCalledWith(expect.objectContaining({ allTools: [] }))
+        expect(events.at(-1)?.toolCalls).toEqual([expect.objectContaining({ name: 'No tools found' })])
     })
 
-    test('falls back to lexical routing when semantic routing fails', async () => {
+    test('falls back to lexical routing when AI toolset selection fails', async () => {
         const fallback = [tool('fallback')]
-        routerMocks.route.mockRejectedValue(new Error('embedding unavailable'))
         routerMocks.lexical.mockReturnValue(fallback)
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 
@@ -126,7 +139,7 @@ describe('automatic tool routing', () => {
             enabled: true,
             conversationId: 'conversation',
             userQuery: 'find it',
-            gateway: {} as LLMGateway,
+            gateway: { complete: vi.fn().mockRejectedValue(new Error('router unavailable')) } as unknown as LLMGateway,
             tools: fallback,
         })).resolves.toBe(fallback)
         expect(routerMocks.lexical).toHaveBeenCalled()

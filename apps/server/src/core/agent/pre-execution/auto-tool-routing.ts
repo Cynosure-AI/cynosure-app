@@ -1,16 +1,15 @@
 import { nanoid } from 'nanoid'
 import { getEventBus } from '../../telemetry/event-bus.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
-import { compactToolDescription } from '../../tools/tool-description.js'
-import { MAX_AUTO_DISCOVERED_TOOLS, routeTools, routeToolsLexically, shouldRouteTools, type RoutedToolDefinition } from './../tool-router.js'
+import { MCP_CANDIDATE_COUNT, routeTools, routeToolsLexically, shouldRouteTools, type RoutedToolDefinition } from './../tool-router.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../../tools/tool-registry.js'
 import type { RequestedToolEffect } from './task-context.js'
 import { completeWithDebugCapture } from '../../chat/debug-context.js'
 
-const TOOL_CONTEXT_SELECTION_TOOL_NAME = 'select_tool_context'
-const TOOL_DESCRIPTION_CHAR_LIMIT = 800
+const TOOLSET_SELECTION_TOOL_NAME = 'select_toolsets'
+const TOOLSET_DESCRIPTION_CHAR_LIMIT = 1_200
 
 export interface ApplyAutoToolRoutingInput {
     enabled: boolean
@@ -32,8 +31,14 @@ export interface ApplyAutoToolRoutingInput {
     debugContextEnabled?: boolean
 }
 
-interface ToolContextSelection {
-    toolIds: string[]
+interface ToolsetCandidate {
+    id: string
+    label: string
+    description: string
+}
+
+interface ToolsetSelection {
+    namespaceIds: string[]
 }
 
 export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Promise<ToolDefinition[]> {
@@ -72,12 +77,33 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
     const taskId = `router_${nanoid()}`
     try {
         signal?.throwIfAborted()
-        emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Gathering tool context...', eventMeta)
+        emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Selecting required MCPs and toolsets...', eventMeta)
+        const selectedNamespaceIds = await selectToolsets({
+            conversationId,
+            gateway,
+            providerId,
+            model,
+            userQuery: userQuery || '',
+            recentMessages: recentMessages || [],
+            tools: eligibleTools,
+            mcpMetadata,
+            signal,
+            debugContextEnabled,
+        })
+        const namespaceFilteredTools = filterToolsByNamespace(eligibleTools, selectedNamespaceIds, protectedNames)
+        emitToolRoutingStatus(
+            conversationId,
+            taskId,
+            'finding-tools',
+            `Filtering tools from ${selectedNamespaceIds.size} selected toolset${selectedNamespaceIds.size === 1 ? '' : 's'}...`,
+            eventMeta,
+        )
         const routedTools = await routeTools({
             userQuery: userQuery || '',
             recentMessages: recentMessages || [],
-            allTools: eligibleTools,
-            mcpMetadata,
+            allTools: namespaceFilteredTools,
+            availableTools: eligibleTools,
+            mcpMetadata: mcpMetadata?.filter(({ id }) => selectedNamespaceIds.has(id)),
             preferredToolNames,
             usedToolNames,
             onStatus: (status, message) => emitToolRoutingStatus(conversationId, taskId, status, message, eventMeta),
@@ -87,37 +113,11 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             conversationId,
             taskId,
             routedTools,
-            'gathered-results',
+            'gathered-context',
             eventMeta,
             routedTools.length ? undefined : 'none-found',
         )
-        const curatedTools = requestedToolEffect !== undefined && routedTools.length <= 3
-            ? routedTools
-            : await (async () => {
-                emitToolRoutingStatus(conversationId, taskId, 'curating-tools', 'Curating tool context...', eventMeta)
-                return curateRoutedTools({
-                    conversationId,
-                    gateway,
-                    providerId,
-                    model,
-                    userQuery: userQuery || '',
-                    recentMessages: recentMessages || [],
-                    routedTools,
-                    preferredToolNames,
-                    usedToolNames,
-                    signal,
-                    debugContextEnabled,
-                })
-            })()
-        emitToolRoutingSelection(
-            conversationId,
-            taskId,
-            curatedTools,
-            'gathered-context',
-            eventMeta,
-            curatedTools.length ? undefined : 'none-relevant',
-        )
-        return curatedTools
+        return routedTools
     } catch (err) {
         if ((err as Error).name === 'AbortError' || signal?.aborted) throw err
         console.warn('[tool-router] Routing failed, using deterministic lexical routing:', err)
@@ -164,36 +164,33 @@ export function emitAutoToolRoutingSkipped(
     // pre-execution timeline quiet unless the auto-router actually runs.
 }
 
-async function curateRoutedTools(input: {
+async function selectToolsets(input: {
     conversationId: string
     gateway: LLMGateway
     providerId?: string
     model?: string
     userQuery: string
     recentMessages: ChatMessage[]
-    routedTools: RoutedToolDefinition[]
-    preferredToolNames?: Set<string>
-    usedToolNames?: Set<string>
+    tools: RegistryAwareToolDefinition[]
+    mcpMetadata?: ToolNamespaceMetadata[]
     signal?: AbortSignal
     debugContextEnabled?: boolean
-}): Promise<RoutedToolDefinition[]> {
-    const protectedNames = collectProtectedToolNames(input.recentMessages, input.preferredToolNames, input.usedToolNames)
-    const curatableTools = input.routedTools.filter((tool) => !protectedNames.has(tool.name))
-    if (!curatableTools.length) return input.routedTools
+}): Promise<Set<string>> {
+    const candidates = buildToolsetCandidates(input.tools, input.mcpMetadata || [])
+    if (!candidates.length) return new Set()
 
+    const candidateIds = candidates.map(({ id }) => id)
     try {
-        const candidateIds = curatableTools.map((_, index) => toolCandidateId(index))
         const request: Parameters<LLMGateway['complete']>[0] = {
             messages: [
                 {
                     role: 'system',
                     content: [
-                        'You curate routed tool candidates before the main assistant run.',
-                        'Given the current request, recent conversation, and candidate tools, call select_tool_context with only the tool IDs that are useful for this next assistant turn.',
-                        `Select at most ${MAX_AUTO_DISCOVERED_TOOLS} tool IDs.`,
-                        'Prefer the smallest sufficient tool set. Keep broad or expensive capabilities out unless they are likely needed.',
-                        'Return an empty list if none of the candidates are useful.',
-                        'Some explicitly selected, recently used, or search-expansion tools are protected and will be kept automatically; they are not listed here.',
+                        'You select MCP servers and toolsets before tools are filtered for the main assistant run.',
+                        'Given the current request, recent conversation, and available toolsets, call select_toolsets with only the namespace IDs whose capabilities are required for this turn.',
+                        `Select at most ${MCP_CANDIDATE_COUNT} namespace IDs.`,
+                        'Prefer the smallest sufficient set. Select a toolset when the task is likely to need one or more of its capabilities.',
+                        'Return an empty list when the request needs no external or built-in tools.',
                         'Do not answer the user. Do not include rationale. /no_think',
                     ].join('\n'),
                 },
@@ -203,87 +200,77 @@ async function curateRoutedTools(input: {
                         buildRecentConversationBlock(input.recentMessages),
                         `Current request: ${input.userQuery}`,
                         '',
-                        'Tool candidates:',
-                        ...curatableTools.map((tool, index) => formatToolCandidate(tool, candidateIds[index])),
+                        'Available MCPs and toolsets:',
+                        ...candidates.map(formatToolsetCandidate),
                     ].filter(Boolean).join('\n'),
                 },
             ],
             model: input.model,
             maxTokens: 350,
-            tools: [buildToolContextSelectionTool(candidateIds)],
-            toolChoice: { type: 'function', name: TOOL_CONTEXT_SELECTION_TOOL_NAME },
+            tools: [buildToolsetSelectionTool(candidateIds)],
+            toolChoice: { type: 'function', name: TOOLSET_SELECTION_TOOL_NAME },
             thinkingEnabled: false,
             signal: input.signal,
         }
         const result = await completeWithDebugCapture({
             enabled: input.debugContextEnabled,
             conversationId: input.conversationId,
-            phase: 'tool-curation',
-            label: 'Tool candidate curation',
+            phase: 'toolset-selection',
+            label: 'MCP and toolset selection',
             gateway: input.gateway,
             providerId: input.providerId,
             request,
         })
 
-        const selectionCall = result.toolCalls?.find((call) => call.function.name === TOOL_CONTEXT_SELECTION_TOOL_NAME)
-        const selection = selectionCall ? parseToolContextSelection(selectionCall.function.arguments, candidateIds) : null
-        if (!selection) return input.routedTools
-
-        const selectedNames = new Set(resolveSelectedTools(curatableTools, selection.toolIds).map((tool) => tool.name))
-        return input.routedTools.filter((tool) => protectedNames.has(tool.name) || selectedNames.has(tool.name))
+        const selectionCall = result.toolCalls?.find((call) => call.function.name === TOOLSET_SELECTION_TOOL_NAME)
+        const selection = selectionCall ? parseToolsetSelection(selectionCall.function.arguments, candidateIds) : null
+        if (!selection) throw new Error('Toolset selector returned no valid selection')
+        return new Set(selection.namespaceIds)
     } catch (err) {
         if ((err as Error).name === 'AbortError' || input.signal?.aborted) throw err
-        console.warn('[tool-router] Tool context curation failed, using routed tools:', err)
-        return input.routedTools
+        throw err
     }
 }
 
-function buildToolContextSelectionTool(candidateIds: string[]): ToolDefinition {
+function buildToolsetSelectionTool(candidateIds: string[]): ToolDefinition {
     return {
-        name: TOOL_CONTEXT_SELECTION_TOOL_NAME,
-        description: 'Select the routed tool candidates that should be exposed to the main assistant run.',
+        name: TOOLSET_SELECTION_TOOL_NAME,
+        description: 'Select the MCP servers and toolsets required for the current assistant turn.',
         timeout: 10_000,
         parameters: {
             type: 'object',
             additionalProperties: false,
             properties: {
-                toolIds: {
+                namespaceIds: {
                     type: 'array',
-                    description: 'Candidate IDs to expose to the main assistant, ordered by usefulness.',
+                    description: 'Namespace IDs whose tools should be considered, ordered by usefulness.',
                     items: { type: 'string', enum: candidateIds },
-                    maxItems: MAX_AUTO_DISCOVERED_TOOLS,
+                    maxItems: MCP_CANDIDATE_COUNT,
                 },
             },
-            required: ['toolIds'],
+            required: ['namespaceIds'],
         },
         execute: async () => ({ success: true, output: 'ok' }),
     }
 }
 
-function parseToolContextSelection(raw: string, candidateIds: string[]): ToolContextSelection | null {
+function parseToolsetSelection(raw: string, candidateIds: string[]): ToolsetSelection | null {
     try {
-        const parsed = JSON.parse(raw) as { toolIds?: unknown }
-        if (!Array.isArray(parsed.toolIds)) return null
+        const parsed = JSON.parse(raw) as { namespaceIds?: unknown }
+        if (!Array.isArray(parsed.namespaceIds)) return null
 
         const allowed = new Set(candidateIds)
-        const requestedIds = parsed.toolIds.filter((id): id is string => typeof id === 'string')
-        const toolIds = requestedIds
+        const requestedIds = parsed.namespaceIds.filter((id): id is string => typeof id === 'string')
+        const namespaceIds = requestedIds
             .filter((id) => allowed.has(id))
             .filter((id, index, arr) => arr.indexOf(id) === index)
-            .slice(0, MAX_AUTO_DISCOVERED_TOOLS)
-        if (requestedIds.length > 0 && toolIds.length === 0) return null
+            .slice(0, MCP_CANDIDATE_COUNT)
+        if (requestedIds.length > 0 && namespaceIds.length === 0) return null
 
-        return { toolIds }
+        return { namespaceIds }
     } catch {
         return null
     }
-}
-
-function resolveSelectedTools(candidates: RoutedToolDefinition[], toolIds: string[]): RoutedToolDefinition[] {
-    const byId = new Map(candidates.map((candidate, index) => [toolCandidateId(index), candidate]))
-    return toolIds
-        .map((id) => byId.get(id))
-        .filter((tool): tool is RoutedToolDefinition => Boolean(tool))
 }
 
 function collectProtectedToolNames(
@@ -332,23 +319,41 @@ function messageContentForRouter(content: ChatMessage['content']): string {
     return text || '[multipart content]'
 }
 
-function toolCandidateId(index: number): string {
-    return `t${index + 1}`
+function toolNamespaceId(tool: RegistryAwareToolDefinition): string {
+    return tool.namespaceId || 'local'
 }
 
-function formatToolCandidate(tool: RoutedToolDefinition, id: string): string {
-    const metadataTool = tool as RoutedToolDefinition & Partial<RegistryAwareToolDefinition>
-    const metadata = [
-        metadataTool.namespaceLabel ? `namespace=${metadataTool.namespaceLabel}` : '',
-        metadataTool.namespaceId ? `namespaceId=${metadataTool.namespaceId}` : '',
-        typeof tool.routerScore === 'number' && Number.isFinite(tool.routerScore) ? `score=${tool.routerScore.toFixed(4)}` : '',
-    ].filter(Boolean).join(', ')
-    const description = compactToolDescription(tool.description).slice(0, TOOL_DESCRIPTION_CHAR_LIMIT)
+function buildToolsetCandidates(tools: RegistryAwareToolDefinition[], metadata: ToolNamespaceMetadata[]): ToolsetCandidate[] {
+    const metadataById = new Map(metadata.map((item) => [item.id, item]))
+    const grouped = new Map<string, RegistryAwareToolDefinition[]>()
+    for (const tool of tools) {
+        const id = toolNamespaceId(tool)
+        grouped.set(id, [...(grouped.get(id) || []), tool])
+    }
+    return [...grouped.entries()].map(([id, namespaceTools]) => {
+        const meta = metadataById.get(id)
+        const description = meta?.description || namespaceTools[0]?.namespaceDescription || namespaceTools
+            .slice(0, 12)
+            .map((tool) => `${tool.name}: ${tool.description}`)
+            .join('\n')
+        return {
+            id,
+            label: meta?.label || namespaceTools[0]?.namespaceLabel || (id === 'local' ? 'Built-in tools' : id),
+            description: description.slice(0, TOOLSET_DESCRIPTION_CHAR_LIMIT),
+        }
+    })
+}
 
-    return [
-        `- ${id}: ${tool.name}${metadata ? ` (${metadata})` : ''}`,
-        description,
-    ].join('\n')
+function formatToolsetCandidate(candidate: ToolsetCandidate): string {
+    return `- ${candidate.id}: ${candidate.label}\n${candidate.description}`
+}
+
+function filterToolsByNamespace(
+    tools: RegistryAwareToolDefinition[],
+    selectedNamespaceIds: Set<string>,
+    protectedNames: Set<string>,
+): RegistryAwareToolDefinition[] {
+    return tools.filter((tool) => selectedNamespaceIds.has(toolNamespaceId(tool)) || protectedNames.has(tool.name))
 }
 
 function emitToolRoutingStatus(conversationId: string, taskId: string, status: string, message: string, eventMeta?: Record<string, unknown>): void {

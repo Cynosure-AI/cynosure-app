@@ -34,6 +34,8 @@ export interface RouteToolsInput {
     userQuery: string
     recentMessages?: ChatMessage[]
     allTools: RegistryAwareToolDefinition[]
+    /** Full catalogue retained for runtime expansion when allTools is pre-filtered. */
+    availableTools?: RegistryAwareToolDefinition[]
     mcpMetadata?: ToolNamespaceMetadata[]
     /** Explicitly selected tool names that must survive routing. */
     preferredToolNames?: Set<string>
@@ -133,6 +135,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
         userQuery,
         recentMessages = [],
         allTools,
+        availableTools = allTools,
         mcpMetadata = [],
         preferredToolNames,
         usedToolNames,
@@ -170,12 +173,12 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
         .flatMap(({ tools }) => tools)
 
     const candidateTools = dedupeTools([...localTools, ...candidateMcpTools])
-    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, allTools, maxTools, protectedNames, onStatus)
+    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, availableTools, maxTools, protectedNames, onStatus)
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
     let routedTools: RoutedToolDefinition[] = []
     const searchTool = makeSearchAvailableMcpToolsTool({
-        allTools,
+        allTools: availableTools,
         getLoadedToolNames: () => new Set(routedTools.map(({ name }) => name)),
     })
 
