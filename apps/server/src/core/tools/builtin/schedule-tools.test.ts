@@ -24,16 +24,42 @@ describe('schedule built-in tools', () => {
         expect(isScheduleToolName('memory_create')).toBe(false)
     })
 
-    test('rejects every scheduling operation in an agentless context', async () => {
+    test('rejects agentless scheduling when no Free Chat execution snapshot is available', async () => {
         const tools = makeScheduleTools({ agentId: '__agentless__' })
 
         for (const tool of tools) {
             const response = await tool.execute({})
             expect(response).toMatchObject({
                 success: false,
-                error: expect.stringMatching(/require a saved agent/i),
+                error: expect.stringMatching(/require either an agent or a Free Chat execution configuration/i),
             })
         }
+    })
+
+    test('accepts a Free Chat execution snapshot as agentless scheduling context', async () => {
+        const [create] = makeScheduleTools({
+            agentId: '__agentless__',
+            executionConfig: {
+                allowedTools: ['builtin::schedule_create'],
+                subAgents: [],
+                memorySpaceIds: [],
+                systemPrompt: 'Keep this configuration.',
+                model: 'model-at-scheduling-time',
+                providerId: 'provider-at-scheduling-time',
+                thinkingEnabled: true,
+                reasoningEffort: 'high',
+                autoToolRouting: false,
+                autoMemory: false,
+                autoRouterProviderId: 'router-provider-at-scheduling-time',
+                autoRouterModel: 'router-model-at-scheduling-time',
+            },
+        })
+
+        const response = await create.execute({})
+        expect(response).toMatchObject({
+            success: false,
+            error: expect.stringMatching(/name and prompt are required/i),
+        })
     })
 
     test('converts a timezone-qualified future instant to server-local cron fields', () => {

@@ -14,7 +14,7 @@ import type {
   TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationMessagesResponse, DebugContextSnapshot } from '@shared/types'
+import type { ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, DebugContextSnapshot } from '@shared/types'
 
 function memorySpacePathId(id: string): string {
   return encodeURIComponent(encodeURIComponent(id))
@@ -530,7 +530,7 @@ export const api = {
   cronJobs: {
     list: () =>
       get<CronJob[]>('/api/cron-jobs'),
-    create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string; notifyInApp?: boolean }) =>
+    create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string; notifyInApp?: boolean; executionConfig?: ConversationExecutionConfig }) =>
       post<CronJob>('/api/cron-jobs', input),
     update: (id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string; notifyInApp?: boolean }) =>
       put<CronJob>(`/api/cron-jobs/${encodeURIComponent(id)}`, input),

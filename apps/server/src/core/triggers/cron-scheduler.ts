@@ -12,6 +12,8 @@ import { cancelPostActions, generateTitle } from '../agent/post-execution.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import type { AgentExecutorResult } from '../agent/agent-executor.js'
 import { createAppNotification } from '../notifications/app-notifications.js'
+import type { ConversationExecutionConfig } from '@shared/types'
+import { parseExecutionConfig } from '../chat/run-config.js'
 
 type CronNotificationMode = 'always' | 'conditional'
 
@@ -49,6 +51,7 @@ export interface CronJobRow {
     created_at: number
     updated_at: number
     last_run_at: number | null
+    execution_config_json: string
 }
 
 export interface CronJobData {
@@ -66,6 +69,7 @@ export interface CronJobData {
     createdAt: number
     updatedAt: number
     lastRunAt: number | null
+    executionConfig: ConversationExecutionConfig | null
 }
 
 export function isValidCronSchedule(schedule: string): boolean {
@@ -73,6 +77,15 @@ export function isValidCronSchedule(schedule: string): boolean {
 }
 
 function rowToData(row: CronJobRow): CronJobData {
+    let executionConfig: ConversationExecutionConfig | null = null
+    if (!row.agent_id && row.execution_config_json && row.execution_config_json !== '{}') {
+        try {
+            const parsed = parseExecutionConfig(row.execution_config_json)
+            if (parsed.providerId && parsed.model) executionConfig = parsed
+        } catch {
+            // Invalid legacy/backup data is treated as an unavailable snapshot.
+        }
+    }
     return {
         id: row.id,
         name: row.name,
@@ -88,6 +101,7 @@ function rowToData(row: CronJobRow): CronJobData {
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         lastRunAt: row.last_run_at ?? null,
+        executionConfig,
     }
 }
 
@@ -105,15 +119,15 @@ export function getCronJob(id: string): CronJobData | undefined {
     return row ? rowToData(row) : undefined
 }
 
-export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; notifyInApp?: boolean }): CronJobData {
+export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; notifyInApp?: boolean; executionConfig?: ConversationExecutionConfig }): CronJobData {
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
     const notificationMode = input.notificationMode === 'conditional' ? 'conditional' : 'always'
     // Set lastRunAt to now so missed first runs are caught up after downtime
     db.prepare(
-        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, output_channel_id, notification_mode, notification_condition, notify_in_app, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.outputChannelId || '', notificationMode, input.notificationCondition || '', input.notifyInApp ? 1 : 0, now, now, now)
+        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, output_channel_id, notification_mode, notification_condition, notify_in_app, execution_config_json, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.outputChannelId || '', notificationMode, input.notificationCondition || '', input.notifyInApp ? 1 : 0, JSON.stringify(input.executionConfig ?? {}), now, now, now)
     return getCronJob(id)!
 }
 
@@ -252,12 +266,12 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
 
     const runStartedAt = Date.now()
     const scheduledAt = opts?.scheduledAt ?? runStartedAt
-    const agent = getAgent(job.agentId)
-    if (!agent) {
+    const agent = job.agentId ? getAgent(job.agentId) : null
+    if (!agent && !job.executionConfig) {
         if (!opts?.force) {
             getDb().prepare('UPDATE cron_jobs SET last_run_at = ? WHERE id = ?').run(scheduledAt, jobId)
         }
-        console.warn(`[cron] Skipping job "${job.name || job.id}" (${job.id}) because agent "${job.agentId}" was not found`)
+        console.warn(`[cron] Skipping job "${job.name || job.id}" (${job.id}) because its execution configuration is unavailable`)
         return
     }
 
@@ -274,11 +288,12 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
     const userContent = job.prompt
         ? `Scheduled cron job due at ${scheduledDate.toISOString()} and started at ${now.toISOString()}.\n\n${job.prompt}`
         : `Scheduled cron job due at ${scheduledDate.toISOString()} and started at ${now.toISOString()}. Execute your scheduled task as described in your instructions.`
-    const titleSource = job.prompt.trim() || agent.cronPrompt.trim() || 'Execute scheduled agent task'
+    const titleSource = job.prompt.trim() || agent?.cronPrompt.trim() || 'Execute scheduled task'
 
     try {
         const { conversationId, result } = await runTriggerExecution({
             agent,
+            executionConfig: job.executionConfig ?? undefined,
             userContent,
             origin: 'cron',
             title: 'New Chat',

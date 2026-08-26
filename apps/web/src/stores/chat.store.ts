@@ -235,6 +235,12 @@ export const useChatStore = defineStore('chat', () => {
       if (activeConversationId.value !== id) return
       agentConfig.setConversationAgent(agentIdHint !== undefined ? agentIdHint : response.conversationAgentId)
 
+      // The conversation list is scoped to the selected agent. Entering a chat
+      // from the global sidebar can switch that scope, so refresh it before
+      // header actions (such as Pin/Unpin) resolve the active conversation.
+      await loadConversations()
+      if (activeConversationId.value !== id) return
+
       // Apply conversation-specific execution config immediately after setting
       // the agent, before any async work that could trigger a Vue render tick.
       // This prevents a flash where the agent defaults are briefly shown.

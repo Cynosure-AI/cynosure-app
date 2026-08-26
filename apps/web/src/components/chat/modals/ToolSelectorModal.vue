@@ -4,7 +4,7 @@ import { useChatStore } from '../../../stores/chat.store'
 import ModalDialog from '../../shared/ModalDialog.vue'
 import ToolSelector from '../../shared/ToolSelector.vue'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
-import { agentRequiredToolStates, memoryAutomaticToolStates } from '../../../utils/internal-tools'
+import { memoryAutomaticToolStates } from '../../../utils/internal-tools'
 
 const chatStore = useChatStore()
 
@@ -62,8 +62,6 @@ const automaticToolStates = computed(() => ({
   },
 }))
 
-const toolRequirements = computed(() => agentRequiredToolStates(Boolean(chatStore.activeAgentId)))
-
 function closeModal(): void {
   visible.value = false
 }
@@ -117,7 +115,6 @@ function onAutoRoutingUpdate(enabled: boolean): void {
       :model-value="chatStore.selectedToolNames"
       :show-approvals="false"
       :automatic-tool-states="automaticToolStates"
-      :tool-requirements="toolRequirements"
       @update:model-value="onToolsUpdate"
     />
   </ModalDialog>

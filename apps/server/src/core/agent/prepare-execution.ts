@@ -21,6 +21,7 @@ import type { ExecutionPreset } from './execution-preset.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
 import { getUserSettings } from '../user-settings.js'
+import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
 const AGENT_ROUTER_PROVIDER = '__agent_provider__'
@@ -84,6 +85,10 @@ export interface PrepareExecutionInput {
     inlineAttachmentTextLimit?: number
     /** Capture auxiliary pre-turn model calls in the Debug Context inspector. */
     debugContextEnabled?: boolean
+    /** Explicitly selected tools to preserve in agentless schedule snapshots. */
+    scheduleSelectedToolKeys?: string[]
+    thinkingEnabled?: boolean
+    reasoningEffort?: ReasoningEffort
 }
 
 export interface PreparedExecution {
@@ -132,6 +137,22 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         providerOverride,
         modelOverride,
     })
+    const scheduleExecutionConfig: ConversationExecutionConfig | undefined = preset.id === '__agentless__'
+        ? {
+            allowedTools: [...(input.scheduleSelectedToolKeys ?? preset.tools)],
+            subAgents: [...(input.subAgentAssignments ?? preset.subAgents)],
+            memorySpaceIds: memorySpaceOverrides?.map((space) => space.id) ?? [],
+            systemPrompt: systemPromptOverride ?? preset.systemPrompt ?? '',
+            model: providerModel.model,
+            providerId: providerModel.providerId,
+            thinkingEnabled: input.thinkingEnabled !== false,
+            reasoningEffort: input.reasoningEffort ?? 'medium',
+            autoToolRouting: input.autoToolRouting === true,
+            autoMemory: input.autoMemory === true,
+            autoRouterProviderId: input.autoRouterProviderId,
+            autoRouterModel: input.autoRouterModel,
+        }
+        : undefined
     const autoModes = {
         tools: isToolRoutingEnabled(preset, input.autoToolRouting),
         memories: isAutoMemoryEnabled(preset, input.autoMemory, memorySpaceOverrides),
@@ -198,6 +219,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         memorySpaceOverrides,
         hydrationAgentId: input.hydrationAgentId,
         eventMeta: input.eventMeta,
+        scheduleExecutionConfig,
     }), resolveMemorySystemMessages({
         preset,
         conversationId,

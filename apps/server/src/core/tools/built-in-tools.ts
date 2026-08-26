@@ -1,4 +1,5 @@
 import type { RegistryAwareToolDefinition, ToolDefinition } from "../gateway/providers/base.provider.js";
+import type { ConversationExecutionConfig } from "@shared/types";
 import {
     buildMemorySpaceFilter,
     getAssignedOrDefaultSpaces,
@@ -80,6 +81,7 @@ interface BuiltInHydrationContext {
     broadcast: BroadcastFn;
     assignedSpaces: MemorySpaceRef[];
     spaceFilter?: string;
+    scheduleExecutionConfig?: ConversationExecutionConfig;
 }
 
 const BUILTIN_TOOL_HYDRATORS = {
@@ -88,10 +90,10 @@ const BUILTIN_TOOL_HYDRATORS = {
         conversationId: ctx.conversationId,
         broadcast: ctx.broadcast,
     }),
-    schedule_create: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "" })[0],
-    schedule_list: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "" })[1],
-    schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "" })[2],
-    schedule_delete: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "" })[3],
+    schedule_create: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[0],
+    schedule_list: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[1],
+    schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[2],
+    schedule_delete: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[3],
     memory_list_documents: (ctx: BuiltInHydrationContext) => makeMemoryListDocumentsTool({
         spaceFilter: ctx.spaceFilter,
         assignedSpaces: ctx.assignedSpaces,
@@ -208,6 +210,7 @@ export function hydrateBuiltInTools(
         conversationId: string;
         broadcast: BroadcastFn;
         memorySpaceOverrides?: MemorySpaceRef[];
+        scheduleExecutionConfig?: ConversationExecutionConfig;
     },
 ): RegistryAwareToolDefinition[] {
     const assignedSpaces =
@@ -221,6 +224,7 @@ export function hydrateBuiltInTools(
         broadcast: ctx.broadcast,
         assignedSpaces,
         spaceFilter,
+        scheduleExecutionConfig: ctx.scheduleExecutionConfig,
     };
 
     return tools.map((t) => {

@@ -1,8 +1,10 @@
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
 import { CronExpressionParser } from 'cron-parser'
+import type { ConversationExecutionConfig } from '@shared/types'
 
 export interface ScheduleToolOptions {
     agentId: string
+    executionConfig?: ConversationExecutionConfig
 }
 
 export const SCHEDULE_TOOL_NAMES = [
@@ -20,14 +22,18 @@ export function isScheduleToolName(name?: string | null): name is ScheduleToolNa
     return Boolean(name && SCHEDULE_TOOL_NAME_SET.has(name))
 }
 
-function hasAgentContext(agentId: string): boolean {
-    return Boolean(agentId && agentId !== '__agentless__')
+function ownerAgentId(agentId: string): string {
+    return agentId === '__agentless__' ? '' : agentId
 }
 
-function requireAgentContext(agentId: string): ReturnType<typeof failure> | undefined {
-    return hasAgentContext(agentId)
+function hasScheduleContext(opts: ScheduleToolOptions): boolean {
+    return Boolean(ownerAgentId(opts.agentId) || opts.executionConfig)
+}
+
+function requireScheduleContext(opts: ScheduleToolOptions): ReturnType<typeof failure> | undefined {
+    return hasScheduleContext(opts)
         ? undefined
-        : failure('Scheduling tools require a saved agent. Select or create an agent before managing schedules.')
+        : failure('Scheduling tools require either an agent or a Free Chat execution configuration.')
 }
 
 function result(value: unknown) {
@@ -65,7 +71,7 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
     return {
         name: 'schedule_create',
         execution: { readOnly: false },
-        description: `Create a scheduled job for this agent. Use runAt for an exact one-time future run, or schedule for a recurring cron expression. The server's current local date-time is ${new Date().toString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'}). The executing agent must already have any tools needed by the future task.`,
+        description: `Create a scheduled job using the current agent or Free Chat configuration. Use runAt for an exact one-time future run, or schedule for a recurring cron expression. The server's current local date-time is ${new Date().toString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'}). The current configuration must already include any tools needed by the future task.`,
         parameters: {
             type: 'object',
             properties: {
@@ -81,7 +87,7 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
         timeout: 5_000,
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
         execute: async (params: unknown) => {
-            const contextFailure = requireAgentContext(opts.agentId)
+            const contextFailure = requireScheduleContext(opts)
             if (contextFailure) return contextFailure
             const input = params as { name?: string; prompt?: string; runAt?: string; schedule?: string; notify?: boolean }
             if (!input.name?.trim() || !input.prompt?.trim()) return failure('name and prompt are required')
@@ -102,12 +108,13 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
 
                 const job = scheduler.createCronJob({
                     name: input.name.trim(),
-                    agentId: opts.agentId,
+                    agentId: ownerAgentId(opts.agentId),
                     schedule,
                     prompt: input.prompt.trim(),
                     enabled: true,
                     oneOff,
                     notifyInApp: input.notify === true,
+                    executionConfig: ownerAgentId(opts.agentId) ? undefined : opts.executionConfig,
                 })
                 scheduler.scheduleCronJob(job.id)
                 return result({ ...job, requestedRunAt: requestedRunAt ? new Date(requestedRunAt).toISOString() : undefined })
@@ -121,16 +128,16 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
 function listTool(opts: ScheduleToolOptions): ToolDefinition {
     return {
         name: 'schedule_list',
-        description: 'List scheduled jobs owned by this agent. Use this before updating or deleting a job when its ID is unknown.',
+        description: 'List scheduled jobs owned by the current agent or by Free Chat. Use this before updating or deleting a job when its ID is unknown.',
         parameters: { type: 'object', properties: {}, additionalProperties: false },
         timeout: 5_000,
         execution: { readOnly: true },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         execute: async () => {
-            const contextFailure = requireAgentContext(opts.agentId)
+            const contextFailure = requireScheduleContext(opts)
             if (contextFailure) return contextFailure
             const { getCronJobsForAgent } = await import('../../triggers/cron-scheduler.js')
-            return result(getCronJobsForAgent(opts.agentId))
+            return result(getCronJobsForAgent(ownerAgentId(opts.agentId)))
         },
     }
 }
@@ -157,7 +164,7 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
         timeout: 5_000,
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         execute: async (params: unknown) => {
-            const contextFailure = requireAgentContext(opts.agentId)
+            const contextFailure = requireScheduleContext(opts)
             if (contextFailure) return contextFailure
             const input = params as { jobId?: string; name?: string; prompt?: string; runAt?: string; schedule?: string; enabled?: boolean; notify?: boolean }
             if (!input.jobId) return failure('jobId is required')
@@ -165,7 +172,7 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
 
             const scheduler = await import('../../triggers/cron-scheduler.js')
             const existing = scheduler.getCronJob(input.jobId)
-            if (!existing || existing.agentId !== opts.agentId) return failure('Scheduled job not found')
+            if (!existing || existing.agentId !== ownerAgentId(opts.agentId)) return failure('Scheduled job not found')
 
             let schedule = input.schedule?.trim()
             let oneOff: boolean | undefined = input.schedule ? false : undefined
@@ -208,13 +215,13 @@ function deleteTool(opts: ScheduleToolOptions): ToolDefinition {
         timeout: 5_000,
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
         execute: async (params: unknown) => {
-            const contextFailure = requireAgentContext(opts.agentId)
+            const contextFailure = requireScheduleContext(opts)
             if (contextFailure) return contextFailure
             const { getCronJob, unscheduleCronJob, deleteCronJob } = await import('../../triggers/cron-scheduler.js')
             const jobId = (params as { jobId?: string }).jobId
             if (!jobId) return failure('jobId is required')
             const existing = getCronJob(jobId)
-            if (!existing || existing.agentId !== opts.agentId) return failure('Scheduled job not found')
+            if (!existing || existing.agentId !== ownerAgentId(opts.agentId)) return failure('Scheduled job not found')
             unscheduleCronJob(jobId)
             deleteCronJob(jobId)
             return result({ deleted: true, jobId })

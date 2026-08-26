@@ -5,7 +5,7 @@ import { useProviderStore } from "../../stores/provider.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { Icon } from "@iconify/vue";
 import AgentSelect from "../shared/AgentSelect.vue";
-import SaveAgentModal from "./inputbar/SaveAgentModal.vue";
+import ChatSettingsMenu from "./ChatSettingsMenu.vue";
 import DebugContextModal from "./modals/DebugContextModal.vue";
 import { usePreferencesStore } from "../../stores/preferences.store";
 
@@ -107,8 +107,6 @@ async function newChat(): Promise<void> {
 
     <div class="flex-1 sm:hidden" />
 
-    <SaveAgentModal />
-
     <button
       v-if="prefs.debugMode"
       type="button"
@@ -159,6 +157,8 @@ async function newChat(): Promise<void> {
       />
       <span class="hidden sm:inline">New Chat</span>
     </button>
+
+    <ChatSettingsMenu />
 
     <DebugContextModal
       v-model="debugContextOpen"

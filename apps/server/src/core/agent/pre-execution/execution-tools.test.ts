@@ -28,11 +28,8 @@ describe('agent-required execution tools', () => {
         tool('read_file'),
     ]
 
-    test('removes built-in scheduling tools from agentless execution', () => {
-        expect(filterToolsForExecutionPreset(preset('__agentless__'), tools).map((item) => `${item.namespaceId}:${item.name}`)).toEqual([
-            'mcp:calendar:schedule_create',
-            'builtin:read_file',
-        ])
+    test('keeps scheduling tools available to agentless execution', () => {
+        expect(filterToolsForExecutionPreset(preset('__agentless__'), tools)).toEqual(tools)
     })
 
     test('keeps scheduling tools available to saved agents', () => {

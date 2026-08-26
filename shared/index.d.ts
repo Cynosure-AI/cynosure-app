@@ -120,6 +120,8 @@ export interface ConversationExecutionConfig {
   reasoningEffort: ReasoningEffort
   autoToolRouting: boolean
   autoMemory: boolean
+  autoRouterProviderId?: string
+  autoRouterModel?: string
 }
 
 export interface ConversationMetadata {

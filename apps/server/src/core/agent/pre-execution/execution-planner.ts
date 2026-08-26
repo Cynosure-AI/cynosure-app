@@ -55,6 +55,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         hasExplicitToolAllowlist = false,
         usedToolNames,
         thinkingEnabled,
+        reasoningEffort,
         eventMeta,
         inlineAttachmentTextLimit,
         debugContextEnabled,
@@ -117,6 +118,9 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         eventMeta,
         inlineAttachmentTextLimit,
         debugContextEnabled,
+        scheduleSelectedToolKeys: selectedToolKeys,
+        thinkingEnabled,
+        reasoningEffort,
     })
 
     const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id

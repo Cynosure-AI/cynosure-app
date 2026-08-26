@@ -133,5 +133,7 @@ export function parseExecutionConfig(raw: string | null | undefined): Conversati
         reasoningEffort: parseReasoningEffort(parsed.reasoningEffort),
         autoToolRouting: parsed.autoToolRouting === true,
         autoMemory: parsed.autoMemory === true,
+        ...(typeof parsed.autoRouterProviderId === 'string' ? { autoRouterProviderId: parsed.autoRouterProviderId } : {}),
+        ...(typeof parsed.autoRouterModel === 'string' ? { autoRouterModel: parsed.autoRouterModel } : {}),
     }
 }

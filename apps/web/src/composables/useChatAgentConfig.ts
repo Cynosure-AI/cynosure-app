@@ -4,7 +4,7 @@ import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import type { Conversation, DisplayMessage } from '../stores/chat.store'
 import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { SK_ACTIVE_AGENT, SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
-import { isAgentRequiredBuiltInToolName, isAutoManagedBuiltInToolName } from '../utils/internal-tools'
+import { isAutoManagedBuiltInToolName } from '../utils/internal-tools'
 
 interface ChatPreset {
     tools: string[]
@@ -141,22 +141,14 @@ export function useChatAgentConfig(
     const freeChatDefaultMemorySpaceIds = ref<string[]>([])
     const freeChatPreset = ref<ChatPreset | null>(null)
 
-    function isAgentRequiredToolReference(name: string): boolean {
-        const tool = agentStore.availableTools.find((candidate) => candidate.key === name)
-        if (tool) return tool.namespace.id === 'builtin' && isAgentRequiredBuiltInToolName(tool.name)
-        if (!name.startsWith('builtin::')) return false
-        return isAgentRequiredBuiltInToolName(name.slice('builtin::'.length))
+    function filterToolsForChatContext(names: string[], _hasAgent = Boolean(activeAgentId.value)): string[] {
+        return [...names]
     }
 
-    function filterToolsForChatContext(names: string[], hasAgent = Boolean(activeAgentId.value)): string[] {
-        return hasAgent ? [...names] : names.filter((name) => !isAgentRequiredToolReference(name))
-    }
-
-    function selectableToolKeys(hasAgent = Boolean(activeAgentId.value)): Set<string> {
+    function selectableToolKeys(): Set<string> {
         return new Set(
             agentStore.availableTools
                 .filter((tool) => !(tool.namespace.id === 'builtin' && isAutoManagedBuiltInToolName(tool.name)))
-                .filter((tool) => hasAgent || tool.namespace.id !== 'builtin' || !isAgentRequiredBuiltInToolName(tool.name))
                 .map((tool) => tool.key)
         )
     }

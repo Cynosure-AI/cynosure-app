@@ -41,7 +41,7 @@ describe('chat agent provider defaults', () => {
     })
   })
 
-  test('removes agent-required scheduling tools from Free Chat selections', () => {
+  test('allows scheduling tools in Free Chat selections', () => {
     const runtime = useAgentStore()
     runtime.availableTools = [
       tool('builtin::schedule_create', 'schedule_create'),
@@ -51,7 +51,7 @@ describe('chat agent provider defaults', () => {
 
     config.setSelectedToolNames(['builtin::schedule_create', 'builtin::read_file'])
 
-    expect(config.selectedToolNames.value).toEqual(['builtin::read_file'])
+    expect(config.selectedToolNames.value).toEqual(['builtin::schedule_create', 'builtin::read_file'])
   })
 
   test('allows scheduling tools when a saved agent is active', () => {

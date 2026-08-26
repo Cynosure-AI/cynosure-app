@@ -62,6 +62,7 @@ export interface ExecutionPlanInput {
     hasExplicitToolAllowlist?: boolean
     usedToolNames?: Set<string>
     thinkingEnabled?: boolean
+    reasoningEffort?: ReasoningEffort
     eventMeta?: Record<string, unknown>
     inlineAttachmentTextLimit?: number
     debugContextEnabled?: boolean
@@ -92,6 +93,7 @@ export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanIn
         hasExplicitToolAllowlist: run.hasExplicitToolAllowlist,
         usedToolNames: run.usedToolNames,
         thinkingEnabled: run.thinkingEnabled,
+        reasoningEffort: run.reasoningEffort,
         eventMeta: request.eventMeta,
         inlineAttachmentTextLimit: run.inlineAttachmentTextLimit,
         debugContextEnabled: run.debugContextEnabled,
