@@ -718,6 +718,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             historyRows,
             filteredRows,
             contextWindow,
+            tools,
+            thinkingEnabled: reqThinkingEnabled !== undefined
+              ? reqThinkingEnabled
+              : (resolvedAgent?.thinkingEnabled !== false),
+            reasoningEffort: reqReasoningEffort ?? resolvedAgent?.reasoningEffort,
             gateway,
             providerId,
             responseModel,
