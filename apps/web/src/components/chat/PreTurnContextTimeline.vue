@@ -5,7 +5,7 @@ import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import type { ToolExecStep } from './ToolExecutionCard.vue'
 
 type ToolCall = NonNullable<ToolExecStep['toolCalls']>[number]
-type ContextKind = 'tools' | 'memory' | 'entities' | 'attachments' | 'context'
+type ContextKind = 'toolsets' | 'tools' | 'memory' | 'entities' | 'attachments' | 'context'
 type TimelineItem = {
   key: string
   label: string
@@ -57,6 +57,7 @@ function score(value: unknown): string | undefined {
 
 function kindOf(call: ToolCall): ContextKind {
   const args = parseArgs(call)
+  if (args.type === 'toolset-router') return 'toolsets'
   if (args.type === 'attachment-index') return 'attachments'
   if (args.type === 'memory') return args.memoryKind === 'knowledge' ? 'entities' : 'memory'
   if (args.type === 'tool-router') return 'tools'
@@ -79,6 +80,7 @@ function plural(count: number, singular: string, pluralValue = `${singular}s`): 
 }
 
 function contextLabel(kind: ContextKind, phase: string, count: number): string {
+  if (kind === 'toolsets') return `AI preselected ${plural(count, 'MCP/toolset', 'MCPs/toolsets')}`
   if (kind === 'tools') return phase === 'gathered-context'
     ? `AI selected ${plural(count, 'tool')}`
     : `Found ${plural(count, 'tool candidate')}`
@@ -121,7 +123,7 @@ const items = computed<TimelineItem[]>(() => {
       result.push({ key: `${stepIndex}-task`, label: 'Prepared search context', icon: 'lucide:compass', tone: 'context', timestamp: step.timestamp, details, pending: false })
     }
 
-    const contextCalls = calls.filter((call) => ['tool-router', 'memory', 'attachment-index'].includes(String(parseArgs(call).type)))
+    const contextCalls = calls.filter((call) => ['toolset-router', 'tool-router', 'memory', 'attachment-index'].includes(String(parseArgs(call).type)))
     const groups = new Map<ContextKind, ToolCall[]>()
     contextCalls.forEach((call) => groups.set(kindOf(call), [...(groups.get(kindOf(call)) || []), call]))
     for (const [kind, groupedCalls] of groups) {
@@ -130,10 +132,10 @@ const items = computed<TimelineItem[]>(() => {
         key: `${stepIndex}-${kind}-${phase}`,
         label: contextLabel(kind, phase, groupedCalls.length),
         summary: phase === 'gathered-context' ? 'Selected for this turn' : undefined,
-        icon: phase === 'gathered-context' ? 'lucide:check' : kind === 'memory' ? 'lucide:brain' : kind === 'entities' ? 'lucide:network' : 'lucide:package-search',
+        icon: kind === 'toolsets' ? 'lucide:boxes' : phase === 'gathered-context' ? 'lucide:check' : kind === 'memory' ? 'lucide:brain' : kind === 'entities' ? 'lucide:network' : 'lucide:package-search',
         tone: kind,
         timestamp: step.timestamp,
-        details: callDetails(groupedCalls, phase === 'gathered-context'),
+        details: callDetails(groupedCalls, kind === 'toolsets' || phase === 'gathered-context'),
         pending: false,
       })
     }
@@ -156,6 +158,7 @@ const items = computed<TimelineItem[]>(() => {
 })
 
 const selectedTools = computed(() => uniqueSelected('tools'))
+const selectedToolsets = computed(() => uniqueSelected('toolsets').length)
 const selectedMemory = computed(() => uniqueSelected('memory').length)
 const selectedEntities = computed(() => uniqueSelected('entities').length)
 const isPending = computed(() => props.isActive && items.value.some((item) => item.pending))
@@ -192,6 +195,7 @@ function formatTimestamp(timestamp: number): string {
             </span>
             <span class="text-[12px] font-semibold text-cyan-100">Pre-turn context</span>
             <span v-if="selectedTools.length" class="context-chip">{{ plural(selectedTools.length, 'tool') }}</span>
+            <span v-if="selectedToolsets" class="context-chip">{{ plural(selectedToolsets, 'toolset') }}</span>
             <span v-if="selectedMemory" class="context-chip">{{ plural(selectedMemory, 'memory item') }}</span>
             <span v-if="selectedEntities" class="context-chip">{{ plural(selectedEntities, 'relationship') }}</span>
             <span class="ml-auto text-[10px] text-theme-500">{{ items.length }} steps</span>
@@ -256,6 +260,7 @@ function formatTimestamp(timestamp: number): string {
 .timeline-item { position: relative; }
 .timeline-item::before { content: ''; position: absolute; z-index: 1; left: -1.25rem; top: 1rem; width: .48rem; height: .48rem; border: 2px solid var(--color-theme-900); border-radius: 9999px; background: rgb(34 211 238); box-shadow: 0 0 0 2px rgb(34 211 238 / .18); }
 .timeline-item--memory::before { background: rgb(167 139 250); }
+.timeline-item--toolsets::before { background: rgb(45 212 191); }
 .timeline-item--entities::before { background: rgb(129 140 248); }
 .timeline-item--attachments::before { background: rgb(56 189 248); }
 </style>

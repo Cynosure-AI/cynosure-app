@@ -18,6 +18,10 @@ describe('PreTurnContextTimeline', () => {
       status: 'routing-tools',
       message: 'Selecting required MCPs and toolsets...',
       timestamp: 1_700_000_000_100,
+      toolCalls: [
+        { name: 'Filesystem', arguments: JSON.stringify({ type: 'toolset-router', namespaceId: 'mcp:filesystem' }) },
+        { name: 'Documents', arguments: JSON.stringify({ type: 'toolset-router', namespaceId: 'toolset:documents' }) },
+      ],
     },
     {
       iteration: 0,
@@ -44,6 +48,7 @@ describe('PreTurnContextTimeline', () => {
 
     expect(wrapper.get('button').text()).toContain('Pre-turn context')
     expect(wrapper.get('button').text()).toContain('1 tool')
+    expect(wrapper.get('button').text()).toContain('2 toolsets')
     expect(wrapper.get('button').text()).toContain('4 steps')
     expect(wrapper.text()).not.toContain('Found 2 tool candidates')
   })
@@ -56,9 +61,15 @@ describe('PreTurnContextTimeline', () => {
 
     await wrapper.get('button').trigger('click')
     expect(wrapper.text()).toContain('Prepared search context')
-    expect(wrapper.text()).toContain('Gathering tools context')
+    expect(wrapper.text()).toContain('AI preselected 2 MCPs/toolsets')
     expect(wrapper.text()).toContain('Found 2 tool candidates')
     expect(wrapper.text()).toContain('AI selected 1 tool')
+
+    const preselectionStep = wrapper.findAll('li').find((item) => item.text().includes('AI preselected 2 MCPs/toolsets'))!
+    expect(preselectionStep.text()).not.toContain('Filesystem')
+    await preselectionStep.get('button').trigger('click')
+    expect(preselectionStep.text()).toContain('Filesystem')
+    expect(preselectionStep.text()).toContain('Documents')
 
     const foundStep = wrapper.findAll('li').find((item) => item.text().includes('Found 2 tool candidates'))!
     expect(foundStep.text()).not.toContain('read_file')
