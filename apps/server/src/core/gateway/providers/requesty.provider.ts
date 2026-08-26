@@ -49,7 +49,7 @@ export class RequestyProvider extends OpenRouterProvider {
 
     protected override get defaultHeaders(): Record<string, string> {
         return {
-            'HTTP-Referer': 'https://cynosure.app',
+            'HTTP-Referer': 'https://github.com/andreasjhagen/Cynosure',
             'X-Title': 'Cynosure'
         }
     }

@@ -82,6 +82,8 @@ describe('automatic tool routing', () => {
                 }],
             }),
         } as unknown as LLMGateway
+        const selectionEvents: Array<Record<string, unknown>> = []
+        getEventBus().on('step:tools-chosen', (event) => selectionEvents.push(event as Record<string, unknown>))
 
         const result = await applyAutoToolRouting({
             enabled: true,
@@ -107,6 +109,10 @@ describe('automatic tool routing', () => {
             }),
             undefined,
         )
+        expect(selectionEvents[0]?.toolCalls).toEqual([{
+            name: 'GitHub MCP',
+            arguments: JSON.stringify({ type: 'toolset-router', namespaceId: 'mcp:github', selectionMethod: 'llm' }),
+        }])
     })
 
     test('treats an explicit empty toolset selection as no relevant tools', async () => {

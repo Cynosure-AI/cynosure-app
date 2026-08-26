@@ -58,6 +58,13 @@ export interface KnowledgeExtractedChunkTags {
   tags: string[]
 }
 
+/** An exact source chunk whose previously extracted knowledge can be carried
+ * into a new document revision without another model call. */
+export interface ReusableKnowledgeChunk {
+  sourceChunkIndex: number
+  priorTextUnitId: string
+}
+
 export interface KnowledgePublishResult {
   runId: string
   status: 'active' | 'unchanged'
@@ -388,6 +395,7 @@ export class MemoryKnowledgeStore {
     relations: KnowledgeExtractedRelation[]
     mentions?: KnowledgeExtractedMention[]
     chunkTags?: KnowledgeExtractedChunkTags[]
+    reusableChunks?: ReusableKnowledgeChunk[]
     extractorProviderId?: string
     extractorModel?: string
     validateBeforePublish?: () => boolean
@@ -399,6 +407,7 @@ export class MemoryKnowledgeStore {
       WHERE document_id = ? AND content_hash = ? AND pipeline_version = ? AND status = 'active'
     `).get(opts.documentId, opts.contentHash, MEMORY_KNOWLEDGE_PIPELINE_VERSION) as { id: string } | undefined
     if (existing) {
+      if (opts.validateBeforePublish && !opts.validateBeforePublish()) throw new Error('MEMORY_KNOWLEDGE_SOURCE_CHANGED')
       const counts = db.prepare(`
         SELECT
           (SELECT COUNT(*) FROM memory_knowledge_text_units WHERE run_id = ?) AS text_units,
@@ -435,6 +444,7 @@ export class MemoryKnowledgeStore {
         opts.extractorProviderId || '', opts.extractorModel || '', now)
 
       const textUnitIds = new Map<number, string>()
+      const chunksByIndex = new Map(opts.chunks.map((chunk) => [chunk.chunkIndex, chunk]))
       const insertTextUnit = db.prepare(`
         INSERT INTO memory_knowledge_text_units
           (id, run_id, document_id, content_hash, space_id, file_name, chunk_index,
@@ -447,6 +457,62 @@ export class MemoryKnowledgeStore {
         insertTextUnit.run(id, runId, opts.documentId, opts.contentHash, opts.spaceId, opts.fileName,
           chunk.chunkIndex, chunk.text, chunk.contentHash || createHash('sha256').update(chunk.text).digest('hex'),
           chunk.documentTitle, chunk.sectionPath, JSON.stringify(tagsByChunk.get(chunk.chunkIndex) || []), now)
+      }
+
+      // Exact, hash-matched chunks retain their already governed extraction.
+      // Clone the provenance onto this revision's text unit so the old run can
+      // still be retired atomically with the rest of the document revision.
+      for (const reusable of opts.reusableChunks || []) {
+        const chunk = chunksByIndex.get(reusable.sourceChunkIndex)
+        const textUnitId = textUnitIds.get(reusable.sourceChunkIndex)
+        if (!chunk || !textUnitId) throw new Error('MEMORY_KNOWLEDGE_REUSE_STALE')
+        const reusableSource = db.prepare(`
+          SELECT tu.id
+          FROM memory_knowledge_text_units tu
+          JOIN memory_knowledge_index_runs r ON r.id = tu.run_id
+          WHERE tu.id = ? AND tu.document_id = ? AND tu.text_hash = ?
+            AND r.pipeline_version = ? AND r.prompt_version = ? AND r.status = 'active'
+        `).get(reusable.priorTextUnitId, opts.documentId, chunk.contentHash,
+          MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION) as { id: string } | undefined
+        if (!reusableSource) throw new Error('MEMORY_KNOWLEDGE_REUSE_STALE')
+
+        const mentions = db.prepare(`
+          SELECT entity_id, surface, normalized_surface, entity_type, span_start, span_end,
+                 resolution_confidence, resolution_status, context_text, note
+          FROM memory_knowledge_entity_mentions WHERE text_unit_id = ?
+        `).all(reusableSource.id) as Array<Record<string, unknown>>
+        const insertMention = db.prepare(`
+          INSERT OR IGNORE INTO memory_knowledge_entity_mentions
+            (id, run_id, text_unit_id, entity_id, surface, normalized_surface, entity_type,
+             span_start, span_end, resolution_confidence, resolution_status, context_text, note, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        for (const mention of mentions) {
+          insertMention.run(nanoid(), runId, textUnitId, mention.entity_id, mention.surface,
+            mention.normalized_surface, mention.entity_type, mention.span_start, mention.span_end,
+            mention.resolution_confidence, mention.resolution_status, mention.context_text, mention.note, now)
+        }
+
+        const evidenceRows = db.prepare(`
+          SELECT assertion_id, quote, span_start, span_end, extractor_confidence,
+                 entity_resolution_confidence, source_trust, entailment_score,
+                 quote_verified, note, pipeline_version
+          FROM memory_knowledge_assertion_evidence WHERE text_unit_id = ?
+        `).all(reusableSource.id) as Array<Record<string, unknown>>
+        const insertEvidence = db.prepare(`
+          INSERT OR IGNORE INTO memory_knowledge_assertion_evidence
+            (id, assertion_id, run_id, text_unit_id, quote, span_start, span_end,
+             extractor_confidence, entity_resolution_confidence, source_trust,
+             entailment_score, quote_verified, note, pipeline_version, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        for (const evidence of evidenceRows) {
+          insertEvidence.run(nanoid(), evidence.assertion_id, runId, textUnitId, evidence.quote,
+            evidence.span_start, evidence.span_end, evidence.extractor_confidence,
+            evidence.entity_resolution_confidence, evidence.source_trust, evidence.entailment_score,
+            evidence.quote_verified, evidence.note, evidence.pipeline_version, now)
+          evidenceCount++
+        }
       }
 
       const addEntityMentions = (
@@ -701,6 +767,36 @@ export class MemoryKnowledgeStore {
           WHERE m.entity_id = e.id AND r.status = 'active'
         )
       `).run(now)
+    })()
+  }
+
+  /** Retire only one derived revision. This is used when a concurrent source
+   * edit invalidates a just-published run, without touching a newer run. */
+  retireRun(runId: string): void {
+    const db = getDb()
+    const now = Date.now()
+    db.transaction(() => {
+      db.prepare(`UPDATE memory_knowledge_index_runs SET status = 'retired', completed_at = COALESCE(completed_at, ?) WHERE id = ? AND status = 'active'`).run(now, runId)
+      db.prepare(`
+        UPDATE memory_knowledge_assertions AS a SET status = 'retired', updated_at = ?
+        WHERE status NOT IN ('retracted', 'superseded')
+          AND EXISTS (SELECT 1 FROM memory_knowledge_assertion_evidence ev WHERE ev.assertion_id = a.id AND ev.run_id = ?)
+          AND NOT EXISTS (
+            SELECT 1 FROM memory_knowledge_assertion_evidence ev
+            JOIN memory_knowledge_index_runs r ON r.id = ev.run_id
+            WHERE ev.assertion_id = a.id AND r.status = 'active'
+          )
+      `).run(now, runId)
+      db.prepare(`
+        UPDATE memory_knowledge_entities AS e SET status = 'retired', updated_at = ?
+        WHERE e.status = 'active'
+          AND EXISTS (SELECT 1 FROM memory_knowledge_entity_mentions m WHERE m.entity_id = e.id AND m.run_id = ?)
+          AND NOT EXISTS (
+            SELECT 1 FROM memory_knowledge_entity_mentions m
+            JOIN memory_knowledge_index_runs r ON r.id = m.run_id
+            WHERE m.entity_id = e.id AND r.status = 'active'
+          )
+      `).run(now, runId)
     })()
   }
 
