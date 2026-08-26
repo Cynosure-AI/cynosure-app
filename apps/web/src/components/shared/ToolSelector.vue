@@ -48,7 +48,7 @@ function isSelected(tool: ToolInfo): boolean {
 function isAutoManagedTool(tool: ToolInfo): boolean {
   if (tool.namespace.id !== 'builtin') return false
   if (isAutoManagedBuiltInToolName(tool.name)) return true
-  return (tool.name.startsWith('relationship_graph_') || tool.name === 'relationship_entity_merge') && automaticToolState(tool).active
+  return (tool.name.startsWith('knowledge_') || tool.name === 'knowledge_entity_merge') && automaticToolState(tool).active
 }
 
 function toolRequirement(tool: ToolInfo): { met: boolean; criteria: string } | undefined {
@@ -75,7 +75,7 @@ function automaticToolState(tool: ToolInfo): { active: boolean; criteria: string
 function automaticToolCriteria(toolName: string): string {
   if (toolName.startsWith('todo_')) return 'thinking mode and visible execution tools'
   if (toolName.startsWith('memory_')) return 'memory folder selected'
-  if (toolName.startsWith('relationship_graph_') || toolName === 'relationship_entity_merge') return 'memory folder selected'
+  if (toolName.startsWith('knowledge_') || toolName === 'knowledge_entity_merge') return 'memory folder selected'
   if (toolName.startsWith('attachment_')) return 'large indexed attachment available'
   if (toolName === 'expand_available_toolset') return 'auto tool mode enabled'
   if (toolName === 'spawn_subagent') return 'sub-agent selected'

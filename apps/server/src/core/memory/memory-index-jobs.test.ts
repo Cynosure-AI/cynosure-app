@@ -36,7 +36,7 @@ describe('durable memory index jobs', () => {
 
     test('persists progress updates while a job is running', async () => {
         const started = startMemoryIndexJob({
-            kind: 'entity-index',
+            kind: 'knowledge-extraction',
             spaceId: 'default',
             fileName: 'progress.md',
             run: async (_signal, reportProgress) => {
@@ -59,7 +59,7 @@ describe('durable memory index jobs', () => {
     test('records the first failure without retrying', async () => {
         const run = vi.fn(async () => { throw new Error('provider failure') })
         const started = startMemoryIndexJob({
-            kind: 'entity-index',
+            kind: 'knowledge-extraction',
             spaceId: 'default',
             fileName: 'failure.md',
             run,

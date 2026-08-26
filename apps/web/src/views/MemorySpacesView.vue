@@ -4,18 +4,18 @@ import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { api } from "../api/client";
-import type { EntityGraphEdge, EntityGraphNode, EntityGraphNodeType, EntityGraphResponse, MemorySpace } from "../api/types";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemorySpace } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiSelect.vue";
 import TabBar, { type TabDef } from "../components/shared/TabBar.vue";
 import MemoryDocumentsSection from "../components/memory/MemoryDocumentsSection.vue";
-import MemoryRelationshipsSection from "../components/memory/MemoryRelationshipsSection.vue";
-import MemoryVisualGraphSection from "../components/memory/MemoryVisualGraphSection.vue";
-import type { GraphEdgePathType } from "../components/memory/memory-graph-types";
+import KnowledgeFactsSection from "../components/memory/KnowledgeFactsSection.vue";
+import KnowledgeGraphSection from "../components/memory/KnowledgeGraphSection.vue";
+import type { GraphEdgePathType } from "../components/memory/knowledge-graph-types";
 import { syncPrefsToElectron } from "../utils/electron-prefs";
-import { selectConnectedGraph } from "../utils/memory-graph-selection";
-import { MEMORY_GRAPH_FLOW_ID as ENTITY_FLOW_ID, useMemoryGraphLayout } from "../composables/useMemoryGraphLayout";
-import { SK_MEMORY_GRAPH_EDGE_LABELS, SK_MEMORY_GRAPH_EDGE_PATH_TYPE, SK_MEMORY_GRAPH_NODE_SPACING } from "../utils/storage-keys";
+import { selectConnectedGraph } from "../utils/knowledge-graph-selection";
+import { KNOWLEDGE_GRAPH_FLOW_ID as KNOWLEDGE_FLOW_ID, useKnowledgeGraphLayout } from "../composables/useKnowledgeGraphLayout";
+import { SK_KNOWLEDGE_GRAPH_EDGE_LABELS, SK_KNOWLEDGE_GRAPH_EDGE_PATH_TYPE, SK_KNOWLEDGE_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
 const VISUAL_GRAPH_RELATION_LIMIT = 500;
 const ALL_GRAPH_LIMIT = 5000;
@@ -26,7 +26,7 @@ type GraphViewMode = "relationships" | "visual";
 type FactLevelFilter = 0 | 1 | 2 | 3;
 type GraphEntityLimit = 100 | 200 | 300 | 500 | null;
 
-const ENTITY_NODE_TYPES: EntityGraphNodeType[] = [
+const ENTITY_NODE_TYPES: KnowledgeGraphNodeType[] = [
   "person",
   "place",
   "organization",
@@ -84,31 +84,31 @@ const showDeleteConfirm = ref(false);
 const pendingDeleteSpace = ref<MemorySpace | null>(null);
 const activePanel = ref<MemoryPanel>("documents");
 
-const graph = ref<EntityGraphResponse | null>(null);
+const graph = ref<KnowledgeGraph | null>(null);
 const graphLoading = ref(false);
 const graphQuery = ref("");
 const graphSearchQuery = ref("");
-const graphSuggestions = ref<EntityGraphNode[]>([]);
-const graphSelectedNodes = ref<EntityGraphNode[]>([]);
+const graphSuggestions = ref<KnowledgeGraphNode[]>([]);
+const graphSelectedNodes = ref<KnowledgeGraphNode[]>([]);
 const graphLimit = ref<number | null>(null);
 const graphView = ref<GraphViewMode | null>(null);
 const graphFactLevel = ref<FactLevelFilter>(0);
 const graphEntityLimit = ref<GraphEntityLimit>(100);
-const editingNode = ref<EntityGraphNode | null>(null);
-const editingEdge = ref<EntityGraphEdge | null>(null);
-const pendingDeleteNode = ref<EntityGraphNode | null>(null);
-const pendingDeleteNodes = ref<EntityGraphNode[]>([]);
-const pendingDeleteEdge = ref<EntityGraphEdge | null>(null);
+const editingNode = ref<KnowledgeGraphNode | null>(null);
+const editingEdge = ref<KnowledgeGraphEdge | null>(null);
+const pendingDeleteNode = ref<KnowledgeGraphNode | null>(null);
+const pendingDeleteNodes = ref<KnowledgeGraphNode[]>([]);
+const pendingDeleteEdge = ref<KnowledgeGraphEdge | null>(null);
 const nodeName = ref("");
-const nodeType = ref<EntityGraphNodeType>("other");
+const nodeType = ref<KnowledgeGraphNodeType>("other");
 const nodeAliases = ref("");
 const edgeRelation = ref("");
 const edgeNote = ref("");
 const graphOperationError = ref("");
 const graphMutationPending = ref(false);
-const nodeSpacing = useLocalStorage(SK_MEMORY_GRAPH_NODE_SPACING, 1.0);
-const showGraphEdgeLabels = useLocalStorage(SK_MEMORY_GRAPH_EDGE_LABELS, true);
-const graphEdgePathType = useLocalStorage<GraphEdgePathType>(SK_MEMORY_GRAPH_EDGE_PATH_TYPE, "bezier");
+const nodeSpacing = useLocalStorage(SK_KNOWLEDGE_GRAPH_NODE_SPACING, 1.0);
+const showGraphEdgeLabels = useLocalStorage(SK_KNOWLEDGE_GRAPH_EDGE_LABELS, true);
+const graphEdgePathType = useLocalStorage<GraphEdgePathType>(SK_KNOWLEDGE_GRAPH_EDGE_PATH_TYPE, "bezier");
 
 const route = useRoute();
 const router = useRouter();
@@ -153,7 +153,7 @@ const {
   fit: relayout,
   requestFit: requestGraphFit,
   setFocusedNode: setFocusedGraphNode,
-} = useMemoryGraphLayout({
+} = useKnowledgeGraphLayout({
   graph: visualGraph,
   nodeSpacing,
   formatRelation,
@@ -261,7 +261,7 @@ function formatRelation(relation: string): string {
 }
 
 
-function capVisualGraph(nextGraph: EntityGraphResponse, view: GraphViewMode): EntityGraphResponse {
+function capVisualGraph(nextGraph: KnowledgeGraph, view: GraphViewMode): KnowledgeGraph {
   const entityLimit = graphEntityLimit.value;
   if (view !== "visual" || entityLimit === null || nextGraph.nodes.length <= entityLimit) return nextGraph;
   return selectConnectedGraph(nextGraph, entityLimit);
@@ -355,7 +355,7 @@ async function loadGraphSuggestions(query = graphQuery.value) {
   }
 }
 
-async function selectGraphSuggestion(node: EntityGraphNode) {
+async function selectGraphSuggestion(node: KnowledgeGraphNode) {
   if (!graphSelectedNodes.value.some((selected) => selected.id === node.id)) {
     graphSelectedNodes.value = [...graphSelectedNodes.value, node];
   }
@@ -376,7 +376,7 @@ watch(graphQuery, (query) => {
   }, 140);
 });
 
-function openEditNode(node: EntityGraphNode) {
+function openEditNode(node: KnowledgeGraphNode) {
   editingNode.value = node;
   nodeName.value = node.name;
   nodeType.value = node.type;
@@ -397,15 +397,15 @@ async function saveNode() {
   await loadGraph();
 }
 
-function confirmDeleteNode(node: EntityGraphNode) {
+function confirmDeleteNode(node: KnowledgeGraphNode) {
   pendingDeleteNode.value = node;
 }
 
-function confirmDeleteNodes(nodes: EntityGraphNode[]) {
+function confirmDeleteNodes(nodes: KnowledgeGraphNode[]) {
   pendingDeleteNodes.value = nodes;
 }
 
-async function deleteNode(node: EntityGraphNode) {
+async function deleteNode(node: KnowledgeGraphNode) {
   graphOperationError.value = "";
   graphMutationPending.value = true;
   try {
@@ -420,7 +420,7 @@ async function deleteNode(node: EntityGraphNode) {
   }
 }
 
-async function deleteNodes(nodes: EntityGraphNode[]) {
+async function deleteNodes(nodes: KnowledgeGraphNode[]) {
   graphOperationError.value = "";
   graphMutationPending.value = true;
   try {
@@ -436,7 +436,7 @@ async function deleteNodes(nodes: EntityGraphNode[]) {
   }
 }
 
-function openEditEdge(edge: EntityGraphEdge) {
+function openEditEdge(edge: KnowledgeGraphEdge) {
   editingEdge.value = edge;
   edgeRelation.value = edge.relation;
   edgeNote.value = edge.note || "";
@@ -452,11 +452,11 @@ async function saveEdge() {
   await loadGraph();
 }
 
-function confirmDeleteEdge(edge: EntityGraphEdge) {
+function confirmDeleteEdge(edge: KnowledgeGraphEdge) {
   pendingDeleteEdge.value = edge;
 }
 
-async function deleteEdge(edge: EntityGraphEdge) {
+async function deleteEdge(edge: KnowledgeGraphEdge) {
   graphOperationError.value = "";
   graphMutationPending.value = true;
   try {
@@ -610,7 +610,7 @@ onMounted(() => loadSpaces());
           @refresh-spaces="loadSpaces"
         />
 
-        <MemoryRelationshipsSection
+        <KnowledgeFactsSection
           v-else-if="activePanel === 'relationships'"
           v-model:graph-query="graphQuery"
           :graph="activeGraph"
@@ -626,7 +626,7 @@ onMounted(() => loadSpaces());
           @delete-edges="deleteEdges"
         />
 
-        <MemoryVisualGraphSection
+        <KnowledgeGraphSection
           v-else
           v-model:graph-query="graphQuery"
           v-model:node-spacing="nodeSpacing"
@@ -634,7 +634,7 @@ onMounted(() => loadSpaces());
           v-model:edge-path-type="graphEdgePathType"
           v-model:fact-level="graphFactLevel"
           v-model:entity-limit="graphEntityLimit"
-          :flow-id="ENTITY_FLOW_ID"
+          :flow-id="KNOWLEDGE_FLOW_ID"
           :graph-search-query="graphSearchQuery"
           :graph="activeGraph"
           :graph-loading="graphLoading"

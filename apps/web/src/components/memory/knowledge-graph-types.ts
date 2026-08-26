@@ -1,9 +1,9 @@
-import type { EntityGraphNode } from "../../api/types";
+import type { KnowledgeGraphNode } from "../../api/types";
 
 export type GraphEdgePathType = "bezier" | "step" | "straight";
 
 export type FlowNodeData = {
-  entity: EntityGraphNode;
+  entity: KnowledgeGraphNode;
   label: string;
   isSeed: boolean;
   connectedHandles: Set<string>;

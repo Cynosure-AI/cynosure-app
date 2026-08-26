@@ -362,8 +362,8 @@ export interface MemoryFileStatus {
     status: 'indexed' | 'needs_reindex' | 'not_indexed' | 'unsupported'
     chunkCount?: number
     lastIndexedAt?: number
-    entityIndexed: boolean
-    entityIndexedAt?: number
+    knowledgeExtracted: boolean
+    knowledgeExtractedAt?: number
     tags: string[]
 }
 
@@ -377,7 +377,7 @@ export interface MemoryDocumentKnowledgePreview {
 
 export interface MemoryIndexJob<T = unknown> {
     id: string
-    kind: 'reindex' | 'entity-index'
+    kind: 'reindex' | 'knowledge-extraction'
     spaceId: string
     fileName: string
     status: 'queued' | 'running' | 'retrying' | 'completed' | 'cancelled' | 'error' | 'dead_letter'
@@ -409,8 +409,7 @@ export interface MemoryKnowledgeStats {
     ambiguous_mentions: number
 }
 
-/** Compatibility name used by the existing /api/memory/graph contract. */
-export interface EntityGraphNode {
+export interface KnowledgeGraphNode {
     id: string
     name: string
     normalizedName: string
@@ -419,12 +418,12 @@ export interface EntityGraphNode {
     importance: 0 | 1 | 2 | 3
     mentionCount: number
     sourceCount: number
-    origins?: EntityGraphOrigin[]
+    origins?: KnowledgeGraphEvidence[]
     firstSeenAt: number
     lastSeenAt: number
 }
 
-export type EntityGraphNodeType = EntityGraphNode['type']
+export type KnowledgeGraphNodeType = KnowledgeGraphNode['type']
 
 export interface KnowledgeSourceChunk {
     textUnitId: string
@@ -438,7 +437,7 @@ export interface KnowledgeSourceChunk {
     notes: string[]
 }
 
-export interface EntityGraphOrigin {
+export interface KnowledgeGraphEvidence {
     sourceKind: string
     sourceId: string
     label: string
@@ -447,7 +446,7 @@ export interface EntityGraphOrigin {
     chunks: KnowledgeSourceChunk[]
 }
 
-export interface EntityGraphEdge {
+export interface KnowledgeGraphEdge {
     id: string
     fromNodeId: string
     toNodeId: string
@@ -469,19 +468,19 @@ export interface EntityGraphEdge {
     lastSeenAt: number
 }
 
-export interface EntityGraphResponse {
+export interface KnowledgeGraph {
     stats: {
         nodeCount: number
         edgeCount: number
         recentEdgeCount: number
     }
-    seedNodes: EntityGraphNode[]
-    nodes: EntityGraphNode[]
-    edges: EntityGraphEdge[]
+    seedNodes: KnowledgeGraphNode[]
+    nodes: KnowledgeGraphNode[]
+    edges: KnowledgeGraphEdge[]
 }
 
-export interface EntityGraphSuggestionsResponse {
-    suggestions: EntityGraphNode[]
+export interface KnowledgeGraphSuggestionsResponse {
+    suggestions: KnowledgeGraphNode[]
 }
 
 // ── Instances / Cron / Channels ──────────────────────────────────────────────
@@ -624,7 +623,7 @@ export interface MetricsSummary {
         estimatedCost: number | null
     }[]
     auxiliaryModelUsage: {
-        kind: 'embedding' | 'reranker' | 'entity-extraction'
+        kind: 'embedding' | 'reranker' | 'knowledge-extraction'
         provider: string
         model: string
         requestCount: number

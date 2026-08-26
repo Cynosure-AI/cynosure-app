@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
-import type { EntityGraphNode } from "../../api/types";
+import type { KnowledgeGraphNode } from "../../api/types";
 
 const props = defineProps<{
   modelValue: string;
-  suggestions: EntityGraphNode[];
+  suggestions: KnowledgeGraphNode[];
   selectedNodeIds?: string[];
   placeholder?: string;
 }>();
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
-  "select-suggestion": [node: EntityGraphNode];
+  "select-suggestion": [node: KnowledgeGraphNode];
 }>();
 
 const activeIndex = ref(0);
@@ -35,7 +35,7 @@ function clampActiveIndex() {
   activeIndex.value = Math.min(Math.max(activeIndex.value, 0), availableSuggestions.value.length - 1);
 }
 
-function selectNode(node: EntityGraphNode) {
+function selectNode(node: KnowledgeGraphNode) {
   emit("select-suggestion", node);
 }
 

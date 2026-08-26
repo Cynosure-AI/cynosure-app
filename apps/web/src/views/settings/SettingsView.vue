@@ -164,11 +164,11 @@ const sections: SettingsSection[] = [
     terms: ['generate chat titles', 'titles', 'chat titles', 'conversation titles', 'title model']
   },
   {
-    id: 'entity-graph-extraction',
+    id: 'knowledge-extraction',
     categoryId: 'memory',
     label: 'Knowledge Extraction Model',
     description: 'Provider and model used when document analysis creates grounded knowledge and relationships.',
-    terms: ['knowledge graph', 'knowledge extraction', 'entity extraction', 'relationships', 'relation extraction', 'memory graph', 'document indexing']
+    terms: ['knowledge graph', 'knowledge extraction', 'entity extraction', 'relationships', 'relation extraction', 'knowledge graph', 'document indexing']
   },
   {
     id: 'context-strategy',
@@ -294,7 +294,7 @@ const sections: SettingsSection[] = [
     categoryId: 'reset-data',
     label: 'Reset Data',
     description: 'Permanently delete selected data areas or return Cynosure to a clean state.',
-    terms: ['reset', 'factory reset', 'wipe', 'delete all', 'clean state', 'start over', 'clear data', 'partial reset', 'memory reset', 'entity graph', 'clear entity graph', 'relationships', 'entities', 'clear vector database', 'vector indexes', 'vectors', 'delete embeddings', 'drop vectors']
+    terms: ['reset', 'factory reset', 'wipe', 'delete all', 'clean state', 'start over', 'clear data', 'partial reset', 'memory reset', 'knowledge', 'clear knowledge', 'relationships', 'entities', 'clear vector database', 'vector indexes', 'vectors', 'delete embeddings', 'drop vectors']
   },
   {
     id: 'about',

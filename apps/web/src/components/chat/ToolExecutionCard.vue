@@ -130,8 +130,8 @@ function isMemoryCall(call?: Pick<ToolCall, 'arguments'> | null): boolean {
   return argType(call) === 'memory'
 }
 
-function isEntityGraphCall(call?: Pick<ToolCall, 'arguments'> | null): boolean {
-  return isMemoryCall(call) && parseArgs(call?.arguments)?.memoryKind === 'entity-graph'
+function isKnowledgeGraphCall(call?: Pick<ToolCall, 'arguments'> | null): boolean {
+  return isMemoryCall(call) && parseArgs(call?.arguments)?.memoryKind === 'knowledge'
 }
 
 function isTaskContextCall(call?: Pick<ToolCall, 'arguments'> | null): boolean {
@@ -162,7 +162,7 @@ function contextSectionKind(status: string): ContextSectionKind | null {
 }
 
 function contextCallKind(call: ToolCall, status: string): ContextSectionKind | null {
-  if (isEntityGraphCall(call)) return 'entity'
+  if (isKnowledgeGraphCall(call)) return 'entity'
   return contextSectionKind(status)
 }
 
@@ -174,7 +174,7 @@ function toolDisplayName(name = 'Tool'): string {
 function memoryFileName(call?: ToolCall | null): string | null {
   if (!call || !isMemoryCall(call)) return null
   const parsed = parseArgs(call.arguments)
-  return visibleText(parsed?.sourceFile) ?? (parsed?.memoryKind === 'entity-graph' ? call.name : null)
+  return visibleText(parsed?.sourceFile) ?? (parsed?.memoryKind === 'knowledge' ? call.name : null)
 }
 
 function scoreForCall(call?: ToolCall | null): string | null {
@@ -394,7 +394,7 @@ function toolCallIcon(call?: ToolCall | null): string {
   if (isAttachmentIndexCall(call)) return 'lucide:paperclip'
   if (isTaskContextCall(call)) return 'lucide:compass'
   if (isSubAgentSpawnCall(call.name)) return 'lucide:bot'
-  if (isEntityGraphCall(call)) return 'lucide:network'
+  if (isKnowledgeGraphCall(call)) return 'lucide:network'
   if (isMemoryCall(call)) return 'lucide:brain'
   return 'lucide:terminal'
 }
@@ -403,7 +403,7 @@ function toolCallIconClass(call?: ToolCall | null): string {
   if (!call) return 'text-theme-500'
   if (isAttachmentIndexCall(call)) return 'text-sky-600 dark:text-sky-300'
   if (isTaskContextCall(call)) return 'text-cyan-600 dark:text-cyan-300'
-  if (isEntityGraphCall(call)) return 'text-violet-500 dark:text-violet-300'
+  if (isKnowledgeGraphCall(call)) return 'text-violet-500 dark:text-violet-300'
   if (isInternalToolName(call.name)) return 'text-purple-500 dark:text-purple-300'
   return isSubAgentSpawnCall(call.name) ? 'text-indigo-500 dark:text-indigo-400' : 'text-accent-500 dark:text-accent-400'
 }

@@ -26,19 +26,19 @@ const automaticToolStates = computed(() => ({
     criteria: 'thinking mode and visible execution tools',
   },
   ...memoryAutomaticToolStates(hasMemoryScope.value),
-  relationship_graph_search: {
+  knowledge_search: {
     active: hasMemoryScope.value,
     criteria: 'memory folder selected',
   },
-  relationship_graph_assert: {
+  knowledge_assert: {
     active: hasMemoryScope.value,
     criteria: 'memory folder selected',
   },
-  relationship_graph_delete: {
+  knowledge_delete: {
     active: hasMemoryScope.value,
     criteria: 'memory folder selected',
   },
-  relationship_entity_merge: {
+  knowledge_entity_merge: {
     active: hasMemoryScope.value,
     criteria: 'memory folder selected',
   },

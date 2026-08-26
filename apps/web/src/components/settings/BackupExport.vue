@@ -10,7 +10,7 @@ const exportModules = reactive({
   settings: true,
   channels: true,
   memory: true,
-  entityGraph: true,
+  knowledge: true,
   conversations: true,
   usage: true
 })
@@ -26,7 +26,7 @@ const moduleLabels: Record<string, { label: string; icon: string; description: s
   settings: { label: 'Settings', icon: 'lucide:sliders-horizontal', description: 'Tool approvals, cron jobs, and app settings' },
   channels: { label: 'Channels', icon: 'lucide:radio', description: 'Channel configurations (Telegram, etc.)' },
   memory: { label: 'Memory Spaces', icon: 'lucide:book-open', description: 'Memory space definitions, agent assignments, and document content (re-embedded on import)' },
-  entityGraph: { label: 'Knowledge Graph', icon: 'lucide:network', description: 'Extracted knowledge plus manual corrections, merges, and relationships' },
+  knowledge: { label: 'Knowledge Graph', icon: 'lucide:network', description: 'Extracted knowledge plus manual corrections, merges, and relationships' },
   conversations: { label: 'Conversations', icon: 'lucide:message-square', description: 'Chat history and messages linked to agents (only restores for agents present in the DB)' },
   usage: { label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs and step traces used for usage metrics' }
 }
@@ -48,7 +48,7 @@ function moduleCountLabel(key: string): string {
     case 'channels': return pluralize(module.count, 'Channel')
     case 'memory':
       return `${pluralize(details.spaces || 0, 'Memory Space')} · ${pluralize(details.documents || 0, 'Document')}`
-    case 'entityGraph':
+    case 'knowledge':
       return `${pluralize(details.entities || 0, 'Entity', 'Entities')} · ${pluralize(details.relationships || 0, 'Relationship')}`
     case 'conversations':
       return `${pluralize(details.conversations || 0, 'Conversation')} · ${pluralize(details.messages || 0, 'Message')}`

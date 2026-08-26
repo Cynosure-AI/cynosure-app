@@ -552,10 +552,10 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         const memoryRows = db.prepare(
-            `SELECT mfi.space_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, mfi.entity_indexed_at, ms.name AS space_name
+            `SELECT mfi.space_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, mfi.knowledge_extracted_at, ms.name AS space_name
              FROM memory_file_index mfi
              LEFT JOIN memory_spaces ms ON ms.id = mfi.space_id
-             ORDER BY MAX(mfi.last_indexed_at, mfi.entity_indexed_at, mfi.created_at) DESC
+             ORDER BY MAX(mfi.last_indexed_at, mfi.knowledge_extracted_at, mfi.created_at) DESC
              LIMIT ?`
         ).all(queryLimit) as {
             space_id: string
@@ -563,18 +563,18 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             chunk_count: number
             created_at: number
             last_indexed_at: number
-            entity_indexed_at: number
+            knowledge_extracted_at: number
             space_name: string | null
         }[]
 
         for (const row of memoryRows) {
-            const createdAt = Math.max(row.last_indexed_at || 0, row.entity_indexed_at || 0, row.created_at || 0)
+            const createdAt = Math.max(row.last_indexed_at || 0, row.knowledge_extracted_at || 0, row.created_at || 0)
             if (!createdAt) continue
-            const entityIndexed = row.entity_indexed_at && row.entity_indexed_at >= row.last_indexed_at
+            const knowledgeExtracted = row.knowledge_extracted_at && row.knowledge_extracted_at >= row.last_indexed_at
             items.push({
                 id: `memory-file:${row.space_id}:${row.file_name}:${createdAt}`,
                 kind: 'memory',
-                title: entityIndexed ? `Updated memory graph for ${row.file_name}` : `Indexed memory file ${row.file_name}`,
+                title: knowledgeExtracted ? `Updated knowledge graph for ${row.file_name}` : `Indexed memory file ${row.file_name}`,
                 description: `${row.space_name || 'Memory folder'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
                 createdAt,
                 agentId: null,

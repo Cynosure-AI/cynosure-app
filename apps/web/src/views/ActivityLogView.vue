@@ -128,15 +128,15 @@ function instanceActivityItem(instance: AgentInstance): ActivityItem {
 }
 
 function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
-  const entityJob = job.kind === "entity-index";
-  const batchProgress = entityJob && job.progressCurrent && job.progressTotal
+  const knowledgeJob = job.kind === "knowledge-extraction";
+  const batchProgress = knowledgeJob && job.progressCurrent && job.progressTotal
     ? ` (batch ${job.progressCurrent}/${job.progressTotal})`
     : "";
   return {
     id: `live-memory:${job.id}`,
     kind: "memory",
-    title: `${entityJob ? `Extracting knowledge${batchProgress} from` : "Search-indexing"} ${job.fileName}`,
-    description: entityJob && batchProgress ? `Extraction batch ${job.progressCurrent} of ${job.progressTotal}` : job.fileName,
+    title: `${knowledgeJob ? `Extracting knowledge${batchProgress} from` : "Search-indexing"} ${job.fileName}`,
+    description: knowledgeJob && batchProgress ? `Extraction batch ${job.progressCurrent} of ${job.progressTotal}` : job.fileName,
     createdAt: job.createdAt,
     agentId: null,
     agentName: null,
@@ -144,7 +144,7 @@ function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
     conversationId: null,
     status: job.status,
     sourceId: job.id,
-    sourceLabel: entityJob ? "Knowledge extraction" : "Search indexing",
+    sourceLabel: knowledgeJob ? "Knowledge extraction" : "Search indexing",
   };
 }
 

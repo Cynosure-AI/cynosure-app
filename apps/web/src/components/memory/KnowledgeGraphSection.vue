@@ -19,23 +19,23 @@ import { Icon } from "@iconify/vue";
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
 import "@vue-flow/controls/dist/style.css";
-import "./memory-visual-graph.css";
-import type { EntityGraphEdge, EntityGraphNode, EntityGraphResponse } from "../../api/types";
-import type { FlowEdgeData, FlowNodeData, GraphEdgePathType } from "./memory-graph-types";
+import "./knowledge-graph.css";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraph } from "../../api/types";
+import type { FlowEdgeData, FlowNodeData, GraphEdgePathType } from "./knowledge-graph-types";
 import KnowledgeGraphSearchBox from "./KnowledgeGraphSearchBox.vue";
-import MemoryGraphInspector from "./MemoryGraphInspector.vue";
+import KnowledgeGraphInspector from "./KnowledgeGraphInspector.vue";
 
 type FactLevelFilter = 0 | 1 | 2 | 3;
 type GraphEntityLimit = 100 | 200 | 300 | 500 | null;
 
 const props = defineProps<{
   flowId: string;
-  graph: EntityGraphResponse | null;
+  graph: KnowledgeGraph | null;
   graphLoading: boolean;
   graphQuery: string;
   graphSearchQuery: string;
-  graphSuggestions: EntityGraphNode[];
-  walkNodes: EntityGraphNode[];
+  graphSuggestions: KnowledgeGraphNode[];
+  walkNodes: KnowledgeGraphNode[];
   graphFlowNodes: Node<FlowNodeData>[];
   graphFlowEdges: Edge<FlowEdgeData>[];
   nodeSpacing: number;
@@ -75,15 +75,15 @@ const emit = defineEmits<{
   "update:entityLimit": [value: GraphEntityLimit];
   "load-graph": [query?: string];
   "clear-walk": [];
-  "select-suggestion": [node: EntityGraphNode];
-  "explore-node": [node: EntityGraphNode];
+  "select-suggestion": [node: KnowledgeGraphNode];
+  "explore-node": [node: KnowledgeGraphNode];
   "remove-selected-node": [nodeId: string];
   "relayout": [];
-  "edit-node": [node: EntityGraphNode];
-  "delete-node": [node: EntityGraphNode];
-  "delete-nodes": [nodes: EntityGraphNode[]];
-  "edit-edge": [edge: EntityGraphEdge];
-  "delete-edge": [edge: EntityGraphEdge];
+  "edit-node": [node: KnowledgeGraphNode];
+  "delete-node": [node: KnowledgeGraphNode];
+  "delete-nodes": [nodes: KnowledgeGraphNode[]];
+  "edit-edge": [edge: KnowledgeGraphEdge];
+  "delete-edge": [edge: KnowledgeGraphEdge];
   "focus-node": [nodeId: string | null];
 }>();
 
@@ -106,7 +106,7 @@ const selectedFlowNodes = computed(() => {
 const selectedGraphNodes = computed(() =>
   selectedFlowNodes.value
     .map((node) => node.data?.entity)
-    .filter((node): node is EntityGraphNode => Boolean(node)),
+    .filter((node): node is KnowledgeGraphNode => Boolean(node)),
 );
 
 const selectedGraphEdge = computed(() =>
@@ -328,7 +328,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
 
       <div
         v-else
-        class="memory-graph-panel isolate relative h-[calc(100vh-255px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
+        class="knowledge-graph-panel isolate relative h-[calc(100vh-255px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
       >
         <div class="absolute top-2 left-2 z-10 flex flex-wrap items-center justify-start gap-2 bg-theme-900/80 backdrop-blur-sm border border-theme-700/60 rounded-lg px-3 py-1.5">
           <label class="flex items-center gap-2">
@@ -578,7 +578,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           <Controls />
         </VueFlow>
 
-        <MemoryGraphInspector
+        <KnowledgeGraphInspector
           v-if="selectedGraphNodes.length || selectedGraphEdge"
           :selected-graph-nodes="selectedGraphNodes"
           :selected-graph-edge="selectedGraphEdge"

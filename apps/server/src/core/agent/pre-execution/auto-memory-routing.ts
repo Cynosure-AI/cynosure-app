@@ -7,7 +7,7 @@ import type { RetrievedChunk } from '../../memory/parser.js'
 import { getMemoryRetrievalConfig } from '../../memory/retrieval-config.js'
 import { getUserSettings } from '../../user-settings.js'
 import { completeWithDebugCapture } from '../../chat/debug-context.js'
-import type { EntityEdge, GraphWalkResult } from '../../memory/knowledge-types.js'
+import type { KnowledgeAssertion, KnowledgeGraphProjection } from '../../memory/knowledge-types.js'
 
 const MAX_SELECTED_MEMORIES = 5
 const MAX_SELECTED_GRAPH_EDGES = 3
@@ -195,7 +195,7 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
     }
 }
 
-function formatGraphOnly(aggregator: ReturnType<typeof getMemoryAggregator>, graph: GraphWalkResult | undefined): string {
+function formatGraphOnly(aggregator: ReturnType<typeof getMemoryAggregator>, graph: KnowledgeGraphProjection | undefined): string {
     return graph?.edges.length ? aggregator.format({ permanent: [], graph }) : ''
 }
 
@@ -371,19 +371,19 @@ function resolveSelectedMemories(candidates: RetrievedChunk[], memoryIds: string
         .filter((candidate): candidate is RetrievedChunk => Boolean(candidate))
 }
 
-function resolveSelectedGraph(graph: GraphWalkResult | undefined, graphEdgeIds: string[]): GraphWalkResult | undefined {
+function resolveSelectedGraph(graph: KnowledgeGraphProjection | undefined, graphEdgeIds: string[]): KnowledgeGraphProjection | undefined {
     if (!graph || !graphEdgeIds.length) return undefined
     const byId = new Map(graph.edges.map((edge, index) => [graphCandidateId(index), edge]))
     const selectedIds = new Set(graphEdgeIds.map((id) => byId.get(id)?.id).filter((id): id is string => Boolean(id)))
     return filterGraphEdges(graph, selectedIds)
 }
 
-function takeGraphEdges(graph: GraphWalkResult | undefined, limit: number): GraphWalkResult | undefined {
+function takeGraphEdges(graph: KnowledgeGraphProjection | undefined, limit: number): KnowledgeGraphProjection | undefined {
     if (!graph?.edges.length) return undefined
     return filterGraphEdges(graph, new Set(graph.edges.slice(0, limit).map((edge) => edge.id)))
 }
 
-function filterGraphEdges(graph: GraphWalkResult, edgeIds: Set<string>): GraphWalkResult | undefined {
+function filterGraphEdges(graph: KnowledgeGraphProjection, edgeIds: Set<string>): KnowledgeGraphProjection | undefined {
     const edges = graph.edges.filter((edge) => edgeIds.has(edge.id))
     if (!edges.length) return undefined
     const nodeIds = new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId]))
@@ -430,7 +430,7 @@ function graphCandidateId(index: number): string {
     return `g${index + 1}`
 }
 
-function formatGraphCandidate(edge: EntityEdge, id: string): string {
+function formatGraphCandidate(edge: KnowledgeAssertion, id: string): string {
     const relation = edge.relation.replace(/_/g, ' ')
     const source = edge.sourceId ? `source=${edge.sourceId}` : ''
     const part = edge.sourceChunkIndex !== undefined ? `part=${edge.sourceChunkIndex + 1}` : ''
@@ -596,10 +596,10 @@ function emitMemoryRoutingSelection(
 
     if (graphContext) {
         toolCalls.push({
-            name: 'Entity Graph Context',
+            name: 'Knowledge Context',
             arguments: JSON.stringify({
                 type: 'memory',
-                memoryKind: 'entity-graph',
+                memoryKind: 'knowledge',
                 contextPhase,
                 content: graphContext,
             }),

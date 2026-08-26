@@ -1,13 +1,13 @@
-import type { EntityGraphEdge, EntityGraphNode, EntityGraphResponse } from "../api/types";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraph } from "../api/types";
 
 type GraphComponent = {
   nodeIds: Set<string>;
-  edges: EntityGraphEdge[];
+  edges: KnowledgeGraphEdge[];
   seedCount: number;
   score: number;
 };
 
-function nodeScore(node: EntityGraphNode): number {
+function nodeScore(node: KnowledgeGraphNode): number {
   return (node.importance * 1_000_000)
     + (Math.min(node.mentionCount, 1_000) * 1_000)
     + (Math.min(node.sourceCount, 100) * 100)
@@ -18,13 +18,13 @@ function nodeScore(node: EntityGraphNode): number {
  * Spend a visual node budget on coherent neighborhoods instead of selecting
  * individually popular nodes and leaving behind fragmented two-node islands.
  */
-export function selectConnectedGraph(graph: EntityGraphResponse, limit: number): EntityGraphResponse {
+export function selectConnectedGraph(graph: KnowledgeGraph, limit: number): KnowledgeGraph {
   if (graph.nodes.length <= limit) return graph;
 
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const seedIds = new Set(graph.seedNodes.map((node) => node.id));
   const adjacency = new Map<string, Set<string>>();
-  const edgesByNode = new Map<string, EntityGraphEdge[]>();
+  const edgesByNode = new Map<string, KnowledgeGraphEdge[]>();
   for (const node of graph.nodes) {
     adjacency.set(node.id, new Set());
     edgesByNode.set(node.id, []);

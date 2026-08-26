@@ -10,7 +10,7 @@ const resetModules = [
   { key: 'usage', label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs, step traces, auxiliary model usage, and usage counters.' },
   { key: 'memory', label: 'Memory Spaces', icon: 'lucide:book-open', description: 'Memory space definitions, source files, assignments, and search indexes.' },
   { key: 'vectors', label: 'Vector Indexes', icon: 'lucide:database', description: 'Stored vector embeddings only. Memory source files and spaces stay in place.' },
-  { key: 'entityGraph', label: 'Knowledge Graph', icon: 'lucide:network', description: 'Clears extracted knowledge, manual corrections, merges, relationships, evidence, and graph search data. Source files and ordinary search indexes stay in place.' },
+  { key: 'knowledge', label: 'Knowledge Graph', icon: 'lucide:network', description: 'Clears extracted knowledge, manual corrections, merges, relationships, evidence, and graph search data. Source files and ordinary search indexes stay in place.' },
   { key: 'agents', label: 'Agents', icon: 'lucide:bot', description: 'Agent definitions plus agent-owned schedules and channels.' },
   { key: 'providers', label: 'LLM Providers', icon: 'lucide:cpu', description: 'Provider configs and saved API keys.' },
   { key: 'mcp', label: 'MCP Servers', icon: 'lucide:plug', description: 'MCP server configurations and connection settings.' },

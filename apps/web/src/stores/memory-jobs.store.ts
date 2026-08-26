@@ -12,11 +12,11 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
     const activeJobs = computed(() => jobs.value.filter(job => job.status === 'queued' || job.status === 'running' || job.status === 'retrying'))
     const runningJobs = computed(() => jobs.value.filter(job => job.status === 'running' || job.status === 'retrying'))
     const runningReindexJobs = computed(() => activeJobs.value.filter(job => job.kind === 'reindex'))
-    const runningEntityJobs = computed(() => activeJobs.value.filter(job => job.kind === 'entity-index'))
+    const runningKnowledgeExtractionJobs = computed(() => activeJobs.value.filter(job => job.kind === 'knowledge-extraction'))
     const hasRunningJobs = computed(() => activeJobs.value.length > 0)
     const statusLabel = computed(() => {
-        if (runningEntityJobs.value.length > 0 && runningReindexJobs.value.length > 0) return 'Memory jobs active...'
-        if (runningEntityJobs.value.length > 0) return 'Knowledge extraction active...'
+        if (runningKnowledgeExtractionJobs.value.length > 0 && runningReindexJobs.value.length > 0) return 'Memory jobs active...'
+        if (runningKnowledgeExtractionJobs.value.length > 0) return 'Knowledge extraction active...'
         if (runningReindexJobs.value.length > 0) return 'Memory indexing active...'
         return ''
     })
@@ -73,7 +73,7 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
         runningJobs,
         activeJobs,
         runningReindexJobs,
-        runningEntityJobs,
+        runningKnowledgeExtractionJobs,
         hasRunningJobs,
         statusLabel,
         refresh,

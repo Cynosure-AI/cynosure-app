@@ -11,7 +11,7 @@ import chokidar, { type FSWatcher } from 'chokidar'
 import { existsSync } from 'fs'
 import { basename, resolve } from 'path'
 import { getAgentMemory } from './agent-memory.js'
-import { deleteMemoryKnowledgeSource } from './memory-entity-indexer.js'
+import { deleteMemoryKnowledgeSource } from './memory-knowledge-extraction.js'
 
 const activeWatchers = new Map<string, FSWatcher>()
 const MOVE_GRACE_MS = 2_000

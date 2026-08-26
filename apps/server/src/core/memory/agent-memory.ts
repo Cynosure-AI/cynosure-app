@@ -7,7 +7,7 @@ import {
     deleteMemoryKnowledgeSource,
     indexMemoryContentIntoKnowledge,
     moveMemoryKnowledgeSource,
-} from './memory-entity-indexer.js'
+} from './memory-knowledge-extraction.js'
 import {
     writeTextFile,
     readTextFile,
@@ -73,8 +73,8 @@ function upsertFileIndex(
                     WHEN memory_file_index.document_ref = '' THEN excluded.document_ref
                     ELSE memory_file_index.document_ref
                 END,
-                entity_indexed_at = CASE
-                    WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.entity_indexed_at
+                knowledge_extracted_at = CASE
+                    WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.knowledge_extracted_at
                     ELSE 0
                 END,
                 tags_json = CASE
@@ -105,7 +105,7 @@ interface FileIndexMoveCandidate {
     contentHash: string
     chunkCount: number
     lastIndexedAt: number
-    entityIndexedAt: number
+    knowledgeExtractedAt: number
     tags: string[]
     createdAt: number
 }
@@ -140,11 +140,11 @@ export class AgentMemory {
     ): void {
         try {
             getDb().prepare(`
-                UPDATE memory_file_index SET entity_indexed_at = 0
+                UPDATE memory_file_index SET knowledge_extracted_at = 0
                 WHERE space_id = ? AND file_name = ?
             `).run(spaceId, fileName)
             startMemoryIndexJob({
-                kind: 'entity-index',
+                kind: 'knowledge-extraction',
                 spaceId,
                 fileName,
                 replaceExisting: true,
@@ -434,7 +434,7 @@ export class AgentMemory {
 
         const db = getDb()
         const candidates = db.prepare(`
-            SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, tags_json, created_at
+            SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, tags_json, created_at
             FROM memory_file_index
             WHERE content_hash = ?
               AND NOT (space_id = ? AND file_name = ?)
@@ -447,7 +447,7 @@ export class AgentMemory {
             content_hash: string
             chunk_count: number
             last_indexed_at: number
-            entity_indexed_at: number
+            knowledge_extracted_at: number
             tags_json: string
             created_at: number
         }[]
@@ -461,7 +461,7 @@ export class AgentMemory {
                 contentHash: row.content_hash,
                 chunkCount: row.chunk_count,
                 lastIndexedAt: row.last_indexed_at,
-                entityIndexedAt: row.entity_indexed_at || 0,
+                knowledgeExtractedAt: row.knowledge_extracted_at || 0,
                 tags: parseDocumentTags(row.tags_json),
                 createdAt: row.created_at,
             }))
@@ -494,7 +494,7 @@ export class AgentMemory {
                 .run(candidate.spaceId, candidate.fileName)
             db.prepare(`
                 INSERT OR REPLACE INTO memory_file_index
-                    (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, tags_json, created_at)
+                    (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, tags_json, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 candidate.documentId,
@@ -504,7 +504,7 @@ export class AgentMemory {
                 candidate.contentHash,
                 candidate.chunkCount,
                 candidate.lastIndexedAt,
-                candidate.entityIndexedAt,
+                candidate.knowledgeExtractedAt,
                 JSON.stringify(candidate.tags),
                 candidate.createdAt || Date.now(),
             )
@@ -596,15 +596,15 @@ export class AgentMemory {
     // File index read helpers
     // -----------------------------------------------------------------------
 
-    getFileIndex(spaceId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number; tags: string[] }> {
+    getFileIndex(spaceId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; knowledgeExtractedAt: number; tags: string[] }> {
         try {
             const db = getDb()
             const rows = db
-                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, tags_json FROM memory_file_index WHERE space_id = ?')
-                .all(spaceId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number; tags_json: string }[]
-            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number; tags: string[] }>()
+                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, tags_json FROM memory_file_index WHERE space_id = ?')
+                .all(spaceId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; knowledge_extracted_at: number; tags_json: string }[]
+            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; knowledgeExtractedAt: number; tags: string[] }>()
             for (const row of rows) {
-                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, entityIndexedAt: row.entity_indexed_at || 0, tags: parseDocumentTags(row.tags_json) })
+                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, knowledgeExtractedAt: row.knowledge_extracted_at || 0, tags: parseDocumentTags(row.tags_json) })
             }
             return map
         } catch {
@@ -612,14 +612,14 @@ export class AgentMemory {
         }
     }
 
-    getFileIndexEntry(spaceId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number; entityIndexedAt: number; tags: string[] } | undefined {
+    getFileIndexEntry(spaceId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number; knowledgeExtractedAt: number; tags: string[] } | undefined {
         try {
             const db = getDb()
             const row = db
-                .prepare('SELECT content_hash, chunk_count, last_indexed_at, entity_indexed_at, tags_json FROM memory_file_index WHERE space_id = ? AND file_name = ?')
-                .get(spaceId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number; tags_json: string } | undefined
+                .prepare('SELECT content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, tags_json FROM memory_file_index WHERE space_id = ? AND file_name = ?')
+                .get(spaceId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number; knowledge_extracted_at: number; tags_json: string } | undefined
             if (!row) return undefined
-            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, entityIndexedAt: row.entity_indexed_at || 0, tags: parseDocumentTags(row.tags_json) }
+            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, knowledgeExtractedAt: row.knowledge_extracted_at || 0, tags: parseDocumentTags(row.tags_json) }
         } catch {
             return undefined
         }

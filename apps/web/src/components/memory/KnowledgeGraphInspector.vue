@@ -2,22 +2,22 @@
 import { computed, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import { api } from "../../api/client";
-import type { EntityGraphEdge, EntityGraphNode, EntityGraphOrigin, KnowledgeSourceChunk } from "../../api/types";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphEvidence, KnowledgeSourceChunk } from "../../api/types";
 
 const props = defineProps<{
-  selectedGraphNodes: EntityGraphNode[];
-  selectedGraphEdge: EntityGraphEdge | null;
-  graphEdges: EntityGraphEdge[];
+  selectedGraphNodes: KnowledgeGraphNode[];
+  selectedGraphEdge: KnowledgeGraphEdge | null;
+  graphEdges: KnowledgeGraphEdge[];
 }>();
 
 const emit = defineEmits<{
   close: [];
-  "explore-node": [node: EntityGraphNode];
-  "edit-node": [node: EntityGraphNode];
-  "delete-node": [node: EntityGraphNode];
-  "delete-nodes": [nodes: EntityGraphNode[]];
-  "edit-edge": [edge: EntityGraphEdge];
-  "delete-edge": [edge: EntityGraphEdge];
+  "explore-node": [node: KnowledgeGraphNode];
+  "edit-node": [node: KnowledgeGraphNode];
+  "delete-node": [node: KnowledgeGraphNode];
+  "delete-nodes": [nodes: KnowledgeGraphNode[]];
+  "edit-edge": [edge: KnowledgeGraphEdge];
+  "delete-edge": [edge: KnowledgeGraphEdge];
 }>();
 
 const hydratedSourceChunks = ref<Record<string, KnowledgeSourceChunk>>({});
@@ -33,7 +33,7 @@ const selectedMentionCount = computed(() => props.selectedGraphNodes.reduce((tot
 const selectedSourceCount = computed(() => props.selectedGraphNodes.reduce((total, node) => total + node.sourceCount, 0));
 const selectedNodeAliases = computed(() => selectedGraphNode.value?.aliases || []);
 const selectedOrigins = computed(() => {
-  const origins = new Map<string, EntityGraphOrigin>();
+  const origins = new Map<string, KnowledgeGraphEvidence>();
   for (const node of props.selectedGraphNodes) {
     for (const origin of node.origins || []) {
       const key = `${origin.sourceKind}:${origin.sourceId}`;

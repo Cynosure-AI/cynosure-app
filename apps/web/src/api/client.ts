@@ -2,7 +2,7 @@ import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscri
 import type {
   LLMProviderConfig, McpServerInfo, McpRegistryResponse,
   AgentDefinition, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk,
-  AgentInstance, ChatExecutionState, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, EntityGraphResponse, EntityGraphSuggestionsResponse,
+  AgentInstance, ChatExecutionState, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, KnowledgeGraph, KnowledgeGraphSuggestionsResponse,
   MetricsSummary, PlanningState,
   ModelListType,
   ModelInfo,
@@ -291,9 +291,9 @@ export const api = {
     getEmbeddingConfig: () =>
       get<{ providerId?: string; model: string; dimensions: number }>('/api/memory/embeddings/config'),
     getEntityExtractionConfig: () =>
-      get<{ providerId?: string; model?: string }>('/api/memory/entity-extraction/config'),
+      get<{ providerId?: string; model?: string }>('/api/memory/knowledge-extraction/config'),
     configureEntityExtraction: (opts: { providerId?: string; model?: string }) =>
-      post<{ success: boolean; providerId?: string; model?: string }>('/api/memory/entity-extraction/configure', opts),
+      post<{ success: boolean; providerId?: string; model?: string }>('/api/memory/knowledge-extraction/configure', opts),
     dropVectors: () =>
       post<{ success: boolean }>('/api/memory/embeddings/drop', {}),
     probeEmbedding: (opts: { providerId?: string; model: string }) =>
@@ -319,29 +319,29 @@ export const api = {
       if (minImportance !== undefined && minImportance !== null) params.set('minImportance', String(minImportance))
       if (spaceIds) params.set('spaceIds', spaceIds.length ? spaceIds.join(',') : '__none__')
       const qs = params.toString()
-      return get<EntityGraphResponse>(`/api/memory/graph${qs ? `?${qs}` : ''}`)
+      return get<KnowledgeGraph>(`/api/memory/knowledge/graph${qs ? `?${qs}` : ''}`)
     },
     getGraphSuggestions: (query: string, limit?: number, spaceIds?: string[]) => {
       const params = new URLSearchParams()
       params.set('query', query)
       if (limit) params.set('limit', String(limit))
       if (spaceIds) params.set('spaceIds', spaceIds.length ? spaceIds.join(',') : '__none__')
-      return get<EntityGraphSuggestionsResponse>(`/api/memory/graph/suggestions?${params.toString()}`)
+      return get<KnowledgeGraphSuggestionsResponse>(`/api/memory/knowledge/graph/suggestions?${params.toString()}`)
     },
-    updateGraphNode: (id: string, data: { name?: string; type?: EntityGraphResponse['nodes'][number]['type']; aliases?: string[]; importance?: number }) =>
-      patch<EntityGraphResponse['nodes'][number]>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`, data),
+    updateGraphNode: (id: string, data: { name?: string; type?: KnowledgeGraph['nodes'][number]['type']; aliases?: string[]; importance?: number }) =>
+      patch<KnowledgeGraph['nodes'][number]>(`/api/memory/knowledge/graph/nodes/${encodeURIComponent(id)}`, data),
     deleteGraphNode: (id: string) =>
-      del<{ success: boolean }>(`/api/memory/graph/nodes/${encodeURIComponent(id)}`),
+      del<{ success: boolean }>(`/api/memory/knowledge/graph/nodes/${encodeURIComponent(id)}`),
     deleteGraphNodes: (ids: string[]) =>
-      post<{ success: boolean; deleted: number }>('/api/memory/graph/nodes/delete', { ids }),
+      post<{ success: boolean; deleted: number }>('/api/memory/knowledge/graph/nodes/delete', { ids }),
     updateGraphEdge: (id: string, data: { relation?: string; note?: string; importance?: number }) =>
-      patch<EntityGraphResponse['edges'][number]>(`/api/memory/graph/edges/${encodeURIComponent(id)}`, data),
+      patch<KnowledgeGraph['edges'][number]>(`/api/memory/knowledge/graph/edges/${encodeURIComponent(id)}`, data),
     deleteGraphEdge: (id: string) =>
-      del<{ success: boolean; orphanedNodeIds: string[] }>(`/api/memory/graph/edges/${encodeURIComponent(id)}`),
+      del<{ success: boolean; orphanedNodeIds: string[] }>(`/api/memory/knowledge/graph/edges/${encodeURIComponent(id)}`),
     deleteGraphEdges: (ids: string[]) =>
-      post<{ success: boolean; deleted: number }>('/api/memory/graph/edges/delete', { ids }),
+      post<{ success: boolean; deleted: number }>('/api/memory/knowledge/graph/edges/delete', { ids }),
     clearGraph: () =>
-      del<{ success: boolean; nodesDeleted: number; edgesDeleted: number }>('/api/memory/graph'),
+      del<{ success: boolean; nodesDeleted: number; edgesDeleted: number }>('/api/memory/knowledge/graph'),
     getKnowledgeStats: () =>
       get<MemoryKnowledgeStats>('/api/memory/knowledge/stats'),
     getKnowledgeSourceChunk: (textUnitId: string) =>
@@ -349,7 +349,7 @@ export const api = {
     onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>
       onWsEvent('memory:reembed-progress', cb as WsHandler),
     onGraphReset: (cb: (data: { resetAt: number }) => void) =>
-      onWsEvent('memory:graph-reset', cb as WsHandler)
+      onWsEvent('memory:knowledge-reset', cb as WsHandler)
   },
 
   memorySpaces: {
@@ -395,14 +395,14 @@ export const api = {
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/reindex-job`,
         {}
       ),
-    entityIndexFile: (spaceId: string, fileName: string) =>
-      post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; entityIndexedAt: number; tags: string[] }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/entity-index`,
+    extractKnowledgeFromFile: (spaceId: string, fileName: string) =>
+      post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; knowledgeExtractedAt: number; tags: string[] }>(
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/knowledge-extraction`,
         {}
       ),
-    startEntityIndexFile: (spaceId: string, fileName: string) =>
-      post<MemoryIndexJob<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; entityIndexedAt: number; tags: string[] }>>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/entity-index-job`,
+    startKnowledgeExtractionFile: (spaceId: string, fileName: string) =>
+      post<MemoryIndexJob<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; knowledgeExtractedAt: number; tags: string[] }>>(
+        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/knowledge-extraction-job`,
         {}
       ),
     deleteFile: (spaceId: string, fileName: string) =>

@@ -5,7 +5,7 @@ import { syncPrefsToElectron } from '@/utils/electron-prefs'
 import { api } from '@/api/client'
 import {
     SK_THEME, SK_AUTO_EXPAND, SK_AUTO_EXPAND_TOOLS, SK_DEBUG_MODE, SK_GENERATE_TITLE, SK_TITLE_PROVIDER, SK_TITLE_MODEL,
-    SK_ENTITY_GRAPH_PROVIDER, SK_ENTITY_GRAPH_MODEL,
+    SK_KNOWLEDGE_PROVIDER, SK_KNOWLEDGE_MODEL,
     SK_AUTO_ROUTER_PROVIDER, SK_AUTO_ROUTER_MODEL, SK_LEGACY_SKILL_ROUTER_PROVIDER, SK_LEGACY_SKILL_ROUTER_MODEL,
     SK_CONTEXT_STRATEGY, SK_INLINE_ATTACHMENT_TEXT_LIMIT, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL,
     SK_AGENT_CATEGORIES, SK_MA_CATEGORIES,
@@ -32,8 +32,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const generateTitle = useLocalStorage(SK_GENERATE_TITLE, true)
     const titleProviderId = useLocalStorage(SK_TITLE_PROVIDER, '')
     const titleModel = useLocalStorage(SK_TITLE_MODEL, '')
-    const entityGraphProviderId = useLocalStorage(SK_ENTITY_GRAPH_PROVIDER, '')
-    const entityGraphModel = useLocalStorage(SK_ENTITY_GRAPH_MODEL, '')
+    const knowledgeProviderId = useLocalStorage(SK_KNOWLEDGE_PROVIDER, '')
+    const knowledgeModel = useLocalStorage(SK_KNOWLEDGE_MODEL, '')
     const autoRouterProviderId = useLocalStorage(SK_AUTO_ROUTER_PROVIDER, '')
     const autoRouterModel = useLocalStorage(SK_AUTO_ROUTER_MODEL, '')
     const compactProviderId = useLocalStorage(SK_COMPACT_PROVIDER, '')
@@ -69,7 +69,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     // Sync all pref changes to Electron's JSON file (single watcher)
     watch(
-        [theme, autoExpandSteps, autoExpandToolCalls, debugMode, generateTitle, titleProviderId, titleModel, entityGraphProviderId, entityGraphModel, autoRouterProviderId, autoRouterModel, compactProviderId, compactModel, contextStrategy, inlineAttachmentTextLimit, recentChatFilter,
+        [theme, autoExpandSteps, autoExpandToolCalls, debugMode, generateTitle, titleProviderId, titleModel, knowledgeProviderId, knowledgeModel, autoRouterProviderId, autoRouterModel, compactProviderId, compactModel, contextStrategy, inlineAttachmentTextLimit, recentChatFilter,
             agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
             voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel],
         () => { syncPrefsToElectron() },
@@ -157,7 +157,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     return {
         userName, userAvatarUrl, userSettingsLoaded, userSettingsSaving, loadUserSettings, saveUserProfile, saveUserName,
-        theme, autoExpandSteps, autoExpandToolCalls, debugMode, generateTitle, titleProviderId, titleModel, entityGraphProviderId, entityGraphModel, autoRouterProviderId, autoRouterModel, compactProviderId, compactModel, sidebarCollapsed, recentChatFilter,
+        theme, autoExpandSteps, autoExpandToolCalls, debugMode, generateTitle, titleProviderId, titleModel, knowledgeProviderId, knowledgeModel, autoRouterProviderId, autoRouterModel, compactProviderId, compactModel, sidebarCollapsed, recentChatFilter,
         contextStrategy, inlineAttachmentTextLimit,
         agentCategories, maCategories,
         whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,

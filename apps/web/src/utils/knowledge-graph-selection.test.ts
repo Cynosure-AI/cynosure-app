@@ -1,15 +1,15 @@
 import { describe, expect, test } from "vitest";
-import type { EntityGraphEdge, EntityGraphNode, EntityGraphResponse } from "../api/types";
-import { selectConnectedGraph } from "./memory-graph-selection";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraph } from "../api/types";
+import { selectConnectedGraph } from "./knowledge-graph-selection";
 
-function node(id: string, importance: EntityGraphNode["importance"] = 1): EntityGraphNode {
+function node(id: string, importance: KnowledgeGraphNode["importance"] = 1): KnowledgeGraphNode {
   return {
     id, name: id, normalizedName: id, type: "concept", aliases: [], importance,
     mentionCount: 1, sourceCount: 1, origins: [], firstSeenAt: 1, lastSeenAt: 1,
   };
 }
 
-function edge(id: string, from: string, to: string): EntityGraphEdge {
+function edge(id: string, from: string, to: string): KnowledgeGraphEdge {
   return {
     id, fromNodeId: from, toNodeId: to, fromName: from, toName: to,
     relation: "related_to", importance: 1, sourceKind: "memory", sourceId: "test",
@@ -17,7 +17,7 @@ function edge(id: string, from: string, to: string): EntityGraphEdge {
   };
 }
 
-function graph(nodes: EntityGraphNode[], edges: EntityGraphEdge[], seeds: EntityGraphNode[] = []): EntityGraphResponse {
+function graph(nodes: KnowledgeGraphNode[], edges: KnowledgeGraphEdge[], seeds: KnowledgeGraphNode[] = []): KnowledgeGraph {
   return {
     stats: { nodeCount: nodes.length, edgeCount: edges.length, recentEdgeCount: edges.length },
     seedNodes: seeds, nodes, edges,

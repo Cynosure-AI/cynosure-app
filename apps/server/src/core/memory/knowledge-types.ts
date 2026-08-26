@@ -1,4 +1,4 @@
-export type EntityType = 'person' | 'place' | 'organization' | 'project' | 'event' | 'date' | 'technology' | 'product' | 'artifact' | 'concept' | 'other'
+export type KnowledgeEntityType = 'person' | 'place' | 'organization' | 'project' | 'event' | 'date' | 'technology' | 'product' | 'artifact' | 'concept' | 'other'
 
 /** 0 = temporary, 1 = minor, 2 = useful, 3 = core. */
 export type ImportanceLevel = 0 | 1 | 2 | 3
@@ -15,7 +15,7 @@ export interface KnowledgeSourceChunk {
   notes: string[]
 }
 
-export interface EntityOrigin {
+export interface KnowledgeEvidence {
   sourceKind: string
   sourceId: string
   label: string
@@ -24,21 +24,21 @@ export interface EntityOrigin {
   chunks: KnowledgeSourceChunk[]
 }
 
-export interface EntityNode {
+export interface KnowledgeEntity {
   id: string
   name: string
   normalizedName: string
-  type: EntityType
+  type: KnowledgeEntityType
   aliases: string[]
   importance: ImportanceLevel
   mentionCount: number
   sourceCount: number
-  origins?: EntityOrigin[]
+  origins?: KnowledgeEvidence[]
   firstSeenAt: number
   lastSeenAt: number
 }
 
-export interface EntityEdge {
+export interface KnowledgeAssertion {
   id: string
   fromNodeId: string
   toNodeId: string
@@ -62,19 +62,19 @@ export interface EntityEdge {
   lastSeenAt: number
 }
 
-export interface GraphWalkResult {
-  seedNodes: EntityNode[]
-  nodes: EntityNode[]
-  edges: EntityEdge[]
+export interface KnowledgeGraphProjection {
+  seedNodes: KnowledgeEntity[]
+  nodes: KnowledgeEntity[]
+  edges: KnowledgeAssertion[]
 }
 
-export interface DeleteEdgeResult {
+export interface DeleteKnowledgeAssertionResult {
   edgeDeleted: boolean
   orphanedNodeIds: string[]
 }
 
-export interface EntityMergeResult {
-  entity: EntityNode
+export interface KnowledgeEntityMergeResult {
+  entity: KnowledgeEntity
   mergedEntityIds: string[]
   consolidatedAssertions: number
   retiredSelfRelationships: number

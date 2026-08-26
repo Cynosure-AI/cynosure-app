@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 
-export type MemoryIndexJobKind = 'reindex' | 'entity-index'
+export type MemoryIndexJobKind = 'reindex' | 'knowledge-extraction'
 export type MemoryIndexJobStatus = 'queued' | 'running' | 'retrying' | 'completed' | 'cancelled' | 'error' | 'dead_letter'
 
 export interface MemoryIndexJobSnapshot<T = unknown> {
@@ -64,7 +64,7 @@ async function runRecoveredJob(
         const result = await getAgentMemory().reindexFile(space.folder_path, fileName, spaceId, { signal })
         return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
     }
-    const { indexMemoryFileIntoKnowledge } = await import('./memory-entity-indexer.js')
+    const { indexMemoryFileIntoKnowledge } = await import('./memory-knowledge-extraction.js')
     return {
         success: true,
         ...(await indexMemoryFileIntoKnowledge({

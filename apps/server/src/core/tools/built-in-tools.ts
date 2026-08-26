@@ -19,13 +19,13 @@ import {
     makeMemoryReplaceAllTool,
     makeMemoryRemoveAllTool,
     makeMemoryRemoveRangeTool,
-    makeRelationshipGraphSearchTool,
-    makeRelationshipGraphAssertTool,
-    makeRelationshipGraphDeleteTool,
-    makeRelationshipEntityMergeTool,
+    makeKnowledgeSearchTool,
+    makeKnowledgeAssertTool,
+    makeKnowledgeDeleteTool,
+    makeKnowledgeEntityMergeTool,
     MEMORY_READ_TOOL_NAMES,
     MEMORY_TOOL_NAMES,
-    RELATIONSHIP_GRAPH_TOOL_NAMES,
+    KNOWLEDGE_TOOL_NAMES,
 } from "./builtin/memory-tools.js";
 export {
     makeNotificationTool,
@@ -38,12 +38,12 @@ export {
     makeMemoryReplaceAllTool,
     makeMemoryRemoveAllTool,
     makeMemoryRemoveRangeTool,
-    makeRelationshipGraphSearchTool,
-    makeRelationshipGraphAssertTool,
-    makeRelationshipGraphDeleteTool,
-    makeRelationshipEntityMergeTool,
+    makeKnowledgeSearchTool,
+    makeKnowledgeAssertTool,
+    makeKnowledgeDeleteTool,
+    makeKnowledgeEntityMergeTool,
     MEMORY_TOOL_NAMES,
-    RELATIONSHIP_GRAPH_TOOL_NAMES,
+    KNOWLEDGE_TOOL_NAMES,
     makeScheduleTools,
     SCHEDULE_TOOL_NAMES,
 };
@@ -51,8 +51,8 @@ export type { NotificationToolOptions } from "./builtin/notification.js";
 export {
     MEMORY_READ_TOOL_NAMES,
     MEMORY_WRITE_TOOL_NAMES,
-    isRelationshipGraphToolName,
-    isRelationshipGraphReadToolName,
+    isKnowledgeToolName,
+    isKnowledgeReadToolName,
     isMemoryToolName,
     isMemoryReadToolName,
     type MemoryToolOptions,
@@ -124,10 +124,10 @@ const BUILTIN_TOOL_HYDRATORS = {
     memory_remove_range: (ctx: BuiltInHydrationContext) => makeMemoryRemoveRangeTool({
         assignedSpaces: ctx.assignedSpaces,
     }),
-    relationship_graph_search: (ctx: BuiltInHydrationContext) => makeRelationshipGraphSearchTool({ assignedSpaces: ctx.assignedSpaces }),
-    relationship_graph_assert: (ctx: BuiltInHydrationContext) => makeRelationshipGraphAssertTool({ assignedSpaces: ctx.assignedSpaces }),
-    relationship_graph_delete: (ctx: BuiltInHydrationContext) => makeRelationshipGraphDeleteTool({ assignedSpaces: ctx.assignedSpaces }),
-    relationship_entity_merge: (ctx: BuiltInHydrationContext) => makeRelationshipEntityMergeTool({ assignedSpaces: ctx.assignedSpaces }),
+    knowledge_search: (ctx: BuiltInHydrationContext) => makeKnowledgeSearchTool({ assignedSpaces: ctx.assignedSpaces }),
+    knowledge_assert: (ctx: BuiltInHydrationContext) => makeKnowledgeAssertTool({ assignedSpaces: ctx.assignedSpaces }),
+    knowledge_delete: (ctx: BuiltInHydrationContext) => makeKnowledgeDeleteTool({ assignedSpaces: ctx.assignedSpaces }),
+    knowledge_entity_merge: (ctx: BuiltInHydrationContext) => makeKnowledgeEntityMergeTool({ assignedSpaces: ctx.assignedSpaces }),
 } as const satisfies Record<string, (ctx: BuiltInHydrationContext) => ToolDefinition>;
 
 export const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_HYDRATORS);
@@ -159,16 +159,16 @@ export function isBuiltInMemoryToolKey(toolKey: string): boolean {
 }
 
 export function getBuiltInMemoryToolKeys(): string[] {
-    return [...MEMORY_TOOL_NAMES, ...RELATIONSHIP_GRAPH_TOOL_NAMES].map((toolName) => `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+    return [...MEMORY_TOOL_NAMES, ...KNOWLEDGE_TOOL_NAMES].map((toolName) => `${BUILTIN_NAMESPACE_ID}::${toolName}`);
 }
 
 export function getBuiltInMemoryReadToolKeys(): string[] {
-    return [...MEMORY_READ_TOOL_NAMES, 'relationship_graph_search']
+    return [...MEMORY_READ_TOOL_NAMES, 'knowledge_search']
         .map((toolName) => `${BUILTIN_NAMESPACE_ID}::${toolName}`);
 }
 
-export function isBuiltInRelationshipGraphToolKey(toolKey: string): boolean {
-    return RELATIONSHIP_GRAPH_TOOL_NAMES.some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
+export function isBuiltInKnowledgeToolKey(toolKey: string): boolean {
+    return KNOWLEDGE_TOOL_NAMES.some((toolName) => toolKey === `${BUILTIN_NAMESPACE_ID}::${toolName}`);
 }
 
 /**

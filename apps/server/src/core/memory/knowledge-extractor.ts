@@ -1,7 +1,7 @@
 import { getGateway } from '../gateway/gateway.js'
 import { recordAuxiliaryModelUsage } from '../usage-metering.js'
 import type { KnowledgeExtractedChunkTags, KnowledgeExtractedEntity, KnowledgeExtractedMention, KnowledgeExtractedRelation } from './memory-knowledge.js'
-import type { EntityType, ImportanceLevel } from './knowledge-types.js'
+import type { KnowledgeEntityType, ImportanceLevel } from './knowledge-types.js'
 
 export interface KnowledgeExtractionSegment {
   content: string
@@ -15,7 +15,7 @@ export interface KnowledgeExtractionResult {
   chunkTags: KnowledgeExtractedChunkTags[]
 }
 
-const ENTITY_TYPES = new Set<EntityType>(['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'])
+const ENTITY_TYPES = new Set<KnowledgeEntityType>(['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'])
 const RESERVED_ENTITY_NAMES = new Set(['user', 'assistant', 'system', 'tool'])
 
 function normalizeName(value: unknown): string {
@@ -95,7 +95,7 @@ function toEntity(value: unknown): KnowledgeExtractedEntity | null {
     : []
   return {
     name,
-    type: typeof raw.type === 'string' && ENTITY_TYPES.has(raw.type as EntityType) ? raw.type as EntityType : 'other',
+    type: typeof raw.type === 'string' && ENTITY_TYPES.has(raw.type as KnowledgeEntityType) ? raw.type as KnowledgeEntityType : 'other',
     aliases,
     identityHint: cleanDisplay(raw.identity_hint ?? raw.identityHint, 160) || undefined,
     description: cleanDisplay(raw.description, 280) || undefined,
@@ -159,7 +159,7 @@ export async function extractKnowledgeFromContent(opts: {
     }, provider.config.id)
 
     recordAuxiliaryModelUsage({
-      kind: 'entity-extraction',
+      kind: 'knowledge-extraction',
       provider: provider.config.id,
       model: response.model || opts.model || provider.config.defaultModel,
       inputTokens: response.usage?.promptTokens,

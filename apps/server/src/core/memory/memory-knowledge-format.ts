@@ -1,4 +1,4 @@
-import type { EntityNode, EntityOrigin, EntityType, ImportanceLevel } from './knowledge-types.js'
+import type { KnowledgeEntity, KnowledgeEvidence, KnowledgeEntityType, ImportanceLevel } from './knowledge-types.js'
 
 const QUERY_STOP_WORDS = new Set([
   'about', 'after', 'also', 'and', 'are', 'between', 'das', 'dem', 'den', 'der', 'die', 'ein', 'eine',
@@ -41,13 +41,13 @@ export function formatKnowledgeLiteral(value: unknown): string {
 export function knowledgeRowToNode(
   row: Record<string, unknown>,
   sourceCount = 1,
-  origins?: EntityOrigin[],
-): EntityNode {
+  origins?: KnowledgeEvidence[],
+): KnowledgeEntity {
   return {
     id: String(row.id),
     name: String(row.canonical_name),
     normalizedName: String(row.normalized_name),
-    type: (row.entity_type || 'other') as EntityType,
+    type: (row.entity_type || 'other') as KnowledgeEntityType,
     aliases: row.aliases ? String(row.aliases).split('\u0000').filter(Boolean) : [],
     importance: Math.min(3, Math.max(0, Number(row.importance || 1))) as ImportanceLevel,
     mentionCount: Number(row.mention_count || 1),

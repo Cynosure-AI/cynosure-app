@@ -320,7 +320,7 @@ function createTables(db: Database.Database): void {
       content_hash TEXT NOT NULL DEFAULT '',
       chunk_count INTEGER NOT NULL DEFAULT 0,
       last_indexed_at INTEGER NOT NULL DEFAULT 0,
-      entity_indexed_at INTEGER NOT NULL DEFAULT 0,
+      knowledge_extracted_at INTEGER NOT NULL DEFAULT 0,
       tags_json TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL,
       PRIMARY KEY (space_id, file_name)
@@ -551,14 +551,6 @@ function createTables(db: Database.Database): void {
 
   `)
 
-  // Knowledge is now the only graph implementation. These compatibility
-  // tables are derived data, so removing them is safe and intentionally final.
-  db.exec(`
-    DROP TABLE IF EXISTS entity_graph_edge_evidence;
-    DROP TABLE IF EXISTS entity_graph_edges;
-    DROP TABLE IF EXISTS entity_graph_nodes;
-  `)
-
   // Migrations for existing databases
   const addColumnIfMissing = (table: string, column: string, definition: string) => {
     try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`) } catch { /* column already exists */ }
@@ -586,7 +578,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('tasks', 'updated_at', 'INTEGER')
   db.prepare('UPDATE tasks SET updated_at = created_at WHERE updated_at IS NULL').run()
 
-  addColumnIfMissing('memory_file_index', 'entity_indexed_at', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('memory_file_index', 'knowledge_extracted_at', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('memory_file_index', 'tags_json', "TEXT NOT NULL DEFAULT '[]'")
   addColumnIfMissing('memory_index_jobs', 'progress_current', 'INTEGER')
   addColumnIfMissing('memory_index_jobs', 'progress_total', 'INTEGER')

@@ -1,4 +1,4 @@
-.memory-graph-panel {
+.knowledge-graph-panel {
   --memory-flow-bg: color-mix(in srgb, var(--color-theme-950) 92%, black);
   --memory-flow-grid: color-mix(
     in srgb,
@@ -144,7 +144,7 @@
   --memory-flow-shadow: color-mix(in srgb, black 28%, transparent);
 }
 
-.memory-graph-panel .entity-flow {
+.knowledge-graph-panel .entity-flow {
   background:
     radial-gradient(
       circle at 20px 20px,
@@ -155,7 +155,7 @@
   background-size: 28px 28px;
 }
 
-.memory-graph-panel .entity-flow-node {
+.knowledge-graph-panel .entity-flow-node {
   border: 1px solid var(--memory-flow-node-border);
   background: var(--memory-flow-node-fill);
   color: var(--memory-flow-node-text);
@@ -165,7 +165,7 @@
   box-shadow: 0 10px 22px var(--memory-flow-shadow);
 }
 
-.memory-graph-panel .entity-flow-node-seed {
+.knowledge-graph-panel .entity-flow-node-seed {
   border-color: var(--memory-flow-seed-border);
   background: var(--memory-flow-seed-fill);
   box-shadow:
@@ -173,8 +173,8 @@
     0 14px 28px var(--memory-flow-shadow);
 }
 
-.memory-graph-panel .entity-flow-node.selected,
-.memory-graph-panel .entity-flow-node:has(.entity-node-body-selected) {
+.knowledge-graph-panel .entity-flow-node.selected,
+.knowledge-graph-panel .entity-flow-node:has(.entity-node-body-selected) {
   border-color: color-mix(in srgb, var(--color-accent-300) 88%, white);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--color-accent-400) 42%, transparent),
@@ -182,7 +182,7 @@
     0 14px 28px var(--memory-flow-shadow);
 }
 
-.memory-graph-panel .entity-flow-node-focus-highlighted {
+.knowledge-graph-panel .entity-flow-node-focus-highlighted {
   z-index: 8;
   border-color: color-mix(in srgb, var(--color-accent-200) 86%, white);
   filter: saturate(1.16) brightness(1.08);
@@ -192,12 +192,12 @@
     0 14px 28px var(--memory-flow-shadow);
 }
 
-.memory-graph-panel .entity-flow-node-focus-dimmed {
+.knowledge-graph-panel .entity-flow-node-focus-dimmed {
   opacity: 0.24;
   filter: grayscale(0.45);
 }
 
-.memory-graph-panel .entity-flow-node-type-person {
+.knowledge-graph-panel .entity-flow-node-type-person {
   --memory-flow-node-fill: var(--memory-flow-person-fill);
   --memory-flow-node-border: var(--memory-flow-person-border);
   --memory-flow-node-muted: color-mix(
@@ -207,7 +207,7 @@
   );
 }
 
-.memory-graph-panel .entity-flow-node-type-place {
+.knowledge-graph-panel .entity-flow-node-type-place {
   --memory-flow-node-fill: var(--memory-flow-place-fill);
   --memory-flow-node-border: var(--memory-flow-place-border);
   --memory-flow-node-muted: color-mix(
@@ -217,7 +217,7 @@
   );
 }
 
-.memory-graph-panel .entity-flow-node-type-organization {
+.knowledge-graph-panel .entity-flow-node-type-organization {
   --memory-flow-node-fill: var(--memory-flow-organization-fill);
   --memory-flow-node-border: var(--memory-flow-organization-border);
   --memory-flow-node-muted: color-mix(
@@ -227,7 +227,7 @@
   );
 }
 
-.memory-graph-panel .entity-flow-node-type-project {
+.knowledge-graph-panel .entity-flow-node-type-project {
   --memory-flow-node-fill: var(--memory-flow-project-fill);
   --memory-flow-node-border: var(--memory-flow-project-border);
   --memory-flow-node-muted: color-mix(
@@ -237,7 +237,7 @@
   );
 }
 
-.memory-graph-panel .entity-flow-node-type-event {
+.knowledge-graph-panel .entity-flow-node-type-event {
   --memory-flow-node-fill: var(--memory-flow-event-fill);
   --memory-flow-node-border: var(--memory-flow-event-border);
   --memory-flow-node-muted: color-mix(
@@ -247,7 +247,7 @@
   );
 }
 
-.memory-graph-panel .entity-flow-node-type-date {
+.knowledge-graph-panel .entity-flow-node-type-date {
   --memory-flow-node-fill: var(--memory-flow-date-fill);
   --memory-flow-node-border: var(--memory-flow-date-border);
   --memory-flow-node-muted: color-mix(
@@ -257,7 +257,7 @@
   );
 }
 
-.memory-graph-panel .entity-flow-node-type-technology {
+.knowledge-graph-panel .entity-flow-node-type-technology {
   --memory-flow-node-fill: var(--memory-flow-technology-fill);
   --memory-flow-node-border: var(--memory-flow-technology-border);
   --memory-flow-node-muted: color-mix(
@@ -267,7 +267,7 @@
   );
 }
 
-.memory-graph-panel .entity-flow-node-type-product {
+.knowledge-graph-panel .entity-flow-node-type-product {
   --memory-flow-node-fill: var(--memory-flow-product-fill);
   --memory-flow-node-border: var(--memory-flow-product-border);
   --memory-flow-node-muted: color-mix(
@@ -277,7 +277,7 @@
   );
 }
 
-.memory-graph-panel .entity-flow-node-type-artifact {
+.knowledge-graph-panel .entity-flow-node-type-artifact {
   --memory-flow-node-fill: var(--memory-flow-artifact-fill);
   --memory-flow-node-border: var(--memory-flow-artifact-border);
   --memory-flow-node-muted: color-mix(
@@ -287,7 +287,7 @@
   );
 }
 
-.memory-graph-panel .entity-flow-node-type-concept {
+.knowledge-graph-panel .entity-flow-node-type-concept {
   --memory-flow-node-fill: var(--memory-flow-concept-fill);
   --memory-flow-node-border: var(--memory-flow-concept-border);
   --memory-flow-node-muted: color-mix(
@@ -297,7 +297,7 @@
   );
 }
 
-.memory-graph-panel .entity-flow-edge path {
+.knowledge-graph-panel .entity-flow-edge path {
   stroke: var(--memory-flow-edge);
   transition:
     opacity 130ms ease,
@@ -305,7 +305,7 @@
     filter 130ms ease;
 }
 
-.memory-graph-panel .entity-flow-edge-focus-highlighted path {
+.knowledge-graph-panel .entity-flow-edge-focus-highlighted path {
   opacity: 1;
   stroke-width: 3;
   filter: drop-shadow(
@@ -313,11 +313,11 @@
   );
 }
 
-.memory-graph-panel .entity-flow-edge-focus-dimmed path {
+.knowledge-graph-panel .entity-flow-edge-focus-dimmed path {
   opacity: 0.13;
 }
 
-.memory-graph-panel .entity-edge-label-stack {
+.knowledge-graph-panel .entity-edge-label-stack {
   position: absolute;
   display: grid;
   gap: 2px;
@@ -333,29 +333,29 @@
     filter 130ms ease;
 }
 
-.memory-graph-panel .entity-edge-label-stack-focus-highlighted {
+.knowledge-graph-panel .entity-edge-label-stack-focus-highlighted {
   filter: brightness(1.12);
 }
 
-.memory-graph-panel .entity-edge-label-stack-focus-dimmed {
+.knowledge-graph-panel .entity-edge-label-stack-focus-dimmed {
   opacity: 0.18;
 }
 
-.memory-graph-panel .entity-edge-label-direction {
+.knowledge-graph-panel .entity-edge-label-direction {
   display: grid;
   gap: 2px;
   min-width: 130px;
   padding: 2px 0;
 }
 
-.memory-graph-panel
+.knowledge-graph-panel
   .entity-edge-label-direction
   + .entity-edge-label-direction {
   border-top: 1px solid
     color-mix(in srgb, var(--color-theme-700) 62%, transparent);
 }
 
-.memory-graph-panel .entity-edge-label-direction-title {
+.knowledge-graph-panel .entity-edge-label-direction-title {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -368,7 +368,7 @@
   line-height: 1.15;
 }
 
-.memory-graph-panel .entity-edge-label-direction-title span {
+.knowledge-graph-panel .entity-edge-label-direction-title span {
   min-width: 0;
   max-width: 86px;
   overflow: hidden;
@@ -376,7 +376,7 @@
   white-space: nowrap;
 }
 
-.memory-graph-panel .entity-edge-label-row {
+.knowledge-graph-panel .entity-edge-label-row {
   min-width: 0;
   overflow-wrap: anywhere;
   border-radius: 4px;
@@ -393,13 +393,13 @@
     color 120ms ease;
 }
 
-.memory-graph-panel .entity-edge-label-row:hover,
-.memory-graph-panel .entity-edge-label-row-selected {
+.knowledge-graph-panel .entity-edge-label-row:hover,
+.knowledge-graph-panel .entity-edge-label-row-selected {
   background: color-mix(in srgb, var(--color-accent-500) 22%, transparent);
   color: var(--color-accent-100);
 }
 
-.memory-graph-panel .entity-node-body {
+.knowledge-graph-panel .entity-node-body {
   display: grid;
   min-width: 150px;
   max-width: 250px;
@@ -413,24 +413,24 @@
     filter 130ms ease;
 }
 
-.memory-graph-panel .entity-node-body-focus-highlighted .entity-node-label {
+.knowledge-graph-panel .entity-node-body-focus-highlighted .entity-node-label {
   color: var(--color-theme-50);
 }
 
-.memory-graph-panel .entity-node-meta {
+.knowledge-graph-panel .entity-node-meta {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.memory-graph-panel .entity-node-type {
+.knowledge-graph-panel .entity-node-type {
   color: var(--memory-flow-node-muted);
   font-size: 10px;
   font-weight: 500;
   line-height: 1;
 }
 
-.memory-graph-panel .entity-node-importance {
+.knowledge-graph-panel .entity-node-importance {
   font-size: 9px;
   font-weight: 600;
   line-height: 1;
@@ -440,48 +440,48 @@
   letter-spacing: 0.03em;
 }
 
-.memory-graph-panel .entity-node-importance-0 {
+.knowledge-graph-panel .entity-node-importance-0 {
   background: color-mix(in srgb, var(--color-theme-600) 40%, transparent);
   color: var(--color-theme-400);
 }
 
-.memory-graph-panel .entity-node-importance-1 {
+.knowledge-graph-panel .entity-node-importance-1 {
   background: color-mix(in srgb, var(--color-theme-500) 30%, transparent);
   color: var(--color-theme-300);
 }
 
-.memory-graph-panel .entity-node-importance-2 {
+.knowledge-graph-panel .entity-node-importance-2 {
   background: color-mix(in srgb, #22c55e 20%, transparent);
   color: #4ade80;
 }
 
-.memory-graph-panel .entity-node-importance-3 {
+.knowledge-graph-panel .entity-node-importance-3 {
   background: color-mix(in srgb, var(--color-accent-500) 20%, transparent);
   color: var(--color-accent-300);
 }
 
-.memory-graph-panel .entity-node-label {
+.knowledge-graph-panel .entity-node-label {
   max-width: 220px;
   overflow-wrap: anywhere;
   line-height: 1.2;
 }
 
-.memory-graph-panel .entity-node-body-selected .entity-node-label {
+.knowledge-graph-panel .entity-node-body-selected .entity-node-label {
   color: var(--color-theme-50);
 }
 
-.memory-graph-panel .entity-handle {
+.knowledge-graph-panel .entity-handle {
   width: 6px;
   height: 6px;
   border: 1px solid var(--color-theme-100);
   background: var(--memory-flow-bg);
 }
 
-.memory-graph-panel .entity-handle-source {
+.knowledge-graph-panel .entity-handle-source {
   background: var(--memory-flow-edge);
 }
 
-.memory-graph-panel .entity-node-sidebar {
+.knowledge-graph-panel .entity-node-sidebar {
   position: absolute;
   top: 0;
   right: 0;
@@ -498,7 +498,7 @@
     -18px 0 36px color-mix(in srgb, black 26%, transparent);
 }
 
-.memory-graph-panel .entity-node-sidebar::after {
+.knowledge-graph-panel .entity-node-sidebar::after {
   position: absolute;
   top: 0;
   right: 3px;
@@ -514,7 +514,7 @@
   pointer-events: none;
 }
 
-.memory-graph-panel .entity-node-sidebar-header {
+.knowledge-graph-panel .entity-node-sidebar-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -522,7 +522,7 @@
   padding: 18px 22px 10px 16px;
 }
 
-.memory-graph-panel .entity-node-sidebar-title {
+.knowledge-graph-panel .entity-node-sidebar-title {
   min-width: 0;
   overflow-wrap: anywhere;
   color: var(--color-theme-100);
@@ -531,7 +531,7 @@
   line-height: 1.2;
 }
 
-.memory-graph-panel .entity-node-sidebar-meta {
+.knowledge-graph-panel .entity-node-sidebar-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
@@ -541,16 +541,16 @@
   line-height: 1.2;
 }
 
-.memory-graph-panel .entity-node-sidebar-meta span:first-child,
-.memory-graph-panel .entity-node-sidebar-alias,
-.memory-graph-panel .entity-node-sidebar-selection-item,
-.memory-graph-panel .entity-node-sidebar-relation-detail span:first-child {
+.knowledge-graph-panel .entity-node-sidebar-meta span:first-child,
+.knowledge-graph-panel .entity-node-sidebar-alias,
+.knowledge-graph-panel .entity-node-sidebar-selection-item,
+.knowledge-graph-panel .entity-node-sidebar-relation-detail span:first-child {
   border-radius: 4px;
   background: color-mix(in srgb, var(--color-theme-800) 62%, transparent);
   color: var(--color-theme-300);
 }
 
-.memory-graph-panel .entity-sidebar-importance {
+.knowledge-graph-panel .entity-sidebar-importance {
   font-size: 10px;
   font-weight: 600;
   padding: 1px 5px;
@@ -559,31 +559,31 @@
   letter-spacing: 0.03em;
 }
 
-.memory-graph-panel .entity-sidebar-importance-0 {
+.knowledge-graph-panel .entity-sidebar-importance-0 {
   background: color-mix(in srgb, var(--color-theme-600) 30%, transparent);
   color: var(--color-theme-400);
 }
 
-.memory-graph-panel .entity-sidebar-importance-1 {
+.knowledge-graph-panel .entity-sidebar-importance-1 {
   background: color-mix(in srgb, var(--color-theme-500) 24%, transparent);
   color: var(--color-theme-300);
 }
 
-.memory-graph-panel .entity-sidebar-importance-2 {
+.knowledge-graph-panel .entity-sidebar-importance-2 {
   background: color-mix(in srgb, #22c55e 18%, transparent);
   color: #4ade80;
 }
 
-.memory-graph-panel .entity-sidebar-importance-3 {
+.knowledge-graph-panel .entity-sidebar-importance-3 {
   background: color-mix(in srgb, var(--color-accent-500) 18%, transparent);
   color: var(--color-accent-300);
 }
 
-.memory-graph-panel .entity-node-sidebar-meta span:first-child {
+.knowledge-graph-panel .entity-node-sidebar-meta span:first-child {
   padding: 2px 6px;
 }
 
-.memory-graph-panel .entity-node-sidebar-close {
+.knowledge-graph-panel .entity-node-sidebar-close {
   display: grid;
   width: 28px;
   height: 28px;
@@ -596,19 +596,19 @@
     color 120ms ease;
 }
 
-.memory-graph-panel .entity-node-sidebar-close:hover {
+.knowledge-graph-panel .entity-node-sidebar-close:hover {
   background: color-mix(in srgb, var(--color-theme-800) 82%, transparent);
   color: var(--color-theme-100);
 }
 
-.memory-graph-panel .entity-node-sidebar-aliases {
+.knowledge-graph-panel .entity-node-sidebar-aliases {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin: 0 16px 16px;
 }
 
-.memory-graph-panel .entity-node-sidebar-alias {
+.knowledge-graph-panel .entity-node-sidebar-alias {
   max-width: 100%;
   overflow-wrap: anywhere;
   border: 1px solid var(--color-theme-800);
@@ -617,7 +617,7 @@
   line-height: 1.2;
 }
 
-.memory-graph-panel .entity-node-sidebar-selection-list {
+.knowledge-graph-panel .entity-node-sidebar-selection-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -626,7 +626,7 @@
   padding: 0 22px 16px 16px;
 }
 
-.memory-graph-panel .entity-node-sidebar-selection-item {
+.knowledge-graph-panel .entity-node-sidebar-selection-item {
   max-width: 100%;
   overflow-wrap: anywhere;
   padding: 4px 7px;
@@ -634,14 +634,14 @@
   line-height: 1.2;
 }
 
-.memory-graph-panel .entity-node-sidebar-actions {
+.knowledge-graph-panel .entity-node-sidebar-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   padding: 0 16px 18px;
 }
 
-.memory-graph-panel .entity-node-sidebar-action {
+.knowledge-graph-panel .entity-node-sidebar-action {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -657,7 +657,7 @@
     color 120ms ease;
 }
 
-.memory-graph-panel .entity-node-sidebar-action:hover {
+.knowledge-graph-panel .entity-node-sidebar-action:hover {
   background: color-mix(
     in srgb,
     var(--color-accent-500) 18%,
@@ -666,23 +666,23 @@
   color: var(--color-theme-50);
 }
 
-.memory-graph-panel .entity-node-sidebar-action-danger {
+.knowledge-graph-panel .entity-node-sidebar-action-danger {
   background: color-mix(in srgb, #7f1d1d 46%, transparent);
   color: #fecaca;
 }
 
-.memory-graph-panel .entity-node-sidebar-action-danger:hover {
+.knowledge-graph-panel .entity-node-sidebar-action-danger:hover {
   background: color-mix(in srgb, #991b1b 70%, black);
   color: white;
 }
 
-.memory-graph-panel .entity-node-sidebar-divider {
+.knowledge-graph-panel .entity-node-sidebar-divider {
   height: 1px;
   margin: 0 16px;
   background: color-mix(in srgb, var(--color-theme-800) 78%, transparent);
 }
 
-.memory-graph-panel .entity-node-sidebar-section-header {
+.knowledge-graph-panel .entity-node-sidebar-section-header {
   display: flex;
   justify-content: space-between;
   padding: 16px 22px 10px 16px;
@@ -692,7 +692,7 @@
   text-transform: uppercase;
 }
 
-.memory-graph-panel .entity-node-sidebar-list {
+.knowledge-graph-panel .entity-node-sidebar-list {
   display: grid;
   gap: 10px;
   min-height: 0;
@@ -700,7 +700,7 @@
   padding: 0 22px 16px 16px;
 }
 
-.memory-graph-panel .entity-node-sidebar-relation {
+.knowledge-graph-panel .entity-node-sidebar-relation {
   display: grid;
   gap: 7px;
   border: 1px solid color-mix(in srgb, var(--color-theme-800) 78%, transparent);
@@ -708,7 +708,7 @@
   padding: 10px 8px 9px;
 }
 
-.memory-graph-panel .entity-node-sidebar-relation-path {
+.knowledge-graph-panel .entity-node-sidebar-relation-path {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -718,14 +718,14 @@
   line-height: 1.25;
 }
 
-.memory-graph-panel .entity-node-sidebar-relation-path span {
+.knowledge-graph-panel .entity-node-sidebar-relation-path span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.memory-graph-panel .entity-node-sidebar-relation-detail {
+.knowledge-graph-panel .entity-node-sidebar-relation-detail {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -735,35 +735,35 @@
   line-height: 1.2;
 }
 
-.memory-graph-panel .entity-node-sidebar-relation-detail span:first-child {
+.knowledge-graph-panel .entity-node-sidebar-relation-detail span:first-child {
   min-width: 0;
   overflow-wrap: anywhere;
   padding: 4px 6px;
 }
 
-.memory-graph-panel .entity-node-sidebar-empty {
+.knowledge-graph-panel .entity-node-sidebar-empty {
   padding: 0 16px;
   color: var(--color-theme-500);
   font-size: 13px;
 }
 
-.memory-graph-panel .entity-flow-edge .vue-flow__edge-textbg {
+.knowledge-graph-panel .entity-flow-edge .vue-flow__edge-textbg {
   stroke: color-mix(in srgb, var(--color-accent-500) 35%, transparent);
   stroke-width: 1px;
 }
 
-.memory-graph-panel .vue-flow__controls {
+.knowledge-graph-panel .vue-flow__controls {
   border-color: var(--color-theme-800);
   box-shadow: 0 10px 22px var(--memory-flow-shadow);
 }
 
-.memory-graph-panel .vue-flow__controls-button {
+.knowledge-graph-panel .vue-flow__controls-button {
   background: color-mix(in srgb, var(--color-theme-900) 90%, transparent);
   border-color: var(--color-theme-800);
   color: var(--color-theme-300);
 }
 
-.memory-graph-panel .vue-flow__controls-button:hover {
+.knowledge-graph-panel .vue-flow__controls-button:hover {
   background: var(--color-theme-800);
   color: var(--color-theme-100);
 }

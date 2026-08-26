@@ -2,12 +2,12 @@ import { getAgentMemory } from './agent-memory.js'
 import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces, getAssignedOrDefaultSpaces } from './memory-space-scope.js'
 import type { RetrievedChunk } from './parser.js'
-import type { GraphWalkResult } from './knowledge-types.js'
+import type { KnowledgeGraphProjection } from './knowledge-types.js'
 import { getMemoryKnowledgeStore } from './memory-knowledge.js'
 
 export interface AggregatedMemory {
   permanent: RetrievedChunk[]
-  graph?: GraphWalkResult
+  graph?: KnowledgeGraphProjection
 }
 
 /**
@@ -139,7 +139,7 @@ export class MemoryAggregator {
     // claim. Do not inject the containing stale chunk beside its correction.
     dedupedPermanent = getMemoryKnowledgeStore().filterManuallySupersededChunks(dedupedPermanent)
 
-    let graphWalk: GraphWalkResult | undefined
+    let graphWalk: KnowledgeGraphProjection | undefined
     if (opts?.includeGraph === true && scopedSpaces.length > 0) {
       try {
         const graphQuery = opts.graphQuery?.trim() || query

@@ -44,7 +44,7 @@ type ResetModule =
     | 'settings'
     | 'channels'
     | 'memory'
-    | 'entityGraph'
+    | 'knowledge'
     | 'conversations'
     | 'notifications'
     | 'usage'
@@ -57,7 +57,7 @@ const RESET_MODULES: ResetModule[] = [
     'settings',
     'channels',
     'memory',
-    'entityGraph',
+    'knowledge',
     'conversations',
     'notifications',
     'usage',
@@ -225,7 +225,7 @@ async function resetMemorySpaces(db = getDb()): Promise<void> {
     watchMemorySpace('default', getDefaultMemorySpaceDir())
 }
 
-async function resetEntityGraph(): Promise<void> {
+async function resetKnowledge(): Promise<void> {
     await getMemoryKnowledgeStore().reset()
 }
 
@@ -323,7 +323,7 @@ async function resetSelectedModules(modules: ResetModule[]): Promise<Record<stri
     await run('usage', () => resetUsage(db))
     await run('memory', () => resetMemorySpaces(db))
     await run('vectors', resetVectorIndexes)
-    await run('entityGraph', resetEntityGraph)
+    await run('knowledge', resetKnowledge)
     await run('settings', () => resetSettings(db))
     await run('channels', () => resetChannels(db))
     await run('agents', () => resetAgents(db))
@@ -393,7 +393,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 count: memoryDocuments,
                 details: { spaces: memorySpaces.length, documents: memoryDocuments }
             },
-            entityGraph: {
+            knowledge: {
                 count: knowledgeRows,
                 details: {
                     entities: knowledgeEntities,
@@ -418,7 +418,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
     app.get<{ Querystring: { modules?: string } }>(
         '/export',
         async (req, reply) => {
-            const requested = (req.query.modules || 'agents,providers,mcp,settings,channels,memory,entityGraph,conversations,usage')
+            const requested = (req.query.modules || 'agents,providers,mcp,settings,channels,memory,knowledge,conversations,usage')
                 .split(',')
                 .map((m) => m.trim())
 
@@ -550,10 +550,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             }
 
             // --- Governed knowledge state ---
-            if (requested.includes('entityGraph')) {
+            if (requested.includes('knowledge')) {
                 const knowledge = createMemoryKnowledgeBackup()
                 archive.append(JSON.stringify(knowledge), { name: 'knowledge/knowledge.json' })
-                manifest.modules.entityGraph = { count: memoryKnowledgeBackupCount(knowledge) }
+                manifest.modules.knowledge = { count: memoryKnowledgeBackupCount(knowledge) }
             }
             // --- Conversations (agent-linked chat history) ---
             if (requested.includes('conversations')) {
@@ -647,7 +647,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
         const db = getDb()
         const results: Record<string, { restored: number; errors: string[] }> = {}
         const restoreModules = requestedModules.filter((module) =>
-            Boolean(manifest.modules[module]) && (module !== 'entityGraph' || Boolean(knowledgeBackup))
+            Boolean(manifest.modules[module]) && (module !== 'knowledge' || Boolean(knowledgeBackup))
         )
         let restoreIndex = 0
         const emitRestoreProgress = (module: string, status: 'started' | 'completed' | 'failed') => {
@@ -1047,7 +1047,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         db.prepare(`
                             INSERT OR REPLACE INTO memory_file_index
                                 (document_id, document_ref, space_id, file_name, content_hash,
-                                 chunk_count, last_indexed_at, entity_indexed_at, tags_json, created_at)
+                                 chunk_count, last_indexed_at, knowledge_extracted_at, tags_json, created_at)
                             VALUES (?, ?, ?, ?, '', 0, 0, 0, '[]', ?)
                         `).run(file.document_id, file.document_ref, mappedSpaceId, file.file_name, file.created_at || Date.now())
                     }
@@ -1100,9 +1100,9 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
         }
 
         // --- Restore governed knowledge, including manual corrections ---
-        if (requestedModules.includes('entityGraph') && manifest.modules.entityGraph && knowledgeBackup) {
+        if (requestedModules.includes('knowledge') && manifest.modules.knowledge && knowledgeBackup) {
             const res = { restored: 0, errors: [] as string[] }
-            emitRestoreProgress('entityGraph', 'started')
+            emitRestoreProgress('knowledge', 'started')
             try {
                 const restored = await restoreMemoryKnowledgeBackup(knowledgeBackup, db)
                 res.restored = restored.restored
@@ -1112,8 +1112,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             } catch (e) {
                 res.errors.push((e as Error).message)
             }
-            results.entityGraph = res
-            emitRestoreProgress('entityGraph', res.errors.length > 0 ? 'failed' : 'completed')
+            results.knowledge = res
+            emitRestoreProgress('knowledge', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
         // --- Restore Conversations (only for agents present in DB) ---
@@ -1450,10 +1450,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             manifestEntry.getData().toString('utf-8')
         ) as BackupManifest
 
-        // Old entity-graph payloads cannot be mixed into the governed schema.
-        // New backups advertise this module only when the versioned knowledge
-        // payload is present.
-        if (!getMemoryKnowledgeBackup(zip)) delete manifest.modules.entityGraph
+        // Advertise Knowledge only when its versioned payload is present.
+        if (!getMemoryKnowledgeBackup(zip)) delete manifest.modules.knowledge
 
         return manifest
     })
