@@ -35,7 +35,7 @@ import {
     deleteMemoryKnowledgeSpace,
     indexMemoryFileIntoKnowledge,
     moveMemoryKnowledgeSource,
-} from '../core/memory/memory-entity-indexer.js'
+} from '../core/memory/memory-knowledge-extraction.js'
 import {
     cancelMemoryIndexJob,
     getMemoryIndexJob,
@@ -86,8 +86,8 @@ export interface MemoryFileStatus {
     status: 'indexed' | 'needs_reindex' | 'not_indexed' | 'unsupported'
     chunkCount?: number
     lastIndexedAt?: number
-    entityIndexed: boolean
-    entityIndexedAt?: number
+    knowledgeExtracted: boolean
+    knowledgeExtractedAt?: number
     tags: string[]
 }
 
@@ -285,7 +285,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         for (const target of rowsToDelete) {
             await rag.deleteByFilter(getActivePermanentMemoryTableName(), lanceDbEqFilter('spaceId', target.id))
             stopWatchingMemorySpace(target.id)
-            // Remove the space's entity-graph edges (and prune orphaned nodes).
+            // Retire the knowledge derived from this space.
             deleteMemoryKnowledgeSpace(target.id)
         }
         archiveMemorySpaceFolder(row)
@@ -330,7 +330,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                 continue
             }
             jobs.push(startMemoryIndexJob({
-                kind: 'entity-index',
+                kind: 'knowledge-extraction',
                 spaceId: row.id,
                 fileName,
                 run: async (signal, reportProgress) => ({
@@ -373,7 +373,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     supported: false,
                     textDirect: false,
                     status: 'unsupported' as const,
-                    entityIndexed: false,
+                    knowledgeExtracted: false,
                     tags: [],
                 }
             }
@@ -387,7 +387,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     supported: true,
                     textDirect: f.textDirect,
                     status: 'not_indexed' as const,
-                    entityIndexed: false,
+                    knowledgeExtracted: false,
                     tags: [],
                 }
             }
@@ -403,8 +403,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                 status,
                 chunkCount: indexed.chunkCount,
                 lastIndexedAt: indexed.lastIndexedAt,
-                entityIndexed: status === 'indexed' && indexed.entityIndexedAt > 0 && currentKnowledgeFiles.has(f.fileName),
-                entityIndexedAt: indexed.entityIndexedAt || undefined,
+                knowledgeExtracted: status === 'indexed' && indexed.knowledgeExtractedAt > 0 && currentKnowledgeFiles.has(f.fileName),
+                knowledgeExtractedAt: indexed.knowledgeExtractedAt || undefined,
                 tags: status === 'indexed' ? indexed.tags : [],
             }
         })
@@ -453,8 +453,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         })
     })
 
-    // Compatibility route: extract one indexed document into governed knowledge.
-    app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/entity-index', async (req, reply) => {
+    // Extract one indexed document into governed knowledge.
+    app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/knowledge-extraction', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
@@ -480,8 +480,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         }
     })
 
-    // Compatibility route: start a background knowledge-extraction job.
-    app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/entity-index-job', async (req, reply) => {
+    // Start a background knowledge-extraction job.
+    app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/knowledge-extraction-job', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
         if (!row.folder_path) return reply.status(400).send({ error: 'Space has no folder configured' })
@@ -493,7 +493,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         }
 
         return startMemoryIndexJob({
-            kind: 'entity-index',
+            kind: 'knowledge-extraction',
             spaceId: row.id,
             fileName: req.params.fileName,
             run: async (signal, reportProgress) => ({
@@ -788,8 +788,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         for (const sf of sourceFiles) {
             const uniqueName = await mem.resolveUniqueSourceFile(sf, target.id)
             if (uniqueName !== sf) renamedCount++
-            const existingIndex = db.prepare('SELECT document_id, document_ref, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
-                .get(source.id, sf) as { document_id: string; document_ref: string; content_hash: string; chunk_count: number; last_indexed_at: number; entity_indexed_at: number; created_at: number } | undefined
+            const existingIndex = db.prepare('SELECT document_id, document_ref, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, created_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
+                .get(source.id, sf) as { document_id: string; document_ref: string; content_hash: string; chunk_count: number; last_indexed_at: number; knowledge_extracted_at: number; created_at: number } | undefined
 
             // Move physical file if both spaces have folders
             if (source.folder_path && target.folder_path) {
@@ -820,7 +820,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             if (existingIndex) {
                 db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?').run(source.id, sf)
                 db.prepare(`
-                    INSERT OR REPLACE INTO memory_file_index (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, entity_indexed_at, created_at)
+                    INSERT OR REPLACE INTO memory_file_index (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `).run(
                     existingIndex.document_id,
@@ -830,7 +830,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     existingIndex.content_hash,
                     existingIndex.chunk_count,
                     existingIndex.last_indexed_at,
-                    existingIndex.entity_indexed_at,
+                    existingIndex.knowledge_extracted_at,
                     existingIndex.created_at,
                 )
             }

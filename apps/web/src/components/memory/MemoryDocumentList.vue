@@ -45,8 +45,8 @@ const unsubscribeGraphReset = api.memory.onGraphReset(() => {
   knowledgePreviews.value = {};
   files.value = files.value.map((file) => ({
     ...file,
-    entityIndexed: false,
-    entityIndexedAt: undefined,
+    knowledgeExtracted: false,
+    knowledgeExtractedAt: undefined,
   }));
   void loadFiles();
 });
@@ -85,7 +85,7 @@ const columns: Column<DocumentRow>[] = [
   { key: "fileName", label: "File", minWidth: "220px", grow: 3, sortable: true, sortValue: (file) => file.fileName },
   { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
   { key: "chunkCount", label: "Chunks", minWidth: "70px", grow: 0, sortable: true, sortValue: (file) => file.chunkCount || 0 },
-  { key: "entityIndexed", label: "Facts Extracted", minWidth: "124px", sortable: true, sortValue: (file) => file.entityIndexed },
+  { key: "knowledgeExtracted", label: "Facts Extracted", minWidth: "124px", sortable: true, sortValue: (file) => file.knowledgeExtracted },
   { key: "status", label: "Search Indexed", minWidth: "146px", grow: 1.15, sortable: true, sortValue: (file) => file.status },
   { key: "actions", label: "Actions", minWidth: "140px" },
 ];
@@ -100,7 +100,7 @@ const supportedFiles = computed(() => files.value.filter((f) => f.supported));
 const needsAttentionCount = computed(
   () => supportedFiles.value.filter((f) => f.status === "needs_reindex" || f.status === "not_indexed").length,
 );
-const selectedEntityIndexableFiles = computed(() =>
+const selectedKnowledgeExtractableFiles = computed(() =>
   files.value.filter((f) => f.supported && f.status === "indexed" && selectedFiles.value.has(f.fileName)),
 );
 const selectedIndexedFiles = computed(() =>
@@ -110,8 +110,8 @@ const selectedIndexedFiles = computed(() =>
     selectedFiles.value.has(f.fileName),
   ),
 );
-const selectedEntityIndexableIdleCount = computed(() =>
-  selectedEntityIndexableFiles.value.filter((f) => !isJobActive("entity-index", f.fileName)).length,
+const selectedKnowledgeExtractableIdleCount = computed(() =>
+  selectedKnowledgeExtractableFiles.value.filter((f) => !isJobActive("knowledge-extraction", f.fileName)).length,
 );
 
 // --- Data loading ---
@@ -134,7 +134,7 @@ const {
   upsertJob,
   loadJobs,
   reindexFile,
-  entityIndexFile,
+  extractKnowledgeFromFile,
   reindexAll,
   cancelJob,
   reset: resetJobs,
@@ -147,9 +147,9 @@ const {
   onCompleted: () => emit("spacesChanged"),
 });
 
-async function entityIndexSelected(): Promise<void> {
-  for (const file of selectedEntityIndexableFiles.value) {
-    if (!isJobActive("entity-index", file.fileName)) await entityIndexFile(file.fileName);
+async function knowledgeExtractionSelected(): Promise<void> {
+  for (const file of selectedKnowledgeExtractableFiles.value) {
+    if (!isJobActive("knowledge-extraction", file.fileName)) await extractKnowledgeFromFile(file.fileName);
   }
 }
 
@@ -591,16 +591,16 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           Move
         </button>
         <button
-          v-if="selectedEntityIndexableFiles.length > 0"
-          :disabled="selectedEntityIndexableIdleCount === 0"
+          v-if="selectedKnowledgeExtractableFiles.length > 0"
+          :disabled="selectedKnowledgeExtractableIdleCount === 0"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
           title="Extract facts from the selected search-indexed documents"
-          @click="entityIndexSelected"
+          @click="knowledgeExtractionSelected"
         >
           <Icon
-            :icon="selectedEntityIndexableIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
+            :icon="selectedKnowledgeExtractableIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
             class="h-3.5 w-3.5"
-            :class="{ 'animate-spin': selectedEntityIndexableIdleCount === 0 }"
+            :class="{ 'animate-spin': selectedKnowledgeExtractableIdleCount === 0 }"
           />
           Extract facts
         </button>
@@ -733,18 +733,18 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         </span>
       </template>
 
-      <template #col-entityIndexed="{ item: file }">
+      <template #col-knowledgeExtracted="{ item: file }">
         <div
           v-if="file.supported"
           class="flex items-center gap-1.5"
-          :title="!isJobRunning('entity-index', file.fileName) && !file.entityIndexed ? (file.status === 'indexed' ? 'Facts not extracted' : 'Fact extraction requires a search index first') : undefined"
+          :title="!isJobRunning('knowledge-extraction', file.fileName) && !file.knowledgeExtracted ? (file.status === 'indexed' ? 'Facts not extracted' : 'Fact extraction requires a search index first') : undefined"
         >
           <button
-            v-if="isJobRunning('entity-index', file.fileName)"
+            v-if="isJobRunning('knowledge-extraction', file.fileName)"
             type="button"
             class="job-cancel-control rounded px-1.5 py-1 text-[11px] text-emerald-500 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:bg-red-500/10 focus-visible:text-red-400"
             title="Cancel fact extraction"
-            @click.stop="cancelJob(runningJob('entity-index', file.fileName))"
+            @click.stop="cancelJob(runningJob('knowledge-extraction', file.fileName))"
           >
             <span class="job-progress inline-flex items-center gap-1.5">
               <Icon
@@ -763,12 +763,12 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           </button>
           <Icon
             v-else
-            :icon="file.entityIndexed ? 'lucide:network' : 'lucide:network-x'"
+            :icon="file.knowledgeExtracted ? 'lucide:network' : 'lucide:network-x'"
             class="h-3.5 w-3.5"
-            :class="file.entityIndexed ? 'text-green-400' : 'text-theme-700'"
+            :class="file.knowledgeExtracted ? 'text-green-400' : 'text-theme-700'"
           />
           <HoverTooltip
-            v-if="!isJobRunning('entity-index', file.fileName) && file.entityIndexed"
+            v-if="!isJobRunning('knowledge-extraction', file.fileName) && file.knowledgeExtracted"
             :max-width="380"
             @show="loadKnowledgePreview(file.fileName)"
           >
@@ -920,14 +920,14 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           <button
             v-if="file.supported && file.status === 'indexed'"
             class="p-1 text-theme-600 hover:text-emerald-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
-            :class="{ 'opacity-100 text-emerald-400': isJobRunning('entity-index', file.fileName) }"
-            :title="isJobRunning('entity-index', file.fileName) ? 'Cancel fact extraction' : 'Extract facts for the knowledge graph'"
-            @click="isJobRunning('entity-index', file.fileName) ? cancelJob(runningJob('entity-index', file.fileName)) : entityIndexFile(file.fileName)"
+            :class="{ 'opacity-100 text-emerald-400': isJobRunning('knowledge-extraction', file.fileName) }"
+            :title="isJobRunning('knowledge-extraction', file.fileName) ? 'Cancel fact extraction' : 'Extract facts for the knowledge graph'"
+            @click="isJobRunning('knowledge-extraction', file.fileName) ? cancelJob(runningJob('knowledge-extraction', file.fileName)) : extractKnowledgeFromFile(file.fileName)"
           >
             <Icon
-              :icon="isJobRunning('entity-index', file.fileName) ? 'lucide:loader-2' : 'lucide:network'"
+              :icon="isJobRunning('knowledge-extraction', file.fileName) ? 'lucide:loader-2' : 'lucide:network'"
               class="h-3.5 w-3.5"
-              :class="{ 'animate-spin': isJobRunning('entity-index', file.fileName) }"
+              :class="{ 'animate-spin': isJobRunning('knowledge-extraction', file.fileName) }"
             />
           </button>
         </div>

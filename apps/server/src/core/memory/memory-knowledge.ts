@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
-import type { DeleteEdgeResult, EntityEdge, EntityMergeResult, EntityNode, EntityType, GraphWalkResult, ImportanceLevel, KnowledgeSourceChunk } from './knowledge-types.js'
+import type { DeleteKnowledgeAssertionResult, KnowledgeAssertion, KnowledgeEntityMergeResult, KnowledgeEntity, KnowledgeEntityType, KnowledgeGraphProjection, ImportanceLevel, KnowledgeSourceChunk } from './knowledge-types.js'
 import type { PreparedMemoryChunk, RetrievedChunk } from './parser.js'
 import { fuseRetrievalChannels } from './parser.js'
 import { getEmbeddingProvider } from './embedding.js'
@@ -27,7 +27,7 @@ export const MEMORY_KNOWLEDGE_VECTOR_TABLE = 'memory_knowledge_v2'
 
 export interface KnowledgeExtractedEntity {
   name: string
-  type?: EntityType
+  type?: KnowledgeEntityType
   aliases?: string[]
   identityHint?: string
   description?: string
@@ -69,15 +69,15 @@ export interface KnowledgePublishResult {
 }
 
 export interface KnowledgeSearchResult {
-  graph?: GraphWalkResult
+  graph?: KnowledgeGraphProjection
   sourceChunks: RetrievedChunk[]
 }
 
 interface PredicateDefinition {
   id: string
   aliases?: string[]
-  subjectTypes?: EntityType[]
-  objectTypes?: EntityType[]
+  subjectTypes?: KnowledgeEntityType[]
+  objectTypes?: KnowledgeEntityType[]
   inverse?: string
   symmetric?: boolean
   temporal?: boolean
@@ -501,8 +501,8 @@ export class MemoryKnowledgeStore {
         const predicateId = this.resolvePredicate(relation.relation)
         const predicate = db.prepare(`SELECT subject_types_json, object_types_json FROM memory_knowledge_predicates WHERE id = ?`)
           .get(predicateId) as { subject_types_json: string; object_types_json: string } | undefined
-        const subjectTypes = JSON.parse(predicate?.subject_types_json || '[]') as EntityType[]
-        const objectTypes = JSON.parse(predicate?.object_types_json || '[]') as EntityType[]
+        const subjectTypes = JSON.parse(predicate?.subject_types_json || '[]') as KnowledgeEntityType[]
+        const objectTypes = JSON.parse(predicate?.object_types_json || '[]') as KnowledgeEntityType[]
         if ((subjectTypes.length && !subjectTypes.includes(relation.from.type || 'other')) ||
           (relation.to && objectTypes.length && !objectTypes.includes(relation.to.type || 'other'))) {
           rejectedClaims++
@@ -724,11 +724,11 @@ export class MemoryKnowledgeStore {
     return this.graph.getSourceChunk(textUnitId)
   }
 
-  getNode(id: string): EntityNode | null {
+  getNode(id: string): KnowledgeEntity | null {
     return this.graph.getNode(id)
   }
 
-  getEdge(id: string): EntityEdge | null {
+  getEdge(id: string): KnowledgeAssertion | null {
     return this.graph.getEdge(id)
   }
 
@@ -748,11 +748,11 @@ export class MemoryKnowledgeStore {
     minImportance?: ImportanceLevel
     spaceIds?: string[]
     depth?: number
-  } = {}): GraphWalkResult {
+  } = {}): KnowledgeGraphProjection {
     return this.graph.browseGraph(opts)
   }
 
-  suggestNodes(query: string, limit = 8, spaceIds: string[] = []): EntityNode[] {
+  suggestNodes(query: string, limit = 8, spaceIds: string[] = []): KnowledgeEntity[] {
     return this.graph.suggestNodes(query, limit, spaceIds)
   }
 
@@ -760,7 +760,7 @@ export class MemoryKnowledgeStore {
     entityIds: string[]
     canonicalName: string
     spaceIds?: string[]
-  }): Promise<EntityMergeResult> {
+  }): Promise<KnowledgeEntityMergeResult> {
     let entityIds = Array.from(new Set(opts.entityIds.map((id) => id.trim()).filter(Boolean))).slice(0, 20)
     if (entityIds.length < 1) throw new Error('ENTITY_MERGE_REQUIRES_MULTIPLE')
     const canonicalName = cleanDisplay(opts.canonicalName, 160)
@@ -783,7 +783,7 @@ export class MemoryKnowledgeStore {
     if (allowedSpaces.size > 0 && !allowedSpaces.has(namespaceId)) throw new Error('ENTITY_MERGE_OUT_OF_SCOPE')
 
     let primaryId = String(primary.id)
-    const primaryType = String(primary.entity_type) as EntityType
+    const primaryType = String(primary.entity_type) as KnowledgeEntityType
     const suppliedCanonical = rows.find((row) =>
       String(row.normalized_name) === normalizedName && String(row.entity_type) === primaryType)
     if (suppliedCanonical) primaryId = String(suppliedCanonical.id)
@@ -979,7 +979,7 @@ export class MemoryKnowledgeStore {
     }
   }
 
-  updateEntity(id: string, patch: { name?: string; type?: EntityType; aliases?: string[]; importance?: ImportanceLevel }): EntityNode | null {
+  updateEntity(id: string, patch: { name?: string; type?: KnowledgeEntityType; aliases?: string[]; importance?: ImportanceLevel }): KnowledgeEntity | null {
     const existing = this.getNode(id)
     if (!existing) return null
     const nextName = cleanDisplay(patch.name || existing.name, 160)
@@ -1063,13 +1063,13 @@ export class MemoryKnowledgeStore {
     return ids.length
   }
 
-  updateEdge(id: string, patch: { relation?: string; note?: string; importance?: ImportanceLevel }): EntityEdge | null {
+  updateEdge(id: string, patch: { relation?: string; note?: string; importance?: ImportanceLevel }): KnowledgeAssertion | null {
     if (!this.getEdge(id)) return null
     this.correctRelationship(id, patch)
     return this.getEdge(id)
   }
 
-  deleteEdge(id: string, spaceIds: string[] = []): DeleteEdgeResult {
+  deleteEdge(id: string, spaceIds: string[] = []): DeleteKnowledgeAssertionResult {
     const deleted = this.deleteEdgesByIds([id], spaceIds)
     return { edgeDeleted: deleted === 1, orphanedNodeIds: [] }
   }
@@ -1120,7 +1120,7 @@ export class MemoryKnowledgeStore {
     return ids.length
   }
 
-  deleteMatchingEdge(fromName: string, relation: string, toName: string, spaceIds: string[]): DeleteEdgeResult {
+  deleteMatchingEdge(fromName: string, relation: string, toName: string, spaceIds: string[]): DeleteKnowledgeAssertionResult {
     const normalizedRelation = this.resolvePredicate(relation)
     const row = this.graph.graphRows(spaceIds, 5000).find((candidate) => normalize(candidate.subject_name) === normalize(fromName) && normalize(candidate.object_name) === normalize(toName) && String(candidate.canonical_name) === normalizedRelation)
     return row ? this.deleteEdge(String(row.id), spaceIds) : { edgeDeleted: false, orphanedNodeIds: [] }
@@ -1133,7 +1133,7 @@ export class MemoryKnowledgeStore {
     to: KnowledgeExtractedEntity
     importance?: ImportanceLevel
     note?: string
-  }): EntityEdge {
+  }): KnowledgeAssertion {
     this.ensurePredicateRegistry()
     const db = getDb()
     const now = Date.now()
@@ -1220,7 +1220,7 @@ export class MemoryKnowledgeStore {
   async reset(): Promise<{ nodesDeleted: number; edgesDeleted: number }> {
     const before = this.graphStats()
     this.resetGeneration++
-    cancelMemoryIndexJobsByKind('entity-index')
+    cancelMemoryIndexJobsByKind('knowledge-extraction')
     const db = getDb()
     db.transaction(() => {
       db.prepare(`DELETE FROM memory_knowledge_assertion_corrections`).run()
@@ -1232,15 +1232,15 @@ export class MemoryKnowledgeStore {
       db.prepare(`DELETE FROM memory_knowledge_entities`).run()
       db.prepare(`DELETE FROM memory_knowledge_text_units`).run()
       db.prepare(`DELETE FROM memory_knowledge_index_runs`).run()
-      db.prepare(`DELETE FROM memory_index_jobs WHERE kind = 'entity-index'`).run()
-      db.prepare(`UPDATE memory_file_index SET entity_indexed_at = 0, tags_json = '[]'`).run()
+      db.prepare(`DELETE FROM memory_index_jobs WHERE kind = 'knowledge-extraction'`).run()
+      db.prepare(`UPDATE memory_file_index SET knowledge_extracted_at = 0, tags_json = '[]'`).run()
     })()
-    getEventBus().emit('memory:graph-reset', { resetAt: Date.now() })
+    getEventBus().emit('memory:knowledge-reset', { resetAt: Date.now() })
     await getRAGStore().deleteTable(MEMORY_KNOWLEDGE_VECTOR_TABLE)
     return { nodesDeleted: before.nodeCount, edgesDeleted: before.edgeCount }
   }
 
-  formatWalk(walk: GraphWalkResult): string {
+  formatWalk(walk: KnowledgeGraphProjection): string {
     if (!walk.edges.length) return ''
     return '## Source-grounded relationships\n' + walk.edges.map((edge) => {
       const status = edge.assertionStatus === 'disputed' ? ' [disputed]' : ''
@@ -1324,7 +1324,7 @@ export class MemoryKnowledgeStore {
     query: string,
     spaceIds: string[],
     opts: { allowAmbiguousExactMatches?: boolean } = {},
-  ): EntityNode[] {
+  ): KnowledgeEntity[] {
     const scopes = Array.from(new Set(spaceIds.filter(Boolean)))
     if (!scopes.length) return []
     const rows = getDb().prepare(`
@@ -1623,8 +1623,8 @@ export class MemoryKnowledgeStore {
       .slice(0, Math.max(1, limit))
     const chosen = chosenEntries.map((entry) => entry.row)
     const chosenScores = new Map(chosenEntries.map((entry) => [String(entry.row.id), clamp(entry.score)]))
-    const nodes = new Map<string, EntityNode>()
-    const edges: EntityEdge[] = []
+    const nodes = new Map<string, KnowledgeEntity>()
+    const edges: KnowledgeAssertion[] = []
     const sourceChunks = new Map<string, RetrievedChunk>()
     const mentionLikeClause = terms.map(() => `(
       e.normalized_name LIKE ? ESCAPE '\\'
@@ -1703,7 +1703,7 @@ export class MemoryKnowledgeStore {
         fromName: String(row.subject_name), toName: objectName, relation: String(row.canonical_name),
         importance: Math.min(3, Math.max(0, Number(row.importance))) as ImportanceLevel,
         retrievalRelevance: chosenScores.get(String(row.id)),
-        assertionStatus: String(row.status) as EntityEdge['assertionStatus'],
+        assertionStatus: String(row.status) as KnowledgeAssertion['assertionStatus'],
         note: String(row.correction_evidence || row.extraction_note || ''),
         sourceKind: row.correction_evidence ? 'manual' : 'memory',
         sourceId: row.correction_evidence ? `manual:assertion:${row.id}` : String(row.source_id),

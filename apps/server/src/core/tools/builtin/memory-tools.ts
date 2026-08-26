@@ -5,9 +5,9 @@ import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getMemorySpaceFolderPath, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
 import { relativePathForFolder } from '../../memory/memory-space-folders.js'
 import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
-import type { EntityEdge, EntityNode, EntityType } from '../../memory/knowledge-types.js'
+import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEntityType } from '../../memory/knowledge-types.js'
 import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
-import { deleteMemoryKnowledgeSource } from '../../memory/memory-entity-indexer.js'
+import { deleteMemoryKnowledgeSource } from '../../memory/memory-knowledge-extraction.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
 import {
     memoryDocumentRefMatchesContentHash,
@@ -73,19 +73,19 @@ export const MEMORY_TOOL_NAMES = [
     ...MEMORY_WRITE_TOOL_NAMES,
 ] as const
 
-export const RELATIONSHIP_GRAPH_TOOL_NAMES = [
-    'relationship_graph_search',
-    'relationship_graph_assert',
-    'relationship_graph_delete',
-    'relationship_entity_merge',
+export const KNOWLEDGE_TOOL_NAMES = [
+    'knowledge_search',
+    'knowledge_assert',
+    'knowledge_delete',
+    'knowledge_entity_merge',
 ] as const
-export const RELATIONSHIP_GRAPH_READ_TOOL_NAMES = ['relationship_graph_search'] as const
+export const KNOWLEDGE_READ_TOOL_NAMES = ['knowledge_search'] as const
 
 export type MemoryReadToolName = (typeof MEMORY_READ_TOOL_NAMES)[number]
 export type MemoryWriteToolName = (typeof MEMORY_WRITE_TOOL_NAMES)[number]
 export type MemoryToolName = (typeof MEMORY_TOOL_NAMES)[number]
-export type RelationshipGraphToolName = (typeof RELATIONSHIP_GRAPH_TOOL_NAMES)[number]
-export type RelationshipGraphReadToolName = (typeof RELATIONSHIP_GRAPH_READ_TOOL_NAMES)[number]
+export type KnowledgeToolName = (typeof KNOWLEDGE_TOOL_NAMES)[number]
+export type KnowledgeReadToolName = (typeof KNOWLEDGE_READ_TOOL_NAMES)[number]
 
 export function isMemoryToolName(toolName: string): toolName is MemoryToolName {
     return (MEMORY_TOOL_NAMES as readonly string[]).includes(toolName)
@@ -95,12 +95,12 @@ export function isMemoryReadToolName(toolName: string): toolName is MemoryReadTo
     return (MEMORY_READ_TOOL_NAMES as readonly string[]).includes(toolName)
 }
 
-export function isRelationshipGraphToolName(toolName: string): toolName is RelationshipGraphToolName {
-    return (RELATIONSHIP_GRAPH_TOOL_NAMES as readonly string[]).includes(toolName)
+export function isKnowledgeToolName(toolName: string): toolName is KnowledgeToolName {
+    return (KNOWLEDGE_TOOL_NAMES as readonly string[]).includes(toolName)
 }
 
-export function isRelationshipGraphReadToolName(toolName: string): toolName is RelationshipGraphReadToolName {
-    return (RELATIONSHIP_GRAPH_READ_TOOL_NAMES as readonly string[]).includes(toolName)
+export function isKnowledgeReadToolName(toolName: string): toolName is KnowledgeReadToolName {
+    return (KNOWLEDGE_READ_TOOL_NAMES as readonly string[]).includes(toolName)
 }
 
 export interface MemoryToolOptions {
@@ -111,7 +111,7 @@ export interface MemoryToolOptions {
 }
 
 const ENTITY_TYPES = ['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'] as const
-const ENTITY_GRAPH_SHORT_ID_LENGTH = 8
+const KNOWLEDGE_SHORT_ID_LENGTH = 8
 const IMPORTANCE_LABELS = ['temporary', 'minor', 'useful', 'core'] as const
 type ImportanceLabel = (typeof IMPORTANCE_LABELS)[number]
 const IMPORTANCE_MAP: Record<ImportanceLabel, 0 | 1 | 2 | 3> = {
@@ -121,15 +121,15 @@ const IMPORTANCE_MAP: Record<ImportanceLabel, 0 | 1 | 2 | 3> = {
     core: 3,
 }
 
-function shortEntityGraphId(prefix: 'n' | 'e', id: string): string {
-    return `${prefix}:${id.slice(0, ENTITY_GRAPH_SHORT_ID_LENGTH)}`
+function shortKnowledgeGraphId(prefix: 'n' | 'e', id: string): string {
+    return `${prefix}:${id.slice(0, KNOWLEDGE_SHORT_ID_LENGTH)}`
 }
 
-function entityGraphHandleSuffix(id: string): string {
-    return createHash('sha256').update(id).digest('hex').slice(0, ENTITY_GRAPH_SHORT_ID_LENGTH)
+function knowledgeHandleSuffix(id: string): string {
+    return createHash('sha256').update(id).digest('hex').slice(0, KNOWLEDGE_SHORT_ID_LENGTH)
 }
 
-function entityGraphHandleSlug(name: string): string {
+function knowledgeHandleSlug(name: string): string {
     return name
         .normalize('NFKD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -139,23 +139,23 @@ function entityGraphHandleSlug(name: string): string {
         .slice(0, 48) || 'entity'
 }
 
-export function readableEntityGraphNodeId(name: string, id: string): string {
-    return `n:${entityGraphHandleSlug(name)}#${entityGraphHandleSuffix(id)}`
+export function readableKnowledgeEntityId(name: string, id: string): string {
+    return `n:${knowledgeHandleSlug(name)}#${knowledgeHandleSuffix(id)}`
 }
 
-function resolveEntityGraphEdgeId(value: string): { id: string } | { error: string } {
+function resolveKnowledgeAssertionId(value: string): { id: string } | { error: string } {
     const trimmed = value.trim()
     const shortId = trimmed.startsWith('e:') ? trimmed.slice(2) : trimmed
     if (!trimmed.startsWith('e:') || shortId.length === 0) return { id: trimmed }
     const rows = getDb().prepare(`SELECT id FROM memory_knowledge_assertions WHERE id LIKE ? AND status IN ('active', 'disputed') ORDER BY updated_at DESC LIMIT 2`).all(`${shortId}%`) as { id: string }[]
     if (rows.length === 1) return { id: rows[0].id }
     if (rows.length > 1) {
-        return { error: `Multiple relationship graph edges match id prefix ${trimmed}. Use relationship_graph_search to get the full id, then retry.` }
+        return { error: `Multiple knowledge edges match id prefix ${trimmed}. Use knowledge_search to get the full id, then retry.` }
     }
     return { id: trimmed }
 }
 
-function resolveEntityGraphNodeIds(values: unknown, spaceIds: string[]): { ids: string[] } | { error: string } {
+function resolveKnowledgeEntityIds(values: unknown, spaceIds: string[]): { ids: string[] } | { error: string } {
     if (!Array.isArray(values)) return { error: 'entityIds must be an array containing at least one entity ID.' }
     const requested = Array.from(new Set(values
         .filter((value): value is string => typeof value === 'string')
@@ -163,7 +163,7 @@ function resolveEntityGraphNodeIds(values: unknown, spaceIds: string[]): { ids: 
         .filter(Boolean)))
         .slice(0, 20)
     if (requested.length < 1) return { error: 'Provide at least one entity ID to merge.' }
-    if (spaceIds.length === 0) return { error: 'No memory folder is selected for relationship graph access.' }
+    if (spaceIds.length === 0) return { error: 'No memory folder is selected for knowledge access.' }
     const scopePlaceholders = spaceIds.map(() => '?').join(', ')
     const ids: string[] = []
     let readableHandleRows: Array<{ id: string }> | undefined
@@ -180,7 +180,7 @@ function resolveEntityGraphNodeIds(values: unknown, spaceIds: string[]): { ids: 
               `).all(...spaceIds) as Array<{ id: string }>
         }
         const rows = readableSuffix
-            ? readableHandleRows!.filter((row) => entityGraphHandleSuffix(row.id) === readableSuffix)
+            ? readableHandleRows!.filter((row) => knowledgeHandleSuffix(row.id) === readableSuffix)
             : isShort
               ? getDb().prepare(`
                 SELECT id FROM memory_knowledge_entities
@@ -192,21 +192,21 @@ function resolveEntityGraphNodeIds(values: unknown, spaceIds: string[]): { ids: 
                 WHERE status = 'active' AND namespace_id IN (${scopePlaceholders}) AND id = ?
                 LIMIT 1
               `).all(...spaceIds, candidate) as Array<{ id: string }>
-        if (rows.length === 0) return { error: `No active entity matched ID ${requestedId}. Use relationship_graph_search to refresh the IDs.` }
-        if (rows.length > 1) return { error: `Multiple entities match ID ${requestedId}. Use relationship_graph_search to refresh the IDs and retry.` }
+        if (rows.length === 0) return { error: `No active entity matched ID ${requestedId}. Use knowledge_search to refresh the IDs.` }
+        if (rows.length > 1) return { error: `Multiple entities match ID ${requestedId}. Use knowledge_search to refresh the IDs and retry.` }
         ids.push(rows[0].id)
     }
     const unique = Array.from(new Set(ids))
     return unique.length >= 1 ? { ids: unique } : { error: 'The supplied IDs did not resolve to an active entity.' }
 }
 
-function formatEntityNode(node: EntityNode): string {
+function formatKnowledgeEntity(node: KnowledgeEntity): string {
     const aliases = node.aliases.length ? ` aliases=${node.aliases.join(', ')}` : ''
     const importanceLabel = IMPORTANCE_LABELS[node.importance] ?? 'minor'
-    return `- [${importanceLabel}] ${node.name} (${node.type}, id=${readableEntityGraphNodeId(node.name, node.id)}, mentions=${node.mentionCount}${aliases})`
+    return `- [${importanceLabel}] ${node.name} (${node.type}, id=${readableKnowledgeEntityId(node.name, node.id)}, mentions=${node.mentionCount}${aliases})`
 }
 
-function formatEntityEdge(edge: EntityEdge): string {
+function formatKnowledgeAssertion(edge: KnowledgeAssertion): string {
     const importanceLabel = IMPORTANCE_LABELS[edge.importance] ?? 'minor'
     const note = edge.note ? ` Note: ${edge.note}` : ''
     const part = edge.sourceChunkIndex !== undefined ? `, part=${edge.sourceChunkIndex + 1}` : ''
@@ -215,12 +215,12 @@ function formatEntityEdge(edge: EntityEdge): string {
         : undefined
     const source = sourceDocument ? ` Source chunk: ${sourceDocument.file_name}${part}.` : ''
     const relevance = edge.retrievalRelevance === undefined ? '' : `, relevance=${edge.retrievalRelevance.toFixed(2)}`
-    return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${shortEntityGraphId('e', edge.id)}${relevance}, mentions=${edge.mentionCount}).${note}${source}`
+    return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${shortKnowledgeGraphId('e', edge.id)}${relevance}, mentions=${edge.mentionCount}).${note}${source}`
 }
 
-function normalizeEntityType(value: unknown): EntityType {
+function normalizeKnowledgeEntityType(value: unknown): KnowledgeEntityType {
     return typeof value === 'string' && (ENTITY_TYPES as readonly string[]).includes(value)
-        ? value as EntityType
+        ? value as KnowledgeEntityType
         : 'other'
 }
 
@@ -275,14 +275,14 @@ function pickToolString(params: unknown, keys: string[]): string {
     return ''
 }
 
-function toEntityInput(value: unknown): { name: string; type: EntityType; aliases: string[] } | { error: string } {
+function toEntityInput(value: unknown): { name: string; type: KnowledgeEntityType; aliases: string[] } | { error: string } {
     if (!value || typeof value !== 'object') return { error: 'Expected entity objects with name, type, and optional aliases.' }
     const obj = value as { name?: unknown; type?: unknown; aliases?: unknown }
     const name = cleanEntityName(obj.name)
     if (name.length < 2) return { error: 'Entity names must be at least 2 characters long.' }
     return {
         name,
-        type: normalizeEntityType(obj.type),
+        type: normalizeKnowledgeEntityType(obj.type),
         aliases: cleanAliases(obj.aliases),
     }
 }
@@ -893,29 +893,29 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
 }
 
 /**
- * Create a `relationship_graph_search` tool that lets the LLM inspect known
+ * Create a `knowledge_search` tool that lets the LLM inspect known
  * relationships and their connected entities.
  */
-function resolveRelationshipGraphSpace(
+function resolveKnowledgeSpace(
     assignedSpaces: MemorySpaceRef[],
     folder?: string,
 ): MemorySpaceRef | { error: string } {
     if (assignedSpaces.length === 0) {
-        return { error: 'No memory folder is selected for relationship graph access.' }
+        return { error: 'No memory folder is selected for knowledge access.' }
     }
     if (folder?.trim()) {
         const match = findSpaceByIdOrName(assignedSpaces, folder.trim())
-        return match || { error: `Memory folder "${folder.trim()}" is not in the selected relationship graph scope.` }
+        return match || { error: `Memory folder "${folder.trim()}" is not in the selected knowledge scope.` }
     }
     if (assignedSpaces.length === 1) return assignedSpaces[0]
     return { error: `Multiple memory folders are selected. Specify the target using the "folder" parameter.\n${formatSpaces(assignedSpaces)}` }
 }
 
-export function makeRelationshipGraphSearchTool(opts: MemoryToolOptions = {}): ToolDefinition {
+export function makeKnowledgeSearchTool(opts: MemoryToolOptions = {}): ToolDefinition {
     const assignedSpaces = opts.assignedSpaces || []
     const spaceIds = assignedSpaces.map((space) => space.id)
     return {
-        name: 'relationship_graph_search',
+        name: 'knowledge_search',
         execution: { readOnly: true },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         description:
@@ -933,7 +933,7 @@ export function makeRelationshipGraphSearchTool(opts: MemoryToolOptions = {}): T
         timeout: 15_000,
         execute: async (params: unknown) => {
             if (spaceIds.length === 0) {
-                return { success: false, output: 'No memory folder is selected for relationship graph access.' }
+                return { success: false, output: 'No memory folder is selected for knowledge access.' }
             }
             const query = pickToolString(params, ['query', 'entity', 'name', 'search_query', 'searchQuery'])
             const { depth, limit } = (params || {}) as { depth?: number; limit?: number }
@@ -945,11 +945,11 @@ export function makeRelationshipGraphSearchTool(opts: MemoryToolOptions = {}): T
                 const result = await knowledge.search(query, spaceIds, cappedLimit, { depth: walkDepth })
                 const walk = result.graph
                 if (!walk || (walk.nodes.length === 0 && walk.edges.length === 0)) {
-                    return { success: false, output: `No relationship graph nodes matched "${query}".` }
+                    return { success: false, output: `No knowledge nodes matched "${query}".` }
                 }
 
-                const nodeLines = walk.nodes.slice(0, cappedLimit).map(formatEntityNode)
-                const edgeLines = walk.edges.slice(0, cappedLimit).map(formatEntityEdge)
+                const nodeLines = walk.nodes.slice(0, cappedLimit).map(formatKnowledgeEntity)
+                const edgeLines = walk.edges.slice(0, cappedLimit).map(formatKnowledgeAssertion)
                 const sections = [
                     `Matched ${walk.seedNodes.length} seed node${walk.seedNodes.length !== 1 ? 's' : ''}; focused ${walkDepth} hop${walkDepth !== 1 ? 's' : ''}.`,
                     nodeLines.length ? `Nodes:\n${nodeLines.join('\n')}` : '',
@@ -960,15 +960,15 @@ export function makeRelationshipGraphSearchTool(opts: MemoryToolOptions = {}): T
 
             const snapshot = knowledge.browseGraph({ limit: cappedLimit, spaceIds })
             if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {
-                return { success: false, output: 'No relationship graph entries are available in the selected memory folders.' }
+                return { success: false, output: 'No knowledge entries are available in the selected memory folders.' }
             }
 
-            const nodeLines = snapshot.nodes.map(formatEntityNode)
-            const edgeLines = snapshot.edges.map(formatEntityEdge)
+            const nodeLines = snapshot.nodes.map(formatKnowledgeEntity)
+            const edgeLines = snapshot.edges.map(formatKnowledgeAssertion)
             return {
                 success: true,
                 output: [
-                    `Recent relationship graph entries (limit ${cappedLimit}):`,
+                    `Recent knowledge entries (limit ${cappedLimit}):`,
                     nodeLines.length ? `Nodes:\n${nodeLines.join('\n')}` : '',
                     edgeLines.length ? `Relationships:\n${edgeLines.join('\n')}` : '',
                 ].filter(Boolean).join('\n\n'),
@@ -978,17 +978,17 @@ export function makeRelationshipGraphSearchTool(opts: MemoryToolOptions = {}): T
 }
 
 /**
- * Create a `relationship_graph_assert` tool that lets the LLM actively record
- * or correct a relationship in the relationship graph.
+ * Create a `knowledge_assert` tool that lets the LLM actively record
+ * or correct a relationship in the knowledge.
  */
-export function makeRelationshipGraphAssertTool(opts: MemoryToolOptions = {}): ToolDefinition {
+export function makeKnowledgeAssertTool(opts: MemoryToolOptions = {}): ToolDefinition {
     const assignedSpaces = opts.assignedSpaces || []
     return {
-        name: 'relationship_graph_assert',
+        name: 'knowledge_assert',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
         description:
-            'Assert or update a durable relationship in the relationship graph. ' +
+            'Assert or update a durable relationship in the knowledge. ' +
             'Use this for stable facts the user explicitly wants remembered as connected entities. ' +
             'This creates missing entities, merges repeated relationships, and may replace older functional relationships such as works_at or lives_in.',
         parameters: {
@@ -1026,7 +1026,7 @@ export function makeRelationshipGraphAssertTool(opts: MemoryToolOptions = {}): T
             const { from, relation, to, importance, note, folder } = (params || {}) as {
                 from?: unknown; relation?: unknown; to?: unknown; importance?: unknown; note?: unknown; folder?: string
             }
-            const targetSpace = resolveRelationshipGraphSpace(assignedSpaces, folder)
+            const targetSpace = resolveKnowledgeSpace(assignedSpaces, folder)
             if ('error' in targetSpace) return { success: false, output: targetSpace.error }
             const fromEntity = toEntityInput(from)
             if ('error' in fromEntity) return { success: false, output: `Invalid from entity: ${fromEntity.error}` }
@@ -1048,18 +1048,18 @@ export function makeRelationshipGraphAssertTool(opts: MemoryToolOptions = {}): T
             })
 
             if (!edge) return { success: false, output: 'No relationship was created.' }
-            return { success: true, output: `Relationship asserted:\n${formatEntityEdge(edge)}` }
+            return { success: true, output: `Relationship asserted:\n${formatKnowledgeAssertion(edge)}` }
         },
     }
 }
 
 /** Merge duplicate graph entities into an existing canonical owner or the first supplied entity ID. */
-export function makeRelationshipEntityMergeTool(opts: MemoryToolOptions = {}): ToolDefinition {
+export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): ToolDefinition {
     const spaceIds = (opts.assignedSpaces || []).map((space) => space.id)
     return {
-        name: 'relationship_entity_merge',
+        name: 'knowledge_entity_merge',
         description:
-            'Merge duplicate relationship graph entities. Provide entity IDs returned by relationship_graph_search and a new canonical mainName. ' +
+            'Merge duplicate knowledge entities. Provide entity IDs returned by knowledge_search and a new canonical mainName. ' +
             'If mainName already belongs to an active entity in scope, that entity automatically remains stable; otherwise the first supplied ID remains stable. ' +
             'All other entities are redirected into it, and their former names and aliases become normalized aliases. ' +
             'Relationships, mentions, and resolution records are rewired; duplicate relationships are consolidated.',
@@ -1071,7 +1071,7 @@ export function makeRelationshipEntityMergeTool(opts: MemoryToolOptions = {}): T
                     items: { type: 'string' },
                     minItems: 1,
                     maxItems: 20,
-                    description: 'One or more full or readable node IDs (n:entity_name#xxxxxxxx) from relationship_graph_search. Legacy short IDs remain accepted. One ID is sufficient when mainName already belongs to another active entity.',
+                    description: 'One or more full or readable node IDs (n:entity_name#xxxxxxxx) from knowledge_search. Legacy short IDs remain accepted. One ID is sufficient when mainName already belongs to another active entity.',
                 },
                 mainName: { type: 'string', description: 'New canonical display name for the merged entity.' },
             },
@@ -1083,7 +1083,7 @@ export function makeRelationshipEntityMergeTool(opts: MemoryToolOptions = {}): T
         timeout: 30_000,
         execute: async (params: unknown) => {
             const { entityIds, mainName } = (params || {}) as { entityIds?: unknown; mainName?: unknown }
-            const resolved = resolveEntityGraphNodeIds(entityIds, spaceIds)
+            const resolved = resolveKnowledgeEntityIds(entityIds, spaceIds)
             if ('error' in resolved) return { success: false, output: resolved.error }
             const canonicalName = cleanEntityName(mainName)
             if (!canonicalName) return { success: false, output: 'mainName is required.' }
@@ -1097,7 +1097,7 @@ export function makeRelationshipEntityMergeTool(opts: MemoryToolOptions = {}): T
                 return {
                     success: true,
                     output: [
-                        `Merged ${result.mergedEntityIds.length + 1} entities into ${result.entity.name} (${readableEntityGraphNodeId(result.entity.name, result.entity.id)}).`,
+                        `Merged ${result.mergedEntityIds.length + 1} entities into ${result.entity.name} (${readableKnowledgeEntityId(result.entity.name, result.entity.id)}).`,
                         `Aliases: ${aliases}.`,
                         `Consolidated ${result.consolidatedAssertions} duplicate relationship${result.consolidatedAssertions === 1 ? '' : 's'}; retired ${result.retiredSelfRelationships} self-relationship${result.retiredSelfRelationships === 1 ? '' : 's'}.`,
                     ].join('\n'),
@@ -1118,23 +1118,23 @@ export function makeRelationshipEntityMergeTool(opts: MemoryToolOptions = {}): T
 }
 
 /**
- * Create a `relationship_graph_delete` tool that lets the LLM remove an
+ * Create a `knowledge_delete` tool that lets the LLM remove an
  * incorrect relationship by ID or by exact relationship triple.
  */
-export function makeRelationshipGraphDeleteTool(opts: MemoryToolOptions = {}): ToolDefinition {
+export function makeKnowledgeDeleteTool(opts: MemoryToolOptions = {}): ToolDefinition {
     const assignedSpaces = opts.assignedSpaces || []
     const spaceIds = assignedSpaces.map((space) => space.id)
     return {
-        name: 'relationship_graph_delete',
+        name: 'knowledge_delete',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
         description:
-            'Delete an incorrect relationship from the relationship graph. ' +
-            'Prefer edgeId from relationship_graph_search. If edgeId is unknown, provide from, relation, and to to delete an exact relationship triple.',
+            'Delete an incorrect relationship from the knowledge. ' +
+            'Prefer edgeId from knowledge_search. If edgeId is unknown, provide from, relation, and to to delete an exact relationship triple.',
         parameters: {
             type: 'object',
             properties: {
-                edgeId: { type: 'string', description: 'Relationship edge ID to delete. The short e:xxxxxxxx ID from relationship_graph_search is accepted.' },
+                edgeId: { type: 'string', description: 'Relationship edge ID to delete. The short e:xxxxxxxx ID from knowledge_search is accepted.' },
                 from: {
                     type: 'object',
                     description: 'Source entity for exact triple deletion when edgeId is not available.',
@@ -1157,7 +1157,7 @@ export function makeRelationshipGraphDeleteTool(opts: MemoryToolOptions = {}): T
         timeout: 15_000,
         execute: async (params: unknown) => {
             if (spaceIds.length === 0) {
-                return { success: false, output: 'No memory folder is selected for relationship graph access.' }
+                return { success: false, output: 'No memory folder is selected for knowledge access.' }
             }
             const { edgeId, from, relation, to } = (params || {}) as {
                 edgeId?: string; from?: unknown; relation?: unknown; to?: unknown
@@ -1165,11 +1165,11 @@ export function makeRelationshipGraphDeleteTool(opts: MemoryToolOptions = {}): T
             const knowledge = getMemoryKnowledgeStore()
 
             if (edgeId?.trim()) {
-                const resolvedEdgeId = resolveEntityGraphEdgeId(edgeId)
+                const resolvedEdgeId = resolveKnowledgeAssertionId(edgeId)
                 if ('error' in resolvedEdgeId) return { success: false, output: resolvedEdgeId.error }
                 const result = knowledge.deleteEdge(resolvedEdgeId.id, spaceIds)
                 return result.edgeDeleted
-                    ? { success: true, output: formatRelationshipGraphDeleteOutput(`Deleted relationship graph edge ${edgeId.trim()}.`, result.orphanedNodeIds.length) }
+                    ? { success: true, output: formatKnowledgeDeleteOutput(`Deleted knowledge edge ${edgeId.trim()}.`, result.orphanedNodeIds.length) }
                     : { success: false, output: `No relationship found with id ${edgeId.trim()}.` }
             }
 
@@ -1182,13 +1182,13 @@ export function makeRelationshipGraphDeleteTool(opts: MemoryToolOptions = {}): T
 
             const result = knowledge.deleteMatchingEdge(fromEntity.name, rel, toEntity.name, spaceIds)
             return result.edgeDeleted
-                ? { success: true, output: formatRelationshipGraphDeleteOutput('Deleted 1 matching relationship graph edge.', result.orphanedNodeIds.length) }
-                : { success: false, output: 'No matching relationship graph edge was found.' }
+                ? { success: true, output: formatKnowledgeDeleteOutput('Deleted 1 matching knowledge edge.', result.orphanedNodeIds.length) }
+                : { success: false, output: 'No matching knowledge edge was found.' }
         },
     }
 }
 
-function formatRelationshipGraphDeleteOutput(message: string, orphanedNodeCount: number): string {
+function formatKnowledgeDeleteOutput(message: string, orphanedNodeCount: number): string {
     if (orphanedNodeCount === 0) return message
     return `${message} Removed ${orphanedNodeCount} orphaned entit${orphanedNodeCount === 1 ? 'y' : 'ies'}.`
 }

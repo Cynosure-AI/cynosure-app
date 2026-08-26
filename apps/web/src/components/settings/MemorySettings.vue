@@ -175,23 +175,23 @@ async function loadEntityExtractionConfig() {
     entityExtractionProviderId.value = config.providerId || ''
     entityExtractionModel.value = config.model || ''
 
-    if (!entityExtractionProviderId.value && !entityExtractionModel.value && (prefs.entityGraphProviderId || prefs.entityGraphModel)) {
+    if (!entityExtractionProviderId.value && !entityExtractionModel.value && (prefs.knowledgeProviderId || prefs.knowledgeModel)) {
       await saveEntityExtractionSelection({
-        providerId: prefs.entityGraphProviderId,
-        model: prefs.entityGraphModel,
+        providerId: prefs.knowledgeProviderId,
+        model: prefs.knowledgeModel,
       })
     }
   } catch {
-    entityExtractionProviderId.value = prefs.entityGraphProviderId || ''
-    entityExtractionModel.value = prefs.entityGraphModel || ''
+    entityExtractionProviderId.value = prefs.knowledgeProviderId || ''
+    entityExtractionModel.value = prefs.knowledgeModel || ''
   }
 }
 
 async function saveEntityExtractionSelection(selection: { providerId: string; model: string }) {
   entityExtractionProviderId.value = selection.providerId
   entityExtractionModel.value = selection.model
-  prefs.entityGraphProviderId = selection.providerId
-  prefs.entityGraphModel = selection.model
+  prefs.knowledgeProviderId = selection.providerId
+  prefs.knowledgeModel = selection.model
   entityExtractionSaving.value = true
   try {
     const res = await api.memory.configureEntityExtraction({
@@ -310,7 +310,7 @@ function cancelDrop() {
 <template>
   <div class="space-y-4">
     <SettingsSubheading
-      v-if="showAnySection(['embedding-model', 'retrieval', 'entity-graph-extraction', 'reranker'])"
+      v-if="showAnySection(['embedding-model', 'retrieval', 'knowledge-extraction', 'reranker'])"
       label="Retrieval"
     />
 
@@ -527,7 +527,7 @@ function cancelDrop() {
 
     <!-- Knowledge Extraction Model -->
     <BaseCard
-      v-if="showSection('entity-graph-extraction')"
+      v-if="showSection('knowledge-extraction')"
       class="p-5 space-y-4"
     >
       <div class="flex items-start gap-3">

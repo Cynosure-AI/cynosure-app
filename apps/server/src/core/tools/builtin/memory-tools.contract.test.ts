@@ -10,11 +10,11 @@ import {
     makeMemoryReplaceRangeTool,
     makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
-    makeRelationshipGraphAssertTool,
-    makeRelationshipGraphDeleteTool,
-    makeRelationshipGraphSearchTool,
-    makeRelationshipEntityMergeTool,
-    readableEntityGraphNodeId,
+    makeKnowledgeAssertTool,
+    makeKnowledgeDeleteTool,
+    makeKnowledgeSearchTool,
+    makeKnowledgeEntityMergeTool,
+    readableKnowledgeEntityId,
 } from './memory-tools.js'
 
 describe('memory mutation tool contracts', () => {
@@ -50,8 +50,8 @@ describe('memory mutation tool contracts', () => {
     })
 
     test('exposes an explicit entity merge contract', () => {
-        const tool = makeRelationshipEntityMergeTool({})
-        expect(tool.name).toBe('relationship_entity_merge')
+        const tool = makeKnowledgeEntityMergeTool({})
+        expect(tool.name).toBe('knowledge_entity_merge')
         expect(tool.parameters).toMatchObject({
             required: ['entityIds', 'mainName'],
             additionalProperties: false,
@@ -64,10 +64,10 @@ describe('memory mutation tool contracts', () => {
     })
 
     test('formats stable, readable, lowercase tool-facing entity handles', () => {
-        const handle = readableEntityGraphNodeId('Andi Personalakte', 'n:aV61X33k')
+        const handle = readableKnowledgeEntityId('Andi Personalakte', 'n:aV61X33k')
         expect(handle).toMatch(/^n:andi_personalakte#[a-f0-9]{8}$/)
-        expect(readableEntityGraphNodeId('Andi Personalakte', 'n:aV61X33k')).toBe(handle)
-        expect(readableEntityGraphNodeId('Andi Personalakte', 'n:different')).not.toBe(handle)
+        expect(readableKnowledgeEntityId('Andi Personalakte', 'n:aV61X33k')).toBe(handle)
+        expect(readableKnowledgeEntityId('Andi Personalakte', 'n:different')).not.toBe(handle)
     })
 
     test('declares complete behavior annotations for every memory and relationship tool', () => {
@@ -81,10 +81,10 @@ describe('memory mutation tool contracts', () => {
             makeMemoryReplaceRangeTool({}),
             makeMemoryRemoveAllTool({}),
             makeMemoryRemoveRangeTool({}),
-            makeRelationshipGraphSearchTool({}),
-            makeRelationshipGraphAssertTool({}),
-            makeRelationshipGraphDeleteTool({}),
-            makeRelationshipEntityMergeTool({}),
+            makeKnowledgeSearchTool({}),
+            makeKnowledgeAssertTool({}),
+            makeKnowledgeDeleteTool({}),
+            makeKnowledgeEntityMergeTool({}),
         ]
         for (const tool of tools) {
             expect(tool.annotations, tool.name).toEqual(expect.objectContaining({

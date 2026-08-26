@@ -82,9 +82,9 @@ describe('ToolExecutionCard', () => {
     expect(summary.match(/Roadmap\.md/g)).toHaveLength(1)
   })
 
-  test('surfaces entity graph evidence included in gathered memory context', async () => {
+  test('surfaces knowledge evidence included in gathered memory context', async () => {
     const graphContext = [
-      '## Entity Graph Context',
+      '## Knowledge Context',
       '- [core] Cynosure -> uses -> entity memory. Evidence: Project architecture.',
     ].join('\n')
     const wrapper = mount(ToolExecutionCard, {
@@ -96,10 +96,10 @@ describe('ToolExecutionCard', () => {
           status: 'curating-memory',
           timestamp: Date.now(),
           toolCalls: [{
-            name: 'Entity Graph Context',
+            name: 'Knowledge Context',
             arguments: JSON.stringify({
               type: 'memory',
-              memoryKind: 'entity-graph',
+              memoryKind: 'knowledge',
               contextPhase: 'gathered-context',
               content: graphContext,
             }),
@@ -141,7 +141,7 @@ describe('ToolExecutionCard', () => {
             timestamp: Date.now() + 1,
             toolCalls: [
               { name: 'Default - people.md - part 1/1', arguments: contextArguments('memory', { sourceFile: 'people.md', content: 'People memory' }) },
-              { name: 'Entity Graph Context', arguments: contextArguments('memory', { memoryKind: 'entity-graph', content: 'Caroline -> best friend of -> Andi' }) },
+              { name: 'Knowledge Context', arguments: contextArguments('memory', { memoryKind: 'knowledge', content: 'Caroline -> best friend of -> Andi' }) },
             ],
           },
         ],
@@ -161,7 +161,7 @@ describe('ToolExecutionCard', () => {
 
   test('shows rejected entity candidates under the finalized entity relationship channel', async () => {
     const graphArgs = (phase: string) => JSON.stringify({
-      type: 'memory', memoryKind: 'entity-graph', contextPhase: phase,
+      type: 'memory', memoryKind: 'knowledge', contextPhase: phase,
       content: 'Unrelated graph relationship',
     })
     const memoryArgs = (phase: string) => JSON.stringify({
@@ -176,7 +176,7 @@ describe('ToolExecutionCard', () => {
             iteration: 1, status: 'routing-memory', timestamp: Date.now(),
             toolCalls: [
               { name: 'selected.md', arguments: memoryArgs('gathered-results') },
-              { name: 'Entity Graph Context', arguments: graphArgs('gathered-results') },
+              { name: 'Knowledge Context', arguments: graphArgs('gathered-results') },
             ],
           },
           {
@@ -190,7 +190,7 @@ describe('ToolExecutionCard', () => {
 
     await wrapper.get('button').trigger('click')
     expect(wrapper.text()).toContain('Entity relationships')
-    const rejected = wrapper.findAll('.line-through').find((element) => element.text().includes('Entity Graph Context'))
+    const rejected = wrapper.findAll('.line-through').find((element) => element.text().includes('Knowledge Context'))
     expect(rejected?.exists()).toBe(true)
   })
 

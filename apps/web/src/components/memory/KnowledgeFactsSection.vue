@@ -2,37 +2,37 @@
 import { computed, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { api } from "../../api/client";
-import type { EntityGraphEdge, EntityGraphNode, EntityGraphResponse, KnowledgeSourceChunk } from "../../api/types";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraph, KnowledgeSourceChunk } from "../../api/types";
 import DataTable, { type Column } from "../shared/DataTable.vue";
 import KnowledgeGraphSearchBox from "./KnowledgeGraphSearchBox.vue";
 
 const props = defineProps<{
-  graph: EntityGraphResponse | null;
+  graph: KnowledgeGraph | null;
   graphLoading: boolean;
   graphQuery: string;
-  graphSuggestions: EntityGraphNode[];
-  walkNodes: EntityGraphNode[];
+  graphSuggestions: KnowledgeGraphNode[];
+  walkNodes: KnowledgeGraphNode[];
 }>();
 
 const emit = defineEmits<{
   "update:graphQuery": [value: string];
   "load-graph": [query?: string];
   "clear-walk": [];
-  "select-suggestion": [node: EntityGraphNode];
+  "select-suggestion": [node: KnowledgeGraphNode];
   "remove-selected-node": [nodeId: string];
-  "edit-edge": [edge: EntityGraphEdge];
-  "delete-edge": [edge: EntityGraphEdge];
+  "edit-edge": [edge: KnowledgeGraphEdge];
+  "delete-edge": [edge: KnowledgeGraphEdge];
   "delete-edges": [ids: string[]];
 }>();
 
 const PAGE_SIZE = 30;
 const selectedIds = ref<string[]>([]);
 const currentPage = ref(0);
-const visibleEdges = ref<EntityGraphEdge[]>([]);
+const visibleEdges = ref<KnowledgeGraphEdge[]>([]);
 const hydratedSourceChunks = ref<Record<string, KnowledgeSourceChunk>>({});
 const loadingSourceChunkIds = ref<Set<string>>(new Set());
 
-const columns: Column<EntityGraphEdge>[] = [
+const columns: Column<KnowledgeGraphEdge>[] = [
   { key: "fromName", label: "From", width: "minmax(0, 1.5fr)", sortable: true },
   { key: "relation", label: "Relation", width: "minmax(0, 1.5fr)", sortable: true, sortValue: (e) => e.relation },
   { key: "toName", label: "To", width: "minmax(0, 1.5fr)", sortable: true },
@@ -63,7 +63,7 @@ function formatDate(ts: number): string {
   }).format(new Date(ts));
 }
 
-function edgeMatchesQuery(edge: EntityGraphEdge, query: string): boolean {
+function edgeMatchesQuery(edge: KnowledgeGraphEdge, query: string): boolean {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) return true;
   return [

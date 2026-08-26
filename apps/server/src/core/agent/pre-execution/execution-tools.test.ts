@@ -41,7 +41,7 @@ describe('agent-required execution tools', () => {
             'builtin::memory_list_documents',
             'builtin::memory_retrieve_chunks',
             'builtin::memory_semantic_search',
-            'builtin::relationship_graph_search',
+            'builtin::knowledge_search',
         ])
         expect(getBuiltInMemoryReadToolKeys().length).toBeLessThan(getBuiltInMemoryToolKeys().length)
     })

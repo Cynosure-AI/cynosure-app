@@ -475,8 +475,8 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const removeMemoryJobUpdatedListener = eventBus.on('memory:job-updated', (data: unknown) => {
     broadcast('memory:job-updated', data)
   })
-  const removeMemoryGraphResetListener = eventBus.on('memory:graph-reset', (data: unknown) => {
-    broadcast('memory:graph-reset', data)
+  const removeKnowledgeResetListener = eventBus.on('memory:knowledge-reset', (data: unknown) => {
+    broadcast('memory:knowledge-reset', data)
   })
   const removeChatExecutionStateListener = eventBus.on('chat:execution-state', (data: unknown) => {
     broadcast('chat:execution-state', data)
@@ -556,7 +556,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       }
       removePlanningStateListener()
       removeMemoryJobUpdatedListener()
-      removeMemoryGraphResetListener()
+      removeKnowledgeResetListener()
       removeChatExecutionStateListener()
       for (const cleanup of stepPersistenceCleanups) {
         cleanup()

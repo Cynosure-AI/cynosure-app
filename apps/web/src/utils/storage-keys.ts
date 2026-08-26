@@ -11,8 +11,8 @@ export const SK_DEBUG_MODE = 'cy-debug-mode'
 export const SK_GENERATE_TITLE = 'cy-generate-title'
 export const SK_TITLE_PROVIDER = 'cy-title-provider'
 export const SK_TITLE_MODEL = 'cy-title-model'
-export const SK_ENTITY_GRAPH_PROVIDER = 'cy-entity-graph-provider'
-export const SK_ENTITY_GRAPH_MODEL = 'cy-entity-graph-model'
+export const SK_KNOWLEDGE_PROVIDER = 'cy-knowledge-provider'
+export const SK_KNOWLEDGE_MODEL = 'cy-knowledge-model'
 export const SK_AUTO_ROUTER_PROVIDER = 'cy-auto-router-provider'
 export const SK_AUTO_ROUTER_MODEL = 'cy-auto-router-model'
 export const SK_LEGACY_SKILL_ROUTER_PROVIDER = 'cy-skill-router-provider'
@@ -26,9 +26,9 @@ export const SK_FREE_CHAT_PROVIDER = 'cy-free-chat-provider'
 export const SK_FREE_CHAT_MODEL = 'cy-free-chat-model'
 export const SK_AGENT_CATEGORIES = 'cy-agent-categories'
 export const SK_MA_CATEGORIES = 'cy-ma-categories'
-export const SK_MEMORY_GRAPH_NODE_SPACING = 'cy-memory-graph-node-spacing'
-export const SK_MEMORY_GRAPH_EDGE_LABELS = 'cy-memory-graph-edge-labels'
-export const SK_MEMORY_GRAPH_EDGE_PATH_TYPE = 'cy-memory-graph-edge-path-type'
+export const SK_KNOWLEDGE_GRAPH_NODE_SPACING = 'cy-knowledge-graph-node-spacing'
+export const SK_KNOWLEDGE_GRAPH_EDGE_LABELS = 'cy-knowledge-graph-edge-labels'
+export const SK_KNOWLEDGE_GRAPH_EDGE_PATH_TYPE = 'cy-knowledge-graph-edge-path-type'
 
 // ── Whisper / STT ──────────────────────────────────────────────────────────────
 export const SK_WHISPER_MODEL = 'cy-whisper-model'
@@ -64,8 +64,8 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_GENERATE_TITLE,
     SK_TITLE_PROVIDER,
     SK_TITLE_MODEL,
-    SK_ENTITY_GRAPH_PROVIDER,
-    SK_ENTITY_GRAPH_MODEL,
+    SK_KNOWLEDGE_PROVIDER,
+    SK_KNOWLEDGE_MODEL,
     SK_AUTO_ROUTER_PROVIDER,
     SK_AUTO_ROUTER_MODEL,
     SK_CONTEXT_STRATEGY,
@@ -77,9 +77,9 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_FREE_CHAT_MODEL,
     SK_AGENT_CATEGORIES,
     SK_MA_CATEGORIES,
-    SK_MEMORY_GRAPH_NODE_SPACING,
-    SK_MEMORY_GRAPH_EDGE_LABELS,
-    SK_MEMORY_GRAPH_EDGE_PATH_TYPE,
+    SK_KNOWLEDGE_GRAPH_NODE_SPACING,
+    SK_KNOWLEDGE_GRAPH_EDGE_LABELS,
+    SK_KNOWLEDGE_GRAPH_EDGE_PATH_TYPE,
     SK_RECENT_CHAT_FILTER,
     SK_WHISPER_MODEL,
     SK_WHISPER_ENABLED,

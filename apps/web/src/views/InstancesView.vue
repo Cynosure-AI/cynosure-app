@@ -164,19 +164,19 @@ function instanceTypeClass(type: AgentInstance["type"]): string {
 }
 
 function memoryJobTitle(job: MemoryIndexJob): string {
-  const progress = job.kind === "entity-index" && job.progressCurrent && job.progressTotal
+  const progress = job.kind === "knowledge-extraction" && job.progressCurrent && job.progressTotal
     ? ` (batch ${job.progressCurrent}/${job.progressTotal})`
     : "";
-  const action = job.kind === "entity-index" ? `Extracting knowledge${progress} from` : "Indexing";
+  const action = job.kind === "knowledge-extraction" ? `Extracting knowledge${progress} from` : "Indexing";
   return `${action} ${job.fileName}`;
 }
 
 function memoryJobLabel(job: MemoryIndexJob): string {
-  return job.kind === "entity-index" ? "Knowledge extraction" : "Memory indexing";
+  return job.kind === "knowledge-extraction" ? "Knowledge extraction" : "Memory indexing";
 }
 
 function memoryJobIcon(job: MemoryIndexJob): string {
-  return job.kind === "entity-index" ? "lucide:network" : "lucide:database-zap";
+  return job.kind === "knowledge-extraction" ? "lucide:network" : "lucide:database-zap";
 }
 
 function entryRowClass(entry: WorkEntry): string {

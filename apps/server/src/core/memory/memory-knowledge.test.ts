@@ -33,7 +33,7 @@ function addDocument(documentId: string, fileName: string, contentHash: string, 
     getDb().prepare(`
         INSERT INTO memory_file_index
             (document_id, document_ref, space_id, file_name, content_hash, chunk_count,
-             last_indexed_at, entity_indexed_at, created_at)
+             last_indexed_at, knowledge_extracted_at, created_at)
         VALUES (?, ?, ?, ?, ?, 2, ?, 0, ?)
     `).run(documentId, `doc-${documentId}`, spaceId, fileName, contentHash, Date.now(), Date.now())
 }
@@ -234,7 +234,7 @@ describe('memory knowledge v3', () => {
         })
 
         const result = await store.search(
-            'What do you know about Alex? Use the relationship graph afterward.',
+            'What do you know about Alex? Use the knowledge afterward.',
             ['test-space'],
             8,
             { allowAmbiguousExactMatches: true },
@@ -544,7 +544,7 @@ describe('memory knowledge v3', () => {
 
     test('resets the complete knowledge projection while preserving source memory', async () => {
         const resetEvents: unknown[] = []
-        const unsubscribe = getEventBus().on('memory:graph-reset', (event) => resetEvents.push(event))
+        const unsubscribe = getEventBus().on('memory:knowledge-reset', (event) => resetEvents.push(event))
         addDocument('doc-reset', 'reset.md', 'revision-1')
         store.publishDocument({
             documentId: 'doc-reset', contentHash: 'revision-1', spaceId: 'test-space', fileName: 'reset.md',
@@ -554,9 +554,8 @@ describe('memory knowledge v3', () => {
 
         await expect(store.reset()).resolves.toEqual({ nodesDeleted: 2, edgesDeleted: 1 })
         expect(store.graphStats()).toEqual({ nodeCount: 0, edgeCount: 0, recentEdgeCount: 0 })
-        expect((getDb().prepare(`SELECT entity_indexed_at FROM memory_file_index WHERE document_id = 'doc-reset'`).get() as { entity_indexed_at: number }).entity_indexed_at).toBe(0)
+        expect((getDb().prepare(`SELECT knowledge_extracted_at FROM memory_file_index WHERE document_id = 'doc-reset'`).get() as { knowledge_extracted_at: number }).knowledge_extracted_at).toBe(0)
         expect((getDb().prepare(`SELECT COUNT(*) AS count FROM memory_file_index WHERE document_id = 'doc-reset'`).get() as { count: number }).count).toBe(1)
-        expect(getDb().prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'entity_graph_%'`).all()).toEqual([])
         expect(resetEvents).toEqual([{ resetAt: expect.any(Number) }])
         unsubscribe()
     })

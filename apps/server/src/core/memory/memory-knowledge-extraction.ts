@@ -11,18 +11,18 @@ import { getRAGStore } from './rag.js'
 import { getActivePermanentMemoryTableName } from './memory-index-manifest.js'
 import { andLanceDbFilters, lanceDbEqFilter } from './lancedb-filter.js'
 
-export interface MemoryEntityIndexResult {
+export interface KnowledgeExtractionResult {
   fileName: string
   sourceId: string
   insertedOrUpdated: number
   deleted: number
-  entityIndexedAt: number
+  knowledgeExtractedAt: number
   documentId: string
   contentHash: string
   tags: string[]
 }
 
-export interface MemoryEntityExtractionConfig {
+export interface KnowledgeExtractionConfig {
   providerId?: string
   model?: string
 }
@@ -45,26 +45,26 @@ function buildEntityExtractionSegments(chunks: PreparedMemoryChunk[]) {
   }))
 }
 
-function normalizeEntityExtractionConfig(config: Partial<MemoryEntityExtractionConfig> | undefined): MemoryEntityExtractionConfig {
+function normalizeEntityExtractionConfig(config: Partial<KnowledgeExtractionConfig> | undefined): KnowledgeExtractionConfig {
   return {
     providerId: config?.providerId?.trim() || undefined,
     model: config?.model?.trim() || undefined,
   }
 }
 
-export function getMemoryEntityExtractionConfig(): MemoryEntityExtractionConfig {
+export function getKnowledgeExtractionConfig(): KnowledgeExtractionConfig {
   try {
     const row = getDb()
       .prepare('SELECT value_json FROM settings WHERE key = ?')
       .get(ENTITY_EXTRACTION_SETTINGS_KEY) as { value_json: string } | undefined
     if (!row) return {}
-    return normalizeEntityExtractionConfig(JSON.parse(row.value_json) as Partial<MemoryEntityExtractionConfig>)
+    return normalizeEntityExtractionConfig(JSON.parse(row.value_json) as Partial<KnowledgeExtractionConfig>)
   } catch {
     return {}
   }
 }
 
-export function saveMemoryEntityExtractionConfig(config: Partial<MemoryEntityExtractionConfig>): MemoryEntityExtractionConfig {
+export function saveKnowledgeExtractionConfig(config: Partial<KnowledgeExtractionConfig>): KnowledgeExtractionConfig {
   const normalized = normalizeEntityExtractionConfig(config)
   getDb()
     .prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (?, ?)')
@@ -76,7 +76,7 @@ export function memoryKnowledgeSourceId(spaceId: string, fileName: string): stri
   return `memory:${spaceId}:${fileName}`
 }
 
-export function markMemoryFileEntityIndexed(
+export function markMemoryFileKnowledgeExtracted(
   spaceId: string,
   fileName: string,
   indexedAt = Date.now(),
@@ -86,11 +86,11 @@ export function markMemoryFileEntityIndexed(
   const tagsJson = JSON.stringify(tags)
   const result = expectedContentHash
     ? getDb().prepare(`
-        UPDATE memory_file_index SET entity_indexed_at = ?, tags_json = ?
+        UPDATE memory_file_index SET knowledge_extracted_at = ?, tags_json = ?
         WHERE space_id = ? AND file_name = ? AND content_hash = ?
       `).run(indexedAt, tagsJson, spaceId, fileName, expectedContentHash)
     : getDb().prepare(`
-        UPDATE memory_file_index SET entity_indexed_at = ?, tags_json = ?
+        UPDATE memory_file_index SET knowledge_extracted_at = ?, tags_json = ?
         WHERE space_id = ? AND file_name = ?
       `).run(indexedAt, tagsJson, spaceId, fileName)
   return result.changes > 0
@@ -107,7 +107,7 @@ export function moveMemoryKnowledgeSource(sourceSpaceId: string, sourceFileName:
       ORDER BY activated_at DESC LIMIT 1
     `).get(sourceSpaceId, sourceFileName) as { document_id: string } | undefined)?.document_id
     if (knowledgeDocumentId) getMemoryKnowledgeStore().retireDocument(knowledgeDocumentId)
-    db.prepare(`UPDATE memory_file_index SET entity_indexed_at = 0, tags_json = '[]' WHERE space_id = ? AND file_name = ?`).run(targetSpaceId, targetFileName)
+    db.prepare(`UPDATE memory_file_index SET knowledge_extracted_at = 0, tags_json = '[]' WHERE space_id = ? AND file_name = ?`).run(targetSpaceId, targetFileName)
     return
   }
   db.transaction(() => {
@@ -162,7 +162,7 @@ export function deleteMemoryKnowledgeSpace(spaceId: string): { edgesDeleted: num
   return { edgesDeleted, orphanedNodeIds: [] }
 }
 
-export async function readMemoryFileForEntityIndex(folderPath: string, fileName: string): Promise<string> {
+export async function readMemoryFileForKnowledgeExtraction(folderPath: string, fileName: string): Promise<string> {
   const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase()
   if (PLAIN_TEXT_EXTENSIONS.has(ext)) {
     return readTextFile(folderPath, fileName)
@@ -182,7 +182,7 @@ export async function indexMemoryContentIntoKnowledge(opts: {
   model?: string
   signal?: AbortSignal
   onExtractionProgress?: (current: number, total: number) => void
-}): Promise<MemoryEntityIndexResult> {
+}): Promise<KnowledgeExtractionResult> {
   const knowledge = getMemoryKnowledgeStore()
   const resetGeneration = knowledge.getResetGeneration()
   const contentHash = createHash('sha256').update(opts.content).digest('hex')
@@ -196,19 +196,19 @@ export async function indexMemoryContentIntoKnowledge(opts: {
   }
 
   const sourceId = memoryKnowledgeSourceId(opts.spaceId, opts.fileName)
-  const configuredTarget = getMemoryEntityExtractionConfig()
+  const configuredTarget = getKnowledgeExtractionConfig()
   const chunks = await getMemoryParser().prepareChunks(opts.content, opts.fileName)
   if (chunks.length === 0) {
     if (opts.replaceExisting !== false) deleteMemoryKnowledgeSource(opts.spaceId, opts.fileName)
     getMemoryKnowledgeStore().retireDocument(indexedDocument.document_id)
-    const entityIndexedAt = Date.now()
-    markMemoryFileEntityIndexed(opts.spaceId, opts.fileName, entityIndexedAt, contentHash)
+    const knowledgeExtractedAt = Date.now()
+    markMemoryFileKnowledgeExtracted(opts.spaceId, opts.fileName, knowledgeExtractedAt, contentHash)
     return {
       fileName: opts.fileName,
       sourceId,
       insertedOrUpdated: 0,
       deleted: 0,
-      entityIndexedAt,
+      knowledgeExtractedAt,
       documentId: indexedDocument.document_id,
       contentHash,
       tags: [],
@@ -223,7 +223,7 @@ export async function indexMemoryContentIntoKnowledge(opts: {
   })
   opts.signal?.throwIfAborted()
   if (knowledge.getResetGeneration() !== resetGeneration) {
-    throw new DOMException('Entity graph was reset during extraction', 'AbortError')
+    throw new DOMException('Knowledge was reset during extraction', 'AbortError')
   }
   const knowledgeResult = knowledge.publishDocument({
     documentId: indexedDocument.document_id,
@@ -248,7 +248,7 @@ export async function indexMemoryContentIntoKnowledge(opts: {
   await knowledge.indexSearchProjection(knowledgeResult.runId, opts.signal)
   opts.signal?.throwIfAborted()
   if (knowledge.getResetGeneration() !== resetGeneration) {
-    throw new DOMException('Entity graph was reset during extraction', 'AbortError')
+    throw new DOMException('Knowledge was reset during extraction', 'AbortError')
   }
   const tags = mergeKnowledgeChunkTags(result.chunkTags)
   const extractedTagsByChunk = new Map(result.chunkTags.map((item) => [item.sourceChunkIndex, item.tags]))
@@ -268,8 +268,8 @@ export async function indexMemoryContentIntoKnowledge(opts: {
     )
   }
   opts.signal?.throwIfAborted()
-  const entityIndexedAt = Date.now()
-  if (!markMemoryFileEntityIndexed(opts.spaceId, opts.fileName, entityIndexedAt, contentHash, tags)) {
+  const knowledgeExtractedAt = Date.now()
+  if (!markMemoryFileKnowledgeExtracted(opts.spaceId, opts.fileName, knowledgeExtractedAt, contentHash, tags)) {
     // A concurrent edit landed after extraction committed. Remove the now-stale
     // version only; never delete a newer extraction that may already exist.
     knowledge.retireDocument(indexedDocument.document_id)
@@ -280,7 +280,7 @@ export async function indexMemoryContentIntoKnowledge(opts: {
     sourceId,
     insertedOrUpdated: knowledgeResult.assertions,
     deleted: 0,
-    entityIndexedAt,
+    knowledgeExtractedAt,
     documentId: indexedDocument.document_id,
     contentHash,
     tags,
@@ -296,7 +296,7 @@ export async function indexMemoryFileIntoKnowledge(opts: {
   model?: string
   signal?: AbortSignal
   onExtractionProgress?: (current: number, total: number) => void
-}): Promise<MemoryEntityIndexResult> {
-  const content = await readMemoryFileForEntityIndex(opts.folderPath, opts.fileName)
+}): Promise<KnowledgeExtractionResult> {
+  const content = await readMemoryFileForKnowledgeExtraction(opts.folderPath, opts.fileName)
   return indexMemoryContentIntoKnowledge({ ...opts, content })
 }

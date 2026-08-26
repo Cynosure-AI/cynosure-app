@@ -25,7 +25,7 @@ describe('automatic memory routing visibility', () => {
     })
 
     test('emits graph-only evidence as gathered context', async () => {
-        const graphContext = '## Entity Graph Context\n- [core] Cynosure -> uses -> entity memory.'
+        const graphContext = '## Knowledge Context\n- [core] Cynosure -> uses -> entity memory.'
         memoryMocks.aggregate.mockResolvedValue({
             permanent: [],
             graph: { seedNodes: [], nodes: [], edges: [{ id: 'edge-1' }] },
@@ -45,10 +45,10 @@ describe('automatic memory routing visibility', () => {
         expect(result).toBe(graphContext)
         const finalEvent = events.at(-1)
         expect(finalEvent?.toolCalls).toEqual([{
-            name: 'Entity Graph Context',
+            name: 'Knowledge Context',
             arguments: JSON.stringify({
                 type: 'memory',
-                memoryKind: 'entity-graph',
+                memoryKind: 'knowledge',
                 contextPhase: 'gathered-context',
                 content: graphContext,
             }),

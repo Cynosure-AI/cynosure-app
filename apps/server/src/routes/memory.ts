@@ -8,8 +8,8 @@ import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/rer
 import { getMemoryRetrievalConfig, saveMemoryRetrievalConfig, type MemoryRetrievalConfig } from '../core/memory/retrieval-config.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
-import type { EntityType, ImportanceLevel } from '../core/memory/knowledge-types.js'
-import { getMemoryEntityExtractionConfig, saveMemoryEntityExtractionConfig, type MemoryEntityExtractionConfig } from '../core/memory/memory-entity-indexer.js'
+import type { KnowledgeEntityType, ImportanceLevel } from '../core/memory/knowledge-types.js'
+import { getKnowledgeExtractionConfig, saveKnowledgeExtractionConfig, type KnowledgeExtractionConfig } from '../core/memory/memory-knowledge-extraction.js'
 import { dropConversationAttachmentIndex } from '../core/artifacts/attachment-rag.js'
 import { getDb } from '../db/database.js'
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_VECTOR_TABLE } from '../core/memory/memory-knowledge.js'
@@ -27,7 +27,7 @@ function markMemoryIndexesForRebuild(): void {
   getDb().prepare(`
     UPDATE memory_file_index
     SET content_hash = '', chunk_count = 0, last_indexed_at = 0,
-        entity_indexed_at = 0, tags_json = '[]'
+        knowledge_extracted_at = 0, tags_json = '[]'
   `).run()
 }
 
@@ -142,8 +142,8 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     return { success: true, ...config }
   })
 
-  // GET /api/memory/graph — inspect the authoritative knowledge graph projection.
-  app.get<{ Querystring: { query?: string; nodeId?: string; nodeIds?: string; limit?: string; view?: string; minImportance?: string; spaceIds?: string } }>('/graph', async (req, reply) => {
+  // GET /api/memory/knowledge/graph — inspect the authoritative knowledge graph projection.
+  app.get<{ Querystring: { query?: string; nodeId?: string; nodeIds?: string; limit?: string; view?: string; minImportance?: string; spaceIds?: string } }>('/knowledge/graph', async (req, reply) => {
     const knowledge = getMemoryKnowledgeStore()
     const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 5000)
     const minImportance = Math.min(Math.max(Number(req.query.minImportance) || 0, 0), 3) as ImportanceLevel
@@ -181,8 +181,8 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     }
   })
 
-  // GET /api/memory/graph/suggestions — autocomplete entity names
-  app.get<{ Querystring: { query?: string; limit?: string; spaceIds?: string } }>('/graph/suggestions', async (req) => {
+  // GET /api/memory/knowledge/graph/suggestions — autocomplete entity names
+  app.get<{ Querystring: { query?: string; limit?: string; spaceIds?: string } }>('/knowledge/graph/suggestions', async (req) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20)
     if (req.query.spaceIds === '__none__') return { suggestions: [] }
     const spaceIds = Array.from(new Set((req.query.spaceIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, 100)
@@ -191,17 +191,17 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     }
   })
 
-  // PATCH /api/memory/graph/nodes/:id — manually correct an entity node
+  // PATCH /api/memory/knowledge/graph/nodes/:id — manually correct an entity node
   app.patch<{
     Params: { id: string }
     Body: { name?: string; type?: string; aliases?: string[]; importance?: number }
-  }>('/graph/nodes/:id', async (req, reply) => {
+  }>('/knowledge/graph/nodes/:id', async (req, reply) => {
     const name = req.body.name?.trim()
     if (name !== undefined && name.length === 0) {
       return reply.status(400).send({ error: 'Entity name cannot be empty' })
     }
-    const allowedEntityTypes: EntityType[] = ['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other']
-    if (req.body.type !== undefined && !allowedEntityTypes.includes(req.body.type as EntityType)) {
+    const allowedKnowledgeEntityTypes: KnowledgeEntityType[] = ['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other']
+    if (req.body.type !== undefined && !allowedKnowledgeEntityTypes.includes(req.body.type as KnowledgeEntityType)) {
       return reply.status(400).send({ error: 'Entity type is not valid' })
     }
 
@@ -211,7 +211,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       if (!existing) return reply.status(404).send({ error: 'Entity not found' })
       const updated = knowledge.updateEntity(req.params.id, {
         name,
-        type: req.body.type as EntityType | undefined,
+        type: req.body.type as KnowledgeEntityType | undefined,
         aliases: Array.isArray(req.body.aliases) ? req.body.aliases : undefined,
         importance: typeof req.body.importance === 'number' ? req.body.importance as 0 | 1 | 2 | 3 : undefined,
       })
@@ -229,15 +229,15 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     }
   })
 
-  // DELETE /api/memory/graph/nodes/:id — manually remove an entity and its relationships
-  app.delete<{ Params: { id: string } }>('/graph/nodes/:id', async (req, reply) => {
+  // DELETE /api/memory/knowledge/graph/nodes/:id — manually remove an entity and its relationships
+  app.delete<{ Params: { id: string } }>('/knowledge/graph/nodes/:id', async (req, reply) => {
     const deleted = getMemoryKnowledgeStore().retractEntityById(req.params.id)
     if (!deleted) return reply.status(404).send({ error: 'Entity not found' })
     return { success: true }
   })
 
-  // POST /api/memory/graph/nodes/delete — atomically retract multiple entities.
-  app.post<{ Body: { ids?: string[] } }>('/graph/nodes/delete', async (req, reply) => {
+  // POST /api/memory/knowledge/graph/nodes/delete — atomically retract multiple entities.
+  app.post<{ Body: { ids?: string[] } }>('/knowledge/graph/nodes/delete', async (req, reply) => {
     const ids = Array.from(new Set((req.body.ids || []).filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))))
     if (!ids.length) return reply.status(400).send({ error: 'At least one entity ID is required' })
     if (ids.length > 500) return reply.status(400).send({ error: 'At most 500 entities can be deleted at once' })
@@ -246,11 +246,11 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     return { success: true, deleted }
   })
 
-  // PATCH /api/memory/graph/edges/:id — manually correct a relationship
+  // PATCH /api/memory/knowledge/graph/edges/:id — manually correct a relationship
   app.patch<{
     Params: { id: string }
     Body: { relation?: string; note?: string; importance?: number }
-  }>('/graph/edges/:id', async (req, reply) => {
+  }>('/knowledge/graph/edges/:id', async (req, reply) => {
     const relation = req.body.relation?.trim()
     if (relation !== undefined && relation.length === 0) {
       return reply.status(400).send({ error: 'Relation cannot be empty' })
@@ -264,15 +264,15 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     return updated
   })
 
-  // DELETE /api/memory/graph/edges/:id — manually remove a relationship
-  app.delete<{ Params: { id: string } }>('/graph/edges/:id', async (req, reply) => {
+  // DELETE /api/memory/knowledge/graph/edges/:id — manually remove a relationship
+  app.delete<{ Params: { id: string } }>('/knowledge/graph/edges/:id', async (req, reply) => {
     const result = getMemoryKnowledgeStore().deleteEdge(req.params.id)
     if (!result.edgeDeleted) return reply.status(404).send({ error: 'Relationship not found' })
     return { success: true, orphanedNodeIds: result.orphanedNodeIds }
   })
 
-  // POST /api/memory/graph/edges/delete — atomically retract multiple relationships.
-  app.post<{ Body: { ids?: string[] } }>('/graph/edges/delete', async (req, reply) => {
+  // POST /api/memory/knowledge/graph/edges/delete — atomically retract multiple relationships.
+  app.post<{ Body: { ids?: string[] } }>('/knowledge/graph/edges/delete', async (req, reply) => {
     const ids = Array.from(new Set((req.body.ids || []).filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))))
     if (!ids.length) return reply.status(400).send({ error: 'At least one relationship ID is required' })
     if (ids.length > 1000) return reply.status(400).send({ error: 'At most 1,000 relationships can be deleted at once' })
@@ -281,8 +281,8 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     return { success: true, deleted }
   })
 
-  // DELETE /api/memory/graph — clear the governed knowledge graph.
-  app.delete('/graph', async () => {
+  // DELETE /api/memory/knowledge/graph — clear the governed knowledge graph.
+  app.delete('/knowledge/graph', async () => {
     const deleted = await getMemoryKnowledgeStore().reset()
     return { success: true, ...deleted }
   })
@@ -461,18 +461,18 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     return { success: true }
   })
 
-  // Compatibility route: get the LLM target for knowledge extraction.
-  app.get('/entity-extraction/config', async () => {
-    return getMemoryEntityExtractionConfig()
+  // GET /api/memory/knowledge-extraction/config — get the extraction model target.
+  app.get('/knowledge-extraction/config', async () => {
+    return getKnowledgeExtractionConfig()
   })
 
-  // Compatibility route: set the LLM target for knowledge extraction.
-  app.post<{ Body: MemoryEntityExtractionConfig }>('/entity-extraction/configure', async (req, reply) => {
+  // POST /api/memory/knowledge-extraction/configure — set the extraction model target.
+  app.post<{ Body: KnowledgeExtractionConfig }>('/knowledge-extraction/configure', async (req, reply) => {
     const providerId = req.body.providerId?.trim()
     if (providerId && !getGateway().getProvider(providerId)) {
       return reply.status(400).send({ error: 'Knowledge extraction provider not found' })
     }
-    const config = saveMemoryEntityExtractionConfig({
+    const config = saveKnowledgeExtractionConfig({
       providerId,
       model: req.body.model,
     })

@@ -1,20 +1,20 @@
 import { nextTick, ref, watch, type Ref } from "vue";
 import { MarkerType, useVueFlow, type Edge, type Node } from "@vue-flow/core";
-import type { EntityGraphEdge, EntityGraphNode, EntityGraphNodeType, EntityGraphResponse } from "../api/types";
-import type { FlowEdgeData, FlowNodeData } from "../components/memory/memory-graph-types";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph } from "../api/types";
+import type { FlowEdgeData, FlowNodeData } from "../components/memory/knowledge-graph-types";
 
 type FlowPoint = { x: number; y: number; width: number; height: number };
-export const MEMORY_GRAPH_FLOW_ID = "memory-entity-graph";
+export const KNOWLEDGE_GRAPH_FLOW_ID = "knowledge-graph";
 
-export function useMemoryGraphLayout(options: {
-  graph: Ref<EntityGraphResponse | null>;
+export function useKnowledgeGraphLayout(options: {
+  graph: Ref<KnowledgeGraph | null>;
   nodeSpacing: Ref<number>;
   formatRelation: (relation: string) => string;
 }) {
   const flowNodes = ref<Node<FlowNodeData>[]>([]);
   const flowEdges = ref<Edge<FlowEdgeData>[]>([]);
   const focusedNodeId = ref<string | null>(null);
-  const { fitView } = useVueFlow(MEMORY_GRAPH_FLOW_ID);
+  const { fitView } = useVueFlow(KNOWLEDGE_GRAPH_FLOW_ID);
 
   let elkPromise: Promise<InstanceType<typeof import("elkjs/lib/elk-api").default>> | null = null;
   let layoutRequest = 0;
@@ -38,7 +38,7 @@ export function useMemoryGraphLayout(options: {
       return;
     }
 
-    const nodeLabels = new Map<string, EntityGraphNode>();
+    const nodeLabels = new Map<string, KnowledgeGraphNode>();
     for (const node of graph.nodes) nodeLabels.set(node.id, node);
     for (const edge of graph.edges) {
       if (!nodeLabels.has(edge.fromNodeId)) nodeLabels.set(edge.fromNodeId, fallbackNode(edge.fromNodeId, edge.fromName));
@@ -77,7 +77,7 @@ export function useMemoryGraphLayout(options: {
       points.set(id, { ...position, ...(dimensions.get(id) || { width: 150, height: 44 }) });
     }
 
-    const edgeGroups = new Map<string, EntityGraphEdge[]>();
+    const edgeGroups = new Map<string, KnowledgeGraphEdge[]>();
     for (const edge of graph.edges) {
       const key = [edge.fromNodeId, edge.toNodeId].sort().join("<->");
       edgeGroups.set(key, [...(edgeGroups.get(key) || []), edge]);
@@ -178,7 +178,7 @@ export function useMemoryGraphLayout(options: {
     flowEdges.value = nextEdges;
   }
 
-  function nodeIsFocused(nodeId: string, edges: EntityGraphEdge[]): boolean {
+  function nodeIsFocused(nodeId: string, edges: KnowledgeGraphEdge[]): boolean {
     if (!focusedNodeId.value) return false;
     if (nodeId === focusedNodeId.value) return true;
     return edges.some((edge) =>
@@ -213,7 +213,7 @@ export function useMemoryGraphLayout(options: {
   return { flowNodes, flowEdges, focusedNodeId, layout, fit, requestFit, setFocusedNode };
 }
 
-function fallbackNode(id: string, name: string): EntityGraphNode {
+function fallbackNode(id: string, name: string): KnowledgeGraphNode {
   return { id, name, normalizedName: name.toLowerCase(), type: "other", aliases: [], importance: 1,
     mentionCount: 0, sourceCount: 0, origins: [], firstSeenAt: 0, lastSeenAt: 0 };
 }
@@ -223,7 +223,7 @@ function nodeDimensions(label: string, importance = 1): { width: number; height:
   return { width: Math.max(150, Math.min(250, label.length * 8 + 54)) * scale, height: (label.length > 18 ? 56 : 44) * scale };
 }
 
-function groupedEdgeLabels(edges: EntityGraphEdge[], format: (relation: string) => string): FlowEdgeData["labelGroups"] {
+function groupedEdgeLabels(edges: KnowledgeGraphEdge[], format: (relation: string) => string): FlowEdgeData["labelGroups"] {
   const groups = new Map<string, FlowEdgeData["labelGroups"][number]>();
   for (const edge of edges) {
     const key = `${edge.fromNodeId}->${edge.toNodeId}`;
@@ -246,7 +246,7 @@ function closestHandles(source?: FlowPoint, target?: FlowPoint): { sourceHandle:
     : { sourceHandle: "source-top", targetHandle: "target-bottom" };
 }
 
-function nodeClass(entity: EntityGraphNode, seed: boolean, highlighted: boolean, dimmed: boolean): string {
+function nodeClass(entity: KnowledgeGraphNode, seed: boolean, highlighted: boolean, dimmed: boolean): string {
   return ["entity-flow-node", entityTypeClass(entity.type), seed ? "entity-flow-node-seed" : "",
     highlighted ? "entity-flow-node-focus-highlighted" : "", dimmed ? "entity-flow-node-focus-dimmed" : ""].filter(Boolean).join(" ");
 }
@@ -256,6 +256,6 @@ function edgeClass(highlighted: boolean, dimmed: boolean): string {
     dimmed ? "entity-flow-edge-focus-dimmed" : ""].filter(Boolean).join(" ");
 }
 
-function entityTypeClass(type: EntityGraphNodeType): string {
+function entityTypeClass(type: KnowledgeGraphNodeType): string {
   return `entity-flow-node-${type.replace(/_/g, "-")}`;
 }

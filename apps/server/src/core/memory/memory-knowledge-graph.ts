@@ -1,5 +1,5 @@
 import { getDb } from '../../db/database.js'
-import type { EntityEdge, EntityNode, EntityOrigin, GraphWalkResult, ImportanceLevel, KnowledgeSourceChunk } from './knowledge-types.js'
+import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEvidence, KnowledgeGraphProjection, ImportanceLevel, KnowledgeSourceChunk } from './knowledge-types.js'
 import {
   cleanKnowledgeDisplay as cleanDisplay,
   formatKnowledgeLiteral as formatLiteral,
@@ -66,7 +66,7 @@ export class MemoryKnowledgeGraphStore {
     `).all(...scopes, ...(assertionId ? [assertionId] : []), Math.max(1, limit)) as Array<Record<string, unknown>>
   }
 
-  private graphEdge(row: Record<string, unknown>): EntityEdge {
+  private graphEdge(row: Record<string, unknown>): KnowledgeAssertion {
     const objectName = row.object_name ? String(row.object_name) : formatLiteral(row.object_value_json)
     return {
       id: String(row.id),
@@ -76,7 +76,7 @@ export class MemoryKnowledgeGraphStore {
       toName: objectName,
       relation: String(row.canonical_name),
       importance: Math.min(3, Math.max(0, Number(row.importance))) as ImportanceLevel,
-      assertionStatus: String(row.status) as EntityEdge['assertionStatus'],
+      assertionStatus: String(row.status) as KnowledgeAssertion['assertionStatus'],
       note: String(row.correction_evidence || row.extraction_note || ''),
       sourceKind: row.correction_evidence ? 'manual' : String(row.source_id).startsWith('manual:') ? 'manual' : 'memory',
       sourceId: String(row.source_id),
@@ -105,7 +105,7 @@ export class MemoryKnowledgeGraphStore {
     }
   }
 
-  private entityOrigins(entityId: string): EntityOrigin[] {
+  private entityOrigins(entityId: string): KnowledgeEvidence[] {
     const rows = getDb().prepare(`
       SELECT r.source_id, r.document_id, r.file_name,
         tu.id AS text_unit_id, tu.chunk_index, tu.document_title, tu.section_path,
@@ -135,7 +135,7 @@ export class MemoryKnowledgeGraphStore {
     for (const row of [...mentionNotes, ...factNotes]) {
       notesByTextUnit.set(row.text_unit_id, [...(notesByTextUnit.get(row.text_unit_id) || []), row.note])
     }
-    const origins = new Map<string, EntityOrigin>()
+    const origins = new Map<string, KnowledgeEvidence>()
     for (const row of rows) {
       const sourceId = String(row.source_id)
       const chunk = this.sourceChunkFromRow(row, [
@@ -178,7 +178,7 @@ export class MemoryKnowledgeGraphStore {
     return this.sourceChunkFromRow(row, notes.map((item) => item.note))
   }
 
-  hydrateGraphNode(row: Record<string, unknown>): EntityNode {
+  hydrateGraphNode(row: Record<string, unknown>): KnowledgeEntity {
     const entityId = String(row.id)
     const aliases = getDb().prepare(`
       SELECT display_alias FROM memory_knowledge_entity_aliases WHERE entity_id = ? ORDER BY confidence DESC, created_at DESC
@@ -205,12 +205,12 @@ export class MemoryKnowledgeGraphStore {
     }, counts.sources || 1, this.entityOrigins(entityId))
   }
 
-  getNode(id: string): EntityNode | null {
+  getNode(id: string): KnowledgeEntity | null {
     const row = getDb().prepare(`SELECT * FROM memory_knowledge_entities WHERE id = ? AND status = 'active'`).get(id) as Record<string, unknown> | undefined
     return row ? this.hydrateGraphNode(row) : null
   }
 
-  getEdge(id: string): EntityEdge | null {
+  getEdge(id: string): KnowledgeAssertion | null {
     const row = this.graphRows([], 1, id)[0]
     return row ? this.graphEdge(row) : null
   }
@@ -320,7 +320,7 @@ export class MemoryKnowledgeGraphStore {
     minImportance?: ImportanceLevel
     spaceIds?: string[]
     depth?: number
-  } = {}): GraphWalkResult {
+  } = {}): KnowledgeGraphProjection {
     const limit = Math.max(1, opts.limit || 80)
     const minImportance = opts.minImportance || 0
     const requestedNodeIds = Array.from(new Set([opts.nodeId, ...(opts.nodeIds || [])].filter((id): id is string => Boolean(id))))
@@ -344,7 +344,7 @@ export class MemoryKnowledgeGraphStore {
       : []
     let nodes = entityRows.map((row) => this.hydrateGraphNode(row))
     for (const edge of edges.filter((candidate) => candidate.toNodeId.startsWith('literal:'))) {
-      const origins: EntityOrigin[] = edge.sourceChunk ? [{
+      const origins: KnowledgeEvidence[] = edge.sourceChunk ? [{
         sourceKind: edge.sourceKind,
         sourceId: edge.sourceId,
         label: edge.sourceChunk.fileName || edge.sourceId,
@@ -359,7 +359,7 @@ export class MemoryKnowledgeGraphStore {
     }
 
     const query = normalize(opts.query || '')
-    let seedNodes: EntityNode[] = []
+    let seedNodes: KnowledgeEntity[] = []
     if (requestedNodeIds.length) {
       const requestedIds = new Set(requestedNodeIds)
       seedNodes = nodes.filter((node) => requestedIds.has(node.id))
@@ -391,7 +391,7 @@ export class MemoryKnowledgeGraphStore {
     return { seedNodes, nodes, edges }
   }
 
-  suggestNodes(query: string, limit = 8, spaceIds: string[] = []): EntityNode[] {
+  suggestNodes(query: string, limit = 8, spaceIds: string[] = []): KnowledgeEntity[] {
     const normalized = normalize(query)
     const scopeClause = spaceIds.length ? `AND r.space_id IN (${spaceIds.map(() => '?').join(', ')})` : ''
     const rows = getDb().prepare(`

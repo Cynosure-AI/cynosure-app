@@ -67,11 +67,11 @@ export function useMemoryDocumentJobs(options: {
     pollTimer = null;
   }
 
-  async function startFileJob(kind: "reindex" | "entity-index", fileName: string): Promise<void> {
+  async function startFileJob(kind: "reindex" | "knowledge-extraction", fileName: string): Promise<void> {
     try {
       const job = kind === "reindex"
         ? await api.memorySpaces.startReindexFile(options.spaceId.value, fileName)
-        : await api.memorySpaces.startEntityIndexFile(options.spaceId.value, fileName);
+        : await api.memorySpaces.startKnowledgeExtractionFile(options.spaceId.value, fileName);
       upsertJob(job);
     } catch {
       // The next authoritative refresh exposes failures without inventing a
@@ -83,8 +83,8 @@ export function useMemoryDocumentJobs(options: {
     await startFileJob("reindex", fileName);
   }
 
-  async function entityIndexFile(fileName: string): Promise<void> {
-    await startFileJob("entity-index", fileName);
+  async function extractKnowledgeFromFile(fileName: string): Promise<void> {
+    await startFileJob("knowledge-extraction", fileName);
   }
 
   async function reindexAll(): Promise<void> {
@@ -112,7 +112,7 @@ export function useMemoryDocumentJobs(options: {
   }
 
   function entityExtractionProgress(fileName: string): string {
-    const job = activeJob("entity-index", fileName);
+    const job = activeJob("knowledge-extraction", fileName);
     if (job?.status === "queued") return "Queued";
     return job?.progressCurrent && job.progressTotal ? `Batch ${job.progressCurrent}/${job.progressTotal}` : "Analysing";
   }
@@ -132,7 +132,7 @@ export function useMemoryDocumentJobs(options: {
     upsertJob,
     loadJobs,
     reindexFile,
-    entityIndexFile,
+    extractKnowledgeFromFile,
     reindexAll,
     cancelJob,
     reset,

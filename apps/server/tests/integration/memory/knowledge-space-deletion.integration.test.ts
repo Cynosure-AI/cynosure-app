@@ -8,7 +8,7 @@ test('deleting one memory-space knowledge projection leaves other spaces intact'
   process.env.CYNOSURE_DATA_DIR = directory
   const { closeDb, getDb } = await import('../../../src/db/database.js')
   const { MemoryKnowledgeStore } = await import('../../../src/core/memory/memory-knowledge.js')
-  const { deleteMemoryKnowledgeSpace } = await import('../../../src/core/memory/memory-entity-indexer.js')
+  const { deleteMemoryKnowledgeSpace } = await import('../../../src/core/memory/memory-knowledge-extraction.js')
   try {
     const db = getDb()
     const store = new MemoryKnowledgeStore()
