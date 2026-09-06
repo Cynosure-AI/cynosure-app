@@ -76,7 +76,7 @@ function agentIcon(agent: { iconUrl: string | null; providerId: string }): strin
 
 
     <!-- Agent list -->
-    <div class="overflow-y-auto space-y-1 max-h-[calc(80vh-120px)]">
+    <div class="overflow-y-auto space-y-1 max-h-[calc(70vh-120px)]">
       <div
         v-if="filteredAgents.length === 0"
         class="text-sm text-theme-500 text-center py-6"
