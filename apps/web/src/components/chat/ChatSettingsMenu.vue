@@ -189,12 +189,9 @@ async function saveAsNewAgent(): Promise<void> {
         v-if="hasCustomConfig"
         class="px-3 py-1.5"
       >
-        <p class="text-[11px] font-medium text-theme-300">
-          {{ hasOverrides ? 'Agent configuration modified' : 'Custom Free Chat configuration' }}
-        </p>
         <p
           v-if="hasOverrides && chatStore.agentOverrideFields.length"
-          class="mt-0.5 text-[10px] leading-relaxed text-theme-500"
+          class="text-[10px] leading-relaxed text-theme-500"
         >
           Changed: {{ chatStore.agentOverrideFields.join(', ') }}
         </p>
@@ -203,6 +200,7 @@ async function saveAsNewAgent(): Promise<void> {
         v-if="hasOverrides"
         type="button"
         role="menuitem"
+        :title="'Apply Updated: ' + chatStore.agentOverrideFields.join(',')"
         class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-amber-300 hover:bg-theme-800"
         @click="applyChanges"
       >
