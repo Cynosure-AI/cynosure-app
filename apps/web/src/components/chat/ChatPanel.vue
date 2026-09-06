@@ -969,34 +969,37 @@ onMounted(() => {
                 v-for="inner in entry.entries"
                 :key="inner.key"
               >
-                <MessageBubble
+                <div
                   v-if="inner.type === 'message'"
                   :data-chat-search-message-id="inner.msg.id"
-                  :class="{ 'ring-1 ring-inset ring-accent-400/60 bg-accent-500/5': activeSearchMessageId === inner.msg.id }"
-                  :role="inner.msg.role"
-                  :message-id="inner.msg.id"
-                  :created-at="inner.msg.createdAt"
-                  :content="inner.msg.content"
-                  :thinking="inner.msg.thinking"
-                  :image-data-urls="inner.msg.imageDataUrls"
-                  :video-data-urls="inner.msg.videoDataUrls"
-                  :audio-data-urls="inner.msg.audioDataUrls"
-                  :file-attachments="inner.msg.fileAttachments"
-                  :file-artifacts="assistantFileArtifacts(inner, entry.entries)"
-                  :agent-id="resolveAgentId(inner.msg)"
-                  :agent-icon-url="resolveAgentIconUrl(inner.msg)"
-                  :agent-name="resolveAgentName(inner.msg)"
-                  :model="inner.msg.model"
-                  :prompt-tokens="inner.msg.promptTokens"
-                  :completion-tokens="inner.msg.completionTokens"
-                  :context-tokens="inner.msg.contextTokens"
-                  :latency-ms="inner.msg.latencyMs"
-                  :is-streaming="inner.msg.isStreaming"
-                  :is-error="inner.msg.isError"
-                  @retry="chatStore.retryFromMessage(inner.msg.id)"
-                  @edit="(content) => chatStore.editMessage(inner.msg.id, content)"
-                  @fork="chatStore.forkConversationFromMessage(inner.msg.id)"
-                />
+                  :class="{ 'ring-1 ring-inset ring-accent-400/60 rounded-2xl bg-accent-500/5': activeSearchMessageId === inner.msg.id }"
+                >
+                  <MessageBubble
+                    :role="inner.msg.role"
+                    :message-id="inner.msg.id"
+                    :created-at="inner.msg.createdAt"
+                    :content="inner.msg.content"
+                    :thinking="inner.msg.thinking"
+                    :image-data-urls="inner.msg.imageDataUrls"
+                    :video-data-urls="inner.msg.videoDataUrls"
+                    :audio-data-urls="inner.msg.audioDataUrls"
+                    :file-attachments="inner.msg.fileAttachments"
+                    :file-artifacts="assistantFileArtifacts(inner, entry.entries)"
+                    :agent-id="resolveAgentId(inner.msg)"
+                    :agent-icon-url="resolveAgentIconUrl(inner.msg)"
+                    :agent-name="resolveAgentName(inner.msg)"
+                    :model="inner.msg.model"
+                    :prompt-tokens="inner.msg.promptTokens"
+                    :completion-tokens="inner.msg.completionTokens"
+                    :context-tokens="inner.msg.contextTokens"
+                    :latency-ms="inner.msg.latencyMs"
+                    :is-streaming="inner.msg.isStreaming"
+                    :is-error="inner.msg.isError"
+                    @retry="chatStore.retryFromMessage(inner.msg.id)"
+                    @edit="(content) => chatStore.editMessage(inner.msg.id, content)"
+                    @fork="chatStore.forkConversationFromMessage(inner.msg.id)"
+                  />
+                </div>
                 <PreTurnContextTimeline
                   v-else-if="inner.type === 'tool-group' && inner.group.iteration === 0"
                   :steps="inner.group.steps"
@@ -1054,11 +1057,13 @@ onMounted(() => {
         </div>
 
         <!-- Regular message (user / assistant) -->
-        <MessageBubble
+        <div
           v-else-if="entry.type === 'message'"
           :data-chat-search-message-id="entry.msg.id"
-          :class="{ 'ring-1 ring-inset ring-accent-400/60 bg-accent-500/5': activeSearchMessageId === entry.msg.id }"
-          :role="entry.msg.role"
+          :class="{ 'ring-1 ring-inset ring-accent-400/60 rounded-2xl bg-accent-500/5': activeSearchMessageId === entry.msg.id }"
+        >
+          <MessageBubble
+            :role="entry.msg.role"
           :message-id="entry.msg.id"
           :created-at="entry.msg.createdAt"
           :content="entry.msg.content"
@@ -1080,8 +1085,9 @@ onMounted(() => {
           :is-error="entry.msg.isError"
           @retry="chatStore.retryFromMessage(entry.msg.id)"
           @edit="(content) => chatStore.editMessage(entry.msg.id, content)"
-          @fork="chatStore.forkConversationFromMessage(entry.msg.id)"
-        />
+            @fork="chatStore.forkConversationFromMessage(entry.msg.id)"
+          />
+        </div>
 
         <!-- Tool execution group (from live execution steps) -->
         <PreTurnContextTimeline
