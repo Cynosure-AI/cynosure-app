@@ -448,6 +448,20 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
       </div>
     </div>
 
+    <!-- Folder description -->
+    <p
+      v-if="currentSpace?.description"
+      class="mb-3 text-sm text-theme-500"
+    >
+      {{ currentSpace.description }}
+    </p>
+    <p
+      v-else
+      class="mb-3 text-sm text-theme-600 italic"
+    >
+      No description set
+    </p>
+
     <!-- Folder path hint -->
     <div
       v-if="currentSpace?.folderPath"
