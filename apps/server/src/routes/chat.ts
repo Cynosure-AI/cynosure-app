@@ -24,7 +24,7 @@ import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
-import { buildAttachmentContext, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
+import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContext, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
 import {
   cancelChatExecution,
   cancelChatExecutionByConversation,
@@ -35,7 +35,7 @@ import {
 } from '../core/chat/active-executions.js'
 import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
-import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageArtifactsSystemHint } from '../core/chat/message-history.js'
+import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemorySpaceOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
 import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
@@ -488,8 +488,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if (responseSupportsToolCalls && hasConversationFileAttachments) {
           tools.push(...makeAttachmentTools(conversationId))
         }
-        messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, normalizedContent, db))
+        const attachmentContext = await buildAttachmentContext(conversationId, normalizedContent, db)
         abortController.signal.throwIfAborted()
+        if (attachmentContext) {
+          messages = appendHiddenSystemContext(messages, ATTACHMENT_SYSTEM_CONTEXT)
+          messages = insertTurnLocalUntrustedContext(messages, attachmentContext, 'retrieved-attachment')
+        }
         messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
         // Persist the full session config with RESOLVED model/provider so it can
