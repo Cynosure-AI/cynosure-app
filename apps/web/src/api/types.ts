@@ -377,7 +377,7 @@ export interface MemoryDocumentKnowledgePreview {
 
 export interface MemoryIndexJob<T = unknown> {
     id: string
-    kind: 'reindex' | 'knowledge-extraction'
+    kind: 'reindex' | 'knowledge-extraction' | 'tool-embeddings'
     spaceId: string
     fileName: string
     status: 'queued' | 'running' | 'retrying' | 'completed' | 'cancelled' | 'error' | 'dead_letter'

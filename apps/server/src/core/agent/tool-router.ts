@@ -1,3 +1,4 @@
+import { getToolRegistry } from '../tools/tool-registry.js'
 import { createHash } from 'crypto'
 import { getEmbeddingProvider } from '../memory/embedding.js'
 import { makeSearchAvailableMcpToolsTool } from '../tools/builtin/expand-available-toolset.js'
@@ -87,6 +88,10 @@ export async function embeddingPreFilter(
             const { vector: queryVector } = await embedder.embed(query)
             return { groupIds: mcpGroups.map(({ id }) => id), queryVector }
         }
+        // Describe namespaces consistently, independent of this turn's allowed subset.
+        const registered = getToolRegistry().getToolDefinitions()
+        const canonical = new Map(buildMcpGroups(registered.filter(isMcpTool), getToolRegistry().getNamespaceMetadataForTools(registered)).map(group => [group.id, group]))
+        mcpGroups = mcpGroups.map(group => canonical.get(group.id) || group)
         const scope = getRouterEmbeddingScope(embedder)
         const hashes = new Map(mcpGroups.map((group) => [group.id, groupContentHash(group)]))
         const cachedVectors = loadCachedRouterEmbeddings(mcpGroups.map(({ id }) => id), hashes, scope)
@@ -111,8 +116,6 @@ export async function embeddingPreFilter(
             groupVectors.set(group.id, vector)
             saveCachedRouterEmbedding(group.id, hashes.get(group.id) || '', vector, scope)
         })
-
-        pruneRouterEmbeddingCache(mcpGroups.map(({ id }) => id), scope)
 
         const groupIds = mcpGroups
             .map((group) => ({
@@ -173,7 +176,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
         .flatMap(({ tools }) => tools)
 
     const candidateTools = dedupeTools([...localTools, ...candidateMcpTools])
-    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, availableTools, maxTools, protectedNames, onStatus)
+    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, maxTools, protectedNames, onStatus)
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
     let routedTools: RoutedToolDefinition[] = []
@@ -190,7 +193,6 @@ async function rankCandidateTools(
     query: string,
     queryVector: number[],
     tools: RegistryAwareToolDefinition[],
-    allTools: RegistryAwareToolDefinition[],
     limit: number,
     protectedNames: Set<string>,
     onStatus?: RouteToolsInput['onStatus'],
@@ -229,10 +231,7 @@ async function rankCandidateTools(
             })
         }
 
-        // Prune against the full installed tool set, not just this call's narrowed
-        // candidate subset — otherwise tools outside the current top-K groups would
-        // have their cached embeddings evicted every call, defeating the cache.
-        pruneToolEmbeddingCache(allTools.map(toolCacheKey), scope)
+        // Cache pruning belongs to the background full-registry scan.
 
         onStatus?.('finding-tools', 'Finding required tools...')
         const scored = rankable
@@ -379,7 +378,7 @@ function toolContentHash(tool: ToolDefinition): string {
     const originalName = (tool as RegistryAwareToolDefinition).originalName || tool.name
 
     return createHash('sha256')
-        .update(`${namespaceId}\n${originalName}\n${tool.name}\n${compactToolDescription(tool.description)}\n${JSON.stringify(tool.parameters || {})}`)
+        .update(`${namespaceId}\n${originalName}\n${compactToolDescription(tool.description)}\n${JSON.stringify(tool.parameters || {})}`)
         .digest('hex')
 }
 
@@ -489,7 +488,7 @@ function toolText(tool: ToolDefinition): string {
 
 function toolEmbeddingText(tool: ToolDefinition): string {
     return [
-        `Tool: ${tool.name}`,
+        `Tool: ${(tool as RegistryAwareToolDefinition).originalName || tool.name}`,
         compactToolDescription(tool.description),
         JSON.stringify(tool.parameters || {}),
     ].filter(Boolean).join('\n')
@@ -536,4 +535,58 @@ function dedupeTools<T extends ToolDefinition>(tools: T[]): T[] {
     }
 
     return result
+}
+
+/** A snapshot of missing embeddings, using the same identities as foreground routing. */
+export function planToolEmbeddingWarmup() {
+    const registry = getToolRegistry()
+    const tools = registry.getToolDefinitions()
+    const groups = buildMcpGroups(tools.filter(isMcpTool), registry.getNamespaceMetadataForTools(tools))
+    const embedder = getEmbeddingProvider()
+    const scope = getRouterEmbeddingScope(embedder)
+    const toolHashes = new Map(tools.map(tool => [toolCacheKey(tool), toolContentHash(tool)]))
+    const groupHashes = new Map(groups.map(group => [group.id, groupContentHash(group)]))
+    const cachedTools = loadCachedToolEmbeddings(tools.map(toolCacheKey), toolHashes, scope)
+    const cachedGroups = loadCachedRouterEmbeddings(groups.map(group => group.id), groupHashes, scope)
+    const missing = [
+        ...groups.filter(group => !cachedGroups.has(group.id)).map(group => ({
+            text: groupEmbeddingText(group),
+            save: (vector: number[]) => saveCachedRouterEmbedding(group.id, groupHashes.get(group.id)!, vector, scope),
+        })),
+        ...tools.filter(tool => !cachedTools.has(toolCacheKey(tool))).map(tool => ({
+            text: toolEmbeddingText(tool),
+            save: (vector: number[]) => saveCachedToolEmbedding(toolCacheKey(tool), toolHashes.get(toolCacheKey(tool))!, vector, scope),
+        })),
+    ]
+    const prune = (): void => {
+        pruneRouterEmbeddingCache(groups.map(group => group.id), scope)
+        pruneToolEmbeddingCache(tools.map(toolCacheKey), scope)
+    }
+    return {
+        prune,
+        count: missing.length,
+        async run(signal: AbortSignal, reportProgress: (current: number, total: number) => void, isCurrent: () => boolean): Promise<number> {
+            let completed = 0
+            reportProgress(0, missing.length)
+            // One small batch at a time so background work does not flood the provider.
+            for (let offset = 0; offset < missing.length; offset += 8) {
+                signal.throwIfAborted()
+                if (!isCurrent()) return completed
+                const batch = missing.slice(offset, offset + 8)
+                const results = await embedder.embedBatch(batch.map(item => item.text), signal)
+                signal.throwIfAborted()
+                // Configuration or tools may have changed while the request was in flight.
+                if (!isCurrent()) return completed
+                if (results.length !== batch.length || results.some(result => result.vector.length !== scope.dimensions || !result.vector.every(Number.isFinite))) {
+                    throw new Error('Tool embedding response has invalid vectors')
+                }
+                batch.forEach((item, index) => item.save(results[index].vector))
+                completed += batch.length
+                reportProgress(completed, missing.length)
+                await new Promise<void>(resolve => setImmediate(resolve))
+            }
+            if (isCurrent()) prune()
+            return completed
+        },
+    }
 }

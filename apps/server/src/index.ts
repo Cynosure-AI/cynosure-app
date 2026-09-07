@@ -43,6 +43,7 @@ import { registerUserSettingsRoutes } from './routes/user-settings.js'
 import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat } from './ws.js'
 import { getMcpManager } from './core/tools/mcp/mcp-manager.js'
 import { getEmbeddingProvider } from './core/memory/embedding.js'
+import { startToolEmbeddingWarmup } from './core/agent/tool-embedding-warmup.js'
 import { startCronScheduler, stopCronScheduler } from './core/triggers/cron-scheduler.js'
 import { registerBuiltInTools } from './core/tools/built-in-tools.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
@@ -525,6 +526,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   // Set the server base URL so MCP HTTP transport can construct OAuth callback URLs
   getMcpManager().setServerBaseUrl(`http://127.0.0.1:${options.port}`)
   await loadSavedMcpServers()
+  const stopToolEmbeddingWarmup = startToolEmbeddingWarmup()
 
   // Start messaging channels (Telegram, etc.) before cron catch-up runs so
   // startup-triggered jobs can deliver configured output notifications.
@@ -555,6 +557,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
         cleanup()
       }
       removePlanningStateListener()
+      await stopToolEmbeddingWarmup()
       removeMemoryJobUpdatedListener()
       removeKnowledgeResetListener()
       removeChatExecutionStateListener()

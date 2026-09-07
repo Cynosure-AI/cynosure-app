@@ -587,6 +587,22 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             })
         }
 
+        const toolIndexJobs = db.prepare(`
+            SELECT id, status, error, progress_current, progress_total, updated_at
+            FROM memory_index_jobs
+            WHERE kind = 'tool-embeddings' AND status NOT IN ('queued', 'running', 'retrying')
+            ORDER BY updated_at DESC LIMIT ?
+        `).all(queryLimit) as Array<{ id: string; status: string; error: string | null; progress_current: number | null; progress_total: number | null; updated_at: number }>
+        for (const job of toolIndexJobs) {
+            items.push({
+                id: `tool-index:${job.id}`, kind: 'memory',
+                title: job.status === 'completed' ? 'Indexed tool capabilities' : 'Tool capability indexing',
+                description: job.error || `${job.progress_current ?? 0}/${job.progress_total ?? 0} embeddings`,
+                createdAt: job.updated_at, agentId: null, agentName: null, agentIconUrl: null,
+                conversationId: null, status: job.status, sourceId: job.id, sourceLabel: 'Tool indexing',
+            })
+        }
+
         const searched = items.filter((item) => !searchQuery || activitySearchText(item).includes(searchQuery))
         const totalsByKind = searched.reduce<ActivityTotalsByKind>((totals, item) => {
             totals[item.kind] += 1

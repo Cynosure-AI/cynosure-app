@@ -1,3 +1,4 @@
+import { getEventBus } from '../telemetry/event-bus.js'
 import OpenAI from 'openai'
 import { GoogleGenAI } from '@google/genai'
 import { getGateway } from '../gateway/gateway.js'
@@ -99,6 +100,7 @@ export class EmbeddingProvider {
         // Best-effort persistence
       }
     }
+    getEventBus().emit('embedding:configured')
   }
 
   /**
