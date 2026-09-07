@@ -204,7 +204,7 @@ function buildPlanningTurnContext(
         `objective=${previous.objective}`,
         ...lines,
         'A planning run is active for the current user message.',
-        'If the current message continues, expands, or changes this work and you will use visible execution tools, call todo_write or todo_upsert with the task list that should now be visible before using non-planning tools.',
+        'If the current message continues, expands, or changes this work and you will use visible execution tools, call todo_write with the task list that should now be visible before using non-planning tools.',
         'If the previous list is still genuinely in progress after an interruption, use the prior task content as context and update or recreate the needed visible list for this run.',
     ].join('\n')
 }
