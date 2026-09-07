@@ -10,9 +10,9 @@
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import { resolveProviderAndModel, resolveTaskContextRouter } from './pre-execution/execution-resolvers.js'
-import { resolveExecutionTools } from './pre-execution/execution-tools.js'
+import { resolveExecutionTools, isToolRoutingEnabled } from './pre-execution/execution-tools.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
-import { resolveMemoryContext } from './pre-execution/execution-memory.js'
+import { resolveMemoryContext, isAutoMemoryEnabled, hasExplicitEmptyMemoryScope } from './pre-execution/execution-memory.js'
 import { ensureOversizedAttachmentsIndexed } from './pre-execution/execution-attachments.js'
 import { buildTaskContext, inferRequestedToolEffect } from './pre-execution/task-context.js'
 import { getAssignedOrDefaultSpaces, type MemorySpaceRef } from '../memory/memory-space-scope.js'
@@ -159,7 +159,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         : undefined
     const autoModes = {
         tools: isToolRoutingEnabled(preset, input.autoToolRouting),
-        memories: isAutoMemoryEnabled(preset, input.autoMemory, memorySpaceOverrides),
+        memories: !hasExplicitEmptyMemoryScope(memorySpaceOverrides) && isAutoMemoryEnabled(preset, input.autoMemory),
     }
     const taskContextRouter = resolveTaskContextRouter({
         gateway,
@@ -198,8 +198,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         })
         : Promise.resolve()
 
-    // Once routing queries are available, tool selection, memory retrieval,
-    // and attachment indexing are independent and should not add serial latency.
+    // Tool selection and memory retrieval share the prepared queries and run concurrently.
     const [toolLayer, memoryContext] = await Promise.all([resolveExecutionTools({
         preset,
         conversationId,
@@ -290,23 +289,4 @@ function resolveSelectedMemoryFolderNames(
     if (agentId === '__agentless__') return []
 
     return getAssignedOrDefaultSpaces(agentId).map((space) => space.name)
-}
-
-function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
-    if (preset.disableToolRouting === true) return false
-    if (preset.toolRoutingEnabled === false) return false
-    if (sessionEnabled === true) return true
-    if (sessionEnabled === false) return false
-    return preset.autoToolRouting === true || preset.toolRoutingEnabled === true
-}
-
-function isAutoMemoryEnabled(
-    preset: ExecutionPreset,
-    sessionEnabled: boolean | undefined,
-    memorySpaceOverrides: MemorySpaceRef[] | undefined,
-): boolean {
-    if (Array.isArray(memorySpaceOverrides) && memorySpaceOverrides.length === 0) return false
-    if (sessionEnabled === true) return true
-    if (sessionEnabled === false) return false
-    return preset.autoMemory === true
 }

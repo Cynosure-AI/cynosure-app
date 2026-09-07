@@ -15,6 +15,7 @@ export interface ToolExecStep {
   results?: ToolResult[]
   streamingChoosing?: string
   timestamp: number
+  updatedAt?: number
   taskId?: string
   maCodename?: string
   maAgentName?: string

@@ -49,6 +49,7 @@ export interface ExecutionStep {
   toolCalls?: ToolCallDisplay[]
   results?: { name: string; success: boolean; output: string; error?: string; images?: string[] }[]
   timestamp: number
+  updatedAt?: number
   /** Task ID — unique per AgentExecutor run, used to match update events to the correct step */
   taskId?: string
   /** Sub-agent internal name (e.g. "researcher") */
@@ -282,7 +283,7 @@ export const useAgentStore = defineStore('agent', () => {
 
   function updateLastStepByTask(taskId: string | undefined, patch: Partial<ExecutionStep>): void {
     const step = findLastStepByTask(taskId)
-    if (step) Object.assign(step, patch)
+    if (step) Object.assign(step, patch, { updatedAt: Date.now() })
   }
 
   function appendToLastStepByTask(taskId: string | undefined, field: 'streamingChoosing', chunk: string): void {
@@ -320,7 +321,7 @@ export const useAgentStore = defineStore('agent', () => {
     const bgSteps = stepsPerConversation.get(convId)
     if (!bgSteps?.length) return
     const step = findLastStepInArray(bgSteps, taskId)
-    if (step) Object.assign(step, patch)
+    if (step) Object.assign(step, patch, { updatedAt: Date.now() })
   }
 
   function handleExecutionUpdate(data: { event: string; data: Record<string, unknown> }): void {

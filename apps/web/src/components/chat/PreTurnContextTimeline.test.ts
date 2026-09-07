@@ -112,7 +112,7 @@ describe('PreTurnContextTimeline', () => {
       global: { stubs: { Icon: true } },
     })
 
-    expect(wrapper.get('button').text()).not.toContain('memory item')
+    expect(wrapper.get('button').findAll('.context-chip')).toHaveLength(0)
     await wrapper.get('button').trigger('click')
     expect(wrapper.text()).toContain('Memory retrieval found 9 matches')
     expect(wrapper.text()).toContain('AI selected no memory items')
@@ -122,4 +122,25 @@ describe('PreTurnContextTimeline', () => {
     await selectionStep.get('button').trigger('click')
     expect(selectionStep.text()).toContain('No relevant memories')
   })
+  test('updates the collapsed header when an earlier parallel task finishes last', async () => {
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: { steps: [
+        { iteration: 0, taskId: 'memory', status: 'routing-memory', timestamp: 100 },
+        { iteration: 0, taskId: 'tools', status: 'finding-tools', timestamp: 200 },
+      ], isActive: true },
+      global: { stubs: { Icon: true } },
+    })
+    expect(wrapper.get('[role="status"]').text()).toBe('Ranking tools')
+    await wrapper.setProps({ steps: [
+      { iteration: 0, taskId: 'memory', status: 'routing-memory', timestamp: 100, updatedAt: 300,
+        toolCalls: [{ name: 'note', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'llm' }) }] },
+      { iteration: 0, taskId: 'tools', status: 'finding-tools', timestamp: 200 },
+    ] })
+    expect(wrapper.get('[role="status"]').text()).toBe('AI selected 1 memory item')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.findAll('icon-stub[icon="svg-spinners:ring-resize"]')).toHaveLength(2)
+    await wrapper.setProps({ isActive: false })
+    expect(wrapper.findAll('icon-stub[icon="svg-spinners:ring-resize"]')).toHaveLength(0)
+  })
+
 })

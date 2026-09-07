@@ -45,9 +45,8 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
     if (!currentRequest || !hasEnabledMode(input.enabledModes)) return null
 
     const taskId = `auto_router_${nanoid()}`
-    emitTaskContextStatus(input.conversationId, taskId, input.eventMeta)
-
     const deterministic = buildDeterministicTaskContext(currentRequest, input.enabledModes)
+    emitTaskContextStatus(input.conversationId, taskId, input.eventMeta, Boolean(deterministic))
     if (deterministic) {
         emitTaskContextSelection(input.conversationId, taskId, deterministic, input.eventMeta, undefined, 'deterministic')
         return deterministic
@@ -69,7 +68,7 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                         'Set requiresExternalTools=false when memory retrieval alone can answer the request.',
                         'Classify the maximum requested side effect as read, write, or destructive.',
                         'Do not include disabled auto modes.',
-                        'Do not add execution instructions or answer the user.',
+                        'Do not add execution instructions.',
                         'Do not answer the user. Keep the context specific and omit irrelevant conversation details. /no_think',
                     ].join('\n'),
                 },
@@ -173,7 +172,7 @@ function parseTaskContextArguments(
         const toolQuery = enabledModes.tools && typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : ''
         const legacyMemoryQuery = typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : ''
         const memoryQueries = enabledModes.memories
-            ? normalizeMemoryQueries(Array.isArray(parsed.memoryQueries) ? parsed.memoryQueries : [legacyMemoryQuery])
+            ? normalizeMemoryQueries(Array.isArray(parsed.memoryQueries) ? parsed.memoryQueries : [legacyMemoryQuery], originalRequest)
             : []
 
         if (enabledModes.tools && !toolQuery) return null
@@ -194,11 +193,11 @@ function parseTaskContextArguments(
     }
 }
 
-function normalizeMemoryQueries(values: unknown[]): string[] {
+function normalizeMemoryQueries(values: unknown[], originalRequest: string): string[] {
     return values
         .filter((value): value is string => typeof value === 'string')
         .map((value) => value.trim().slice(0, MAX_ROUTER_QUERY_LENGTH))
-        .filter(Boolean)
+        .filter((value) => Boolean(value) && value !== originalRequest.trim())
         .filter((value, index, all) => all.indexOf(value) === index)
         .slice(0, MAX_MEMORY_EXPANSIONS)
 }
@@ -291,13 +290,13 @@ function enabledQueryInstructions(modes: BuildTaskContextInput['enabledModes']):
     ].filter(Boolean)
 }
 
-function emitTaskContextStatus(conversationId: string, taskId: string, eventMeta?: Record<string, unknown>): void {
+function emitTaskContextStatus(conversationId: string, taskId: string, eventMeta?: Record<string, unknown>, deterministic = false): void {
     getEventBus().emit('step:status', {
         conversationId,
         taskId,
         iteration: 0,
         status: 'building-task-context',
-        message: 'Building task context...',
+        message: deterministic ? 'Using direct retrieval query' : 'AI writing retrieval queries',
         ...eventMeta,
     })
 }

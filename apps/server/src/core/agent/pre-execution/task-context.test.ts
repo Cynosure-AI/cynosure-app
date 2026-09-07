@@ -42,6 +42,18 @@ describe('task context cancellation', () => {
         expect(gateway.complete).not.toHaveBeenCalled()
     })
 
+    test('drops redundant memory expansions before applying the query budget', async () => {
+        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
+            name: 'set_task_context',
+            arguments: JSON.stringify({ memoryQueries: ['project details', 'specific preference', 'related decision'] }),
+        } }] })
+        const result = await buildTaskContext({
+            conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
+            userQuery: 'project details', enabledModes: { tools: false, memories: true },
+        })
+        expect(result?.memoryQueries).toEqual(['specific preference', 'related decision'])
+    })
+
     test('classifies explicit mutations conservatively', () => {
         expect(inferRequestedToolEffect('Please send the email')).toBe('write')
         expect(inferRequestedToolEffect('Lösche diesen Eintrag')).toBe('destructive')
