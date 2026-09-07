@@ -485,6 +485,9 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         const messageArtifactKeysByConversation = new Map<string, Set<string>>()
+        // Paginate after artifact extraction and deduplication. A bounded window
+        // of messages lets ordinary replies push older artifacts out of history
+        // and can incorrectly report hasMore=false before they are reached.
         const messageRows = db.prepare(
             `SELECT m.id, m.conversation_id, m.role, m.content, m.image_urls_json, m.video_urls_json, m.audio_urls_json, m.generated_media, m.created_at, c.title, c.agent_id
              FROM messages m
@@ -492,9 +495,8 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
              WHERE m.generated_media = 1
                 OR m.role = 'assistant'
                 OR (m.role = 'tool' AND (m.content LIKE '%/api/files?path=%' OR m.content GLOB '*/*.*'))
-             ORDER BY m.created_at DESC
-             LIMIT ?`
-        ).all(searchQuery ? -1 : Math.max(queryLimit * 3, 100)) as {
+             ORDER BY m.created_at DESC, m.id DESC`
+        ).iterate() as Iterable<{
             id: string
             conversation_id: string
             role: string
@@ -506,7 +508,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             created_at: number
             title: string | null
             agent_id: string | null
-        }[]
+        }>
 
         for (const row of messageRows) {
             if (row.role === 'tool' && row.generated_media !== 1 && !toolOutputIndicatesGeneratedArtifact(row.content)) {

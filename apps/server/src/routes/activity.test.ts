@@ -172,6 +172,50 @@ describe('activity artifact discovery', () => {
         ])
     })
 
+    test('keeps older artifacts discoverable and paginated as ordinary messages accumulate', async () => {
+        const db = getDb()
+        const now = Date.now()
+        db.prepare(`INSERT INTO conversations (id, title, origin, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)`).run('history', 'Artifact history', 'chat', now, now)
+        const insert = db.prepare(`INSERT INTO messages
+            (id, conversation_id, role, content, image_urls_json, created_at)
+            VALUES (?, 'history', 'assistant', ?, ?, ?)`)
+        db.transaction(() => {
+            for (let index = 0; index < 65; index++) {
+                insert.run(`artifact-${index}`, 'Generated an image.',
+                    JSON.stringify([`https://example.com/generated-${index}.png`]), now + index)
+            }
+        })()
+        const app = Fastify()
+        await app.register(registerActivityRoutes, { prefix: '/api/activity' })
+        try {
+            const url = '/api/activity?types=artifact&limit=60'
+            const before = (await app.inject({ method: 'GET', url })).json()
+            expect(before.items).toHaveLength(60)
+            expect(before.hasMore).toBe(true)
+
+            db.transaction(() => {
+                for (let index = 0; index < 250; index++) {
+                    insert.run(`reply-${index}`, 'An ordinary reply without artifacts.', null, now + 100 + index)
+                }
+            })()
+            const after = (await app.inject({ method: 'GET', url })).json()
+            expect(after).toEqual(before)
+            expect(after.total).toBe(65)
+            const lastPage = (await app.inject({ method: 'GET', url: `${url}&offset=60` })).json()
+            expect(lastPage.items).toHaveLength(5)
+            expect(lastPage.hasMore).toBe(false)
+            expect(lastPage.items.map((item: { sourceId: string }) => item.sourceId))
+                .toEqual(['artifact-4', 'artifact-3', 'artifact-2', 'artifact-1', 'artifact-0'])
+
+            const search = (await app.inject({ method: 'GET', url: `${url}&search=generated-0.png` })).json()
+            expect(search.items).toHaveLength(1)
+            expect(search.items[0].sourceId).toBe('artifact-0')
+        } finally {
+            await app.close()
+        }
+    })
+
     test('stops active server work through one endpoint', async () => {
         const controller = new AbortController()
         registerActiveChatExecution({
