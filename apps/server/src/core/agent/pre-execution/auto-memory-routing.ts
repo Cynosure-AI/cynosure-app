@@ -269,7 +269,7 @@ async function selectMemoryContext(input: {
                 },
             ],
             model: input.model,
-            maxTokens: 400,
+            maxTokens: 1_500,
             tools: [buildMemoryContextSelectionTool(candidateIds, graphEdgeIds)],
             toolChoice: { type: 'function', name: MEMORY_CONTEXT_SELECTION_TOOL_NAME },
             thinkingEnabled: false,

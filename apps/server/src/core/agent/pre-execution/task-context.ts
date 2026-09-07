@@ -8,6 +8,8 @@ const TASK_CONTEXT_TOOL_NAME = 'set_task_context'
 const TURN_CHAR_LIMIT = 500
 const MAX_ROUTER_QUERY_LENGTH = 2_000
 const MAX_MEMORY_EXPANSIONS = 2
+/** Headroom for tool-call arguments plus any reasoning tokens some models emit despite /no_think. */
+const TASK_CONTEXT_MAX_TOKENS = 1_500
 
 export type RequestedToolEffect = 'read' | 'write' | 'destructive'
 
@@ -83,7 +85,7 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                 },
             ],
             model: input.model,
-            maxTokens: 400,
+            maxTokens: TASK_CONTEXT_MAX_TOKENS,
             tools: [buildTaskContextTool(input.enabledModes)],
             toolChoice: { type: 'function', name: TASK_CONTEXT_TOOL_NAME },
             thinkingEnabled: false,
