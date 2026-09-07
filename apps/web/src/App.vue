@@ -225,6 +225,7 @@ onUnmounted(() => {
       title="Authentication Required"
       icon="lucide:shield-alert"
       icon-color="accent"
+      layer="nested"
       @close="dismissAuthRequest(mcpAuthRequests[0]?.serverId)"
     >
       <p class="text-theme-400 leading-relaxed">
