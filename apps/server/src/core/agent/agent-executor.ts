@@ -208,6 +208,9 @@ function toolReturnsGeneratedMedia(tool: ToolDefinition): boolean {
  */
 export class AgentExecutor {
     private config: Required<Pick<AgentExecutorConfig, 'hitl' | 'maxRounds' | 'saveMessages' | 'streamMode' | 'emitEvents'>> & AgentExecutorConfig
+    private _lastStreamId?: string
+    get lastStreamId(): string { return this._lastStreamId || this._streamId }
+
     private _streamId: string
     private _sp: string
 
@@ -359,7 +362,7 @@ export class AgentExecutor {
                 // Save assistant message (thinking + tool calls) before executing tools
                 // so timestamps precede any sub-agent messages produced during execution.
                 if (this.config.saveMessages) {
-                    this.saveAssistantToolCallMessage(conversationId, fullContent, lastRoundThinking, pendingToolCalls)
+                    this.saveAssistantToolCallMessage(conversationId, fullContent, lastRoundThinking, pendingToolCalls, activeStreamId)
                 }
                 contextTokens = maxTokens(
                     contextTokens,
@@ -462,6 +465,7 @@ export class AgentExecutor {
             }
             loopCompleted = true
         } finally {
+            this._lastStreamId = activeStreamId
             // Guarantee stream-end is always sent even if an error escapes the loop
             this.broadcastStreamEnd(activeStreamId, {
                 usage, model: this.config.model, contextTokens,
@@ -1068,11 +1072,14 @@ export class AgentExecutor {
         assistantContent: string,
         thinking: string,
         toolCalls: ToolCall[],
+        streamId: string,
     ): void {
         const { agentId, providerId, model } = this.config
         const meta = this.config.eventMeta
         const visibleToolCalls = toolCalls.filter((tc) => isVisibleExecutionTool(tc.function.name))
         if (!visibleToolCalls.length) return
+        const id = nanoid()
+        const createdAt = Date.now()
         getDb().prepare(
             `INSERT INTO messages (
                 id, conversation_id, role, content, thinking, tool_calls_json, agent_id,
@@ -1080,12 +1087,16 @@ export class AgentExecutor {
                 provider, model, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
-            nanoid(), conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(visibleToolCalls), agentId || null,
+            id, conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(visibleToolCalls), agentId || null,
             (meta?.maCodename as string) || null,
             (meta?.maAgentName as string) || null,
             (meta?.maInvocationId as string) || null,
-            providerId || null, model || null, Date.now()
+            providerId || null, model || null, createdAt
         )
+        this.config.broadcast('chat:new-message', {
+            conversationId, streamId,
+            message: { id, conversationId, role: 'assistant', content: assistantContent || '', createdAt, agentId },
+        })
     }
 
     /** Save tool result messages to DB and broadcast them to the UI. */

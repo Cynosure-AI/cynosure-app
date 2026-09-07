@@ -34,6 +34,7 @@ const props = defineProps<{
   latencyMs?: number
   isStreaming?: boolean
   isError?: boolean
+  forkDisabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -218,8 +219,9 @@ const imageGridClass = computed(() => {
         </button>
         <button
           v-if="isForkable"
-          class="p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
-          title="Fork"
+          class="disabled:opacity-40 disabled:cursor-not-allowed p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
+          :disabled="forkDisabled || !messageId || /^(streaming_|sa_stream_|error_)/.test(messageId)"
+          :title="forkDisabled ? 'Wait for the response to finish before forking' : 'Fork'"
           @click="$emit('fork')"
         >
           <Icon

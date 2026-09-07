@@ -9,7 +9,7 @@
 
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
-import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
+import { resolveProviderAndModel, resolveTaskContextRouter } from './pre-execution/execution-resolvers.js'
 import { resolveExecutionTools } from './pre-execution/execution-tools.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemoryContext } from './pre-execution/execution-memory.js'
@@ -18,14 +18,11 @@ import { buildTaskContext, inferRequestedToolEffect } from './pre-execution/task
 import { getAssignedOrDefaultSpaces, type MemorySpaceRef } from '../memory/memory-space-scope.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
-import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
 import { getUserSettings } from '../user-settings.js'
 import type { ContextEvidence, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
-const AGENT_ROUTER_PROVIDER = '__agent_provider__'
-const AGENT_ROUTER_MODEL = '__agent_model__'
 
 export interface PrepareExecutionInput {
     /** The resolved agent config */
@@ -293,27 +290,6 @@ function resolveSelectedMemoryFolderNames(
     if (agentId === '__agentless__') return []
 
     return getAssignedOrDefaultSpaces(agentId).map((space) => space.name)
-}
-
-function resolveTaskContextRouter(params: {
-    gateway: LLMGateway
-    preset: ExecutionPreset
-    fallbackProviderId: string
-    fallbackModel: string
-    requestRouterProviderId?: string
-    requestRouterModel?: string
-}) {
-    const useAgentRouterProvider = params.preset.autoRouterProviderId === AGENT_ROUTER_PROVIDER
-    const useAgentRouterModel = params.preset.autoRouterModel === AGENT_ROUTER_MODEL
-    return resolveRouterProviderModel({
-        gateway: params.gateway,
-        fallbackProviderId: params.fallbackProviderId,
-        fallbackModel: params.fallbackModel,
-        agentRouterProviderId: useAgentRouterProvider ? params.preset.providerId : (params.preset.autoRouterProviderId || undefined),
-        agentRouterModel: useAgentRouterModel ? (params.preset.model || undefined) : (params.preset.autoRouterModel || undefined),
-        requestRouterProviderId: params.requestRouterProviderId,
-        requestRouterModel: useAgentRouterProvider ? undefined : params.requestRouterModel,
-    })
 }
 
 function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {

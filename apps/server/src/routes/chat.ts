@@ -588,6 +588,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             assistantNow - now,
             assistantNow
           )
+          executionBroadcast('chat:new-message', {
+            conversationId, streamId,
+            message: { id: assistantMsgId, conversationId, role: 'assistant', content: assistantContent, createdAt: assistantNow, agentId },
+          })
           db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
 
           const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
@@ -678,6 +682,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             assistantNow - now,
             assistantNow
           )
+          executionBroadcast('chat:new-message', {
+            conversationId, streamId,
+            message: { id: assistantMsgId, conversationId, role: 'assistant', content: assistantContent, createdAt: assistantNow, agentId },
+          })
           db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
 
           const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
@@ -826,6 +834,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           assistantNow
         )
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
+
+        executionBroadcast('chat:new-message', {
+          conversationId, streamId,
+          message: { id: assistantMsgId, conversationId, role: 'assistant', content: result.content, createdAt: assistantNow, agentId },
+        })
 
         // Auto-generate conversation title on first exchange (fire-and-forget)
         const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined

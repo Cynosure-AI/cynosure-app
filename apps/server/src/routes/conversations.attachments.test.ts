@@ -23,6 +23,28 @@ describe('conversation message attachment resolution', () => {
         await rm(directory, { recursive: true, force: true })
     })
 
+    test('forks persisted history and configuration through the selected message', async () => {
+        const db = getDb()
+        db.prepare(`INSERT INTO conversations (id, title, execution_config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`)
+            .run('source', 'Original', '{"model":"selected-model"}', 1, 4)
+        const insert = db.prepare('INSERT INTO messages (id, conversation_id, role, content, context_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        insert.run('user', 'source', 'user', 'Question', null, 1)
+        insert.run('answer', 'source', 'assistant', 'Answer', 42, 2)
+        insert.run('later', 'source', 'user', 'Later', 99, 2)
+        const app = Fastify()
+        await app.register(registerConversationRoutes, { prefix: '/api/chat' })
+        try {
+            const response = await app.inject({ method: 'POST', url: '/api/chat/conversations/source/fork', payload: { messageId: 'answer' } })
+            expect(response.statusCode, response.body).toBe(200)
+            const { id } = response.json()
+            expect(db.prepare('SELECT content FROM messages WHERE conversation_id = ? ORDER BY created_at').all(id)).toEqual([{ content: 'Question' }, { content: 'Answer' }])
+            expect(db.prepare('SELECT title, last_context_tokens, execution_config_json FROM conversations WHERE id = ?').get(id)).toEqual({ title: 'Original (fork)', last_context_tokens: 42, execution_config_json: '{"model":"selected-model"}' })
+            expect(db.prepare('SELECT count(*) AS count FROM messages WHERE conversation_id = ?').get('source')).toEqual({ count: 3 })
+        } finally {
+            await app.close()
+        }
+    })
+
     test('returns provider-safe media and original files for an edited message', async () => {
         const now = Date.now()
         const db = getDb()

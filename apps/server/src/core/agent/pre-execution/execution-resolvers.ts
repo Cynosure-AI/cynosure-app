@@ -1,3 +1,4 @@
+import type { ExecutionPreset } from '../execution-preset.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 
 export interface ProviderModelResolution {
@@ -72,4 +73,26 @@ export function resolveRouterProviderModel(params: {
         providerId: routerProvider.config.id,
         model,
     }
+}
+
+const AGENT_ROUTER_PROVIDER = '__agent_provider__'
+const AGENT_ROUTER_MODEL = '__agent_model__'
+
+export function resolveTaskContextRouter(params: {
+    gateway: LLMGateway
+    preset: ExecutionPreset
+    fallbackProviderId: string
+    fallbackModel: string
+    requestRouterProviderId?: string
+    requestRouterModel?: string
+}) {
+    const useAgentRouterProvider = !params.preset.autoRouterProviderId || params.preset.autoRouterProviderId === AGENT_ROUTER_PROVIDER
+    const useAgentRouterModel = !params.preset.autoRouterModel || params.preset.autoRouterModel === AGENT_ROUTER_MODEL
+    return resolveRouterProviderModel({
+        gateway: params.gateway,
+        fallbackProviderId: params.fallbackProviderId,
+        fallbackModel: params.fallbackModel,
+        agentRouterProviderId: useAgentRouterProvider ? params.fallbackProviderId : (params.preset.autoRouterProviderId || undefined),
+        agentRouterModel: useAgentRouterModel ? (useAgentRouterProvider ? params.fallbackModel : undefined) : params.preset.autoRouterModel,
+    })
 }

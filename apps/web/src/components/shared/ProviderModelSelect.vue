@@ -384,7 +384,7 @@ const selectedEncoded = computed(() =>
 );
 
 const selectedTriggerLabel = computed(() => {
-  // Leading selections (e.g. "Use global auto router", "Use agent model") may
+  // Leading selections (e.g. "Use agent model") may
   // carry sentinel values like "__agent_model__". Always show their friendly
   // label instead of the raw value, whether freshly selected or loaded from a
   // saved configuration.

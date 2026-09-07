@@ -24,6 +24,16 @@ const emit = defineEmits<{ closeSearch: [] }>()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
+const forkError = ref('')
+async function forkMessage(messageId: string): Promise<void> {
+  forkError.value = ''
+  try {
+    await chatStore.forkConversationFromMessage(messageId)
+  } catch (error) {
+    forkError.value = `Could not fork conversation: ${error instanceof Error ? error.message : String(error)}`
+  }
+}
+
 const scrollContainer = ref<HTMLDivElement | null>(null)
 const expandedFallback = ref<Set<string>>(new Set())
 const collapsedSubAgentGroups = reactive(new Set<string>())
@@ -751,6 +761,7 @@ onMounted(() => {
     ref="scrollContainer"
     class="flex-1 overflow-y-auto"
   >
+    <div v-if="forkError" role="alert" class="p-3 text-sm text-red-400">{{ forkError }}</div>
     <div
       v-if="props.searchOpen"
       role="search"
@@ -977,6 +988,7 @@ onMounted(() => {
                   <MessageBubble
                     :role="inner.msg.role"
                     :message-id="inner.msg.id"
+                    :fork-disabled="chatStore.isConversationLocked"
                     :created-at="inner.msg.createdAt"
                     :content="inner.msg.content"
                     :thinking="inner.msg.thinking"
@@ -997,7 +1009,7 @@ onMounted(() => {
                     :is-error="inner.msg.isError"
                     @retry="chatStore.retryFromMessage(inner.msg.id)"
                     @edit="(content) => chatStore.editMessage(inner.msg.id, content)"
-                    @fork="chatStore.forkConversationFromMessage(inner.msg.id)"
+                    @fork="forkMessage(inner.msg.id)"
                   />
                 </div>
                 <PreTurnContextTimeline
@@ -1065,6 +1077,7 @@ onMounted(() => {
           <MessageBubble
             :role="entry.msg.role"
           :message-id="entry.msg.id"
+            :fork-disabled="chatStore.isConversationLocked"
           :created-at="entry.msg.createdAt"
           :content="entry.msg.content"
           :thinking="entry.msg.thinking"
@@ -1085,7 +1098,7 @@ onMounted(() => {
           :is-error="entry.msg.isError"
           @retry="chatStore.retryFromMessage(entry.msg.id)"
           @edit="(content) => chatStore.editMessage(entry.msg.id, content)"
-            @fork="chatStore.forkConversationFromMessage(entry.msg.id)"
+            @fork="forkMessage(entry.msg.id)"
           />
         </div>
 

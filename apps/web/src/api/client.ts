@@ -203,7 +203,7 @@ export const api = {
       cb: (data: { conversationId: string; title: string }) => void
     ) => onWsEvent('chat:title-updated', cb as WsHandler),
     onNewMessage: (
-      cb: (data: { conversationId: string; message: { id: string; conversationId: string; role: string; content: string; createdAt: number; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }) => void
+      cb: (data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; role: string; content: string; createdAt: number; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }) => void
     ) => onWsEvent('chat:new-message', cb as WsHandler),
     onPostAction: (
       cb: (data: { conversationId: string; action: string; status: 'started' | 'completed' }) => void

@@ -150,13 +150,6 @@ const sections: SettingsSection[] = [
     terms: ['chunking', 'chunk size', 'chunk overlap', 'tokens', 'documents', 'split documents']
   },
   {
-    id: 'auto-router',
-    categoryId: 'chat',
-    label: 'Context Routing Model',
-    description: 'Choose the default model that prepares context for automatic tool discovery and memory retrieval.',
-    terms: ['context routing', 'auto router', 'router', 'task context', 'automatic tools', 'automatic memory']
-  },
-  {
     id: 'generated-titles',
     categoryId: 'chat',
     label: 'Generate Chat Titles',

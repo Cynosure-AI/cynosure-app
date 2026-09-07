@@ -94,7 +94,7 @@ function onAutoRoutingUpdate(enabled: boolean): void {
             </span>
           </div>
           <p class="mt-1 text-[11px] text-theme-500">
-            Uses recent context to discover a compact tool set. Selected tools are pinned and always retained. The routing model is configured in Preferences.
+            Uses recent context to discover a compact tool set. Selected tools are pinned and always retained. Context routing uses the current agent / selected model by default; agent overrides are configured in the Advanced tab.
           </p>
         </div>
         <ToggleSwitch
