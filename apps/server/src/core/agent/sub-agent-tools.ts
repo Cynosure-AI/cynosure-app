@@ -161,6 +161,8 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 if (result.content || result.images.length) {
                     activeSignal?.throwIfAborted()
                     const db = getDb()
+                    const messageId = nanoid()
+                    const createdAt = Date.now()
                     db.prepare(
                         `INSERT INTO messages (
                             id, conversation_id, role, content, thinking, image_urls_json, generated_media, agent_id,
@@ -168,7 +170,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                             provider, model, prompt_tokens, completion_tokens, context_tokens, created_at
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                     ).run(
-                        nanoid(), conversationId, 'assistant', result.content, result.thinking || null,
+                        messageId, conversationId, 'assistant', result.content, result.thinking || null,
                         result.images.length ? JSON.stringify(result.images) : null,
                         result.images.length ? 1 : 0,
                         agentData.id,
@@ -180,8 +182,12 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                         result.usage?.promptTokens ?? null,
                         result.usage?.completionTokens ?? null,
                         result.contextTokens ?? null,
-                        Date.now()
+                        createdAt
                     )
+                    broadcast('chat:new-message', {
+                        conversationId, streamId: executor.lastStreamId,
+                        message: { id: messageId, conversationId, role: 'assistant', content: result.content, createdAt, agentId: agentData.id },
+                    })
                 }
 
                 const imageLines = result.images.map((url, index) => {

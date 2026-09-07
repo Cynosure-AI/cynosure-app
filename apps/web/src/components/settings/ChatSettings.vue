@@ -56,14 +56,6 @@ const contextStrategyOptions: {
   },
 ];
 
-function onAutoRouterSelection(selection: {
-  providerId: string;
-  model: string;
-}): void {
-  prefs.autoRouterProviderId = selection.providerId;
-  prefs.autoRouterModel = selection.model;
-}
-
 function onTitleSelection(selection: {
   providerId: string;
   model: string;
@@ -112,51 +104,9 @@ onMounted(async () => {
 <template>
   <div class="space-y-4">
     <SettingsSubheading
-      v-if="showAnySection(['auto-router', 'generated-titles'])"
+      v-if="showAnySection(['generated-titles'])"
       label="Automation"
     />
-
-    <!-- Context Routing Model -->
-    <BaseCard
-      v-if="showSection('auto-router')"
-      class="p-5 space-y-4"
-    >
-      <div class="flex items-center gap-3">
-        <div
-          class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center"
-        >
-          <Icon
-            icon="lucide:book-open-check"
-            class="w-5 h-5 text-theme-400"
-          />
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-theme-200">
-            Context Routing Model
-          </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
-            Default provider and model used to prepare tool and memory routing context
-          </p>
-        </div>
-      </div>
-
-      <div class="pt-1 border-t border-theme-700">
-        <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
-        <ProviderModelSelect
-          :provider-id="prefs.autoRouterProviderId"
-          :model-value="prefs.autoRouterModel"
-          :providers="providerStore.providers"
-          include-default
-          default-label="Use chat provider"
-          placeholder="Use chat provider"
-          @change="onAutoRouterSelection"
-        />
-        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          Used only when automatic tool discovery or automatic memory retrieval is enabled.
-          Defaults to the current chat model when not set; routing behavior is configured per agent or conversation.
-        </p>
-      </div>
-    </BaseCard>
 
     <!-- Generate Chat Titles -->
     <BaseCard

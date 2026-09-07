@@ -21,12 +21,6 @@ const REASONING_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"] as
 
 const autoRouterLeadingSelections = [
   {
-    providerId: "",
-    model: "",
-    label: "Use global auto router",
-    iconName: "lucide:settings",
-  },
-  {
     providerId: AGENT_ROUTER_PROVIDER,
     model: AGENT_ROUTER_MODEL,
     label: "Use agent model",
@@ -144,17 +138,17 @@ function onMaxCtxSliderInput(event: Event) {
       <p class="text-xs text-theme-500 leading-relaxed">
         Override the provider and model used to prepare context for automatic tool discovery
         and memory retrieval. Those features are enabled independently in the Tools and Memory tabs.
-        Leave blank to use the global context routing model from Preferences.
+        By default, uses the current agent / selected chat model.
       </p>
 
       <div class="mt-4">
         <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
         <ProviderModelSelect
-          :provider-id="agent.autoRouterProviderId || ''"
-          :model-value="agent.autoRouterModel || ''"
+          :provider-id="agent.autoRouterProviderId || AGENT_ROUTER_PROVIDER"
+          :model-value="agent.autoRouterModel || AGENT_ROUTER_MODEL"
           :providers="providerStore.providers"
           :leading-selections="autoRouterLeadingSelections"
-          placeholder="Use global routing model"
+          placeholder="Use agent model"
           @change="onAutoRouterSelection"
         />
       </div>

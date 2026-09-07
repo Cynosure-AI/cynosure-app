@@ -121,8 +121,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             if (!source) return reply.status(404).send({ error: 'Conversation not found' })
 
             const forkPoint = db
-                .prepare('SELECT created_at FROM messages WHERE id = ? AND conversation_id = ?')
-                .get(messageId, sourceConversationId) as { created_at: number } | undefined
+                .prepare('SELECT rowid AS row_id, created_at FROM messages WHERE id = ? AND conversation_id = ?')
+                .get(messageId, sourceConversationId) as { row_id: number; created_at: number } | undefined
             if (!forkPoint) return reply.status(404).send({ error: 'Message not found' })
 
             const id = nanoid()
@@ -130,16 +130,16 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             const title = source.title ? `${source.title} (fork)` : 'Forked Chat'
             const lastContextTokens = (db.prepare(`
                 SELECT context_tokens FROM messages
-                WHERE conversation_id = ? AND created_at <= ? AND context_tokens IS NOT NULL
-                ORDER BY created_at DESC
+                WHERE conversation_id = ? AND (created_at < ? OR (created_at = ? AND rowid <= ?)) AND context_tokens IS NOT NULL
+                ORDER BY created_at DESC, rowid DESC
                 LIMIT 1
-            `).get(sourceConversationId, forkPoint.created_at) as { context_tokens: number } | undefined)?.context_tokens ?? null
+            `).get(sourceConversationId, forkPoint.created_at, forkPoint.created_at, forkPoint.row_id) as { context_tokens: number } | undefined)?.context_tokens ?? null
 
             db.prepare(`
                 INSERT INTO conversations (
                     id, title, agent_id, ma_workspace_id, origin, pinned,
                     last_read_at, last_context_tokens, execution_config_json, metadata_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
             `).run(
                 id,
                 title,
@@ -156,9 +156,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
             const messageRows = db.prepare(`
                 SELECT * FROM messages
-                WHERE conversation_id = ? AND created_at <= ?
-                ORDER BY created_at ASC
-            `).all(sourceConversationId, forkPoint.created_at) as {
+                WHERE conversation_id = ? AND (created_at < ? OR (created_at = ? AND rowid <= ?))
+                ORDER BY created_at ASC, rowid ASC
+            `).all(sourceConversationId, forkPoint.created_at, forkPoint.created_at, forkPoint.row_id) as {
                 id: string
                 role: string
                 content: string

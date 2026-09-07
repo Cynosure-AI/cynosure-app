@@ -151,6 +151,15 @@ describe('chat message actions', () => {
     expect(mocks.agentStore.setConversationExecutionState).toHaveBeenLastCalledWith('created-conversation', false)
   })
 
+  test('does not send legacy global router preferences when the agent has no override', async () => {
+    const state = setup()
+    mocks.agentDefinitions.get.mockReturnValue({ id: 'agent', name: 'Agent', autoRouterProviderId: '', autoRouterModel: '' })
+    await state.api.sendMessage('Hello')
+    expect(mocks.chat.send).toHaveBeenCalledWith('conversation', expect.objectContaining({
+      run: expect.objectContaining({ autoRouterProviderId: undefined, autoRouterModel: undefined }),
+    }))
+  })
+
   test('clears streaming state and rethrows when sending fails', async () => {
     const state = setup()
     mocks.chat.send.mockRejectedValue(new Error('server unavailable'))

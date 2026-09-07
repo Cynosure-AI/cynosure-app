@@ -153,3 +153,41 @@ describe('chat streaming completion', () => {
     })
   })
 })
+
+
+describe('persisted streaming message identities', () => {
+  test('assigns database IDs to tool rounds and the final reply without duplicate bubbles', () => {
+    const { messages, streaming } = setup()
+    const event = { conversationId: 'conversation', streamId: 'stream' }
+    streaming.handleStreamStart(event)
+    streaming.handleStreamChunk({ ...event, content: 'Checking tools' })
+    streaming.handleNewMessage({ ...event, message: { id: 'saved-round', conversationId: 'conversation', role: 'assistant', content: 'Checking tools', createdAt: 1 } })
+    streaming.handleStreamReset(event)
+    streaming.handleStreamChunk({ ...event, content: 'Answer' })
+    streaming.handleStreamEnd(event)
+    streaming.handleNewMessage({ ...event, message: { id: 'saved-final', conversationId: 'conversation', role: 'assistant', content: 'Answer', createdAt: 2 } })
+    expect(messages.value.map(m => m.id)).toEqual(['saved-round', 'saved-final'])
+    expect(messages.value.map(m => m.content)).toEqual(['Checking tools', 'Answer'])
+  })
+
+  test('assigns the saved ID to a completed sub-agent reply', () => {
+    const { messages, streaming } = setup()
+    const event = { conversationId: 'conversation', streamId: 'sub-stream', agentId: 'sub-agent' }
+    streaming.handleSubAgentStreamStart(event)
+    streaming.handleSubAgentStreamChunk({ ...event, content: 'Sub-agent answer' })
+    streaming.handleSubAgentStreamEnd(event)
+    const saved = { ...event, message: { id: 'saved-sub-agent', conversationId: 'conversation', role: 'assistant', content: 'Sub-agent answer', createdAt: 1 } }
+    streaming.handleNewMessage(saved)
+    streaming.handleNewMessage(saved)
+    expect(messages.value).toHaveLength(1)
+    expect(messages.value[0]).toMatchObject({ id: 'saved-sub-agent', content: 'Sub-agent answer', agentId: 'sub-agent', isStreaming: false })
+  })
+
+  test('ignores persisted IDs from another conversation', () => {
+    const { messages, streaming } = setup()
+    streaming.handleStreamStart({ conversationId: 'conversation', streamId: 'stream' })
+    const originalId = messages.value[0].id
+    streaming.handleNewMessage({ conversationId: 'other', streamId: 'stream', message: { id: 'other-id', conversationId: 'other', role: 'assistant', content: 'Other', createdAt: 1 } })
+    expect(messages.value[0].id).toBe(originalId)
+  })
+})

@@ -194,8 +194,8 @@ function rowToAgentData(row: AgentRow): AgentData {
         autoApproveTools: row.auto_approve_tools === 1,
         autoToolRouting: row.auto_tool_routing === 1,
         autoMemory: row.auto_memory === 1,
-        autoRouterProviderId: row.auto_router_provider_id || '',
-        autoRouterModel: row.auto_router_model || '',
+        autoRouterProviderId: row.auto_router_provider_id || '__agent_provider__',
+        autoRouterModel: row.auto_router_model || '__agent_model__',
         thinkingEnabled: row.thinking_enabled !== 0,
         reasoningEffort: parseReasoningEffort(row.reasoning_effort),
         maxContextTokens: typeof row.max_context_tokens === 'number' ? row.max_context_tokens : null,
@@ -276,9 +276,9 @@ export function createAgent(input: CreateAgentInput): AgentData {
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, tool_router_provider_id, tool_router_model,
-            auto_memory, memory_router_provider_id, memory_router_model,
+            auto_memory, memory_router_provider_id, memory_router_model, auto_router_provider_id, auto_router_model,
             sort_order, tags_json, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.name,
@@ -301,6 +301,8 @@ export function createAgent(input: CreateAgentInput): AgentData {
         input.autoMemory === true ? 1 : 0,
         '',
         '',
+        input.autoRouterProviderId || '__agent_provider__',
+        input.autoRouterModel || '__agent_model__',
         typeof input.sortOrder === 'number' ? input.sortOrder : 0,
         JSON.stringify(normalizeTags(input.tags || [])),
         input.favorite === true ? 1 : 0,
@@ -446,9 +448,9 @@ export function duplicateAgent(id: string): AgentData | null {
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, tool_router_provider_id, tool_router_model,
-            auto_memory, memory_router_provider_id, memory_router_model,
+            auto_memory, memory_router_provider_id, memory_router_model, auto_router_provider_id, auto_router_model,
             sort_order, tags_json, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         newId,
         newName,
@@ -471,6 +473,8 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.auto_memory,
         existing.memory_router_provider_id,
         existing.memory_router_model,
+        existing.auto_router_provider_id || '__agent_provider__',
+        existing.auto_router_model || '__agent_model__',
         existing.sort_order,
         existing.tags_json || '[]',
         existing.favorite,
