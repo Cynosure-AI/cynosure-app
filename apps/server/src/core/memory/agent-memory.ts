@@ -5,7 +5,6 @@ import { buildMemorySpaceFilter, getMemorySpaceFolderPath } from './memory-space
 import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
 import {
     deleteMemoryKnowledgeSource,
-    indexMemoryContentIntoKnowledge,
     moveMemoryKnowledgeSource,
 } from './memory-knowledge-extraction.js'
 import {
@@ -20,7 +19,7 @@ import {
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
-import { cancelMemoryIndexJobsForFile, startMemoryIndexJob } from './memory-index-jobs.js'
+import { cancelMemoryIndexJobsForFile } from './memory-index-jobs.js'
 import { getActivePermanentMemoryTableName } from './memory-index-manifest.js'
 import { randomBytes } from 'node:crypto'
 import { createStableMemoryDocumentRef } from './memory-reference.js'
@@ -127,49 +126,6 @@ function parseDocumentTags(value: unknown): string[] {
 export class AgentMemory {
     private parser = getMemoryParser()
 
-    /**
-     * Knowledge projections are rebuildable derivatives of the indexed
-     * document. Extraction stages a complete revision and atomically publishes
-     * it, so a provider failure leaves the prior searchable projection intact.
-     */
-    private scheduleDerivedGraphRefresh(
-        content: string,
-        fileName: string,
-        spaceId: string,
-        replacedSourceFiles: string[] = [fileName],
-    ): void {
-        try {
-            getDb().prepare(`
-                UPDATE memory_file_index SET knowledge_extracted_at = 0
-                WHERE space_id = ? AND file_name = ?
-            `).run(spaceId, fileName)
-            startMemoryIndexJob({
-                kind: 'knowledge-extraction',
-                spaceId,
-                fileName,
-                replaceExisting: true,
-                run: async (jobSignal, reportProgress) => {
-                    const result = await indexMemoryContentIntoKnowledge({
-                        content,
-                        spaceId,
-                        fileName,
-                        replaceExisting: true,
-                        signal: jobSignal,
-                        onExtractionProgress: reportProgress,
-                    })
-                    // Converted/renamed source projections are retired only
-                    // after the replacement revision is fully published.
-                    for (const priorFileName of Array.from(new Set(replacedSourceFiles.filter(Boolean)))) {
-                        if (priorFileName !== fileName) deleteMemoryKnowledgeSource(spaceId, priorFileName)
-                    }
-                    return result
-                },
-            })
-        } catch (err) {
-            console.warn(`[memory] Document indexed, but graph derivation could not be scheduled for ${spaceId}/${fileName}:`, err)
-        }
-    }
-
     // -----------------------------------------------------------------------
     // Core: ingest text into LanceDB (low-level, no file I/O)
     // -----------------------------------------------------------------------
@@ -266,7 +222,6 @@ export class AgentMemory {
             removeFileIndex(spaceId, fileName)
             const hash = computeFileHash(mdPath)
             upsertFileIndex(spaceId, mdName, hash, count)
-            this.scheduleDerivedGraphRefresh(text, mdName, spaceId, [fileName, mdName])
             return { fileName: mdName, chunkCount: count }
         } else {
             throw new Error(`Unsupported file type: ${ext}`)
@@ -276,7 +231,6 @@ export class AgentMemory {
         throwIfAborted(opts?.signal)
         const hash = computeFileHash(filePath)
         upsertFileIndex(spaceId, fileName, hash, count)
-        this.scheduleDerivedGraphRefresh(text, fileName, spaceId)
         return { fileName, chunkCount: count }
     }
 
