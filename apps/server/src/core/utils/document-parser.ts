@@ -1,12 +1,12 @@
 /**
- * Document parser utility – uses officeparser to extract structured content
- * from office documents (docx, pptx, xlsx, odt, odp, ods, pdf, rtf)
- * and converts the AST to Markdown for LLM consumption.
+ * Shared Markdown conversion for memory ingestion and attachments.
+ * PDFs use unpdf; office documents use officeparser or the DOCX converter.
  */
 import AdmZip from 'adm-zip'
 import { parseOffice, type OfficeContentNode } from 'officeparser'
+import { parsePdfToMarkdown } from './pdf-parser.js'
 
-/** File extensions that officeparser can handle */
+/** File extensions supported by the document converters */
 const PARSEABLE_EXTENSIONS = new Set([
     '.docx', '.pptx', '.xlsx',
     '.odt', '.odp', '.ods',
@@ -21,6 +21,8 @@ export function isParseableDocument(filename: string): boolean {
 
 /** Parse a document buffer and return structured Markdown text */
 export async function parseDocument(buffer: Buffer, filename: string): Promise<string> {
+    if (filename.toLowerCase().endsWith('.pdf')) return parsePdfToMarkdown(buffer)
+
     if (filename.toLowerCase().endsWith('.docx')) {
         const docxMarkdown = parseDocxToMarkdown(buffer)
         if (docxMarkdown) return docxMarkdown

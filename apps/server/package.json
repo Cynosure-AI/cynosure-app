@@ -3,6 +3,9 @@
   "version": "2.1.0",
   "description": "Cynosure server – LLM orchestrator with tools, agents, and memory",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -47,6 +50,7 @@
     "node-cron": "^4.2.1",
     "officeparser": "^7.1.0",
     "openai": "^6.27.0",
+    "unpdf": "^1.8.1",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },

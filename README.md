@@ -21,6 +21,8 @@ Memory source files are authoritative. Search vectors are rebuildable, while kno
 
 Version 2.1 replaces the legacy entity-graph store. Existing legacy graph rows are intentionally removed during upgrade; re-extract knowledge from the source memory documents afterward.
 
+PDF memory imports and file attachments use `unpdf` for Markdown extraction. Matching bookmark titles retain their heading hierarchy; short lines with larger fonts provide a heading fallback. Line breaks, paragraph gaps, and common bullet markers are preserved. Heading inference is heuristic, and complex tables, columns, and visual formatting may need correction. Scanned PDFs require OCR before importing. Previously converted Markdown is unchanged; import the original PDF again to use the new converter.
+
 ## Monorepo Structure
 
 ```
@@ -33,7 +35,7 @@ mcps/        — Built-in MCP tool servers (media converter, diagrams, weather, 
 
 ## Prerequisites
 
-- **Node.js** ≥ 20
+- **Node.js** ≥ 22 (required by `unpdf`)
 - **pnpm** — enabled via `corepack enable pnpm`
 
 ## Getting Started
