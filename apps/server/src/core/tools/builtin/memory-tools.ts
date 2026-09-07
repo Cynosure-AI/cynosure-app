@@ -1059,7 +1059,7 @@ export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): Tool
     return {
         name: 'knowledge_entity_merge',
         description:
-            'Merge duplicate knowledge entities. Provide entity IDs returned by knowledge_search and a new canonical mainName. ' +
+            'Manually repair confirmed duplicate knowledge entities. Routine entity resolution happens during memory indexing; use this only for exceptional repairs, not uncertain candidate matches. Provide entity IDs returned by knowledge_search and a new canonical mainName. ' +
             'If mainName already belongs to an active entity in scope, that entity automatically remains stable; otherwise the first supplied ID remains stable. ' +
             'All other entities are redirected into it, and their former names and aliases become normalized aliases. ' +
             'Relationships, mentions, and resolution records are rewired; duplicate relationships are consolidated.',

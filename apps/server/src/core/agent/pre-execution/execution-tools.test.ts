@@ -36,13 +36,17 @@ describe('agent-required execution tools', () => {
         expect(filterToolsForExecutionPreset(preset('agent-1'), tools)).toEqual(tools)
     })
 
-    test('keeps the automatic read recovery set smaller than the mutation-capable memory set', () => {
+    test('includes additive writes by default while keeping read recovery read-only', () => {
         expect(getBuiltInMemoryReadToolKeys()).toEqual([
             'builtin:memory::memory_list_documents',
             'builtin:memory::memory_retrieve_chunks',
             'builtin:memory::memory_semantic_search',
             'builtin:memory::knowledge_search',
         ])
-        expect(getBuiltInMemoryReadToolKeys().length).toBeLessThan(getBuiltInMemoryToolKeys().length)
+        expect(getBuiltInMemoryToolKeys()).toEqual([
+            ...getBuiltInMemoryReadToolKeys(),
+            'builtin:memory::memory_create',
+            'builtin:memory::memory_append',
+        ])
     })
 })

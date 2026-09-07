@@ -10,10 +10,6 @@ export const AUTO_MEMORY_TOOL_NAMES = [
   'memory_semantic_search',
   'memory_create',
   'memory_append',
-  'memory_replace_range',
-  'memory_replace_all',
-  'memory_remove_all',
-  'memory_remove_range',
 ] as const
 
 export const AGENT_REQUIRED_TOOL_NAMES = [
@@ -39,13 +35,11 @@ const INTERNAL_TOOL_NAMES = new Set([
 const AUTO_MANAGED_BUILT_IN_TOOL_PREFIXES = [
   'todo_',
   'attachment_',
-  'memory_',
 ]
 
-const AUTO_MANAGED_BUILT_IN_TOOL_NAMES = new Set([
+const AUTO_MANAGED_BUILT_IN_TOOL_NAMES = new Set<string>([
+  ...AUTO_MEMORY_TOOL_NAMES,
   'expand_available_toolset',
-  'memory_remove_all',
-  'memory_remove_range',
   'spawn_subagent',
 ])
 
