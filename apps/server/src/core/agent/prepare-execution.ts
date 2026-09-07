@@ -12,7 +12,7 @@ import { getToolRegistry } from '../tools/tool-registry.js'
 import { resolveProviderAndModel, resolveRouterProviderModel } from './pre-execution/execution-resolvers.js'
 import { resolveExecutionTools } from './pre-execution/execution-tools.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
-import { resolveMemorySystemMessages } from './pre-execution/execution-memory.js'
+import { resolveMemoryContext } from './pre-execution/execution-memory.js'
 import { ensureOversizedAttachmentsIndexed } from './pre-execution/execution-attachments.js'
 import { buildTaskContext, inferRequestedToolEffect } from './pre-execution/task-context.js'
 import { getAssignedOrDefaultSpaces, type MemorySpaceRef } from '../memory/memory-space-scope.js'
@@ -21,7 +21,7 @@ import type { ExecutionPreset } from './execution-preset.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
 import { getUserSettings } from '../user-settings.js'
-import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
+import type { ContextEvidence, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
 const AGENT_ROUTER_PROVIDER = '__agent_provider__'
@@ -91,6 +91,11 @@ export interface PrepareExecutionInput {
     reasoningEffort?: ReasoningEffort
 }
 
+export interface ContextBundle {
+    messages: ChatMessage[]
+    evidence: ContextEvidence[]
+}
+
 export interface PreparedExecution {
     /** Tool definitions ready for the executor */
     tools: RegistryAwareToolDefinition[]
@@ -98,7 +103,9 @@ export interface PreparedExecution {
     providerId: string | undefined
     /** Resolved model name */
     model: string
-    /** Prepared context messages to prepend to conversation history (trusted prompts, then untrusted retrieved evidence). */
+    /** Prepared model context plus the exact evidence that produced it. */
+    contextBundle: ContextBundle
+    /** Compatibility alias for contextBundle.messages. */
     systemMessages: ChatMessage[]
     /** Whether sub-agent delegation tools were added */
     hasSubAgents: boolean
@@ -196,7 +203,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     // Once routing queries are available, tool selection, memory retrieval,
     // and attachment indexing are independent and should not add serial latency.
-    const [toolLayer, memoryMessages] = await Promise.all([resolveExecutionTools({
+    const [toolLayer, memoryContext] = await Promise.all([resolveExecutionTools({
         preset,
         conversationId,
         broadcast,
@@ -220,7 +227,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         hydrationAgentId: input.hydrationAgentId,
         eventMeta: input.eventMeta,
         scheduleExecutionConfig,
-    }), resolveMemorySystemMessages({
+    }), resolveMemoryContext({
         preset,
         conversationId,
         gateway,
@@ -255,13 +262,14 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     const systemMessages = [
         ...promptMessages,
-        ...memoryMessages,
+        ...memoryContext.messages,
     ]
 
     return {
         tools: toolLayer.tools,
         providerId: providerModel.providerId,
         model: providerModel.model,
+        contextBundle: { messages: systemMessages, evidence: memoryContext.evidence },
         systemMessages,
         hasSubAgents: toolLayer.hasSubAgents,
     }

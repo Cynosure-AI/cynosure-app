@@ -5,6 +5,7 @@ import { getRAGStore } from '../memory/rag.js'
 import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from '../memory/lancedb-filter.js'
 import { readFileAttachmentText, type FileAttachmentArtifact } from './file-artifacts.js'
 import { getDb } from '../../db/database.js'
+import type { ContextEvidence } from '@shared/types'
 
 export const CONVERSATION_ATTACHMENTS_TABLE = 'conversation_attachments'
 
@@ -367,7 +368,16 @@ export const ATTACHMENT_SYSTEM_CONTEXT = [
     'Use attachment_search for focused lookups and attachment_retrieve_chunks to expand around relevant parts, especially for broad summaries or exact citations.',
 ].join('\n')
 
+export interface AttachmentContextBundle {
+    content: string
+    evidence: ContextEvidence[]
+}
+
 export async function buildAttachmentContext(conversationId: string, query: string, db: Database): Promise<string | null> {
+    return (await buildAttachmentContextBundle(conversationId, query, db))?.content ?? null
+}
+
+export async function buildAttachmentContextBundle(conversationId: string, query: string, db: Database): Promise<AttachmentContextBundle | null> {
     const attachments = listConversationFileAttachments(db, conversationId)
     if (!attachments.length) return null
 
@@ -392,5 +402,18 @@ export async function buildAttachmentContext(conversationId: string, query: stri
     }
 
     lines.push('', '[/Retrieved attachment context]')
-    return lines.join('\n')
+
+    const evidence: ContextEvidence[] = results.map((result) => ({
+        kind: 'attachment-chunk',
+        sourceId: result.id,
+        documentId: result.sourceFile,
+        revision: result.revision || result.contentHash,
+        chunkIndex: result.chunkIndex,
+        retrievalMethod: result.scoreType || 'attachment-search',
+        selectionMethod: 'ranked-fallback',
+        relevance: result.score,
+        verificationStatus: 'ranked-fallback',
+    }))
+
+    return { content: lines.join('\n'), evidence }
 }

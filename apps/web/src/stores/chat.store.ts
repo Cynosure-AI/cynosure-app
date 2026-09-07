@@ -2,7 +2,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
 import type { ChatExecutionState, MemorySpace, ModelPricing } from '../api/types'
-import type { StoredMessageDto } from '@shared/types'
+import type { ContextEvidence, StoredMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -31,6 +31,7 @@ export interface DisplayMessage {
   videoDataUrls?: string[]
   audioDataUrls?: string[]
   structuredContent?: unknown
+  contextEvidence?: ContextEvidence[]
   fileAttachments?: { name: string }[]
   agentId?: string
   agentName?: string
@@ -260,6 +261,7 @@ export const useChatStore = defineStore('chat', () => {
           videoDataUrls: r.videoDataUrls || undefined,
           audioDataUrls: r.audioDataUrls || undefined,
           structuredContent: r.structuredContent,
+          contextEvidence: r.contextEvidence,
           fileAttachments: r.fileAttachments || undefined,
           agentId: r.agentId || undefined,
           agentName: r.agentName || undefined,
