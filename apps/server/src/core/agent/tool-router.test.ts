@@ -14,6 +14,18 @@ function tool(name: string, description: string, namespaceId?: string): Registry
 }
 
 describe('tool router degraded mode', () => {
+    test('can discover entity repair when the task calls for it', () => {
+        const repair = tool('knowledge_entity_merge', 'Manually repair confirmed duplicate knowledge entities', 'builtin:memory')
+        const result = routeToolsLexically({
+            userQuery: 'repair duplicate knowledge entities',
+            allTools: [tool('read_workspace', 'Read project files'), repair],
+            maxTools: 1,
+        })
+
+        expect(result.map(({ name }) => name)).toContain('knowledge_entity_merge')
+        expect(result.map(({ name }) => name)).not.toContain('read_workspace')
+    })
+
     test('routes registered local tools even when no MCP namespace exists', () => {
         expect(shouldRouteTools([tool('read_workspace', 'Read project files')], 'inspect the project', { enabled: true })).toBe(true)
     })

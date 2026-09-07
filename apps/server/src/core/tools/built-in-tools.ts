@@ -192,7 +192,12 @@ export function isBuiltInMemoryToolKey(toolKey: string): boolean {
 }
 
 export function getBuiltInMemoryToolKeys(): string[] {
-    return [...MEMORY_TOOL_NAMES, ...KNOWLEDGE_TOOL_NAMES].map(getBuiltInToolKey);
+    // Memory-space access includes reads and additive writes; other mutations require selection or routing.
+    return [
+        ...getBuiltInMemoryReadToolKeys(),
+        getBuiltInToolKey('memory_create'),
+        getBuiltInToolKey('memory_append'),
+    ];
 }
 
 export function getBuiltInMemoryReadToolKeys(): string[] {

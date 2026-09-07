@@ -26,18 +26,6 @@ const automaticToolStates = computed(() => ({
     active: hasMemoryScope.value,
     criteria: 'memory folder selected',
   },
-  knowledge_assert: {
-    active: hasMemoryScope.value,
-    criteria: 'memory folder selected',
-  },
-  knowledge_delete: {
-    active: hasMemoryScope.value,
-    criteria: 'memory folder selected',
-  },
-  knowledge_entity_merge: {
-    active: hasMemoryScope.value,
-    criteria: 'memory folder selected',
-  },
   attachment_list_documents: {
     active: false,
     criteria: 'large indexed attachment available during chat',

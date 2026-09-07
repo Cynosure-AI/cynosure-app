@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { useAgentStore, type ToolInfo } from '../../stores/agent-runtime.store'
 import ToolSelector from './ToolSelector.vue'
+import { memoryAutomaticToolStates } from '../../utils/internal-tools'
 
 describe('ToolSelector requirements', () => {
   beforeEach(() => {
@@ -51,6 +52,50 @@ describe('ToolSelector requirements', () => {
 
     await wrapper.get('button.text-accent-400').trigger('click')
     expect(wrapper.emitted('update:modelValue')).toEqual([[['builtin::schedule_create']]])
+  })
+
+  test.each(['memory_create', 'memory_append'])('automatically enables %s with a memory space', async (name) => {
+    const store = useAgentStore()
+    store.availableTools = [tool(`builtin:memory::${name}`, name)]
+    const wrapper = mount(ToolSelector, {
+      props: {
+        modelValue: [],
+        automaticToolStates: memoryAutomaticToolStates(true),
+      },
+    })
+
+    await wrapper.get('section button').trigger('click')
+    const checkbox = wrapper.get('input[type="checkbox"]')
+    expect(checkbox.attributes('disabled')).toBeDefined()
+    expect((checkbox.element as HTMLInputElement).checked).toBe(true)
+
+    await wrapper.setProps({ automaticToolStates: memoryAutomaticToolStates(false) })
+    expect((checkbox.element as HTMLInputElement).checked).toBe(false)
+  })
+
+  test.each([
+    'memory_replace_range', 'memory_replace_all',
+    'memory_remove_range', 'memory_remove_all', 'knowledge_assert', 'knowledge_delete',
+    'knowledge_entity_merge',
+  ])('allows manual %s selection alongside automatic knowledge tools', async (name) => {
+    const store = useAgentStore()
+    const mergeKey = `builtin:memory::${name}`
+    store.availableTools = [tool(mergeKey, name)]
+    const wrapper = mount(ToolSelector, {
+      props: {
+        modelValue: [],
+        automaticToolStates: {
+          knowledge_search: { active: true, criteria: 'memory folder selected' },
+        },
+      },
+    })
+
+    await wrapper.get('section button').trigger('click')
+    const checkbox = wrapper.get('input[type="checkbox"]')
+    expect(checkbox.attributes('disabled')).toBeUndefined()
+    expect((checkbox.element as HTMLInputElement).checked).toBe(false)
+    await checkbox.setValue(true)
+    expect(wrapper.emitted('update:modelValue')).toEqual([[[mergeKey]]])
   })
 })
 
