@@ -1,0 +1,204 @@
+name: Apply structured context provenance refactor
+
+on:
+  push:
+    branches:
+      - feat/structured-context-provenance
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/structured-context-provenance
+          fetch-depth: 0
+
+      - name: Apply provenance refactor
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'Missing expected text in {path}: {old[:120]!r}')
+              text = text.replace(old, new, count)
+              p.write_text(text)
+
+          # Shared transport/persistence contract.
+          replace('shared/index.d.ts',
+          "export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'\n",
+          "export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'\n\nexport type ContextEvidenceKind = 'memory-chunk' | 'graph-assertion' | 'attachment-chunk'\nexport type ContextVerificationStatus = 'verified' | 'ranked-fallback'\n\nexport interface ContextEvidence {\n  kind: ContextEvidenceKind\n  sourceId: string\n  documentId?: string\n  revision?: string\n  chunkIndex?: number\n  retrievalMethod: string\n  selectionMethod: string\n  relevance?: number\n  verificationStatus: ContextVerificationStatus\n}\n")
+          replace('shared/index.d.ts',
+          "  contextStrategy?: ContextStrategy\n  rounds: DebugContextRound[]",
+          "  contextStrategy?: ContextStrategy\n  /** Structured evidence that was serialized into the main model turn. */\n  evidence?: ContextEvidence[]\n  rounds: DebugContextRound[]")
+          replace('shared/index.d.ts',
+          "  structuredContent?: unknown\n  fileAttachments?: { name: string }[]",
+          "  structuredContent?: unknown\n  /** Exact retrieval evidence associated with this assistant turn. */\n  contextEvidence?: ContextEvidence[]\n  fileAttachments?: { name: string }[]")
+
+          # Debug context carries the same evidence bundle as execution/persistence.
+          replace('apps/server/src/core/chat/debug-context.ts',
+          "    ReasoningEffort,\n} from '@shared/types'",
+          "    ReasoningEffort,\n    ContextEvidence,\n} from '@shared/types'")
+          replace('apps/server/src/core/chat/debug-context.ts',
+          "    contextWindow?: number\n    contextStrategy?: ContextStrategy\n}",
+          "    contextWindow?: number\n    contextStrategy?: ContextStrategy\n    evidence?: ContextEvidence[]\n}")
+
+          # Preserve memory evidence before formatting it for the model.
+          replace('apps/server/src/core/agent/pre-execution/auto-memory-routing.ts',
+          "import type { KnowledgeAssertion, KnowledgeGraphProjection } from '../../memory/knowledge-types.js'\n",
+          "import type { KnowledgeAssertion, KnowledgeGraphProjection } from '../../memory/knowledge-types.js'\nimport type { ContextEvidence } from '@shared/types'\n")
+          replace('apps/server/src/core/agent/pre-execution/auto-memory-routing.ts',
+          "export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput): Promise<string | null> {",
+          "export interface RoutedMemoryContext {\n    content: string\n    evidence: ContextEvidence[]\n}\n\nexport async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput): Promise<string | null> {\n    return (await applyAutoMemoryRoutingWithEvidence(input))?.content ?? null\n}\n\nexport async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryRoutingInput): Promise<RoutedMemoryContext | null> {")
+          replace('apps/server/src/core/agent/pre-execution/auto-memory-routing.ts',
+          "        const formatted = aggregator.format(selectedMemory)\n        return formatted || null",
+          "        const formatted = aggregator.format(selectedMemory)\n        if (!formatted) return null\n\n        const selectionMethod = selection ? 'llm' : 'ranked-fallback'\n        const verificationStatus = selection ? 'verified' : 'ranked-fallback'\n        const evidence: ContextEvidence[] = [\n            ...selectedMemory.permanent.map((chunk) => ({\n                kind: 'memory-chunk' as const,\n                sourceId: chunk.id,\n                documentId: chunk.documentId || chunk.documentRef || chunk.sourceFile,\n                revision: chunk.revision || chunk.contentHash,\n                chunkIndex: chunk.chunkIndex,\n                retrievalMethod: chunk.scoreType || 'memory-retrieval',\n                selectionMethod,\n                relevance: typeof chunk.rerankerScore === 'number' ? chunk.rerankerScore : chunk.score,\n                verificationStatus,\n            })),\n            ...(selectedMemory.graph?.edges || []).map((edge) => ({\n                kind: 'graph-assertion' as const,\n                sourceId: edge.id,\n                documentId: edge.sourceDocumentId || edge.sourceChunk?.documentId,\n                revision: edge.sourceContentHash,\n                chunkIndex: edge.sourceChunkIndex ?? edge.sourceChunk?.chunkIndex,\n                retrievalMethod: 'knowledge-graph',\n                selectionMethod,\n                relevance: edge.retrievalRelevance,\n                verificationStatus,\n            })),\n        ]\n        return { content: formatted, evidence }")
+
+          # Memory layer now returns messages + evidence, not just preformatted messages.
+          replace('apps/server/src/core/agent/pre-execution/execution-memory.ts',
+          "import { applyAutoMemoryRouting, emitAutoMemoryRoutingSkipped } from './auto-memory-routing.js'",
+          "import { applyAutoMemoryRoutingWithEvidence, emitAutoMemoryRoutingSkipped } from './auto-memory-routing.js'")
+          replace('apps/server/src/core/agent/pre-execution/execution-memory.ts',
+          "import type { MemorySpaceRef } from '../../memory/memory-space-scope.js'\n",
+          "import type { MemorySpaceRef } from '../../memory/memory-space-scope.js'\nimport type { ContextEvidence } from '@shared/types'\n")
+          replace('apps/server/src/core/agent/pre-execution/execution-memory.ts',
+          "export async function resolveMemorySystemMessages(input: ResolveMemoryContextInput): Promise<ChatMessage[]> {",
+          "export interface ResolvedMemoryContext {\n    messages: ChatMessage[]\n    evidence: ContextEvidence[]\n}\n\nexport async function resolveMemorySystemMessages(input: ResolveMemoryContextInput): Promise<ResolvedMemoryContext> {")
+          replace('apps/server/src/core/agent/pre-execution/execution-memory.ts',
+          "        return []\n    }\n    if (hasExplicitEmptyMemoryScope(memorySpaceOverrides)) {",
+          "        return { messages: [], evidence: [] }\n    }\n    if (hasExplicitEmptyMemoryScope(memorySpaceOverrides)) {")
+          replace('apps/server/src/core/agent/pre-execution/execution-memory.ts',
+          "        return []\n    }\n\n    const memoryContext = await applyAutoMemoryRouting({",
+          "        return { messages: [], evidence: [] }\n    }\n\n    const memoryContext = await applyAutoMemoryRoutingWithEvidence({")
+          replace('apps/server/src/core/agent/pre-execution/execution-memory.ts',
+          "    return memoryContext ? [{\n        role: 'user',",
+          "    return memoryContext ? {\n        messages: [{\n        role: 'user',")
+          replace('apps/server/src/core/agent/pre-execution/execution-memory.ts',
+          "            memoryContext,\n",
+          "            memoryContext.content,\n")
+          replace('apps/server/src/core/agent/pre-execution/execution-memory.ts',
+          "        metadata: { contextKind: 'retrieved-memory', untrusted: true },\n    }] : []\n}",
+          "        metadata: { contextKind: 'retrieved-memory', untrusted: true },\n    }],\n        evidence: memoryContext.evidence,\n    } : { messages: [], evidence: [] }\n}")
+
+          # PreparedExecution owns one context bundle for serialization and downstream consumers.
+          replace('apps/server/src/core/agent/prepare-execution.ts',
+          "import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'",
+          "import type { ContextEvidence, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'")
+          replace('apps/server/src/core/agent/prepare-execution.ts',
+          "export interface PreparedExecution {",
+          "export interface ContextBundle {\n    messages: ChatMessage[]\n    evidence: ContextEvidence[]\n}\n\nexport interface PreparedExecution {")
+          replace('apps/server/src/core/agent/prepare-execution.ts',
+          "    /** Prepared context messages to prepend to conversation history (trusted prompts, then untrusted retrieved evidence). */\n    systemMessages: ChatMessage[]",
+          "    /** Prepared model context plus the exact evidence that produced it. */\n    contextBundle: ContextBundle")
+          replace('apps/server/src/core/agent/prepare-execution.ts',
+          "    const [toolLayer, memoryMessages] = await Promise.all([resolveExecutionTools({",
+          "    const [toolLayer, memoryContext] = await Promise.all([resolveExecutionTools({")
+          replace('apps/server/src/core/agent/prepare-execution.ts',
+          "        ...memoryMessages,\n",
+          "        ...memoryContext.messages,\n")
+          replace('apps/server/src/core/agent/prepare-execution.ts',
+          "        systemMessages,\n        hasSubAgents:",
+          "        contextBundle: { messages: systemMessages, evidence: memoryContext.evidence },\n        hasSubAgents:")
+
+          # Planner passes evidence forward alongside the exact prepared messages.
+          replace('apps/server/src/core/agent/pre-execution/execution-planner.ts',
+          "import type { ExecutionPlanInput, ExecutionRequest } from './execution-input.js'",
+          "import type { ExecutionPlanInput, ExecutionRequest } from './execution-input.js'\nimport type { ContextEvidence } from '@shared/types'")
+          replace('apps/server/src/core/agent/pre-execution/execution-planner.ts',
+          "    hasSubAgents: boolean\n",
+          "    hasSubAgents: boolean\n    evidence: ContextEvidence[]\n")
+          replace('apps/server/src/core/agent/pre-execution/execution-planner.ts',
+          "        prepared.systemMessages,\n",
+          "        prepared.contextBundle.messages,\n")
+          replace('apps/server/src/core/agent/pre-execution/execution-planner.ts',
+          "        hasSubAgents: prepared.hasSubAgents,\n",
+          "        hasSubAgents: prepared.hasSubAgents,\n        evidence: prepared.contextBundle.evidence,\n")
+
+          # Attachment retrieval exposes the same structured evidence while preserving the old string API.
+          replace('apps/server/src/core/artifacts/attachment-rag.ts',
+          "import { getDb } from '../../db/database.js'\n",
+          "import { getDb } from '../../db/database.js'\nimport type { ContextEvidence } from '@shared/types'\n")
+          replace('apps/server/src/core/artifacts/attachment-rag.ts',
+          "export async function buildAttachmentContext(conversationId: string, query: string, db: Database): Promise<string | null> {",
+          "export interface AttachmentContextBundle {\n    content: string\n    evidence: ContextEvidence[]\n}\n\nexport async function buildAttachmentContext(conversationId: string, query: string, db: Database): Promise<string | null> {\n    return (await buildAttachmentContextBundle(conversationId, query, db))?.content ?? null\n}\n\nexport async function buildAttachmentContextBundle(conversationId: string, query: string, db: Database): Promise<AttachmentContextBundle | null> {")
+          replace('apps/server/src/core/artifacts/attachment-rag.ts',
+          "    return lines.join('\\n')\n}",
+          "    const evidence: ContextEvidence[] = results.map((result) => ({\n        kind: 'attachment-chunk',\n        sourceId: result.id,\n        documentId: result.sourceFile,\n        revision: result.revision || result.contentHash,\n        chunkIndex: result.chunkIndex,\n        retrievalMethod: result.scoreType || 'attachment-search',\n        selectionMethod: 'ranked-fallback',\n        relevance: result.score,\n        verificationStatus: 'ranked-fallback',\n    }))\n\n    return { content: lines.join('\\n'), evidence }\n}")
+
+          # Chat turn combines memory + attachment evidence once, feeds debug capture, and persists it on the answer.
+          replace('apps/server/src/routes/chat.ts',
+          "import { buildAttachmentContext, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'",
+          "import { buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'")
+          replace('apps/server/src/routes/chat.ts',
+          "        chatAgentIconUrl,\n      } = planned",
+          "        chatAgentIconUrl,\n        evidence: preparedEvidence,\n      } = planned")
+          replace('apps/server/src/routes/chat.ts',
+          "        messages = planned.messages\n\n        const responseSupportsToolCalls",
+          "        messages = planned.messages\n        const turnEvidence = [...preparedEvidence]\n\n        const responseSupportsToolCalls")
+          replace('apps/server/src/routes/chat.ts',
+          "        messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, normalizedContent, db))\n        abortController.signal.throwIfAborted()",
+          "        const attachmentContext = await buildAttachmentContextBundle(conversationId, normalizedContent, db)\n        messages = appendHiddenSystemContext(messages, attachmentContext?.content ?? null)\n        if (attachmentContext?.evidence.length) turnEvidence.push(...attachmentContext.evidence)\n        if (reqDebugMode === true) updateDebugContextCapture(conversationId, { evidence: turnEvidence })\n        abortController.signal.throwIfAborted()")
+          replace('apps/server/src/routes/chat.ts',
+          "          null,\n          agentId,\n          responseProvider,",
+          "          turnEvidence.length ? JSON.stringify(turnEvidence) : null,\n          agentId,\n          responseProvider,", 1)
+
+          # Conversation API exposes persisted evidence for source inspection and evaluation exports.
+          replace('apps/server/src/routes/conversations.ts',
+          "                structured_content_json: string | null\n                agent_id: string | null",
+          "                structured_content_json: string | null\n                memory_sources_json: string | null\n                agent_id: string | null")
+          replace('apps/server/src/routes/conversations.ts',
+          "                let structuredContent: unknown | undefined\n                try {\n                    structuredContent = row.structured_content_json ? JSON.parse(row.structured_content_json) : undefined\n                } catch { /* malformed JSON - ignore */ }",
+          "                let structuredContent: unknown | undefined\n                try {\n                    structuredContent = row.structured_content_json ? JSON.parse(row.structured_content_json) : undefined\n                } catch { /* malformed JSON - ignore */ }\n                let contextEvidence: unknown | undefined\n                try {\n                    contextEvidence = row.memory_sources_json ? JSON.parse(row.memory_sources_json) : undefined\n                } catch { /* malformed JSON - ignore */ }")
+          replace('apps/server/src/routes/conversations.ts',
+          "                    structuredContent,\n                    fileAttachments,",
+          "                    structuredContent,\n                    contextEvidence,\n                    fileAttachments,")
+
+          # Web state retains evidence instead of dropping it after API hydration.
+          replace('apps/web/src/stores/chat.store.ts',
+          "import type { StoredMessageDto } from '@shared/types'",
+          "import type { ContextEvidence, StoredMessageDto } from '@shared/types'")
+          replace('apps/web/src/stores/chat.store.ts',
+          "  structuredContent?: unknown\n  fileAttachments?: { name: string }[]",
+          "  structuredContent?: unknown\n  contextEvidence?: ContextEvidence[]\n  fileAttachments?: { name: string }[]")
+          replace('apps/web/src/stores/chat.store.ts',
+          "          structuredContent: r.structuredContent,\n          fileAttachments:",
+          "          structuredContent: r.structuredContent,\n          contextEvidence: r.contextEvidence,\n          fileAttachments:")
+
+          # Remove this one-shot workflow from the resulting feature branch.
+          Path('.github/workflows/apply-structured-context-provenance.yml').unlink()
+          PY
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm test:typecheck
+
+      - name: Run focused memory tests
+        run: pnpm --filter cynosure-server test:unit -- auto-memory-routing
+
+      - name: Commit refactor
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: preserve structured context provenance"
+          git push origin HEAD:feat/structured-context-provenance
