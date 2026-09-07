@@ -93,8 +93,12 @@ export interface GenerateTitleOpts {
 }
 
 const MAX_TITLE_CHARS = 70
-const MIN_TITLE_WORDS = 2
-const MAX_TITLE_WORDS = 8
+const MIN_TITLE_WORDS = 1
+const MAX_TITLE_WORDS = 10
+/** Hard cap on the title LLM call — a title should never take longer than this. */
+const TITLE_TIMEOUT_MS = 15_000
+/** Small completion budget: enough for a short title, prevents runaway generation. */
+const TITLE_MAX_TOKENS = 64
 
 export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     const { conversationId, userMessage, assistantResponse, broadcast, providerId, model } = opts
@@ -103,45 +107,58 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
 
     const signal = startAction(conversationId, 'generating-title', broadcast)
 
+    // Give the chat a usable title immediately from the user message, then let
+    // the LLM upgrade it in the background. This guarantees every conversation
+    // has a proper title within milliseconds, regardless of model behaviour.
+    const fallback = buildFallbackTitle(userMessage)
+    if (fallback) {
+        updateConversationTitle(db, conversationId, fallback, broadcast)
+    }
+
     try {
         const titleTarget = resolveTitleTarget(gateway, providerId, model)
 
         const result = await gateway.complete({
             messages: buildTitleMessages(userMessage, assistantResponse),
             model: titleTarget.model,
-            signal,
+            signal: withTimeout(signal, TITLE_TIMEOUT_MS),
+            maxTokens: TITLE_MAX_TOKENS,
             thinkingEnabled: false
         }, titleTarget.providerId)
 
         const title = normalizeGeneratedTitle(result.content)
-        if (title) {
+        // Only overwrite the fallback with a genuinely different, usable title.
+        if (title && title.toLowerCase() !== fallback.toLowerCase()) {
             updateConversationTitle(db, conversationId, title, broadcast)
-            return
         }
-
-        applyFallbackTitle(db, conversationId, userMessage, broadcast)
     } catch (err) {
         if ((err as Error).name !== 'AbortError') {
-            console.warn('[title] Title generation failed, using fallback title:', err)
+            console.warn('[title] Title generation failed, keeping fallback title:', err)
         }
-        applyFallbackTitle(db, conversationId, userMessage, broadcast)
+        // Fallback title was already applied above — nothing else to do.
     } finally {
         completeAction(conversationId, 'generating-title', broadcast)
     }
+}
+
+/** Combine the conversation abort signal with a hard timeout for the title call. */
+function withTimeout(signal: AbortSignal, ms: number): AbortSignal {
+    const timeoutSignal = AbortSignal.timeout(ms)
+    if (typeof AbortSignal.any === 'function') {
+        return AbortSignal.any([signal, timeoutSignal])
+    }
+    return timeoutSignal
 }
 
 function buildTitleMessages(userMessage: string, assistantResponse: string) {
     return [
         {
             role: 'system' as const,
-            content: `Create a useful ${MIN_TITLE_WORDS}-${MAX_TITLE_WORDS} word title for a chat conversation. Return only the title, without quotes or ending punctuation.`
+            content: `Write a short title (3-8 words) for this chat. Reply with the title only — no quotes, no punctuation at the end, no explanation.`
         },
         {
             role: 'user' as const,
-            content: [
-                `User: ${limitForTitlePrompt(userMessage, 800)}`,
-                `Assistant: ${limitForTitlePrompt(assistantResponse, 800)}`
-            ].join('\n')
+            content: limitForTitlePrompt(userMessage, 800)
         }
     ]
 }

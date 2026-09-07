@@ -365,6 +365,7 @@ defineExpose({ processFiles })
         >
 
         <textarea
+          id="chat-textarea"
           ref="textareaRef"
           v-model="inputText"
           placeholder="Type a message..."
@@ -401,3 +402,9 @@ defineExpose({ processFiles })
     </div>
   </div>
 </template>
+
+<style scoped>
+#chat-textarea:focus {
+  box-shadow:none !important;
+}
+</style>

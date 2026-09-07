@@ -415,6 +415,16 @@ function kindClass(item: ActivityItem): string {
   return "activity-info";
 }
 
+function agentIcon(item: ActivityItem): string | null {
+  if (item.agentIconUrl) return item.agentIconUrl;
+  const icon = item.agentId ? agentDefs.get(item.agentId)?.iconUrl : undefined;
+  return icon || null;
+}
+
+function showAgentIcon(item: ActivityItem): boolean {
+  return Boolean(agentIcon(item));
+}
+
 function agentLabel(item: ActivityItem): string {
   if (item.agentName) return item.agentName;
   if (item.agentId) return agentDefs.get(item.agentId)?.name || "Agent";
@@ -802,8 +812,16 @@ watch(searchQuery, () => {
               <small class="block text-[8px] text-theme-700">{{ formatTimeAgo(item.createdAt) }}</small>
             </div>
 
-            <div class="relative mt-1.5 flex h-6 w-6 items-center justify-center rounded-full border text-[var(--activity-color)] activity-marker">
+            <div class="relative mt-1.5 flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border text-[var(--activity-color)] activity-marker">
+              <img
+                v-if="showAgentIcon(item)"
+                :src="agentIcon(item)"
+                :alt="agentLabel(item)"
+                loading="lazy"
+                class="h-full w-full object-cover ring-1 ring-inset ring-theme-900/60"
+              >
               <Icon
+                v-else
                 :icon="kindIcon(item.kind)"
                 class="relative h-3 w-3"
               />

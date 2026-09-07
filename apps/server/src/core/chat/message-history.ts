@@ -82,6 +82,34 @@ export function appendHiddenSystemContext(messages: ChatMessage[], hint: string 
     })
 }
 
+export function insertTurnLocalUntrustedContext(
+    messages: ChatMessage[],
+    context: string | null,
+    contextKind: string,
+): ChatMessage[] {
+    if (!context) return messages
+    const contextMessage: ChatMessage = {
+        role: 'user',
+        content: context,
+        metadata: { contextKind, untrusted: true },
+    }
+
+    let activeUserIndex = -1
+    for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') {
+            activeUserIndex = i
+            break
+        }
+    }
+
+    if (activeUserIndex === -1) return [...messages, contextMessage]
+    return [
+        ...messages.slice(0, activeUserIndex),
+        contextMessage,
+        ...messages.slice(activeUserIndex),
+    ]
+}
+
 export function buildConversationHistory(input: {
     db: Database.Database
     conversationId: string

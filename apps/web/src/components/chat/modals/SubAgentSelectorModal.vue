@@ -50,6 +50,7 @@ function agentIcon(agent: { iconUrl: string | null; providerId: string }): strin
     icon="lucide:bot"
     icon-color="accent"
     max-width="max-w-lg"
+    max-height="max-h-[80vh]"
     @close="visible = false"
   >
     <div class="mb-3 flex items-center justify-between gap-4 rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2.5">
@@ -75,7 +76,7 @@ function agentIcon(agent: { iconUrl: string | null; providerId: string }): strin
 
 
     <!-- Agent list -->
-    <div class="overflow-y-auto space-y-1 ">
+    <div class="overflow-y-auto space-y-1 max-h-[calc(70vh-120px)]">
       <div
         v-if="filteredAgents.length === 0"
         class="text-sm text-theme-500 text-center py-6"

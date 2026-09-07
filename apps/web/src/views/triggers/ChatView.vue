@@ -16,6 +16,7 @@ const router = useRouter()
 const inputBarRef = ref<InstanceType<typeof InputBar> | null>(null)
 const isDragOver = ref(false)
 const taskListOpen = ref(false)
+const chatSearchOpen = ref(false)
 let dragCounter = 0
 let syncingFromRoute = false
 
@@ -108,6 +109,13 @@ watch(
 )
 
 watch(
+  () => chatStore.activeConversationId,
+  () => {
+    chatSearchOpen.value = false
+  }
+)
+
+watch(
   [() => chatStore.activeConversationId, () => route.name],
   ([conversationId]) => {
     if (syncingFromRoute || (route.name !== 'triggers-chat' && route.name !== 'conversation')) return
@@ -129,6 +137,7 @@ watch(
       :task-list-open="taskListOpen"
       :planning-task-count="agentStore.planningState?.items.length ?? 0"
       @toggle-task-list="taskListOpen = !taskListOpen"
+      @search-chat="chatSearchOpen = true"
     />
 
     <!-- Main content area -->
@@ -144,7 +153,10 @@ watch(
       >
         <!-- Chat area -->
         <div class="flex flex-col flex-1 min-h-0 relative">
-          <ChatPanel />
+          <ChatPanel
+            :search-open="chatSearchOpen"
+            @close-search="chatSearchOpen = false"
+          />
 
           <PlanningTaskList
             v-if="taskListOpen"

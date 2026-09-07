@@ -11,7 +11,7 @@ import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-to
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
-import { trimMessagesToContextLimit, estimateTotalTokens } from '../core/agent/context-trimmer.js'
+import { trimMessagesToContextLimit, estimateTotalTokens, estimateToolDefinitionTokens } from '../core/agent/context-trimmer.js'
 import type {
   ChatMessage,
   ContentPart,
@@ -24,7 +24,7 @@ import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
-import { buildAttachmentContext, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
+import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
 import {
   cancelChatExecution,
   cancelChatExecutionByConversation,
@@ -35,7 +35,7 @@ import {
 } from '../core/chat/active-executions.js'
 import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
-import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageArtifactsSystemHint } from '../core/chat/message-history.js'
+import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemorySpaceOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
 import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
@@ -465,6 +465,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         planningRunId,
         chatAgentName,
         chatAgentIconUrl,
+        evidence: preparedEvidence,
       } = planned
       updateActiveChatExecution(executionId, { model: responseModel, planningRunId })
       if (abortController.signal.aborted) {
@@ -481,6 +482,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       let attemptedVideoOutput = false
       try {
         messages = planned.messages
+        const turnEvidence = [...preparedEvidence]
 
         const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(responseModel, responseProvider)
         abortController.signal.throwIfAborted()
@@ -488,8 +490,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if (responseSupportsToolCalls && hasConversationFileAttachments) {
           tools.push(...makeAttachmentTools(conversationId))
         }
-        messages = appendHiddenSystemContext(messages, await buildAttachmentContext(conversationId, normalizedContent, db))
+        const attachmentContext = await buildAttachmentContextBundle(conversationId, normalizedContent, db)
+        messages = appendHiddenSystemContext(messages, attachmentContext?.content ?? null)
+        if (attachmentContext?.evidence.length) turnEvidence.push(...attachmentContext.evidence)
+        if (reqDebugMode === true) updateDebugContextCapture(conversationId, { evidence: turnEvidence })
         abortController.signal.throwIfAborted()
+        if (attachmentContext) {
+          messages = appendHiddenSystemContext(messages, ATTACHMENT_SYSTEM_CONTEXT)
+          messages = insertTurnLocalUntrustedContext(messages, attachmentContext.content, 'retrieved-attachment')
+        }
         messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
         // Persist the full session config with RESOLVED model/provider so it can
@@ -718,6 +727,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             historyRows,
             filteredRows,
             contextWindow,
+            tools,
+            thinkingEnabled: reqThinkingEnabled !== undefined
+              ? reqThinkingEnabled
+              : (resolvedAgent?.thinkingEnabled !== false),
+            reasoningEffort: reqReasoningEffort ?? resolvedAgent?.reasoningEffort,
             gateway,
             providerId,
             responseModel,
@@ -731,8 +745,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           messages = compactResult.messages
           initialContextEstimate = compactResult.initialContextEstimate
         } else if (contextWindow) {
-          initialContextEstimate = estimateTotalTokens(messages)
-          messages = trimMessagesToContextLimit(messages, contextWindow, undefined, contextStrategy)
+          initialContextEstimate = estimateTotalTokens(messages) + estimateToolDefinitionTokens(tools)
+          messages = trimMessagesToContextLimit(messages, contextWindow, {
+            tools,
+            thinkingEnabled: reqThinkingEnabled !== undefined
+              ? reqThinkingEnabled
+              : (resolvedAgent?.thinkingEnabled !== false),
+            reasoningEffort: reqReasoningEffort ?? resolvedAgent?.reasoningEffort,
+            strategy: contextStrategy,
+          })
         }
 
         if (reqDebugMode === true) {
@@ -794,7 +815,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           result.thinking || null,
           result.images.length ? JSON.stringify(result.images) : null,
           result.images.length ? 1 : 0,
-          null,
+          turnEvidence.length ? JSON.stringify(turnEvidence) : null,
           agentId,
           responseProvider,
           responseModel,

@@ -2,7 +2,13 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getHITLGate } from './hitl-gate.js'
-import { trimMessagesToContextLimit, estimateTotalTokens, type ContextStrategy } from './context-trimmer.js'
+import {
+    trimMessagesToContextLimit,
+    estimateTotalTokens,
+    estimateToolDefinitionTokens,
+    resolveOutputReserve,
+    type ContextStrategy,
+} from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import { IncompleteModelResponseError, type ChatMessage, type ToolCall, type ToolDefinition, type ToolResult, type ToolResultContent } from '../gateway/providers/base.provider.js'
 import type { ReasoningEffort } from '@shared/types'
@@ -98,6 +104,8 @@ export interface AgentExecutorConfig {
     initialContextEstimate?: number
     /** Context window management strategy (default: 'sliding-window') */
     contextStrategy?: ContextStrategy
+    /** Maximum completion tokens requested from the provider and reserved in the context budget. */
+    maxOutputTokens?: number
     /** Mutable set populated with tool names invoked during this execution turn. */
     usedToolNames?: Set<string>
     /** Durable planning run for the top-level chat executor. */
@@ -235,13 +243,16 @@ export class AgentExecutor {
 
         this.config.signal?.throwIfAborted()
 
-        let currentMessages = [...messages]
+        let currentMessages = this.maybeTrimContext([...messages])
         let fullContent = ''
         let fullThinking = ''
         let lastRoundThinking = ''
         const collectedImages: string[] = []
         let usage: Usage
-        let contextTokens = this.config.initialContextEstimate
+        let contextTokens = maxTokens(
+            this.config.initialContextEstimate,
+            this.estimateContextTokens(currentMessages),
+        )
         let pendingToolCalls: ToolCall[] | undefined
         let toolRounds = 0
         let openPlanRecoveryAttempts = 0
@@ -352,7 +363,7 @@ export class AgentExecutor {
                 }
                 contextTokens = maxTokens(
                     contextTokens,
-                    estimateTotalTokens([
+                    this.estimateContextTokens([
                         ...currentMessages,
                         { role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls },
                     ])
@@ -407,12 +418,12 @@ export class AgentExecutor {
                             : tr.output,
                         toolCallId: tr.toolCallId,
                     })
-                    contextTokens = maxTokens(contextTokens, estimateTotalTokens(currentMessages))
+                    contextTokens = maxTokens(contextTokens, this.estimateContextTokens(currentMessages))
                     this.publishContextUsage(conversationId, usage, contextTokens)
                 }
 
                 currentMessages = this.maybeTrimContext(currentMessages)
-                contextTokens = maxTokens(contextTokens, estimateTotalTokens(currentMessages))
+                contextTokens = maxTokens(contextTokens, this.estimateContextTokens(currentMessages))
 
                 const roundResult = await this.streamLLMRound(currentMessages, activeStreamId)
                 fullContent = roundResult.content
@@ -548,7 +559,22 @@ export class AgentExecutor {
      */
     private maybeTrimContext(messages: ChatMessage[]): ChatMessage[] {
         if (!this.config.contextWindow) return messages
-        return trimMessagesToContextLimit(messages, this.config.contextWindow, undefined, this.config.contextStrategy)
+        return trimMessagesToContextLimit(messages, this.config.contextWindow, {
+            tools: this.config.tools,
+            requestedOutputTokens: this.requestedOutputTokens(),
+            thinkingEnabled: this.config.thinkingEnabled !== false,
+            reasoningEffort: this.config.reasoningEffort,
+            strategy: this.config.contextStrategy,
+        })
+    }
+
+    private requestedOutputTokens(): number | undefined {
+        if (!this.config.contextWindow) return this.config.maxOutputTokens
+        return resolveOutputReserve(this.config.contextWindow, this.config.maxOutputTokens)
+    }
+
+    private estimateContextTokens(messages: ChatMessage[]): number {
+        return estimateTotalTokens(messages) + estimateToolDefinitionTokens(this.config.tools)
     }
 
     /**
@@ -560,11 +586,13 @@ export class AgentExecutor {
     } {
         this.config.signal?.throwIfAborted()
         const { gateway, tools, model, temperature, thinkingEnabled, reasoningEffort, signal, providerId } = this.config
+        const maxTokens = this.requestedOutputTokens()
         const request = {
-            messages: AgentExecutor.trimOldImages(messages),
+            messages: this.maybeTrimContext(AgentExecutor.trimOldImages(messages)),
             model,
             tools: tools.length ? tools : undefined,
             temperature,
+            maxTokens,
             thinkingEnabled,
             reasoningEffort,
             signal,
@@ -578,6 +606,7 @@ export class AgentExecutor {
                 tools: tools,
                 model,
                 temperature,
+                maxTokens,
                 thinkingEnabled,
                 reasoningEffort,
             })
@@ -639,7 +668,7 @@ export class AgentExecutor {
             }
         )
 
-        const updatedContextTokens = maxTokens(contextTokens, estimateTotalTokens(currentMessages))
+        const updatedContextTokens = maxTokens(contextTokens, this.estimateContextTokens(currentMessages))
         const trimmedMessages = this.maybeTrimContext(currentMessages)
 
         const result = await this.streamLLMRound(trimmedMessages, activeStreamId)

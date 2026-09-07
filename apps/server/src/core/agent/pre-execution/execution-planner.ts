@@ -14,6 +14,7 @@ import {
 } from '../../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../../tools/tool-policy.js'
 import type { ExecutionPlanInput, ExecutionRequest } from './execution-input.js'
+import type { ContextEvidence } from '@shared/types'
 import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
 
 export interface PlannedExecution {
@@ -23,6 +24,7 @@ export interface PlannedExecution {
     responseProvider: string
     responseModel: string
     hasSubAgents: boolean
+    evidence: ContextEvidence[]
     planningRunId?: string
     chatAgentName?: string
     chatAgentIconUrl?: string | null
@@ -131,7 +133,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         conversationId,
         userText,
         responseTools,
-        prepared.systemMessages,
+        prepared.contextBundle.messages,
         effectiveThinkingEnabled,
     )
 
@@ -142,6 +144,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         responseProvider,
         responseModel: prepared.model,
         hasSubAgents: prepared.hasSubAgents,
+        evidence: prepared.contextBundle.evidence,
         planningRunId: planning.runId,
         chatAgentName: resolvedAgent?.name,
         chatAgentIconUrl: resolvedAgent?.iconUrl || null,
@@ -201,7 +204,7 @@ function buildPlanningTurnContext(
         `objective=${previous.objective}`,
         ...lines,
         'A planning run is active for the current user message.',
-        'If the current message continues, expands, or changes this work and you will use visible execution tools, call todo_write or todo_upsert with the task list that should now be visible before using non-planning tools.',
+        'If the current message continues, expands, or changes this work and you will use visible execution tools, call todo_write with the task list that should now be visible before using non-planning tools.',
         'If the previous list is still genuinely in progress after an interruption, use the prior task content as context and update or recreate the needed visible list for this run.',
     ].join('\n')
 }

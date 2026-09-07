@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { interruptPlanningRun } from '../agent/planning-state.js'
 import { cancelPostActions } from '../agent/post-execution.js'
-import { trimMessagesToContextLimit, estimateTotalTokens } from '../agent/context-trimmer.js'
+import { trimMessagesToContextLimit, estimateTotalTokens, estimateToolDefinitionTokens } from '../agent/context-trimmer.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getChatAttachmentConfig } from '../chat/attachment-settings.js'
 import { buildConversationHistory } from '../chat/message-history.js'
@@ -163,8 +163,13 @@ export async function applyChannelContextLimit(input: {
     if (!contextWindow) return { messages: input.messages }
 
     const initialContextEstimate = estimateTotalTokens(input.messages)
+        + estimateToolDefinitionTokens(input.planned.tools)
     return {
-        messages: trimMessagesToContextLimit(input.messages, contextWindow),
+        messages: trimMessagesToContextLimit(input.messages, contextWindow, {
+            tools: input.planned.tools,
+            thinkingEnabled: input.agent.thinkingEnabled !== false,
+            reasoningEffort: input.agent.reasoningEffort,
+        }),
         contextWindow,
         initialContextEstimate,
     }

@@ -273,7 +273,7 @@ async function selectToolsets(input: {
                 },
             ],
             model: input.model,
-            maxTokens: 350,
+            maxTokens: 1_500,
             tools: [buildToolsetSelectionTool(candidateIds)],
             toolChoice: { type: 'function', name: TOOLSET_SELECTION_TOOL_NAME },
             thinkingEnabled: false,

@@ -464,6 +464,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 video_urls_json: string | null
                 audio_urls_json: string | null
                 structured_content_json: string | null
+                memory_sources_json: string | null
                 agent_id: string | null
                 ma_codename: string | null
                 ma_agent_name: string | null
@@ -525,6 +526,10 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 try {
                     structuredContent = row.structured_content_json ? JSON.parse(row.structured_content_json) : undefined
                 } catch { /* malformed JSON - ignore */ }
+                let contextEvidence: unknown | undefined
+                try {
+                    contextEvidence = row.memory_sources_json ? JSON.parse(row.memory_sources_json) : undefined
+                } catch { /* malformed JSON - ignore */ }
                 const fileAttachments = attachmentsByMessage.get(row.id)
                 return {
                     id: row.id,
@@ -538,6 +543,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     videoDataUrls,
                     audioDataUrls,
                     structuredContent,
+                    contextEvidence,
                     fileAttachments,
                     agentId: row.agent_id || undefined,
                     agentName,

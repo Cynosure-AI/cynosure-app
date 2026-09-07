@@ -531,6 +531,18 @@ export class OpenRouterProvider extends BaseLLMProvider {
         return /support tool use|tool use|tools?/i.test(message) && /no endpoints?|unsupported|not support/i.test(message)
     }
 
+    /**
+     * Some reasoning models reject `reasoning: { enabled: false }` outright
+     * ("Reasoning is mandatory for this endpoint and cannot be disabled").
+     * In that case we retry once with reasoning enabled at minimal effort.
+     */
+    private isReasoningMandatoryError(err: unknown): boolean {
+        const message = err instanceof Error ? err.message : String(err)
+        return /reasoning is mandatory|cannot be disabled/i.test(message)
+    }
+
+    private static minimalReasoningEnabled = { enabled: true, effort: 'low' as const }
+
     private assertCompleteFinishReason(reason: string | null | undefined): void {
         if (reason === 'stop' || reason === 'tool_calls' || reason === 'function_call') return
         throw new IncompleteModelResponseError(reason || 'missing_finish_reason')
@@ -667,7 +679,12 @@ export class OpenRouterProvider extends BaseLLMProvider {
                 signal: request.signal
             })
         } catch (err) {
-            if (!request.toolChoice && request.tools?.length && this.isToolSupportRoutingError(err)) {
+            if (this.isReasoningMandatoryError(err) && request.thinkingEnabled === false) {
+                params.reasoning = OpenRouterProvider.minimalReasoningEnabled
+                response = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, {
+                    signal: request.signal
+                })
+            } else if (!request.toolChoice && request.tools?.length && this.isToolSupportRoutingError(err)) {
                 delete params.tools
                 delete params.tool_choice
                 response = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, {
@@ -772,7 +789,12 @@ export class OpenRouterProvider extends BaseLLMProvider {
                 signal: request.signal
             })
         } catch (err) {
-            if (!request.toolChoice && request.tools?.length && this.isToolSupportRoutingError(err)) {
+            if (this.isReasoningMandatoryError(err) && request.thinkingEnabled === false) {
+                params.reasoning = OpenRouterProvider.minimalReasoningEnabled
+                stream = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsStreaming, {
+                    signal: request.signal
+                })
+            } else if (!request.toolChoice && request.tools?.length && this.isToolSupportRoutingError(err)) {
                 delete params.tools
                 delete params.tool_choice
                 stream = await this.client.chat.completions.create(params as OpenAI.Chat.ChatCompletionCreateParamsStreaming, {
