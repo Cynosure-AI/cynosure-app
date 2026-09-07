@@ -1,0 +1,110 @@
+name: Retry structured context provenance refactor
+
+on:
+  push:
+    branches:
+      - feat/structured-context-provenance
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/structured-context-provenance
+          fetch-depth: 0
+
+      - name: Apply refactor and compatibility fixes
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          source_path = Path('.github/workflows/apply-structured-context-provenance.yml')
+          lines = source_path.read_text().splitlines()
+          start = lines.index("          python <<'PY'") + 1
+          end = lines.index('          PY', start)
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines[start:end])
+          exec(compile(script, str(source_path), 'exec'))
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'Missing expected text in {path}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, count))
+
+          # Preserve the established array-returning memory API for existing tests/callers.
+          replace(
+              'apps/server/src/core/agent/pre-execution/execution-memory.ts',
+              'export async function resolveMemorySystemMessages(input: ResolveMemoryContextInput): Promise<ResolvedMemoryContext> {',
+              'export async function resolveMemoryContext(input: ResolveMemoryContextInput): Promise<ResolvedMemoryContext> {'
+          )
+          p = Path('apps/server/src/core/agent/pre-execution/execution-memory.ts')
+          text = p.read_text()
+          text += "\nexport async function resolveMemorySystemMessages(input: ResolveMemoryContextInput): Promise<ChatMessage[]> {\n    return (await resolveMemoryContext(input)).messages\n}\n"
+          p.write_text(text)
+
+          replace(
+              'apps/server/src/core/agent/prepare-execution.ts',
+              "import { resolveMemorySystemMessages } from './pre-execution/execution-memory.js'",
+              "import { resolveMemoryContext } from './pre-execution/execution-memory.js'"
+          )
+          replace(
+              'apps/server/src/core/agent/prepare-execution.ts',
+              '    }), resolveMemorySystemMessages({',
+              '    }), resolveMemoryContext({'
+          )
+
+          # Keep systemMessages as a compatibility alias while new code consumes contextBundle.
+          replace(
+              'apps/server/src/core/agent/prepare-execution.ts',
+              '    /** Prepared model context plus the exact evidence that produced it. */\n    contextBundle: ContextBundle',
+              '    /** Prepared model context plus the exact evidence that produced it. */\n    contextBundle: ContextBundle\n    /** Compatibility alias for contextBundle.messages. */\n    systemMessages: ChatMessage[]'
+          )
+          replace(
+              'apps/server/src/core/agent/prepare-execution.ts',
+              '        contextBundle: { messages: systemMessages, evidence: memoryContext.evidence },\n        hasSubAgents:',
+              '        contextBundle: { messages: systemMessages, evidence: memoryContext.evidence },\n        systemMessages,\n        hasSubAgents:'
+          )
+
+          # Keep the verification union narrow instead of widening it to string.
+          replace(
+              'apps/server/src/core/agent/pre-execution/auto-memory-routing.ts',
+              "        const verificationStatus = selection ? 'verified' : 'ranked-fallback'",
+              "        const verificationStatus: ContextEvidence['verificationStatus'] = selection ? 'verified' : 'ranked-fallback'"
+          )
+
+          Path('.github/workflows/retry-structured-context-provenance.yml').unlink()
+          PY
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm test:typecheck
+
+      - name: Run focused memory tests
+        run: pnpm --filter cynosure-server test:unit -- auto-memory-routing execution-memory
+
+      - name: Commit refactor
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: preserve structured context provenance"
+          git push origin HEAD:feat/structured-context-provenance
