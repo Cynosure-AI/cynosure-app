@@ -14,7 +14,7 @@ type TimelineItem = {
   tone: ContextKind
   timestamp: number
   updatedAt: number
-  details: Array<{ name: string; content?: string; score?: string; selected?: boolean; empty?: boolean }>
+  details: Array<{ name: string; content?: string; score?: string; scoreValue?: number; selected?: boolean; empty?: boolean }>
   pending: boolean
 }
 
@@ -54,6 +54,12 @@ function score(value: unknown): string | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
   const normalized = value > 1 ? value / 100 : value
   return `${Math.round(Math.max(0, Math.min(1, normalized)) * 100)}%`
+}
+
+function scoreValue(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  const normalized = value > 1 ? value / 100 : value
+  return Math.max(0, Math.min(1, normalized))
 }
 
 function kindOf(call: ToolCall): ContextKind {
@@ -123,14 +129,16 @@ function contextLabel(kind: ContextKind, phase: string, count: number, method: s
 function callDetails(calls: ToolCall[], selected?: boolean): TimelineItem['details'] {
   return calls.map((call) => {
     const args = parseArgs(call)
+    const match = args.routerScore ?? args.rerankerScore ?? args.matchScore
     return {
       name: displayName(call),
       content: text(args.content) || text(args.toolQuery) || text(args.memoryQuery),
-      score: score(args.routerScore ?? args.rerankerScore ?? args.matchScore),
+      score: score(match),
+      scoreValue: scoreValue(match),
       selected: selected && !isEmptyCall(call),
       empty: isEmptyCall(call),
     }
-  })
+  }).sort((a, b) => (b.scoreValue ?? Number.NEGATIVE_INFINITY) - (a.scoreValue ?? Number.NEGATIVE_INFINITY))
 }
 
 const items = computed<TimelineItem[]>(() => {

@@ -73,7 +73,7 @@ describe('automatic memory routing visibility', () => {
         )
     })
 
-    test('emits semantic similarity instead of the small RRF ranking score', async () => {
+    test('uses the displayed semantic similarity as the effective match score', async () => {
         const candidate = {
             id: 'memory-1',
             text: 'Deployment uses the blue environment.',
@@ -120,6 +120,53 @@ describe('automatic memory routing visibility', () => {
             scoreType: 'dense',
         })
         expect(args).not.toHaveProperty('rerankerScore')
+    })
+
+    test('uses reranker match scores for merging, filtering, and descending output order', async () => {
+        const candidate = (id: string, rerankerScore: number, denseScore: number) => ({
+            id,
+            text: `${id} content`,
+            source: 'memory',
+            sourceFile: `${id}.md`,
+            score: rerankerScore,
+            rerankerScore,
+            denseScore,
+            scoreType: 'reranker' as const,
+        })
+        memoryMocks.aggregate
+            .mockResolvedValueOnce({
+                permanent: [candidate('medium', 0.6, 0.95), candidate('weak', 0.4, 0.99)],
+                graph: undefined,
+            })
+            .mockResolvedValueOnce({
+                permanent: [candidate('best', 0.8, 0.3), candidate('medium', 0.55, 0.95)],
+                graph: undefined,
+            })
+        memoryMocks.format.mockImplementation((memory: { permanent: Array<{ id: string }> }) => (
+            memory.permanent.map(({ id }) => id).join(',')
+        ))
+        const events: Array<Record<string, unknown>> = []
+        getEventBus().on('step:tools-chosen', (event) => events.push(event as Record<string, unknown>))
+
+        await applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-ranked',
+            userQuery: 'Find the relevant project',
+            retrievalQueries: ['project details'],
+            gateway: { complete: vi.fn().mockResolvedValue({}) } as unknown as LLMGateway,
+        })
+
+        const gathered = events.find((event) => {
+            const call = (event.toolCalls as Array<{ arguments: string }> | undefined)?.[0]
+            return call && JSON.parse(call.arguments).contextPhase === 'gathered-results'
+        })
+        const calls = gathered!.toolCalls as Array<{ name: string; arguments: string }>
+        expect(calls.map(({ name }) => name)).toEqual(['best.md', 'medium.md'])
+        expect(calls.map(({ arguments: args }) => JSON.parse(args).matchScore)).toEqual([0.8, 0.6])
+        expect(calls.map(({ arguments: args }) => JSON.parse(args).scoreType)).toEqual(['reranker', 'reranker'])
+        expect(memoryMocks.format).toHaveBeenLastCalledWith(expect.objectContaining({
+            permanent: [expect.objectContaining({ id: 'best' }), expect.objectContaining({ id: 'medium' })],
+        }))
     })
 
     test('always searches the original request before complementary expansions', async () => {
