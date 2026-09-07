@@ -4,6 +4,21 @@ export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' |
 
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
+export type ContextEvidenceKind = 'memory-chunk' | 'graph-assertion' | 'attachment-chunk'
+export type ContextVerificationStatus = 'verified' | 'ranked-fallback'
+
+export interface ContextEvidence {
+  kind: ContextEvidenceKind
+  sourceId: string
+  documentId?: string
+  revision?: string
+  chunkIndex?: number
+  retrievalMethod: string
+  selectionMethod: string
+  relevance?: number
+  verificationStatus: ContextVerificationStatus
+}
+
 export interface SubAgentAssignmentDto {
   agentId: string
 }
@@ -85,6 +100,8 @@ export interface DebugContextSnapshot {
   model?: string
   contextWindow?: number
   contextStrategy?: ContextStrategy
+  /** Structured evidence that was serialized into the main model turn. */
+  evidence?: ContextEvidence[]
   rounds: DebugContextRound[]
   limitations: string[]
 }
@@ -165,6 +182,8 @@ export interface StoredMessageDto {
   videoDataUrls?: string[]
   audioDataUrls?: string[]
   structuredContent?: unknown
+  /** Exact retrieval evidence associated with this assistant turn. */
+  contextEvidence?: ContextEvidence[]
   fileAttachments?: { name: string }[]
   agentId?: string
   agentName?: string

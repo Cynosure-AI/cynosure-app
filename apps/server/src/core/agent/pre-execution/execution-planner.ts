@@ -14,6 +14,7 @@ import {
 } from '../../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../../tools/tool-policy.js'
 import type { ExecutionPlanInput, ExecutionRequest } from './execution-input.js'
+import type { ContextEvidence } from '@shared/types'
 import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
 
 export interface PlannedExecution {
@@ -23,6 +24,7 @@ export interface PlannedExecution {
     responseProvider: string
     responseModel: string
     hasSubAgents: boolean
+    evidence: ContextEvidence[]
     planningRunId?: string
     chatAgentName?: string
     chatAgentIconUrl?: string | null
@@ -131,7 +133,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         conversationId,
         userText,
         responseTools,
-        prepared.systemMessages,
+        prepared.contextBundle.messages,
         effectiveThinkingEnabled,
     )
 
@@ -142,6 +144,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         responseProvider,
         responseModel: prepared.model,
         hasSubAgents: prepared.hasSubAgents,
+        evidence: prepared.contextBundle.evidence,
         planningRunId: planning.runId,
         chatAgentName: resolvedAgent?.name,
         chatAgentIconUrl: resolvedAgent?.iconUrl || null,
