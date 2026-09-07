@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 
-export type MemoryIndexJobKind = 'reindex' | 'knowledge-extraction'
+export type MemoryIndexJobKind = 'reindex' | 'knowledge-extraction' | 'tool-embeddings'
 export type MemoryIndexJobStatus = 'queued' | 'running' | 'retrying' | 'completed' | 'cancelled' | 'error' | 'dead_letter'
 
 export interface MemoryIndexJobSnapshot<T = unknown> {
@@ -125,7 +125,9 @@ function ensurePersistedJobsLoaded(): void {
     `).all(Date.now() - COMPLETED_TTL_MS) as Array<Record<string, unknown>>
     for (const row of rows) {
         const saved = persistedRowToSnapshot(row)
+        // Tool warmup is rescheduled from the live registry after startup.
         const interrupted = saved.status === 'running' || saved.status === 'retrying'
+            || (saved.kind === 'tool-embeddings' && saved.status === 'queued')
         const controller = new AbortController()
         const job: MemoryIndexJob = {
             ...saved,
@@ -321,4 +323,9 @@ export function cancelMemoryIndexJob(id: string): MemoryIndexJobSnapshot | undef
         processMemoryIndexQueue()
     }
     return snapshot(job)
+}
+
+/** Wait for a running job to release its resources after cancellation. */
+export async function waitForMemoryIndexJob(id: string): Promise<void> {
+    await jobs.get(id)?.promise
 }

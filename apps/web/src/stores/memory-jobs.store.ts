@@ -18,6 +18,7 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
         if (runningKnowledgeExtractionJobs.value.length > 0 && runningReindexJobs.value.length > 0) return 'Memory jobs active...'
         if (runningKnowledgeExtractionJobs.value.length > 0) return 'Knowledge extraction active...'
         if (runningReindexJobs.value.length > 0) return 'Memory indexing active...'
+        if (activeJobs.value.some(job => job.kind === 'tool-embeddings')) return 'Tool indexing active...'
         return ''
     })
 

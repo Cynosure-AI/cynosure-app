@@ -1,3 +1,4 @@
+import { getEventBus } from '../telemetry/event-bus.js'
 import type { RegisteredToolDefinition, RegistryAwareToolDefinition, ToolBehaviorAnnotations, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { normalizeToolDescription } from './tool-description.js'
 
@@ -146,12 +147,15 @@ export class ToolRegistry {
       this.nameIndex.set(tool.name, new Set())
     }
     this.nameIndex.get(tool.name)!.add(key)
+    getEventBus().emit('tools:registry-changed')
   }
 
   unregisterByNamespace(namespaceId: string): void {
+    let changed = false
     for (const [key, entry] of this.entries) {
       if (entry.namespace.id === namespaceId) {
         this.entries.delete(key)
+        changed = true
         const bare = entry.tool.name
         const keys = this.nameIndex.get(bare)
         if (keys) {
@@ -160,6 +164,7 @@ export class ToolRegistry {
         }
       }
     }
+    if (changed) getEventBus().emit('tools:registry-changed')
   }
 
   /** Get a tool by stable registry key. */

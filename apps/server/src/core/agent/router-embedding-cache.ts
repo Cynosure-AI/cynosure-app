@@ -81,7 +81,6 @@ export function pruneRouterEmbeddingCache(
     activeNamespaceIds: string[],
     scope: RouterEmbeddingScope,
 ): void {
-    if (!activeNamespaceIds.length) return
 
     try {
         const placeholders = activeNamespaceIds.map(() => '?').join(', ')
@@ -91,7 +90,7 @@ export function pruneRouterEmbeddingCache(
             WHERE embedding_provider_id = ?
               AND embedding_model = ?
               AND embedding_dimensions = ?
-              AND namespace_id NOT IN (${placeholders})
+              ${activeNamespaceIds.length ? `AND namespace_id NOT IN (${placeholders})` : ''}
         `).run(scope.providerId, scope.model, scope.dimensions, ...activeNamespaceIds)
     } catch (err) {
         console.warn('[tool-router] Failed to prune router embedding cache:', err)
@@ -175,7 +174,6 @@ export function pruneToolEmbeddingCache(
     activeToolNames: string[],
     scope: RouterEmbeddingScope,
 ): void {
-    if (!activeToolNames.length) return
 
     try {
         const placeholders = activeToolNames.map(() => '?').join(', ')
@@ -185,7 +183,7 @@ export function pruneToolEmbeddingCache(
             WHERE embedding_provider_id = ?
               AND embedding_model = ?
               AND embedding_dimensions = ?
-              AND tool_name NOT IN (${placeholders})
+              ${activeToolNames.length ? `AND tool_name NOT IN (${placeholders})` : ''}
         `).run(scope.providerId, scope.model, scope.dimensions, ...activeToolNames)
     } catch (err) {
         console.warn('[tool-router] Failed to prune tool embedding cache:', err)

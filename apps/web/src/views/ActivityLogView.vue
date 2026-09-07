@@ -129,14 +129,15 @@ function instanceActivityItem(instance: AgentInstance): ActivityItem {
 
 function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
   const knowledgeJob = job.kind === "knowledge-extraction";
+  const toolJob = job.kind === "tool-embeddings";
   const batchProgress = knowledgeJob && job.progressCurrent && job.progressTotal
     ? ` (batch ${job.progressCurrent}/${job.progressTotal})`
     : "";
   return {
     id: `live-memory:${job.id}`,
     kind: "memory",
-    title: `${knowledgeJob ? `Extracting knowledge${batchProgress} from` : "Search-indexing"} ${job.fileName}`,
-    description: knowledgeJob && batchProgress ? `Extraction batch ${job.progressCurrent} of ${job.progressTotal}` : job.fileName,
+    title: toolJob ? "Indexing tool capabilities" : `${knowledgeJob ? `Extracting knowledge${batchProgress} from` : "Search-indexing"} ${job.fileName}`,
+    description: toolJob ? `${job.progressCurrent ?? 0}/${job.progressTotal ?? 0} embeddings` : knowledgeJob && batchProgress ? `Extraction batch ${job.progressCurrent} of ${job.progressTotal}` : job.fileName,
     createdAt: job.createdAt,
     agentId: null,
     agentName: null,
@@ -144,7 +145,7 @@ function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
     conversationId: null,
     status: job.status,
     sourceId: job.id,
-    sourceLabel: knowledgeJob ? "Knowledge extraction" : "Search indexing",
+    sourceLabel: toolJob ? "Tool indexing" : knowledgeJob ? "Knowledge extraction" : "Search indexing",
   };
 }
 
@@ -432,6 +433,10 @@ function agentLabel(item: ActivityItem): string {
 }
 
 async function openItem(item: ActivityItem) {
+  if (item.sourceLabel === "Tool indexing") {
+    router.push("/tools-policy");
+    return;
+  }
   if (isActiveMemoryJob(item)) {
     router.push("/memory-spaces/documents");
     return;
@@ -815,7 +820,7 @@ watch(searchQuery, () => {
             <div class="relative mt-1.5 flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border text-[var(--activity-color)] activity-marker">
               <img
                 v-if="showAgentIcon(item)"
-                :src="agentIcon(item)"
+                :src="agentIcon(item) || undefined"
                 :alt="agentLabel(item)"
                 loading="lazy"
                 class="h-full w-full object-cover ring-1 ring-inset ring-theme-900/60"

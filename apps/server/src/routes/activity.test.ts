@@ -21,6 +21,24 @@ describe('activity artifact discovery', () => {
         await rm(directory, { recursive: true, force: true })
     })
 
+    test('includes completed tool embedding jobs in activity history', async () => {
+        const now = Date.now()
+        getDb().prepare(`INSERT INTO memory_index_jobs (id, kind, space_id, file_name, status, progress_current, progress_total, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run('warmup', 'tool-embeddings', 'tool-registry', 'Tool capabilities', 'completed', 12, 12, now, now)
+        const app = Fastify()
+        await app.register(registerActivityRoutes, { prefix: '/api/activity' })
+        try {
+            const response = await app.inject({ method: 'GET', url: '/api/activity' })
+            expect(response.statusCode).toBe(200)
+            expect(response.json().items).toEqual(expect.arrayContaining([
+                expect.objectContaining({ title: 'Indexed tool capabilities', description: '12/12 embeddings', status: 'completed', sourceLabel: 'Tool indexing' }),
+            ]))
+        } finally {
+            await app.close()
+        }
+    })
+
     test('only includes generated assistant media, not uploads or tool-viewed media', async () => {
         const now = Date.now()
         const db = getDb()
