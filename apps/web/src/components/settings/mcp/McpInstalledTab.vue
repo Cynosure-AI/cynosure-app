@@ -74,6 +74,9 @@ const pendingAddId = ref<string | null>(null)
 const editServer = reactive({ name: '', description: '', command: '', args: '', env: '' })
 const editEnvFields = reactive<Record<string, string>>({})
 
+const editingServer = computed(() => servers.value.find(s => s.id === editingId.value) ?? null)
+const isSaving = ref(false)
+
 const editingServerHints = computed(() => {
   if (!editingId.value) return null
   const srv = servers.value.find(s => s.id === editingId.value)
@@ -197,6 +200,7 @@ function cancelForm(): void {
 }
 
 function startEditing(server: McpServerInfo): void {
+  delete actionError.value['edit']
   editingId.value = server.id
   editServer.name = server.customName || ''
   editServer.description = server.description || ''
@@ -216,11 +220,14 @@ function startEditing(server: McpServerInfo): void {
 }
 
 function cancelEditing(): void {
+  if (isSaving.value || confirmDeleteId.value) return
   editingId.value = null
   delete actionError.value['edit']
 }
 
 async function saveEditing(id: string): Promise<void> {
+  if (isLoading(id) || !editServer.command.trim()) return
+  isSaving.value = true
   setLoading(id, true)
   try {
     const args = editServer.args ? editServer.args.split('\n').map(a => a.trim()).filter(Boolean) : []
@@ -241,7 +248,7 @@ async function saveEditing(id: string): Promise<void> {
     const result = await api.mcp.updateServer(id, {
       customName: editServer.name.trim() || null,
       description: editServer.description,
-      command: editServer.command,
+      command: editServer.command.trim(),
       args,
       env,
     })
@@ -252,7 +259,10 @@ async function saveEditing(id: string): Promise<void> {
       delete actionError.value['edit']
     }
     await refreshAll()
+  } catch (error) {
+    actionError.value['edit'] = error instanceof Error ? error.message : 'Failed to save MCP settings'
   } finally {
+    isSaving.value = false
     setLoading(id, false)
   }
 }
@@ -316,6 +326,7 @@ function promptRemoveServer(id: string): void {
 async function confirmRemoveServer(): Promise<void> {
   if (!confirmDeleteId.value) return
   await api.mcp.removeServer(confirmDeleteId.value)
+  if (editingId.value === confirmDeleteId.value) editingId.value = null
   delete actionError.value[confirmDeleteId.value]
   confirmDeleteId.value = null
   await refreshAll()
@@ -528,7 +539,6 @@ defineExpose({ loadServers })
       <!-- Tools column -->
       <template #col-tools="{ item: server }">
         <HoverTooltip
-          v-if="!editingId || editingId !== server.id"
           :disabled="server.toolCount === 0"
           placement="mouse"
           :max-width="220"
@@ -563,7 +573,6 @@ defineExpose({ loadServers })
       <!-- Status column -->
       <template #col-status="{ item: server }">
         <span
-          v-if="!editingId || editingId !== server.id"
           class="inline-flex items-center gap-1.5 text-xs"
           :class="server.connected ? 'text-emerald-400' : server.enabled ? (server.pendingAuthUrl ? 'text-accent-400' : 'text-red-400') : 'text-theme-500'"
         >
@@ -578,7 +587,6 @@ defineExpose({ loadServers })
       <!-- Actions column -->
       <template #col-actions="{ item: server }">
         <div
-          v-if="!editingId || editingId !== server.id"
           class="flex flex-wrap items-center gap-1.5"
         >
           <button
@@ -623,26 +631,12 @@ defineExpose({ loadServers })
               class="w-3.5 h-3.5"
             />
           </button>
-
-          <button
-            v-if="server.enabled && !server.pendingAuthUrl && (server.origin === 'smithery.ai' || server.args.some(a => /^https?:\/\//.test(a) || a === 'mcp-remote'))"
-            class="p-1.5 text-theme-600 hover:text-accent-400 rounded-md hover:bg-accent-500/10 transition-colors"
-            :disabled="isLoading(server.id)"
-            title="Clear cached OAuth tokens and re-authorize"
-            @click="reauthServer(server.id)"
-          >
-            <Icon
-              icon="lucide:key"
-              class="w-3.5 h-3.5"
-            />
-          </button>
         </div>
       </template>
 
       <!-- Enable column -->
       <template #col-enable="{ item: server }">
         <ToggleSwitch
-          v-if="!editingId || editingId !== server.id"
           :model-value="server.enabled"
           :disabled="isLoading(server.id)"
           :label="server.enabled ? `Disable ${server.name}` : `Enable ${server.name}`"
@@ -653,12 +647,63 @@ defineExpose({ loadServers })
           @click.stop
         />
       </template>
+    </DataTable>
 
-      <!-- Full-width edit form -->
-      <template #row-expand="{ item: server }">
-        <div
-          v-if="editingId === server.id"
-          class="border-t border-theme-800 px-4 py-4 md:px-5 space-y-3"
+    <div
+      v-else-if="servers.length === 0 && !showAddForm"
+      class="text-center py-10 text-theme-500"
+    >
+      <Icon
+        icon="lucide:plug"
+        class="w-8 h-8 mx-auto mb-2 text-theme-600"
+      />
+      <p class="text-lg mb-2">
+        No MCP servers installed
+      </p>
+      <p class="text-sm mb-4">
+        Browse the registry to discover and add servers, or add one manually.
+      </p>
+      <button
+        class="text-sm text-accent-400 hover:text-accent-300 transition-colors"
+        @click="emit('goToBrowse')"
+      >
+        Browse Registry ->
+      </button>
+    </div>
+
+    <ModalDialog
+      :show="!!editingServer && !confirmDeleteId"
+      title="Edit MCP Server"
+      icon="lucide:plug"
+      max-width="max-w-2xl"
+      @close="cancelEditing"
+    >
+      <div
+        v-if="editingServer"
+        class="space-y-4"
+      >
+        <div class="flex items-center gap-3">
+          <img
+            v-if="hasUsableIcon(editingServer)"
+            :src="editingServer.icon_url"
+            :alt="editingServer.name"
+            class="w-10 h-10 rounded-lg object-cover"
+            @error="onServerIconError(editingServer)"
+          >
+          <div>
+            <p class="text-sm font-medium text-theme-100">
+              {{ originalServerName(editingServer) }}
+            </p>
+            <p class="text-xs text-theme-400">
+              {{ editingServer.connected ? 'Connected' : editingServer.enabled ? (editingServer.pendingAuthUrl ? 'Authorization required' : 'Disconnected') : 'Disabled' }}
+              · {{ editingServer.toolCount }} tools
+              <span v-if="editingServer.origin"> · {{ editingServer.origin }}</span>
+            </p>
+          </div>
+        </div>
+        <fieldset
+          :disabled="isLoading(editingServer.id)"
+          class="space-y-3"
         >
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
@@ -666,7 +711,7 @@ defineExpose({ loadServers })
               <input
                 v-model="editServer.name"
                 type="text"
-                :placeholder="originalServerName(server)"
+                :placeholder="originalServerName(editingServer)"
                 class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
             </div>
@@ -684,7 +729,7 @@ defineExpose({ loadServers })
             <textarea
               v-model="editServer.description"
               rows="2"
-              :placeholder="server.description || server.serverInfo?.description || 'What this MCP server is useful for'"
+              :placeholder="editingServer.description || editingServer.serverInfo?.description || 'What this MCP server is useful for'"
               class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
             />
           </div>
@@ -698,10 +743,10 @@ defineExpose({ loadServers })
           </div>
           <div>
             <label class="block text-xs text-theme-400 mb-1">Environment Variables</label>
-            <template v-if="server.envHints?.length">
+            <template v-if="editingServer.envHints?.length">
               <div class="space-y-2">
                 <div
-                  v-for="hint in server.envHints"
+                  v-for="hint in editingServer.envHints"
                   :key="hint.name"
                 >
                   <label class="flex items-center gap-1.5 text-xs text-theme-400 mb-1">
@@ -748,46 +793,103 @@ defineExpose({ loadServers })
           >
             {{ actionError['edit'] }}
           </div>
+        </fieldset>
+        <div class="border-t border-theme-800 pt-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-theme-300">Enable server</span>
+            <ToggleSwitch
+              :model-value="editingServer.enabled"
+              :disabled="isLoading(editingServer.id)"
+              label="Enable server"
+              size="sm"
+              color="green"
+              @update:model-value="toggleServer(editingServer.id)"
+            />
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              v-if="editingServer.enabled && editingServer.pendingAuthUrl && authInProgress !== editingServer.id"
+              class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-white rounded-md transition-colors"
+              :disabled="isLoading(editingServer.id)"
+              @click="startAuth(editingServer)"
+            >
+              Authorize
+            </button>
+            <button
+              v-else-if="editingServer.enabled && editingServer.pendingAuthUrl && authInProgress === editingServer.id"
+              :disabled="isLoading(editingServer.id)"
+              class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
+              @click="finishAuth(editingServer.id)"
+            >
+              {{ isLoading(editingServer.id) ? 'Reconnecting...' : 'Reconnect' }}
+            </button>
+            <button
+              v-else-if="editingServer.enabled"
+              class="px-2.5 py-1.5 text-xs bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-md transition-colors"
+              :disabled="isLoading(editingServer.id)"
+              @click="reconnectServer(editingServer.id)"
+            >
+              {{ isLoading(editingServer.id) ? 'Connecting...' : 'Reconnect' }}
+            </button>
+
+            <button
+              type="button"
+              class="p-1.5 text-theme-600 hover:text-red-400 rounded-md hover:bg-red-500/10 transition-colors"
+              :aria-label="`Remove ${editingServer.name}`"
+              :disabled="isLoading(editingServer.id)"
+              @click="promptRemoveServer(editingServer.id)"
+            >
+              <Icon
+                icon="lucide:trash-2"
+                class="w-3.5 h-3.5 inline"
+              />
+              Remove
+            </button>
+
+            <button
+              v-if="editingServer.enabled && !editingServer.pendingAuthUrl && (editingServer.origin === 'smithery.ai' || editingServer.args.some(a => /^https?:\/\//.test(a) || a === 'mcp-remote'))"
+              class="p-1.5 text-theme-600 hover:text-accent-400 rounded-md hover:bg-accent-500/10 transition-colors"
+              :disabled="isLoading(editingServer.id)"
+              title="Clear cached OAuth tokens and re-authorize"
+              @click="reauthServer(editingServer.id)"
+            >
+              <Icon
+                icon="lucide:key"
+                class="w-3.5 h-3.5 inline"
+              />
+              Re-auth
+            </button>
+          </div>
+          <p
+            v-if="actionError[editingServer.id]"
+            class="text-xs text-red-400"
+            role="alert"
+          >
+            {{ actionError[editingServer.id] }}
+          </p>
+        </div>
+      </div>
+      <template #actions>
+        <template v-if="editingServer">
           <div class="flex gap-2 justify-end">
             <button
               class="px-3 py-1.5 text-xs bg-theme-700 hover:bg-theme-600 text-theme-300 rounded-md transition-colors"
+              :disabled="isSaving"
               @click="cancelEditing"
             >
               Cancel
             </button>
             <button
-              :disabled="!editServer.command || isLoading(server.id)"
+              :disabled="!editServer.command.trim() || isLoading(editingServer.id)"
               class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
-              @click="saveEditing(server.id)"
+              @click="saveEditing(editingServer.id)"
             >
-              {{ isLoading(server.id) ? 'Saving...' : 'Save & Reconnect' }}
+              {{ isSaving ? 'Saving...' : 'Save' }}
             </button>
           </div>
-        </div>
+        </template>
       </template>
-    </DataTable>
-
-    <div
-      v-else-if="servers.length === 0 && !showAddForm"
-      class="text-center py-10 text-theme-500"
-    >
-      <Icon
-        icon="lucide:plug"
-        class="w-8 h-8 mx-auto mb-2 text-theme-600"
-      />
-      <p class="text-lg mb-2">
-        No MCP servers installed
-      </p>
-      <p class="text-sm mb-4">
-        Browse the registry to discover and add servers, or add one manually.
-      </p>
-      <button
-        class="text-sm text-accent-400 hover:text-accent-300 transition-colors"
-        @click="emit('goToBrowse')"
-      >
-        Browse Registry ->
-      </button>
-    </div>
+    </ModalDialog>
 
     <ModalDialog
       :show="!!confirmDeleteId"
