@@ -8,6 +8,7 @@ import { getMemoryRetrievalConfig } from '../../memory/retrieval-config.js'
 import { getUserSettings } from '../../user-settings.js'
 import { completeWithDebugCapture } from '../../chat/debug-context.js'
 import type { KnowledgeAssertion, KnowledgeGraphProjection } from '../../memory/knowledge-types.js'
+import type { ContextEvidence } from '@shared/types'
 
 const MAX_SELECTED_MEMORIES = 5
 const MAX_SELECTED_GRAPH_EDGES = 3
@@ -42,7 +43,16 @@ interface MemoryContextSelection {
     correctiveQuery?: string
 }
 
+export interface RoutedMemoryContext {
+    content: string
+    evidence: ContextEvidence[]
+}
+
 export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput): Promise<string | null> {
+    return (await applyAutoMemoryRoutingWithEvidence(input))?.content ?? null
+}
+
+export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryRoutingInput): Promise<RoutedMemoryContext | null> {
     const {
         enabled,
         conversationId,
@@ -189,7 +199,35 @@ export async function applyAutoMemoryRouting(input: ApplyAutoMemoryRoutingInput)
             selection ? 'llm' : 'ranked-fallback',
         )
         const formatted = aggregator.format(selectedMemory)
-        return formatted || null
+        if (!formatted) return null
+
+        const selectionMethod = selection ? 'llm' : 'ranked-fallback'
+        const verificationStatus: ContextEvidence['verificationStatus'] = selection ? 'verified' : 'ranked-fallback'
+        const evidence: ContextEvidence[] = [
+            ...selectedMemory.permanent.map((chunk) => ({
+                kind: 'memory-chunk' as const,
+                sourceId: chunk.id,
+                documentId: chunk.documentId || chunk.documentRef || chunk.sourceFile,
+                revision: chunk.revision || chunk.contentHash,
+                chunkIndex: chunk.chunkIndex,
+                retrievalMethod: chunk.scoreType || 'memory-retrieval',
+                selectionMethod,
+                relevance: typeof chunk.rerankerScore === 'number' ? chunk.rerankerScore : chunk.score,
+                verificationStatus,
+            })),
+            ...(selectedMemory.graph?.edges || []).map((edge) => ({
+                kind: 'graph-assertion' as const,
+                sourceId: edge.id,
+                documentId: edge.sourceDocumentId || edge.sourceChunk?.documentId,
+                revision: edge.sourceContentHash,
+                chunkIndex: edge.sourceChunkIndex ?? edge.sourceChunk?.chunkIndex,
+                retrievalMethod: 'knowledge-graph',
+                selectionMethod,
+                relevance: edge.retrievalRelevance,
+                verificationStatus,
+            })),
+        ]
+        return { content: formatted, evidence }
     } catch (err) {
         if ((err as Error).name === 'AbortError' || signal?.aborted) throw err
         console.warn('[memory-router] Routing failed, continuing without auto-memory:', err)

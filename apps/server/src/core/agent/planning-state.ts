@@ -248,7 +248,9 @@ export function upsertTodoItem(runId: string, params: unknown): { success: boole
   }
 
   const title = cleanTaskTitle(payload.title)
-  if (!title) return { success: false, output: 'A title is required to append a planning task.' }
+  if (!title) {
+    return { success: false, output: `No task matches taskId ${payload.taskId || '(missing)'}. A title is required to append a new planning task.` }
+  }
   if (current.items.length >= MAX_TASKS) return { success: false, output: `Planning list is limited to ${MAX_TASKS} tasks.` }
 
   const now = Date.now()

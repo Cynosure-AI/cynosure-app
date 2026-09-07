@@ -24,7 +24,7 @@ import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
-import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContext, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
+import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
 import {
   cancelChatExecution,
   cancelChatExecutionByConversation,
@@ -465,6 +465,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         planningRunId,
         chatAgentName,
         chatAgentIconUrl,
+        evidence: preparedEvidence,
       } = planned
       updateActiveChatExecution(executionId, { model: responseModel, planningRunId })
       if (abortController.signal.aborted) {
@@ -481,6 +482,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       let attemptedVideoOutput = false
       try {
         messages = planned.messages
+        const turnEvidence = [...preparedEvidence]
 
         const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(responseModel, responseProvider)
         abortController.signal.throwIfAborted()
@@ -488,11 +490,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if (responseSupportsToolCalls && hasConversationFileAttachments) {
           tools.push(...makeAttachmentTools(conversationId))
         }
-        const attachmentContext = await buildAttachmentContext(conversationId, normalizedContent, db)
+        const attachmentContext = await buildAttachmentContextBundle(conversationId, normalizedContent, db)
+        messages = appendHiddenSystemContext(messages, attachmentContext?.content ?? null)
+        if (attachmentContext?.evidence.length) turnEvidence.push(...attachmentContext.evidence)
+        if (reqDebugMode === true) updateDebugContextCapture(conversationId, { evidence: turnEvidence })
         abortController.signal.throwIfAborted()
         if (attachmentContext) {
           messages = appendHiddenSystemContext(messages, ATTACHMENT_SYSTEM_CONTEXT)
-          messages = insertTurnLocalUntrustedContext(messages, attachmentContext, 'retrieved-attachment')
+          messages = insertTurnLocalUntrustedContext(messages, attachmentContext.content, 'retrieved-attachment')
         }
         messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
 
@@ -810,7 +815,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           result.thinking || null,
           result.images.length ? JSON.stringify(result.images) : null,
           result.images.length ? 1 : 0,
-          null,
+          turnEvidence.length ? JSON.stringify(turnEvidence) : null,
           agentId,
           responseProvider,
           responseModel,

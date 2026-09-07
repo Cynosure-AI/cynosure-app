@@ -3,11 +3,13 @@ import type { LLMGateway } from '../../gateway/gateway.js'
 
 const routingMocks = vi.hoisted(() => ({
     apply: vi.fn(),
+    applyWithEvidence: vi.fn(),
     skipped: vi.fn(),
 }))
 
 vi.mock('./auto-memory-routing.js', () => ({
     applyAutoMemoryRouting: routingMocks.apply,
+    applyAutoMemoryRoutingWithEvidence: routingMocks.applyWithEvidence,
     emitAutoMemoryRoutingSkipped: routingMocks.skipped,
 }))
 
@@ -19,7 +21,10 @@ describe('retrieved memory context messages', () => {
     })
 
     test('presents memory as reference material without exposing internal trust terminology', async () => {
-        routingMocks.apply.mockResolvedValue('## Relevant Knowledge\n- Remembered deployment detail.')
+        routingMocks.applyWithEvidence.mockResolvedValue({
+            content: '## Relevant Knowledge\n- Remembered deployment detail.',
+            evidence: [],
+        })
 
         const messages = await resolveMemorySystemMessages({
             preset: {
@@ -41,7 +46,7 @@ describe('retrieved memory context messages', () => {
         expect(messages[0].content).toContain('Remembered deployment detail.')
         expect(messages[0].content).not.toContain('untrusted')
         expect(messages[0].metadata).toEqual({ contextKind: 'retrieved-memory', untrusted: true })
-        expect(routingMocks.apply).toHaveBeenCalledWith(expect.objectContaining({
+        expect(routingMocks.applyWithEvidence).toHaveBeenCalledWith(expect.objectContaining({
             userQuery: 'How should I deploy?',
             retrievalQueries: ['How should I deploy?', 'deployment procedure'],
         }))

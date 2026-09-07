@@ -110,13 +110,18 @@ describe('visible planning state', () => {
     })
     expect(upsertTodoItem(run.runId, {})).toEqual({
       success: false,
-      output: 'A title is required to append a planning task.',
+      output: 'No task matches taskId (missing). A title is required to append a new planning task.',
     })
     upsertTodoItem(run.runId, { title: 'New task', status: 'not-a-status' })
     const state = getPlanningState(run.runId)!
     expect(state.items[0]).toMatchObject({ id: '01', title: 'New task', status: 'in_progress' })
     expect(buildPlanningStateContext(state)).toContain('id=01; status=in_progress; title=New task')
     expect(buildPlanningStateContext({ ...state, items: [] })).toBeNull()
+    // Update by taskId only: title stays unchanged.
+    expect(upsertTodoItem(run.runId, { taskId: '1', status: 'completed' }).success).toBe(true)
+    expect(getPlanningState(run.runId)?.items[0]).toMatchObject({ id: '01', title: 'New task', status: 'completed' })
+    // Append requires a title when no taskId matches.
+    expect(upsertTodoItem(run.runId, { taskId: '99', status: 'pending' }).success).toBe(false)
   })
 
   test('deletes an empty run on close and skips corrupt persisted rows', () => {

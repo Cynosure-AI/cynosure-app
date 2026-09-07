@@ -34,7 +34,7 @@ describe('title generation', () => {
     gateway.getLastUsedProvider.mockClear()
   })
 
-  test('generates a title without imposing a completion token limit', async () => {
+  test('applies a fallback title immediately and upgrades it with the LLM result', async () => {
     const broadcast = vi.fn()
 
     await generateTitle({
@@ -48,16 +48,34 @@ describe('title generation', () => {
     expect(request).toMatchObject({
       model: 'reasoning-model',
       thinkingEnabled: false,
+      maxTokens: expect.any(Number),
     })
-    expect(request).not.toHaveProperty('maxTokens')
+    // Fallback title is broadcast first, then the LLM title replaces it.
+    expect(broadcast).toHaveBeenCalledWith('chat:title-updated', {
+      conversationId: 'conversation-1',
+      title: 'Fix Persistent Chat Drafts',
+    })
     expect(run).toHaveBeenCalledWith(
       'Fix Persistent Chat Drafts',
       expect.any(Number),
       'conversation-1',
     )
+  })
+
+  test('keeps the fallback title when the LLM call fails or times out', async () => {
+    complete.mockRejectedValueOnce(new Error('timeout'))
+    const broadcast = vi.fn()
+
+    await generateTitle({
+      conversationId: 'conversation-2',
+      userMessage: 'Explain how database indexes work',
+      assistantResponse: 'Indexes are data structures that...',
+      broadcast,
+    })
+
     expect(broadcast).toHaveBeenCalledWith('chat:title-updated', {
-      conversationId: 'conversation-1',
-      title: 'Fix Persistent Chat Drafts',
+      conversationId: 'conversation-2',
+      title: 'Explain How Database Indexes Work',
     })
   })
 })

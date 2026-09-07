@@ -21,10 +21,6 @@ const automaticToolStates = computed(() => ({
     active: props.agent.thinkingEnabled && hasSelectableExecutionTools.value,
     criteria: 'thinking mode and visible execution tools',
   },
-  todo_upsert: {
-    active: props.agent.thinkingEnabled && hasSelectableExecutionTools.value,
-    criteria: 'thinking mode and visible execution tools',
-  },
   ...memoryAutomaticToolStates(hasMemoryScope.value),
   knowledge_search: {
     active: hasMemoryScope.value,

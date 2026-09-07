@@ -4,6 +4,7 @@ import type {
     DebugContextSnapshot,
     DebugContextTool,
     ReasoningEffort,
+    ContextEvidence,
 } from '@shared/types'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, CompletionRequest, CompletionResponse, ToolDefinition, ToolCall } from '../gateway/providers/base.provider.js'
@@ -18,6 +19,7 @@ export interface BeginDebugContextInput {
     model?: string
     contextWindow?: number
     contextStrategy?: ContextStrategy
+    evidence?: ContextEvidence[]
 }
 
 export interface DebugModelRequest {
