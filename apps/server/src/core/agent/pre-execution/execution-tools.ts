@@ -170,7 +170,7 @@ function dedupeToolsByName(tools: RegistryAwareToolDefinition[]): RegistryAwareT
     return result
 }
 
-function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
+export function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
     if (preset.disableToolRouting === true) return false
     if (preset.toolRoutingEnabled === false) return false
     if (sessionEnabled === true) return true

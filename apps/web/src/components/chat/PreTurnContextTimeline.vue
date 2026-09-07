@@ -13,6 +13,7 @@ type TimelineItem = {
   icon: string
   tone: ContextKind
   timestamp: number
+  updatedAt: number
   details: Array<{ name: string; content?: string; score?: string; selected?: boolean; empty?: boolean }>
   pending: boolean
 }
@@ -95,6 +96,7 @@ function plural(count: number, singular: string, pluralValue = `${singular}s`): 
 function contextLabel(kind: ContextKind, phase: string, count: number, method: string, emptyReason?: string): string {
   if (kind === 'toolsets') return `AI selected ${plural(count, 'MCP/toolset', 'MCPs/toolsets')}`
   if (kind === 'tools') {
+    if (method === 'llm') return `AI selected ${plural(count, 'tool')}`
     const prefix = method === 'lexical' ? 'Lexical search' : 'Semantic search'
     return phase === 'gathered-context'
       ? `${prefix} matched ${plural(count, 'tool')}`
@@ -103,7 +105,7 @@ function contextLabel(kind: ContextKind, phase: string, count: number, method: s
   if (kind === 'memory') return emptyReason === 'routing-failed'
     ? 'Memory retrieval failed'
     : phase === 'gathered-context' && method === 'retrieval'
-      ? 'Memory retrieval found no matches'
+      ? `Memory retrieval found ${count ? plural(count, 'memory item') : 'no matches'}`
       : phase === 'gathered-context'
     ? method === 'llm'
       ? `AI selected ${count ? plural(count, 'memory item') : 'no memory items'}`
@@ -170,6 +172,7 @@ const items = computed<TimelineItem[]>(() => {
         icon: 'lucide:compass',
         tone: 'context',
         timestamp: step.timestamp,
+        updatedAt: step.updatedAt ?? step.timestamp,
         details,
         pending: false,
       })
@@ -200,6 +203,7 @@ const items = computed<TimelineItem[]>(() => {
         icon: kind === 'toolsets' ? 'lucide:boxes' : phase === 'gathered-context' ? 'lucide:check' : kind === 'memory' ? 'lucide:brain' : kind === 'entities' ? 'lucide:network' : 'lucide:package-search',
         tone: kind,
         timestamp: step.timestamp,
+        updatedAt: step.updatedAt ?? step.timestamp,
         details: callDetails(groupedCalls, kind === 'toolsets' || phase === 'gathered-context'),
         pending: false,
       })
@@ -209,18 +213,24 @@ const items = computed<TimelineItem[]>(() => {
       const meta = STATUS_LABELS[step.status]
       if (meta) result.push({
         key: `${stepIndex}-${step.status}`,
-        label: meta.label,
-        summary: step.message,
+        label: step.message || meta.label,
+        summary: undefined,
         icon: meta.icon,
         tone: meta.tone,
         timestamp: step.timestamp,
+        updatedAt: step.updatedAt ?? step.timestamp,
         details: step.streamingChoosing ? [{ name: 'Model routing', content: step.streamingChoosing }] : [],
-        pending: props.isActive && stepIndex === props.steps.length - 1,
+        pending: props.isActive && !props.steps.slice(stepIndex + 1).some((later) => later.taskId === step.taskId),
       })
     }
   })
   return result
 })
+
+const latestItem = computed(() => items.value.reduce<TimelineItem | undefined>(
+  (latest, item) => !latest || item.updatedAt >= latest.updatedAt ? item : latest,
+  undefined,
+))
 
 const selectedTools = computed(() => uniqueSelected('tools'))
 const selectedToolsets = computed(() => uniqueSelected('toolsets').length)
@@ -258,7 +268,10 @@ function formatTimestamp(timestamp: number): string {
             <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-cyan-400/10 ring-1 ring-cyan-300/15">
               <Icon :icon="isPending ? 'svg-spinners:ring-resize' : 'lucide:history'" class="h-3.5 w-3.5 text-cyan-300" />
             </span>
-            <span class="text-[12px] font-semibold text-cyan-100">Pre-turn context</span>
+            <span class="min-w-0 flex-1 text-[12px] font-semibold text-cyan-100">
+              Pre-turn context
+              <span class="block truncate text-[11px] font-normal text-cyan-200/80" role="status" aria-live="polite">{{ latestItem?.label }}</span>
+            </span>
             <span v-if="selectedTools.length" class="context-chip">{{ plural(selectedTools.length, 'tool') }}</span>
             <span v-if="selectedToolsets" class="context-chip">{{ plural(selectedToolsets, 'toolset') }}</span>
             <span v-if="selectedMemory" class="context-chip">{{ plural(selectedMemory, 'memory item') }}</span>
