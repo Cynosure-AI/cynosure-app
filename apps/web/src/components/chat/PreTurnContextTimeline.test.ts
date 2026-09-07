@@ -122,6 +122,35 @@ describe('PreTurnContextTimeline', () => {
     await selectionStep.get('button').trigger('click')
     expect(selectionStep.text()).toContain('No relevant memories')
   })
+
+  test('shows memory matches from highest to lowest percentage', async () => {
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: {
+        steps: [{
+          iteration: 0,
+          status: 'routing-memory',
+          timestamp: 1_700_000_000_600,
+          toolCalls: [
+            { name: 'medium.md', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-results', matchScore: 0.52 }) },
+            { name: 'best.md', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-results', matchScore: 0.87 }) },
+            { name: 'lower.md', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-results', matchScore: 0.41 }) },
+          ],
+        }],
+        isActive: false,
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    await wrapper.get('button').trigger('click')
+    await wrapper.get('li button').trigger('click')
+    const details = wrapper.get('li').text()
+    expect(details.indexOf('best.md')).toBeLessThan(details.indexOf('medium.md'))
+    expect(details.indexOf('medium.md')).toBeLessThan(details.indexOf('lower.md'))
+    expect(details).toContain('87%')
+    expect(details).toContain('52%')
+    expect(details).toContain('41%')
+  })
+
   test('updates the collapsed header when an earlier parallel task finishes last', async () => {
     const wrapper = mount(PreTurnContextTimeline, {
       props: { steps: [

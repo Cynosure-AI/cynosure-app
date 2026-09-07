@@ -15,7 +15,6 @@ const MAX_SELECTED_GRAPH_EDGES = 3
 const TURN_CHAR_LIMIT = 200
 const CANDIDATE_CHAR_LIMIT = 1_200
 const MIN_RELATIVE_MEMORY_SCORE = 0.65
-const MIN_MEMORY_CANDIDATES = 3
 const MEMORY_CONTEXT_SELECTION_TOOL_NAME = 'select_memory_context'
 
 export interface ApplyAutoMemoryRoutingInput {
@@ -212,7 +211,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                 chunkIndex: chunk.chunkIndex,
                 retrievalMethod: chunk.scoreType || 'memory-retrieval',
                 selectionMethod,
-                relevance: typeof chunk.rerankerScore === 'number' ? chunk.rerankerScore : chunk.score,
+                relevance: memoryMatch(chunk).score,
                 verificationStatus,
             })),
             ...(selectedMemory.graph?.edges || []).map((edge) => ({
@@ -285,6 +284,7 @@ async function selectMemoryContext(input: {
                         `Select at most ${MAX_SELECTED_MEMORIES} memory IDs.`,
                         `Select at most ${MAX_SELECTED_GRAPH_EDGES} graph edge IDs.`,
                         'Evidence must directly support the requested fact or operation; topical similarity is insufficient.',
+                        'Treat the provided match score as a strong relevance signal. Prefer higher-scoring evidence when candidates support the same fact.',
                         'A close friend does not entail best friend. A related project does not entail the requested project.',
                         'Set answerable=false and select nothing when the pool lacks direct evidence.',
                         'When answerable=false, provide one precise corrective query in the user request language that preserves names, relationship terms, identifiers, and constraints.',
@@ -410,6 +410,7 @@ function resolveSelectedMemories(candidates: RetrievedChunk[], memoryIds: string
     return memoryIds
         .map((id) => byId.get(id))
         .filter((candidate): candidate is RetrievedChunk => Boolean(candidate))
+        .sort((a, b) => memoryMatch(b).score - memoryMatch(a).score)
 }
 
 function resolveSelectedGraph(graph: KnowledgeGraphProjection | undefined, graphEdgeIds: string[]): KnowledgeGraphProjection | undefined {
@@ -480,9 +481,7 @@ function formatGraphCandidate(edge: KnowledgeAssertion, id: string): string {
 }
 
 function formatMemoryCandidate(candidate: RetrievedChunk, id: string): string {
-    const score = typeof candidate.rerankerScore === 'number' && Number.isFinite(candidate.rerankerScore)
-        ? candidate.rerankerScore
-        : candidate.score
+    const score = memoryMatch(candidate).score
     const metadata = [
         candidate.spaceName ? `space=${candidate.spaceName}` : '',
         candidate.sourceFile ? `source=${candidate.sourceFile}` : '',
@@ -512,29 +511,18 @@ function filterAutoMemoryCandidates(memory: AggregatedMemory): AggregatedMemory 
     return { permanent, graph: memory.graph }
 }
 
-/** Reciprocal-rank fusion makes short-turn and conversation-aware retrieval
- * complementary without comparing dense, hybrid, and reranker score scales. */
+/** Merge results from the original and expanded queries using the same match
+ * score used for filtering, curation, context ordering, and UI display. */
 function fuseAutoMemoryResults(results: AggregatedMemory[]): AggregatedMemory {
-    if (results.length <= 1) return results[0] || { permanent: [] }
-    const ranked = new Map<string, { chunk: RetrievedChunk; score: number }>()
+    const ranked = new Map<string, RetrievedChunk>()
     for (const result of results) {
-        result.permanent.forEach((chunk, index) => {
+        result.permanent.forEach((chunk) => {
             const key = chunk.id || [chunk.spaceId, chunk.sourceFile, chunk.chunkIndex].join('\u0000')
             const existing = ranked.get(key)
-            const score = 1 / (60 + index + 1)
-            if (existing) existing.score += score
-            else ranked.set(key, { chunk, score })
+            if (!existing || memoryMatch(chunk).score > memoryMatch(existing).score) ranked.set(key, chunk)
         })
     }
-    const sorted = [...ranked.values()].sort((a, b) => b.score - a.score)
-    const best = sorted[0]?.score || 1
-    const permanent = sorted.map(({ chunk, score }) => ({
-        ...chunk,
-        score: score / best,
-        rerankerScore: undefined,
-        fusionScore: score,
-        scoreType: 'fusion' as const,
-    }))
+    const permanent = sortMemoriesByMatch([...ranked.values()])
 
     const edgeMap = new Map<string, NonNullable<AggregatedMemory['graph']>['edges'][number]>()
     const nodeMap = new Map<string, NonNullable<AggregatedMemory['graph']>['nodes'][number]>()
@@ -560,17 +548,21 @@ function fuseAutoMemoryResults(results: AggregatedMemory[]): AggregatedMemory {
 }
 
 /**
- * Dense, RRF, and external-reranker scores have different scales, so an
- * absolute cross-mode cutoff is invalid. Remove only the weak tail relative
- * to the best result while retaining a small recall floor for LLM curation.
+ * Remove the weak tail relative to the best visible match. This deliberately
+ * uses the exact score shown in the UI and supplied to LLM curation.
  */
 function filterWeakRelativeMatches(candidates: RetrievedChunk[]): RetrievedChunk[] {
-    if (candidates.length <= MIN_MEMORY_CANDIDATES) return candidates
-    const scores = candidates.map((candidate) => candidate.rerankerScore ?? candidate.score)
+    const sorted = sortMemoriesByMatch(candidates)
+    if (sorted.length <= 1) return sorted
+    const scores = sorted.map((candidate) => memoryMatch(candidate).score)
     const best = Math.max(...scores.filter((score) => Number.isFinite(score) && score > 0))
-    if (!Number.isFinite(best)) return candidates
+    if (!Number.isFinite(best)) return sorted
     const threshold = best * MIN_RELATIVE_MEMORY_SCORE
-    return candidates.filter((_, index) => index < MIN_MEMORY_CANDIDATES || (Number.isFinite(scores[index]) && scores[index] >= threshold))
+    return sorted.filter((_, index) => Number.isFinite(scores[index]) && scores[index] >= threshold)
+}
+
+function sortMemoriesByMatch(candidates: RetrievedChunk[]): RetrievedChunk[] {
+    return [...candidates].sort((a, b) => memoryMatch(b).score - memoryMatch(a).score)
 }
 
 function memoryLabel(chunk: RetrievedChunk): string {
@@ -615,8 +607,8 @@ function emitMemoryRoutingSelection(
     graphContext?: string,
     selectionMethod: 'retrieval' | 'llm' | 'ranked-fallback' | 'routing-failed' = contextPhase === 'gathered-results' ? 'retrieval' : 'llm',
 ): void {
-    const toolCalls = memories.map((memory) => {
-        const visibleMatch = memoryVisibleMatch(memory)
+    const toolCalls = sortMemoriesByMatch(memories).map((memory) => {
+        const visibleMatch = memoryMatch(memory)
         return {
             name: memoryLabel(memory),
             arguments: JSON.stringify({
@@ -627,10 +619,6 @@ function emitMemoryRoutingSelection(
                 folderPath: memory.spaceName,
                 chunkIndex: memory.chunkIndex,
                 content: memory.text,
-                // Hybrid retrieval is ranked by a reciprocal-rank-fusion value,
-                // whose small magnitude (commonly 0.01-0.03) is not a semantic
-                // percentage. Show cosine similarity, like tool routing does,
-                // while leaving the fusion score in charge of result ordering.
                 matchScore: visibleMatch.score,
                 scoreType: visibleMatch.scoreType,
             }),
@@ -668,17 +656,22 @@ function emitMemoryRoutingSelection(
     })
 }
 
-function memoryVisibleMatch(memory: RetrievedChunk): {
+function memoryMatch(memory: RetrievedChunk): {
     score: number
     scoreType: 'dense' | 'lexical' | 'fusion' | 'reranker' | 'entity-resolution' | undefined
 } {
     if (typeof memory.rerankerScore === 'number' && Number.isFinite(memory.rerankerScore)) {
-        return { score: memory.rerankerScore, scoreType: 'reranker' }
+        return { score: normalizeMatchScore(memory.rerankerScore), scoreType: 'reranker' }
     }
     if (typeof memory.denseScore === 'number' && Number.isFinite(memory.denseScore)) {
-        return { score: memory.denseScore, scoreType: 'dense' }
+        return { score: normalizeMatchScore(memory.denseScore), scoreType: 'dense' }
     }
-    return { score: memory.score, scoreType: memory.scoreType }
+    return { score: normalizeMatchScore(memory.score), scoreType: memory.scoreType }
+}
+
+function normalizeMatchScore(value: number): number {
+    const normalized = value > 1 ? value / 100 : value
+    return Math.max(0, Math.min(1, normalized))
 }
 
 function memoryEmptyLabel(reason?: string): string {
