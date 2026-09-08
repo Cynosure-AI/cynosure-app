@@ -114,7 +114,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             recentMessages: recentMessages || [],
             allTools: namespaceFilteredTools,
             availableTools: eligibleTools,
-            mcpMetadata: mcpMetadata?.filter(({ id }) => selectedNamespaceIds.has(id)),
+            mcpMetadata,
             preferredToolNames,
             usedToolNames,
             // Complete small toolsets remain included after ordinary semantic

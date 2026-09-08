@@ -135,6 +135,18 @@ export async function embeddingPreFilter(
     }
 }
 
+/** Shared MCP retrieval for pre-turn routing and runtime capability expansion. */
+export async function retrieveMcpTools(input: Pick<RouteToolsInput, 'userQuery' | 'allTools' | 'mcpMetadata' | 'topK' | 'maxTools' | 'onStatus'>): Promise<RoutedToolDefinition[]> {
+    const groups = buildMcpGroups(input.allTools.filter(isMcpTool), input.mcpMetadata || [])
+    if (!groups.length) return []
+    const { groupIds, queryVector } = await embeddingPreFilter(
+        input.userQuery, groups, input.topK ?? MCP_CANDIDATE_COUNT, input.onStatus,
+    )
+    const candidateIds = new Set(groupIds)
+    const candidates = dedupeTools(groups.filter(({ id }) => candidateIds.has(id)).flatMap(({ tools }) => tools))
+    return rankCandidateTools(input.userQuery, queryVector, candidates, input.maxTools ?? MAX_AUTO_DISCOVERED_TOOLS, new Set(), input.onStatus)
+}
+
 export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefinition[]> {
     const {
         userQuery,
@@ -185,6 +197,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
     let routedTools: RoutedToolDefinition[] = []
     const searchTool = makeSearchAvailableMcpToolsTool({
         allTools: availableTools,
+        mcpMetadata,
         getLoadedToolNames: () => new Set(routedTools.map(({ name }) => name)),
     })
 
@@ -306,7 +319,8 @@ export function routeToolsLexically(input: RouteToolsInput): RoutedToolDefinitio
 
     let routedTools: RoutedToolDefinition[] = []
     const searchTool = makeSearchAvailableMcpToolsTool({
-        allTools,
+        allTools: input.availableTools ?? allTools,
+        mcpMetadata,
         getLoadedToolNames: () => new Set(routedTools.map(({ name }) => name)),
     })
     routedTools = dedupeTools([...fixedTools, ...discovered, ...stickyTools, searchTool])
