@@ -14,7 +14,7 @@ import type {
   TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, DebugContextSnapshot } from '@shared/types'
+import type { ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, DebugContextSnapshot, QueuedChatMessageDto } from '@shared/types'
 
 function memorySpacePathId(id: string): string {
   return encodeURIComponent(encodeURIComponent(id))
@@ -121,6 +121,20 @@ export const api = {
       patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/read`),
     send: (conversationId: string, request: ChatSendRequest) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, request),
+    getQueue: (conversationId: string) =>
+      get<ChatQueueStateDto>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue`),
+    enqueue: (conversationId: string, request: ChatQueueRequest) =>
+      post<QueuedChatMessageDto>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue`, request),
+    updateQueued: (conversationId: string, queueId: string, request: ChatQueueRequest) =>
+      put<QueuedChatMessageDto>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue/${encodeURIComponent(queueId)}`, request),
+    removeQueued: (conversationId: string, queueId: string) =>
+      del<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue/${encodeURIComponent(queueId)}`),
+    removeQueuedAttachment: (conversationId: string, queueId: string, attachmentId: string) =>
+      del<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue/${encodeURIComponent(queueId)}/attachments/${encodeURIComponent(attachmentId)}`),
+    steerQueued: (conversationId: string, queueId: string) =>
+      post<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue/${encodeURIComponent(queueId)}/steer`),
+    runNextQueued: (conversationId: string) =>
+      post<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue/run-next`),
     getAttachmentConfig: () =>
       get<{ inlineAttachmentTextLimit: number }>('/api/chat/attachment-config'),
     getMessageAttachments: (conversationId: string, messageId: string) =>
@@ -146,6 +160,8 @@ export const api = {
     ) => onWsEvent('channel:conversation-state', cb as WsHandler),
     onExecutionState: (cb: (data: ChatExecutionState) => void) =>
       onWsEvent('chat:execution-state', cb as WsHandler),
+    onQueueChanged: (cb: (data: { conversationId: string }) => void) =>
+      onWsEvent('chat:queue-changed', cb as WsHandler),
 
     // Stream event listeners — via WebSocket
     onStreamStart: (cb: (data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }) => void) =>
@@ -175,6 +191,8 @@ export const api = {
     ) => onWsEvent('chat:stream-end', cb as WsHandler),
     onStreamReset: (cb: (data: { streamId: string; conversationId: string }) => void) =>
       onWsEvent('chat:stream-reset', cb as WsHandler),
+    onStreamDiscard: (cb: (data: { streamId: string; conversationId: string }) => void) =>
+      onWsEvent('chat:stream-discard', cb as WsHandler),
     onStreamUsage: (
       cb: (data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number }) => void
     ) => onWsEvent('chat:stream-usage', cb as WsHandler),

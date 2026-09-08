@@ -585,7 +585,13 @@ export const useAgentStore = defineStore('agent', () => {
     if (stoppedExecutionIds.has(data.executionId) && pendingNewConversationStarts.has(data.conversationId)) return
     const currentExecutionId = executionIdByConversation.get(data.conversationId)
     if (currentExecutionId && currentExecutionId !== data.executionId) return
-    stopConversationExecution(data.conversationId, [data.executionId])
+    if (data.state === 'stopped') {
+      stopConversationExecution(data.conversationId, [data.executionId])
+      return
+    }
+    executionIdByConversation.delete(data.conversationId)
+    pendingNewConversationStarts.delete(data.conversationId)
+    setConversationExecutionState(data.conversationId, false)
   }
 
   function isConversationExecuting(conversationId: string | null | undefined): boolean {

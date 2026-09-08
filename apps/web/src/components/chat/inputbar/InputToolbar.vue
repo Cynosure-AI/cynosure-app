@@ -22,11 +22,15 @@ import { shortModelLabel } from "../../../utils/model-label";
 
 defineProps<{
   canSend: boolean;
+  isRunning: boolean;
+  editingQueue: boolean;
 }>();
 
 const emit = defineEmits<{
   attach: [];
   send: [];
+  steer: [];
+  cancelEdit: [];
   transcription: [text: string];
 }>();
 
@@ -215,7 +219,6 @@ async function toggleMic(): Promise<void> {
     <button
       class="p-1.5 text-theme-500 hover:text-theme-300 rounded-lg transition-colors shrink-0 focus:outline-none"
       title="Attach file"
-      :disabled="chatStore.isConversationLocked"
       aria-label="Attach file"
       @click="emit('attach')"
     >
@@ -484,7 +487,17 @@ async function toggleMic(): Promise<void> {
       </button>
     </div>
 
-    <!-- Send / Cancel -->
+    <button
+      v-if="editingQueue"
+      class="p-1.5 text-theme-400 hover:text-theme-100 rounded-lg transition-colors"
+      title="Cancel edit"
+      aria-label="Cancel queued message edit"
+      @click="emit('cancelEdit')"
+    >
+      <Icon icon="lucide:x" class="h-4 w-4" />
+    </button>
+
+    <!-- Send / Queue / Steer / Cancel -->
     <button
       v-if="showCancelButton"
       class="p-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
@@ -498,10 +511,30 @@ async function toggleMic(): Promise<void> {
       />
     </button>
     <button
-      v-else
+      v-if="isRunning && !editingQueue"
+      :disabled="!canSend"
+      class="p-1.5 bg-theme-700 hover:bg-theme-600 disabled:text-theme-500 text-theme-100 rounded-lg transition-colors shrink-0 focus:outline-none"
+      title="Queue for next turn"
+      aria-label="Queue message"
+      @click="emit('send')"
+    >
+      <Icon icon="lucide:list-plus" class="h-4 w-4" />
+    </button>
+    <button
+      v-if="isRunning && !editingQueue"
       :disabled="!canSend"
       class="p-1.5 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
-      title="Send"
+      title="Steer current run"
+      aria-label="Steer current run"
+      @click="emit('steer')"
+    >
+      <Icon icon="lucide:corner-up-left" class="h-4 w-4" />
+    </button>
+    <button
+      v-if="!isRunning || editingQueue"
+      :disabled="!canSend"
+      class="p-1.5 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
+      :title="editingQueue ? 'Save queued message' : 'Send'"
       aria-label="Send message"
       @click="emit('send')"
     >

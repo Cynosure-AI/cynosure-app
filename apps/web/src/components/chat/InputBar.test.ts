@@ -8,8 +8,15 @@ const chatStore = reactive({
   activeConversationId: 'conversation-1' as string | null,
   activeAgentId: 'agent-1' as string | null,
   isConversationLocked: false,
+  queuedMessages: [] as Array<{ id: string; content: string; attachments: unknown[] }>,
   modelModalities: null as { input: string[]; output: string[] } | null,
   sendMessage: vi.fn<(...args: unknown[]) => Promise<void>>(),
+  queueMessage: vi.fn<(...args: unknown[]) => Promise<void>>(),
+  updateQueuedMessage: vi.fn<(...args: unknown[]) => Promise<void>>(),
+  removeQueuedMessage: vi.fn(),
+  removeQueuedAttachment: vi.fn(),
+  steerQueuedMessage: vi.fn(),
+  runNextQueuedMessage: vi.fn(),
 })
 
 vi.mock('../../stores/chat.store', () => ({
@@ -34,8 +41,11 @@ describe('InputBar drafts', () => {
     chatStore.activeConversationId = 'conversation-1'
     chatStore.activeAgentId = 'agent-1'
     chatStore.isConversationLocked = false
+    chatStore.queuedMessages = []
     chatStore.sendMessage.mockReset()
     chatStore.sendMessage.mockResolvedValue()
+    chatStore.queueMessage.mockReset()
+    chatStore.queueMessage.mockResolvedValue()
   })
 
   test('restores the latest conversation draft after the composer remounts', async () => {
@@ -91,5 +101,28 @@ describe('InputBar drafts', () => {
     expect(chatStore.sendMessage).toHaveBeenCalledWith('Send this', undefined, undefined, undefined)
     expect(localStorage.getItem(draftKey)).toBeNull()
     expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('')
+  })
+
+  test('queues Enter submissions while a conversation is running', async () => {
+    chatStore.isConversationLocked = true
+    const wrapper = mountInputBar()
+    await wrapper.get('textarea').setValue('Do this next')
+
+    await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(chatStore.queueMessage).toHaveBeenCalledWith('Do this next', 'next', undefined, undefined, undefined)
+    expect(chatStore.sendMessage).not.toHaveBeenCalled()
+  })
+
+  test('uses the secondary composer action for steering', async () => {
+    chatStore.isConversationLocked = true
+    const wrapper = mountInputBar()
+    await wrapper.get('textarea').setValue('Change direction')
+
+    wrapper.findComponent({ name: 'InputToolbar' }).vm.$emit('steer')
+    await flushPromises()
+
+    expect(chatStore.queueMessage).toHaveBeenCalledWith('Change direction', 'steer', undefined, undefined, undefined)
   })
 })
