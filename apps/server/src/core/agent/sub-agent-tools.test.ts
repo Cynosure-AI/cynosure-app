@@ -119,7 +119,7 @@ describe('sub-agent execution', () => {
 
         expect(result.success).toBe(true)
         expect(result.structuredContent).toEqual({
-            invocationId: expect.any(String),
+            invocationId: expect.stringMatching(/^worker-[23456789abcdefghjkmnpqrstuvwxyz]{8}$/),
             response: 'Completed work',
         })
         expect(result.output).toContain(`Sub-agent invocation ID: ${(result.structuredContent as { invocationId: string }).invocationId}`)

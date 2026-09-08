@@ -5,13 +5,15 @@ import { prepareAgentExecution } from './prepare-execution.js'
 import { getDb } from '../../db/database.js'
 import { getAssignedOrDefaultSpaces } from '../memory/memory-space-scope.js'
 import { extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
-import { nanoid } from 'nanoid'
+import { customAlphabet, nanoid } from 'nanoid'
 import type { ChatMessage, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 
 /** Timeout in milliseconds for a single sub-agent tool call. */
 const SUB_AGENT_TIMEOUT_MS = 300_000 // 5 minutes 
 /** Maximum tool-use rounds for a sub-agent per delegation call. */
 const SUB_AGENT_MAX_ROUNDS = 30
+/** Short, readable suffix without visually ambiguous characters (0/O, 1/I/l). */
+const createInvocationSuffix = customAlphabet('23456789abcdefghjkmnpqrstuvwxyz', 8)
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -45,6 +47,15 @@ function parseSessionHistory(json: string): ChatMessage[] | null {
     } catch {
         return null
     }
+}
+
+function createInvocationId(internalName: string): string {
+    const readableName = internalName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 32) || 'subagent'
+    return `${readableName}-${createInvocationSuffix()}`
 }
 
 /**
@@ -218,7 +229,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             }
 
             const { agentData } = selected
-            const invocationId = nanoid()
+            const invocationId = createInvocationId(agentData.internalName)
             const userMessage = context
                 ? `## Context\n${context}\n\n## Task\n${instructions}`
                 : instructions
