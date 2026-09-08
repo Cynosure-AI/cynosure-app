@@ -402,6 +402,39 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }
     })
 
+    // Resolve library selections back to the same provider-safe payload used by
+    // a freshly selected file. The new message will materialize its own durable
+    // copy, so deleting the source conversation cannot break the reused file.
+    app.post<{ Body: { ids?: string[] } }>('/uploads/resolve', async (req, reply) => {
+        const ids = Array.isArray(req.body?.ids)
+            ? [...new Set(req.body.ids.filter((id): id is string => typeof id === 'string' && id.length > 0))]
+            : []
+        if (!ids.length) return { files: [] }
+        if (ids.length > 100) return reply.status(400).send({ error: 'No more than 100 uploads can be selected' })
+
+        const db = getDb()
+        const placeholders = ids.map(() => '?').join(', ')
+        const rows = db.prepare(
+            `SELECT id, name, original_path
+             FROM message_attachments
+             WHERE kind = 'file' AND id IN (${placeholders})`,
+        ).all(...ids) as { id: string; name: string; original_path: string | null }[]
+        const byId = new Map(rows.map((row) => [row.id, row]))
+        const files = ids.map((id) => {
+            const row = byId.get(id)
+            if (!row || !row.original_path || !existsSync(row.original_path)) {
+                return null
+            }
+            const encoded = readFileSync(row.original_path).toString('base64')
+            return { id: row.id, name: row.name, content: `data:application/octet-stream;base64,${encoded}` }
+        })
+        const missing = ids.filter((id, index) => !files[index])
+        if (missing.length) {
+            return reply.status(404).send({ error: 'One or more selected uploads are no longer available' })
+        }
+        return { files: files.filter((file): file is NonNullable<typeof file> => file !== null) }
+    })
+
     // GET /api/chat/conversations — list (optionally filtered by agent_id or ma_workspace_id)
     // Supports pagination via ?limit=N&offset=N — when limit is set, returns { items, total }
     app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; limit?: string; offset?: string; sort?: string; search?: string } }>('/conversations', async (req) => {

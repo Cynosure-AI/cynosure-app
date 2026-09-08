@@ -128,4 +128,36 @@ describe('conversation message attachment resolution', () => {
             }],
         })
     })
+
+    test('resolves selected uploads into reusable attachment payloads', async () => {
+        const now = Date.now()
+        const db = getDb()
+        db.prepare(
+            `INSERT INTO conversations (id, title, origin, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?)`,
+        ).run('conversation-1', 'Source chat', 'chat', now, now)
+        db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, created_at)
+             VALUES (?, ?, ?, ?, ?)`,
+        ).run('message-1', 'conversation-1', 'user', 'Keep this.', now)
+        const files = await materializeFileAttachments([
+            { name: 'first.txt', content: 'first contents' },
+            { name: 'second.txt', content: 'second contents' },
+        ], 'conversation-1')
+        persistMessageFileAttachments(db, 'message-1', 'conversation-1', files, now)
+
+        const app = Fastify()
+        await app.register(registerConversationRoutes, { prefix: '/api/chat' })
+        const response = await app.inject({
+            method: 'POST',
+            url: '/api/chat/uploads/resolve',
+            payload: { ids: [files[1].id, files[0].id] },
+        })
+        await app.close()
+
+        expect(response.statusCode, response.body).toBe(200)
+        const resolved = response.json().files as { id: string; name: string; content: string }[]
+        expect(resolved.map((file) => file.name)).toEqual(['second.txt', 'first.txt'])
+        expect(Buffer.from(resolved[0].content.split(',')[1], 'base64').toString('utf8')).toBe('second contents')
+    })
 })

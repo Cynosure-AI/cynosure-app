@@ -6,6 +6,7 @@ import { Icon } from '@iconify/vue'
 import InputToolbar from './inputbar/InputToolbar.vue'
 import ContextRing from './inputbar/ContextRing.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
+import FileLibraryModal from './modals/FileLibraryModal.vue'
 
 const chatStore = useChatStore()
 
@@ -46,9 +47,10 @@ const inputText = ref(readDraft(draftStorageKey.value))
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<{ url: string; name: string }[]>([])
-const attachedFiles = ref<{ name: string; content: string }[]>([])
+const attachedFiles = ref<{ name: string; content: string; sourceId?: string }[]>([])
 const attachedAudio = ref<{ url: string; name: string }[]>([])
 const editingQueueId = ref<string | null>(null)
+const showFileLibrary = ref(false)
 
 function modelHasInputModality(modality: string): boolean | null {
   const inputModalities = chatStore.modelModalities?.input
@@ -101,6 +103,15 @@ function cancelQueueEdit(): void {
 
 function openFilePicker(): void {
   fileInputRef.value?.click()
+}
+
+function addLibraryFiles(files: { id: string; name: string; content: string }[]): void {
+  const existing = new Set(attachedFiles.value.map((file) => file.sourceId).filter(Boolean))
+  for (const file of files) {
+    if (!existing.has(file.id)) {
+      attachedFiles.value.push({ name: file.name, content: file.content, sourceId: file.id })
+    }
+  }
 }
 
 function handleFileSelect(e: Event): void {
@@ -446,6 +457,7 @@ defineExpose({ processFiles })
           :is-running="chatStore.isConversationLocked"
           :editing-queue="Boolean(editingQueueId)"
           @attach="openFilePicker"
+          @browse-library="showFileLibrary = true"
           @send="send('next')"
           @steer="send('steer')"
           @cancel-edit="cancelQueueEdit"
@@ -460,6 +472,13 @@ defineExpose({ processFiles })
         <ContextRing />
       </div>
     </div>
+
+    <FileLibraryModal
+      :show="showFileLibrary"
+      :already-selected-ids="attachedFiles.flatMap((file) => file.sourceId ? [file.sourceId] : [])"
+      @close="showFileLibrary = false"
+      @add="addLibraryFiles"
+    />
 
     <!-- Context window usage ring — pinned to the far right of the bar -->
     <div

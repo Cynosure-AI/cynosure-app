@@ -91,6 +91,8 @@ export const api = {
       if (search?.trim()) params.set('search', search.trim())
       return get<{ items: ConversationUpload[]; total: number }>(`/api/chat/uploads?${params}`)
     },
+    resolveUploads: (ids: string[]) =>
+      post<{ files: { id: string; name: string; content: string }[] }>('/api/chat/uploads/resolve', { ids }),
     getMessages: (conversationId: string) =>
       get<ConversationMessagesResponse>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
     getDebugContext: (conversationId: string) =>
