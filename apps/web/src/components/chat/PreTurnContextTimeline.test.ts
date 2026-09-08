@@ -105,20 +105,42 @@ describe('PreTurnContextTimeline', () => {
     expect(toolsets[1].text()).toContain('read_document')
   })
 
-  test('does not render shared query planning as a third context card', () => {
+  test('shows discovery queries in the first memory and tool step details', async () => {
     const wrapper = mount(PreTurnContextTimeline, {
       props: {
-        steps: [{
-          iteration: 0,
-          status: 'building-task-context',
-          timestamp: 100,
-          toolCalls: [{ name: 'Task context', arguments: JSON.stringify({ type: 'task-context', toolQuery: 'tools', memoryQuery: 'memory' }) }],
-        }],
+        steps: [
+          {
+            iteration: 0,
+            status: 'building-task-context',
+            timestamp: 100,
+            toolCalls: [{ name: 'Task context', arguments: JSON.stringify({
+              type: 'task-context', selectionMethod: 'llm', toolQuery: 'calendar scheduling capabilities',
+              memoryQueries: ['project deadline notes', 'launch date discussion'],
+            }) }],
+          },
+          { iteration: 0, taskId: 'memory', status: 'searching-memory', timestamp: 110 },
+          { iteration: 0, taskId: 'tools', status: 'finding-tools', timestamp: 120 },
+        ],
         isActive: true,
       },
       global,
     })
-    expect(wrapper.findAll('.pre-turn-card')).toHaveLength(0)
+    expect(wrapper.findAll('.pre-turn-card')).toHaveLength(2)
+    expect(wrapper.text()).not.toContain('project deadline notes')
+    expect(wrapper.text()).not.toContain('calendar scheduling capabilities')
+
+    const cards = wrapper.findAll('.pre-turn-card')
+    await cards[0].get(':scope > button').trigger('click')
+    expect(cards[0].text()).toContain('Searching memory with RAG')
+    expect(cards[0].text()).not.toContain('project deadline notes')
+    await cards[0].findAll('ol button')[0].trigger('click')
+    expect(cards[0].text()).toContain('project deadline notes')
+    expect(cards[0].text()).toContain('launch date discussion')
+
+    await cards[1].get(':scope > button').trigger('click')
+    expect(cards[1].text()).toContain('Ranking tools')
+    await cards[1].findAll('ol button')[0].trigger('click')
+    expect(cards[1].text()).toContain('calendar scheduling capabilities')
   })
 
   test('keeps empty selections visible without counting them', async () => {

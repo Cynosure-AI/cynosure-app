@@ -66,6 +66,10 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
+function stringValues(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(stringValue).filter((item): item is string => Boolean(item)) : []
+}
+
 function normalizedScore(value: unknown): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
   return Math.max(0, Math.min(1, value > 1 ? value / 100 : value))
@@ -110,6 +114,16 @@ function plural(count: number, singular: string, pluralValue = `${singular}s`): 
 
 const cards = computed<ContextCard[]>(() => {
   const pipelines: Record<Channel, PipelineItem[]> = { memory: [], tools: [] }
+  const taskContextStep = props.steps.find((step) => step.toolCalls?.some((call) => args(call).type === 'task-context'))
+  const taskContext = taskContextStep?.toolCalls?.find((call) => args(call).type === 'task-context')
+  const taskContextArgs = taskContext ? args(taskContext) : {}
+  const channelQueries: Record<Channel, string[]> = {
+    tools: [stringValue(taskContextArgs.toolQuery)].filter((query): query is string => Boolean(query)),
+    memory: [...new Set([
+      ...stringValues(taskContextArgs.memoryQueries),
+      ...(stringValue(taskContextArgs.memoryQuery) ? [stringValue(taskContextArgs.memoryQuery)!] : []),
+    ])],
+  }
 
   props.steps.forEach((step, stepIndex) => {
     const calls = step.toolCalls || []
@@ -118,6 +132,7 @@ const cards = computed<ContextCard[]>(() => {
 
     const status = STATUS[step.status]
     if (status) {
+      const firstChannelStep = pipelines[status.channel].length === 0
       pipelines[status.channel].push({
         key: `${status.channel}-${stepIndex}-${step.status}`,
         label: step.message || status.label,
@@ -125,7 +140,7 @@ const cards = computed<ContextCard[]>(() => {
         icon: status.icon,
         timestamp: step.timestamp,
         updatedAt: step.updatedAt ?? step.timestamp,
-        details: [],
+        details: firstChannelStep ? channelQueries[status.channel].map((query) => ({ name: query })) : [],
         final: false,
         pending: props.isActive && !calls.length && !props.steps.slice(stepIndex + 1).some((later) => later.taskId === step.taskId),
       })
