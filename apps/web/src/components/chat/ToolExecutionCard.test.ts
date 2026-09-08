@@ -248,6 +248,43 @@ describe('ToolExecutionCard', () => {
     expect(wrapper.findAll('icon-stub').filter((icon) => icon.attributes('icon') === 'svg-spinners:ring-resize')).toHaveLength(2)
   })
 
+  test('previews returned images while collapsed and uses the full gallery while expanded', async () => {
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1,
+        isActive: false,
+        steps: [{
+          iteration: 1,
+          status: 'executing',
+          timestamp: Date.now(),
+          toolCalls: [{ name: 'screenshot_page', arguments: '{"url":"https://example.com"}' }],
+          results: [{
+            name: 'screenshot_page',
+            success: true,
+            output: '(2 media items returned)',
+            images: ['data:image/png;base64,first', 'data:image/png;base64,second'],
+          }],
+        }],
+      },
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+
+    const collapsedPreview = wrapper.get('[aria-label="2 returned images"]')
+    expect(collapsedPreview.get('img').attributes('src')).toBe('data:image/png;base64,first')
+    expect(collapsedPreview.text()).toBe('+1')
+    expect(wrapper.findAll('img')).toHaveLength(1)
+
+    await wrapper.get('button').trigger('click')
+
+    expect(wrapper.find('[aria-label="2 returned images"]').exists()).toBe(false)
+    expect(wrapper.findAll('img').map((image) => image.attributes('src'))).toEqual([
+      'data:image/png;base64,first',
+      'data:image/png;base64,second',
+    ])
+  })
+
   test('shows mixed tool outcomes as an amber partial success', () => {
     const wrapper = mount(ToolExecutionCard, {
       props: {

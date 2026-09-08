@@ -526,6 +526,7 @@ const routingStatusSteps = computed(() => {
 })
 
 const successfulResultCount = computed(() => results.value.filter((result) => result.success).length)
+const resultImages = computed(() => results.value.flatMap((result) => result.images?.filter(Boolean) ?? []))
 const resultOutcome = computed<ResultOutcomeMeta | null>(() => {
   if (!results.value.length) return null
   if (successfulResultCount.value === results.value.length) {
@@ -807,6 +808,22 @@ const hasDisplayableActivity = computed(() =>
                 :class="currentPhase.color"
               >{{ headerLabel }}</span>
             </div>
+
+            <span
+              v-if="!isExpanded && resultImages.length"
+              class="relative h-8 w-10 shrink-0 overflow-hidden rounded-md border border-theme-600/70 bg-theme-900/70 shadow-sm"
+              :aria-label="`${resultImages.length} returned image${resultImages.length === 1 ? '' : 's'}`"
+            >
+              <img
+                :src="resultImages[0]"
+                alt=""
+                class="h-full w-full object-cover"
+              >
+              <span
+                v-if="resultImages.length > 1"
+                class="absolute bottom-0 right-0 rounded-tl bg-theme-950/85 px-1 text-[9px] leading-4 text-theme-200"
+              >+{{ resultImages.length - 1 }}</span>
+            </span>
 
             <span
               v-if="resultOutcome"
