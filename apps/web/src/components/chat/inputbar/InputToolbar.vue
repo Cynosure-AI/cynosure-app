@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
+import { onClickOutside } from "@vueuse/core";
 import { useChatStore } from "../../../stores/chat.store";
 import { useAgentStore } from "../../../stores/agent-runtime.store";
 import { usePreferencesStore } from "../../../stores/preferences.store";
@@ -20,7 +21,7 @@ import {
 } from "../../../utils/model-pricing";
 import { shortModelLabel } from "../../../utils/model-label";
 
-defineProps<{
+const props = defineProps<{
   canSend: boolean;
   isRunning: boolean;
   editingQueue: boolean;
@@ -42,6 +43,12 @@ const providerStore = useProviderStore();
 
 const showMobileDrawer = ref(false);
 const showModelModal = ref(false);
+const showDeliveryMenu = ref(false);
+const deliveryMenuRef = ref<HTMLElement | null>(null);
+
+onClickOutside(deliveryMenuRef, () => {
+  showDeliveryMenu.value = false;
+});
 
 const selectedAgent = computed(() =>
   chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null,
@@ -129,6 +136,23 @@ const hasPendingHITLForActiveConversation = computed(() => {
 });
 
 const showCancelButton = computed(() => chatStore.activeConversationHasRunningInstance);
+
+watch(
+  () => props.isRunning,
+  (isRunning) => {
+    if (!isRunning) showDeliveryMenu.value = false;
+  },
+);
+
+function queueMessage(): void {
+  showDeliveryMenu.value = false;
+  emit("send");
+}
+
+function steerCurrentRun(): void {
+  showDeliveryMenu.value = false;
+  emit("steer");
+}
 
 async function onCancelClick(): Promise<void> {
   if (
@@ -494,54 +518,111 @@ async function toggleMic(): Promise<void> {
       aria-label="Cancel queued message edit"
       @click="emit('cancelEdit')"
     >
-      <Icon icon="lucide:x" class="h-4 w-4" />
+      <Icon
+        icon="lucide:x"
+        class="h-4 w-4"
+      />
     </button>
 
-    <!-- Send / Queue / Steer / Cancel -->
+    <!-- Stop is intentionally separate from message delivery actions. -->
     <button
       v-if="showCancelButton"
-      class="p-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
-      title="Cancel"
-      aria-label="Cancel"
+      type="button"
+      class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-500/60 bg-red-600/15 px-2.5 text-red-300 transition-colors hover:bg-red-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70"
+      title="Stop the current response"
+      aria-label="Stop current response"
       @click="onCancelClick"
     >
       <Icon
-        icon="mdi:stop-circle"
-        class="h-4 w-4"
+        icon="lucide:square"
+        class="h-3.5 w-3.5 fill-current"
       />
+      <span class="hidden sm:inline text-xs font-medium">Stop</span>
     </button>
-    <button
+
+    <!-- While running, Queue is the safe default; Steer is the split-button alternative. -->
+    <div
       v-if="isRunning && !editingQueue"
-      :disabled="!canSend"
-      class="p-1.5 bg-theme-700 hover:bg-theme-600 disabled:text-theme-500 text-theme-100 rounded-lg transition-colors shrink-0 focus:outline-none"
-      title="Queue for next turn"
-      aria-label="Queue message"
-      @click="emit('send')"
+      ref="deliveryMenuRef"
+      class="relative flex h-8 shrink-0"
     >
-      <Icon icon="lucide:list-plus" class="h-4 w-4" />
-    </button>
-    <button
-      v-if="isRunning && !editingQueue"
-      :disabled="!canSend"
-      class="p-1.5 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
-      title="Steer current run"
-      aria-label="Steer current run"
-      @click="emit('steer')"
-    >
-      <Icon icon="lucide:corner-up-left" class="h-4 w-4" />
-    </button>
+      <button
+        type="button"
+        :disabled="!canSend"
+        class="inline-flex items-center gap-1.5 rounded-l-lg bg-accent-600 px-2.5 text-white transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-theme-500 focus:z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
+        title="Add this message to the queue"
+        aria-label="Queue message for next turn"
+        @click="queueMessage"
+      >
+        <Icon
+          icon="lucide:list-plus"
+          class="h-4 w-4"
+        />
+        <span class="hidden sm:inline text-xs font-medium">Queue</span>
+      </button>
+      <button
+        type="button"
+        :disabled="!canSend"
+        class="inline-flex w-7 items-center justify-center rounded-r-lg border-l border-white/20 bg-accent-600 text-white transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:border-theme-600 disabled:bg-theme-700 disabled:text-theme-500 focus:z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
+        title="More delivery options"
+        aria-label="Choose message delivery"
+        aria-haspopup="menu"
+        :aria-expanded="showDeliveryMenu"
+        @click="showDeliveryMenu = !showDeliveryMenu"
+        @keydown.esc="showDeliveryMenu = false"
+      >
+        <Icon
+          icon="lucide:chevron-down"
+          class="h-3.5 w-3.5"
+        />
+      </button>
+
+      <Transition
+        enter-active-class="transition duration-100 ease-out"
+        leave-active-class="transition duration-75 ease-in"
+        enter-from-class="translate-y-1 opacity-0"
+        leave-to-class="translate-y-1 opacity-0"
+      >
+        <div
+          v-if="showDeliveryMenu"
+          class="absolute bottom-full right-0 z-30 mb-2 w-64 overflow-hidden rounded-xl border border-theme-700 bg-theme-900 p-1.5 shadow-2xl shadow-black/40"
+          role="menu"
+          aria-label="Message delivery options"
+          @keydown.esc="showDeliveryMenu = false"
+        >
+          <button
+            type="button"
+            class="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-theme-800 focus:outline-none focus-visible:bg-theme-800"
+            role="menuitem"
+            @click="steerCurrentRun"
+          >
+            <Icon
+              icon="lucide:corner-up-left"
+              class="mt-0.5 h-4 w-4 shrink-0 text-accent-400"
+            />
+            <span>
+              <span class="block text-xs font-medium text-theme-100">Steer current run</span>
+              <span class="mt-0.5 block text-[11px] leading-4 text-theme-400">Interrupt the current response and redirect it with this message.</span>
+            </span>
+          </button>
+        </div>
+      </Transition>
+    </div>
+
     <button
       v-if="!isRunning || editingQueue"
+      type="button"
       :disabled="!canSend"
-      class="p-1.5 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-lg transition-colors shrink-0 focus:outline-none"
-      :title="editingQueue ? 'Save queued message' : 'Send'"
-      aria-label="Send message"
-      @click="emit('send')"
+      class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-accent-600 px-2.5 text-white transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-theme-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
+      :title="editingQueue ? 'Save queued message' : 'Send message'"
+      :aria-label="editingQueue ? 'Save queued message' : 'Send message'"
+      @click="queueMessage"
     >
       <Icon
-        icon="mdi:send"
+        :icon="editingQueue ? 'lucide:check' : 'mdi:send'"
         class="h-4 w-4"
       />
+      <span class="hidden sm:inline text-xs font-medium">{{ editingQueue ? 'Save' : 'Send' }}</span>
     </button>
   </div>
 
