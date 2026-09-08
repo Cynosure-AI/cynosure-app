@@ -4,6 +4,7 @@
 
 /* ── Variable overrides ── */
 [data-theme="matrix"] {
+  --accent-button-foreground: #030705;
   /* Base: readable neutral graphite; green is reserved for terminal signals */
   --color-theme-950: #050706;
   --color-theme-900: #0d100e;

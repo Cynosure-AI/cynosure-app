@@ -4,6 +4,7 @@
 
 /* ── Variable overrides ── */
 [data-theme="cyberpunk"] {
+  --accent-button-foreground: #060608;
   /* Base: cold dark industrial tones */
   --color-theme-950: #111114;
   --color-theme-900: #181819;

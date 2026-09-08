@@ -38,6 +38,11 @@
   --color-accent-950: #172554;
 }
 
+:root {
+  /* Accent buttons default to light content; bright themes override this. */
+  --accent-button-foreground: #ffffff;
+}
+
 /* Custom dark variant based on data-theme attribute */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="arasaka"], [data-theme="arasaka"] *, [data-theme="galaxy"], [data-theme="galaxy"] *, [data-theme="cyberpunk"], [data-theme="cyberpunk"] *, [data-theme="matrix"], [data-theme="matrix"] *, [data-theme="sakura"], [data-theme="sakura"] *, [data-theme="industrial"], [data-theme="industrial"] *, [data-theme="arctic"], [data-theme="arctic"] *, [data-theme="monochrome"], [data-theme="monochrome"] *));
 @custom-variant arasaka (&:where([data-theme="arasaka"], [data-theme="arasaka"] *));
@@ -66,6 +71,20 @@ body,
 :where(button, input, textarea, select):disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;
+}
+
+/*
+ * Theme gradients have greater specificity than disabled background utilities.
+ * Keep their contrast-safe foreground and communicate disabled state by muting
+ * the whole accent treatment instead of turning only its content low-contrast.
+ */
+button:is(.bg-accent-600, .bg-accent-500, .bg-accent-400):disabled {
+  background-color: var(--color-accent-600);
+  color: var(--accent-button-foreground);
+  cursor: not-allowed;
+  filter: saturate(0.55);
+  opacity: 0.62;
+  box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
