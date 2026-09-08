@@ -41,6 +41,8 @@ export interface RouteToolsInput {
     /** Explicitly selected tool names that must survive routing. */
     preferredToolNames?: Set<string>
     usedToolNames?: Set<string>
+    /** Tools that must be retained after scoring without treating them as pinned/unscored. */
+    requiredScoredToolNames?: Set<string>
     topK?: number
     maxTools?: number
     contextWindowTurns?: number
@@ -142,6 +144,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
         mcpMetadata = [],
         preferredToolNames,
         usedToolNames,
+        requiredScoredToolNames,
         topK = MCP_CANDIDATE_COUNT,
         maxTools = MAX_AUTO_DISCOVERED_TOOLS,
         contextWindowTurns = CONTEXT_WINDOW_TURNS,
@@ -176,7 +179,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
         .flatMap(({ tools }) => tools)
 
     const candidateTools = dedupeTools([...localTools, ...candidateMcpTools])
-    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, maxTools, protectedNames, onStatus)
+    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, maxTools, protectedNames, requiredScoredToolNames, onStatus)
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
     let routedTools: RoutedToolDefinition[] = []
@@ -195,13 +198,14 @@ async function rankCandidateTools(
     tools: RegistryAwareToolDefinition[],
     limit: number,
     protectedNames: Set<string>,
+    requiredScoredToolNames: Set<string> = new Set(),
     onStatus?: RouteToolsInput['onStatus'],
 ): Promise<RoutedToolDefinition[]> {
     const rankable = tools.filter(({ name }) => !protectedNames.has(name))
 
     if (queryVector.length === 0) {
         onStatus?.('finding-tools', 'Finding required tools with lexical matching...')
-        return lexicalToolRank(query, rankable, limit)
+        return appendRequiredTools(lexicalToolRank(query, rankable, limit), rankable, requiredScoredToolNames)
     }
 
     try {
@@ -246,12 +250,28 @@ async function rankCandidateTools(
         const minScore = bestScore > 0 ? bestScore * MIN_RELATIVE_TOOL_SCORE : Number.POSITIVE_INFINITY
         const nearMatches = scored.filter(({ score }) => score >= minScore)
         const selected = nearMatches.length ? nearMatches : scored
+        const selectedWithRequired = [...selected.slice(0, limit)]
+        const includedNames = new Set(selectedWithRequired.map(({ tool }) => tool.name))
+        for (const scoredTool of scored) {
+            if (requiredScoredToolNames.has(scoredTool.tool.name) && !includedNames.has(scoredTool.tool.name)) {
+                selectedWithRequired.push(scoredTool)
+                includedNames.add(scoredTool.tool.name)
+            }
+        }
 
-        return selected.slice(0, limit).map(({ tool, score }) => ({ ...tool, routerScore: score }))
+        return selectedWithRequired.map(({ tool, score }) => ({ ...tool, routerScore: score }))
     } catch (err) {
         console.warn('[tool-router] Tool ranking failed, using lexical fallback:', err)
-        return lexicalToolRank(query, rankable, limit)
+        return appendRequiredTools(lexicalToolRank(query, rankable, limit), rankable, requiredScoredToolNames)
     }
+}
+
+function appendRequiredTools<T extends ToolDefinition>(selected: T[], available: T[], requiredNames: Set<string>): T[] {
+    const selectedNames = new Set(selected.map(({ name }) => name))
+    return [
+        ...selected,
+        ...available.filter(({ name }) => requiredNames.has(name) && !selectedNames.has(name)),
+    ]
 }
 
 /** Deterministic degraded-mode routing that never calls an embedding or LLM provider. */

@@ -2,206 +2,139 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, test } from 'vitest'
 import PreTurnContextTimeline from './PreTurnContextTimeline.vue'
 
+const global = { stubs: { Icon: true } }
+
 describe('PreTurnContextTimeline', () => {
-  const steps = [
-    {
-      iteration: 0,
-      status: 'building-task-context',
-      timestamp: 1_700_000_000_000,
-      toolCalls: [{
-        name: 'Task context',
-        arguments: JSON.stringify({ type: 'task-context', toolQuery: 'read a document', memoryQuery: 'project preferences' }),
-      }],
-    },
-    {
-      iteration: 0,
-      status: 'routing-tools',
-      message: 'Selecting required MCPs and toolsets...',
-      timestamp: 1_700_000_000_100,
-      toolCalls: [
-        { name: 'Filesystem', arguments: JSON.stringify({ type: 'toolset-router', namespaceId: 'mcp:filesystem' }) },
-        { name: 'Documents', arguments: JSON.stringify({ type: 'toolset-router', namespaceId: 'toolset:documents' }) },
-      ],
-    },
-    {
-      iteration: 0,
-      status: 'routing-tools',
-      timestamp: 1_700_000_000_200,
-      toolCalls: [
-        { name: 'read_file', arguments: JSON.stringify({ type: 'tool-router', contextPhase: 'gathered-results', routerScore: .92 }) },
-        { name: 'parse_document', arguments: JSON.stringify({ type: 'tool-router', contextPhase: 'gathered-results', routerScore: .81 }) },
-      ],
-    },
-    {
-      iteration: 0,
-      status: 'curating-tools',
-      timestamp: 1_700_000_000_300,
-      toolCalls: [{ name: 'read_file', arguments: JSON.stringify({ type: 'tool-router', contextPhase: 'gathered-context', routerScore: .92 }) }],
-    },
-  ]
-
-  test('renders pre-turn work as a collapsed historical summary', () => {
-    const wrapper = mount(PreTurnContextTimeline, {
-      props: { steps, isActive: false },
-      global: { stubs: { Icon: true } },
-    })
-
-    expect(wrapper.get('button').text()).toContain('Pre-turn context')
-    expect(wrapper.get('button').text()).toContain('1 tool')
-    expect(wrapper.get('button').text()).toContain('2 toolsets')
-    expect(wrapper.get('button').text()).toContain('4 steps')
-    expect(wrapper.text()).not.toContain('Found 2 tool candidates')
-  })
-
-  test('expands the timeline and then an individual step detail', async () => {
-    const wrapper = mount(PreTurnContextTimeline, {
-      props: { steps, isActive: false },
-      global: { stubs: { Icon: true } },
-    })
-
-    await wrapper.get('button').trigger('click')
-    expect(wrapper.text()).toContain('AI wrote retrieval queries')
-    expect(wrapper.text()).toContain('LLM-generated routing intent')
-    expect(wrapper.text()).toContain('AI selected 2 MCPs/toolsets')
-    expect(wrapper.text()).toContain('Semantic search found 2 tool candidates')
-    expect(wrapper.text()).toContain('Semantic search matched 1 tool')
-
-    const preselectionStep = wrapper.findAll('li').find((item) => item.text().includes('AI selected 2 MCPs/toolsets'))!
-    expect(preselectionStep.text()).not.toContain('Filesystem')
-    await preselectionStep.get('button').trigger('click')
-    expect(preselectionStep.text()).toContain('Filesystem')
-    expect(preselectionStep.text()).toContain('Documents')
-
-    const foundStep = wrapper.findAll('li').find((item) => item.text().includes('Semantic search found 2 tool candidates'))!
-    expect(foundStep.text()).not.toContain('read_file')
-    await foundStep.get('button').trigger('click')
-    expect(foundStep.text()).toContain('read_file')
-    expect(foundStep.text()).toContain('92%')
-    expect(foundStep.text()).toContain('parse_document')
-  })
-
-  test('does not count an empty memory result as a selected memory item', async () => {
-    const memorySteps = [
-      {
-        iteration: 0,
-        status: 'routing-memory',
-        timestamp: 1_700_000_000_400,
-        toolCalls: Array.from({ length: 9 }, (_, index) => ({
-          name: `memory-${index + 1}.md`,
-          arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-results', selectionMethod: 'retrieval', matchScore: .9 - index / 20 }),
-        })),
-      },
-      {
-        iteration: 0,
-        status: 'curating-memory',
-        timestamp: 1_700_000_000_500,
-        toolCalls: [{
-          name: 'No relevant memories',
-          arguments: JSON.stringify({
-            type: 'memory',
-            contextPhase: 'gathered-context',
-            selectionMethod: 'llm',
-            emptyReason: 'none-relevant',
-            content: 'Auto memory found candidates, but the curation step selected none as useful for this turn.',
-          }),
-        }],
-      },
-    ]
-    const wrapper = mount(PreTurnContextTimeline, {
-      props: { steps: memorySteps, isActive: false },
-      global: { stubs: { Icon: true } },
-    })
-
-    expect(wrapper.get('button').findAll('.context-chip')).toHaveLength(0)
-    await wrapper.get('button').trigger('click')
-    expect(wrapper.text()).toContain('Memory retrieval found 9 matches')
-    expect(wrapper.text()).toContain('AI selected no memory items')
-    expect(wrapper.text()).toContain('LLM decision')
-
-    const selectionStep = wrapper.findAll('li').find((item) => item.text().includes('AI selected no memory items'))!
-    await selectionStep.get('button').trigger('click')
-    expect(selectionStep.text()).toContain('No relevant memories')
-  })
-
-  test('shows an explicit empty toolset selection without counting a selected toolset', async () => {
+  test('renders memory and tool gathering as separate cards with independent headings', () => {
     const wrapper = mount(PreTurnContextTimeline, {
       props: {
-        steps: [{
-          iteration: 0,
-          status: 'routing-tools',
-          timestamp: 1_700_000_000_550,
-          toolCalls: [{
-            name: 'No toolsets selected',
-            arguments: JSON.stringify({
-              type: 'toolset-router',
-              selectionMethod: 'llm',
-              emptyReason: 'none-relevant',
-              content: 'AI toolset selection ran, but no MCPs or toolsets were relevant for this turn.',
-            }),
-          }],
-        }],
-        isActive: false,
+        steps: [
+          { iteration: 0, taskId: 'memory', status: 'searching-memory', message: 'Searching memory with hybrid RAG...', timestamp: 100 },
+          { iteration: 0, taskId: 'tools', status: 'finding-tools', message: 'Ranking selected tools...', timestamp: 200 },
+        ],
+        isActive: true,
       },
-      global: { stubs: { Icon: true } },
+      global,
     })
 
-    expect(wrapper.get('button').findAll('.context-chip')).toHaveLength(0)
-    expect(wrapper.get('[role="status"]').text()).toBe('AI selected no MCPs/toolsets')
-    await wrapper.get('button').trigger('click')
-    const selectionStep = wrapper.get('li')
-    expect(selectionStep.text()).toContain('AI selected no MCPs/toolsets')
-    await selectionStep.get('button').trigger('click')
-    expect(selectionStep.text()).toContain('No toolsets selected')
-    expect(selectionStep.text()).toContain('no MCPs or toolsets were relevant')
-  })
-
-  test('shows memory matches from highest to lowest percentage', async () => {
-    const wrapper = mount(PreTurnContextTimeline, {
-      props: {
-        steps: [{
-          iteration: 0,
-          status: 'routing-memory',
-          timestamp: 1_700_000_000_600,
-          toolCalls: [
-            { name: 'medium.md', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-results', matchScore: 0.52 }) },
-            { name: 'best.md', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-results', matchScore: 0.87 }) },
-            { name: 'lower.md', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-results', matchScore: 0.41 }) },
-          ],
-        }],
-        isActive: false,
-      },
-      global: { stubs: { Icon: true } },
-    })
-
-    await wrapper.get('button').trigger('click')
-    await wrapper.get('li button').trigger('click')
-    const details = wrapper.get('li').text()
-    expect(details.indexOf('best.md')).toBeLessThan(details.indexOf('medium.md'))
-    expect(details.indexOf('medium.md')).toBeLessThan(details.indexOf('lower.md'))
-    expect(details).toContain('87%')
-    expect(details).toContain('52%')
-    expect(details).toContain('41%')
-  })
-
-  test('updates the collapsed header when an earlier parallel task finishes last', async () => {
-    const wrapper = mount(PreTurnContextTimeline, {
-      props: { steps: [
-        { iteration: 0, taskId: 'memory', status: 'routing-memory', timestamp: 100 },
-        { iteration: 0, taskId: 'tools', status: 'finding-tools', timestamp: 200 },
-      ], isActive: true },
-      global: { stubs: { Icon: true } },
-    })
-    expect(wrapper.get('[role="status"]').text()).toBe('Ranking tools')
-    await wrapper.setProps({ steps: [
-      { iteration: 0, taskId: 'memory', status: 'routing-memory', timestamp: 100, updatedAt: 300,
-        toolCalls: [{ name: 'note', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'llm' }) }] },
-      { iteration: 0, taskId: 'tools', status: 'finding-tools', timestamp: 200 },
-    ] })
-    expect(wrapper.get('[role="status"]').text()).toBe('AI selected 1 memory item')
-    await wrapper.get('button').trigger('click')
+    const cards = wrapper.findAll('.pre-turn-card')
+    expect(cards).toHaveLength(2)
+    expect(cards[0].text()).toContain('Auto memory')
+    expect(cards[0].get('[role="status"]').text()).toBe('Searching memory with hybrid RAG...')
+    expect(cards[1].text()).toContain('Auto tools')
+    expect(cards[1].get('[role="status"]').text()).toBe('Ranking selected tools...')
     expect(wrapper.findAll('icon-stub[icon="svg-spinners:ring-resize"]')).toHaveLength(2)
-    await wrapper.setProps({ isActive: false })
-    expect(wrapper.findAll('icon-stub[icon="svg-spinners:ring-resize"]')).toHaveLength(0)
   })
 
+  test('shows the full memory pipeline and final memories as a score-sorted card grid', async () => {
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: {
+        steps: [
+          { iteration: 0, taskId: 'memory', status: 'searching-memory', timestamp: 100 },
+          { iteration: 0, taskId: 'memory', status: 'reranking-memory', timestamp: 110 },
+          { iteration: 0, taskId: 'memory', status: 'filtering-memory', timestamp: 120 },
+          { iteration: 0, taskId: 'memory', status: 'selecting-memory', timestamp: 130 },
+          {
+            iteration: 0, taskId: 'memory', status: 'selecting-memory', timestamp: 140,
+            toolCalls: [
+              { name: 'lower', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'lower.md', matchScore: .62, content: 'A lower-scoring excerpt.' }) },
+              { name: 'best', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'best.md', matchScore: .94, content: 'The strongest matching memory excerpt.' }) },
+            ],
+          },
+        ],
+        isActive: false,
+      },
+      global,
+    })
+
+    expect(wrapper.get('[role="status"]').text()).toBe('Selected 2 reranked memories')
+    const collapsedResults = wrapper.get('[aria-label="Auto memory selected results"]')
+    expect(collapsedResults.text()).toContain('best.md94%')
+    expect(collapsedResults.text()).toContain('lower.md62%')
+    await wrapper.get('.pre-turn-card > button').trigger('click')
+    const text = wrapper.text()
+    expect(text).toContain('Searching memory with RAG')
+    expect(text).toContain('Reranking memory matches')
+    expect(text).toContain('Filtering memory matches')
+    expect(text).toContain('Selecting reranked memories')
+    const cards = wrapper.findAll('.memory-card')
+    expect(cards).toHaveLength(2)
+    expect(cards[0].text()).toContain('best.md')
+    expect(cards[0].text()).toContain('94%')
+    expect(cards[0].text()).toContain('strongest matching memory excerpt')
+    expect(cards[1].text()).toContain('lower.md')
+  })
+
+  test('shows only MCPs when collapsed and their individual tools when expanded', async () => {
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: {
+        steps: [
+          {
+            iteration: 0, taskId: 'tools', status: 'routing-tools', timestamp: 100,
+            toolCalls: [
+              { name: 'GitHub MCP', arguments: JSON.stringify({ type: 'toolset-router', namespaceId: 'mcp:github', selectionMethod: 'llm' }) },
+              { name: 'Documents', arguments: JSON.stringify({ type: 'toolset-router', namespaceId: 'toolset:documents', selectionMethod: 'llm' }) },
+            ],
+          },
+          {
+            iteration: 0, taskId: 'tools', status: 'finding-tools', timestamp: 120,
+            toolCalls: [
+              { name: 'search_repositories', arguments: JSON.stringify({ type: 'tool-router', contextPhase: 'gathered-context', selectionMethod: 'semantic', namespaceId: 'mcp:github', namespaceLabel: 'GitHub MCP', routerScore: .88 }) },
+              { name: 'read_document', arguments: JSON.stringify({ type: 'tool-router', contextPhase: 'gathered-context', selectionMethod: 'automatic', namespaceId: 'toolset:documents', namespaceLabel: 'Documents' }) },
+            ],
+          },
+        ],
+        isActive: false,
+      },
+      global,
+    })
+
+    const collapsedResults = wrapper.get('[aria-label="Auto tools selected results"]')
+    expect(collapsedResults.text()).toContain('GitHub MCP')
+    expect(collapsedResults.text()).toContain('Documents')
+    expect(collapsedResults.text()).not.toContain('search_repositories')
+    expect(collapsedResults.text()).not.toContain('read_document')
+    expect(wrapper.get('.count-chip').text()).toBe('2 MCPs/toolsets')
+    await wrapper.get('.pre-turn-card > button').trigger('click')
+    const toolsets = wrapper.findAll('.toolset-card')
+    expect(toolsets).toHaveLength(2)
+    expect(toolsets[0].text()).toContain('GitHub MCP')
+    expect(toolsets[0].text()).toContain('search_repositories')
+    expect(toolsets[0].text()).toContain('88%')
+    expect(toolsets[1].text()).toContain('Documents')
+    expect(toolsets[1].text()).toContain('read_document')
+  })
+
+  test('does not render shared query planning as a third context card', () => {
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: {
+        steps: [{
+          iteration: 0,
+          status: 'building-task-context',
+          timestamp: 100,
+          toolCalls: [{ name: 'Task context', arguments: JSON.stringify({ type: 'task-context', toolQuery: 'tools', memoryQuery: 'memory' }) }],
+        }],
+        isActive: true,
+      },
+      global,
+    })
+    expect(wrapper.findAll('.pre-turn-card')).toHaveLength(0)
+  })
+
+  test('keeps empty selections visible without counting them', async () => {
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: {
+        steps: [{
+          iteration: 0, taskId: 'memory', status: 'curating-memory', timestamp: 100,
+          toolCalls: [{ name: 'No relevant memories', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'llm', emptyReason: 'none-relevant' }) }],
+        }],
+        isActive: false,
+      },
+      global,
+    })
+    expect(wrapper.get('[role="status"]').text()).toBe('No memories selected')
+    expect(wrapper.find('.count-chip').exists()).toBe(false)
+    await wrapper.get('.pre-turn-card > button').trigger('click')
+    expect(wrapper.findAll('.memory-card')).toHaveLength(0)
+  })
 })

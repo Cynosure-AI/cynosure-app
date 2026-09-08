@@ -36,6 +36,8 @@ export class MemoryAggregator {
       includeGraph?: boolean
       /** Query enriched only for graph entity/relation resolution. */
       graphQuery?: string
+      /** Optional live progress for automatic pre-turn memory retrieval. */
+      onStatus?: (stage: 'rag' | 'reranking') => void
     }
   ): Promise<AggregatedMemory> {
     const permanentMem = getAgentMemory()
@@ -77,7 +79,7 @@ export class MemoryAggregator {
       spaceFilter = buildMemorySpaceFilter(scopedSpaces)
     }
 
-    const permanent = await permanentMem.recall(query, opts?.permanentTopK ?? 3, spaceFilter).catch(() => [])
+    const permanent = await permanentMem.recall(query, opts?.permanentTopK ?? 3, spaceFilter, opts?.onStatus).catch(() => [])
 
     // Deduplicate exact normalized chunks. Prefix-only deduplication can merge
     // unrelated chunks that happen to begin with the same heading/template.

@@ -7,12 +7,16 @@ const memoryMocks = vi.hoisted(() => ({
     format: vi.fn(),
 }))
 const retrievalConfigMock = vi.hoisted(() => ({ resultCount: 10 }))
+const rerankerConfigMock = vi.hoisted(() => ({ enabled: false }))
 
 vi.mock('../../memory/memory-aggregator.js', () => ({
     getMemoryAggregator: () => memoryMocks,
 }))
 vi.mock('../../memory/retrieval-config.js', () => ({
     getMemoryRetrievalConfig: () => ({ resultCount: retrievalConfigMock.resultCount }),
+}))
+vi.mock('../../memory/reranker.js', () => ({
+    getMemoryReranker: () => ({ getConfig: () => ({ enabled: rerankerConfigMock.enabled }) }),
 }))
 
 import { applyAutoMemoryRouting } from './auto-memory-routing.js'
@@ -22,6 +26,7 @@ describe('automatic memory routing visibility', () => {
         getEventBus().removeAllListeners()
         vi.clearAllMocks()
         retrievalConfigMock.resultCount = 10
+        rerankerConfigMock.enabled = false
     })
 
     test('emits graph-only evidence as gathered context', async () => {
@@ -167,6 +172,38 @@ describe('automatic memory routing visibility', () => {
         expect(memoryMocks.format).toHaveBeenLastCalledWith(expect.objectContaining({
             permanent: [expect.objectContaining({ id: 'best' }), expect.objectContaining({ id: 'medium' })],
         }))
+    })
+
+    test('skips AI curation and selects top-ranked evidence when reranking is enabled', async () => {
+        rerankerConfigMock.enabled = true
+        const candidate = (id: string, score: number) => ({
+            id,
+            text: `${id} excerpt`,
+            source: 'memory',
+            sourceFile: `${id}.md`,
+            score,
+            rerankerScore: score,
+            scoreType: 'reranker' as const,
+        })
+        memoryMocks.aggregate.mockResolvedValue({
+            permanent: [candidate('first', .95), candidate('second', .82)],
+            graph: undefined,
+        })
+        memoryMocks.format.mockImplementation((memory: { permanent: Array<{ id: string }> }) => memory.permanent.map(({ id }) => id).join(','))
+        const gateway = { complete: vi.fn() } as unknown as LLMGateway
+        const events: Array<Record<string, unknown>> = []
+        getEventBus().on('step:tools-chosen', (event) => events.push(event as Record<string, unknown>))
+
+        await expect(applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-reranked',
+            userQuery: 'find it',
+            gateway,
+        })).resolves.toBe('first,second')
+
+        expect(gateway.complete).not.toHaveBeenCalled()
+        const finalCalls = events.at(-1)!.toolCalls as Array<{ arguments: string }>
+        expect(finalCalls.map(({ arguments: value }) => JSON.parse(value).selectionMethod)).toEqual(['reranker', 'reranker'])
     })
 
     test('always searches the original request before complementary expansions', async () => {

@@ -238,8 +238,13 @@ export class AgentMemory {
     // Retrieval
     // -----------------------------------------------------------------------
 
-    async recall(query: string, topK: number = 3, filter?: string): Promise<RetrievedChunk[]> {
-        return this.parser.retrieve(getActivePermanentMemoryTableName(), query, topK, filter || undefined)
+    async recall(
+        query: string,
+        topK: number = 3,
+        filter?: string,
+        onStatus?: (stage: 'rag' | 'reranking') => void,
+    ): Promise<RetrievedChunk[]> {
+        return this.parser.retrieve(getActivePermanentMemoryTableName(), query, topK, filter || undefined, onStatus)
     }
 
     getDocumentReference(spaceId: string, fileName: string): MemoryDocumentReference | undefined {

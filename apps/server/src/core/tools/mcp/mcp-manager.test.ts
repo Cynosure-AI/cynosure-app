@@ -43,4 +43,28 @@ describe('McpManager tool metadata', () => {
     expect(tool.icons).toEqual(descriptor.icons)
     expect(tool.providerMetadata).toEqual({ vendor: 'test' })
   })
+
+  test('preserves a missing read-only hint as unknown', () => {
+    const manager = new McpManager()
+    const descriptor: McpTool = {
+      name: 'tavily-search',
+      description: 'Search the web with Tavily',
+      inputSchema: { type: 'object', properties: {} },
+    }
+    const config: McpServerConfig = {
+      id: 'tavily',
+      name: 'Tavily MCP Server',
+      command: 'test',
+      args: [],
+      enabled: true,
+    }
+    const buildToolDefinitions = (manager as unknown as {
+      buildToolDefinitions: (tools: McpTool[], client: Client, config: McpServerConfig) => ToolDefinition[]
+    }).buildToolDefinitions.bind(manager)
+
+    const [tool] = buildToolDefinitions([descriptor], {} as Client, config)
+
+    expect(tool.annotations).toBeUndefined()
+    expect(tool.execution).toBeUndefined()
+  })
 })

@@ -1,262 +1,195 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive } from 'vue'
 import { Icon } from '@iconify/vue'
-import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import type { ToolExecStep } from './ToolExecutionCard.vue'
 
 type ToolCall = NonNullable<ToolExecStep['toolCalls']>[number]
-type ContextKind = 'toolsets' | 'tools' | 'memory' | 'entities' | 'attachments' | 'context'
-type TimelineItem = {
+type Channel = 'memory' | 'tools'
+type Detail = {
+  name: string
+  content?: string
+  score?: string
+  scoreValue?: number
+  namespaceId?: string
+  namespaceLabel?: string
+  empty?: boolean
+}
+type PipelineItem = {
   key: string
   label: string
   summary?: string
   icon: string
-  tone: ContextKind
   timestamp: number
   updatedAt: number
-  details: Array<{ name: string; content?: string; score?: string; scoreValue?: number; selected?: boolean; empty?: boolean }>
+  details: Detail[]
+  final: boolean
   pending: boolean
 }
-
-const props = defineProps<{
-  steps: ToolExecStep[]
-  isActive: boolean
-}>()
-
-const expanded = ref(false)
-const expandedItems = reactive(new Set<string>())
-
-const STATUS_LABELS: Record<string, { label: string; icon: string; tone: ContextKind }> = {
-  'building-task-context': { label: 'AI writing retrieval queries', icon: 'lucide:compass', tone: 'context' },
-  'indexing-attachments': { label: 'Indexing attachments', icon: 'lucide:paperclip', tone: 'attachments' },
-  'indexing-tools': { label: 'Indexing tool definitions', icon: 'lucide:database-zap', tone: 'tools' },
-  'routing-tools': { label: 'AI selecting MCPs/toolsets', icon: 'lucide:route', tone: 'toolsets' },
-  'finding-tools': { label: 'Ranking tools', icon: 'lucide:search-check', tone: 'tools' },
-  'curating-tools': { label: 'AI selecting tools', icon: 'lucide:list-checks', tone: 'tools' },
-  'routing-memory': { label: 'Searching memory index', icon: 'lucide:brain-circuit', tone: 'memory' },
-  'curating-memory': { label: 'AI curating memory evidence', icon: 'lucide:list-checks', tone: 'memory' },
+type ContextCard = {
+  channel: Channel
+  title: string
+  icon: string
+  items: PipelineItem[]
+  latest: PipelineItem
+  selected: Detail[]
+  toolsets: Detail[]
+  selectedTools: Detail[]
 }
 
-function parseArgs(call: ToolCall): Record<string, unknown> {
+const props = defineProps<{ steps: ToolExecStep[]; isActive: boolean }>()
+const expandedCards = reactive(new Set<Channel>())
+const expandedSteps = reactive(new Set<string>())
+
+const STATUS: Record<string, { channel: Channel; label: string; summary: string; icon: string }> = {
+  'routing-memory': { channel: 'memory', label: 'Preparing memory retrieval', summary: 'Building the memory search', icon: 'lucide:brain-circuit' },
+  'searching-memory': { channel: 'memory', label: 'Searching memory with RAG', summary: 'Hybrid semantic and lexical retrieval', icon: 'lucide:search' },
+  'reranking-memory': { channel: 'memory', label: 'Reranking memory matches', summary: 'Reranker relevance scoring', icon: 'lucide:arrow-down-wide-narrow' },
+  'filtering-memory': { channel: 'memory', label: 'Filtering memory matches', summary: 'Removing weak and duplicate evidence', icon: 'lucide:list-filter' },
+  'selecting-memory': { channel: 'memory', label: 'Selecting reranked memories', summary: 'Using the highest-ranked evidence', icon: 'lucide:badge-check' },
+  'curating-memory': { channel: 'memory', label: 'AI curating memory evidence', summary: 'Final relevance verification', icon: 'lucide:list-checks' },
+  'routing-tools': { channel: 'tools', label: 'Selecting MCPs and toolsets', summary: 'Choosing capability groups', icon: 'lucide:boxes' },
+  'indexing-tools': { channel: 'tools', label: 'Indexing tool definitions', summary: 'Preparing semantic tool search', icon: 'lucide:database-zap' },
+  'finding-tools': { channel: 'tools', label: 'Ranking tools', summary: 'Selecting tools within each toolset', icon: 'lucide:search-check' },
+  'curating-tools': { channel: 'tools', label: 'Selecting final tools', summary: 'Final tool selection', icon: 'lucide:list-checks' },
+}
+
+function args(call: ToolCall): Record<string, unknown> {
   try {
-    const parsed = JSON.parse(call.arguments || '{}')
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    const value = JSON.parse(call.arguments || '{}')
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
   } catch {
     return {}
   }
 }
 
-function text(value: unknown): string | undefined {
+function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
-function score(value: unknown): string | undefined {
+function normalizedScore(value: unknown): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
-  const normalized = value > 1 ? value / 100 : value
-  return `${Math.round(Math.max(0, Math.min(1, normalized)) * 100)}%`
+  return Math.max(0, Math.min(1, value > 1 ? value / 100 : value))
 }
 
-function scoreValue(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
-  const normalized = value > 1 ? value / 100 : value
-  return Math.max(0, Math.min(1, normalized))
+function details(calls: ToolCall[]): Detail[] {
+  return calls.map((call) => {
+    const parsed = args(call)
+    const value = normalizedScore(parsed.routerScore ?? parsed.rerankerScore ?? parsed.matchScore)
+    return {
+      name: stringValue(parsed.sourceFile) || call.name,
+      content: stringValue(parsed.content),
+      score: value === undefined ? undefined : `${Math.round(value * 100)}%`,
+      scoreValue: value,
+      namespaceId: stringValue(parsed.namespaceId),
+      namespaceLabel: stringValue(parsed.namespaceLabel),
+      empty: Boolean(stringValue(parsed.emptyReason)),
+    }
+  }).sort((a, b) => (b.scoreValue ?? -1) - (a.scoreValue ?? -1))
 }
 
-function kindOf(call: ToolCall): ContextKind {
-  const args = parseArgs(call)
-  if (args.type === 'toolset-router') return 'toolsets'
-  if (args.type === 'attachment-index') return 'attachments'
-  if (args.type === 'memory') return args.memoryKind === 'knowledge' ? 'entities' : 'memory'
-  if (args.type === 'tool-router') return 'tools'
-  return 'context'
-}
-
-function phaseOf(calls: ToolCall[]): string {
-  return text(parseArgs(calls[0]).contextPhase) || ''
-}
-
-function methodOf(calls: ToolCall[], kind: ContextKind, phase: string): string {
-  const explicit = text(parseArgs(calls[0]).selectionMethod)
-  if (explicit) return explicit
-  if (kind === 'toolsets') return 'llm'
-  if (kind === 'tools') return calls.some((call) => typeof parseArgs(call).routerScore === 'number') ? 'semantic' : 'lexical'
-  if (kind === 'memory' || kind === 'entities') return phase === 'gathered-context' ? 'llm' : 'retrieval'
-  return ''
-}
-
-function isEmptyCall(call: ToolCall): boolean {
-  return Boolean(text(parseArgs(call).emptyReason))
-}
-
-function displayName(call: ToolCall): string {
-  const args = parseArgs(call)
-  if (args.type === 'memory') return text(args.sourceFile) || call.name
-  if (call.name === 'Task context') return 'Search context'
-  return call.name
+function selectionLabel(channel: Channel, calls: ToolCall[], final: boolean): string {
+  const visible = calls.filter((call) => !stringValue(args(call).emptyReason))
+  if (channel === 'memory') {
+    if (!visible.length) return final ? 'No memories selected' : 'No memory matches found'
+    if (!final) return `Found ${plural(visible.length, 'memory match', 'memory matches')}`
+    const method = stringValue(args(visible[0]).selectionMethod)
+    return method === 'reranker'
+      ? `Selected ${plural(visible.length, 'reranked memory', 'reranked memories')}`
+      : `Selected ${plural(visible.length, 'memory item')}`
+  }
+  const toolsets = calls.every((call) => args(call).type === 'toolset-router')
+  if (toolsets) return visible.length
+    ? `Selected ${plural(visible.length, 'MCP/toolset', 'MCPs/toolsets')}`
+    : 'No MCPs or toolsets selected'
+  return visible.length ? 'Tool selection complete' : 'No tools selected'
 }
 
 function plural(count: number, singular: string, pluralValue = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : pluralValue}`
 }
 
-function contextLabel(kind: ContextKind, phase: string, count: number, method: string, emptyReason?: string): string {
-  if (kind === 'toolsets') return emptyReason
-    ? 'AI selected no MCPs/toolsets'
-    : `AI selected ${plural(count, 'MCP/toolset', 'MCPs/toolsets')}`
-  if (kind === 'tools') {
-    if (method === 'llm') return `AI selected ${plural(count, 'tool')}`
-    const prefix = method === 'lexical' ? 'Lexical search' : 'Semantic search'
-    return phase === 'gathered-context'
-      ? `${prefix} matched ${plural(count, 'tool')}`
-      : `${prefix} found ${plural(count, 'tool candidate')}`
-  }
-  if (kind === 'memory') return emptyReason === 'routing-failed'
-    ? 'Memory retrieval failed'
-    : phase === 'gathered-context' && method === 'retrieval'
-      ? `Memory retrieval found ${count ? plural(count, 'memory item') : 'no matches'}`
-      : phase === 'gathered-context'
-    ? method === 'llm'
-      ? `AI selected ${count ? plural(count, 'memory item') : 'no memory items'}`
-      : `Ranking fallback selected ${plural(count, 'memory item')}`
-    : `Memory retrieval found ${plural(count, 'match', 'matches')}`
-  if (kind === 'entities') return phase === 'gathered-context'
-    ? method === 'llm'
-      ? `AI selected ${count ? plural(count, 'entity relationship') : 'no entity relationships'}`
-      : `Ranking fallback selected ${plural(count, 'entity relationship')}`
-    : `Knowledge retrieval found ${plural(count, 'entity relationship')}`
-  if (kind === 'attachments') return `Indexed ${plural(count, 'attachment')}`
-  return 'Prepared search context'
-}
+const cards = computed<ContextCard[]>(() => {
+  const pipelines: Record<Channel, PipelineItem[]> = { memory: [], tools: [] }
 
-function callDetails(calls: ToolCall[], selected?: boolean): TimelineItem['details'] {
-  return calls.map((call) => {
-    const args = parseArgs(call)
-    const match = args.routerScore ?? args.rerankerScore ?? args.matchScore
-    return {
-      name: displayName(call),
-      content: text(args.content) || text(args.toolQuery) || text(args.memoryQuery),
-      score: score(match),
-      scoreValue: scoreValue(match),
-      selected: selected && !isEmptyCall(call),
-      empty: isEmptyCall(call),
-    }
-  }).sort((a, b) => (b.scoreValue ?? Number.NEGATIVE_INFINITY) - (a.scoreValue ?? Number.NEGATIVE_INFINITY))
-}
-
-const items = computed<TimelineItem[]>(() => {
-  const result: TimelineItem[] = []
   props.steps.forEach((step, stepIndex) => {
     const calls = step.toolCalls || []
-    const taskCalls = calls.filter((call) => ['task-context', 'auto-router'].includes(String(parseArgs(call).type)))
-    if (taskCalls.length) {
-      const args = parseArgs(taskCalls[0])
-      const taskMethod = text(args.selectionMethod) || (args.fastPath === true ? 'deterministic' : 'llm')
-      const emptyReason = text(args.emptyReason)
-      const memoryQueries = Array.isArray(args.memoryQueries)
-        ? args.memoryQueries.map(text).filter((query): query is string => Boolean(query))
-        : [text(args.memoryQuery)].filter((query): query is string => Boolean(query))
-      const details = [
-        text(args.toolQuery) ? { name: 'Tool retrieval query', content: text(args.toolQuery) } : null,
-        ...memoryQueries.map((query, index) => ({
-          name: memoryQueries.length === 1 ? 'Memory retrieval expansion' : `Memory retrieval expansion ${index + 1}`,
-          content: query,
-        })),
-        !text(args.toolQuery) && !text(args.memoryQuery) && text(args.content)
-          ? { name: 'Context', content: text(args.content) }
-          : null,
-      ].filter((value): value is NonNullable<typeof value> => Boolean(value))
-      result.push({
-        key: `${stepIndex}-task`,
-        label: emptyReason === 'routing-failed'
-          ? 'AI retrieval planning failed'
-          : emptyReason === 'none-generated'
-            ? 'AI returned no retrieval plan'
-            : taskMethod === 'deterministic'
-              ? 'Used direct retrieval query'
-              : 'AI wrote retrieval queries',
-        summary: taskMethod === 'deterministic'
-          ? 'Rule-based fast path'
-          : emptyReason
-            ? 'LLM routing step'
-            : 'LLM-generated routing intent',
-        icon: 'lucide:compass',
-        tone: 'context',
+    const memoryCalls = calls.filter((call) => args(call).type === 'memory')
+    const toolCalls = calls.filter((call) => ['toolset-router', 'tool-router'].includes(String(args(call).type)))
+
+    const status = STATUS[step.status]
+    if (status) {
+      pipelines[status.channel].push({
+        key: `${status.channel}-${stepIndex}-${step.status}`,
+        label: step.message || status.label,
+        summary: status.summary,
+        icon: status.icon,
         timestamp: step.timestamp,
         updatedAt: step.updatedAt ?? step.timestamp,
-        details,
+        details: [],
+        final: false,
+        pending: props.isActive && !calls.length && !props.steps.slice(stepIndex + 1).some((later) => later.taskId === step.taskId),
+      })
+    }
+
+    for (const [channel, channelCalls] of [['memory', memoryCalls], ['tools', toolCalls]] as const) {
+      if (!channelCalls.length) continue
+      const final = channel === 'memory'
+        ? args(channelCalls[0]).contextPhase === 'gathered-context'
+        : args(channelCalls[0]).type === 'tool-router' && args(channelCalls[0]).contextPhase === 'gathered-context'
+      const method = stringValue(args(channelCalls[0]).selectionMethod)
+      pipelines[channel].push({
+        key: `${channel}-${stepIndex}-${String(args(channelCalls[0]).contextPhase || args(channelCalls[0]).type)}`,
+        label: selectionLabel(channel, channelCalls, final),
+        summary: method === 'reranker' ? 'Reranker selection' : method === 'llm' ? 'AI selection' : method === 'automatic' ? 'Included complete small toolset' : method === 'semantic' ? 'Embedding similarity' : method === 'lexical' ? 'Lexical matching' : 'Retrieval results',
+        icon: final ? 'lucide:check' : channel === 'memory' ? 'lucide:brain' : args(channelCalls[0]).type === 'toolset-router' ? 'lucide:boxes' : 'lucide:wrench',
+        timestamp: step.timestamp,
+        updatedAt: step.updatedAt ?? step.timestamp,
+        details: channel === 'tools' && args(channelCalls[0]).type === 'tool-router' ? [] : details(channelCalls),
+        final,
         pending: false,
       })
     }
 
-    const contextCalls = calls.filter((call) => ['toolset-router', 'tool-router', 'memory', 'attachment-index'].includes(String(parseArgs(call).type)))
-    const groups = new Map<ContextKind, ToolCall[]>()
-    contextCalls.forEach((call) => groups.set(kindOf(call), [...(groups.get(kindOf(call)) || []), call]))
-    for (const [kind, groupedCalls] of groups) {
-      const phase = phaseOf(groupedCalls)
-      const method = methodOf(groupedCalls, kind, phase)
-      const count = groupedCalls.filter((call) => !isEmptyCall(call)).length
-      const emptyReason = text(parseArgs(groupedCalls[0]).emptyReason)
-      result.push({
-        key: `${stepIndex}-${kind}-${phase}`,
-        label: contextLabel(kind, phase, count, method, emptyReason),
-        summary: method === 'llm'
-          ? 'LLM decision'
-          : method === 'semantic'
-            ? 'Embedding similarity'
-            : method === 'lexical'
-              ? 'Lexical matching'
-              : method === 'ranked-fallback'
-                ? 'AI curation unavailable'
-                : method === 'retrieval'
-                  ? 'Memory index retrieval'
-                  : undefined,
-        icon: kind === 'toolsets' ? 'lucide:boxes' : phase === 'gathered-context' ? 'lucide:check' : kind === 'memory' ? 'lucide:brain' : kind === 'entities' ? 'lucide:network' : 'lucide:package-search',
-        tone: kind,
-        timestamp: step.timestamp,
-        updatedAt: step.updatedAt ?? step.timestamp,
-        details: callDetails(groupedCalls, kind === 'toolsets' || phase === 'gathered-context'),
-        pending: false,
-      })
-    }
-
-    if (!taskCalls.length && !contextCalls.length) {
-      const meta = STATUS_LABELS[step.status]
-      if (meta) result.push({
-        key: `${stepIndex}-${step.status}`,
-        label: step.message || meta.label,
-        summary: undefined,
-        icon: meta.icon,
-        tone: meta.tone,
-        timestamp: step.timestamp,
-        updatedAt: step.updatedAt ?? step.timestamp,
-        details: step.streamingChoosing ? [{ name: 'Model routing', content: step.streamingChoosing }] : [],
-        pending: props.isActive && !props.steps.slice(stepIndex + 1).some((later) => later.taskId === step.taskId),
-      })
-    }
   })
-  return result
+
+  return (['memory', 'tools'] as Channel[]).flatMap((channel) => {
+    const items = pipelines[channel]
+    if (!items.length) return []
+    const latest = items.reduce((current, item) => item.updatedAt >= current.updatedAt ? item : current)
+    const toolsets = channel === 'tools'
+      ? items.flatMap((item) => item.details.filter((detail) => item.key.includes('toolset-router') && !detail.empty))
+      : []
+    const final = [...items].reverse().find((item) => item.final)
+    const selected = channel === 'tools'
+      ? toolsets
+      : (final?.details || []).filter((detail) => !detail.empty)
+    const selectedTools = channel === 'tools'
+      ? props.steps.flatMap((step) => details((step.toolCalls || []).filter((call) => (
+        args(call).type === 'tool-router' && args(call).contextPhase === 'gathered-context'
+      )))).filter((detail) => !detail.empty)
+      : []
+    return [{ channel, title: channel === 'memory' ? 'Auto memory' : 'Auto tools', icon: channel === 'memory' ? 'lucide:brain-circuit' : 'lucide:wrench', items, latest, selected, toolsets, selectedTools }]
+  })
 })
 
-const latestItem = computed(() => items.value.reduce<TimelineItem | undefined>(
-  (latest, item) => !latest || item.updatedAt >= latest.updatedAt ? item : latest,
-  undefined,
-))
-
-const selectedTools = computed(() => uniqueSelected('tools'))
-const selectedToolsets = computed(() => uniqueSelected('toolsets').length)
-const selectedMemory = computed(() => uniqueSelected('memory').length)
-const selectedEntities = computed(() => uniqueSelected('entities').length)
-const isPending = computed(() => props.isActive && items.value.some((item) => item.pending))
-
-function uniqueSelected(kind: ContextKind): string[] {
-  return [...new Set(items.value
-    .filter((item) => item.tone === kind && item.details.some((detail) => detail.selected && !detail.empty))
-    .flatMap((item) => item.details.filter((detail) => detail.selected && !detail.empty).map((detail) => detail.name)))]
+function groupedTools(card: ContextCard): Array<{ id: string; label: string; tools: Detail[] }> {
+  const groups = new Map<string, { id: string; label: string; tools: Detail[] }>()
+  for (const toolset of card.toolsets) {
+    const id = toolset.namespaceId || toolset.name
+    groups.set(id, { id, label: toolset.name, tools: [] })
+  }
+  for (const tool of card.selectedTools) {
+    const fallback = card.toolsets.length === 1 ? card.toolsets[0] : undefined
+    const id = tool.namespaceId || fallback?.namespaceId || fallback?.name || 'selected-tools'
+    if (!groups.has(id)) groups.set(id, { id, label: tool.namespaceLabel || 'Selected tools', tools: [] })
+    groups.get(id)!.tools.push(tool)
+  }
+  return [...groups.values()]
 }
 
-function toggleItem(key: string): void {
-  if (expandedItems.has(key)) expandedItems.delete(key)
-  else expandedItems.add(key)
+function toggle(set: Set<string>, key: string): void {
+  if (set.has(key)) set.delete(key)
+  else set.add(key)
 }
 
 function formatTimestamp(timestamp: number): string {
@@ -265,90 +198,185 @@ function formatTimestamp(timestamp: number): string {
 </script>
 
 <template>
-  <div v-if="items.length" class="px-4 py-2">
-    <div class="ml-3 max-w-[80%] md:ml-12">
-      <CollapsibleSection v-model="expanded">
-        <template #trigger="{ expanded: isExpanded, toggle, triggerAttrs }">
-          <button
-            v-bind="triggerAttrs"
-            class="context-header group flex w-full items-center gap-2 rounded-2xl px-3.5 py-2.5 text-left transition-all"
-            :class="{ '!rounded-b-none': isExpanded }"
-            @click="toggle"
+  <div
+    v-if="cards.length"
+    class="px-4 py-1.5"
+  >
+    <div class="ml-3 flex flex-col max-w-[50%] gap-2 md:ml-12">
+      <article
+        v-for="card in cards"
+        :key="card.channel"
+        class="pre-turn-card"
+        :class="`pre-turn-card--${card.channel}`"
+      >
+        <button
+          class="flex w-full items-center gap-2.5 px-3.5 py-3 text-left"
+          :aria-expanded="expandedCards.has(card.channel)"
+          @click="toggle(expandedCards, card.channel)"
+        >
+          <span class="card-icon"><Icon
+            :icon="card.latest.pending ? 'svg-spinners:ring-resize' : card.icon"
+            class="h-3.5 w-3.5"
+          /></span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-[12px] font-semibold text-theme-200">{{ card.title }}</span>
+            <span
+              class="block truncate text-[11px] text-theme-400"
+              role="status"
+              aria-live="polite"
+            >{{ card.latest.label }}</span>
+          </span>
+          <span
+            v-if="card.selected.length"
+            class="count-chip"
+          >{{ plural(card.selected.length, card.channel === 'memory' ? 'memory' : 'MCP/toolset', 'MCPs/toolsets') }}</span>
+          <Icon
+            icon="lucide:chevron-down"
+            class="h-3.5 w-3.5 text-theme-500 transition-transform"
+            :class="{ 'rotate-180': expandedCards.has(card.channel) }"
+          />
+        </button>
+
+        <div
+          v-if="!expandedCards.has(card.channel) && card.selected.length"
+          class="collapsed-results"
+          :aria-label="`${card.title} selected results`"
+        >
+          <span
+            v-for="(result, index) in card.selected"
+            :key="`${result.name}-${index}`"
+            class="collapsed-result-chip"
+            :title="result.name"
           >
-            <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-cyan-400/10 ring-1 ring-cyan-300/15">
-              <Icon :icon="isPending ? 'svg-spinners:ring-resize' : 'lucide:history'" class="h-3.5 w-3.5 text-cyan-300" />
-            </span>
-            <span class="min-w-0 flex-1 text-[12px] font-semibold text-cyan-100">
-              Pre-turn context
-              <span class="block truncate text-[11px] font-normal text-cyan-200/80" role="status" aria-live="polite">{{ latestItem?.label }}</span>
-            </span>
-            <span v-if="selectedTools.length" class="context-chip">{{ plural(selectedTools.length, 'tool') }}</span>
-            <span v-if="selectedToolsets" class="context-chip">{{ plural(selectedToolsets, 'toolset') }}</span>
-            <span v-if="selectedMemory" class="context-chip">{{ plural(selectedMemory, 'memory item') }}</span>
-            <span v-if="selectedEntities" class="context-chip">{{ plural(selectedEntities, 'relationship') }}</span>
-            <span class="ml-auto text-[10px] text-theme-500">{{ items.length }} steps</span>
-            <Icon icon="lucide:chevron-down" class="h-3 w-3 text-theme-500 transition-transform" :class="{ 'rotate-180': isExpanded }" />
-          </button>
-        </template>
+            <span class="truncate">{{ result.name }}</span>
+            <small v-if="result.score">{{ result.score }}</small>
+          </span>
+        </div>
 
-        <ol class="context-timeline rounded-b-2xl py-2.5">
-          <li v-for="item in items" :key="item.key" class="timeline-item" :class="`timeline-item--${item.tone}`">
-            <button
-              class="flex w-full min-w-0 items-start gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-theme-800/35"
-              :class="{ 'cursor-default': !item.details.length }"
-              :aria-expanded="item.details.length ? expandedItems.has(item.key) : undefined"
-              @click="item.details.length && toggleItem(item.key)"
+        <div
+          v-if="expandedCards.has(card.channel)"
+          class="border-t border-theme-700/35 px-3 py-3"
+        >
+          <ol
+            class="space-y-1"
+            :aria-label="`${card.title} pipeline`"
+          >
+            <li
+              v-for="item in card.items"
+              :key="item.key"
             >
-              <Icon :icon="item.pending ? 'svg-spinners:ring-resize' : item.icon" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400" />
-              <span class="min-w-0 flex-1">
-                <span class="block text-[11px] font-medium text-theme-300">{{ item.label }}</span>
-                <span v-if="item.summary" class="block truncate text-[10px] text-theme-500">{{ item.summary }}</span>
-              </span>
-              <time class="text-[10px] tabular-nums text-theme-600">{{ formatTimestamp(item.timestamp) }}</time>
-              <Icon v-if="item.details.length" icon="lucide:chevron-right" class="mt-0.5 h-3 w-3 text-theme-600 transition-transform" :class="{ 'rotate-90': expandedItems.has(item.key) }" />
-            </button>
-
-            <div v-if="item.details.length && expandedItems.has(item.key)" class="mb-1 ml-8 mr-2 space-y-1 rounded-lg bg-theme-950/40 p-2">
-              <div v-for="(detail, index) in item.details" :key="`${detail.name}-${index}`" class="text-[10px]">
-                <div class="flex items-center gap-2">
-                  <span class="font-medium text-theme-400">{{ detail.name }}</span>
-                  <span v-if="detail.score" class="rounded bg-cyan-500/10 px-1.5 py-0.5 text-cyan-300">{{ detail.score }}</span>
+              <button
+                class="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-theme-800/35"
+                :class="{ 'cursor-default': !item.details.length }"
+                @click="item.details.length && toggle(expandedSteps, item.key)"
+              >
+                <Icon
+                  :icon="item.pending ? 'svg-spinners:ring-resize' : item.icon"
+                  class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                />
+                <span class="min-w-0 flex-1"><span class="block text-[11px] font-medium text-theme-300">{{ item.label }}</span><span
+                  v-if="item.summary"
+                  class="block text-[10px] text-theme-500"
+                >{{ item.summary }}</span></span>
+                <time class="text-[9px] tabular-nums text-theme-600">{{ formatTimestamp(item.timestamp) }}</time>
+                <Icon
+                  v-if="item.details.length"
+                  icon="lucide:chevron-right"
+                  class="mt-0.5 h-3 w-3 text-theme-600 transition-transform"
+                  :class="{ 'rotate-90': expandedSteps.has(item.key) }"
+                />
+              </button>
+              <div
+                v-if="item.details.length && expandedSteps.has(item.key)"
+                class="ml-7 space-y-1 rounded-lg bg-theme-950/35 p-2"
+              >
+                <div
+                  v-for="(detail, index) in item.details"
+                  :key="`${detail.name}-${index}`"
+                  class="text-[10px] text-theme-400"
+                >
+                  <span class="font-medium">{{ detail.name }}</span><span
+                    v-if="detail.score"
+                    class="ml-2 text-cyan-300"
+                  >{{ detail.score }}</span>
                 </div>
-                <pre v-if="detail.content" class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap wrap-break-word font-sans leading-relaxed text-theme-500">{{ detail.content }}</pre>
               </div>
-            </div>
-          </li>
-        </ol>
-      </CollapsibleSection>
+            </li>
+          </ol>
+
+          <div
+            v-if="card.channel === 'memory' && card.selected.length"
+            class="memory-grid mt-3"
+            aria-label="Selected memories"
+          >
+            <article
+              v-for="(memory, index) in card.selected"
+              :key="`${memory.name}-${index}`"
+              class="memory-card"
+            >
+              <div class="flex items-start gap-2">
+                <h4
+                  class="min-w-0 flex-1 truncate text-[11px] font-semibold text-violet-200"
+                  :title="memory.name"
+                >
+                  {{ memory.name }}
+                </h4><span
+                  v-if="memory.score"
+                  class="score-chip"
+                >{{ memory.score }}</span>
+              </div>
+              <p
+                v-if="memory.content"
+                class="mt-1.5 line-clamp-3 text-[10px] leading-relaxed text-theme-400"
+              >
+                {{ memory.content }}
+              </p>
+            </article>
+          </div>
+
+          <div
+            v-if="card.channel === 'tools' && groupedTools(card).length"
+            class="mt-3 space-y-2"
+            aria-label="Selected MCPs, toolsets, and tools"
+          >
+            <section
+              v-for="group in groupedTools(card)"
+              :key="group.id"
+              class="toolset-card"
+            >
+              <div class="flex items-center gap-2 text-[11px] font-semibold text-teal-200">
+                <Icon icon="lucide:boxes" class="h-3.5 w-3.5" />
+                {{ group.label }}
+              </div>
+              <div v-if="group.tools.length" class="mt-2 flex flex-wrap gap-1.5">
+                <span v-for="tool in group.tools" :key="tool.name" class="tool-chip">
+                  {{ tool.name }}<small v-if="tool.score">{{ tool.score }}</small>
+                </span>
+              </div>
+              <p v-else class="mt-1 text-[10px] text-theme-500">No individual tools selected.</p>
+            </section>
+          </div>
+        </div>
+      </article>
     </div>
   </div>
 </template>
 
 <style scoped>
-.context-header {
-  border: 1px solid rgb(34 211 238 / .2);
-  background:
-    radial-gradient(circle at 0 50%, rgb(34 211 238 / .11), transparent 30%),
-    linear-gradient(135deg, rgb(15 23 42 / .88), rgb(8 47 73 / .32));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / .025), 0 8px 24px rgb(0 0 0 / .12);
-}
-.context-header:hover { border-color: rgb(34 211 238 / .36); filter: brightness(1.06); }
-.context-chip { border-radius: .375rem; padding: .125rem .375rem; background: rgb(6 182 212 / .1); color: rgb(165 243 252); font-size: 10px; }
-.context-timeline {
-  position: relative;
-  padding-left: 2.25rem;
-  border: 1px solid rgb(34 211 238 / .16);
-  border-top: 0;
-  background:
-    radial-gradient(circle at 8% 0, rgb(34 211 238 / .08), transparent 34%),
-    linear-gradient(180deg, rgb(15 23 42 / .72), rgb(9 14 25 / .82));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / .02), 0 12px 30px rgb(0 0 0 / .12);
-}
-.context-timeline::before { content: ''; position: absolute; left: 1.28rem; top: 1.15rem; bottom: 1.15rem; width: 1px; background: color-mix(in srgb, var(--color-cyan-400) 42%, transparent); }
-.timeline-item { position: relative; }
-.timeline-item::before { content: ''; position: absolute; z-index: 1; left: -1.25rem; top: 1rem; width: .48rem; height: .48rem; border: 2px solid var(--color-theme-900); border-radius: 9999px; background: rgb(34 211 238); box-shadow: 0 0 0 2px rgb(34 211 238 / .18); }
-.timeline-item--memory::before { background: rgb(167 139 250); }
-.timeline-item--toolsets::before { background: rgb(45 212 191); }
-.timeline-item--entities::before { background: rgb(129 140 248); }
-.timeline-item--attachments::before { background: rgb(56 189 248); }
+.pre-turn-card { overflow: hidden; border: 1px solid rgb(71 85 105 / .38); border-radius: 1rem; background: linear-gradient(145deg, rgb(15 23 42 / .88), rgb(9 14 25 / .9)); box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
+.pre-turn-card--memory { border-color: rgb(167 139 250 / .25); background: radial-gradient(circle at 0 0, rgb(139 92 246 / .1), transparent 40%), linear-gradient(145deg, rgb(15 23 42 / .9), rgb(20 15 38 / .82)); }
+.pre-turn-card--tools { border-color: rgb(45 212 191 / .24); background: radial-gradient(circle at 0 0, rgb(20 184 166 / .09), transparent 40%), linear-gradient(145deg, rgb(15 23 42 / .9), rgb(8 34 36 / .72)); }
+.card-icon { display: flex; height: 1.5rem; width: 1.5rem; flex-shrink: 0; align-items: center; justify-content: center; border-radius: .5rem; background: rgb(34 211 238 / .1); color: rgb(103 232 249); box-shadow: 0 0 0 1px rgb(103 232 249 / .12); }
+.pre-turn-card--memory .card-icon { background: rgb(139 92 246 / .12); color: rgb(196 181 253); box-shadow: 0 0 0 1px rgb(167 139 250 / .16); }
+.count-chip, .score-chip { border-radius: .375rem; padding: .125rem .375rem; background: rgb(6 182 212 / .1); color: rgb(165 243 252); font-size: 10px; white-space: nowrap; }
+.collapsed-results { display: flex; flex-wrap: wrap; gap: .35rem; border-top: 1px solid rgb(71 85 105 / .24); padding: 0 .75rem .7rem; }
+.collapsed-result-chip { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: .35rem; border-radius: .4rem; background: rgb(30 41 59 / .62); padding: .2rem .4rem; color: rgb(203 213 225); font-size: 10px; }
+.collapsed-result-chip small { flex-shrink: 0; color: rgb(103 232 249); }
+.pre-turn-card--memory .collapsed-result-chip small { color: rgb(196 181 253); }
+.memory-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.memory-card { min-width: 0; border: 1px solid rgb(167 139 250 / .18); border-radius: .625rem; background: rgb(76 29 149 / .08); padding: .625rem; }
+.toolset-card { border: 1px solid rgb(45 212 191 / .16); border-radius: .625rem; background: rgb(15 118 110 / .06); padding: .625rem; }
+.tool-chip { border-radius: .4rem; background: rgb(20 184 166 / .1); padding: .25rem .45rem; color: rgb(153 246 228); font-size: 10px; }
+.tool-chip small { margin-left: .35rem; color: rgb(94 234 212 / .7); }
+@media (max-width: 640px) { .memory-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>

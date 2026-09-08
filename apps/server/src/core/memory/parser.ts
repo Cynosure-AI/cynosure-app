@@ -223,12 +223,14 @@ export class MemoryParser {
     tableName: string,
     query: string,
     topK: number = 5,
-    filter?: string
+    filter?: string,
+    onStatus?: (stage: 'rag' | 'reranking') => void,
   ): Promise<RetrievedChunk[]> {
     const embedder = getEmbeddingProvider()
     const ragStore = getRAGStore()
     const reranker = getMemoryReranker()
 
+    onStatus?.('rag')
     const { vector } = await embedder.embed(query)
     const candidateCount = reranker.getCandidateCount(topK)
     const [denseCandidates, lexicalCandidates] = await Promise.all([
@@ -237,6 +239,7 @@ export class MemoryParser {
     ])
     const results = fuseRetrievalChannels([denseCandidates, lexicalCandidates], candidateCount)
       .filter((result) => isRetrievableChunk(result.text))
+    if (reranker.getConfig().enabled && results.length > 1) onStatus?.('reranking')
     const ranked = await reranker.rerank(query, results, topK).catch((err) => {
       console.warn('[memory-reranker] Rerank failed, using hybrid ranking:', err)
       return results.slice(0, topK)
