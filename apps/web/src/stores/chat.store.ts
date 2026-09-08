@@ -2,7 +2,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
 import type { ChatExecutionState, MemorySpace, ModelPricing } from '../api/types'
-import type { ContextEvidence, StoredMessageDto } from '@shared/types'
+import type { ChatQueueDelivery, ContextEvidence, QueuedChatMessageDto, StoredMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -71,6 +71,8 @@ export const useChatStore = defineStore('chat', () => {
   const modelInfoStatus = ref<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
   let modelInfoRequestId = 0
   const memorySpaces = ref<MemorySpace[]>([])
+  const queuedMessages = ref<QueuedChatMessageDto[]>([])
+  const queuePaused = ref(false)
   const postActionsMap = new Map<string, Set<string>>()
   const postActionsTrigger = ref(0)
   const activePostActions = computed(() => {
@@ -182,6 +184,22 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  async function loadQueue(conversationId = activeConversationId.value): Promise<void> {
+    if (!conversationId) {
+      queuedMessages.value = []
+      queuePaused.value = false
+      return
+    }
+    const state = await api.chat.getQueue(conversationId)
+    if (activeConversationId.value !== conversationId) return
+    queuedMessages.value = state.items
+    queuePaused.value = state.paused
+  }
+
+  function handleQueueChanged(data: { conversationId: string }): void {
+    if (data.conversationId === activeConversationId.value) void loadQueue(data.conversationId)
+  }
+
   async function createConversation(title?: string): Promise<string> {
     const conv = await api.chat.createConversation(
       title,
@@ -199,6 +217,8 @@ export const useChatStore = defineStore('chat', () => {
     })
     activeConversationId.value = conv.id
     messages.value = []
+    queuedMessages.value = []
+    queuePaused.value = false
     agentStore.setActiveViewConversation(conv.id)
     agentStore.clearExecution()
     return conv.id
@@ -314,6 +334,7 @@ export const useChatStore = defineStore('chat', () => {
       // If we navigated into a conversation after its websocket events already
       // fired, hydrate the run lock from the server-side instance list.
       await syncConversationRunState(id)
+      await loadQueue(id)
     } finally {
       if (activeConversationId.value === id) markConversationRead(id)
       if (activeConversationId.value === id) {
@@ -614,6 +635,8 @@ export const useChatStore = defineStore('chat', () => {
     messages,
     loadingMessages,
     memorySpaces,
+    queuedMessages,
+    queuePaused,
     activeConversation,
     activePostActions,
     activeConversationIsStreaming,
@@ -657,29 +680,18 @@ export const useChatStore = defineStore('chat', () => {
     handleStreamReset(data: Parameters<typeof streaming.handleStreamReset>[0]): void {
       if (!agentStore.isConversationStopped(data.conversationId, data.streamId)) streaming.handleStreamReset(data)
     },
+    handleStreamDiscard(data: Parameters<typeof streaming.handleStreamDiscard>[0]): void {
+      streaming.handleStreamDiscard(data)
+    },
     handleStreamUsage(data: Parameters<typeof streaming.handleStreamUsage>[0]): void {
       if (!agentStore.isConversationStopped(data.conversationId)) streaming.handleStreamUsage(data)
     },
     finalizeCurrentStreaming: streaming.finalizeCurrentStreaming,
     handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number; images?: string[] }): void {
       streaming.handleStreamEnd(data)
-      // Clear execution state when the stream ends — the task:completed WS event
-      // may arrive later or not at all, so ensure the conversation unlocks promptly.
-      agentStore.handleChatExecutionState({
-        executionId: data.streamId,
-        conversationId: data.conversationId,
-        agentId: null,
-        state: data.cancelled ? 'stopped' : 'finished',
-      })
     },
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void {
       streaming.handleStreamError(data)
-      agentStore.handleChatExecutionState({
-        executionId: data.streamId,
-        conversationId: data.conversationId,
-        agentId: null,
-        state: 'finished',
-      })
     },
     handleSubAgentStreamStart(data: Parameters<typeof streaming.handleSubAgentStreamStart>[0]): void {
       if (!agentStore.isConversationStopped(data.conversationId)) streaming.handleSubAgentStreamStart(data)
@@ -706,9 +718,40 @@ export const useChatStore = defineStore('chat', () => {
       agentStore.handleChatExecutionState(data)
       if (data.state !== 'running') streaming.clearConversationStreamState(data.conversationId)
     },
+    handleQueueChanged,
 
     // Messages (delegated)
     sendMessage,
+    async queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void> {
+      if (!memorySpaces.value.length) await loadMemorySpaces()
+      agentConfig.ensureFreeChatPreset()
+      await chatMessages.queueMessage(content, delivery, imageDataUrls, files, audioDataUrls)
+      await loadQueue()
+    },
+    async updateQueuedMessage(id: string, content: string, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void> {
+      await chatMessages.updateQueuedMessage(id, content, imageDataUrls, files, audioDataUrls)
+      await loadQueue()
+    },
+    async removeQueuedMessage(id: string): Promise<void> {
+      if (!activeConversationId.value) return
+      await api.chat.removeQueued(activeConversationId.value, id)
+      await loadQueue()
+    },
+    async removeQueuedAttachment(id: string, attachmentId: string): Promise<void> {
+      if (!activeConversationId.value) return
+      await api.chat.removeQueuedAttachment(activeConversationId.value, id, attachmentId)
+      await loadQueue()
+    },
+    async steerQueuedMessage(id: string): Promise<void> {
+      if (!activeConversationId.value) return
+      await api.chat.steerQueued(activeConversationId.value, id)
+      await loadQueue()
+    },
+    async runNextQueuedMessage(): Promise<void> {
+      if (!activeConversationId.value) return
+      await api.chat.runNextQueued(activeConversationId.value)
+      await loadQueue()
+    },
     retryFromMessage: chatMessages.retryFromMessage,
     editMessage: chatMessages.editMessage,
     forkConversationFromMessage,

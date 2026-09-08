@@ -144,7 +144,15 @@ export async function retrieveMcpTools(input: Pick<RouteToolsInput, 'userQuery' 
     )
     const candidateIds = new Set(groupIds)
     const candidates = dedupeTools(groups.filter(({ id }) => candidateIds.has(id)).flatMap(({ tools }) => tools))
-    return rankCandidateTools(input.userQuery, queryVector, candidates, input.maxTools ?? MAX_AUTO_DISCOVERED_TOOLS, new Set(), input.onStatus)
+    return rankCandidateTools(
+        input.userQuery,
+        queryVector,
+        candidates,
+        input.maxTools ?? MAX_AUTO_DISCOVERED_TOOLS,
+        new Set(),
+        new Set(),
+        input.onStatus,
+    )
 }
 
 export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefinition[]> {

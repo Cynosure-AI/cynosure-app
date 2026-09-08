@@ -126,6 +126,39 @@ export interface ChatSendRequest {
   run: ChatRunConfig
 }
 
+export type ChatQueueDelivery = 'next' | 'steer'
+export type ChatQueueStatus = 'pending' | 'paused'
+
+export interface QueuedChatAttachment {
+  id: string
+  kind: 'image' | 'audio' | 'file'
+  name: string
+  url?: string
+}
+
+export interface QueuedChatMessageDto {
+  id: string
+  conversationId: string
+  content: string
+  delivery: ChatQueueDelivery
+  status: ChatQueueStatus
+  position: number
+  attachments: QueuedChatAttachment[]
+  run: ChatRunConfig
+  createdAt: number
+  updatedAt: number
+}
+
+export interface ChatQueueStateDto {
+  conversationId: string
+  paused: boolean
+  items: QueuedChatMessageDto[]
+}
+
+export interface ChatQueueRequest extends ChatSendRequest {
+  delivery: ChatQueueDelivery
+}
+
 export interface ConversationExecutionConfig {
   allowedTools: string[]
   subAgents: SubAgentAssignmentDto[]

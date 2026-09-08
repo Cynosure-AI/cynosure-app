@@ -48,6 +48,7 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<{ url: string; name: string }[]>([])
 const attachedFiles = ref<{ name: string; content: string }[]>([])
 const attachedAudio = ref<{ url: string; name: string }[]>([])
+const editingQueueId = ref<string | null>(null)
 
 function modelHasInputModality(modality: string): boolean | null {
   const inputModalities = chatStore.modelModalities?.input
@@ -64,9 +65,9 @@ const audioInputUnsupported = computed(() =>
 )
 const canSend = computed(() => !!inputText.value.trim() || attachedAudio.value.length > 0)
 
-async function send(): Promise<void> {
+async function send(delivery: 'next' | 'steer' = 'next'): Promise<void> {
   const content = inputText.value.trim()
-  if ((!content && !attachedAudio.value.length) || chatStore.isConversationLocked) return
+  if (!content && !attachedAudio.value.length) return
   const images = attachedImages.value.map((i) => i.url)
   const files = attachedFiles.value.map((f) => ({ name: f.name, content: f.content }))
   const audio = attachedAudio.value.map((a) => a.url)
@@ -76,12 +77,26 @@ async function send(): Promise<void> {
   attachedFiles.value = []
   attachedAudio.value = []
   resetHeight()
-  await chatStore.sendMessage(
-    content || (audio.length ? 'Transcribe the attached audio.' : content),
-    images.length ? images : undefined,
-    files.length ? files : undefined,
-    audio.length ? audio : undefined
-  )
+  const normalized = content || (audio.length ? 'Transcribe the attached audio.' : content)
+  if (editingQueueId.value) {
+    await chatStore.updateQueuedMessage(editingQueueId.value, normalized, images.length ? images : undefined, files.length ? files : undefined, audio.length ? audio : undefined)
+    editingQueueId.value = null
+  } else if (chatStore.isConversationLocked || chatStore.queuedMessages?.length) {
+    await chatStore.queueMessage(normalized, delivery, images.length ? images : undefined, files.length ? files : undefined, audio.length ? audio : undefined)
+  } else {
+    await chatStore.sendMessage(normalized, images.length ? images : undefined, files.length ? files : undefined, audio.length ? audio : undefined)
+  }
+}
+
+function editQueued(id: string, content: string): void {
+  editingQueueId.value = id
+  inputText.value = content
+  nextTick(() => textareaRef.value?.focus())
+}
+
+function cancelQueueEdit(): void {
+  editingQueueId.value = null
+  inputText.value = ''
 }
 
 function openFilePicker(): void {
@@ -168,7 +183,7 @@ function removeAudio(idx: number): void {
 function onKeydown(e: KeyboardEvent): void {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
-    if (!chatStore.isConversationLocked) send()
+    void send('next')
   }
 }
 
@@ -236,6 +251,55 @@ defineExpose({ processFiles })
 
     <!-- Main input area -->
     <div class="relative max-w-5xl mx-auto flex-1 min-w-0">
+      <div
+        v-if="chatStore.queuedMessages?.length"
+        class="mb-2 space-y-1.5 rounded-xl border border-theme-700 bg-theme-900/90 p-2"
+        aria-label="Queued messages"
+      >
+        <div class="flex items-center justify-between px-1 text-[11px] text-theme-500">
+          <span>{{ chatStore.queuedMessages?.length }} queued</span>
+          <button
+            v-if="!chatStore.isConversationLocked"
+            type="button"
+            class="text-accent-400 hover:text-accent-300"
+            @click="chatStore.runNextQueuedMessage()"
+          >
+            Run next
+          </button>
+        </div>
+        <div
+          v-for="item in chatStore.queuedMessages"
+          :key="item.id"
+          class="flex items-center gap-2 rounded-lg bg-theme-800 px-2.5 py-2 text-xs"
+        >
+          <Icon icon="lucide:list-end" class="h-3.5 w-3.5 shrink-0 text-theme-500" />
+          <span class="min-w-0 flex-1 truncate text-theme-200">{{ item.content }}</span>
+          <span v-if="item.attachments.length" class="flex shrink-0 items-center gap-1 text-theme-500">
+            <span
+              v-for="attachment in item.attachments"
+              :key="attachment.id"
+              class="inline-flex max-w-28 items-center gap-0.5 rounded bg-theme-700 px-1.5 py-0.5"
+            >
+              <span class="truncate">{{ attachment.name }}</span>
+              <button
+                type="button"
+                class="hover:text-red-400"
+                :aria-label="`Remove ${attachment.name}`"
+                @click.stop="chatStore.removeQueuedAttachment(item.id, attachment.id)"
+              >×</button>
+            </span>
+          </span>
+          <button type="button" class="text-theme-500 hover:text-theme-200" title="Edit queued message" @click="editQueued(item.id, item.content)">
+            <Icon icon="lucide:pencil" class="h-3.5 w-3.5" />
+          </button>
+          <button type="button" class="text-accent-500 hover:text-accent-300" :title="chatStore.isConversationLocked ? 'Steer now' : 'Run now'" @click="chatStore.steerQueuedMessage(item.id)">
+            <Icon icon="lucide:corner-up-left" class="h-3.5 w-3.5" />
+          </button>
+          <button type="button" class="text-theme-500 hover:text-red-400" title="Remove queued message" @click="chatStore.removeQueuedMessage(item.id)">
+            <Icon icon="lucide:x" class="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
       <!-- Attached images preview -->
       <div
         v-if="attachedImages.length"
@@ -368,7 +432,7 @@ defineExpose({ processFiles })
           id="chat-textarea"
           ref="textareaRef"
           v-model="inputText"
-          placeholder="Type a message..."
+          :placeholder="editingQueueId ? 'Edit queued message…' : chatStore.isConversationLocked ? 'Queue a message…' : 'Type a message...'"
           rows="1"
           class="w-full bg-transparent text-theme-100 px-4 pt-3 pb-2 text-sm resize-none focus:outline-none placeholder-theme-500"
           aria-label="Type a message"
@@ -379,8 +443,12 @@ defineExpose({ processFiles })
 
         <InputToolbar
           :can-send="canSend"
+          :is-running="chatStore.isConversationLocked"
+          :editing-queue="Boolean(editingQueueId)"
           @attach="openFilePicker"
-          @send="send"
+          @send="send('next')"
+          @steer="send('steer')"
+          @cancel-edit="cancelQueueEdit"
           @transcription="onTranscription"
         />
       </div>

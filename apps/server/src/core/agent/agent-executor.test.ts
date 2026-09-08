@@ -66,6 +66,85 @@ describe('AgentExecutor cancellation', () => {
   })
 })
 
+describe('AgentExecutor steering', () => {
+  test('discards an in-flight model response and restarts with the steering message', async () => {
+    let firstChunk!: () => void
+    const chunkSeen = new Promise<void>((resolve) => { firstChunk = resolve })
+    let call = 0
+    const streamComplete = vi.fn((request: { messages: Array<{ role: string; content: unknown }>; signal?: AbortSignal }) => (async function* (): AsyncIterable<StreamChunk> {
+      call++
+      if (call === 1) {
+        yield { content: 'discard me', done: false }
+        firstChunk()
+        await new Promise<void>((_resolve, reject) => {
+          request.signal?.addEventListener('abort', () => reject(request.signal?.reason), { once: true })
+        })
+        return
+      }
+      expect(request.messages.at(-1)).toEqual({ role: 'user', content: 'change direction' })
+      yield { content: 'steered answer', done: true }
+    })())
+    const broadcast = vi.fn()
+    const takeSteeringMessages = vi.fn(async () => [{ role: 'user' as const, content: 'change direction' }])
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [], conversationId: 'steering', broadcast, model: 'test',
+      saveMessages: false, emitEvents: false, takeSteeringMessages,
+    })
+
+    const run = executor.run([{ role: 'user', content: 'start' }])
+    await chunkSeen
+    executor.requestSteering()
+
+    await expect(run).resolves.toMatchObject({ content: 'steered answer' })
+    expect(streamComplete).toHaveBeenCalledTimes(2)
+    expect(broadcast).toHaveBeenCalledWith('chat:stream-discard', expect.objectContaining({ conversationId: 'steering' }))
+  })
+
+  test('finishes the in-flight tool, skips later tools, then applies steering', async () => {
+    let toolStarted!: () => void
+    let finishTool!: () => void
+    const started = new Promise<void>((resolve) => { toolStarted = resolve })
+    const release = new Promise<void>((resolve) => { finishTool = resolve })
+    const firstTool = vi.fn(async () => {
+      toolStarted()
+      await release
+      return { success: true, output: 'first complete' }
+    })
+    const secondTool = vi.fn(async () => ({ success: true, output: 'must not execute' }))
+    let call = 0
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      if (call++ === 0) {
+        yield { toolCalls: [
+          { id: 'one', type: 'function', function: { name: 'one', arguments: '{}' } },
+          { id: 'two', type: 'function', function: { name: 'two', arguments: '{}' } },
+        ], done: true }
+        return
+      }
+      yield { content: 'changed', done: true }
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [
+        { name: 'one', description: 'one', parameters: { type: 'object', properties: {} }, timeout: 1_000, execute: firstTool },
+        { name: 'two', description: 'two', parameters: { type: 'object', properties: {} }, timeout: 1_000, execute: secondTool },
+      ],
+      conversationId: 'tool-steering', broadcast: vi.fn(), model: 'test',
+      saveMessages: false, emitEvents: false,
+      takeSteeringMessages: async () => [{ role: 'user', content: 'stop after this tool' }],
+    })
+
+    const run = executor.run([{ role: 'user', content: 'start' }])
+    await started
+    executor.requestSteering()
+    finishTool()
+
+    await expect(run).resolves.toMatchObject({ content: 'changed' })
+    expect(firstTool).toHaveBeenCalledOnce()
+    expect(secondTool).not.toHaveBeenCalled()
+  })
+})
+
 describe('AgentExecutor tool-loop safety', () => {
   test('keeps the completed placeholder for a successful empty post-tool response', async () => {
     const tool: ToolDefinition = {
