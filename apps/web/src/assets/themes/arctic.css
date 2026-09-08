@@ -3,6 +3,7 @@
    ========================================================================== */
 
 [data-theme="arctic"] {
+  --accent-button-foreground: #041318;
   --color-theme-950: #07131b;
   --color-theme-900: #0b1c26;
   --color-theme-800: #102733;

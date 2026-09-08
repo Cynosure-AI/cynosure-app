@@ -4,6 +4,7 @@
 
 /* ── Variable overrides ── */
 [data-theme="arasaka"] {
+  --accent-button-foreground: #0a1018;
   /* Base: near-black with warm red/crimson undertone */
   --color-theme-950: #13090e;
   --color-theme-900: #1c1218;
