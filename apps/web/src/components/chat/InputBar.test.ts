@@ -30,6 +30,7 @@ function mountInputBar() {
         InputToolbar: true,
         ContextRing: true,
         HoverTooltip: true,
+        FileLibraryModal: true,
       },
     },
   })
@@ -124,5 +125,26 @@ describe('InputBar drafts', () => {
     await flushPromises()
 
     expect(chatStore.queueMessage).toHaveBeenCalledWith('Change direction', 'steer', undefined, undefined, undefined)
+  })
+
+  test('adds a reused library file to the next message', async () => {
+    const wrapper = mountInputBar()
+    const toolbar = wrapper.findComponent({ name: 'InputToolbar' })
+    toolbar.vm.$emit('browseLibrary')
+    await flushPromises()
+
+    const library = wrapper.findComponent({ name: 'FileLibraryModal' })
+    expect(library.props('show')).toBe(true)
+    library.vm.$emit('add', [{ id: 'upload-1', name: 'notes.txt', content: 'saved notes' }])
+    await wrapper.get('textarea').setValue('Use this again')
+    await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(chatStore.sendMessage).toHaveBeenCalledWith(
+      'Use this again',
+      undefined,
+      [{ name: 'notes.txt', content: 'saved notes' }],
+      undefined,
+    )
   })
 })

@@ -9,6 +9,7 @@ import { useProviderStore } from "../../../stores/provider.store";
 import { useWhisper } from "../../../composables/useWhisper";
 import { Icon } from "@iconify/vue";
 import HoverTooltip from "../../shared/HoverTooltip.vue";
+import HoverMenu from "../../shared/HoverMenu.vue";
 import ProviderModelSelect from "../../shared/ProviderModelSelect.vue";
 import ToolsButton from "./ToolsButton.vue";
 import SubAgentsButton from "./SubAgentsButton.vue";
@@ -29,6 +30,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   attach: [];
+  browseLibrary: [];
   send: [];
   steer: [];
   cancelEdit: [];
@@ -240,17 +242,59 @@ async function toggleMic(): Promise<void> {
   <!-- Bottom toolbar -->
   <div class="flex items-center gap-1 px-2 pb-2 pt-0.5">
     <!-- Left: action buttons -->
-    <button
-      class="p-1.5 text-theme-500 hover:text-theme-300 rounded-lg transition-colors shrink-0 focus:outline-none"
-      title="Attach file"
-      aria-label="Attach file"
-      @click="emit('attach')"
+    <HoverMenu
+      placement="above"
+      :max-width="210"
     >
-      <Icon
-        icon="streamline-ultimate:attachment"
-        class="h-4 w-4"
-      />
-    </button>
+      <template #trigger="{ open, toggle }">
+        <button
+          type="button"
+          class="p-1.5 rounded-lg transition-colors shrink-0 focus:outline-none"
+          :class="open ? 'text-accent-400 bg-theme-700/50' : 'text-theme-500 hover:text-theme-300'"
+          title="Add attachment"
+          aria-label="Add attachment"
+          :aria-expanded="open"
+          aria-haspopup="menu"
+          @click="!open && toggle()"
+        >
+          <Icon
+            icon="streamline-ultimate:attachment"
+            class="h-4 w-4"
+          />
+        </button>
+      </template>
+      <template #content="{ close }">
+        <div
+          class="w-48"
+          role="menu"
+        >
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-theme-200 hover:bg-theme-800 hover:text-theme-100"
+            role="menuitem"
+            @click="close(); emit('attach')"
+          >
+            <Icon
+              icon="lucide:upload"
+              class="h-4 w-4 text-theme-400"
+            />
+            <span>Select File</span>
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-theme-200 hover:bg-theme-800 hover:text-theme-100"
+            role="menuitem"
+            @click="close(); emit('browseLibrary')"
+          >
+            <Icon
+              icon="lucide:library"
+              class="h-4 w-4 text-theme-400"
+            />
+            <span>Select From Library</span>
+          </button>
+        </div>
+      </template>
+    </HoverMenu>
 
     <!--Vertical separator-->
     <div class="hidden md:block w-px h-6 bg-theme-700/80" />
