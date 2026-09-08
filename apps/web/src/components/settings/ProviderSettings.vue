@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useProviderStore } from '../../stores/provider.store'
 import type { LLMProviderConfig, ModelListType } from '../../api/types'
 import { useProviderLogos } from '../../composables/useProviderLogos'
@@ -8,6 +8,8 @@ import ProviderCard from './ProviderCard.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import { Icon } from '@iconify/vue'
 import SettingsSubheading from './SettingsSubheading.vue'
+import SettingsPersistenceStatus, { type SettingsPersistenceState } from './SettingsPersistenceStatus.vue'
+import ModalDialog from '../shared/ModalDialog.vue'
 
 const { providerLogos } = useProviderLogos()
 
@@ -17,6 +19,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   visibleSections: () => []
 })
+const emit = defineEmits<{ 'dirty-change': [dirty: boolean] }>()
 
 const showAddForm = ref(false)
 const editingProviderId = ref<string | null>(null)
@@ -25,6 +28,10 @@ const showApiKey = ref(false)
 const testResult = ref<Map<string, boolean>>(new Map())
 const fetchedModels = ref<string[]>([])
 const loadingModels = ref(false)
+const savingProvider = ref(false)
+const providerSaveStatus = ref<SettingsPersistenceState>('idle')
+const showDraftDiscardConfirm = ref(false)
+let pendingDraftDiscard: (() => void) | null = null
 type ProviderType = LLMProviderConfig['type']
 const responseModelTypes: ModelListType[] = ['llm', 'image', 'video', 'transcription']
 
@@ -41,6 +48,18 @@ const newProvider = reactive<{
   apiKey: '',
   defaultModel: ''
 })
+const draftBaseline = ref('')
+const serializedDraft = computed(() => JSON.stringify({
+  name: newProvider.name,
+  type: newProvider.type,
+  baseUrl: newProvider.baseUrl,
+  apiKey: newProvider.apiKey,
+  defaultModel: newProvider.defaultModel,
+}))
+const draftOpen = computed(() => showAddForm.value || editingProviderId.value !== null)
+const draftDirty = computed(() => draftOpen.value && serializedDraft.value !== draftBaseline.value)
+
+watch(draftDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
 
 const defaultBaseUrls: Record<ProviderType, string> = {
   openai: 'https://api.openai.com/v1',
@@ -169,7 +188,15 @@ async function addProvider(): Promise<void> {
       newProvider.type === 'mistral'
   }
 
-  await providerStore.addProvider(config)
+  savingProvider.value = true
+  providerSaveStatus.value = 'saving'
+  try {
+    await providerStore.addProvider(config)
+  } catch {
+    providerSaveStatus.value = 'error'
+    savingProvider.value = false
+    return
+  }
 
   // Reset form
   newProvider.name = ''
@@ -179,6 +206,9 @@ async function addProvider(): Promise<void> {
   newProvider.defaultModel = ''
   editingProviderId.value = null
   showAddForm.value = false
+  draftBaseline.value = serializedDraft.value
+  providerSaveStatus.value = 'saved'
+  savingProvider.value = false
 }
 
 function startAddProvider(): void {
@@ -190,6 +220,8 @@ function startAddProvider(): void {
   newProvider.defaultModel = ''
   fetchedModels.value = []
   showAddForm.value = true
+  draftBaseline.value = serializedDraft.value
+  providerSaveStatus.value = 'idle'
 }
 
 function startEditProvider(provider: LLMProviderConfig): void {
@@ -202,26 +234,58 @@ function startEditProvider(provider: LLMProviderConfig): void {
   fetchedModels.value = []
   showApiKey.value = false
   showAddForm.value = false
+  draftBaseline.value = serializedDraft.value
+  providerSaveStatus.value = 'idle'
   fetchModelsForEdit(provider.id)
 }
 
 function toggleEditProvider(provider: LLMProviderConfig): void {
-  if (editingProviderId.value === provider.id) {
-    editingProviderId.value = null
-    fetchedModels.value = []
-    return
-  }
-  startEditProvider(provider)
+  requestDraftDiscard(() => {
+    if (editingProviderId.value === provider.id) {
+      editingProviderId.value = null
+      fetchedModels.value = []
+      providerSaveStatus.value = 'idle'
+      return
+    }
+    startEditProvider(provider)
+  })
 }
 
 function cancelEditProvider(): void {
-  editingProviderId.value = null
-  fetchedModels.value = []
+  requestDraftDiscard(() => {
+    editingProviderId.value = null
+    fetchedModels.value = []
+    providerSaveStatus.value = 'idle'
+  })
 }
 
 function cancelForm(): void {
-  showAddForm.value = false
-  editingProviderId.value = null
+  requestDraftDiscard(() => {
+    showAddForm.value = false
+    editingProviderId.value = null
+    providerSaveStatus.value = 'idle'
+  })
+}
+
+function requestDraftDiscard(action: () => void): void {
+  if (!draftDirty.value) {
+    action()
+    return
+  }
+  pendingDraftDiscard = action
+  showDraftDiscardConfirm.value = true
+}
+
+function keepDraft(): void {
+  pendingDraftDiscard = null
+  showDraftDiscardConfirm.value = false
+}
+
+function discardDraft(): void {
+  const action = pendingDraftDiscard
+  pendingDraftDiscard = null
+  showDraftDiscardConfirm.value = false
+  action?.()
 }
 
 async function testConnection(id: string): Promise<void> {
@@ -254,7 +318,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
 
     <div
       v-if="showSection('provider-actions')"
-      class="flex items-center justify-end"
+      class="flex justify-end"
     >
       <button
         class="px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg transition-colors"
@@ -398,13 +462,19 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
         </div>
       </div>
 
-      <button
-        :disabled="!canSaveProvider"
-        class="w-full px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
-        @click="addProvider"
-      >
-        Add Provider
-      </button>
+      <div class="flex items-center justify-end gap-3">
+        <SettingsPersistenceStatus
+          mode="manual"
+          :state="providerSaveStatus === 'error' ? 'error' : savingProvider ? 'saving' : draftDirty ? 'dirty' : providerSaveStatus"
+        />
+        <button
+          :disabled="!canSaveProvider || !draftDirty || savingProvider"
+          class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+          @click="addProvider"
+        >
+          {{ savingProvider ? 'Saving…' : 'Add Provider' }}
+        </button>
+      </div>
     </div>
 
     <!-- Provider List -->
@@ -559,7 +629,12 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
             </div>
           </div>
 
-          <div class="flex justify-end gap-2">
+          <div class="flex items-center justify-end gap-2">
+            <SettingsPersistenceStatus
+              mode="manual"
+              :state="providerSaveStatus === 'error' ? 'error' : savingProvider ? 'saving' : draftDirty ? 'dirty' : providerSaveStatus"
+              class="mr-auto"
+            />
             <button
               type="button"
               class="px-4 py-2 bg-theme-700 hover:bg-theme-600 text-theme-200 text-sm rounded-lg transition-colors"
@@ -568,11 +643,11 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
               Cancel
             </button>
             <button
-              :disabled="!canSaveProvider"
+              :disabled="!canSaveProvider || !draftDirty || savingProvider"
               class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
               @click="addProvider"
             >
-              Save Changes
+              {{ savingProvider ? 'Saving…' : 'Save changes' }}
             </button>
           </div>
         </div>
@@ -590,5 +665,34 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
         </p>
       </div>
     </div>
+
+    <ModalDialog
+      :show="showDraftDiscardConfirm"
+      title="Discard provider changes?"
+      icon="lucide:triangle-alert"
+      icon-color="amber"
+      layer="nested"
+      @close="keepDraft"
+    >
+      <p class="text-sm leading-relaxed text-theme-400">
+        The provider form has changes that have not been saved.
+      </p>
+      <template #actions>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-500"
+          @click="discardDraft"
+        >
+          Discard changes
+        </button>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-theme-800 px-4 py-3 text-sm font-medium text-theme-200 transition hover:bg-theme-700"
+          @click="keepDraft"
+        >
+          Keep editing
+        </button>
+      </template>
+    </ModalDialog>
   </div>
 </template>

@@ -8,6 +8,8 @@ import MultiSelect from '../../components/shared/MultiSelect.vue'
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import BaseCard from '../../components/shared/BaseCard.vue'
+import SettingsPersistenceStatus, { type SettingsPersistenceState } from '../../components/settings/SettingsPersistenceStatus.vue'
+import ModalDialog from '../../components/shared/ModalDialog.vue'
 
 const props = defineProps<{
   channelId: string
@@ -16,6 +18,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   saved: [channel: ChannelDefinition]
+  'dirty-change': [dirty: boolean]
 }>()
 
 const channel = ref<ChannelDefinition | null>(null)
@@ -23,7 +26,7 @@ const allAgents = ref<AgentDefinition[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const testing = ref(false)
-const saveMessage = ref('')
+const saveStatus = ref<SettingsPersistenceState>('idle')
 const testResult = ref<{ success: boolean; username?: string; error?: string } | null>(null)
 
 const dlgName = ref('')
@@ -33,6 +36,8 @@ const dlgAppToken = ref('')
 const dlgEnabled = ref(true)
 const dlgAllowedAgentIds = ref<string[]>([])
 const dlgAllowedTelegramUserIds = ref('')
+const draftBaseline = ref('')
+const showDiscardConfirm = ref(false)
 
 const agentOptions = computed<MultiSelectOption[]>(() =>
   allAgents.value.map(a => ({ value: a.id, label: a.name }))
@@ -113,6 +118,17 @@ const canSave = computed(() => {
   return !!dlgBotToken.value.trim()
 })
 
+const serializedDraft = computed(() => JSON.stringify({
+  name: dlgName.value,
+  agentId: dlgAgentId.value,
+  botToken: dlgBotToken.value,
+  appToken: dlgAppToken.value,
+  enabled: dlgEnabled.value,
+  allowedAgentIds: dlgAllowedAgentIds.value,
+  allowedTelegramUserIds: dlgAllowedTelegramUserIds.value,
+}))
+const isDirty = computed(() => !loading.value && serializedDraft.value !== draftBaseline.value)
+
 function populateFields(ch: ChannelDefinition) {
   dlgName.value = ch.name || ''
   dlgAgentId.value = ch.agentId
@@ -124,6 +140,8 @@ function populateFields(ch: ChannelDefinition) {
     : ''
   dlgEnabled.value = ch.enabled
   testResult.value = null
+  draftBaseline.value = serializedDraft.value
+  saveStatus.value = 'idle'
 }
 
 function buildConfig(): Record<string, unknown> {
@@ -164,8 +182,9 @@ async function loadChannel() {
 }
 
 async function save() {
-  if (!channel.value || !canSave.value) return
+  if (!channel.value || !canSave.value || !isDirty.value) return
   saving.value = true
+  saveStatus.value = 'saving'
   try {
     const updated = await api.channels.update(props.channelId, {
       name: dlgName.value.trim(),
@@ -176,11 +195,25 @@ async function save() {
     channel.value = updated
     populateFields(updated)
     emit('saved', updated)
-    saveMessage.value = 'Saved'
-    setTimeout(() => saveMessage.value = '', 2000)
+    saveStatus.value = 'saved'
+  } catch {
+    saveStatus.value = 'error'
   } finally {
     saving.value = false
   }
+}
+
+function requestClose(): void {
+  if (isDirty.value) {
+    showDiscardConfirm.value = true
+    return
+  }
+  emit('close')
+}
+
+function discardAndClose(): void {
+  showDiscardConfirm.value = false
+  emit('close')
 }
 
 async function testConnection() {
@@ -201,6 +234,7 @@ async function testConnection() {
 }
 
 watch(() => props.channelId, loadChannel, { immediate: true })
+watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
 </script>
 
 <template>
@@ -220,7 +254,7 @@ watch(() => props.channelId, loadChannel, { immediate: true })
             type="button"
             aria-label="Back to channels"
             class="p-1.5 text-theme-500 hover:text-theme-300 transition-colors"
-            @click="emit('close')"
+            @click="requestClose"
           >
             <Icon
               icon="lucide:arrow-left"
@@ -248,16 +282,16 @@ watch(() => props.channelId, loadChannel, { immediate: true })
         </div>
 
         <div class="flex items-center gap-3">
-          <span
-            v-if="saveMessage"
-            class="text-sm text-green-400"
-          >{{ saveMessage }}</span>
+          <SettingsPersistenceStatus
+            mode="manual"
+            :state="saveStatus === 'error' ? 'error' : saving ? 'saving' : isDirty ? 'dirty' : saveStatus"
+          />
           <button
             class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-            :disabled="saving || !canSave"
+            :disabled="saving || !canSave || !isDirty"
             @click="save"
           >
-            {{ saving ? 'Saving...' : 'Save Changes' }}
+            {{ saving ? 'Saving...' : 'Save changes' }}
           </button>
         </div>
       </div>
@@ -528,5 +562,34 @@ watch(() => props.channelId, loadChannel, { immediate: true })
         </BaseCard>
       </div>
     </template>
+
+    <ModalDialog
+      :show="showDiscardConfirm"
+      title="Discard channel changes?"
+      icon="lucide:triangle-alert"
+      icon-color="amber"
+      layer="nested"
+      @close="showDiscardConfirm = false"
+    >
+      <p class="text-sm leading-relaxed text-theme-400">
+        This channel has changes that have not been saved.
+      </p>
+      <template #actions>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-500"
+          @click="discardAndClose"
+        >
+          Discard changes
+        </button>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-theme-800 px-4 py-3 text-sm font-medium text-theme-200 transition hover:bg-theme-700"
+          @click="showDiscardConfirm = false"
+        >
+          Keep editing
+        </button>
+      </template>
+    </ModalDialog>
   </div>
 </template>

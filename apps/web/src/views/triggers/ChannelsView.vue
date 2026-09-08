@@ -10,6 +10,7 @@ import BaseCard from '../../components/shared/BaseCard.vue'
 import AgentSelect from '../../components/shared/AgentSelect.vue'
 import MultiSelect from '../../components/shared/MultiSelect.vue'
 import SettingsSubheading from '../../components/settings/SettingsSubheading.vue'
+import SettingsPersistenceStatus, { type SettingsPersistenceState } from '../../components/settings/SettingsPersistenceStatus.vue'
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 import ChannelDetailView from './ChannelDetailView.vue'
 
@@ -22,6 +23,7 @@ const props = withDefaults(defineProps<{
   embedded: false,
   visibleSections: () => []
 })
+const emit = defineEmits<{ 'dirty-change': [dirty: boolean] }>()
 const channels = ref<ChannelDefinition[]>([])
 const allAgents = ref<AgentDefinition[]>([])
 const loading = ref(true)
@@ -41,6 +43,28 @@ const dlgTesting = ref(false)
 const dlgTestResult = ref<{ success: boolean; username?: string; error?: string } | null>(null)
 const dlgAllowedAgentIds = ref<string[]>([])
 const dlgAllowedTelegramUserIds = ref('')
+const addDraftBaseline = ref('')
+const addSaveStatus = ref<SettingsPersistenceState>('idle')
+const showAddDiscardConfirm = ref(false)
+const detailDirty = ref(false)
+const togglingIds = ref<Set<string>>(new Set())
+const toggleError = ref('')
+const channelToggleStatus = ref<SettingsPersistenceState>('idle')
+
+const serializedAddDraft = computed(() => JSON.stringify({
+  name: dlgName.value,
+  type: dlgType.value,
+  agentId: dlgAgentId.value,
+  botToken: dlgBotToken.value,
+  appToken: dlgAppToken.value,
+  enabled: dlgEnabled.value,
+  allowedAgentIds: dlgAllowedAgentIds.value,
+  allowedTelegramUserIds: dlgAllowedTelegramUserIds.value,
+}))
+const addDraftDirty = computed(() => showAddDialog.value && serializedAddDraft.value !== addDraftBaseline.value)
+const hasManualChanges = computed(() => addDraftDirty.value || detailDirty.value)
+
+watch(hasManualChanges, (dirty) => emit('dirty-change', dirty), { immediate: true })
 
 const agentOptions = computed<MultiSelectOption[]>(() =>
   allAgents.value.map(a => ({ value: a.id, label: a.name }))
@@ -86,6 +110,7 @@ function openChannelEditor(channelId: string) {
 
 async function closeChannelEditor() {
   selectedChannelId.value = null
+  detailDirty.value = false
   if (typeof route.query.channel === 'string') {
     await router.replace({
       query: {
@@ -112,7 +137,22 @@ function resetDialog() {
 async function openAddDialog() {
   allAgents.value = await api.agents.list()
   resetDialog()
+  addDraftBaseline.value = serializedAddDraft.value
+  addSaveStatus.value = 'idle'
   showAddDialog.value = true
+}
+
+function closeAddDialog(): void {
+  if (addDraftDirty.value) {
+    showAddDiscardConfirm.value = true
+    return
+  }
+  showAddDialog.value = false
+}
+
+function discardAddDraft(): void {
+  showAddDiscardConfirm.value = false
+  showAddDialog.value = false
 }
 
 function buildConfig(): Record<string, unknown> {
@@ -151,6 +191,7 @@ async function testConnection() {
 
 async function saveChannel() {
   dlgSaving.value = true
+  addSaveStatus.value = 'saving'
   try {
     if (!dlgAgentId.value) return
     await api.channels.create({
@@ -161,15 +202,34 @@ async function saveChannel() {
       enabled: dlgEnabled.value
     })
     showAddDialog.value = false
+    addDraftBaseline.value = serializedAddDraft.value
     await loadChannels()
+    addSaveStatus.value = 'saved'
+  } catch {
+    addSaveStatus.value = 'error'
   } finally {
     dlgSaving.value = false
   }
 }
 
 async function toggleChannel(id: string) {
-  await api.channels.toggle(id)
-  await loadChannels()
+  if (togglingIds.value.has(id)) return
+  toggleError.value = ''
+  channelToggleStatus.value = 'saving'
+  togglingIds.value = new Set(togglingIds.value).add(id)
+  try {
+    await api.channels.toggle(id)
+    await loadChannels()
+    channelToggleStatus.value = 'saved'
+  } catch {
+    toggleError.value = 'Could not update the channel. Its previous state was restored.'
+    channelToggleStatus.value = 'error'
+  } finally {
+    const next = new Set(togglingIds.value)
+    next.delete(id)
+    togglingIds.value = next
+    if (next.size > 0 && channelToggleStatus.value !== 'error') channelToggleStatus.value = 'saving'
+  }
 }
 
 function confirmDelete(ch: ChannelDefinition) {
@@ -219,6 +279,7 @@ onUnmounted(() => {
       :channel-id="selectedChannelId"
       @close="closeChannelEditor"
       @saved="loadChannels"
+      @dirty-change="detailDirty = $event"
     />
 
     <div
@@ -268,7 +329,6 @@ onUnmounted(() => {
         v-if="props.embedded && showSection('channel-management')"
         label="Channel Management"
       />
-
       <!-- Loading -->
       <BaseCard
         v-if="loading"
@@ -410,6 +470,7 @@ onUnmounted(() => {
               :label="ch.enabled ? `Disable ${ch.name}` : `Enable ${ch.name}`"
               size="sm"
               color="emerald"
+              :disabled="togglingIds.has(ch.id)"
               :title="ch.enabled ? 'Disable channel' : 'Enable channel'"
               @click.stop
               @update:model-value="toggleChannel(ch.id)"
@@ -435,6 +496,16 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+      <div
+        v-if="channelToggleStatus === 'saving' || channelToggleStatus === 'error'"
+        class="mt-3 flex justify-end"
+      >
+        <SettingsPersistenceStatus
+          mode="auto"
+          :state="channelToggleStatus"
+          :message="toggleError"
+        />
+      </div>
     </div>
 
     <!-- Add Channel Dialog -->
@@ -443,12 +514,14 @@ onUnmounted(() => {
         v-if="showAddDialog"
         class="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm"
         :class="props.embedded ? 'z-200' : 'z-50'"
-        @click.self="showAddDialog = false"
+        @click.self="closeAddDialog"
       >
         <div class="w-full max-w-lg bg-theme-900 border border-theme-800 rounded-2xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
-          <h2 class="text-lg font-semibold text-theme-100 mb-4">
-            Add Channel
-          </h2>
+          <div class="mb-4">
+            <h2 class="text-lg font-semibold text-theme-100">
+              Add Channel
+            </h2>
+          </div>
 
           <!-- Channel name -->
           <label class="block text-sm text-theme-400 mb-1">
@@ -644,15 +717,20 @@ onUnmounted(() => {
           </label>
 
           <!-- Actions -->
-          <div class="flex justify-end gap-3">
+          <div class="flex items-center justify-end gap-3">
+            <SettingsPersistenceStatus
+              mode="manual"
+              :state="addSaveStatus === 'error' ? 'error' : dlgSaving ? 'saving' : addDraftDirty ? 'dirty' : addSaveStatus"
+              class="mr-auto"
+            />
             <button
               class="px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors"
-              @click="showAddDialog = false"
+              @click="closeAddDialog"
             >
               Cancel
             </button>
             <button
-              :disabled="!canSaveChannel"
+              :disabled="!canSaveChannel || !addDraftDirty"
               class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
               @click="saveChannel"
             >
@@ -662,6 +740,35 @@ onUnmounted(() => {
         </div>
       </div>
     </Teleport>
+
+    <ModalDialog
+      :show="showAddDiscardConfirm"
+      title="Discard channel changes?"
+      icon="lucide:triangle-alert"
+      icon-color="amber"
+      :layer="props.embedded ? 'nested' : 'default'"
+      @close="showAddDiscardConfirm = false"
+    >
+      <p class="text-sm leading-relaxed text-theme-400">
+        The new channel has changes that have not been saved.
+      </p>
+      <template #actions>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-500"
+          @click="discardAddDraft"
+        >
+          Discard changes
+        </button>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-theme-800 px-4 py-3 text-sm font-medium text-theme-200 transition hover:bg-theme-700"
+          @click="showAddDiscardConfirm = false"
+        >
+          Keep editing
+        </button>
+      </template>
+    </ModalDialog>
 
     <!-- Delete Confirmation -->
     <ModalDialog

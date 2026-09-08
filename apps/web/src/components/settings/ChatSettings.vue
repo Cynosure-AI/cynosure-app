@@ -11,10 +11,12 @@ import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import BaseCard from "../shared/BaseCard.vue";
 import SettingsSubheading from "./SettingsSubheading.vue";
+import SettingsPersistenceStatus from "./SettingsPersistenceStatus.vue";
 
 const prefs = usePreferencesStore();
 const providerStore = useProviderStore();
 const attachmentConfigStatus = ref<"idle" | "saving" | "saved" | "error">("idle");
+const lastSavedAttachmentLimit = ref(24_000);
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
 }>(), {
@@ -84,8 +86,10 @@ async function updateInlineAttachmentTextLimit(event: Event): Promise<void> {
   try {
     const result = await api.chat.updateAttachmentConfig(limit);
     prefs.inlineAttachmentTextLimit = result.inlineAttachmentTextLimit;
+    lastSavedAttachmentLimit.value = result.inlineAttachmentTextLimit;
     attachmentConfigStatus.value = "saved";
   } catch {
+    prefs.inlineAttachmentTextLimit = lastSavedAttachmentLimit.value;
     attachmentConfigStatus.value = "error";
   }
 }
@@ -94,6 +98,7 @@ onMounted(async () => {
   try {
     const config = await api.chat.getAttachmentConfig();
     prefs.inlineAttachmentTextLimit = config.inlineAttachmentTextLimit;
+    lastSavedAttachmentLimit.value = config.inlineAttachmentTextLimit;
   } catch {
     attachmentConfigStatus.value = "error";
   }
@@ -194,6 +199,7 @@ onMounted(async () => {
               min="2000"
               max="500000"
               step="1000"
+              :disabled="attachmentConfigStatus === 'saving'"
               class="w-full bg-theme-900 border border-theme-600 rounded-lg px-3 py-2 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
               @change="updateInlineAttachmentTextLimit"
             >
@@ -202,19 +208,16 @@ onMounted(async () => {
         </div>
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
           Larger extracted document text is indexed and retrieved as relevant excerpts instead of being fully resent each turn.
-          <span
-            v-if="attachmentConfigStatus === 'saving'"
-            class="text-theme-400"
-          > Saving...</span>
-          <span
-            v-else-if="attachmentConfigStatus === 'saved'"
-            class="text-green-400"
-          > Saved.</span>
-          <span
-            v-else-if="attachmentConfigStatus === 'error'"
-            class="text-red-400"
-          > Could not save.</span>
         </p>
+      </div>
+      <div
+        v-if="attachmentConfigStatus === 'saving' || attachmentConfigStatus === 'error'"
+        class="flex justify-end"
+      >
+        <SettingsPersistenceStatus
+          mode="auto"
+          :state="attachmentConfigStatus"
+        />
       </div>
     </BaseCard>
 

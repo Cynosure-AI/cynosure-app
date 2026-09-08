@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import ProviderSettings from '../../components/settings/ProviderSettings.vue'
 import MemorySettings from '../../components/settings/MemorySettings.vue'
@@ -11,6 +11,7 @@ import BackupSettings from '../../components/settings/BackupSettings.vue'
 import ResetDataSettings from '../../components/settings/ResetDataSettings.vue'
 import AboutSettings from '../../components/settings/AboutSettings.vue'
 import ResponsiveSectionLayout from '../../components/shared/ResponsiveSectionLayout.vue'
+import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ChannelsView from '../triggers/ChannelsView.vue'
 
 type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'general' | 'backup' | 'reset-data' | 'about'
@@ -38,6 +39,12 @@ const router = useRouter()
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const settingsPanelRef = ref<HTMLElement | null>(null)
 const mobileDetailOpen = ref(false)
+const dirtySources = ref<Record<string, boolean>>({})
+const showDiscardConfirm = ref(false)
+let pendingDiscardAction: (() => unknown | Promise<unknown>) | null = null
+let allowRouteLeave = false
+
+const hasUnsavedChanges = computed(() => Object.values(dirtySources.value).some(Boolean))
 
 const categories: SettingsCategory[] = [
   {
@@ -309,12 +316,14 @@ const sectionsByCategory = computed(() => {
 const searchQuery = computed({
   get: () => String(route.query.search || ''),
   set: (value: string) => {
-    router.replace({
-      query: {
-        ...route.query,
-        search: value.trim() ? value : undefined
-      }
+    const updateSearch = () => router.replace({
+      query: { ...route.query, search: value.trim() ? value : undefined }
     })
+    if (hasUnsavedChanges.value && !isSearching.value && value.trim()) {
+      requestDiscard(updateSearch)
+      return
+    }
+    updateSearch()
   }
 })
 
@@ -383,6 +392,7 @@ watch(activeCategoryId, (category) => {
 
 onMounted(() => {
   document.addEventListener('keydown', onGlobalKeydown)
+  window.addEventListener('beforeunload', onBeforeUnload)
   if (typeof route.query.category === 'string') {
     scrollToCategory(activeCategoryId.value)
   }
@@ -390,19 +400,23 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onGlobalKeydown)
+  window.removeEventListener('beforeunload', onBeforeUnload)
 })
 
 function selectCategory(category: SettingsCategoryId): void {
-  mobileDetailOpen.value = true
-  router.replace({
-    query: {
-      ...route.query,
-      category,
-      channel: category === 'channels' ? route.query.channel : undefined,
-      search: undefined
-    }
+  if (category === activeCategoryId.value && !isSearching.value) return
+  requestDiscard(async () => {
+    mobileDetailOpen.value = true
+    await router.replace({
+      query: {
+        ...route.query,
+        category,
+        channel: category === 'channels' ? route.query.channel : undefined,
+        search: undefined
+      }
+    })
+    scrollToCategory(category)
   })
-  scrollToCategory(category)
 }
 
 async function scrollToCategory(category: SettingsCategoryId): Promise<void> {
@@ -411,7 +425,7 @@ async function scrollToCategory(category: SettingsCategoryId): Promise<void> {
 }
 
 function clearSearch(): void {
-  searchQuery.value = ''
+  requestDiscard(() => { searchQuery.value = '' })
 }
 
 function categoryButtonClass(id: SettingsCategoryId): string {
@@ -443,12 +457,56 @@ function onGlobalKeydown(event: KeyboardEvent): void {
 }
 
 function closeSettings(): void {
-  const previousPath = window.history.state?.back
-  const canReturn = typeof previousPath === 'string'
-    && previousPath.startsWith('/')
-    && !previousPath.startsWith('/settings')
-  router.push(canReturn ? previousPath : '/chat')
+  requestDiscard(() => {
+    allowRouteLeave = true
+    const previousPath = window.history.state?.back
+    const canReturn = typeof previousPath === 'string'
+      && previousPath.startsWith('/')
+      && !previousPath.startsWith('/settings')
+    return router.push(canReturn ? previousPath : '/chat')
+  })
 }
+
+function setDirtySource(category: SettingsCategoryId, dirty: boolean): void {
+  dirtySources.value = { ...dirtySources.value, [category]: dirty }
+}
+
+function requestDiscard(action: () => unknown | Promise<unknown>): void {
+  if (!hasUnsavedChanges.value) {
+    void action()
+    return
+  }
+  pendingDiscardAction = action
+  showDiscardConfirm.value = true
+}
+
+function keepEditing(): void {
+  pendingDiscardAction = null
+  showDiscardConfirm.value = false
+}
+
+function discardChanges(): void {
+  const action = pendingDiscardAction
+  pendingDiscardAction = null
+  showDiscardConfirm.value = false
+  dirtySources.value = {}
+  if (action) void action()
+}
+
+function onBeforeUnload(event: BeforeUnloadEvent): void {
+  if (!hasUnsavedChanges.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+onBeforeRouteLeave((to) => {
+  if (allowRouteLeave || !hasUnsavedChanges.value) return true
+  requestDiscard(() => {
+    allowRouteLeave = true
+    return router.push(to.fullPath)
+  })
+  return false
+})
 
 function normalize(value: string): string {
   return value
@@ -529,7 +587,7 @@ function scoreSection(section: SettingsSection, query: string): number {
         role="dialog"
         aria-modal="true"
         aria-label="Settings"
-        class="relative h-full max-h-[900px] w-full max-w-7xl overflow-hidden rounded-2xl border border-theme-700 bg-theme-950 shadow-2xl"
+        class="relative h-full max-h-[80vh] w-full max-w-7xl overflow-hidden rounded-2xl border border-theme-700 bg-theme-950 shadow-2xl"
       >
         <ResponsiveSectionLayout
           :detail-open="mobileDetailOpen"
@@ -694,6 +752,7 @@ function scoreSection(section: SettingsSection, query: string): number {
                     :is="category.component"
                     :visible-sections="visibleSectionIds"
                     v-bind="category.componentProps || {}"
+                    @dirty-change="setDirtySource(category.id, $event)"
                   />
                 </section>
               </div>
@@ -703,4 +762,33 @@ function scoreSection(section: SettingsSection, query: string): number {
       </section>
     </div>
   </Teleport>
+
+  <ModalDialog
+    :show="showDiscardConfirm"
+    title="Discard unsaved changes?"
+    icon="lucide:triangle-alert"
+    icon-color="amber"
+    layer="nested"
+    @close="keepEditing"
+  >
+    <p class="text-sm leading-relaxed text-theme-400">
+      Some grouped settings have not been saved. Discard them and continue?
+    </p>
+    <template #actions>
+      <button
+        type="button"
+        class="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-500"
+        @click="discardChanges"
+      >
+        Discard changes
+      </button>
+      <button
+        type="button"
+        class="w-full rounded-xl bg-theme-800 px-4 py-3 text-sm font-medium text-theme-200 transition hover:bg-theme-700"
+        @click="keepEditing"
+      >
+        Keep editing
+      </button>
+    </template>
+  </ModalDialog>
 </template>
