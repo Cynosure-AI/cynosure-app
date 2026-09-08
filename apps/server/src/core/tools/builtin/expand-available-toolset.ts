@@ -1,19 +1,21 @@
 import type { RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
+import type { ToolNamespaceMetadata } from '../tool-registry.js'
 import { compactToolDescription } from '../tool-description.js'
 
-export const TOOL_SEARCH_TOOL_NAME = 'expand_available_toolset' // Name of the tool the router LLM calls to confirm its tool selection
+export const TOOL_SEARCH_TOOL_NAME = 'expand_available_toolset' // Runtime capability discovery tool
 
 const TOOL_SEARCH_LIMIT = 12
 
 export interface SearchAvailableMcpToolsOptions {
     allTools: RegistryAwareToolDefinition[]
+    mcpMetadata?: ToolNamespaceMetadata[]
     getLoadedToolNames: () => Set<string>
 }
 
 export function makeSearchAvailableMcpToolsTool(
     opts: SearchAvailableMcpToolsOptions,
 ): ToolDefinition {
-    const { allTools, getLoadedToolNames } = opts
+    const { allTools, mcpMetadata, getLoadedToolNames } = opts
     const dynamicallyLoadedNames = new Set<string>()
 
     return {
@@ -21,8 +23,8 @@ export function makeSearchAvailableMcpToolsTool(
         execution: { readOnly: true },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         description:
-            'IMPORTANT TOOL: Search and load additional available tools when the current tools are insufficient or the wrong ones. Use this before saying a capability is unavailable.',
-        timeout: 1_000,
+            'IMPORTANT TOOL: Semantically search MCP capabilities and load additional available tools when the current tools are insufficient or the wrong ones. Use this before saying a capability is unavailable.',
+        timeout: 60_000,
         parameters: {
             type: 'object',
             additionalProperties: false,
@@ -39,7 +41,8 @@ export function makeSearchAvailableMcpToolsTool(
             },
             required: ['requested_capability'],
         },
-        execute: async (params) => {
+        execute: async (params, signal) => {
+            signal?.throwIfAborted()
             const { requested_capability, limit } = parseSearchArgs(params)
 
             if (!requested_capability) {
@@ -51,8 +54,15 @@ export function makeSearchAvailableMcpToolsTool(
                 (tool) => isMcpTool(tool) && tool.name !== TOOL_SEARCH_TOOL_NAME && !loadedNames.has(tool.name),
             )
 
-            const names = lexicalToolSearch(requested_capability, searchableTools, limit)
-            const matches = searchableTools.filter(({ name }) => names.includes(name))
+            // Load lazily: the router also constructs this tool for every routed turn.
+            const { retrieveMcpTools } = await import('../../agent/tool-router.js')
+            const matches = await retrieveMcpTools({
+                userQuery: requested_capability,
+                allTools: searchableTools,
+                mcpMetadata,
+                maxTools: limit,
+            })
+            signal?.throwIfAborted()
             for (const tool of matches) {
                 dynamicallyLoadedNames.add(tool.name)
             }
@@ -79,62 +89,11 @@ function parseSearchArgs(params: unknown): { requested_capability: string; limit
         : {}
 
     const requested_capability = typeof args.requested_capability === 'string' ? args.requested_capability.trim() : ''
-    const limit = typeof args.limit === 'number'
+    const limit = typeof args.limit === 'number' && Number.isFinite(args.limit)
         ? Math.max(1, Math.min(TOOL_SEARCH_LIMIT, Math.floor(args.limit)))
         : TOOL_SEARCH_LIMIT
 
     return { requested_capability, limit }
-}
-
-function lexicalToolSearch(
-    requested_capability: string,
-    tools: ToolDefinition[],
-    limit: number,
-): string[] {
-    const scored = scoreItems(
-        requested_capability,
-        tools,
-        toolText,
-        ({ name }) => name,
-    )
-
-    const matching = scored.filter(({ score }) => score > 0)
-    return (matching.length ? matching : scored)
-        .slice(0, limit)
-        .map(({ value }) => value)
-}
-
-function scoreItems<T>(
-    requested_capability: string,
-    items: T[],
-    textForItem: (item: T) => string,
-    valueForItem: (item: T) => string,
-): Array<{ value: string; score: number; index: number }> {
-    const terms = tokenize(requested_capability)
-
-    return items
-        .map((item, index) => {
-            const haystack = textForItem(item).toLowerCase()
-            const score = [...terms].reduce(
-                (sum, term) => sum + (haystack.includes(term) ? 1 : 0),
-                0,
-            )
-
-            return {
-                value: valueForItem(item),
-                score,
-                index,
-            }
-        })
-        .sort((a, b) => b.score - a.score || a.index - b.index)
-}
-
-function tokenize(text: string): Set<string> {
-    return new Set(text.toLowerCase().match(/[a-z0-9_]{3,}/g) || [])
-}
-
-function toolText(tool: ToolDefinition): string {
-    return `${tool.name} ${tool.description}`
 }
 
 function isMcpTool(tool: RegistryAwareToolDefinition): boolean {
