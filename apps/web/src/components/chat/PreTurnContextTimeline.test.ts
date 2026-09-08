@@ -123,6 +123,38 @@ describe('PreTurnContextTimeline', () => {
     expect(selectionStep.text()).toContain('No relevant memories')
   })
 
+  test('shows an explicit empty toolset selection without counting a selected toolset', async () => {
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: {
+        steps: [{
+          iteration: 0,
+          status: 'routing-tools',
+          timestamp: 1_700_000_000_550,
+          toolCalls: [{
+            name: 'No toolsets selected',
+            arguments: JSON.stringify({
+              type: 'toolset-router',
+              selectionMethod: 'llm',
+              emptyReason: 'none-relevant',
+              content: 'AI toolset selection ran, but no MCPs or toolsets were relevant for this turn.',
+            }),
+          }],
+        }],
+        isActive: false,
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    expect(wrapper.get('button').findAll('.context-chip')).toHaveLength(0)
+    expect(wrapper.get('[role="status"]').text()).toBe('AI selected no MCPs/toolsets')
+    await wrapper.get('button').trigger('click')
+    const selectionStep = wrapper.get('li')
+    expect(selectionStep.text()).toContain('AI selected no MCPs/toolsets')
+    await selectionStep.get('button').trigger('click')
+    expect(selectionStep.text()).toContain('No toolsets selected')
+    expect(selectionStep.text()).toContain('no MCPs or toolsets were relevant')
+  })
+
   test('shows memory matches from highest to lowest percentage', async () => {
     const wrapper = mount(PreTurnContextTimeline, {
       props: {

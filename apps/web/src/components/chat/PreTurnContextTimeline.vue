@@ -100,7 +100,9 @@ function plural(count: number, singular: string, pluralValue = `${singular}s`): 
 }
 
 function contextLabel(kind: ContextKind, phase: string, count: number, method: string, emptyReason?: string): string {
-  if (kind === 'toolsets') return `AI selected ${plural(count, 'MCP/toolset', 'MCPs/toolsets')}`
+  if (kind === 'toolsets') return emptyReason
+    ? 'AI selected no MCPs/toolsets'
+    : `AI selected ${plural(count, 'MCP/toolset', 'MCPs/toolsets')}`
   if (kind === 'tools') {
     if (method === 'llm') return `AI selected ${plural(count, 'tool')}`
     const prefix = method === 'lexical' ? 'Lexical search' : 'Semantic search'

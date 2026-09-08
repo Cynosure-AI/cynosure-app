@@ -386,15 +386,24 @@ function emitToolsetRoutingSelection(
     eventMeta?: Record<string, unknown>,
 ): void {
     const candidatesById = new Map(buildToolsetCandidates(tools, mcpMetadata).map((candidate) => [candidate.id, candidate]))
+    const selectedToolsets = [...selectedNamespaceIds].map((namespaceId) => ({
+        name: candidatesById.get(namespaceId)?.label || namespaceId,
+        arguments: JSON.stringify({ type: 'toolset-router', namespaceId, selectionMethod: 'llm' }),
+    }))
     getEventBus().emit('step:tools-chosen', {
         conversationId,
         taskId,
         iteration: 0,
         ...eventMeta,
-        toolCalls: [...selectedNamespaceIds].map((namespaceId) => ({
-            name: candidatesById.get(namespaceId)?.label || namespaceId,
-            arguments: JSON.stringify({ type: 'toolset-router', namespaceId, selectionMethod: 'llm' }),
-        })),
+        toolCalls: selectedToolsets.length ? selectedToolsets : [{
+            name: 'No toolsets selected',
+            arguments: JSON.stringify({
+                type: 'toolset-router',
+                selectionMethod: 'llm',
+                emptyReason: 'none-relevant',
+                content: 'AI toolset selection ran, but no MCPs or toolsets were relevant for this turn.',
+            }),
+        }],
     })
 }
 
