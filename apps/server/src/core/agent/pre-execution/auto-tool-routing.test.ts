@@ -17,7 +17,7 @@ vi.mock('../tool-router.js', () => ({
     routeToolsLexically: routerMocks.lexical,
 }))
 
-import { applyAutoToolRouting, filterToolsForRequestedEffect } from './auto-tool-routing.js'
+import { applyAutoToolRouting, collectAutoIncludedToolNames, filterToolsForRequestedEffect } from './auto-tool-routing.js'
 
 function tool(name: string): RegistryAwareToolDefinition {
     return {
@@ -186,5 +186,59 @@ describe('automatic tool routing', () => {
         expect(filterToolsForRequestedEffect(tools, 'read').map(({ name }) => name)).toEqual(['memory_search'])
         expect(filterToolsForRequestedEffect(tools, 'write').map(({ name }) => name)).toEqual(['memory_search', 'memory_create'])
         expect(filterToolsForRequestedEffect(tools, 'destructive')).toEqual(tools)
+    })
+
+    test('keeps unannotated retrieval tools discoverable for read requests', () => {
+        const tavilyTools = [
+            namespacedTool('tavily-search', 'mcp:tavily', 'Tavily MCP Server'),
+            namespacedTool('tavily-extract', 'mcp:tavily', 'Tavily MCP Server'),
+            namespacedTool('tavily-crawl', 'mcp:tavily', 'Tavily MCP Server'),
+            namespacedTool('tavily-map', 'mcp:tavily', 'Tavily MCP Server'),
+        ]
+        const unknownDestructive = namespacedTool('delete_remote_resource', 'mcp:unknown', 'Unknown MCP')
+
+        expect(filterToolsForRequestedEffect([...tavilyTools, unknownDestructive], 'read'))
+            .toEqual(tavilyTools)
+    })
+
+    test('automatically includes complete small toolsets within the schema token budget', () => {
+        const small = Array.from({ length: 9 }, (_, index) => namespacedTool(`small_${index}`, 'mcp:small', 'Small MCP'))
+        const large = Array.from({ length: 10 }, (_, index) => namespacedTool(`large_${index}`, 'mcp:large', 'Large MCP'))
+
+        expect([...collectAutoIncludedToolNames(
+            [...small, ...large],
+            new Set(['mcp:small', 'mcp:large']),
+        )]).toEqual(small.map(({ name }) => name))
+    })
+
+    test('still ranks every automatically included tool so match scores remain visible', async () => {
+        const tools = [
+            namespacedTool('browser_snapshot', 'mcp:browser', 'Browser MCP'),
+            namespacedTool('browser_find', 'mcp:browser', 'Browser MCP'),
+        ]
+        routerMocks.route.mockImplementation(async ({ allTools }) => allTools.map((candidate: RegistryAwareToolDefinition, index: number) => ({
+            ...candidate,
+            routerScore: .9 - index / 10,
+        })))
+        const gateway = { complete: vi.fn().mockResolvedValue({
+            toolCalls: [{ function: { name: 'select_toolsets', arguments: JSON.stringify({ namespaceIds: ['mcp:browser'] }) } }],
+        }) } as unknown as LLMGateway
+        const events: Array<Record<string, unknown>> = []
+        getEventBus().on('step:tools-chosen', (event) => events.push(event as Record<string, unknown>))
+
+        await applyAutoToolRouting({
+            enabled: true,
+            conversationId: 'conversation-scored-small-set',
+            userQuery: 'inspect the browser',
+            gateway,
+            tools,
+        })
+
+        expect(routerMocks.route).toHaveBeenCalledWith(expect.objectContaining({
+            preferredToolNames: undefined,
+            requiredScoredToolNames: new Set(['browser_snapshot', 'browser_find']),
+        }))
+        const finalCalls = events.at(-1)!.toolCalls as Array<{ arguments: string }>
+        expect(finalCalls.map(({ arguments: value }) => JSON.parse(value).routerScore)).toEqual([.9, .8])
     })
 })

@@ -332,7 +332,12 @@ export class McpManager {
             providerMetadata: t._meta,
             timeout: 60000,
             annotations: t.annotations,
-            execution: { readOnly: t.annotations?.readOnlyHint === true },
+            // Preserve the MCP annotation's tri-state. Missing means unknown,
+            // not explicitly mutating; routing and HITL handle those cases
+            // differently.
+            ...(t.annotations?.readOnlyHint === undefined
+                ? {}
+                : { execution: { readOnly: t.annotations.readOnlyHint === true } }),
             execute: async (params: unknown, signal?: AbortSignal): Promise<ToolResult> => {
                 try {
                     const result = await client.callTool({

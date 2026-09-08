@@ -10,6 +10,8 @@ import { completeWithDebugCapture } from '../../chat/debug-context.js'
 
 const TOOLSET_SELECTION_TOOL_NAME = 'select_toolsets'
 const TOOLSET_DESCRIPTION_CHAR_LIMIT = 1_200
+const AUTO_INCLUDE_TOOLSET_MAX_TOOLS = 9
+const AUTO_INCLUDE_TOOLSET_TOKEN_LIMIT = 6_000
 
 export interface ApplyAutoToolRoutingInput {
     enabled: boolean
@@ -99,6 +101,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             eventMeta,
         )
         const namespaceFilteredTools = filterToolsByNamespace(eligibleTools, selectedNamespaceIds, protectedNames)
+        const autoIncludedToolNames = collectAutoIncludedToolNames(namespaceFilteredTools, selectedNamespaceIds)
         emitToolRoutingStatus(
             conversationId,
             taskId,
@@ -114,6 +117,9 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             mcpMetadata: mcpMetadata?.filter(({ id }) => selectedNamespaceIds.has(id)),
             preferredToolNames,
             usedToolNames,
+            // Complete small toolsets remain included after ordinary semantic
+            // ranking, so they keep a routerScore without consuming the normal cap.
+            requiredScoredToolNames: autoIncludedToolNames,
             onStatus: (status, message) => emitToolRoutingStatus(conversationId, taskId, status, message, eventMeta),
         })
         signal?.throwIfAborted()
@@ -124,7 +130,9 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             'gathered-context',
             eventMeta,
             routedTools.length ? undefined : 'none-found',
-            routedTools.some((tool) => typeof (tool as RoutedToolDefinition).routerScore === 'number') ? 'semantic' : 'lexical',
+            autoIncludedToolNames.size > 0
+                ? 'automatic'
+                : routedTools.some((tool) => typeof (tool as RoutedToolDefinition).routerScore === 'number') ? 'semantic' : 'lexical',
         )
         return routedTools
     } catch (err) {
@@ -161,7 +169,12 @@ export function filterToolsForRequestedEffect<T extends ToolDefinition>(
         if (protectedNames.has(tool.name)) return true
         const destructive = tool.annotations?.destructiveHint === true || /(^|_)(delete|remove|destroy|revoke|cancel)(_|$)/i.test(tool.name)
         if (requestedEffect === 'write') return !destructive
-        return tool.execution?.readOnly === true || (tool.annotations?.readOnlyHint === true && !destructive)
+        if (destructive) return false
+        // An explicit false is authoritative. Missing metadata is merely
+        // unknown and must remain discoverable; execution policy/HITL still
+        // controls whether the selected tool may actually run.
+        if (tool.annotations?.readOnlyHint === false || tool.execution?.readOnly === false) return false
+        return true
     })
 }
 
@@ -366,6 +379,34 @@ function filterToolsByNamespace(
     return tools.filter((tool) => selectedNamespaceIds.has(toolNamespaceId(tool)) || protectedNames.has(tool.name))
 }
 
+/** Small selected toolsets are cheaper and more reliable to include whole than
+ * to run through a second lossy selection pass. The token ceiling prevents a
+ * handful of schema-heavy tools from unexpectedly consuming the context. */
+export function collectAutoIncludedToolNames(
+    tools: RegistryAwareToolDefinition[],
+    selectedNamespaceIds: Set<string>,
+): Set<string> {
+    const grouped = new Map<string, RegistryAwareToolDefinition[]>()
+    for (const tool of tools) {
+        const namespaceId = toolNamespaceId(tool)
+        if (!selectedNamespaceIds.has(namespaceId)) continue
+        grouped.set(namespaceId, [...(grouped.get(namespaceId) || []), tool])
+    }
+
+    const included = new Set<string>()
+    for (const namespaceTools of grouped.values()) {
+        if (namespaceTools.length > AUTO_INCLUDE_TOOLSET_MAX_TOOLS) continue
+        const estimatedTokens = namespaceTools.reduce((total, tool) => total + Math.ceil(JSON.stringify({
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
+        }).length / 4), 0)
+        if (estimatedTokens > AUTO_INCLUDE_TOOLSET_TOKEN_LIMIT) continue
+        namespaceTools.forEach((tool) => included.add(tool.name))
+    }
+    return included
+}
+
 function emitToolRoutingStatus(conversationId: string, taskId: string, status: string, message: string, eventMeta?: Record<string, unknown>): void {
     getEventBus().emit('step:status', {
         conversationId,
@@ -414,7 +455,7 @@ function emitToolRoutingSelection(
     contextPhase: 'gathered-results' | 'gathered-context' = 'gathered-context',
     eventMeta?: Record<string, unknown>,
     emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed' | 'disabled' | 'no-query' | 'no-tools',
-    selectionMethod: 'semantic' | 'lexical' = 'semantic',
+    selectionMethod: 'semantic' | 'lexical' | 'automatic' = 'semantic',
 ): void {
     const visibleTools = tools.filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
     getEventBus().emit('step:tools-chosen', {
@@ -426,8 +467,17 @@ function emitToolRoutingSelection(
             .map((tool) => ({
                 name: tool.name,
                 arguments: typeof (tool as RoutedToolDefinition).routerScore === 'number'
-                    ? JSON.stringify({ type: 'tool-router', contextPhase, selectionMethod, routerScore: (tool as RoutedToolDefinition).routerScore })
-                    : JSON.stringify({ type: 'tool-router', contextPhase, selectionMethod })
+                    ? JSON.stringify({
+                        type: 'tool-router', contextPhase, selectionMethod,
+                        routerScore: (tool as RoutedToolDefinition).routerScore,
+                        namespaceId: (tool as RegistryAwareToolDefinition).namespaceId,
+                        namespaceLabel: (tool as RegistryAwareToolDefinition).namespaceLabel,
+                    })
+                    : JSON.stringify({
+                        type: 'tool-router', contextPhase, selectionMethod,
+                        namespaceId: (tool as RegistryAwareToolDefinition).namespaceId,
+                        namespaceLabel: (tool as RegistryAwareToolDefinition).namespaceLabel,
+                    })
             })) : [{
                 name: toolEmptyLabel(emptyReason),
                 arguments: JSON.stringify({

@@ -5,6 +5,7 @@ import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { RetrievedChunk } from '../../memory/parser.js'
 import { getMemoryRetrievalConfig } from '../../memory/retrieval-config.js'
+import { getMemoryReranker } from '../../memory/reranker.js'
 import { getUserSettings } from '../../user-settings.js'
 import { completeWithDebugCapture } from '../../chat/debug-context.js'
 import type { KnowledgeAssertion, KnowledgeGraphProjection } from '../../memory/knowledge-types.js'
@@ -91,6 +92,14 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             contextualQuery,
         ].map((query) => query?.trim() || '').filter(Boolean)))
         const retrievalCount = getMemoryRetrievalConfig().resultCount
+        const rerankerEnabled = getMemoryReranker().getConfig().enabled
+        let pipelineStage = 0
+        const reportRetrievalStage = (stage: 'rag' | 'reranking') => {
+            const nextStage = stage === 'rag' ? 1 : 2
+            if (nextStage <= pipelineStage) return
+            pipelineStage = nextStage
+            emitMemoryPipelineStatus(conversationId, taskId, stage === 'rag' ? 'searching-memory' : 'reranking-memory', eventMeta)
+        }
         let retrievalResults = await Promise.all(
             retrievalQueries.map((query) => aggregator.aggregate(query, {
                 agentId,
@@ -98,8 +107,10 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                 permanentTopK: retrievalCount,
                 includeGraph: true,
                 graphQuery: qualifyFirstPersonGraphQuery(primaryQuery),
+                onStatus: reportRetrievalStage,
             })),
         )
+        emitMemoryPipelineStatus(conversationId, taskId, 'filtering-memory', eventMeta)
         let candidates = filterAutoMemoryCandidates(fuseAutoMemoryResults(retrievalResults))
         signal?.throwIfAborted()
 
@@ -118,8 +129,9 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             formatGraphOnly(aggregator, candidates.graph),
             'retrieval',
         )
-        emitMemoryCurationStatus(conversationId, taskId, eventMeta)
-        let selection = await selectMemoryContext({
+        if (rerankerEnabled) emitMemoryPipelineStatus(conversationId, taskId, 'selecting-memory', eventMeta)
+        else emitMemoryCurationStatus(conversationId, taskId, eventMeta)
+        let selection = rerankerEnabled ? null : await selectMemoryContext({
             conversationId,
             gateway,
             providerId,
@@ -141,6 +153,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                 permanentTopK: retrievalCount,
                 includeGraph: true,
                 graphQuery: qualifyFirstPersonGraphQuery(correctiveQuery),
+                onStatus: reportRetrievalStage,
             })
             retrievalResults = [...retrievalResults, corrected]
             candidates = filterAutoMemoryCandidates(fuseAutoMemoryResults(retrievalResults))
@@ -154,7 +167,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                 formatGraphOnly(aggregator, candidates.graph),
                 'retrieval',
             )
-            selection = await selectMemoryContext({
+            selection = rerankerEnabled ? null : await selectMemoryContext({
                 conversationId,
                 gateway,
                 providerId,
@@ -187,6 +200,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             ? aggregator.format({ permanent: [], graph: selectedMemory.graph })
             : ''
 
+        const selectionMethod = rerankerEnabled ? 'reranker' : selection ? 'llm' : 'ranked-fallback'
         emitMemoryRoutingSelection(
             conversationId,
             taskId,
@@ -195,12 +209,11 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             eventMeta,
             selectedMemory.permanent.length || graphContext ? undefined : 'none-relevant',
             graphContext,
-            selection ? 'llm' : 'ranked-fallback',
+            selectionMethod,
         )
         const formatted = aggregator.format(selectedMemory)
         if (!formatted) return null
 
-        const selectionMethod = selection ? 'llm' : 'ranked-fallback'
         const verificationStatus: ContextEvidence['verificationStatus'] = selection ? 'verified' : 'ranked-fallback'
         const evidence: ContextEvidence[] = [
             ...selectedMemory.permanent.map((chunk) => ({
@@ -597,6 +610,28 @@ function emitMemoryCurationStatus(conversationId: string, taskId: string, eventM
     })
 }
 
+function emitMemoryPipelineStatus(
+    conversationId: string,
+    taskId: string,
+    status: 'searching-memory' | 'reranking-memory' | 'filtering-memory' | 'selecting-memory',
+    eventMeta?: Record<string, unknown>,
+): void {
+    const messages = {
+        'searching-memory': 'Searching memory with hybrid RAG...',
+        'reranking-memory': 'Reranking memory matches...',
+        'filtering-memory': 'Filtering weak and duplicate memory matches...',
+        'selecting-memory': 'Selecting the highest-ranked memories...',
+    }
+    getEventBus().emit('step:status', {
+        conversationId,
+        taskId,
+        iteration: 0,
+        status,
+        message: messages[status],
+        ...eventMeta,
+    })
+}
+
 function emitMemoryRoutingSelection(
     conversationId: string,
     taskId: string,
@@ -605,7 +640,7 @@ function emitMemoryRoutingSelection(
     eventMeta?: Record<string, unknown>,
     emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed' | 'disabled' | 'empty-scope' | 'no-query',
     graphContext?: string,
-    selectionMethod: 'retrieval' | 'llm' | 'ranked-fallback' | 'routing-failed' = contextPhase === 'gathered-results' ? 'retrieval' : 'llm',
+    selectionMethod: 'retrieval' | 'reranker' | 'llm' | 'ranked-fallback' | 'routing-failed' = contextPhase === 'gathered-results' ? 'retrieval' : 'llm',
 ): void {
     const toolCalls = sortMemoriesByMatch(memories).map((memory) => {
         const visibleMatch = memoryMatch(memory)
