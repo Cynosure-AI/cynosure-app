@@ -50,6 +50,7 @@ export interface ChatStreamingState {
     handleStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleStreamVideos(data: { streamId: string; conversationId: string; videos: string[] }): void
     handleStreamReset(data: { streamId: string; conversationId: string }): void
+    handleStreamDiscard(data: { streamId: string; conversationId: string }): void
     handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number }): void
     handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number; images?: string[] }): void
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
@@ -542,6 +543,24 @@ export function useChatStreaming(
         }
     }
 
+    function handleStreamDiscard(data: { streamId: string; conversationId: string }): void {
+        const buf = streamBuffers.get(data.conversationId)
+        if (buf?.streamId === data.streamId) {
+            buf.content = ''
+            buf.thinking = ''
+            buf.images = []
+            buf.videos = []
+        }
+        if (data.conversationId !== activeConversationId.value) return
+        const streamMsg = findStreamingMsg(data.streamId)
+        if (streamMsg) {
+            const idx = messages.value.indexOf(streamMsg)
+            if (idx !== -1) messages.value.splice(idx, 1)
+        }
+        streamingContent.value = ''
+        streamingThinking.value = ''
+    }
+
     function handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number }): void {
         if (data.conversationId !== activeConversationId.value) return
         lastUsage.value = { ...data.usage, model: data.model, contextTokens: data.contextTokens }
@@ -922,6 +941,7 @@ export function useChatStreaming(
         handleStreamImages,
         handleStreamVideos,
         handleStreamReset,
+        handleStreamDiscard,
         handleStreamUsage,
         handleStreamEnd,
         handleStreamError,

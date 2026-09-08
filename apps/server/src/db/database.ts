@@ -33,6 +33,8 @@ export function getDb(): Database.Database {
     createTables(db)
     // All pending HITL are void after a server restart — the executor promises are gone.
     db.prepare('DELETE FROM pending_hitl').run()
+    // Queued chat messages survive restarts, but never resume work unexpectedly.
+    db.prepare("UPDATE queued_chat_messages SET status = 'paused'").run()
   }
   return db
 }
@@ -116,6 +118,23 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
+
+    CREATE TABLE IF NOT EXISTS queued_chat_messages (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      content TEXT NOT NULL,
+      delivery TEXT NOT NULL DEFAULT 'next' CHECK(delivery IN ('next', 'steer')),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'paused')),
+      position INTEGER NOT NULL,
+      run_json TEXT NOT NULL DEFAULT '{}',
+      image_urls_json TEXT,
+      audio_urls_json TEXT,
+      file_artifacts_json TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_queued_chat_messages_conversation
+      ON queued_chat_messages(conversation_id, position, created_at);
 
     CREATE TABLE IF NOT EXISTS message_attachments (
       id TEXT PRIMARY KEY,

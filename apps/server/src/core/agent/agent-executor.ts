@@ -114,6 +114,8 @@ export interface AgentExecutorConfig {
     isPrimaryExecutor?: boolean
     /** Capture model-visible requests and provider-exposed responses for the debug inspector. */
     debugContextEnabled?: boolean
+    /** Promote durable steering messages into this run at model boundaries. */
+    takeSteeringMessages?: () => Promise<ChatMessage[]>
 }
 
 export interface AgentExecutorResult {
@@ -213,9 +215,17 @@ export class AgentExecutor {
 
     private _streamId: string
     private _sp: string
+    private steeringRequested = false
+    private modelAbortController: AbortController | null = null
 
     /** The primary streamId (useful for callers that need it for cancel/error handling). */
     get streamId(): string { return this._streamId }
+
+    /** Interrupt only the current model request. In-flight tools keep the global signal. */
+    requestSteering(): void {
+        this.steeringRequested = true
+        this.modelAbortController?.abort(new DOMException('Steering requested', 'AbortError'))
+    }
 
     constructor(config: AgentExecutorConfig) {
         this.config = {
@@ -266,12 +276,7 @@ export class AgentExecutor {
         // --- Phase 1: Initial LLM streaming response ---
         this.broadcastStreamStart(activeStreamId)
 
-        const initialStream = this.createStream(currentMessages)
-        const initialResult = await this.consumeStream(
-            initialStream.stream,
-            activeStreamId,
-            initialStream.debugRoundIndex,
-        )
+        const initialResult = await this.streamInitialRound(currentMessages, activeStreamId)
 
         if (initialResult.error) {
             // Always close the stream before re-throwing so the frontend's
@@ -333,6 +338,17 @@ export class AgentExecutor {
         try {
             for (let round = 0; round < this.config.maxRounds && pendingToolCalls?.length; round++) {
                 if (this.config.signal?.aborted) break
+                if (await this.applyPendingSteering(currentMessages, activeStreamId)) {
+                    const steered = await this.streamLLMRound(currentMessages, activeStreamId)
+                    fullContent = steered.content
+                    fullThinking += steered.thinking
+                    lastRoundThinking = steered.thinking
+                    collectedImages.push(...steered.images)
+                    pendingToolCalls = steered.toolCalls
+                    usage = accumulateUsage(usage, steered.usage)
+                    contextTokens = maxTokens(contextTokens, steered.usage?.totalTokens)
+                    if (!pendingToolCalls?.length) break
+                }
                 toolRounds = round + 1
                 const visibleToolCalls = pendingToolCalls.filter((tc) => isVisibleExecutionTool(tc.function.name))
                 const hasPlanningUpdate = pendingToolCalls.some((tc) => isPlanningToolName(tc.function.name))
@@ -584,12 +600,13 @@ export class AgentExecutor {
     /**
      * Create a gateway stream from the current messages, with old images trimmed.
      */
-    private createStream(messages: ChatMessage[]): {
+    private createStream(messages: ChatMessage[], modelSignal?: AbortSignal): {
         stream: AsyncIterable<import('../gateway/providers/base.provider.js').StreamChunk>
         debugRoundIndex?: number
     } {
         this.config.signal?.throwIfAborted()
-        const { gateway, tools, model, temperature, thinkingEnabled, reasoningEffort, signal, providerId } = this.config
+        const { gateway, tools, model, temperature, thinkingEnabled, reasoningEffort, providerId } = this.config
+        const signal = modelSignal || this.config.signal
         const maxTokens = this.requestedOutputTokens()
         const request = {
             messages: this.maybeTrimContext(AgentExecutor.trimOldImages(messages)),
@@ -696,6 +713,7 @@ export class AgentExecutor {
         stream: AsyncIterable<import('../gateway/providers/base.provider.js').StreamChunk>,
         streamId: string,
         debugRoundIndex?: number,
+        signal?: AbortSignal,
     ): Promise<{
         content: string
         thinking: string
@@ -715,7 +733,7 @@ export class AgentExecutor {
 
         try {
             for await (const chunk of stream) {
-                this.config.signal?.throwIfAborted()
+                signal?.throwIfAborted()
                 if (chunk.content) {
                     content += chunk.content
                     broadcast(`${this._sp}-chunk`, { streamId, conversationId, content: chunk.content })
@@ -775,6 +793,59 @@ export class AgentExecutor {
         return { content, thinking, images, toolCalls, usage }
     }
 
+    private modelSignal(): AbortSignal {
+        this.modelAbortController = new AbortController()
+        if (this.steeringRequested) {
+            this.modelAbortController.abort(new DOMException('Steering requested', 'AbortError'))
+        }
+        return this.config.signal
+            ? AbortSignal.any([this.config.signal, this.modelAbortController.signal])
+            : this.modelAbortController.signal
+    }
+
+    private async applyPendingSteering(messages: ChatMessage[], streamId: string): Promise<boolean> {
+        if (!this.steeringRequested || !this.config.takeSteeringMessages) return false
+        this.steeringRequested = false
+        const steering = await this.config.takeSteeringMessages()
+        if (!steering.length) return false
+        messages.push(...steering)
+        this.config.broadcast(`${this._sp}-discard`, {
+            streamId,
+            conversationId: this.config.conversationId,
+        })
+        this.config.broadcast(`${this._sp}-reset`, {
+            streamId,
+            conversationId: this.config.conversationId,
+        })
+        return true
+    }
+
+    private async streamInitialRound(
+        messages: ChatMessage[],
+        streamId: string,
+    ): Promise<{
+        content: string
+        thinking: string
+        images: string[]
+        toolCalls: ToolCall[] | undefined
+        usage: Usage
+        error?: Error
+    }> {
+        while (true) {
+            await this.applyPendingSteering(messages, streamId)
+            const signal = this.modelSignal()
+            const initialStream = this.createStream(messages, signal)
+            const result = await this.consumeStream(initialStream.stream, streamId, initialStream.debugRoundIndex, signal)
+            this.modelAbortController = null
+            this.config.signal?.throwIfAborted()
+            if (this.steeringRequested) {
+                await this.applyPendingSteering(messages, streamId)
+                continue
+            }
+            return result
+        }
+    }
+
     /**
      * Stream a single LLM round and return the result.
      * In 'single' mode: resets the existing stream and reuses the streamId.
@@ -798,6 +869,7 @@ export class AgentExecutor {
 
         for (let attempt = 1; attempt <= MODEL_ROUND_MAX_ATTEMPTS; attempt++) {
             this.config.signal?.throwIfAborted()
+            await this.applyPendingSteering(messages, streamId)
             if (this.config.streamMode === 'per-round') {
                 streamId = nanoid()
                 this.broadcastStreamStart(streamId)
@@ -805,9 +877,17 @@ export class AgentExecutor {
                 this.config.broadcast(`${this._sp}-reset`, { streamId, conversationId })
             }
 
-            const nextStream = this.createStream(messages)
-            const result = await this.consumeStream(nextStream.stream, streamId, nextStream.debugRoundIndex)
+            const signal = this.modelSignal()
+            const nextStream = this.createStream(messages, signal)
+            const result = await this.consumeStream(nextStream.stream, streamId, nextStream.debugRoundIndex, signal)
+            this.modelAbortController = null
             this.config.signal?.throwIfAborted()
+
+            if (this.steeringRequested) {
+                await this.applyPendingSteering(messages, streamId)
+                attempt--
+                continue
+            }
 
             if (!result.error) {
                 if (this.config.streamMode === 'per-round') {
@@ -894,13 +974,25 @@ export class AgentExecutor {
      */
     private async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolCallResult[]> {
         const results: ToolCallResult[] = []
-        for (const tc of toolCalls) {
+        for (let index = 0; index < toolCalls.length; index++) {
+            const tc = toolCalls[index]
             this.config.signal?.throwIfAborted()
             if (isVisibleExecutionTool(tc.function.name)) {
                 this.config.usedToolNames?.add(tc.function.name)
             }
             results.push(await this.executeSingleToolCall(tc))
             this.config.signal?.throwIfAborted()
+            if (this.steeringRequested) {
+                for (const skipped of toolCalls.slice(index + 1)) {
+                    results.push({
+                        toolCallId: skipped.id,
+                        name: skipped.function.name,
+                        output: 'Skipped because the user supplied a steering instruction.',
+                        success: false,
+                    })
+                }
+                break
+            }
         }
         return results
     }

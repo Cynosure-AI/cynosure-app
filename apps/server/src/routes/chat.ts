@@ -39,6 +39,22 @@ import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageAr
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemorySpaceOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
 import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
+import type { ChatQueueRequest } from '@shared/types'
+import {
+  configureChatQueue,
+  deleteQueuedChatMessage,
+  deleteQueuedChatAttachment,
+  enqueueChatMessage,
+  getChatQueueState,
+  markQueuedMessagePromoted,
+  pauseChatQueue,
+  promoteQueuedMessageToSteering,
+  registerChatSteeringHandler,
+  replaceQueuedChatMessage,
+  runNextQueuedMessage,
+  takeSteeringMessages,
+  type QueuedExecutionRequest,
+} from '../core/chat/message-queue.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -209,12 +225,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     return capture
   })
 
-  // POST /api/chat/conversations/:id/send — send message + stream response
-  app.post<{
-    Params: { id: string }
-    Body: ChatSendRequest
-  }>('/conversations/:id/send', async (req) => {
-    const conversationId = req.params.id
+  async function executeSend(conversationId: string, request: QueuedExecutionRequest): Promise<boolean> {
     const initialConversation = getDb().prepare('SELECT agent_id FROM conversations WHERE id = ?')
       .get(conversationId) as { agent_id: string | null } | undefined
     const initialAgentId = initialConversation?.agent_id || null
@@ -238,20 +249,20 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       id: executionId,
       conversationId,
       agentId: initialAgentId,
-      model: req.body.run.model || initialAgent?.model || null,
+      model: request.run.model || initialAgent?.model || null,
       startedAt: Date.now(),
     }, abortController)
 
-    return withConversationLock(conversationId, async () => {
+    const outcome = await withConversationLock(conversationId, async () => {
       abortController.signal.throwIfAborted()
-      const { content, messageId: providedMsgId, imageDataUrls, audioDataUrls, files } = req.body
+      const { content, messageId: providedMsgId, imageDataUrls, audioDataUrls, files } = request
       const normalizedContent = content.trim() || (audioDataUrls?.length ? 'Transcribe the attached audio.' : content)
       // Browser-facing artifact URLs are relative API routes. Resolve them for
       // providers as a defensive fallback (edits normally use the dedicated
       // attachment-resolution endpoint before truncating the old message).
       const providerImageDataUrls = imageDataUrls?.map((url) => artifactFileUrlToDataUrl(url) || url)
       const providerAudioDataUrls = audioDataUrls?.map((url) => artifactFileUrlToDataUrl(url) || url)
-      const run = req.body.run
+      const run = request.run
       const {
         model,
         providerOverride,
@@ -313,18 +324,22 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
       }
 
-      const storedFileAttachments = files?.length
-        ? await materializeFileAttachments(files, conversationId)
-        : []
+      const storedFileAttachments = request.stagedFileArtifacts
+        ? request.stagedFileArtifacts
+        : files?.length
+          ? await materializeFileAttachments(files, conversationId)
+          : []
       abortController.signal.throwIfAborted()
-      for (const attachment of storedFileAttachments) {
-        attachment.chunkCount = await indexConversationAttachment(conversationId, attachment)
-        abortController.signal.throwIfAborted()
+      if (!request.stagedFileArtifacts) {
+        for (const attachment of storedFileAttachments) {
+          attachment.chunkCount = await indexConversationAttachment(conversationId, attachment)
+          abortController.signal.throwIfAborted()
+        }
       }
 
       // Build content (text + optional images + optional audio + optional files)
       let userContent: string | ContentPart[]
-      if (providerImageDataUrls?.length || providerAudioDataUrls?.length || files?.length) {
+      if (providerImageDataUrls?.length || providerAudioDataUrls?.length || storedFileAttachments.length) {
         const parts: ContentPart[] = [{ type: 'text', text: normalizedContent }]
         if (storedFileAttachments.length) {
           for (const file of storedFileAttachments) {
@@ -366,12 +381,31 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const idPattern = /^[A-Za-z0-9_-]{6,36}$/
       const userMsgId = (providedMsgId && idPattern.test(providedMsgId)) ? providedMsgId : nanoid()
       const now = Date.now()
-      db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(userMsgId, conversationId, 'user', normalizedContent, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, storedAudioUrls?.length ? JSON.stringify(storedAudioUrls) : null, now)
-      persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
-      db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
+      db.transaction(() => {
+        db.prepare(
+          `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        ).run(userMsgId, conversationId, 'user', normalizedContent, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, storedAudioUrls?.length ? JSON.stringify(storedAudioUrls) : null, now)
+        persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
+        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
+        if (request.fromQueue) markQueuedMessagePromoted(conversationId, userMsgId)
+      })()
+      if (request.fromQueue) {
+        broadcast('chat:new-message', {
+          conversationId,
+          streamId,
+          message: {
+            id: userMsgId,
+            conversationId,
+            role: 'user',
+            content: normalizedContent,
+            imageDataUrls: storedImageUrls,
+            audioDataUrls: storedAudioUrls,
+            fileAttachments: storedFileAttachments.map(file => ({ name: file.name })),
+            createdAt: now,
+          },
+        })
+      }
 
       const convRow = db.prepare('SELECT agent_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null } | undefined
       const mainAgentId: string | null = convRow?.agent_id || null
@@ -385,7 +419,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       let messages: ChatMessage[] = history.messages
 
       // Replace last user message with multimodal version if images/files/audio present
-      if (providerImageDataUrls?.length || providerAudioDataUrls?.length || files?.length) {
+      if (providerImageDataUrls?.length || providerAudioDataUrls?.length || storedFileAttachments.length) {
         messages[messages.length - 1] = {
           ...messages[messages.length - 1],
           content: userContent
@@ -613,7 +647,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
               }
             }
           }
-          return { streamId }
+          return { streamId, completed: true }
         }
 
         if (isTranscriptionOutputModel) {
@@ -707,7 +741,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
               }
             }
           }
-          return { streamId }
+          return { streamId, completed: true }
         }
 
         // Fetch context window size (best-effort, non-blocking for the critical path)
@@ -797,10 +831,17 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           isPrimaryExecutor: true,
           usedToolNames,
           debugContextEnabled: reqDebugMode === true,
+          takeSteeringMessages: () => takeSteeringMessages(conversationId, streamId),
           eventMeta: { executionId },
         })
 
-        const result = await executor.run(messages)
+        const unregisterSteering = registerChatSteeringHandler(conversationId, () => executor.requestSteering())
+        let result
+        try {
+          result = await executor.run(messages)
+        } finally {
+          unregisterSteering()
+        }
         abortController.signal.throwIfAborted()
         if (reqAutoToolRouting === true && executionConfig) {
           persistStickyUsedTools(db, conversationId, executionConfig, tools, usedToolNames, toolRegistry)
@@ -904,7 +945,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         unregisterActiveChatExecution(executionId)
       }
 
-      return { streamId }
+      return { streamId, completed: true }
     }).catch((err: unknown) => {
       if ((err as Error).name === 'AbortError' || abortController.signal.aborted) {
         getEventBus().emit('task:error', { conversationId, executionId, error: 'Cancelled' })
@@ -913,6 +954,64 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       }
       throw err
     }).finally(() => unregisterActiveChatExecution(executionId)) // end withConversationLock
+    return 'completed' in outcome && outcome.completed === true
+  }
+
+  configureChatQueue(executeSend, broadcast)
+
+  // POST /api/chat/conversations/:id/send — send message + stream response
+  app.post<{
+    Params: { id: string }
+    Body: ChatSendRequest
+  }>('/conversations/:id/send', async (req) => {
+    const completed = await executeSend(req.params.id, req.body)
+    if (completed) void runNextQueuedMessage(req.params.id)
+    else pauseChatQueue(req.params.id)
+    return { success: true }
+  })
+
+  app.get<{ Params: { id: string } }>('/conversations/:id/queue', async (req) => {
+    return getChatQueueState(req.params.id)
+  })
+
+  app.post<{ Params: { id: string }; Body: ChatQueueRequest }>('/conversations/:id/queue', async (req, reply) => {
+    const item = await enqueueChatMessage(req.params.id, req.body)
+    return reply.status(201).send(item)
+  })
+
+  app.put<{ Params: { id: string; queueId: string }; Body: ChatQueueRequest }>(
+    '/conversations/:id/queue/:queueId',
+    async (req, reply) => {
+      const item = await replaceQueuedChatMessage(req.params.id, req.params.queueId, req.body)
+      return item || reply.status(404).send({ error: 'Queued message not found' })
+    },
+  )
+
+  app.delete<{ Params: { id: string; queueId: string } }>(
+    '/conversations/:id/queue/:queueId',
+    async (req, reply) => deleteQueuedChatMessage(req.params.id, req.params.queueId)
+      ? { success: true }
+      : reply.status(404).send({ error: 'Queued message not found' }),
+  )
+
+  app.delete<{ Params: { id: string; queueId: string; attachmentId: string } }>(
+    '/conversations/:id/queue/:queueId/attachments/:attachmentId',
+    async (req, reply) => deleteQueuedChatAttachment(req.params.id, req.params.queueId, req.params.attachmentId)
+      ? { success: true }
+      : reply.status(404).send({ error: 'Queued attachment not found' }),
+  )
+
+  app.post<{ Params: { id: string; queueId: string } }>(
+    '/conversations/:id/queue/:queueId/steer',
+    async (req, reply) => promoteQueuedMessageToSteering(req.params.id, req.params.queueId)
+      ? { success: true }
+      : reply.status(404).send({ error: 'Queued message not found' }),
+  )
+
+  app.post<{ Params: { id: string } }>('/conversations/:id/queue/run-next', async (req) => {
+    getDb().prepare(`UPDATE queued_chat_messages SET status = 'pending' WHERE conversation_id = ?`).run(req.params.id)
+    void runNextQueuedMessage(req.params.id)
+    return { success: true }
   })
 
   // POST /api/chat/cancel — cancel an active stream / execution
@@ -929,6 +1028,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     }
     // Fallback: cancel by conversationId (handles post-reload or sub-agent-only streaming)
     if (conversationId) {
+      pauseChatQueue(conversationId)
       for (const executionId of getChatExecutionIdsByConversation(conversationId)) executionIds.add(executionId)
       clearPendingHITLForConversation(conversationId)
       cancelChatExecutionByConversation(conversationId)

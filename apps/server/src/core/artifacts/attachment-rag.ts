@@ -135,6 +135,12 @@ export async function deleteConversationAttachmentIndex(conversationId: string):
     await getRAGStore().deleteByFilter(CONVERSATION_ATTACHMENTS_TABLE, filter)
 }
 
+export async function deleteConversationAttachmentChunks(conversationId: string, attachmentIds: string[]): Promise<void> {
+    const filter = buildAttachmentFilter(conversationId, attachmentIds)
+    if (!filter) return
+    await getRAGStore().deleteByFilter(CONVERSATION_ATTACHMENTS_TABLE, filter)
+}
+
 export async function deleteConversationAttachmentIndexes(conversationIds: string[]): Promise<void> {
     const spaceIds = Array.from(new Set(conversationIds.map(conversationAttachmentSpaceId)))
     const filter = lanceDbInFilter('spaceId', spaceIds)

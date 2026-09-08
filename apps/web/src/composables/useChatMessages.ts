@@ -6,10 +6,12 @@ import { usePreferencesStore } from '../stores/preferences.store'
 import type { SubAgentAssignment } from '../api/types'
 import type { DisplayMessage } from '../stores/chat.store'
 import type { ChatStreamingState } from './useChatStreaming'
-import type { ChatSendRequest, ReasoningEffort } from '@shared/types'
+import type { ChatQueueDelivery, ChatQueueRequest, ChatSendRequest, ReasoningEffort } from '@shared/types'
 
 export interface ChatMessagesApi {
     sendMessage(content: string, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void>
+    queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void>
+    updateQueuedMessage(id: string, content: string, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void>
     retryFromMessage(messageId: string): Promise<void>
     editMessage(messageId: string, newContent: string): Promise<void>
     cancelStream(): Promise<void>
@@ -61,6 +63,77 @@ export function useChatMessages(
         return Boolean(conversationId && agentStore.isConversationExecuting(conversationId))
     }
 
+    function buildRequest(
+        content: string,
+        msgId: string,
+        imageDataUrls?: string[],
+        files?: { name: string; content: string }[],
+        audioDataUrls?: string[],
+    ): ChatSendRequest {
+        const agentDefs = useAgentDefinitionsStore()
+        const activeAgent = activeAgentId.value ? agentDefs.get(activeAgentId.value) : null
+        const prefs = usePreferencesStore()
+        return {
+            content,
+            messageId: msgId,
+            imageDataUrls,
+            audioDataUrls,
+            files,
+            run: {
+                model: agentConfig.sessionModelOverride.value || undefined,
+                providerOverride: agentConfig.sessionProviderOverride.value || undefined,
+                allowedTools: agentConfig.selectedToolNames.value,
+                systemPrompt: agentConfig.sessionSystemPrompt.value || activeAgent?.systemPrompt || undefined,
+                generateTitle: prefs.generateTitle,
+                subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.freeChatSubAgentIds.value]),
+                memorySpaceIds: agentConfig.freeChatMemorySelectionInitialized.value ? [...agentConfig.freeChatMemorySpaceIds.value] : undefined,
+                thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
+                reasoningEffort: agentConfig.sessionReasoningEffort.value,
+                contextStrategy: prefs.contextStrategy,
+                titleProviderId: prefs.titleProviderId || undefined,
+                titleModel: prefs.titleModel || undefined,
+                autoToolRouting: agentConfig.sessionAutoToolRouting.value,
+                autoMemory: agentConfig.sessionAutoMemory.value,
+                autoRouterProviderId: activeAgent?.autoRouterProviderId || undefined,
+                autoRouterModel: activeAgent?.autoRouterModel || undefined,
+                compactProviderId: prefs.compactProviderId || undefined,
+                compactModel: prefs.compactModel || undefined,
+                inlineAttachmentTextLimit: prefs.inlineAttachmentTextLimit,
+                debugMode: prefs.debugMode,
+            },
+        }
+    }
+
+    async function queueMessage(
+        content: string,
+        delivery: ChatQueueDelivery,
+        imageDataUrls?: string[],
+        files?: { name: string; content: string }[],
+        audioDataUrls?: string[],
+    ): Promise<void> {
+        if (!activeConversationId.value) await createConversation()
+        const request: ChatQueueRequest = {
+            ...buildRequest(content, createMessageId(), imageDataUrls, files, audioDataUrls),
+            delivery,
+        }
+        await api.chat.enqueue(activeConversationId.value!, request)
+    }
+
+    async function updateQueuedMessage(
+        id: string,
+        content: string,
+        imageDataUrls?: string[],
+        files?: { name: string; content: string }[],
+        audioDataUrls?: string[],
+    ): Promise<void> {
+        if (!activeConversationId.value) return
+        const request: ChatQueueRequest = {
+            ...buildRequest(content, id, imageDataUrls, files, audioDataUrls),
+            delivery: 'next',
+        }
+        await api.chat.updateQueued(activeConversationId.value, id, request)
+    }
+
     async function sendMessage(
         content: string,
         imageDataUrls?: string[],
@@ -103,51 +176,7 @@ export function useChatMessages(
             isStreaming: true
         })
 
-        const tools = agentConfig.selectedToolNames.value
-        const baseSystemPrompt = activeAgent?.systemPrompt || undefined
-        const executionRun = {
-            model: agentConfig.sessionModelOverride.value || undefined,
-            providerOverride: agentConfig.sessionProviderOverride.value || undefined,
-            systemPrompt: agentConfig.sessionSystemPrompt.value || baseSystemPrompt,
-            subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.freeChatSubAgentIds.value]),
-            memorySpaceIds: agentConfig.freeChatMemorySelectionInitialized.value ? [...agentConfig.freeChatMemorySpaceIds.value] : undefined,
-            thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
-            reasoningEffort: agentConfig.sessionReasoningEffort.value,
-            autoToolRouting: agentConfig.sessionAutoToolRouting.value,
-            autoMemory: agentConfig.sessionAutoMemory.value,
-        }
-
-        const prefs = usePreferencesStore()
-
-        const request: ChatSendRequest = {
-            content,
-            messageId: msgId,
-            imageDataUrls,
-            audioDataUrls,
-            files,
-            run: {
-                model: executionRun.model,
-                providerOverride: executionRun.providerOverride,
-                allowedTools: tools,
-                systemPrompt: executionRun.systemPrompt,
-                generateTitle: prefs.generateTitle,
-                subAgents: executionRun.subAgents,
-                memorySpaceIds: executionRun.memorySpaceIds,
-                thinkingEnabled: executionRun.thinkingEnabled,
-                reasoningEffort: executionRun.reasoningEffort,
-                contextStrategy: prefs.contextStrategy,
-                titleProviderId: prefs.titleProviderId || undefined,
-                titleModel: prefs.titleModel || undefined,
-                autoToolRouting: executionRun.autoToolRouting,
-                autoMemory: executionRun.autoMemory,
-                autoRouterProviderId: activeAgent?.autoRouterProviderId || undefined,
-                autoRouterModel: activeAgent?.autoRouterModel || undefined,
-                compactProviderId: prefs.compactProviderId || undefined,
-                compactModel: prefs.compactModel || undefined,
-                inlineAttachmentTextLimit: prefs.inlineAttachmentTextLimit,
-                debugMode: prefs.debugMode,
-            },
-        }
+        const request = buildRequest(content, msgId, imageDataUrls, files, audioDataUrls)
 
         try {
             await api.chat.send(conversationId, request)
@@ -228,6 +257,8 @@ export function useChatMessages(
 
     return {
         sendMessage,
+        queueMessage,
+        updateQueuedMessage,
         retryFromMessage,
         editMessage,
         cancelStream,
