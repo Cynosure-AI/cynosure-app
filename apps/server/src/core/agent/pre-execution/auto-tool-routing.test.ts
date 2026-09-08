@@ -133,6 +133,15 @@ describe('automatic tool routing', () => {
             tools: [tool('optional')],
         })).resolves.toEqual([])
         expect(routerMocks.route).toHaveBeenCalledWith(expect.objectContaining({ allTools: [] }))
+        expect(events[0]?.toolCalls).toEqual([{
+            name: 'No toolsets selected',
+            arguments: JSON.stringify({
+                type: 'toolset-router',
+                selectionMethod: 'llm',
+                emptyReason: 'none-relevant',
+                content: 'AI toolset selection ran, but no MCPs or toolsets were relevant for this turn.',
+            }),
+        }])
         expect(events.at(-1)?.toolCalls).toEqual([expect.objectContaining({ name: 'No tools found' })])
     })
 
