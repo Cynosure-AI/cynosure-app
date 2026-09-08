@@ -11,13 +11,13 @@ import type { ToolBehaviorAnnotations } from '../gateway/providers/base.provider
  */
 
 export function isSubAgentDelegationTool(toolName: string): boolean {
-  return toolName === 'spawn_subagent'
+  return toolName === 'spawn_subagent' || toolName === 'continue_subagent'
 }
 
 export function isInternalTool(toolName: string): boolean {
   return (
     toolName === TOOL_SEARCH_TOOL_NAME ||
-    toolName === 'spawn_subagent' ||
+    isSubAgentDelegationTool(toolName) ||
     isPlanningToolName(toolName) ||
     isMemoryReadToolName(toolName) ||
     isKnowledgeReadToolName(toolName) ||

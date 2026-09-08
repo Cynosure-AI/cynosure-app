@@ -78,7 +78,7 @@ function automaticToolCriteria(toolName: string): string {
   if (toolName.startsWith('knowledge_') || toolName === 'knowledge_entity_merge') return 'memory folder selected'
   if (toolName.startsWith('attachment_')) return 'large indexed attachment available'
   if (toolName === 'expand_available_toolset') return 'auto tool mode enabled'
-  if (toolName === 'spawn_subagent') return 'sub-agent selected'
+  if (toolName === 'spawn_subagent' || toolName === 'continue_subagent') return 'sub-agent selected'
   return 'runtime criteria met'
 }
 

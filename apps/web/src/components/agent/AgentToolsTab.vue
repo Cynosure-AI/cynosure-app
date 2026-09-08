@@ -46,6 +46,10 @@ const automaticToolStates = computed(() => ({
     active: (props.agent.subAgents?.length ?? 0) > 0,
     criteria: 'sub-agent selected',
   },
+  continue_subagent: {
+    active: (props.agent.subAgents?.length ?? 0) > 0,
+    criteria: 'sub-agent selected',
+  },
 }))
 
 const missingTools = computed(() => {

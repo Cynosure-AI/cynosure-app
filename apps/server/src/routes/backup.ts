@@ -560,11 +560,13 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 const db = getDb()
                 const conversations = db.prepare('SELECT * FROM conversations ORDER BY created_at').all()
                 const messages = db.prepare('SELECT * FROM messages ORDER BY created_at').all()
+                const subagentSessions = db.prepare('SELECT * FROM subagent_sessions ORDER BY created_at').all()
                 const messageAttachments = db.prepare('SELECT * FROM message_attachments ORDER BY created_at').all()
                 const tasks = db.prepare('SELECT * FROM tasks ORDER BY created_at').all()
 
                 archive.append(JSON.stringify(conversations, null, 2), { name: 'conversations/conversations.json' })
                 archive.append(JSON.stringify(messages, null, 2), { name: 'conversations/messages.json' })
+                archive.append(JSON.stringify(subagentSessions, null, 2), { name: 'conversations/subagent_sessions.json' })
                 archive.append(JSON.stringify(messageAttachments, null, 2), { name: 'conversations/message_attachments.json' })
                 archive.append(JSON.stringify(tasks, null, 2), { name: 'conversations/tasks.json' })
 
@@ -1189,6 +1191,27 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             importedMessageIds.add(m.id as string)
                         } catch (e) {
                             res.errors.push(`Message: ${(e as Error).message}`)
+                        }
+                    }
+                }
+
+                // Durable sub-agent sessions (only for imported conversations)
+                const subagentSessionsEntry = zip.getEntry('conversations/subagent_sessions.json')
+                if (subagentSessionsEntry) {
+                    const sessions = JSON.parse(subagentSessionsEntry.getData().toString('utf-8')) as Record<string, unknown>[]
+                    for (const session of sessions) {
+                        if (!importedConversationIds.has(session.conversation_id as string)) continue
+                        try {
+                            db.prepare(
+                                `INSERT OR REPLACE INTO subagent_sessions (
+                                    invocation_id, conversation_id, agent_id, history_json, created_at, updated_at
+                                 ) VALUES (?, ?, ?, ?, ?, ?)`
+                            ).run(
+                                session.invocation_id, session.conversation_id, session.agent_id,
+                                session.history_json || '[]', session.created_at || Date.now(), session.updated_at || Date.now()
+                            )
+                        } catch (e) {
+                            res.errors.push(`Sub-agent session: ${(e as Error).message}`)
                         }
                     }
                 }

@@ -565,6 +565,32 @@ function createTables(db: Database.Database): void {
   `)
 
   // Migrations for existing databases
+  const requiredSubagentSessionColumns = new Set([
+    'invocation_id', 'conversation_id', 'agent_id', 'history_json', 'created_at', 'updated_at',
+  ])
+  const existingSubagentSessionColumns = new Set(
+    (db.prepare("PRAGMA table_info('subagent_sessions')").all() as Array<{ name: string }>).map(({ name }) => name)
+  )
+  if (existingSubagentSessionColumns.size > 0
+    && [...requiredSubagentSessionColumns].some((column) => !existingSubagentSessionColumns.has(column))) {
+    // An early experimental build used this table name with an incompatible,
+    // non-durable schema. It was never consumed by the released continuation
+    // feature, so replace only that legacy table rather than guessing at data.
+    db.exec('DROP TABLE subagent_sessions')
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS subagent_sessions (
+      invocation_id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      agent_id TEXT NOT NULL,
+      history_json TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_subagent_sessions_conversation
+      ON subagent_sessions(conversation_id, updated_at);
+  `)
+
   const addColumnIfMissing = (table: string, column: string, definition: string) => {
     try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`) } catch { /* column already exists */ }
   }

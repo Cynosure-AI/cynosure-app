@@ -228,6 +228,15 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
                 namespace: BUILTIN_NAMESPACES.utility,
                 ambiguous: false,
             },
+            {
+                key: `${BUILTIN_NAMESPACES.utility.id}::continue_subagent`,
+                name: 'continue_subagent',
+                executionName: 'continue_subagent',
+                description: 'Continue a previously spawned sub-agent session by invocation ID.',
+                parameters: { type: 'object', properties: { invocationId: { type: 'string' }, instructions: { type: 'string' }, context: { type: 'string' } }, required: ['invocationId', 'instructions'] },
+                namespace: BUILTIN_NAMESPACES.utility,
+                ambiguous: false,
+            },
         ]
 
         return [...items, ...dynamicBuiltIns].map((tool) => {
