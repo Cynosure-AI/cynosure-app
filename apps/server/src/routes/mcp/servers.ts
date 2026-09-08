@@ -2,10 +2,10 @@ import type { FastifyInstance } from 'fastify'
 import { getDb } from '../../db/database.js'
 import { getMcpManager, McpManager, type McpServerConfig } from '../../core/tools/mcp/mcp-manager.js'
 import { getToolRegistry, type ToolNamespace } from '../../core/tools/tool-registry.js'
-import { nanoid } from 'nanoid'
 import { readFileSync } from 'fs'
 import { registerMcpTools, findMcpIcon, findEnvHints, type McpEnvHint } from './utils.js'
 import { renderOAuthCallbackPage } from './oauth-callback-page.js'
+import { createMcpServerId } from './server-id.js'
 
 type McpServerRow = {
     id: string
@@ -242,11 +242,11 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
         }
 
         const db = getDb()
-        const id = nanoid()
         const now = Date.now()
         const isEnabled = enabled !== false
         const envHintsJson = env_hints?.length ? JSON.stringify(env_hints) : null
         const original = deriveOriginalName({ originalName, name, command, args })
+        const id = createMcpServerId(original)
         const custom = customName !== undefined ? trimToNull(customName) : null
         const displayName = custom || original
 
