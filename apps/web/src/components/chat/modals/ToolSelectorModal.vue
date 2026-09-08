@@ -44,6 +44,10 @@ const automaticToolStates = computed(() => ({
     active: chatStore.freeChatSubAgentIds.length > 0,
     criteria: 'sub-agent selected',
   },
+  continue_subagent: {
+    active: chatStore.freeChatSubAgentIds.length > 0,
+    criteria: 'sub-agent selected',
+  },
 }))
 
 function closeModal(): void {

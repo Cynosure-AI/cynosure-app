@@ -440,7 +440,7 @@ const unifiedTimeline = computed(() => {
 
   function isSpawnSubAgentToolGroup(entry: TimelineEntry): boolean {
     return entry.type === 'tool-group' && entry.group.steps.some(step =>
-      step.toolCalls?.some(call => call.name === 'spawn_subagent')
+      step.toolCalls?.some(call => call.name === 'spawn_subagent' || call.name === 'continue_subagent')
     )
   }
 

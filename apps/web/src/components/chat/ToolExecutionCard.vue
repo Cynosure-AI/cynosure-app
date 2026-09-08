@@ -127,7 +127,7 @@ function visibleText(value: unknown): string | null {
 }
 
 function isSubAgentSpawnCall(name?: string): boolean {
-  return name === 'spawn_subagent'
+  return name === 'spawn_subagent' || name === 'continue_subagent'
 }
 
 function isMemoryCall(call?: Pick<ToolCall, 'arguments'> | null): boolean {

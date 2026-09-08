@@ -30,6 +30,7 @@ const INTERNAL_TOOL_NAMES = new Set([
   'memory_remove_all',
   'memory_remove_range',
   'spawn_subagent',
+  'continue_subagent',
 ])
 
 const AUTO_MANAGED_BUILT_IN_TOOL_PREFIXES = [
@@ -41,6 +42,7 @@ const AUTO_MANAGED_BUILT_IN_TOOL_NAMES = new Set<string>([
   ...AUTO_MEMORY_TOOL_NAMES,
   'expand_available_toolset',
   'spawn_subagent',
+  'continue_subagent',
 ])
 
 export function isBuiltInNamespaceId(id?: string | null): boolean {
