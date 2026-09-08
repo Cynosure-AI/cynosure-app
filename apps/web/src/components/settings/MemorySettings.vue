@@ -10,6 +10,7 @@ import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import SettingsSubheading from './SettingsSubheading.vue'
+import SettingsPersistenceStatus, { type SettingsPersistenceState } from './SettingsPersistenceStatus.vue'
 import {
   defaultEmbeddingModelForProviderId,
 } from '../../utils/embedding-defaults'
@@ -21,6 +22,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   visibleSections: () => []
 })
+const emit = defineEmits<{ 'dirty-change': [dirty: boolean] }>()
 
 function showSection(id: string): boolean {
   return props.visibleSections.length === 0 || props.visibleSections.includes(id)
@@ -37,7 +39,8 @@ const embDimensions = ref(1536)
 const embModelRefreshKey = ref(0)
 
 const embSaving = ref(false)
-const embDirty = ref(false)
+const savedEmbedding = ref({ providerId: '', model: '' })
+const embStatus = ref<SettingsPersistenceState>('idle')
 const embProbing = ref(false)
 const loadingEmbeddingConfig = ref(true)
 
@@ -45,10 +48,14 @@ const loadingEmbeddingConfig = ref(true)
 const chunkSize = ref(512)
 const chunkOverlap = ref(64)
 const chunkSaving = ref(false)
+const savedChunking = ref({ chunkSize: 512, chunkOverlap: 64 })
+const chunkStatus = ref<SettingsPersistenceState>('idle')
 
 // Retrieval state
 const retrievalResultCount = ref(10)
 const retrievalSaving = ref(false)
+const savedRetrievalResultCount = ref(10)
+const retrievalStatus = ref<SettingsPersistenceState>('idle')
 
 // Reranker state
 const rerankEnabled = ref(false)
@@ -56,11 +63,30 @@ const rerankProviderId = ref('')
 const rerankModel = ref('')
 const rerankCandidateCount = ref(50)
 const rerankSaving = ref(false)
+const savedReranker = ref({ enabled: false, providerId: '', model: '', candidateCount: 50 })
+const rerankStatus = ref<SettingsPersistenceState>('idle')
 
 // Entity extraction state
 const entityExtractionProviderId = ref('')
 const entityExtractionModel = ref('')
 const entityExtractionSaving = ref(false)
+const entityExtractionStatus = ref<SettingsPersistenceState>('idle')
+
+const embDirty = computed(() =>
+  embProviderId.value !== savedEmbedding.value.providerId || embModel.value !== savedEmbedding.value.model
+)
+const chunkDirty = computed(() =>
+  chunkSize.value !== savedChunking.value.chunkSize || chunkOverlap.value !== savedChunking.value.chunkOverlap
+)
+const rerankDirty = computed(() =>
+  rerankEnabled.value !== savedReranker.value.enabled ||
+  rerankProviderId.value !== savedReranker.value.providerId ||
+  rerankModel.value !== savedReranker.value.model ||
+  rerankCandidateCount.value !== savedReranker.value.candidateCount
+)
+const manualDirty = computed(() => embDirty.value || chunkDirty.value || rerankDirty.value)
+
+watch(manualDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
 
 const embeddingProviders = computed(() => {
   const provider = providerStore.providers.find((candidate) => candidate.id === embProviderId.value)
@@ -114,11 +140,10 @@ async function loadEmbeddingConfig() {
     } else {
       applyDefaultEmbeddingConfig()
     }
-    embDirty.value = false
   } catch {
     applyDefaultEmbeddingConfig()
-    embDirty.value = false
   }
+  savedEmbedding.value = { providerId: embProviderId.value, model: embModel.value }
   loadingEmbeddingConfig.value = false
 }
 
@@ -127,17 +152,25 @@ async function loadChunkingConfig() {
     const config = await api.memory.getChunkingConfig()
     chunkSize.value = config.chunkSize
     chunkOverlap.value = config.chunkOverlap
+    savedChunking.value = { chunkSize: config.chunkSize, chunkOverlap: config.chunkOverlap }
   } catch { /* defaults */ }
 }
 
 async function saveChunking() {
   chunkSaving.value = true
+  chunkStatus.value = 'saving'
   try {
-    await api.memory.configureChunking({
+    const config = await api.memory.configureChunking({
       chunkSize: chunkSize.value,
       chunkOverlap: chunkOverlap.value
     })
-  } catch { /* error handling */ }
+    chunkSize.value = config.chunkSize
+    chunkOverlap.value = config.chunkOverlap
+    savedChunking.value = { chunkSize: config.chunkSize, chunkOverlap: config.chunkOverlap }
+    chunkStatus.value = 'saved'
+  } catch {
+    chunkStatus.value = 'error'
+  }
   chunkSaving.value = false
 }
 
@@ -148,8 +181,20 @@ async function loadRerankerConfig() {
     rerankProviderId.value = config.providerId || openRouterProviders.value[0]?.id || ''
     rerankModel.value = config.model
     rerankCandidateCount.value = config.candidateCount
+    savedReranker.value = {
+      enabled: config.enabled,
+      providerId: config.providerId || rerankProviderId.value,
+      model: config.model,
+      candidateCount: config.candidateCount,
+    }
   } catch {
     rerankProviderId.value = openRouterProviders.value[0]?.id || ''
+    savedReranker.value = {
+      enabled: rerankEnabled.value,
+      providerId: rerankProviderId.value,
+      model: rerankModel.value,
+      candidateCount: rerankCandidateCount.value,
+    }
   }
 }
 
@@ -157,15 +202,23 @@ async function loadRetrievalConfig() {
   try {
     const config = await api.memory.getRetrievalConfig()
     retrievalResultCount.value = config.resultCount
+    savedRetrievalResultCount.value = config.resultCount
   } catch { /* defaults */ }
 }
 
 async function saveRetrieval() {
+  const requested = retrievalResultCount.value
   retrievalSaving.value = true
+  retrievalStatus.value = 'saving'
   try {
-    const config = await api.memory.configureRetrieval({ resultCount: retrievalResultCount.value })
+    const config = await api.memory.configureRetrieval({ resultCount: requested })
     retrievalResultCount.value = config.resultCount
-  } catch { /* error handling */ }
+    savedRetrievalResultCount.value = config.resultCount
+    retrievalStatus.value = 'saved'
+  } catch {
+    retrievalResultCount.value = savedRetrievalResultCount.value
+    retrievalStatus.value = 'error'
+  }
   retrievalSaving.value = false
 }
 
@@ -188,11 +241,16 @@ async function loadEntityExtractionConfig() {
 }
 
 async function saveEntityExtractionSelection(selection: { providerId: string; model: string }) {
+  const previous = {
+    providerId: entityExtractionProviderId.value,
+    model: entityExtractionModel.value,
+  }
   entityExtractionProviderId.value = selection.providerId
   entityExtractionModel.value = selection.model
   prefs.knowledgeProviderId = selection.providerId
   prefs.knowledgeModel = selection.model
   entityExtractionSaving.value = true
+  entityExtractionStatus.value = 'saving'
   try {
     const res = await api.memory.configureEntityExtraction({
       providerId: selection.providerId || undefined,
@@ -200,12 +258,22 @@ async function saveEntityExtractionSelection(selection: { providerId: string; mo
     })
     entityExtractionProviderId.value = res.providerId || ''
     entityExtractionModel.value = res.model || ''
-  } catch { /* error handling */ }
+    prefs.knowledgeProviderId = entityExtractionProviderId.value
+    prefs.knowledgeModel = entityExtractionModel.value
+    entityExtractionStatus.value = 'saved'
+  } catch {
+    entityExtractionProviderId.value = previous.providerId
+    entityExtractionModel.value = previous.model
+    prefs.knowledgeProviderId = previous.providerId
+    prefs.knowledgeModel = previous.model
+    entityExtractionStatus.value = 'error'
+  }
   entityExtractionSaving.value = false
 }
 
 async function saveReranker() {
   rerankSaving.value = true
+  rerankStatus.value = 'saving'
   try {
     const res = await api.memory.configureReranker({
       enabled: rerankEnabled.value,
@@ -217,7 +285,16 @@ async function saveReranker() {
     rerankProviderId.value = res.providerId || rerankProviderId.value
     rerankModel.value = res.model
     rerankCandidateCount.value = res.candidateCount
-  } catch { /* error handling */ }
+    savedReranker.value = {
+      enabled: res.enabled,
+      providerId: res.providerId || rerankProviderId.value,
+      model: res.model,
+      candidateCount: res.candidateCount,
+    }
+    rerankStatus.value = 'saved'
+  } catch {
+    rerankStatus.value = 'error'
+  }
   rerankSaving.value = false
 }
 
@@ -233,11 +310,9 @@ function updateEmbeddingSelection(selection: { providerId: string; model: string
 
 watch(embProviderId, (id) => {
   if (loadingEmbeddingConfig.value) return
-  embDirty.value = true
   const defaultModel = defaultEmbeddingModelForProviderId(id, providerStore.providers)
   if (defaultModel) embModel.value = defaultModel
-})
-watch(embModel, () => { embDirty.value = true })
+}, { flush: 'sync' })
 
 function applyDefaultEmbeddingConfig() {
   const providerId = providerStore.lastUsedProviderId || providerStore.providers[0]?.id || ''
@@ -280,6 +355,7 @@ async function saveEmbeddings() {
 
 async function doSaveEmbeddings(reembed: boolean) {
   embSaving.value = true
+  embStatus.value = 'saving'
   try {
     const res = await api.memory.configureEmbeddings({
       providerId: embProviderId.value || undefined,
@@ -287,8 +363,11 @@ async function doSaveEmbeddings(reembed: boolean) {
       reembed
     })
     embDimensions.value = res.dimensions
-    embDirty.value = false
-  } catch { /* error handling */ }
+    savedEmbedding.value = { providerId: embProviderId.value, model: embModel.value }
+    embStatus.value = 'saved'
+  } catch {
+    embStatus.value = 'error'
+  }
   embSaving.value = false
   showDropConfirm.value = false
 }
@@ -389,14 +468,20 @@ function cancelDrop() {
         </div>
       </div>
 
-      <button
-        :disabled="embSaving || embProbing || !embModel"
-        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
-        @click="saveEmbeddings"
-      >
-        <span v-if="embSaving || embProbing">Saving...</span>
-        <span v-else>Save Embedding Config</span>
-      </button>
+      <div class="flex items-center justify-between gap-3">
+        <SettingsPersistenceStatus
+          mode="manual"
+          :state="embStatus === 'error' ? 'error' : embSaving ? 'saving' : embDirty ? 'dirty' : embStatus"
+        />
+        <button
+          :disabled="embSaving || embProbing || !embModel || !embDirty"
+          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+          @click="saveEmbeddings"
+        >
+          <span v-if="embSaving || embProbing">Saving...</span>
+          <span v-else>Save changes</span>
+        </button>
+      </div>
     </BaseCard>
 
     <!-- Automatic Retrieval -->
@@ -429,21 +514,23 @@ function cancelDrop() {
           min="1"
           max="50"
           step="1"
+          :disabled="retrievalSaving"
           class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          @change="saveRetrieval"
         >
         <p class="text-xs text-theme-500 mt-1">
           Automatic routing may run both direct and contextual queries, deduplicate their results, then select up to 5 memories for chat context.
         </p>
       </div>
-
-      <button
-        :disabled="retrievalSaving"
-        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
-        @click="saveRetrieval"
+      <div
+        v-if="retrievalStatus === 'saving' || retrievalStatus === 'error'"
+        class="flex justify-end"
       >
-        <span v-if="retrievalSaving">Saving...</span>
-        <span v-else>Save Retrieval Config</span>
-      </button>
+        <SettingsPersistenceStatus
+          mode="auto"
+          :state="retrievalStatus"
+        />
+      </div>
     </BaseCard>
 
     <!-- Reranking -->
@@ -515,14 +602,20 @@ function cancelDrop() {
         </div>
       </div>
 
-      <button
-        :disabled="rerankSaving || (rerankEnabled && (!rerankProviderId || !rerankModel))"
-        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
-        @click="saveReranker"
-      >
-        <span v-if="rerankSaving">Saving...</span>
-        <span v-else>Save Reranker Config</span>
-      </button>
+      <div class="flex items-center justify-between gap-3">
+        <SettingsPersistenceStatus
+          mode="manual"
+          :state="rerankStatus === 'error' ? 'error' : rerankSaving ? 'saving' : rerankDirty ? 'dirty' : rerankStatus"
+        />
+        <button
+          :disabled="rerankSaving || !rerankDirty || (rerankEnabled && (!rerankProviderId || !rerankModel))"
+          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+          @click="saveReranker"
+        >
+          <span v-if="rerankSaving">Saving...</span>
+          <span v-else>Save changes</span>
+        </button>
+      </div>
     </BaseCard>
 
     <!-- Knowledge Extraction Model -->
@@ -547,15 +640,14 @@ function cancelDrop() {
         </div>
       </div>
 
-      <div class="pt-1 border-t border-theme-700">
+      <div
+        class="pt-1 border-t border-theme-700"
+        :class="{ 'opacity-60': entityExtractionSaving }"
+        :inert="entityExtractionSaving || undefined"
+        :aria-busy="entityExtractionSaving"
+      >
         <div class="flex items-center justify-between gap-3 mb-1.5">
           <label class="block text-xs text-theme-400">Provider / Model</label>
-          <span
-            v-if="entityExtractionSaving"
-            class="text-[11px] text-theme-500"
-          >
-            Saving...
-          </span>
         </div>
         <ProviderModelSelect
           :provider-id="entityExtractionProviderId"
@@ -569,6 +661,15 @@ function cancelDrop() {
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
           This setting is used for explicit knowledge extraction. Leaving it on the default uses the server's active provider and that provider's default model.
         </p>
+      </div>
+      <div
+        v-if="entityExtractionStatus === 'saving' || entityExtractionStatus === 'error'"
+        class="flex justify-end"
+      >
+        <SettingsPersistenceStatus
+          mode="auto"
+          :state="entityExtractionStatus"
+        />
       </div>
     </BaseCard>
     
@@ -625,14 +726,20 @@ function cancelDrop() {
         </div>
       </div>
 
-      <button
-        :disabled="chunkSaving"
-        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
-        @click="saveChunking"
-      >
-        <span v-if="chunkSaving">Saving...</span>
-        <span v-else>Save Chunking Config</span>
-      </button>
+      <div class="flex items-center justify-between gap-3">
+        <SettingsPersistenceStatus
+          mode="manual"
+          :state="chunkStatus === 'error' ? 'error' : chunkSaving ? 'saving' : chunkDirty ? 'dirty' : chunkStatus"
+        />
+        <button
+          :disabled="chunkSaving || !chunkDirty"
+          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+          @click="saveChunking"
+        >
+          <span v-if="chunkSaving">Saving...</span>
+          <span v-else>Save changes</span>
+        </button>
+      </div>
     </BaseCard>
 
     <!-- Model change confirmation modal -->

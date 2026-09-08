@@ -7,13 +7,16 @@ import { useOnboardingStore } from '../../stores/onboarding.store'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import SettingsSubheading from './SettingsSubheading.vue'
+import SettingsPersistenceStatus, { type SettingsPersistenceState } from './SettingsPersistenceStatus.vue'
 import IconUpload from '../shared/IconUpload.vue'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 const prefs = usePreferencesStore()
 const onboardingStore = useOnboardingStore()
 const router = useRouter()
 const nameSaveError = ref('')
+const profileStatus = ref<SettingsPersistenceState>('idle')
+const lastSavedName = ref(prefs.userName)
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
 }>(), {
@@ -35,10 +38,15 @@ function redoOnboarding() {
 
 async function saveName() {
   nameSaveError.value = ''
+  profileStatus.value = 'saving'
   try {
     await prefs.saveUserName()
+    lastSavedName.value = prefs.userName
+    profileStatus.value = 'saved'
   } catch {
+    prefs.userName = lastSavedName.value
     nameSaveError.value = 'Could not save your name.'
+    profileStatus.value = 'error'
   }
 }
 
@@ -46,13 +54,21 @@ async function updateAvatar(value: string | null) {
   nameSaveError.value = ''
   const previous = prefs.userAvatarUrl
   prefs.userAvatarUrl = value
+  profileStatus.value = 'saving'
   try {
     await prefs.saveUserProfile()
+    lastSavedName.value = prefs.userName
+    profileStatus.value = 'saved'
   } catch {
     prefs.userAvatarUrl = previous
     nameSaveError.value = 'Could not save your profile image.'
+    profileStatus.value = 'error'
   }
 }
+
+watch(() => prefs.userSettingsLoaded, (loaded) => {
+  if (loaded) lastSavedName.value = prefs.userName
+}, { immediate: true })
 
 const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#141417', surface: '#202024', accent: '#3b82f6', text: '#f4f4f5' } },
@@ -103,6 +119,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
               v-model="prefs.userName"
               type="text"
               maxlength="100"
+              :disabled="prefs.userSettingsSaving"
               autocomplete="name"
               placeholder="How should agents address you?"
               class="w-full max-w-md rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-100 outline-none transition placeholder:text-theme-600 focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
@@ -133,6 +150,15 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
             Used for your workspace profile and user messages in chat.
           </template>
         </IconUpload>
+      </div>
+      <div
+        v-if="profileStatus === 'saving' || profileStatus === 'error'"
+        class="mt-4 flex justify-end"
+      >
+        <SettingsPersistenceStatus
+          mode="auto"
+          :state="profileStatus"
+        />
       </div>
     </BaseCard>
 
