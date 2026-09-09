@@ -23,6 +23,8 @@ export interface ResolveMemoryContextInput {
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
     debugContextEnabled?: boolean
+    /** Skip retrieval when task-context planning determined stored context cannot help. */
+    suppressAutoMemory?: boolean
 }
 
 export function isAutoMemoryEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
@@ -66,6 +68,7 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
         eventMeta,
         signal,
         debugContextEnabled,
+        suppressAutoMemory,
     } = input
 
     if (!isAutoMemoryEnabled(preset, autoMemory)) {
@@ -74,6 +77,10 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
     }
     if (hasExplicitEmptyMemoryScope(memorySpaceOverrides)) {
         emitAutoMemoryRoutingSkipped(conversationId, 'empty-scope', eventMeta)
+        return { messages: [], evidence: [] }
+    }
+    if (suppressAutoMemory) {
+        emitAutoMemoryRoutingSkipped(conversationId, 'not-required', eventMeta)
         return { messages: [], evidence: [] }
     }
 
