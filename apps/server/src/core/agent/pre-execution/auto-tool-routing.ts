@@ -5,7 +5,6 @@ import { MCP_CANDIDATE_COUNT, routeTools, routeToolsLexically, shouldRouteTools,
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../../tools/tool-registry.js'
-import type { RequestedToolEffect } from './task-context.js'
 import { completeWithDebugCapture } from '../../chat/debug-context.js'
 
 const TOOLSET_SELECTION_TOOL_NAME = 'select_toolsets'
@@ -29,7 +28,6 @@ export interface ApplyAutoToolRoutingInput {
     /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
-    requestedToolEffect?: RequestedToolEffect
     debugContextEnabled?: boolean
 }
 
@@ -58,22 +56,20 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         usedToolNames,
         eventMeta,
         signal,
-        requestedToolEffect,
         debugContextEnabled,
     } = input
 
     const protectedNames = collectProtectedToolNames(recentMessages || [], preferredToolNames, usedToolNames)
-    const eligibleTools = requestedToolEffect
-        ? filterToolsForRequestedEffect(tools, requestedToolEffect, protectedNames)
-        : tools
-
-    if (!shouldRouteTools(eligibleTools, userQuery, { enabled })) {
+    // Discovery must see the complete configured catalogue. Behavior hints
+    // control approval at execution time; using them as a visibility filter
+    // makes valid write/destructive capabilities impossible to discover.
+    if (!shouldRouteTools(tools, userQuery, { enabled })) {
         emitAutoToolRoutingSkipped(
             conversationId,
-            !eligibleTools.length ? 'no-tools' : !userQuery?.trim() ? 'no-query' : 'disabled',
+            !tools.length ? 'no-tools' : !userQuery?.trim() ? 'no-query' : 'disabled',
             eventMeta,
         )
-        return eligibleTools
+        return tools
     }
 
     const taskId = `router_${nanoid()}`
@@ -87,7 +83,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             model,
             userQuery: userQuery || '',
             recentMessages: recentMessages || [],
-            tools: eligibleTools,
+            tools,
             mcpMetadata,
             signal,
             debugContextEnabled,
@@ -96,11 +92,11 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             conversationId,
             taskId,
             selectedNamespaceIds,
-            eligibleTools,
+            tools,
             mcpMetadata || [],
             eventMeta,
         )
-        const namespaceFilteredTools = filterToolsByNamespace(eligibleTools, selectedNamespaceIds, protectedNames)
+        const namespaceFilteredTools = filterToolsByNamespace(tools, selectedNamespaceIds, protectedNames)
         const autoIncludedToolNames = collectAutoIncludedToolNames(namespaceFilteredTools, selectedNamespaceIds)
         emitToolRoutingStatus(
             conversationId,
@@ -113,7 +109,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             userQuery: userQuery || '',
             recentMessages: recentMessages || [],
             allTools: namespaceFilteredTools,
-            availableTools: eligibleTools,
+            availableTools: tools,
             mcpMetadata,
             preferredToolNames,
             usedToolNames,
@@ -141,7 +137,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         const fallbackTools = routeToolsLexically({
             userQuery: userQuery || '',
             recentMessages: recentMessages || [],
-            allTools: eligibleTools,
+            allTools: tools,
             mcpMetadata,
             preferredToolNames,
             usedToolNames,
@@ -157,25 +153,6 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         )
         return fallbackTools
     }
-}
-
-export function filterToolsForRequestedEffect<T extends ToolDefinition>(
-    tools: T[],
-    requestedEffect: RequestedToolEffect,
-    protectedNames: Set<string> = new Set(),
-): T[] {
-    if (requestedEffect === 'destructive') return tools
-    return tools.filter((tool) => {
-        if (protectedNames.has(tool.name)) return true
-        const destructive = tool.annotations?.destructiveHint === true || /(^|_)(delete|remove|destroy|revoke|cancel)(_|$)/i.test(tool.name)
-        if (requestedEffect === 'write') return !destructive
-        if (destructive) return false
-        // An explicit false is authoritative. Missing metadata is merely
-        // unknown and must remain discoverable; execution policy/HITL still
-        // controls whether the selected tool may actually run.
-        if (tool.annotations?.readOnlyHint === false || tool.execution?.readOnly === false) return false
-        return true
-    })
 }
 
 export function emitAutoToolRoutingSkipped(

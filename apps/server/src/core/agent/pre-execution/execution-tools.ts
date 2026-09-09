@@ -102,7 +102,6 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             usedToolNames,
             eventMeta,
             signal,
-            requestedToolEffect,
             debugContextEnabled,
         }) as RegistryAwareToolDefinition[]
     } else {
