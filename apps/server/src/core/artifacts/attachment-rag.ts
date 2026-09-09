@@ -282,12 +282,11 @@ function formatSearchResults(
     }).join('\n\n---\n\n')
 }
 
-function resolveAttachmentIds(attachments: FileAttachmentArtifact[], fileName?: string): string[] | undefined {
-    const wanted = fileName?.trim()
+function resolveAttachmentIds(attachments: FileAttachmentArtifact[], attachmentId?: string): string[] | undefined {
+    const wanted = attachmentId?.trim()
     if (!wanted) return undefined
-    const lower = wanted.toLowerCase()
     const matches = attachments
-        .filter((attachment) => attachment.id === wanted || attachment.name.toLowerCase() === lower)
+        .filter((attachment) => attachment.id === wanted)
         .map((attachment) => attachment.id)
     return matches.length ? matches : []
 }
@@ -295,40 +294,32 @@ function resolveAttachmentIds(attachments: FileAttachmentArtifact[], fileName?: 
 export function makeAttachmentTools(conversationId: string): ToolDefinition[] {
     return [
         {
-            name: 'attachment_list_documents',
-            execution: { readOnly: true },
-            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-            description: 'List the indexed file/document attachments available in the current conversation.',
-            parameters: { type: 'object', properties: {} },
-            timeout: 10_000,
-            execute: async () => {
-                const attachments = listConversationFileAttachments(getDb(), conversationId)
-                return { success: attachments.length > 0, output: formatAttachmentList(attachments) }
-            },
-        },
-        {
             name: 'attachment_search',
             execution: { readOnly: true },
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-            description: 'Search indexed file/document attachments in this conversation for information relevant to a query. Use this when the visible context does not contain enough detail from an attached document.',
+            description: 'List or search indexed file/document attachments in this conversation. Omit query to list available documents. Provide query to search all documents, optionally restricted by attachmentId.',
             parameters: {
                 type: 'object',
                 properties: {
-                    query: { type: 'string', description: 'A focused semantic search query.' },
+                    query: { type: 'string', description: 'Optional focused semantic search query. Omit to list available documents.' },
                     topK: { type: 'number', description: 'Maximum chunks to return (default 5, max 10).' },
-                    fileName: { type: 'string', description: 'Optional exact attachment name or attachmentId to restrict the search.' },
+                    attachmentId: { type: 'string', description: 'Optional attachmentId to restrict the search to one document.' },
                 },
-                required: ['query'],
             },
             timeout: 20_000,
             execute: async (params: unknown) => {
-                const { query, topK, fileName } = params as { query: string; topK?: number; fileName?: string }
+                const { query, topK, attachmentId } = (params ?? {}) as { query?: string; topK?: number; attachmentId?: string }
                 const attachments = listConversationFileAttachments(getDb(), conversationId)
-                const ids = resolveAttachmentIds(attachments, fileName)
-                if (ids?.length === 0) return { success: false, output: `No attachment matched "${fileName}".\n${formatAttachmentList(attachments)}` }
+                const searchQuery = query?.trim()
+                if (!searchQuery) {
+                    return { success: attachments.length > 0, output: formatAttachmentList(attachments) }
+                }
 
-                const results = await searchConversationAttachments(conversationId, query, Math.min(topK ?? 5, 10), ids)
-                if (!results.length) return { success: false, output: `No relevant attachment chunks found for "${query}".` }
+                const ids = resolveAttachmentIds(attachments, attachmentId)
+                if (ids?.length === 0) return { success: false, output: `No attachment matched "${attachmentId}".\n${formatAttachmentList(attachments)}` }
+
+                const results = await searchConversationAttachments(conversationId, searchQuery, Math.min(topK ?? 5, 10), ids)
+                if (!results.length) return { success: false, output: `No relevant attachment chunks found for "${searchQuery}".` }
 
                 const byId = new Map(attachments.map((attachment) => [attachment.id, attachment]))
                 const chunkCounts = await enrichChunkCounts(conversationId, attachments)
@@ -336,14 +327,14 @@ export function makeAttachmentTools(conversationId: string): ToolDefinition[] {
             },
         },
         {
-            name: 'attachment_retrieve_chunks',
+            name: 'attachment_read',
             execution: { readOnly: true },
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             description: 'Retrieve neighboring chunks from an indexed conversation attachment by attachmentId and zero-based chunk range. Use this to expand around a relevant search result or inspect a document section.',
             parameters: {
                 type: 'object',
                 properties: {
-                    attachmentId: { type: 'string', description: 'The attachmentId shown by attachment_search or attachment_list_documents.' },
+                    attachmentId: { type: 'string', description: 'The attachmentId shown by attachment_search.' },
                     minIndex: { type: 'number', description: 'Minimum zero-based chunk index.' },
                     maxIndex: { type: 'number', description: 'Maximum zero-based chunk index, inclusive. Capped to 20 chunks per call.' },
                 },
@@ -371,7 +362,7 @@ export function makeAttachmentTools(conversationId: string): ToolDefinition[] {
 
 export const ATTACHMENT_SYSTEM_CONTEXT = [
     'Conversation file attachments are available and indexed for retrieval.',
-    'Use attachment_search for focused lookups and attachment_retrieve_chunks to expand around relevant parts, especially for broad summaries or exact citations.',
+    'Use attachment_search without a query to list documents, or with a query for focused lookups. Use attachment_read to expand around relevant parts, especially for broad summaries or exact citations.',
 ].join('\n')
 
 export interface AttachmentContextBundle {

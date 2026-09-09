@@ -5,6 +5,15 @@ import { makeNotificationTool } from './notification.js'
 import { makeSearchAvailableMcpToolsTool } from './expand-available-toolset.js'
 
 describe('internal tool behavior annotations', () => {
+    test('exposes the consolidated attachment tool contract', () => {
+        const tools = makeAttachmentTools('conversation')
+
+        expect(tools.map((tool) => tool.name)).toEqual(['attachment_search', 'attachment_read'])
+        expect(tools[0].parameters.required).toBeUndefined()
+        expect(tools[0].parameters.properties).toHaveProperty('query')
+        expect(tools[0].parameters.properties).toHaveProperty('attachmentId')
+    })
+
     test('declares complete annotations for dynamic internal tools', () => {
         const tools = [
             ...makePlanningTools('run'),

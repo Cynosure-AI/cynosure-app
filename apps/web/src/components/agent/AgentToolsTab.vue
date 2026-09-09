@@ -26,15 +26,11 @@ const automaticToolStates = computed(() => ({
     active: hasMemoryScope.value,
     criteria: 'memory folder selected',
   },
-  attachment_list_documents: {
-    active: false,
-    criteria: 'large indexed attachment available during chat',
-  },
   attachment_search: {
     active: false,
     criteria: 'large indexed attachment available during chat',
   },
-  attachment_retrieve_chunks: {
+  attachment_read: {
     active: false,
     criteria: 'large indexed attachment available during chat',
   },
