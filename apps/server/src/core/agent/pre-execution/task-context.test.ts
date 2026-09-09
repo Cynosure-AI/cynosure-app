@@ -37,6 +37,7 @@ describe('task context cancellation', () => {
             memoryQueries: [],
             requestedToolEffect: 'read',
             skipToolRouting: true,
+            skipMemoryRouting: false,
             fastPath: true,
         })
         expect(gateway.complete).not.toHaveBeenCalled()
@@ -45,13 +46,38 @@ describe('task context cancellation', () => {
     test('drops redundant memory expansions before applying the query budget', async () => {
         const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
             name: 'set_task_context',
-            arguments: JSON.stringify({ memoryQueries: ['project details', 'specific preference', 'related decision'] }),
+            arguments: JSON.stringify({
+                memoryQueries: ['project details', 'specific preference', 'related decision'],
+                requiresMemory: true,
+            }),
         } }] })
         const result = await buildTaskContext({
             conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
             userQuery: 'project details', enabledModes: { tools: false, memories: true },
         })
         expect(result?.memoryQueries).toEqual(['specific preference', 'related decision'])
+    })
+
+    test('can independently skip both automatic tools and automatic memory', async () => {
+        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
+            name: 'set_task_context',
+            arguments: JSON.stringify({
+                toolQuery: 'No external capability needed',
+                requestedToolEffect: 'read',
+                requiresExternalTools: false,
+                memoryQueries: [],
+                requiresMemory: false,
+            }),
+        } }] })
+        const result = await buildTaskContext({
+            conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
+            userQuery: 'Explain recursion', enabledModes: { tools: true, memories: true },
+        })
+
+        expect(result).toMatchObject({
+            skipToolRouting: true,
+            skipMemoryRouting: true,
+        })
     })
 
     test('classifies explicit mutations conservatively', () => {

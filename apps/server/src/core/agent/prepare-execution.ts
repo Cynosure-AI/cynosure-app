@@ -237,6 +237,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         eventMeta: input.eventMeta,
         signal: input.signal,
         debugContextEnabled: input.debugContextEnabled,
+        suppressAutoMemory: taskContext?.skipMemoryRouting === true,
     }), attachmentPreparation])
 
     const promptMessages = await resolveSystemPromptMessages({

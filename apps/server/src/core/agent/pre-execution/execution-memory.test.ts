@@ -13,7 +13,7 @@ vi.mock('./auto-memory-routing.js', () => ({
     emitAutoMemoryRoutingSkipped: routingMocks.skipped,
 }))
 
-import { resolveMemorySystemMessages } from './execution-memory.js'
+import { resolveMemoryContext, resolveMemorySystemMessages } from './execution-memory.js'
 
 describe('retrieved memory context messages', () => {
     afterEach(() => {
@@ -50,5 +50,24 @@ describe('retrieved memory context messages', () => {
             userQuery: 'How should I deploy?',
             retrievalQueries: ['How should I deploy?', 'deployment procedure'],
         }))
+    })
+
+    test('skips enabled auto-memory when task-context planning says it is not required', async () => {
+        const result = await resolveMemoryContext({
+            preset: {
+                id: 'agent-1',
+                tools: [],
+                subAgents: [],
+                autoMemory: true,
+            },
+            conversationId: 'conversation-1',
+            userQuery: 'Explain recursion',
+            gateway: {} as LLMGateway,
+            suppressAutoMemory: true,
+        })
+
+        expect(result).toEqual({ messages: [], evidence: [] })
+        expect(routingMocks.applyWithEvidence).not.toHaveBeenCalled()
+        expect(routingMocks.skipped).toHaveBeenCalledWith('conversation-1', 'not-required', undefined)
     })
 })

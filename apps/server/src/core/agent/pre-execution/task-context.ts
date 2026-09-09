@@ -21,6 +21,8 @@ export interface TaskContext {
     requestedToolEffect: RequestedToolEffect
     /** Clear memory lookups do not need the external tool catalogue routed. */
     skipToolRouting: boolean
+    /** Requests unrelated to stored context do not need automatic memory retrieval. */
+    skipMemoryRouting: boolean
     fastPath?: boolean
 }
 
@@ -65,7 +67,8 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                         'Keep expansions in the request language and preserve exact names, quoted phrases, identifiers, relationship terms, and constraints.',
                         'Never broaden a specific relationship or operation into generic related topics.',
                         'toolQuery must describe only capabilities required to perform the request, not nouns merely mentioned in it.',
-                        'Set requiresExternalTools=false when memory retrieval alone can answer the request.',
+                        'Assess external tools and memory independently. It is valid for neither to be required.',
+                        ...enabledRequirementInstructions(input.enabledModes),
                         'Classify the maximum requested side effect as read, write, or destructive.',
                         'Do not include disabled auto modes.',
                         'Do not add execution instructions.',
@@ -128,7 +131,7 @@ function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes'
         }
         properties.requiresExternalTools = {
             type: 'boolean',
-            description: 'False when automatic memory context alone is sufficient and no external capability is required.',
+            description: 'False when no external capability is required to answer the request.',
         }
         required.push('requestedToolEffect', 'requiresExternalTools')
     }
@@ -139,7 +142,11 @@ function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes'
             items: { type: 'string' },
             maxItems: MAX_MEMORY_EXPANSIONS,
         }
-        required.push('memoryQueries')
+        properties.requiresMemory = {
+            type: 'boolean',
+            description: 'False when stored user or project context is unlikely to help answer the request.',
+        }
+        required.push('memoryQueries', 'requiresMemory')
     }
 
     return {
@@ -168,6 +175,7 @@ function parseTaskContextArguments(
             memoryQueries?: unknown
             requestedToolEffect?: unknown
             requiresExternalTools?: unknown
+            requiresMemory?: unknown
         }
         const toolQuery = enabledModes.tools && typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : ''
         const legacyMemoryQuery = typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : ''
@@ -187,6 +195,7 @@ function parseTaskContextArguments(
             memoryQueries,
             requestedToolEffect,
             skipToolRouting: enabledModes.tools ? parsed.requiresExternalTools === false : true,
+            skipMemoryRouting: enabledModes.memories ? parsed.requiresMemory === false : true,
         }
     } catch {
         return null
@@ -212,6 +221,7 @@ function buildDeterministicTaskContext(
         memoryQueries: [],
         requestedToolEffect: 'read',
         skipToolRouting: true,
+        skipMemoryRouting: false,
         fastPath: true,
     }
 }
@@ -290,6 +300,17 @@ function enabledQueryInstructions(modes: BuildTaskContextInput['enabledModes']):
     ].filter(Boolean)
 }
 
+function enabledRequirementInstructions(modes: BuildTaskContextInput['enabledModes']): string[] {
+    return [
+        modes.tools
+            ? 'Set requiresExternalTools=false when the request can be answered without external capabilities.'
+            : '',
+        modes.memories
+            ? 'Set requiresMemory=false when stored user or project context is unlikely to help answer the request.'
+            : '',
+    ].filter(Boolean)
+}
+
 function emitTaskContextStatus(conversationId: string, taskId: string, eventMeta?: Record<string, unknown>, deterministic = false): void {
     getEventBus().emit('step:status', {
         conversationId,
@@ -324,6 +345,7 @@ function emitTaskContextSelection(
                 memoryQueries: context?.memoryQueries,
                 requestedToolEffect: context?.requestedToolEffect,
                 skipToolRouting: context?.skipToolRouting,
+                skipMemoryRouting: context?.skipMemoryRouting,
                 fastPath: context?.fastPath,
                 emptyReason,
                 content: emptyReason ? taskContextEmptyContent(emptyReason) : undefined,
