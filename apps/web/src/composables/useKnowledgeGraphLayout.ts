@@ -117,18 +117,20 @@ export function useKnowledgeGraphLayout(options: {
     });
 
     const nextNodes: Node<FlowNodeData>[] = [...nodeLabels.entries()].map(([id, entity]) => {
+      const isFocusRoot = focusedNodeId.value === id;
       const isFocusHighlighted = nodeIsFocused(id, graph.edges);
       const isFocusDimmed = Boolean(focusedNodeId.value) && !isFocusHighlighted;
       return {
         id,
         type: "entity",
         position: positions.get(id) || { x: 0, y: 0 },
-        class: nodeClass(entity, seedIds.has(id), isFocusHighlighted, isFocusDimmed),
+        class: nodeClass(entity, seedIds.has(id), isFocusRoot, isFocusHighlighted, isFocusDimmed),
         data: {
           entity,
           label: entity.name,
           isSeed: seedIds.has(id),
           connectedHandles: connectedHandles.get(id) ?? new Set(),
+          isFocusRoot,
           isFocusHighlighted,
           isFocusDimmed,
         },
@@ -155,12 +157,13 @@ export function useKnowledgeGraphLayout(options: {
         nextNodes.push(node as Node<FlowNodeData>);
         continue;
       }
+      const isFocusRoot = focusedNodeId.value === node.id;
       const highlighted = nodeIsFocused(node.id, graph.edges);
       const dimmed = Boolean(focusedNodeId.value) && !highlighted;
       nextNodes.push({
         ...node,
-        class: nodeClass(node.data.entity, seedIds.has(node.id), highlighted, dimmed),
-        data: { ...node.data, isFocusHighlighted: highlighted, isFocusDimmed: dimmed },
+        class: nodeClass(node.data.entity, seedIds.has(node.id), isFocusRoot, highlighted, dimmed),
+        data: { ...node.data, isFocusRoot, isFocusHighlighted: highlighted, isFocusDimmed: dimmed },
       } as Node<FlowNodeData>);
     }
     flowNodes.value = nextNodes;
@@ -246,8 +249,9 @@ function closestHandles(source?: FlowPoint, target?: FlowPoint): { sourceHandle:
     : { sourceHandle: "source-top", targetHandle: "target-bottom" };
 }
 
-function nodeClass(entity: KnowledgeGraphNode, seed: boolean, highlighted: boolean, dimmed: boolean): string {
+function nodeClass(entity: KnowledgeGraphNode, seed: boolean, focusRoot: boolean, highlighted: boolean, dimmed: boolean): string {
   return ["entity-flow-node", entityTypeClass(entity.type), seed ? "entity-flow-node-seed" : "",
+    focusRoot ? "entity-flow-node-focus-root" : "",
     highlighted ? "entity-flow-node-focus-highlighted" : "", dimmed ? "entity-flow-node-focus-dimmed" : ""].filter(Boolean).join(" ");
 }
 
@@ -257,5 +261,5 @@ function edgeClass(highlighted: boolean, dimmed: boolean): string {
 }
 
 function entityTypeClass(type: KnowledgeGraphNodeType): string {
-  return `entity-flow-node-${type.replace(/_/g, "-")}`;
+  return `entity-flow-node-type-${type.replace(/_/g, "-")}`;
 }

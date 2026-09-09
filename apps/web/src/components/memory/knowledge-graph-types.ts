@@ -7,6 +7,7 @@ export type FlowNodeData = {
   label: string;
   isSeed: boolean;
   connectedHandles: Set<string>;
+  isFocusRoot?: boolean;
   isFocusHighlighted?: boolean;
   isFocusDimmed?: boolean;
 };

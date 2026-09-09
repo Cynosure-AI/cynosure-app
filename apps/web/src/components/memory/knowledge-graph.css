@@ -23,32 +23,32 @@
   );
   --memory-flow-person-fill: color-mix(
     in srgb,
-    #0f766e 52%,
+    #0369a1 48%,
     var(--color-theme-950)
   );
   --memory-flow-person-border: color-mix(
     in srgb,
-    #2dd4bf 70%,
+    #38bdf8 76%,
     var(--color-theme-700)
   );
   --memory-flow-place-fill: color-mix(
     in srgb,
-    #166534 52%,
+    #be123c 46%,
     var(--color-theme-950)
   );
   --memory-flow-place-border: color-mix(
     in srgb,
-    #4ade80 70%,
+    #fb7185 74%,
     var(--color-theme-700)
   );
   --memory-flow-organization-fill: color-mix(
     in srgb,
-    #1d4ed8 54%,
+    #15803d 46%,
     var(--color-theme-950)
   );
   --memory-flow-organization-border: color-mix(
     in srgb,
-    #60a5fa 72%,
+    #4ade80 72%,
     var(--color-theme-700)
   );
   --memory-flow-project-fill: color-mix(
@@ -63,62 +63,62 @@
   );
   --memory-flow-event-fill: color-mix(
     in srgb,
-    #be123c 48%,
+    #a16207 48%,
     var(--color-theme-950)
   );
   --memory-flow-event-border: color-mix(
     in srgb,
-    #fb7185 72%,
+    #facc15 72%,
     var(--color-theme-700)
   );
   --memory-flow-date-fill: color-mix(
     in srgb,
-    #854d0e 48%,
+    #4d7c0f 46%,
     var(--color-theme-950)
   );
   --memory-flow-date-border: color-mix(
     in srgb,
-    #facc15 68%,
+    #a3e635 68%,
     var(--color-theme-700)
   );
   --memory-flow-technology-fill: color-mix(
     in srgb,
-    #0891b2 52%,
+    #7c3aed 48%,
     var(--color-theme-950)
   );
   --memory-flow-technology-border: color-mix(
     in srgb,
-    #22d3ee 72%,
+    #c084fc 74%,
     var(--color-theme-700)
   );
   --memory-flow-product-fill: color-mix(
     in srgb,
-    #c2410c 48%,
+    #0e7490 48%,
     var(--color-theme-950)
   );
   --memory-flow-product-border: color-mix(
     in srgb,
-    #fb923c 72%,
+    #22d3ee 74%,
     var(--color-theme-700)
   );
   --memory-flow-artifact-fill: color-mix(
     in srgb,
-    #b45309 48%,
+    #a21caf 44%,
     var(--color-theme-950)
   );
   --memory-flow-artifact-border: color-mix(
     in srgb,
-    #fbbf24 70%,
+    #e879f9 70%,
     var(--color-theme-700)
   );
   --memory-flow-concept-fill: color-mix(
     in srgb,
-    #4338ca 50%,
+    #b45309 46%,
     var(--color-theme-950)
   );
   --memory-flow-concept-border: color-mix(
     in srgb,
-    #818cf8 72%,
+    #fb923c 72%,
     var(--color-theme-700)
   );
   --memory-flow-seed-fill: color-mix(
@@ -163,38 +163,58 @@
   font-size: 12px;
   font-weight: 600;
   box-shadow: 0 10px 22px var(--memory-flow-shadow);
+  transition:
+    opacity 160ms ease,
+    filter 160ms ease,
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.knowledge-graph-panel .entity-flow-node:hover {
+  z-index: 9;
+  filter: saturate(1.12) brightness(1.08);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--memory-flow-node-border) 28%, transparent),
+    0 12px 26px var(--memory-flow-shadow);
 }
 
 .knowledge-graph-panel .entity-flow-node-seed {
-  border-color: var(--memory-flow-seed-border);
-  background: var(--memory-flow-seed-fill);
+  z-index: 10;
+  border-color: color-mix(in srgb, #fde047 86%, white);
+  background: color-mix(in srgb, #a16207 54%, var(--color-theme-950));
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--color-accent-400) 24%, transparent),
-    0 14px 28px var(--memory-flow-shadow);
-}
-
-.knowledge-graph-panel .entity-flow-node.selected,
-.knowledge-graph-panel .entity-flow-node:has(.entity-node-body-selected) {
-  border-color: color-mix(in srgb, var(--color-accent-300) 88%, white);
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--color-accent-400) 42%, transparent),
-    0 0 28px color-mix(in srgb, var(--color-accent-500) 30%, transparent),
+    0 0 0 1px color-mix(in srgb, #fde047 30%, transparent),
+    0 0 22px color-mix(in srgb, #facc15 22%, transparent),
     0 14px 28px var(--memory-flow-shadow);
 }
 
 .knowledge-graph-panel .entity-flow-node-focus-highlighted {
   z-index: 8;
-  border-color: color-mix(in srgb, var(--color-accent-200) 86%, white);
-  filter: saturate(1.16) brightness(1.08);
+  filter: saturate(1.12) brightness(1.06);
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--color-accent-300) 32%, transparent),
-    0 0 24px color-mix(in srgb, var(--color-accent-400) 24%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--memory-flow-node-border) 34%, transparent),
+    0 0 18px color-mix(in srgb, var(--memory-flow-node-border) 18%, transparent),
     0 14px 28px var(--memory-flow-shadow);
 }
 
+.knowledge-graph-panel .entity-flow-node.selected,
+.knowledge-graph-panel .entity-flow-node-focus-root,
+.knowledge-graph-panel .entity-flow-node:has(.entity-node-body-selected) {
+  z-index: 12;
+  border-color: color-mix(in srgb, #fde047 88%, white);
+  background: color-mix(in srgb, #a16207 58%, var(--color-theme-950));
+  filter: saturate(1.08) brightness(1.12);
+  transform: scale(1.06);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, #fde047 38%, transparent),
+    0 0 30px color-mix(in srgb, #facc15 34%, transparent),
+    0 16px 30px var(--memory-flow-shadow);
+}
+
 .knowledge-graph-panel .entity-flow-node-focus-dimmed {
-  opacity: 0.24;
-  filter: grayscale(0.45);
+  opacity: 0.2;
+  filter: grayscale(0.55) saturate(0.55);
 }
 
 .knowledge-graph-panel .entity-flow-node-type-person {
@@ -202,7 +222,7 @@
   --memory-flow-node-border: var(--memory-flow-person-border);
   --memory-flow-node-muted: color-mix(
     in srgb,
-    #99f6e4 78%,
+    #bae6fd 80%,
     var(--color-theme-300)
   );
 }
@@ -212,7 +232,7 @@
   --memory-flow-node-border: var(--memory-flow-place-border);
   --memory-flow-node-muted: color-mix(
     in srgb,
-    #bbf7d0 78%,
+    #fecdd3 80%,
     var(--color-theme-300)
   );
 }
@@ -222,7 +242,7 @@
   --memory-flow-node-border: var(--memory-flow-organization-border);
   --memory-flow-node-muted: color-mix(
     in srgb,
-    #bfdbfe 80%,
+    #bbf7d0 80%,
     var(--color-theme-300)
   );
 }
@@ -242,7 +262,7 @@
   --memory-flow-node-border: var(--memory-flow-event-border);
   --memory-flow-node-muted: color-mix(
     in srgb,
-    #fecdd3 78%,
+    #fef08a 78%,
     var(--color-theme-300)
   );
 }
@@ -252,7 +272,7 @@
   --memory-flow-node-border: var(--memory-flow-date-border);
   --memory-flow-node-muted: color-mix(
     in srgb,
-    #fef08a 76%,
+    #d9f99d 76%,
     var(--color-theme-300)
   );
 }
@@ -262,7 +282,7 @@
   --memory-flow-node-border: var(--memory-flow-technology-border);
   --memory-flow-node-muted: color-mix(
     in srgb,
-    #a5f3fc 78%,
+    #e9d5ff 80%,
     var(--color-theme-300)
   );
 }
@@ -272,7 +292,7 @@
   --memory-flow-node-border: var(--memory-flow-product-border);
   --memory-flow-node-muted: color-mix(
     in srgb,
-    #fed7aa 78%,
+    #a5f3fc 80%,
     var(--color-theme-300)
   );
 }
@@ -282,7 +302,7 @@
   --memory-flow-node-border: var(--memory-flow-artifact-border);
   --memory-flow-node-muted: color-mix(
     in srgb,
-    #fde68a 78%,
+    #f5d0fe 78%,
     var(--color-theme-300)
   );
 }
@@ -292,9 +312,15 @@
   --memory-flow-node-border: var(--memory-flow-concept-border);
   --memory-flow-node-muted: color-mix(
     in srgb,
-    #c7d2fe 80%,
+    #fed7aa 80%,
     var(--color-theme-300)
   );
+}
+
+.knowledge-graph-panel .entity-flow-node-type-other {
+  --memory-flow-node-fill: color-mix(in srgb, var(--color-theme-800) 72%, var(--color-theme-950));
+  --memory-flow-node-border: color-mix(in srgb, var(--color-theme-400) 64%, var(--color-theme-700));
+  --memory-flow-node-muted: var(--color-theme-300);
 }
 
 .knowledge-graph-panel .entity-flow-edge path {
@@ -401,16 +427,37 @@
 
 .knowledge-graph-panel .entity-node-body {
   display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
   min-width: 150px;
   max-width: 250px;
   min-height: 44px;
-  place-items: center;
-  gap: 2px;
-  padding: 8px 12px;
-  text-align: center;
+  gap: 9px;
+  padding: 8px 12px 8px 9px;
+  text-align: left;
   transition:
     opacity 130ms ease,
     filter 130ms ease;
+}
+
+.knowledge-graph-panel .entity-node-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--memory-flow-node-border) 72%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--memory-flow-node-border) 22%, transparent);
+  color: color-mix(in srgb, var(--memory-flow-node-border) 78%, white);
+}
+
+.knowledge-graph-panel .entity-node-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.knowledge-graph-panel .entity-node-content {
+  min-width: 0;
 }
 
 .knowledge-graph-panel .entity-node-body-focus-highlighted .entity-node-label {
@@ -421,6 +468,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-top: 3px;
 }
 
 .knowledge-graph-panel .entity-node-type {
@@ -463,12 +511,61 @@
 .knowledge-graph-panel .entity-node-label {
   max-width: 220px;
   overflow-wrap: anywhere;
+  font-weight: 650;
   line-height: 1.2;
 }
 
 .knowledge-graph-panel .entity-node-body-selected .entity-node-label {
   color: var(--color-theme-50);
 }
+
+.knowledge-graph-panel .entity-category-legend {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 10;
+  display: flex;
+  max-width: calc(100% - 110px);
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--color-theme-700) 70%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-theme-950) 86%, transparent);
+  box-shadow: 0 8px 22px color-mix(in srgb, black 22%, transparent);
+  color: var(--color-theme-400);
+  font-size: 10px;
+  line-height: 1;
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.knowledge-graph-panel .entity-category-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.knowledge-graph-panel .entity-category-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--legend-color, var(--color-theme-400));
+  box-shadow: 0 0 7px color-mix(in srgb, var(--legend-color, var(--color-theme-400)) 48%, transparent);
+}
+
+.knowledge-graph-panel .entity-category-person { --legend-color: #38bdf8; }
+.knowledge-graph-panel .entity-category-organization { --legend-color: #4ade80; }
+.knowledge-graph-panel .entity-category-place { --legend-color: #fb7185; }
+.knowledge-graph-panel .entity-category-concept { --legend-color: #fb923c; }
+.knowledge-graph-panel .entity-category-event { --legend-color: #facc15; }
+.knowledge-graph-panel .entity-category-date { --legend-color: #a3e635; }
+.knowledge-graph-panel .entity-category-technology { --legend-color: #c084fc; }
+.knowledge-graph-panel .entity-category-product { --legend-color: #22d3ee; }
+.knowledge-graph-panel .entity-category-project { --legend-color: #a78bfa; }
+.knowledge-graph-panel .entity-category-artifact { --legend-color: #e879f9; }
+.knowledge-graph-panel .entity-category-other { --legend-color: var(--color-theme-400); }
 
 .knowledge-graph-panel .entity-handle {
   width: 6px;
@@ -753,6 +850,9 @@
 }
 
 .knowledge-graph-panel .vue-flow__controls {
+  right: 10px;
+  bottom: 10px;
+  left: auto;
   border-color: var(--color-theme-800);
   box-shadow: 0 10px 22px var(--memory-flow-shadow);
 }
