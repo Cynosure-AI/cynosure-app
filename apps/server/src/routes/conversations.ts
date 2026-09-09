@@ -388,7 +388,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             items: rows.map((row) => ({
                 id: row.id,
                 name: row.name,
-                href: toFileUrl(row.original_path),
+                href: toFileUrl(row.original_path, row.name),
                 ext: extname(row.name).replace(/^\./, '').toLowerCase(),
                 sizeBytes: row.size_bytes ?? 0,
                 chunkCount: row.chunk_count ?? 0,
@@ -512,12 +512,13 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             }[]
 
         const attachmentRows = db.prepare(
-            'SELECT message_id, name FROM message_attachments WHERE conversation_id = ? ORDER BY created_at ASC'
-        ).all(req.params.id) as { message_id: string; name: string }[]
-        const attachmentsByMessage = new Map<string, { name: string }[]>()
+            'SELECT message_id, name, original_path FROM message_attachments WHERE conversation_id = ? ORDER BY created_at ASC'
+        ).all(req.params.id) as { message_id: string; name: string; original_path: string | null }[]
+        const attachmentsByMessage = new Map<string, { name: string; originalPath: string }[]>()
         for (const row of attachmentRows) {
+            if (!row.original_path) continue
             const existing = attachmentsByMessage.get(row.message_id) || []
-            existing.push({ name: row.name })
+            existing.push({ name: row.name, originalPath: row.original_path })
             attachmentsByMessage.set(row.message_id, existing)
         }
 
@@ -563,7 +564,10 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 try {
                     contextEvidence = row.memory_sources_json ? JSON.parse(row.memory_sources_json) : undefined
                 } catch { /* malformed JSON - ignore */ }
-                const fileAttachments = attachmentsByMessage.get(row.id)
+                const fileAttachments = attachmentsByMessage.get(row.id)?.map((file) => ({
+                    name: file.name,
+                    href: toFileUrl(file.originalPath, file.name),
+                }))
                 return {
                     id: row.id,
                     conversationId: row.conversation_id,

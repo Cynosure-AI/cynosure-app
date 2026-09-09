@@ -90,6 +90,35 @@ describe('conversation message attachment resolution', () => {
         expect(Buffer.from(body.files[0].content.split(',')[1], 'base64').toString('utf8')).toBe('remember me')
     })
 
+    test('returns browser links for persisted message attachments', async () => {
+        const now = Date.now()
+        const db = getDb()
+        db.prepare(
+            `INSERT INTO conversations (id, title, origin, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?)`,
+        ).run('conversation-1', 'Attachments', 'chat', now, now)
+        db.prepare(
+            `INSERT INTO messages (id, conversation_id, role, content, created_at)
+             VALUES (?, ?, ?, ?, ?)`,
+        ).run('message-1', 'conversation-1', 'user', 'Review this.', now)
+        const files = await materializeFileAttachments([{ name: 'briefing.pdf', content: 'report contents' }], 'conversation-1')
+        persistMessageFileAttachments(db, 'message-1', 'conversation-1', files, now)
+
+        const app = Fastify()
+        await app.register(registerConversationRoutes, { prefix: '/api/chat' })
+        const response = await app.inject({
+            method: 'GET',
+            url: '/api/chat/conversations/conversation-1/messages',
+        })
+        await app.close()
+
+        expect(response.statusCode).toBe(200)
+        expect(response.json().messages[0].fileAttachments).toEqual([{
+            name: 'briefing.pdf',
+            href: expect.stringContaining('&name=briefing.pdf'),
+        }])
+    })
+
     test('lists persisted document uploads with their conversation metadata', async () => {
         const now = Date.now()
         const db = getDb()

@@ -157,7 +157,7 @@ export interface StoredMessage {
     videoDataUrls?: string[]
     audioDataUrls?: string[]
     structuredContent?: unknown
-    fileAttachments?: { name: string }[]
+    fileAttachments?: { name: string; href?: string }[]
     agentId?: string
     agentName?: string
     agentIconUrl?: string | null

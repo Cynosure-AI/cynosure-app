@@ -156,6 +156,34 @@ describe('chat streaming completion', () => {
 
 
 describe('persisted streaming message identities', () => {
+  test('hydrates clickable attachment links onto an optimistic user message', () => {
+    const { messages, streaming } = setup()
+    messages.value.push({
+      id: 'user-message',
+      role: 'user',
+      content: 'Review this.',
+      fileAttachments: [{ name: 'brief.pdf' }],
+      createdAt: 1,
+    })
+
+    streaming.handleNewMessage({
+      conversationId: 'conversation',
+      message: {
+        id: 'user-message',
+        conversationId: 'conversation',
+        role: 'user',
+        content: 'Review this.',
+        fileAttachments: [{ name: 'brief.pdf', href: '/api/files?path=brief.pdf' }],
+        createdAt: 1,
+      },
+    })
+
+    expect(messages.value).toHaveLength(1)
+    expect(messages.value[0].fileAttachments).toEqual([
+      { name: 'brief.pdf', href: '/api/files?path=brief.pdf' },
+    ])
+  })
+
   test('assigns database IDs to tool rounds and the final reply without duplicate bubbles', () => {
     const { messages, streaming } = setup()
     const event = { conversationId: 'conversation', streamId: 'stream' }

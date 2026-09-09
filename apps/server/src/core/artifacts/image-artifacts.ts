@@ -62,8 +62,9 @@ export function cleanupConversationArtifacts(conversationId: string): void {
     }
 }
 
-export function toFileUrl(filePath: string): string {
-    return `/api/files?path=${encodeURIComponent(filePath)}`
+export function toFileUrl(filePath: string, displayName?: string): string {
+    const name = displayName ? `&name=${encodeURIComponent(displayName)}` : ''
+    return `/api/files?path=${encodeURIComponent(filePath)}${name}`
 }
 
 export function extractFilePathFromFileUrl(url: string): string | null {

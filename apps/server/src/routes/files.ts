@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { existsSync, createReadStream, statSync } from 'fs'
-import { resolve, extname, isAbsolute } from 'path'
+import { basename, resolve, extname, isAbsolute } from 'path'
 
 const ALLOWED_EXTENSIONS = new Set([
     '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.avif',
@@ -46,7 +46,7 @@ const MIME_TYPES: Record<string, string> = {
 
 export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     app.get('/', async (req, reply) => {
-        const { path: filePath } = req.query as { path?: string }
+        const { path: filePath, name } = req.query as { path?: string; name?: string }
 
         if (!filePath || typeof filePath !== 'string') {
             return reply.status(400).send({ error: 'Missing "path" query parameter' })
@@ -76,7 +76,9 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
         reply.header('Content-Type', mime)
         const inlineDocument = ext === '.pdf' || ext === '.txt' || ext === '.md' || ext === '.csv' || ext === '.tsv' || ext === '.json'
         if (!mime.startsWith('image/') && !mime.startsWith('audio/') && !mime.startsWith('video/') && !inlineDocument) {
-            reply.header('Content-Disposition', `attachment; filename="${resolved.split('/').pop()?.replace(/"/g, '') || 'download'}"`)
+            const downloadName = basename(name || resolved).replace(/["\r\n]/g, '') || 'download'
+            const asciiName = downloadName.replace(/[^\x20-\x7E]/g, '_')
+            reply.header('Content-Disposition', `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`)
         }
         reply.header('Content-Length', stat.size)
         reply.header('Cache-Control', 'public, max-age=3600')

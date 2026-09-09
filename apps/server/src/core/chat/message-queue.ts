@@ -7,6 +7,7 @@ import {
   extractFilePathFromFileUrl,
   materializeAudioArtifacts,
   materializeImageArtifacts,
+  toFileUrl,
 } from '../artifacts/image-artifacts.js'
 import {
   materializeFileAttachments,
@@ -69,7 +70,7 @@ function rowToDto(row: QueueRow): QueuedChatMessageDto {
   const attachments: QueuedChatAttachment[] = [
     ...images.map((url, index) => ({ id: `image-${index}`, kind: 'image' as const, name: `Image ${index + 1}`, url })),
     ...audio.map((url, index) => ({ id: `audio-${index}`, kind: 'audio' as const, name: `Audio ${index + 1}`, url })),
-    ...files.map(file => ({ id: file.id, kind: 'file' as const, name: file.name })),
+    ...files.map(file => ({ id: file.id, kind: 'file' as const, name: file.name, url: toFileUrl(file.originalPath, file.name) })),
   ]
   return {
     id: row.id,
@@ -369,7 +370,7 @@ export async function takeSteeringMessages(conversationId: string, streamId: str
       message: {
         id: row.id, conversationId, role: 'user', content: normalized,
         imageDataUrls: images, audioDataUrls: audio,
-        fileAttachments: files.map(file => ({ name: file.name })), createdAt: now,
+        fileAttachments: files.map(file => ({ name: file.name, href: toFileUrl(file.originalPath, file.name) })), createdAt: now,
       },
     })
   }

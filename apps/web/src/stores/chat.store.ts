@@ -32,7 +32,7 @@ export interface DisplayMessage {
   audioDataUrls?: string[]
   structuredContent?: unknown
   contextEvidence?: ContextEvidence[]
-  fileAttachments?: { name: string }[]
+  fileAttachments?: { name: string; href?: string }[]
   agentId?: string
   agentName?: string
   agentIconUrl?: string | null
