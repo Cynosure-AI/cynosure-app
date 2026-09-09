@@ -79,7 +79,6 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
                 prompt: { type: 'string', description: 'Complete instructions the agent should execute at the scheduled time.' },
                 runAt: { type: 'string', description: 'For a one-time job: future ISO 8601 date-time including timezone, aligned to a whole minute.' },
                 schedule: { type: 'string', description: 'For a recurring job: cron expression, such as "0 15 * * *" for every day at 15:00.' },
-                notify: { type: 'boolean', description: 'Set true when the user asks to be notified; creates an in-app notification containing the result. Defaults to false.' },
             },
             required: ['name', 'prompt'],
             additionalProperties: false,
@@ -89,7 +88,7 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
         execute: async (params: unknown) => {
             const contextFailure = requireScheduleContext(opts)
             if (contextFailure) return contextFailure
-            const input = params as { name?: string; prompt?: string; runAt?: string; schedule?: string; notify?: boolean }
+            const input = params as { name?: string; prompt?: string; runAt?: string; schedule?: string }
             if (!input.name?.trim() || !input.prompt?.trim()) return failure('name and prompt are required')
             if (Boolean(input.runAt) === Boolean(input.schedule)) return failure('Provide exactly one of runAt or schedule')
 
@@ -113,7 +112,6 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
                     prompt: input.prompt.trim(),
                     enabled: true,
                     oneOff,
-                    notifyInApp: input.notify === true,
                     executionConfig: ownerAgentId(opts.agentId) ? undefined : opts.executionConfig,
                 })
                 scheduler.scheduleCronJob(job.id)
@@ -156,7 +154,6 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
                 runAt: { type: 'string', description: 'Future ISO 8601 date-time including timezone, aligned to a whole minute.' },
                 schedule: { type: 'string', description: 'Recurring cron expression.' },
                 enabled: { type: 'boolean' },
-                notify: { type: 'boolean', description: 'Whether completed runs create an in-app notification.' },
             },
             required: ['jobId'],
             additionalProperties: false,
@@ -166,7 +163,7 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
         execute: async (params: unknown) => {
             const contextFailure = requireScheduleContext(opts)
             if (contextFailure) return contextFailure
-            const input = params as { jobId?: string; name?: string; prompt?: string; runAt?: string; schedule?: string; enabled?: boolean; notify?: boolean }
+            const input = params as { jobId?: string; name?: string; prompt?: string; runAt?: string; schedule?: string; enabled?: boolean }
             if (!input.jobId) return failure('jobId is required')
             if (input.runAt && input.schedule) return failure('Provide runAt or schedule, not both')
 
@@ -188,7 +185,6 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
                     schedule,
                     oneOff,
                     enabled: input.enabled,
-                    notifyInApp: input.notify,
                 })
                 if (!job) return failure('Scheduled job not found')
                 if (job.enabled) scheduler.scheduleCronJob(job.id)
