@@ -17,7 +17,7 @@ vi.mock('../tool-router.js', () => ({
     routeToolsLexically: routerMocks.lexical,
 }))
 
-import { applyAutoToolRouting, collectAutoIncludedToolNames, filterToolsForRequestedEffect } from './auto-tool-routing.js'
+import { applyAutoToolRouting, collectAutoIncludedToolNames } from './auto-tool-routing.js'
 
 function tool(name: string): RegistryAwareToolDefinition {
     return {
@@ -35,14 +35,6 @@ function namespacedTool(name: string, namespaceId: string, namespaceLabel: strin
         namespaceId,
         namespaceLabel,
         namespaceDescription: `${namespaceLabel} capabilities`,
-    }
-}
-
-function annotatedTool(name: string, readOnly: boolean, destructive = false): RegistryAwareToolDefinition {
-    return {
-        ...tool(name),
-        execution: { readOnly },
-        annotations: { readOnlyHint: readOnly, destructiveHint: destructive },
     }
 }
 
@@ -176,40 +168,30 @@ describe('automatic tool routing', () => {
         expect(routerMocks.lexical).not.toHaveBeenCalled()
     })
 
-    test('hard-gates mutating and destructive tools for read-only requests', () => {
+    test('keeps read, write, and destructive tools in the discovery catalog', async () => {
         const tools = [
-            annotatedTool('memory_search', true),
-            annotatedTool('memory_create', false),
-            annotatedTool('memory_delete', false, true),
+            { ...namespacedTool('search_messages', 'mcp:mail', 'Mail'), execution: { readOnly: true }, annotations: { readOnlyHint: true, destructiveHint: false } },
+            { ...namespacedTool('send_message', 'mcp:mail', 'Mail'), execution: { readOnly: false }, annotations: { readOnlyHint: false, destructiveHint: false } },
+            { ...namespacedTool('delete_message', 'mcp:mail', 'Mail'), execution: { readOnly: false }, annotations: { readOnlyHint: false, destructiveHint: true } },
         ]
+        routerMocks.route.mockResolvedValue([])
+        const gateway = {
+            complete: vi.fn().mockResolvedValue({ toolCalls: [{
+                function: { name: 'select_toolsets', arguments: '{"namespaceIds":[]}' },
+            }] }),
+        } as unknown as LLMGateway
 
-        expect(filterToolsForRequestedEffect(tools, 'read').map(({ name }) => name)).toEqual(['memory_search'])
-        expect(filterToolsForRequestedEffect(tools, 'write').map(({ name }) => name)).toEqual(['memory_search', 'memory_create'])
-        expect(filterToolsForRequestedEffect(tools, 'destructive')).toEqual(tools)
-    })
+        await applyAutoToolRouting({
+            enabled: true,
+            conversationId: 'conversation',
+            userQuery: 'find a capability',
+            gateway,
+            tools,
+        })
 
-    test('never removes an explicitly selected destructive tool', () => {
-        const search = annotatedTool('memory_search', true)
-        const replace = annotatedTool('memory_replace_all', false, true)
-
-        expect(filterToolsForRequestedEffect(
-            [search, replace],
-            'read',
-            new Set(['memory_replace_all']),
-        )).toEqual([search, replace])
-    })
-
-    test('keeps unannotated retrieval tools discoverable for read requests', () => {
-        const tavilyTools = [
-            namespacedTool('tavily-search', 'mcp:tavily', 'Tavily MCP Server'),
-            namespacedTool('tavily-extract', 'mcp:tavily', 'Tavily MCP Server'),
-            namespacedTool('tavily-crawl', 'mcp:tavily', 'Tavily MCP Server'),
-            namespacedTool('tavily-map', 'mcp:tavily', 'Tavily MCP Server'),
-        ]
-        const unknownDestructive = namespacedTool('delete_remote_resource', 'mcp:unknown', 'Unknown MCP')
-
-        expect(filterToolsForRequestedEffect([...tavilyTools, unknownDestructive], 'read'))
-            .toEqual(tavilyTools)
+        expect(routerMocks.route).toHaveBeenCalledWith(expect.objectContaining({
+            availableTools: tools,
+        }))
     })
 
     test('automatically includes complete small toolsets within the schema token budget', () => {
