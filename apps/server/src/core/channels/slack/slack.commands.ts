@@ -3,6 +3,7 @@ import { getDb } from '../../../db/database.js'
 import type { WebClient } from '@slack/web-api'
 import type { SlackCtx } from './slack.types.js'
 import { cancelChannelExecutionsWhere } from '../channel-execution.js'
+import { stopAllActivity } from '../../activity/stop-all.js'
 
 export function getAvailableAgents(ctx: SlackCtx) {
     const all = listAgents()
@@ -19,6 +20,15 @@ export async function handleCommand(
     threadTs: string
 ): Promise<boolean> {
     const command = text.slice(1).split(/\s/)[0].toLowerCase()
+
+    if (command === 'kill') {
+        const result = stopAllActivity()
+        const reply = result.total > 0
+            ? `Stopped ${result.total} running execution(s) across all activity.`
+            : 'No executions are currently running.'
+        await client.chat.postMessage({ channel: slackChannelId, text: reply, thread_ts: threadTs }).catch(() => { })
+        return true
+    }
 
     if (command === 'stop') {
         const cancelled = cancelExecutionsForChannel(ctx, slackChannelId)

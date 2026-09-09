@@ -2,6 +2,7 @@ import { getAgent, listAgents } from '../../agents/agent-store.js'
 import { getDb } from '../../../db/database.js'
 import type { DiscordCtx } from './discord.types.js'
 import { cancelChannelExecutionsWhere } from '../channel-execution.js'
+import { stopAllActivity } from '../../activity/stop-all.js'
 
 export function getAvailableAgents(ctx: DiscordCtx) {
     const all = listAgents()
@@ -13,6 +14,15 @@ export function getAvailableAgents(ctx: DiscordCtx) {
 export async function handleCommand(ctx: DiscordCtx, msg: import('discord.js').Message, text: string): Promise<boolean> {
     const command = text.slice(1).split(/\s/)[0].toLowerCase()
     const discordChannelId = msg.channel.id
+
+    if (command === 'kill') {
+        const result = stopAllActivity()
+        const reply = result.total > 0
+            ? `Stopped ${result.total} running execution(s) across all activity.`
+            : 'No executions are currently running.'
+        await msg.reply(reply).catch(() => { })
+        return true
+    }
 
     if (command === 'stop') {
         const cancelled = cancelExecutionsForChannel(ctx, discordChannelId)
