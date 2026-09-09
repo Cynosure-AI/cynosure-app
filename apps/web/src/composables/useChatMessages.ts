@@ -63,6 +63,32 @@ export function useChatMessages(
         return Boolean(conversationId && agentStore.isConversationExecuting(conversationId))
     }
 
+    function createFilePreviewUrl(content: string): string | undefined {
+        if (typeof URL.createObjectURL !== 'function') return undefined
+
+        try {
+            if (!content.startsWith('data:')) {
+                return URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }))
+            }
+
+            const commaIndex = content.indexOf(',')
+            if (commaIndex === -1) return undefined
+            const metadata = content.slice(5, commaIndex)
+            const mimeType = metadata.split(';')[0] || 'application/octet-stream'
+            const payload = content.slice(commaIndex + 1)
+            if (!metadata.includes(';base64')) {
+                return URL.createObjectURL(new Blob([decodeURIComponent(payload)], { type: mimeType }))
+            }
+
+            const binary = atob(payload)
+            const bytes = new Uint8Array(binary.length)
+            for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+            return URL.createObjectURL(new Blob([bytes], { type: mimeType }))
+        } catch {
+            return undefined
+        }
+    }
+
     function buildRequest(
         content: string,
         msgId: string,
@@ -153,7 +179,10 @@ export function useChatMessages(
             content,
             imageDataUrls,
             audioDataUrls,
-            fileAttachments: files?.map(f => ({ name: f.name })),
+            fileAttachments: files?.map((file) => {
+                const href = createFilePreviewUrl(file.content)
+                return href ? { name: file.name, href } : { name: file.name }
+            }),
             createdAt: Date.now()
         })
 

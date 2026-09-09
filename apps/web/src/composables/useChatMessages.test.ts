@@ -122,7 +122,7 @@ describe('chat message actions', () => {
     expect(state.messages.value[0]).toMatchObject({
       role: 'user',
       content: 'Hello',
-      fileAttachments: [{ name: 'notes.txt' }],
+      fileAttachments: [{ name: 'notes.txt', href: expect.stringMatching(/^blob:/) }],
     })
     expect(state.messages.value[1]).toMatchObject({
       role: 'assistant',

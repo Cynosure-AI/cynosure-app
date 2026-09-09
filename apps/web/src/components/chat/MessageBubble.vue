@@ -22,7 +22,7 @@ const props = defineProps<{
   imageDataUrls?: string[]
   videoDataUrls?: string[]
   audioDataUrls?: string[]
-  fileAttachments?: { name: string }[]
+  fileAttachments?: { name: string; href?: string }[]
   fileArtifacts?: FileArtifactLink[]
   agentId?: string | null
   agentIconUrl?: string | null
@@ -319,17 +319,23 @@ const imageGridClass = computed(() => {
           v-if="fileAttachments?.length"
           class="flex gap-1.5 mt-2 flex-wrap"
         >
-          <span
+          <component
+            :is="file.href ? 'a' : 'span'"
             v-for="(file, idx) in fileAttachments"
             :key="idx"
+            :href="file.href"
+            :target="file.href ? '_blank' : undefined"
+            :rel="file.href ? 'noopener noreferrer' : undefined"
             class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] bg-black/25 text-white/90 border border-white/15"
+            :class="file.href ? 'cursor-pointer hover:bg-black/35 focus-visible:outline-2 focus-visible:outline-white/70' : ''"
+            :title="file.href ? `Open ${file.name}` : file.name"
           >
             <Icon
               icon="lucide:paperclip"
               class="w-3 h-3 shrink-0 opacity-70"
             />
             <span class="truncate max-w-40">{{ file.name }}</span>
-          </span>
+          </component>
         </div>
         <div class="flex gap-2 mt-2 justify-end">
           <button
@@ -385,18 +391,23 @@ const imageGridClass = computed(() => {
           v-if="fileAttachments?.length"
           class="flex gap-1.5 mt-2 flex-wrap"
         >
-          <span
+          <component
+            :is="file.href ? 'a' : 'span'"
             v-for="(file, idx) in fileAttachments"
             :key="idx"
+            :href="file.href"
+            :target="file.href ? '_blank' : undefined"
+            :rel="file.href ? 'noopener noreferrer' : undefined"
             class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] bg-black/25 text-white/90 backdrop-blur-sm border border-white/15"
-            :title="file.name"
+            :class="file.href ? 'cursor-pointer hover:bg-black/35 focus-visible:outline-2 focus-visible:outline-white/70' : ''"
+            :title="file.href ? `Open ${file.name}` : file.name"
           >
             <Icon
               icon="lucide:paperclip"
               class="w-3 h-3 shrink-0 opacity-70"
             />
             <span class="truncate max-w-40">{{ file.name }}</span>
-          </span>
+          </component>
         </div>
       </div>
 

@@ -22,7 +22,7 @@ import type {
 } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
-import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer } from '../core/artifacts/image-artifacts.js'
+import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
 import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
 import {
@@ -390,22 +390,23 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
         if (request.fromQueue) markQueuedMessagePromoted(conversationId, userMsgId)
       })()
-      if (request.fromQueue) {
-        broadcast('chat:new-message', {
+      // Broadcast the persisted representation for both immediate and queued sends.
+      // The sender merges this into its optimistic message, hydrating durable file
+      // links, while other connected clients receive the new user message normally.
+      broadcast('chat:new-message', {
+        conversationId,
+        streamId,
+        message: {
+          id: userMsgId,
           conversationId,
-          streamId,
-          message: {
-            id: userMsgId,
-            conversationId,
-            role: 'user',
-            content: normalizedContent,
-            imageDataUrls: storedImageUrls,
-            audioDataUrls: storedAudioUrls,
-            fileAttachments: storedFileAttachments.map(file => ({ name: file.name })),
-            createdAt: now,
-          },
-        })
-      }
+          role: 'user',
+          content: normalizedContent,
+          imageDataUrls: storedImageUrls,
+          audioDataUrls: storedAudioUrls,
+          fileAttachments: storedFileAttachments.map(file => ({ name: file.name, href: toFileUrl(file.originalPath, file.name) })),
+          createdAt: now,
+        },
+      })
 
       const convRow = db.prepare('SELECT agent_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null } | undefined
       const mainAgentId: string | null = convRow?.agent_id || null
