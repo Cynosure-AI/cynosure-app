@@ -19,6 +19,15 @@ describe('schedule built-in tools', () => {
         }
     })
 
+    test('does not offer automatic in-app notifications for scheduled runs', () => {
+        const tools = makeScheduleTools({ agentId: 'agent-1' })
+        const create = tools.find((tool) => tool.name === 'schedule_create')
+        const update = tools.find((tool) => tool.name === 'schedule_update')
+
+        expect(create?.parameters.properties).not.toHaveProperty('notify')
+        expect(update?.parameters.properties).not.toHaveProperty('notify')
+    })
+
     test('identifies only built-in schedule tool names', () => {
         expect(SCHEDULE_TOOL_NAMES.every(isScheduleToolName)).toBe(true)
         expect(isScheduleToolName('memory_create')).toBe(false)
