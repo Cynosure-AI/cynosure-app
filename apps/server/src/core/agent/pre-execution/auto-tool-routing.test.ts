@@ -188,6 +188,17 @@ describe('automatic tool routing', () => {
         expect(filterToolsForRequestedEffect(tools, 'destructive')).toEqual(tools)
     })
 
+    test('never removes an explicitly selected destructive tool', () => {
+        const search = annotatedTool('memory_search', true)
+        const replace = annotatedTool('memory_replace_all', false, true)
+
+        expect(filterToolsForRequestedEffect(
+            [search, replace],
+            'read',
+            new Set(['memory_replace_all']),
+        )).toEqual([search, replace])
+    })
+
     test('keeps unannotated retrieval tools discoverable for read requests', () => {
         const tavilyTools = [
             namespacedTool('tavily-search', 'mcp:tavily', 'Tavily MCP Server'),

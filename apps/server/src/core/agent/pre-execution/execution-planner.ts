@@ -1,7 +1,7 @@
 import { prepareAgentExecution } from '../prepare-execution.js'
 import { presetFromAgent, presetFromAgentless } from '../execution-preset.js'
 import { toExecutionPlanInput } from './execution-input.js'
-import { isBuiltInMemoryToolKey } from '../../tools/built-in-tools.js'
+import { getBuiltInMemoryToolKeys, isBuiltInMemoryToolKey } from '../../tools/built-in-tools.js'
 import {
     buildPlanningStateContext,
     getLatestPlanningState,
@@ -62,7 +62,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         inlineAttachmentTextLimit,
         debugContextEnabled,
     } = input
-    const selectedToolKeys = stripRuntimeMemoryToolKeys(input.selectedToolKeys ?? [])
+    const selectedToolKeys = stripAutomaticallyManagedMemoryToolKeys(input.selectedToolKeys ?? [])
     const hasRequestToolSelection = input.selectedToolKeys !== undefined
 
     const allRegisteredToolKeys = toolRegistry.listRegisteredTools()
@@ -72,11 +72,11 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
     const configuredTools = hasExplicitToolAllowlist
         ? selectedToolKeys
         : resolvedAgent
-            ? (stripRuntimeMemoryToolKeys(resolvedAgent.tools).length ? stripRuntimeMemoryToolKeys(resolvedAgent.tools) : (effectiveAutoToolRouting ? allRegisteredToolKeys : []))
+            ? (stripAutomaticallyManagedMemoryToolKeys(resolvedAgent.tools).length ? stripAutomaticallyManagedMemoryToolKeys(resolvedAgent.tools) : (effectiveAutoToolRouting ? allRegisteredToolKeys : []))
             : allRegisteredToolKeys
     const fixedToolKeys = hasRequestToolSelection
         ? selectedToolKeys
-        : stripRuntimeMemoryToolKeys(resolvedAgent?.tools ?? [])
+        : stripAutomaticallyManagedMemoryToolKeys(resolvedAgent?.tools ?? [])
 
     const effectiveSubAgents = requestedSubAgents ?? resolvedAgent?.subAgents ?? []
     const preset = resolvedAgent
@@ -151,8 +151,9 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
     }
 }
 
-function stripRuntimeMemoryToolKeys(toolKeys: string[]): string[] {
-    return toolKeys.filter((key) => !isBuiltInMemoryToolKey(key))
+export function stripAutomaticallyManagedMemoryToolKeys(toolKeys: string[]): string[] {
+    const automaticallyManagedKeys = new Set(getBuiltInMemoryToolKeys())
+    return toolKeys.filter((key) => !automaticallyManagedKeys.has(key))
 }
 
 function applyPlanningIfToolCapable(
