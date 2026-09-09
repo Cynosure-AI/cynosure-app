@@ -20,7 +20,7 @@ import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
 import "@vue-flow/controls/dist/style.css";
 import "./knowledge-graph.css";
-import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraph } from "../../api/types";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph } from "../../api/types";
 import type { FlowEdgeData, FlowNodeData, GraphEdgePathType } from "./knowledge-graph-types";
 import KnowledgeGraphSearchBox from "./KnowledgeGraphSearchBox.vue";
 import KnowledgeGraphInspector from "./KnowledgeGraphInspector.vue";
@@ -65,6 +65,26 @@ const entityLimitOptions: { value: GraphEntityLimit; label: string }[] = [
   { value: 500, label: "500" },
   { value: null, label: "All" },
 ];
+
+const entityCategories: { type: KnowledgeGraphNodeType; label: string; icon: string }[] = [
+  { type: "person", label: "Person", icon: "lucide:user" },
+  { type: "organization", label: "Organization", icon: "lucide:building-2" },
+  { type: "place", label: "Place", icon: "lucide:map-pin" },
+  { type: "concept", label: "Concept", icon: "lucide:lightbulb" },
+  { type: "event", label: "Event", icon: "lucide:calendar-days" },
+  { type: "date", label: "Date", icon: "lucide:calendar" },
+  { type: "technology", label: "Technology", icon: "lucide:box" },
+  { type: "product", label: "Product", icon: "lucide:package" },
+  { type: "project", label: "Project", icon: "lucide:folder-kanban" },
+  { type: "artifact", label: "Artifact", icon: "lucide:file-box" },
+  { type: "other", label: "Other", icon: "lucide:circle-ellipsis" },
+];
+
+const categoryByType = new Map(entityCategories.map((category) => [category.type, category]));
+const visibleCategories = computed(() => {
+  const presentTypes = new Set(props.graph?.nodes.map((node) => node.type) || []);
+  return entityCategories.filter((category) => presentTypes.has(category.type));
+});
 
 const emit = defineEmits<{
   "update:graphQuery": [value: string];
@@ -115,8 +135,14 @@ const selectedGraphEdge = computed(() =>
 
 const isWalkView = computed(() => Boolean(props.graphSearchQuery.trim() || props.walkNodes.length));
 
-watch(() => props.graph, () => {
-  clearSelection();
+watch(() => props.graph, (graph) => {
+  selectedEdgeId.value = null;
+  removeSelectedElements();
+
+  const visibleNodeIds = new Set(graph?.nodes.map((node) => node.id) || []);
+  const primarySearchMatch = graph?.seedNodes.find((node) => visibleNodeIds.has(node.id)) || null;
+  selectedNodeId.value = primarySearchMatch?.id || null;
+  emit("focus-node", selectedNodeId.value);
 });
 
 watch(() => props.graphFlowNodes, (nodes) => {
@@ -140,6 +166,10 @@ function changeEntityLimit(event: Event): void {
 
 function importanceLabel(level: number): string {
   return ["temporary", "minor", "useful", "core"][level] ?? "minor";
+}
+
+function entityIcon(type: KnowledgeGraphNodeType): string {
+  return categoryByType.get(type)?.icon || "lucide:circle-ellipsis";
 }
 
 function changeFactLevel(event: Event): void {
@@ -328,7 +358,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
 
       <div
         v-else
-        class="knowledge-graph-panel isolate relative h-[calc(100vh-255px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
+        class="knowledge-graph-panel isolate relative h-[calc(100vh-310px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
       >
         <div class="absolute top-2 left-2 z-10 flex flex-wrap items-center justify-start gap-2 bg-theme-900/80 backdrop-blur-sm border border-theme-700/60 rounded-lg px-3 py-1.5">
           <label class="flex items-center gap-2">
@@ -495,25 +525,34 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               class="entity-node-body"
               :class="{
                 'entity-node-body-selected': selected || selectedNodeId === data.entity.id,
+                'entity-node-body-focus-root': data.isFocusRoot,
                 'entity-node-body-focus-highlighted': data.isFocusHighlighted,
                 'entity-node-body-focus-dimmed': data.isFocusDimmed,
               }"
             >
-              <div class="entity-node-label">
-                {{ data.label }}
+              <div
+                class="entity-node-icon"
+                aria-hidden="true"
+              >
+                <Icon :icon="entityIcon(data.entity.type)" />
               </div>
-              <div class="entity-node-meta">
-                <span class="entity-node-type">
-                  {{ data.entity.type }}
-                </span>
-                <span
-                  v-if="data.entity.importance > 0"
-                  class="entity-node-importance"
-                  :class="`entity-node-importance-${data.entity.importance}`"
-                  :title="importanceLabel(data.entity.importance)"
-                >
-                  {{ importanceLabel(data.entity.importance) }}
-                </span>
+              <div class="entity-node-content">
+                <div class="entity-node-label">
+                  {{ data.label }}
+                </div>
+                <div class="entity-node-meta">
+                  <span class="entity-node-type">
+                    {{ data.entity.type }}
+                  </span>
+                  <span
+                    v-if="data.entity.importance > 0"
+                    class="entity-node-importance"
+                    :class="`entity-node-importance-${data.entity.importance}`"
+                    :title="importanceLabel(data.entity.importance)"
+                  >
+                    {{ importanceLabel(data.entity.importance) }}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -577,6 +616,22 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
 
           <Controls />
         </VueFlow>
+
+        <div
+          v-if="visibleCategories.length"
+          class="entity-category-legend"
+          aria-label="Entity category legend"
+        >
+          <div
+            v-for="category in visibleCategories"
+            :key="category.type"
+            class="entity-category-legend-item"
+            :class="`entity-category-${category.type}`"
+          >
+            <span class="entity-category-legend-dot" />
+            {{ category.label }}
+          </div>
+        </div>
 
         <KnowledgeGraphInspector
           v-if="selectedGraphNodes.length || selectedGraphEdge"
