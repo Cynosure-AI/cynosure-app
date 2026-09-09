@@ -34,7 +34,7 @@ export async function handleMessage(ctx: DiscordCtx, msg: Message): Promise<void
     const discordChannelId = msg.channel.id
     const text = (msg.content || '').trim()
 
-    if (text.startsWith('!')) {
+    if (text.startsWith('!') || text.startsWith('/')) {
         const handled = await handleCommand(ctx, msg, text)
         if (handled) return
     }
@@ -74,7 +74,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
     const userText = (msg.content || '').trim()
     const senderName = msg.member?.displayName || msg.author.username
 
-    if (userText.startsWith('!')) {
+    if (userText.startsWith('!') || userText.startsWith('/')) {
         const handled = await handleCommand(ctx, msg, userText)
         if (handled) return
     }

@@ -4,6 +4,7 @@ import type { TelegramCtx } from './telegram.types.js'
 import { TELEGRAM_API } from './telegram.types.js'
 import { sendMessage } from './telegram.api.js'
 import { cancelChannelExecutionsWhere } from '../channel-execution.js'
+import { stopAllActivity } from '../../activity/stop-all.js'
 
 /** Return the list of agents available for this channel (filtered by allowedAgentIds). */
 export function getAvailableAgents(ctx: TelegramCtx) {
@@ -19,6 +20,7 @@ export async function registerBotCommands(ctx: TelegramCtx): Promise<void> {
     const commands: { command: string; description: string }[] = [
         { command: 'start', description: 'Start a fresh conversation with the default agent' },
         { command: 'stop', description: 'Cancel the currently running execution' },
+        { command: 'kill', description: 'Stop all running executions' },
         { command: 'new', description: 'Start a fresh conversation with the last used agent' }
     ]
     for (const agent of agents) {
@@ -37,6 +39,15 @@ export async function registerBotCommands(ctx: TelegramCtx): Promise<void> {
 /** Handle slash commands. Returns true if the message was a command and was handled. */
 export async function handleCommand(ctx: TelegramCtx, chatId: number, text: string): Promise<boolean> {
     const command = text.split(/\s|@/)[0].slice(1).toLowerCase()
+
+    if (command === 'kill') {
+        const result = stopAllActivity()
+        const reply = result.total > 0
+            ? `Stopped ${result.total} running execution(s) across all activity.`
+            : 'No executions are currently running.'
+        await sendMessage(ctx, chatId, reply)
+        return true
+    }
 
     if (command === 'stop') {
         const cancelled = cancelExecutionsForChat(ctx, chatId)

@@ -36,7 +36,7 @@ export async function handleMessage(ctx: SlackCtx, msg: SlackMessage, client: We
     const text = (msg.text || '').trim()
     const hasFiles = !!(msg.files?.length)
 
-    if (text.startsWith('!')) {
+    if (text.startsWith('!') || text.startsWith('/')) {
         const handled = await handleCommand(ctx, slackChannelId, text, client, msg.ts)
         if (handled) return
     }
@@ -76,7 +76,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
     const userText = (msg.text || '').trim()
     const senderName = msg.user || 'User'
 
-    if (userText.startsWith('!')) {
+    if (userText.startsWith('!') || userText.startsWith('/')) {
         const handled = await handleCommand(ctx, slackChannelId, userText, client, msg.ts)
         if (handled) return
     }
