@@ -92,6 +92,36 @@ describe('central context budget', () => {
             safetyMargin: 100,
         })).toThrow(/System messages alone/)
     })
+
+    test('truncates an oversized tool result while preserving its request group', () => {
+        const messages = [
+            { role: 'system' as const, content: 'Instructions' },
+            { role: 'user' as const, content: 'list my notes' },
+            {
+                role: 'assistant' as const,
+                content: '',
+                toolCalls: [{ id: 'call-1', type: 'function' as const, function: { name: 'get_list', arguments: '{}' } }],
+            },
+            { role: 'tool' as const, content: 'x'.repeat(12_000), toolCallId: 'call-1' },
+        ]
+
+        const trimmed = trimMessagesToContextLimit(messages, 1_500, {
+            requestedOutputTokens: 200,
+            thinkingEnabled: false,
+            safetyMargin: 100,
+        })
+
+        expect(trimmed.map(message => message.role)).toEqual(['system', 'user', 'assistant', 'tool'])
+        expect(trimmed.at(-1)?.content).toContain('[Tool result truncated to fit the model context window.]')
+        const budget = calculateContextBudget({
+            contextWindow: 1_500,
+            messages,
+            requestedOutputTokens: 200,
+            thinkingEnabled: false,
+            safetyMargin: 100,
+        })
+        expect(estimateTotalTokens(trimmed.filter(message => message.role !== 'system'))).toBeLessThanOrEqual(budget.availableHistory)
+    })
 })
 
 describe('AgentExecutor dynamic context budget', () => {

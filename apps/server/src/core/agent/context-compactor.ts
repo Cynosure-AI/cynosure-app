@@ -196,11 +196,24 @@ export async function applyCompactStrategy({
         return { messages: workingMessages, initialContextEstimate: initialEstimate }
     }
 
-    // Summarise all non-system messages except the last user message
+    // Summarise everything before the latest request. The complete request
+    // group (user message, assistant tool calls, and tool results) must remain
+    // together; preserving only the final message can orphan a tool result.
     const workingSystemMsgs = workingMessages.filter(m => m.role === 'system')
     const workingNonSystemMsgs = workingMessages.filter(m => m.role !== 'system')
-    const toSummarize = workingNonSystemMsgs.slice(0, -1)
-    const lastUserMsg = workingNonSystemMsgs[workingNonSystemMsgs.length - 1] ?? null
+    let latestRequestIndex = -1
+    for (let i = workingNonSystemMsgs.length - 1; i >= 0; i--) {
+        if (workingNonSystemMsgs[i].role === 'user') {
+            latestRequestIndex = i
+            break
+        }
+    }
+    const toSummarize = latestRequestIndex >= 0
+        ? workingNonSystemMsgs.slice(0, latestRequestIndex)
+        : workingNonSystemMsgs.slice(0, -1)
+    const latestRequestGroup = latestRequestIndex >= 0
+        ? workingNonSystemMsgs.slice(latestRequestIndex)
+        : workingNonSystemMsgs.slice(-1)
 
     if (toSummarize.length === 0) {
         return { messages: workingMessages, initialContextEstimate: initialEstimate }
@@ -238,9 +251,7 @@ export async function applyCompactStrategy({
 
     const summaryNote = `\n\n---\n[Conversation compacted — ${toSummarize.length} messages summarized by ${responseModel}]\n${summary}`
     const finalSystemMsgs = injectSummaryNote(workingSystemMsgs, summaryNote)
-    const finalMessages: ChatMessage[] = lastUserMsg
-        ? [...finalSystemMsgs, lastUserMsg]
-        : [...finalSystemMsgs]
+    const finalMessages: ChatMessage[] = [...finalSystemMsgs, ...latestRequestGroup]
 
     return { messages: finalMessages, initialContextEstimate: initialEstimate }
 }
