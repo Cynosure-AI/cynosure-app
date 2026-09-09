@@ -232,6 +232,12 @@ export function trimMessagesToContextLimit(
             budget,
         )
     }
+    // A tool can legitimately return more data than the remaining context can
+    // hold. Keep the call/result structure intact, but compact textual tool
+    // output as a last resort so one large result cannot strand the run.
+    const preCompactionMsgs = keptMsgs
+    keptMsgs = compactToolResultsToBudget(keptMsgs, budget.availableHistory)
+    const toolResultsCompacted = keptMsgs !== preCompactionMsgs
     const keptHistoryTokens = estimateTotalTokens(keptMsgs)
     if (keptHistoryTokens > budget.availableHistory) {
         throw new ContextBudgetExceededError(
@@ -239,7 +245,9 @@ export function trimMessagesToContextLimit(
             budget,
         )
     }
-    if (trimmedCount === 0) return messages
+    if (trimmedCount === 0) {
+        return toolResultsCompacted ? [...systemMsgs, ...keptMsgs] : messages
+    }
 
     const trimmedTokens = totalHistoryTokens - keptHistoryTokens
 
@@ -263,6 +271,35 @@ export function trimMessagesToContextLimit(
         : [{ role: 'system' as const, content: trimNote.trimStart() }]
 
     return [...mergedSystemMsgs, ...keptMsgs]
+}
+
+const TOOL_RESULT_TRUNCATION_NOTE = '\n\n[Tool result truncated to fit the model context window.]'
+
+function compactToolResultsToBudget(messages: ChatMessage[], budget: number): ChatMessage[] {
+    let excess = estimateTotalTokens(messages) - budget
+    if (excess <= 0) return messages
+
+    const compacted = [...messages]
+    // Prefer trimming older results first while retaining a useful tail from
+    // the newest result. Token estimates use four characters per token.
+    for (let i = 0; i < compacted.length && excess > 0; i++) {
+        const message = compacted[i]
+        if (message.role !== 'tool' || typeof message.content !== 'string') continue
+
+        const minimumLength = TOOL_RESULT_TRUNCATION_NOTE.length
+        const removableChars = Math.max(0, message.content.length - minimumLength)
+        if (removableChars === 0) continue
+
+        const targetLength = Math.max(minimumLength, message.content.length - excess * 4)
+        const keepChars = targetLength - minimumLength
+        compacted[i] = {
+            ...message,
+            content: message.content.slice(0, keepChars) + TOOL_RESULT_TRUNCATION_NOTE,
+        }
+        excess = estimateTotalTokens(compacted) - budget
+    }
+
+    return compacted
 }
 
 function slidingWindow(
