@@ -182,7 +182,7 @@ function buildHistoryContent(
                 : `This attachment is larger than the inline context limit and will be indexed for retrieval (attachmentId: ${file.id}).`
             parts.push({
                 type: 'text',
-                text: `[Attached file: ${file.name}]\n${status} Use the current attachment context or attachment_search/attachment_retrieve_chunks when details are needed.`
+                text: `[Attached file: ${file.name}]\n${status} Use the current attachment context or attachment_search/attachment_read when details are needed.`
             })
             continue
         }

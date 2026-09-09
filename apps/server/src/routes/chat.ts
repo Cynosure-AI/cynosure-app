@@ -349,7 +349,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
                 : `This attachment is larger than the inline context limit and will be indexed for retrieval (attachmentId: ${file.id}).`
               parts.push({
                 type: 'text',
-                text: `[Attached file: ${file.name}]\n${status} Relevant excerpts will be provided as context; use attachment_search/attachment_retrieve_chunks for more detail.`
+                text: `[Attached file: ${file.name}]\n${status} Relevant excerpts will be provided as context; use attachment_search/attachment_read for more detail.`
               })
               continue
             }
