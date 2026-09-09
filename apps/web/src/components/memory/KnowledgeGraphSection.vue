@@ -140,7 +140,10 @@ watch(() => props.graph, (graph) => {
   removeSelectedElements();
 
   const visibleNodeIds = new Set(graph?.nodes.map((node) => node.id) || []);
-  const primarySearchMatch = graph?.seedNodes.find((node) => visibleNodeIds.has(node.id)) || null;
+  const newestWalkMatch = [...props.walkNodes].reverse().find((node) => visibleNodeIds.has(node.id));
+  const primarySearchMatch = newestWalkMatch
+    || graph?.seedNodes.find((node) => visibleNodeIds.has(node.id))
+    || null;
   selectedNodeId.value = primarySearchMatch?.id || null;
   emit("focus-node", selectedNodeId.value);
 });
