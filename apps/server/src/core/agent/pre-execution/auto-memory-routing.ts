@@ -260,7 +260,7 @@ function qualifyFirstPersonGraphQuery(query: string): string {
 
 export function emitAutoMemoryRoutingSkipped(
     _conversationId: string,
-    _reason: 'disabled' | 'empty-scope' | 'no-query',
+    _reason: 'disabled' | 'empty-scope' | 'no-query' | 'not-required',
     _eventMeta?: Record<string, unknown>,
 ): void {
     // Static or disabled memory selection is not auto-memory routing, so do
