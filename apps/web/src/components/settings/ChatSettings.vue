@@ -17,6 +17,10 @@ const prefs = usePreferencesStore();
 const providerStore = useProviderStore();
 const attachmentConfigStatus = ref<"idle" | "saving" | "saved" | "error">("idle");
 const lastSavedAttachmentLimit = ref(24_000);
+const attachmentLimitSteps = [
+  2_000, 4_000, 8_000, 12_000, 16_000, 24_000, 32_000, 48_000,
+  64_000, 96_000, 128_000, 192_000, 256_000, 384_000, 500_000,
+];
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
 }>(), {
@@ -78,9 +82,28 @@ function clampInlineAttachmentTextLimit(value: number): number {
   return Math.max(2_000, Math.min(500_000, Math.floor(value || 24_000)));
 }
 
+function formatAttachmentTextLimit(value: number): string {
+  return `${Math.round(clampInlineAttachmentTextLimit(value) / 1_000)} KB`;
+}
+
+function attachmentLimitStepIndex(value: number): number {
+  return attachmentLimitSteps.reduce((closestIndex, step, index) =>
+    Math.abs(step - value) < Math.abs(attachmentLimitSteps[closestIndex] - value)
+      ? index
+      : closestIndex, 0);
+}
+
+function attachmentLimitFromEvent(event: Event): number {
+  const index = Number((event.target as HTMLInputElement).value);
+  return attachmentLimitSteps[index] ?? 24_000;
+}
+
+function previewInlineAttachmentTextLimit(event: Event): void {
+  prefs.inlineAttachmentTextLimit = attachmentLimitFromEvent(event);
+}
+
 async function updateInlineAttachmentTextLimit(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement;
-  const limit = clampInlineAttachmentTextLimit(Number(input.value));
+  const limit = attachmentLimitFromEvent(event);
   prefs.inlineAttachmentTextLimit = limit;
   attachmentConfigStatus.value = "saving";
   try {
@@ -190,22 +213,31 @@ onMounted(async () => {
       </div>
 
       <div class="pt-1 border-t border-theme-700">
-        <div class="flex items-end gap-3">
-          <label class="flex-1">
-            <span class="block text-xs text-theme-400 mb-1.5">Inline text limit</span>
+        <label class="block">
+          <span class="flex items-center justify-between gap-3 text-xs text-theme-400 mb-2">
+            <span>Inline text limit</span>
+            <output class="font-medium tabular-nums text-theme-200">
+              {{ formatAttachmentTextLimit(prefs.inlineAttachmentTextLimit) }}
+            </output>
+          </span>
+          <div class="flex items-center gap-3">
+            <span class="w-10 text-right text-[11px] tabular-nums text-theme-500">2 KB</span>
             <input
-              :value="prefs.inlineAttachmentTextLimit"
-              type="number"
-              min="2000"
-              max="500000"
-              step="1000"
+              :value="attachmentLimitStepIndex(prefs.inlineAttachmentTextLimit)"
+              type="range"
+              min="0"
+              :max="attachmentLimitSteps.length - 1"
+              step="1"
+              aria-label="Inline attachment text limit"
+              :aria-valuetext="formatAttachmentTextLimit(prefs.inlineAttachmentTextLimit)"
               :disabled="attachmentConfigStatus === 'saving'"
-              class="w-full bg-theme-900 border border-theme-600 rounded-lg px-3 py-2 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              class="min-w-0 flex-1 accent-accent-500 disabled:cursor-wait disabled:opacity-60"
+              @input="previewInlineAttachmentTextLimit"
               @change="updateInlineAttachmentTextLimit"
             >
-          </label>
-          <span class="pb-2 text-xs text-theme-500">bytes</span>
-        </div>
+            <span class="w-12 text-[11px] tabular-nums text-theme-500">500 KB</span>
+          </div>
+        </label>
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
           Larger extracted document text is indexed and retrieved as relevant excerpts instead of being fully resent each turn.
         </p>
