@@ -94,11 +94,15 @@ export interface GenerateTitleOpts {
 
 const MAX_TITLE_CHARS = 70
 const MIN_TITLE_WORDS = 1
-const MAX_TITLE_WORDS = 10
+const MAX_TITLE_WORDS = 20
 /** Hard cap on the title LLM call — a title should never take longer than this. */
 const TITLE_TIMEOUT_MS = 15_000
-/** Small completion budget: enough for a short title, prevents runaway generation. */
-const TITLE_MAX_TOKENS = 64
+/**
+ * Includes headroom for providers that make reasoning mandatory. Although the
+ * visible title is short, those models count hidden reasoning against the same
+ * completion limit and can exhaust a tiny budget before emitting the title.
+ */
+const TITLE_MAX_TOKENS = 512
 
 export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     const { conversationId, userMessage, assistantResponse, broadcast, providerId, model } = opts
