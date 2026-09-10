@@ -22,6 +22,8 @@ const router = useRouter()
 const appVersion = ref<string | null>(null)
 const { state: updateState, progressPercent, download, install } = useAppUpdater()
 const popoverStyle = ref<CSSProperties>({})
+const electron = (window as unknown as { electron?: { quitApp?: () => Promise<void> } }).electron
+const isElectron = typeof electron?.quitApp === 'function'
 
 const setupLinks = [
   { path: '/settings', label: 'Settings', icon: 'lucide:settings' },
@@ -51,6 +53,11 @@ async function fetchVersion() {
 function goTo(path: string) {
   emit('close')
   router.push(path)
+}
+
+function quitApp(): void {
+  emit('close')
+  void electron?.quitApp?.()
 }
 
 watch(() => props.show, async (show) => {
@@ -139,6 +146,19 @@ onBeforeUnmount(() => {
               icon="lucide:chevron-right"
               class="h-4 w-4 text-theme-600"
             />
+          </button>
+
+          <button
+            v-if="isElectron"
+            type="button"
+            class="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-theme-300 transition hover:bg-theme-800 hover:text-red-400"
+            @click="quitApp"
+          >
+            <Icon
+              icon="lucide:power"
+              class="h-5 w-5 shrink-0 text-theme-500 group-hover:text-red-400"
+            />
+            <span class="min-w-0 flex-1">Quit</span>
           </button>
         </div>
 

@@ -562,6 +562,10 @@ app.whenReady().then(async () => {
         error: hotkeyRegistrationError || undefined,
     }))
     ipcMain.handle('global-hotkey:set', (_event, accelerator: string) => registerGlobalHotkey(accelerator))
+    ipcMain.handle('app:quit', () => {
+        isQuitting = true
+        app.quit()
+    })
 
     initializeUpdater()
 
