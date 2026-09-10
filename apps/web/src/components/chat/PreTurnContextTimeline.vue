@@ -229,22 +229,26 @@ function formatTimestamp(timestamp: number): string {
           :aria-expanded="expandedCards.has(card.channel)"
           @click="toggle(expandedCards, card.channel)"
         >
-          <span class="card-icon"><Icon
-            :icon="card.latest.pending ? 'svg-spinners:ring-resize' : card.icon"
-            class="h-3.5 w-3.5"
-          /></span>
+          <span class="card-icon">
+            <Icon
+              :icon="card.latest.pending ? 'svg-spinners:ring-resize' : card.icon"
+              class="h-3.5 w-3.5"
+            />
+          </span>
           <span class="min-w-0 flex-1">
             <span class="block text-[12px] font-semibold text-theme-200">{{ card.title }}</span>
             <span
               class="block truncate text-[11px] text-theme-400"
               role="status"
               aria-live="polite"
-            >{{ card.latest.label }}</span>
+            >{{
+              card.latest.label }}</span>
           </span>
           <span
             v-if="card.selected.length"
             class="count-chip"
-          >{{ plural(card.selected.length, card.channel === 'memory' ? 'memory' : 'MCP/toolset', 'MCPs/toolsets') }}</span>
+          >{{ plural(card.selected.length, card.channel === 'memory'
+            ? 'memory' : 'MCP/toolset', 'MCPs/toolsets') }}</span>
           <Icon
             icon="lucide:chevron-down"
             class="h-3.5 w-3.5 text-theme-500 transition-transform"
@@ -289,10 +293,12 @@ function formatTimestamp(timestamp: number): string {
                   :icon="item.pending ? 'svg-spinners:ring-resize' : item.icon"
                   class="mt-0.5 h-3.5 w-3.5 shrink-0"
                 />
-                <span class="min-w-0 flex-1"><span class="block text-[11px] font-medium text-theme-300">{{ item.label }}</span><span
+                <span class="min-w-0 flex-1"><span class="block text-[11px] font-medium text-theme-300">{{ item.label
+                }}</span><span
                   v-if="item.summary"
                   class="block text-[10px] text-theme-500"
-                >{{ item.summary }}</span></span>
+                >{{ item.summary
+                }}</span></span>
                 <time class="text-[9px] tabular-nums text-theme-600">{{ formatTimestamp(item.timestamp) }}</time>
                 <Icon
                   v-if="item.details.length"
@@ -360,15 +366,30 @@ function formatTimestamp(timestamp: number): string {
               class="toolset-card"
             >
               <div class="flex items-center gap-2 text-[11px] font-semibold text-teal-200">
-                <Icon icon="lucide:boxes" class="h-3.5 w-3.5" />
+                <Icon
+                  icon="lucide:boxes"
+                  class="h-3.5 w-3.5"
+                />
                 {{ group.label }}
               </div>
-              <div v-if="group.tools.length" class="mt-2 flex flex-wrap gap-1.5">
-                <span v-for="tool in group.tools" :key="tool.name" class="tool-chip">
+              <div
+                v-if="group.tools.length"
+                class="mt-2 flex flex-wrap gap-1.5"
+              >
+                <span
+                  v-for="tool in group.tools"
+                  :key="tool.name"
+                  class="tool-chip"
+                >
                   {{ tool.name }}<small v-if="tool.score">{{ tool.score }}</small>
                 </span>
               </div>
-              <p v-else class="mt-1 text-[10px] text-theme-500">No individual tools selected.</p>
+              <p
+                v-else
+                class="mt-1 text-[10px] text-theme-500"
+              >
+                No individual tools selected.
+              </p>
             </section>
           </div>
         </div>
@@ -378,20 +399,120 @@ function formatTimestamp(timestamp: number): string {
 </template>
 
 <style scoped>
-.pre-turn-card { overflow: hidden; border: 1px solid rgb(71 85 105 / .38); border-radius: 1rem; background: linear-gradient(145deg, rgb(15 23 42 / .88), rgb(9 14 25 / .9)); box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
-.pre-turn-card--memory { border-color: rgb(167 139 250 / .25); background: radial-gradient(circle at 0 0, rgb(139 92 246 / .1), transparent 40%), linear-gradient(145deg, rgb(15 23 42 / .9), rgb(20 15 38 / .82)); }
-.pre-turn-card--tools { border-color: rgb(45 212 191 / .24); background: radial-gradient(circle at 0 0, rgb(20 184 166 / .09), transparent 40%), linear-gradient(145deg, rgb(15 23 42 / .9), rgb(8 34 36 / .72)); }
-.card-icon { display: flex; height: 1.5rem; width: 1.5rem; flex-shrink: 0; align-items: center; justify-content: center; border-radius: .5rem; background: rgb(34 211 238 / .1); color: rgb(103 232 249); box-shadow: 0 0 0 1px rgb(103 232 249 / .12); }
-.pre-turn-card--memory .card-icon { background: rgb(139 92 246 / .12); color: rgb(196 181 253); box-shadow: 0 0 0 1px rgb(167 139 250 / .16); }
-.count-chip, .score-chip { border-radius: .375rem; padding: .125rem .375rem; background: rgb(6 182 212 / .1); color: rgb(165 243 252); font-size: 10px; white-space: nowrap; }
-.collapsed-results { display: flex; flex-wrap: wrap; gap: .35rem; border-top: 1px solid rgb(71 85 105 / .24); padding: 0 .75rem .7rem; }
-.collapsed-result-chip { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: .35rem; border-radius: .4rem; background: rgb(30 41 59 / .62); padding: .2rem .4rem; color: rgb(203 213 225); font-size: 10px; }
-.collapsed-result-chip small { flex-shrink: 0; color: rgb(103 232 249); }
-.pre-turn-card--memory .collapsed-result-chip small { color: rgb(196 181 253); }
-.memory-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
-.memory-card { min-width: 0; border: 1px solid rgb(167 139 250 / .18); border-radius: .625rem; background: rgb(76 29 149 / .08); padding: .625rem; }
-.toolset-card { border: 1px solid rgb(45 212 191 / .16); border-radius: .625rem; background: rgb(15 118 110 / .06); padding: .625rem; }
-.tool-chip { border-radius: .4rem; background: rgb(20 184 166 / .1); padding: .25rem .45rem; color: rgb(153 246 228); font-size: 10px; }
-.tool-chip small { margin-left: .35rem; color: rgb(94 234 212 / .7); }
-@media (max-width: 640px) { .memory-grid { grid-template-columns: minmax(0, 1fr); } }
+.pre-turn-card {
+  overflow: hidden;
+  border: 1px solid rgb(71 85 105 / .38);
+  border-radius: 1rem;
+  background: linear-gradient(145deg, rgb(15 23 42 / .88), rgb(9 14 25 / .9));
+  box-shadow: 0 8px 24px rgb(0 0 0 / .12);
+}
+
+.pre-turn-card--memory {
+  border-color: rgb(167 139 250 / .25);
+  background: radial-gradient(circle at 0 0, rgb(139 92 246 / .1), transparent 40%), linear-gradient(145deg, rgb(15 23 42 / .9), rgb(20 15 38 / .82));
+}
+
+.pre-turn-card--tools {
+  border-color: rgb(45 212 191 / .24);
+  background: radial-gradient(circle at 0 0, rgb(20 184 166 / .09), transparent 40%), linear-gradient(145deg, rgb(15 23 42 / .9), rgb(8 34 36 / .72));
+}
+
+.card-icon {
+  display: flex;
+  height: 1.5rem;
+  width: 1.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: .5rem;
+  background: rgb(34 211 238 / .1);
+  color: rgb(103 232 249);
+  box-shadow: 0 0 0 1px rgb(103 232 249 / .12);
+}
+
+.pre-turn-card--memory .card-icon {
+  background: rgb(139 92 246 / .12);
+  color: rgb(196 181 253);
+  box-shadow: 0 0 0 1px rgb(167 139 250 / .16);
+}
+
+.count-chip,
+.score-chip {
+  border-radius: .375rem;
+  padding: .125rem .375rem;
+  background: rgb(6 182 212 / .1);
+  color: rgb(165 243 252);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.collapsed-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  border-top: 1px solid rgb(71 85 105 / .24);
+  padding: .5rem .7rem;
+}
+
+.collapsed-result-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: .35rem;
+  border-radius: .4rem;
+  background: rgb(30 41 59 / .62);
+  padding: .2rem .4rem;
+  color: rgb(203 213 225);
+  font-size: 10px;
+}
+
+.collapsed-result-chip small {
+  flex-shrink: 0;
+  color: rgb(103 232 249);
+}
+
+.pre-turn-card--memory .collapsed-result-chip small {
+  color: rgb(196 181 253);
+}
+
+.memory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .5rem;
+}
+
+.memory-card {
+  min-width: 0;
+  border: 1px solid rgb(167 139 250 / .18);
+  border-radius: .625rem;
+  background: rgb(76 29 149 / .08);
+  padding: .625rem;
+}
+
+.toolset-card {
+  border: 1px solid rgb(45 212 191 / .16);
+  border-radius: .625rem;
+  background: rgb(15 118 110 / .06);
+  padding: .625rem;
+}
+
+.tool-chip {
+  border-radius: .4rem;
+  background: rgb(20 184 166 / .1);
+  padding: .25rem .45rem;
+  color: rgb(153 246 228);
+  font-size: 10px;
+}
+
+.tool-chip small {
+  margin-left: .35rem;
+  color: rgb(94 234 212 / .7);
+}
+
+@media (max-width: 640px) {
+  .memory-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 </style>
