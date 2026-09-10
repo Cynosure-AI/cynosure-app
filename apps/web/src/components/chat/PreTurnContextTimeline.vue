@@ -159,7 +159,11 @@ const cards = computed<ContextCard[]>(() => {
         icon: final ? 'lucide:check' : channel === 'memory' ? 'lucide:brain' : args(channelCalls[0]).type === 'toolset-router' ? 'lucide:boxes' : 'lucide:wrench',
         timestamp: step.timestamp,
         updatedAt: step.updatedAt ?? step.timestamp,
-        details: channel === 'tools' && args(channelCalls[0]).type === 'tool-router' ? [] : details(channelCalls),
+        // Keep the effective final tool list on the completion item so users can
+        // inspect tools that were retained independently of toolset routing.
+        details: channel === 'tools' && args(channelCalls[0]).type === 'tool-router' && !final
+          ? []
+          : details(channelCalls),
         final,
         pending: false,
       })
@@ -187,7 +191,7 @@ const cards = computed<ContextCard[]>(() => {
   })
 })
 
-function groupedTools(card: ContextCard): Array<{ id: string; label: string; tools: Detail[] }> {
+function groupedAutoSelectedTools(card: ContextCard): Array<{ id: string; label: string; tools: Detail[] }> {
   const groups = new Map<string, { id: string; label: string; tools: Detail[] }>()
   for (const toolset of card.toolsets) {
     const id = toolset.namespaceId || toolset.name
@@ -195,9 +199,8 @@ function groupedTools(card: ContextCard): Array<{ id: string; label: string; too
   }
   for (const tool of card.selectedTools) {
     const fallback = card.toolsets.length === 1 ? card.toolsets[0] : undefined
-    const id = tool.namespaceId || fallback?.namespaceId || fallback?.name || 'selected-tools'
-    if (!groups.has(id)) groups.set(id, { id, label: tool.namespaceLabel || 'Selected tools', tools: [] })
-    groups.get(id)!.tools.push(tool)
+    const id = tool.namespaceId || fallback?.namespaceId || fallback?.name
+    if (id && groups.has(id)) groups.get(id)!.tools.push(tool)
   }
   return [...groups.values()]
 }
@@ -287,6 +290,7 @@ function formatTimestamp(timestamp: number): string {
               <button
                 class="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-theme-800/35"
                 :class="{ 'cursor-default': !item.details.length }"
+                :aria-expanded="item.details.length ? expandedSteps.has(item.key) : undefined"
                 @click="item.details.length && toggle(expandedSteps, item.key)"
               >
                 <Icon
@@ -310,6 +314,7 @@ function formatTimestamp(timestamp: number): string {
               <div
                 v-if="item.details.length && expandedSteps.has(item.key)"
                 class="ml-7 space-y-1 rounded-lg bg-theme-950/35 p-2"
+                :aria-label="card.channel === 'tools' && item.final ? 'All tools included this round' : undefined"
               >
                 <div
                   v-for="(detail, index) in item.details"
@@ -356,12 +361,12 @@ function formatTimestamp(timestamp: number): string {
           </div>
 
           <div
-            v-if="card.channel === 'tools' && groupedTools(card).length"
+            v-if="card.channel === 'tools' && groupedAutoSelectedTools(card).length"
             class="mt-3 space-y-2"
-            aria-label="Selected MCPs, toolsets, and tools"
+            aria-label="Auto-selected MCPs, toolsets, and tools"
           >
             <section
-              v-for="group in groupedTools(card)"
+              v-for="group in groupedAutoSelectedTools(card)"
               :key="group.id"
               class="toolset-card"
             >

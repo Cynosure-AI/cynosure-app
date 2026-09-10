@@ -65,7 +65,7 @@ describe('PreTurnContextTimeline', () => {
     expect(cards[1].text()).toContain('lower.md')
   })
 
-  test('shows only MCPs when collapsed and their individual tools when expanded', async () => {
+  test('shows only MCPs when collapsed and tools inside the expanded completion step', async () => {
     const wrapper = mount(PreTurnContextTimeline, {
       props: {
         steps: [
@@ -103,6 +103,51 @@ describe('PreTurnContextTimeline', () => {
     expect(toolsets[0].text()).toContain('88%')
     expect(toolsets[1].text()).toContain('Documents')
     expect(toolsets[1].text()).toContain('read_document')
+
+    const completionStep = wrapper.findAll('ol button').find((button) => button.text().includes('Tool selection complete'))
+    expect(completionStep).toBeDefined()
+    await completionStep!.trigger('click')
+    const includedTools = wrapper.get('[aria-label="All tools included this round"]')
+    expect(includedTools.text()).toContain('search_repositories88%')
+    expect(includedTools.text()).toContain('read_document')
+  })
+
+  test('lists all retained tools in the completion step without presenting them as auto-selected toolsets', async () => {
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: {
+        steps: [
+          {
+            iteration: 0, taskId: 'tools', status: 'routing-tools', timestamp: 100,
+            toolCalls: [
+              { name: 'No toolsets selected', arguments: JSON.stringify({ type: 'toolset-router', selectionMethod: 'llm', emptyReason: 'none-relevant' }) },
+            ],
+          },
+          {
+            iteration: 0, taskId: 'tools', status: 'finding-tools', timestamp: 120,
+            toolCalls: [
+              { name: 'memory_replace_all', arguments: JSON.stringify({ type: 'tool-router', contextPhase: 'gathered-context', selectionMethod: 'lexical', namespaceId: 'builtin:memory', namespaceLabel: 'Built-In: Memory' }) },
+              { name: 'get_weather_forecast', arguments: JSON.stringify({ type: 'tool-router', contextPhase: 'gathered-context', selectionMethod: 'lexical', namespaceId: 'mcp:weather', namespaceLabel: 'Weather Fetcher' }) },
+            ],
+          },
+        ],
+        isActive: false,
+      },
+      global,
+    })
+
+    expect(wrapper.find('[aria-label="Auto tools selected results"]').exists()).toBe(false)
+    expect(wrapper.find('.count-chip').exists()).toBe(false)
+    await wrapper.get('.pre-turn-card > button').trigger('click')
+    expect(wrapper.findAll('.toolset-card')).toHaveLength(0)
+
+    const completionStep = wrapper.findAll('ol button').find((button) => button.text().includes('Tool selection complete'))
+    expect(completionStep).toBeDefined()
+    await completionStep!.trigger('click')
+
+    expect(wrapper.findAll('.toolset-card')).toHaveLength(0)
+    const includedTools = wrapper.get('[aria-label="All tools included this round"]')
+    expect(includedTools.text()).toContain('memory_replace_all')
+    expect(includedTools.text()).toContain('get_weather_forecast')
   })
 
   test('shows discovery queries in the first memory and tool step details', async () => {
