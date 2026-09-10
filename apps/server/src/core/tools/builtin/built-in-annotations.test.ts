@@ -3,6 +3,7 @@ import { makeAttachmentTools } from '../../artifacts/attachment-rag.js'
 import { makePlanningTools } from './planning-tools.js'
 import { makeNotificationTool } from './notification.js'
 import { makeSearchAvailableMcpToolsTool } from './expand-available-toolset.js'
+import { makeManageMcpTool } from './manage-mcp.js'
 
 describe('internal tool behavior annotations', () => {
     test('exposes the consolidated attachment tool contract', () => {
@@ -20,6 +21,7 @@ describe('internal tool behavior annotations', () => {
             ...makeAttachmentTools('conversation'),
             makeNotificationTool({ agentId: 'agent', conversationId: 'conversation', broadcast: vi.fn() }),
             makeSearchAvailableMcpToolsTool({ allTools: [], getLoadedToolNames: () => new Set() }),
+            makeManageMcpTool(),
         ]
 
         for (const tool of tools) {
