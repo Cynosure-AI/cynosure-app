@@ -108,6 +108,9 @@ async function summarizeConversation(
                 content: `Summarize the following conversation:\n\n${conversationText}`,
             },
         ],
+        // Compaction is a mechanical summarization pass. Hidden reasoning only
+        // consumes the completion budget and can truncate the actual summary.
+        thinkingEnabled: false,
     }, providerId)
     return response.content
 }
