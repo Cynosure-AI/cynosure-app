@@ -13,6 +13,7 @@ import {
     PLANNING_SYSTEM_PROMPT,
 } from '../../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../../tools/tool-policy.js'
+import { MANAGE_MCP_TOOL_NAME } from '../../tools/builtin/manage-mcp.js'
 import type { ExecutionPlanInput, ExecutionRequest } from './execution-input.js'
 import type { ContextEvidence } from '@shared/types'
 import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
@@ -167,7 +168,11 @@ function applyPlanningIfToolCapable(
         return { tools, systemMessages }
     }
 
-    const hasVisibleExecutionTool = tools.some((tool) => isVisibleExecutionTool(tool.name))
+    // manage_mcp is always available as a management capability. Its mere
+    // presence should not activate planning for an otherwise tool-free chat.
+    const hasVisibleExecutionTool = tools.some(
+        (tool) => tool.name !== MANAGE_MCP_TOOL_NAME && isVisibleExecutionTool(tool.name),
+    )
     if (!hasVisibleExecutionTool) {
         return { tools, systemMessages }
     }

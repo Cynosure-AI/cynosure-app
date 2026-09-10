@@ -8,6 +8,7 @@ import type { ChatMessage, RegistryAwareToolDefinition } from '../../gateway/pro
 import type { ToolRegistry } from '../../tools/tool-registry.js'
 import type { RequestedToolEffect } from './task-context.js'
 import type { ConversationExecutionConfig } from '@shared/types'
+import { makeManageMcpTool } from '../../tools/builtin/manage-mcp.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -143,6 +144,9 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         memorySpaceOverrides,
         scheduleExecutionConfig,
     })
+    // MCP configuration is an application-level capability, so it remains
+    // available even when the user has not selected any external tool yet.
+    tools = dedupeToolsByName([...tools, makeManageMcpTool()])
 
     return {
         tools,
