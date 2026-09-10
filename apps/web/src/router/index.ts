@@ -178,6 +178,10 @@ const router = createRouter({
       redirect: { name: 'settings', query: { category: 'general' } }
     },
     {
+      path: '/settings/desktop',
+      redirect: { name: 'settings', query: { category: 'desktop-application' } }
+    },
+    {
       path: '/settings/appearance',
       redirect: { name: 'settings', query: { category: 'general' } }
     },
