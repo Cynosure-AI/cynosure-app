@@ -24,6 +24,7 @@ export const SK_COMPACT_MODEL = 'cy-compact-model'
 export const SK_PROVIDER_MODEL_FAVORITES = 'cy-provider-model-favorites'
 export const SK_FREE_CHAT_PROVIDER = 'cy-free-chat-provider'
 export const SK_FREE_CHAT_MODEL = 'cy-free-chat-model'
+export const SK_GLOBAL_HOTKEY = 'cy-global-hotkey'
 export const SK_AGENT_CATEGORIES = 'cy-agent-categories'
 export const SK_MA_CATEGORIES = 'cy-ma-categories'
 export const SK_KNOWLEDGE_GRAPH_NODE_SPACING = 'cy-knowledge-graph-node-spacing'
@@ -75,6 +76,8 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_PROVIDER_MODEL_FAVORITES,
     SK_FREE_CHAT_PROVIDER,
     SK_FREE_CHAT_MODEL,
+    SK_GLOBAL_HOTKEY,
+    SK_ACTIVE_AGENT,
     SK_AGENT_CATEGORIES,
     SK_MA_CATEGORIES,
     SK_KNOWLEDGE_GRAPH_NODE_SPACING,

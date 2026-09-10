@@ -7,6 +7,7 @@ import MemorySettings from '../../components/settings/MemorySettings.vue'
 import ChatSettings from '../../components/settings/ChatSettings.vue'
 import SpeechToTextSettings from '../../components/settings/SpeechToTextSettings.vue'
 import GeneralSettings from '../../components/settings/AppearanceSettings.vue'
+import DesktopSettings from '../../components/settings/DesktopSettings.vue'
 import BackupSettings from '../../components/settings/BackupSettings.vue'
 import ResetDataSettings from '../../components/settings/ResetDataSettings.vue'
 import AboutSettings from '../../components/settings/AboutSettings.vue'
@@ -14,7 +15,7 @@ import ResponsiveSectionLayout from '../../components/shared/ResponsiveSectionLa
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ChannelsView from '../triggers/ChannelsView.vue'
 
-type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'general' | 'backup' | 'reset-data' | 'about'
+type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'general' | 'desktop-application' | 'backup' | 'reset-data' | 'about'
 
 interface SettingsCategory {
   id: SettingsCategoryId
@@ -45,6 +46,7 @@ let pendingDiscardAction: (() => unknown | Promise<unknown>) | null = null
 let allowRouteLeave = false
 
 const hasUnsavedChanges = computed(() => Object.values(dirtySources.value).some(Boolean))
+const isElectronBuild = Boolean((window as unknown as { electron?: unknown }).electron)
 
 const categories: SettingsCategory[] = [
   {
@@ -54,6 +56,13 @@ const categories: SettingsCategory[] = [
     icon: 'lucide:sliders-horizontal',
     component: GeneralSettings
   },
+  ...(isElectronBuild ? [{
+    id: 'desktop-application' as const,
+    label: 'Desktop Application',
+    description: 'Configure Electron desktop integration, shortcuts, and background behavior.',
+    icon: 'lucide:monitor-cog',
+    component: DesktopSettings
+  }] : []),
   {
     id: 'chat',
     label: 'Chat',
@@ -121,6 +130,13 @@ const sections: SettingsSection[] = [
     description: 'Set your name and profile image.',
     terms: ['name', 'user name', 'profile', 'identity', 'smart tag', 'username', 'avatar', 'profile image', 'user image']
   },
+  ...(isElectronBuild ? [{
+    id: 'global-hotkey',
+    categoryId: 'desktop-application' as const,
+    label: 'New Chat Shortcut',
+    description: 'Choose the global keyboard shortcut that opens a compact new chat near the mouse cursor.',
+    terms: ['desktop', 'electron', 'global hotkey', 'keyboard shortcut', 'new chat', 'ctrl space', 'quick chat', 'compact chat']
+  }] : []),
   {
     id: 'provider-actions',
     categoryId: 'providers',
