@@ -3,12 +3,15 @@
     "version": "2.1.0",
     "description": "Cynosure - local AI agent with tools, memories, and reasoning capabilities",
     "author": {
-        "name": "Cynosure",
+        "name": "Andreas Hagen",
+        "email": "andreas.hagen@outlook.com",
         "url": "https://github.com/andreasjhagen/Cynosure"
     },
     "homepage": "https://github.com/andreasjhagen/Cynosure",
+    "desktopName": "com.cynosure.desktop",
     "main": "./out/main/index.js",
     "scripts": {
+        "postinstall": "electron-builder install-app-deps",
         "dev": "concurrently -k -n web,electron -c blue,green \"cd ../web && pnpm dev\" \"wait-on http://localhost:5173 && electron-vite dev\"",
         "build": "electron-vite build",
         "prebuild:deps": "pnpm --filter cynosure-web build && pnpm --filter cynosure-server build",

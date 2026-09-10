@@ -41,6 +41,7 @@ linux:
     - deb
   category: Utility
   icon: build/icon.png
+  syncDesktopName: true
 
 mac:
   target:
