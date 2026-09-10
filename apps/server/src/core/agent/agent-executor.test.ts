@@ -66,6 +66,37 @@ describe('AgentExecutor cancellation', () => {
   })
 })
 
+describe('AgentExecutor tool result normalization', () => {
+  test('sends a failed tool error to the model when output is empty', async () => {
+    let round = 0
+    const streamComplete = vi.fn((request: { messages: Array<{ role: string; content: unknown }> }) => (async function* (): AsyncIterable<StreamChunk> {
+      if (round++ === 0) {
+        yield {
+          toolCalls: [{ id: 'failed-call', type: 'function', function: { name: 'failing_tool', arguments: '{}' } }],
+          done: true,
+        }
+        return
+      }
+      expect(request.messages.at(-1)).toMatchObject({
+        role: 'tool',
+        content: 'Error: delegated operation failed',
+      })
+      yield { content: 'failure explained', done: true }
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [{
+        name: 'failing_tool', description: 'fails', parameters: { type: 'object', properties: {} }, timeout: 1_000,
+        execute: async () => ({ success: false, output: '', error: 'delegated operation failed' }),
+      }],
+      conversationId: 'tool-error', broadcast: vi.fn(), model: 'test',
+      saveMessages: false, emitEvents: false,
+    })
+
+    await expect(executor.run([{ role: 'user', content: 'run it' }])).resolves.toMatchObject({ content: 'failure explained' })
+  })
+})
+
 describe('AgentExecutor steering', () => {
   test('discards an in-flight model response and restarts with the steering message', async () => {
     let firstChunk!: () => void
