@@ -50,7 +50,7 @@ describe('OnboardingAgent', () => {
     vi.spyOn(api.memorySpaces, 'list').mockResolvedValue([])
     vi.spyOn(api.memorySpaces, 'create').mockResolvedValue({
       id: 'space-1',
-      relativePath: 'agents/research_assistant',
+      relativePath: '.agents/research_assistant',
     } as MemorySpace)
 
     const wrapper = mountStep()
@@ -61,7 +61,7 @@ describe('OnboardingAgent', () => {
     expect(api.memorySpaces.create).toHaveBeenCalledWith(
       'research_assistant',
       'Private memory folder for Research Assistant',
-      'agents',
+      '.agents',
     )
     expect(definitions.create).toHaveBeenCalledWith(expect.objectContaining({
       name: 'Research Assistant',

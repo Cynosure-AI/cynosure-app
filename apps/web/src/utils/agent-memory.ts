@@ -16,5 +16,5 @@ export function agentMemoryFolderName(internalName: string, name: string): strin
 }
 
 export function agentMemoryRelativePath(internalName: string, name: string): string {
-  return `agents/${agentMemoryFolderName(internalName, name)}`
+  return `.agents/${agentMemoryFolderName(internalName, name)}`
 }

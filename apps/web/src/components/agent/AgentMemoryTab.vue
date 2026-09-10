@@ -120,7 +120,7 @@ async function createAgentMemorySpace() {
       created = await api.memorySpaces.create(
         folderName,
         `Private memory folder for ${props.agent.name}`,
-        'agents',
+        '.agents',
       )
     }
 

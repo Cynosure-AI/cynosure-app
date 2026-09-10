@@ -741,7 +741,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         return { success: true }
     })
 
-    // POST /api/memory-spaces/:id/drop-indexes — reset files to a clean, not-indexed state
+    // POST /api/memory-spaces/:id/drop-indexes — forget derived vectors and
+    // extracted facts while preserving the source documents unchanged.
     app.post<{ Params: { id: string }; Body: { sourceFiles: string[] } }>('/:id/drop-indexes', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })

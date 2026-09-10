@@ -10,6 +10,8 @@ import { stopWatchingMemorySpace, watchMemorySpace } from './memory-space-watche
 
 export const DEFAULT_MEMORY_SPACE_ID = 'default'
 const FOLDER_MODEL_MIGRATION_KEY = 'memory.folder_model_v1'
+const AGENT_FOLDER_MIGRATION_KEY = 'memory.agent_folder_v2'
+export const AGENT_MEMORY_FOLDER_NAME = '.agents'
 const IGNORED_FOLDER_NAMES = new Set(['default', '.trash', '.revisions', 'revisions', '.cynosure'])
 
 export interface MemorySpaceFolderRow {
@@ -80,11 +82,12 @@ export function validateRelativePath(input: string): string {
     if (!value) return ''
     if (isAbsolute(input)) throw new Error('Folder path must be relative to the memory root.')
     const segments = value.split('/')
-    for (const segment of segments) {
+    for (const [index, segment] of segments.entries()) {
         if (!segment || segment === '.' || segment === '..') {
             throw new Error('Folder path cannot contain empty, current, or parent directory segments.')
         }
-        if (segment.startsWith('.') || IGNORED_FOLDER_NAMES.has(segment.toLowerCase())) {
+        const isAgentMemoryRoot = index === 0 && segment.toLowerCase() === AGENT_MEMORY_FOLDER_NAME
+        if ((segment.startsWith('.') && !isAgentMemoryRoot) || IGNORED_FOLDER_NAMES.has(segment.toLowerCase())) {
             throw new Error(`Folder "${segment}" is reserved and cannot be used as a memory folder.`)
         }
     }
@@ -106,7 +109,8 @@ export function makeSubfolderRelativePath(name: string, parentPath = ''): string
     return parent ? `${parent}/${child}` : child
 }
 
-export function isIgnoredMemoryFolderName(name: string): boolean {
+export function isIgnoredMemoryFolderName(name: string, allowAgentMemoryRoot = false): boolean {
+    if (allowAgentMemoryRoot && name.toLowerCase() === AGENT_MEMORY_FOLDER_NAME) return false
     return name.startsWith('.') || IGNORED_FOLDER_NAMES.has(name.toLowerCase())
 }
 
@@ -122,7 +126,7 @@ function discoverRelativeFolders(root: string): string[] {
         }
 
         for (const entry of entries) {
-            if (!entry.isDirectory() || isIgnoredMemoryFolderName(entry.name)) continue
+            if (!entry.isDirectory() || isIgnoredMemoryFolderName(entry.name, baseRelative === '')) continue
             const rel = baseRelative ? `${baseRelative}/${entry.name}` : entry.name
             result.push(rel)
             walk(join(current, entry.name), rel)
@@ -141,60 +145,81 @@ function nameForRelativePath(relativePath: string): string {
     return basename(relativePath)
 }
 
-function markMigrationComplete(db: Database.Database): void {
-    db.prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (?, ?)').run(FOLDER_MODEL_MIGRATION_KEY, JSON.stringify({ completedAt: Date.now() }))
+function markMigrationComplete(db: Database.Database, key: string): void {
+    db.prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (?, ?)').run(key, JSON.stringify({ completedAt: Date.now() }))
 }
 
-function hasMigrationRun(db: Database.Database): boolean {
-    const row = db.prepare('SELECT value_json FROM settings WHERE key = ?').get(FOLDER_MODEL_MIGRATION_KEY) as { value_json: string } | undefined
+function hasMigrationRun(db: Database.Database, key: string): boolean {
+    const row = db.prepare('SELECT value_json FROM settings WHERE key = ?').get(key) as { value_json: string } | undefined
     return Boolean(row)
 }
 
 export async function runFolderModelCleanupOnce(db: Database.Database): Promise<void> {
-    if (hasMigrationRun(db)) return
-
     const root = ensureMemoryRoot()
-    const legacyDefaultFolder = join(root, 'default')
-    if (existsSync(legacyDefaultFolder)) {
-        try {
-            const entries = readdirSync(legacyDefaultFolder, { withFileTypes: true })
-            for (const entry of entries) {
-                if (!entry.isFile()) continue
-                const source = join(legacyDefaultFolder, entry.name)
-                let target = join(root, entry.name)
-                if (existsSync(target)) {
-                    const dotIdx = entry.name.lastIndexOf('.')
-                    const base = dotIdx > 0 ? entry.name.slice(0, dotIdx) : entry.name
-                    const ext = dotIdx > 0 ? entry.name.slice(dotIdx) : ''
-                    let counter = 2
-                    do {
-                        target = join(root, `${base} (${counter})${ext}`)
-                        counter++
-                    } while (existsSync(target))
+    if (!hasMigrationRun(db, FOLDER_MODEL_MIGRATION_KEY)) {
+        const legacyDefaultFolder = join(root, 'default')
+        if (existsSync(legacyDefaultFolder)) {
+            try {
+                const entries = readdirSync(legacyDefaultFolder, { withFileTypes: true })
+                for (const entry of entries) {
+                    if (!entry.isFile()) continue
+                    const source = join(legacyDefaultFolder, entry.name)
+                    let target = join(root, entry.name)
+                    if (existsSync(target)) {
+                        const dotIdx = entry.name.lastIndexOf('.')
+                        const base = dotIdx > 0 ? entry.name.slice(0, dotIdx) : entry.name
+                        const ext = dotIdx > 0 ? entry.name.slice(dotIdx) : ''
+                        let counter = 2
+                        do {
+                            target = join(root, `${base} (${counter})${ext}`)
+                            counter++
+                        } while (existsSync(target))
+                    }
+                    renameSync(source, target)
                 }
-                renameSync(source, target)
+                removeFolderIfEmpty(legacyDefaultFolder)
+            } catch {
+                /* keep legacy files in place if the move fails */
             }
-            removeFolderIfEmpty(legacyDefaultFolder)
-        } catch {
-            /* keep legacy files in place if the move fails */
         }
+
+        const legacyRows = db.prepare('SELECT id FROM memory_spaces WHERE id != ?').all(DEFAULT_MEMORY_SPACE_ID) as { id: string }[]
+        const rag = getRAGStore()
+        for (const row of legacyRows) {
+            await rag.deleteByFilter(getActivePermanentMemoryTableName(), lanceDbEqFilter('spaceId', row.id)).catch(() => undefined)
+            stopWatchingMemorySpace(row.id)
+        }
+
+        db.transaction(() => {
+            db.prepare('DELETE FROM memory_file_index WHERE space_id != ?').run(DEFAULT_MEMORY_SPACE_ID)
+            db.prepare('DELETE FROM agent_memory_spaces WHERE space_id != ?').run(DEFAULT_MEMORY_SPACE_ID)
+            db.prepare('DELETE FROM memory_spaces WHERE id != ?').run(DEFAULT_MEMORY_SPACE_ID)
+            db.prepare('UPDATE memory_spaces SET name = ?, description = ?, folder_path = ?, sort_order = ?, is_default = ? WHERE id = ?')
+                .run('Default', 'Default memory folder for general knowledge and notes', memoryRootDir(), 0, 1, DEFAULT_MEMORY_SPACE_ID)
+            markMigrationComplete(db, FOLDER_MODEL_MIGRATION_KEY)
+        })()
     }
 
-    const legacyRows = db.prepare('SELECT id FROM memory_spaces WHERE id != ?').all(DEFAULT_MEMORY_SPACE_ID) as { id: string }[]
-    const rag = getRAGStore()
-    for (const row of legacyRows) {
-        await rag.deleteByFilter(getActivePermanentMemoryTableName(), lanceDbEqFilter('spaceId', row.id)).catch(() => undefined)
-        stopWatchingMemorySpace(row.id)
+    if (!hasMigrationRun(db, AGENT_FOLDER_MIGRATION_KEY)) {
+        const legacyAgentFolder = join(root, 'agents')
+        const agentFolder = join(root, AGENT_MEMORY_FOLDER_NAME)
+        if (existsSync(legacyAgentFolder) && !existsSync(agentFolder)) {
+            renameSync(legacyAgentFolder, agentFolder)
+            const rows = db.prepare('SELECT id, folder_path FROM memory_spaces').all() as Array<{ id: string; folder_path: string }>
+            const legacyPrefix = `${legacyAgentFolder}${sep}`
+            const updateFolder = db.prepare('UPDATE memory_spaces SET folder_path = ? WHERE id = ?')
+            const updatePaths = db.transaction(() => {
+                for (const row of rows) {
+                    if (row.folder_path === legacyAgentFolder) updateFolder.run(agentFolder, row.id)
+                    else if (row.folder_path.startsWith(legacyPrefix)) {
+                        updateFolder.run(`${agentFolder}${row.folder_path.slice(legacyAgentFolder.length)}`, row.id)
+                    }
+                }
+            })
+            updatePaths()
+        }
+        markMigrationComplete(db, AGENT_FOLDER_MIGRATION_KEY)
     }
-
-    db.transaction(() => {
-        db.prepare('DELETE FROM memory_file_index WHERE space_id != ?').run(DEFAULT_MEMORY_SPACE_ID)
-        db.prepare('DELETE FROM agent_memory_spaces WHERE space_id != ?').run(DEFAULT_MEMORY_SPACE_ID)
-        db.prepare('DELETE FROM memory_spaces WHERE id != ?').run(DEFAULT_MEMORY_SPACE_ID)
-        db.prepare('UPDATE memory_spaces SET name = ?, description = ?, folder_path = ?, sort_order = ?, is_default = ? WHERE id = ?')
-            .run('Default', 'Default memory folder for general knowledge and notes', memoryRootDir(), 0, 1, DEFAULT_MEMORY_SPACE_ID)
-        markMigrationComplete(db)
-    })()
 }
 
 export function syncMemorySpacesFromFolders(db: Database.Database): MemorySpaceFolderRow[] {
