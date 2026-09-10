@@ -25,7 +25,7 @@ export interface MemoryIndexJobSnapshot<T = unknown> {
 interface MemoryIndexJob<T = unknown> extends MemoryIndexJobSnapshot<T> {
     controller: AbortController
     promise: Promise<void>
-    run: (signal: AbortSignal, reportProgress: (current: number, total: number) => void) => Promise<T>
+    run: (signal: AbortSignal, reportProgress: (current: number, total: number, checkpoint?: unknown) => void) => Promise<T>
 }
 
 const jobs = new Map<string, MemoryIndexJob>()
@@ -55,7 +55,7 @@ async function runRecoveredJob(
     spaceId: string,
     fileName: string,
     signal: AbortSignal,
-    reportProgress: (current: number, total: number) => void,
+    reportProgress: (current: number, total: number, checkpoint?: unknown) => void,
 ): Promise<unknown> {
     const space = getDb().prepare('SELECT folder_path FROM memory_spaces WHERE id = ?').get(spaceId) as { folder_path: string } | undefined
     if (!space?.folder_path) throw new Error('Memory space is no longer available')
@@ -69,7 +69,7 @@ async function runRecoveredJob(
         success: true,
         ...(await indexMemoryFileIntoKnowledge({
             folderPath: space.folder_path, spaceId, fileName, replaceExisting: true, signal,
-            onExtractionProgress: reportProgress,
+            onExtractionProgress: (current, total) => reportProgress(current, total),
         })),
     }
 }
@@ -159,7 +159,8 @@ export function startMemoryIndexJob<T>(opts: {
     spaceId: string
     fileName: string
     replaceExisting?: boolean
-    run: (signal: AbortSignal, reportProgress: (current: number, total: number) => void) => Promise<T>
+    resume?: { current: number; total: number; checkpoint: unknown }
+    run: (signal: AbortSignal, reportProgress: (current: number, total: number, checkpoint?: unknown) => void) => Promise<T>
 }): MemoryIndexJobSnapshot<T> {
     ensurePersistedJobsLoaded()
     pruneJobs()
@@ -179,6 +180,9 @@ export function startMemoryIndexJob<T>(opts: {
         id: nanoid(), kind: opts.kind, spaceId: opts.spaceId, fileName: opts.fileName,
         status: 'queued', createdAt: now, updatedAt: now, attempt: 0,
         maxAttempts: DEFAULT_MAX_ATTEMPTS,
+        progressCurrent: opts.resume?.current,
+        progressTotal: opts.resume?.total,
+        result: opts.resume ? { resumeCheckpoint: opts.resume.checkpoint } as T : undefined,
         controller: new AbortController(), promise: Promise.resolve(), run: opts.run,
     }
     jobs.set(job.id, job)
@@ -218,10 +222,11 @@ function startQueuedJob<T>(job: MemoryIndexJob<T>): void {
     job.updatedAt = Date.now()
     emitJobUpdated(job)
 
-    const reportProgress = (current: number, total: number): void => {
+    const reportProgress = (current: number, total: number, checkpoint?: unknown): void => {
         if (job.status !== 'running' || job.controller.signal.aborted) return
         job.progressCurrent = Math.max(0, Math.floor(current))
         job.progressTotal = Math.max(job.progressCurrent, Math.floor(total))
+        if (checkpoint !== undefined) job.result = { resumeCheckpoint: checkpoint } as T
         job.updatedAt = Date.now()
         emitJobUpdated(job)
     }
@@ -323,6 +328,39 @@ export function cancelMemoryIndexJob(id: string): MemoryIndexJobSnapshot | undef
         processMemoryIndexQueue()
     }
     return snapshot(job)
+}
+
+export function latestResumableMemoryIndexJob(spaceId: string, fileName: string): MemoryIndexJobSnapshot | undefined {
+    ensurePersistedJobsLoaded()
+    const matching = Array.from(jobs.values())
+        .filter((job) => job.kind === 'knowledge-extraction' && job.spaceId === spaceId && job.fileName === fileName)
+        .sort((a, b) => b.createdAt - a.createdAt)
+    if (matching[0]?.status !== 'cancelled') return undefined
+    const resumable = matching.find((job) => job.status === 'cancelled'
+        && (job.progressCurrent || 0) > 0
+        && job.progressCurrent! < (job.progressTotal || 0))
+    return resumable ? snapshot(resumable) : undefined
+}
+
+export function discardMemoryIndexJob(id: string): boolean {
+    ensurePersistedJobsLoaded()
+    const job = jobs.get(id)
+    if (!job || isActive(job)) return false
+    const discardedIds = Array.from(jobs.values())
+        .filter((candidate) => candidate.status === 'cancelled'
+            && candidate.kind === job.kind
+            && candidate.spaceId === job.spaceId
+            && candidate.fileName === job.fileName)
+        .map((candidate) => candidate.id)
+    for (const discardedId of discardedIds) jobs.delete(discardedId)
+    if (discardedIds.length) {
+        const placeholders = discardedIds.map(() => '?').join(', ')
+        getDb().prepare(`DELETE FROM memory_index_jobs WHERE id IN (${placeholders})`).run(...discardedIds)
+    } else {
+        jobs.delete(id)
+        getDb().prepare('DELETE FROM memory_index_jobs WHERE id = ?').run(id)
+    }
+    return true
 }
 
 /** Wait for a running job to release its resources after cancellation. */

@@ -4,6 +4,7 @@ import { createHash } from 'crypto'
 import { getDb } from '../../db/database.js'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 import { extractKnowledgeFromContent, mergeKnowledgeChunkTags } from './knowledge-extractor.js'
+import type { KnowledgeExtractionResult as ExtractedKnowledge } from './knowledge-extractor.js'
 import {
   getMemoryKnowledgeStore,
   MEMORY_KNOWLEDGE_PIPELINE_VERSION,
@@ -33,6 +34,11 @@ export interface KnowledgeExtractionResult {
 export interface KnowledgeExtractionConfig {
   providerId?: string
   model?: string
+}
+
+export interface KnowledgeExtractionCheckpoint extends ExtractedKnowledge {
+  contentHash: string
+  completedChunkIndexes: number[]
 }
 
 const ENTITY_EXTRACTION_SETTINGS_KEY = 'memoryEntityExtraction'
@@ -239,6 +245,8 @@ export async function indexMemoryContentIntoKnowledge(opts: {
   model?: string
   signal?: AbortSignal
   onExtractionProgress?: (current: number, total: number) => void
+  resumeCheckpoint?: KnowledgeExtractionCheckpoint
+  onExtractionCheckpoint?: (checkpoint: KnowledgeExtractionCheckpoint, current: number, total: number) => void
 }): Promise<KnowledgeExtractionResult> {
   const knowledge = getMemoryKnowledgeStore()
   const resetGeneration = knowledge.getResetGeneration()
@@ -274,15 +282,31 @@ export async function indexMemoryContentIntoKnowledge(opts: {
     }
   }
   const reusePlan = planReusableKnowledgeChunks(indexedDocument.document_id, chunks)
-  const extracted = reusePlan.chunksToExtract.length > 0
+  const resumable = opts.resumeCheckpoint?.contentHash === contentHash ? opts.resumeCheckpoint : undefined
+  const extractableIndexes = new Set(reusePlan.chunksToExtract.map((chunk) => chunk.chunkIndex))
+  const completedIndexes = new Set((resumable?.completedChunkIndexes || []).filter((index) => extractableIndexes.has(index)))
+  const remainingChunks = reusePlan.chunksToExtract.filter((chunk) => !completedIndexes.has(chunk.chunkIndex))
+  let checkpointStep = 0
+  const extracted = remainingChunks.length > 0
     ? await extractKnowledgeFromContent({
-        segments: buildEntityExtractionSegments(reusePlan.chunksToExtract),
+        segments: buildEntityExtractionSegments(remainingChunks),
         providerId: opts.providerId || configuredTarget.providerId,
         model: opts.model || configuredTarget.model,
         signal: opts.signal,
-        onProgress: opts.onExtractionProgress,
+        initialResult: resumable,
+        onCheckpoint: (partial) => {
+          const completedChunk = remainingChunks[checkpointStep++]
+          if (completedChunk) completedIndexes.add(completedChunk.chunkIndex)
+          const checkpoint: KnowledgeExtractionCheckpoint = {
+            contentHash,
+            completedChunkIndexes: [...completedIndexes].sort((a, b) => a - b),
+            ...partial,
+          }
+          opts.onExtractionCheckpoint?.(checkpoint, completedIndexes.size, reusePlan.chunksToExtract.length)
+        },
+        onProgress: (_current, _total) => opts.onExtractionProgress?.(completedIndexes.size, reusePlan.chunksToExtract.length),
       })
-    : { relations: [], mentions: [], chunkTags: [] }
+    : resumable || { relations: [], mentions: [], chunkTags: [] }
   const chunkTags = [...reusePlan.chunkTags, ...extracted.chunkTags]
   opts.signal?.throwIfAborted()
   if (knowledge.getResetGeneration() !== resetGeneration) {
@@ -362,6 +386,8 @@ export async function indexMemoryFileIntoKnowledge(opts: {
   model?: string
   signal?: AbortSignal
   onExtractionProgress?: (current: number, total: number) => void
+  resumeCheckpoint?: KnowledgeExtractionCheckpoint
+  onExtractionCheckpoint?: (checkpoint: KnowledgeExtractionCheckpoint, current: number, total: number) => void
 }): Promise<KnowledgeExtractionResult> {
   const content = await readMemoryFileForKnowledgeExtraction(opts.folderPath, opts.fileName)
   return indexMemoryContentIntoKnowledge({ ...opts, content })

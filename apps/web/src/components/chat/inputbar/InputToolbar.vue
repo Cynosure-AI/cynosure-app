@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
-import { onClickOutside } from "@vueuse/core";
+import { ref, computed } from "vue";
 import { useChatStore } from "../../../stores/chat.store";
 import { useAgentStore } from "../../../stores/agent-runtime.store";
 import { usePreferencesStore } from "../../../stores/preferences.store";
@@ -11,6 +10,7 @@ import { Icon } from "@iconify/vue";
 import HoverTooltip from "../../shared/HoverTooltip.vue";
 import HoverMenu from "../../shared/HoverMenu.vue";
 import ProviderModelSelect from "../../shared/ProviderModelSelect.vue";
+import SplitButton from "../../shared/SplitButton.vue";
 import ToolsButton from "./ToolsButton.vue";
 import SubAgentsButton from "./SubAgentsButton.vue";
 import MemorySpacesButton from "./MemorySpacesButton.vue";
@@ -22,7 +22,7 @@ import {
 } from "../../../utils/model-pricing";
 import { shortModelLabel } from "../../../utils/model-label";
 
-const props = defineProps<{
+defineProps<{
   canSend: boolean;
   isRunning: boolean;
   editingQueue: boolean;
@@ -45,12 +45,6 @@ const providerStore = useProviderStore();
 
 const showMobileDrawer = ref(false);
 const showModelModal = ref(false);
-const showDeliveryMenu = ref(false);
-const deliveryMenuRef = ref<HTMLElement | null>(null);
-
-onClickOutside(deliveryMenuRef, () => {
-  showDeliveryMenu.value = false;
-});
 
 const selectedAgent = computed(() =>
   chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null,
@@ -139,20 +133,11 @@ const hasPendingHITLForActiveConversation = computed(() => {
 
 const showCancelButton = computed(() => chatStore.activeConversationHasRunningInstance);
 
-watch(
-  () => props.isRunning,
-  (isRunning) => {
-    if (!isRunning) showDeliveryMenu.value = false;
-  },
-);
-
 function queueMessage(): void {
-  showDeliveryMenu.value = false;
   emit("send");
 }
 
 function steerCurrentRun(): void {
-  showDeliveryMenu.value = false;
   emit("steer");
 }
 
@@ -585,73 +570,39 @@ async function toggleMic(): Promise<void> {
     </button>
 
     <!-- While running, Queue is the safe default; Steer is the split-button alternative. -->
-    <div
+    <SplitButton
       v-if="isRunning && !editingQueue"
-      ref="deliveryMenuRef"
-      class="relative flex h-8 shrink-0"
+      class="h-8"
+      :disabled="!canSend"
+      title="Add this message to the queue"
+      primary-label="Queue message for next turn"
+      menu-label="Message delivery options"
+      placement="above"
+      @primary="queueMessage"
     >
-      <button
-        type="button"
-        :disabled="!canSend"
-        class="inline-flex items-center gap-1.5 rounded-l-lg bg-accent-600 px-2.5 text-white transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-theme-500 focus:z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
-        title="Add this message to the queue"
-        aria-label="Queue message for next turn"
-        @click="queueMessage"
-      >
-        <Icon
-          icon="lucide:list-plus"
-          class="h-4 w-4"
-        />
-        <span class="hidden sm:inline text-xs font-medium">Queue</span>
-      </button>
-      <button
-        type="button"
-        :disabled="!canSend"
-        class="inline-flex w-7 items-center justify-center rounded-r-lg border-l border-white/20 bg-accent-600 text-white transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:border-theme-600 disabled:bg-theme-700 disabled:text-theme-500 focus:z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
-        title="More delivery options"
-        aria-label="Choose message delivery"
-        aria-haspopup="menu"
-        :aria-expanded="showDeliveryMenu"
-        @click="showDeliveryMenu = !showDeliveryMenu"
-        @keydown.esc="showDeliveryMenu = false"
-      >
-        <Icon
-          icon="lucide:chevron-down"
-          class="h-3.5 w-3.5"
-        />
-      </button>
-
-      <Transition
-        enter-active-class="transition duration-100 ease-out"
-        leave-active-class="transition duration-75 ease-in"
-        enter-from-class="translate-y-1 opacity-0"
-        leave-to-class="translate-y-1 opacity-0"
-      >
-        <div
-          v-if="showDeliveryMenu"
-          class="absolute bottom-full right-0 z-30 mb-2 w-64 overflow-hidden rounded-xl border border-theme-700 bg-theme-900 p-1.5 shadow-2xl shadow-black/40"
-          role="menu"
-          aria-label="Message delivery options"
-          @keydown.esc="showDeliveryMenu = false"
+      <Icon
+        icon="lucide:list-plus"
+        class="h-4 w-4"
+      />
+      <span class="hidden sm:inline text-xs font-medium">Queue</span>
+      <template #menu="{ close }">
+        <button
+          type="button"
+          class="flex w-64 items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-theme-800 focus:outline-none focus-visible:bg-theme-800"
+          role="menuitem"
+          @click="close(); steerCurrentRun()"
         >
-          <button
-            type="button"
-            class="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-theme-800 focus:outline-none focus-visible:bg-theme-800"
-            role="menuitem"
-            @click="steerCurrentRun"
-          >
-            <Icon
-              icon="lucide:corner-up-left"
-              class="mt-0.5 h-4 w-4 shrink-0 text-accent-400"
-            />
-            <span>
-              <span class="block text-xs font-medium text-theme-100">Steer current run</span>
-              <span class="mt-0.5 block text-[11px] leading-4 text-theme-400">Interrupt the current response and redirect it with this message.</span>
-            </span>
-          </button>
-        </div>
-      </Transition>
-    </div>
+          <Icon
+            icon="lucide:corner-up-left"
+            class="mt-0.5 h-4 w-4 shrink-0 text-accent-400"
+          />
+          <span>
+            <span class="block text-xs font-medium text-theme-100">Steer current run</span>
+            <span class="mt-0.5 block text-[11px] leading-4 text-theme-400">Interrupt the current response and redirect it with this message.</span>
+          </span>
+        </button>
+      </template>
+    </SplitButton>
 
     <button
       v-if="!isRunning || editingQueue"

@@ -409,6 +409,8 @@ export const api = {
       get<MemoryIndexJob>(`/api/memory-spaces/jobs/${encodeURIComponent(jobId)}`),
     cancelJob: (jobId: string) =>
       post<MemoryIndexJob>(`/api/memory-spaces/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
+    discardJob: (jobId: string) =>
+      del<{ success: boolean }>(`/api/memory-spaces/jobs/${encodeURIComponent(jobId)}`),
     onJobUpdated: (cb: (data: MemoryIndexJob) => void) =>
       onWsEvent('memory:job-updated', cb as WsHandler),
     reindexFile: (spaceId: string, fileName: string) =>
