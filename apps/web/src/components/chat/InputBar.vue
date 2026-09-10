@@ -255,7 +255,11 @@ function onTranscription(text: string): void {
   inputText.value = inputText.value ? `${inputText.value} ${text}` : text
 }
 
-defineExpose({ processFiles })
+function focus(): void {
+  textareaRef.value?.focus()
+}
+
+defineExpose({ processFiles, focus })
 </script>
 
 <template>

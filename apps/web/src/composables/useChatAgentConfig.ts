@@ -4,6 +4,7 @@ import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import type { Conversation, DisplayMessage } from '../stores/chat.store'
 import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { SK_ACTIVE_AGENT, SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
+import { syncPrefsToElectron } from '../utils/electron-prefs'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/internal-tools'
 
 interface ChatPreset {
@@ -113,7 +114,7 @@ export function useChatAgentConfig(
     const agentStore = useAgentStore()
 
     const activeAgentId = ref<string | null>(
-        sessionStorage.getItem(SK_ACTIVE_AGENT) || null
+        loadStoredValue(SK_ACTIVE_AGENT) || sessionStorage.getItem(SK_ACTIVE_AGENT) || null
     )
     const freeChatModelOverride = ref<string | null>(loadStoredValue(SK_FREE_CHAT_MODEL))
     const freeChatProviderOverride = ref<string | null>(loadStoredValue(SK_FREE_CHAT_PROVIDER))
@@ -399,16 +400,19 @@ export function useChatAgentConfig(
         activeAgentId.value = id
         if (id) {
             sessionStorage.setItem(SK_ACTIVE_AGENT, id)
+            persistStoredValue(SK_ACTIVE_AGENT, id)
             const { preset } = agentPreset(id)
             applyPreset(preset)
             setAgentBaseline(preset)
         } else {
             sessionStorage.removeItem(SK_ACTIVE_AGENT)
+            persistStoredValue(SK_ACTIVE_AGENT, null)
             ensureFreeChatPreset()
             applyPreset(freeChatPreset.value || regularFreeChatPreset())
             restoreFreeChatModelSelection()
             setAgentBaseline(regularFreeChatPreset())
         }
+        syncPrefsToElectron()
     }
 
     async function setActiveAgent(id: string | null) {

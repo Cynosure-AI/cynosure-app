@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, protocol, net, ipcMain, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, shell, protocol, net, ipcMain, Tray, Menu, nativeImage, globalShortcut, screen } from 'electron'
 import { spawn, execSync, type ChildProcess } from 'child_process'
 import { createServer } from 'net'
 import { join } from 'path'
@@ -15,11 +15,20 @@ import { checkForUpdates, initializeUpdater } from './updater'
 
 const PREFERRED_PORT = 3099
 const CYNOSURE_DATA_DIR_NAME = 'cynosure'
+const DEFAULT_GLOBAL_HOTKEY = 'Control+Space'
+const GLOBAL_HOTKEY_PREF = 'cy-global-hotkey'
+const ACTIVE_AGENT_PREF = 'cy-active-agent'
+const QUICK_CHAT_WIDTH = 440
+const QUICK_CHAT_HEIGHT = 680
 
 let serverPort = PREFERRED_PORT
 let serverProcess: ChildProcess | null = null
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
+let quickChatWindow: BrowserWindow | null = null
+let uiPrefsStore: ElectronStore<Record<string, string>> | null = null
+let registeredHotkey: string | null = null
+let hotkeyRegistrationError: string | null = null
 let isQuitting = false
 let activeTasks = 0
 let trayWs: WebSocket | null = null
@@ -334,7 +343,7 @@ function createTray(win: BrowserWindow): Tray {
         },
         { type: 'separator' },
         {
-            label: 'Close',
+            label: 'Quit Cynosure',
             click: () => {
                 isQuitting = true
                 app.quit()
@@ -370,8 +379,11 @@ function createWindow(): BrowserWindow {
 
     win.on('ready-to-show', () => win.show())
 
-    // Minimize (not close) hides to tray; pressing X actually quits the app
-    win.on('minimize', () => {
+    // Keep Cynosure and its background server available from the tray. The
+    // native minimize button retains the platform's normal minimize behavior.
+    win.on('close', (event) => {
+        if (isQuitting) return
+        event.preventDefault()
         win.hide()
     })
 
@@ -409,6 +421,102 @@ function createWindow(): BrowserWindow {
     return win
 }
 
+function rendererUrl(path: string): string {
+    return is.dev
+        ? `http://localhost:5173${path}`
+        : `app://cynosure${path}`
+}
+
+function positionQuickChat(win: BrowserWindow): void {
+    const cursor = screen.getCursorScreenPoint()
+    const { workArea } = screen.getDisplayNearestPoint(cursor)
+    const { width, height } = win.getBounds()
+    const gap = 12
+    const x = cursor.x + gap + width <= workArea.x + workArea.width
+        ? cursor.x + gap
+        : cursor.x - width - gap
+    const y = cursor.y + gap + height <= workArea.y + workArea.height
+        ? cursor.y + gap
+        : cursor.y - height - gap
+
+    win.setPosition(
+        Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - width)),
+        Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - height)),
+    )
+}
+
+function showQuickChat(): void {
+    const activeAgentId = uiPrefsStore?.get(ACTIVE_AGENT_PREF) || null
+
+    if (quickChatWindow && !quickChatWindow.isDestroyed()) {
+        positionQuickChat(quickChatWindow)
+        if (quickChatWindow.isMinimized()) quickChatWindow.restore()
+        quickChatWindow.webContents.send('quick-chat:new', activeAgentId)
+        quickChatWindow.show()
+        quickChatWindow.focus()
+        return
+    }
+
+    const win = new BrowserWindow({
+        width: QUICK_CHAT_WIDTH,
+        height: QUICK_CHAT_HEIGHT,
+        minWidth: 360,
+        minHeight: 500,
+        show: false,
+        title: 'New Chat — Cynosure',
+        autoHideMenuBar: true,
+        icon: nativeImage.createFromPath(appIcon),
+        webPreferences: {
+            preload: join(__dirname, '../preload/index.js'),
+            sandbox: false
+        }
+    })
+    quickChatWindow = win
+    positionQuickChat(win)
+
+    win.once('ready-to-show', () => {
+        win.show()
+        win.focus()
+    })
+    win.on('closed', () => {
+        if (quickChatWindow === win) quickChatWindow = null
+    })
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith('http://') || url.startsWith('https://')) void shell.openExternal(url)
+        return { action: 'deny' }
+    })
+    win.loadURL(rendererUrl('/chat?compact=1'))
+}
+
+function registerGlobalHotkey(accelerator: string): { success: boolean; accelerator: string; error?: string } {
+    const next = accelerator.trim()
+    if (!next) {
+        hotkeyRegistrationError = 'Enter a keyboard shortcut.'
+        return { success: false, accelerator: registeredHotkey || DEFAULT_GLOBAL_HOTKEY, error: hotkeyRegistrationError }
+    }
+    if (next === registeredHotkey) return { success: true, accelerator: next }
+
+    const previous = registeredHotkey
+    if (previous) globalShortcut.unregister(previous)
+
+    try {
+        if (!globalShortcut.register(next, showQuickChat)) {
+            if (previous) globalShortcut.register(previous, showQuickChat)
+            hotkeyRegistrationError = 'That shortcut is unavailable or already used by another application.'
+            return { success: false, accelerator: previous || DEFAULT_GLOBAL_HOTKEY, error: hotkeyRegistrationError }
+        }
+    } catch {
+        if (previous) globalShortcut.register(previous, showQuickChat)
+        hotkeyRegistrationError = 'That keyboard shortcut is not valid.'
+        return { success: false, accelerator: previous || DEFAULT_GLOBAL_HOTKEY, error: hotkeyRegistrationError }
+    }
+
+    registeredHotkey = next
+    hotkeyRegistrationError = null
+    uiPrefsStore?.set(GLOBAL_HOTKEY_PREF, next)
+    return { success: true, accelerator: next }
+}
+
 // ── App lifecycle ──────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
@@ -433,23 +541,37 @@ app.whenReady().then(async () => {
     // Chromium's LevelDB "Reusing old log" optimization causes sequence-number
     // conflicts across app restarts, making localStorage unreliable in Electron.
     // electron-store persists prefs to a plain JSON file in the shared app data dir.
-    const uiPrefsStore = new ElectronStore<Record<string, string>>({
+    const prefsStore = new ElectronStore<Record<string, string>>({
         name: 'ui-prefs',
         cwd: getAppDataDir(),
     })
+    uiPrefsStore = prefsStore
 
     ipcMain.on('get-ui-prefs', (event) => {
-        event.returnValue = uiPrefsStore.store
+        event.returnValue = prefsStore.store
     })
 
     ipcMain.on('set-ui-prefs', (event, prefs: Record<string, string>) => {
-        uiPrefsStore.store = prefs
+        uiPrefsStore!.store = prefs
         event.returnValue = null
     })
+
+    ipcMain.handle('global-hotkey:get', () => ({
+        success: registeredHotkey !== null,
+        accelerator: registeredHotkey || DEFAULT_GLOBAL_HOTKEY,
+        error: hotkeyRegistrationError || undefined,
+    }))
+    ipcMain.handle('global-hotkey:set', (_event, accelerator: string) => registerGlobalHotkey(accelerator))
 
     initializeUpdater()
 
     registerAppProtocol()
+
+    const savedHotkey = prefsStore.get(GLOBAL_HOTKEY_PREF) || DEFAULT_GLOBAL_HOTKEY
+    const hotkeyResult = registerGlobalHotkey(savedHotkey)
+    if (!hotkeyResult.success && savedHotkey !== DEFAULT_GLOBAL_HOTKEY) {
+        registerGlobalHotkey(DEFAULT_GLOBAL_HOTKEY)
+    }
 
     // Start the server in the background — the UI handles reconnection.
     // Once ready, connect the tray monitor WS to track active tasks.
@@ -500,6 +622,7 @@ function killServer(): void {
 
 app.on('before-quit', () => {
     isQuitting = true
+    globalShortcut.unregisterAll()
     trayWs?.close()
     trayWs = null
     tray?.destroy()
@@ -510,7 +633,5 @@ process.on('SIGINT', () => { killServer(); process.exit() })
 process.on('SIGTERM', () => { killServer(); process.exit() })
 
 app.on('window-all-closed', () => {
-    // Tray keeps the app running only when the window was minimised (hidden).
-    // If X was explicitly clicked the window is destroyed and we quit here.
-    if (!isQuitting) app.quit()
+    // The tray owns the application lifecycle. Quit explicitly from its menu.
 })

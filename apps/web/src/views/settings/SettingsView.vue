@@ -122,6 +122,13 @@ const sections: SettingsSection[] = [
     terms: ['name', 'user name', 'profile', 'identity', 'smart tag', 'username', 'avatar', 'profile image', 'user image']
   },
   {
+    id: 'global-hotkey',
+    categoryId: 'general',
+    label: 'New Chat Shortcut',
+    description: 'Choose the global keyboard shortcut that opens a compact new chat near the mouse cursor.',
+    terms: ['desktop', 'electron', 'global hotkey', 'keyboard shortcut', 'new chat', 'ctrl space', 'quick chat', 'compact chat']
+  },
+  {
     id: 'provider-actions',
     categoryId: 'providers',
     label: 'Provider management',
