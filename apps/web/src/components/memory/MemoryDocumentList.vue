@@ -337,15 +337,6 @@ function statusIcon(status: MemoryFileStatus["status"]) {
   }
 }
 
-function statusClass(status: MemoryFileStatus["status"]) {
-  switch (status) {
-    case "indexed": return "text-green-400";
-    case "needs_reindex": return "text-orange-400";
-    case "not_indexed": return "text-theme-500";
-    default: return "text-theme-600";
-  }
-}
-
 function statusLabel(status: MemoryFileStatus["status"]) {
   switch (status) {
     case "indexed": return "Searchable";
@@ -779,12 +770,26 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             :max-width="380"
             @show="loadKnowledgePreview(file.fileName)"
           >
-            <span class="inline-flex cursor-help items-center gap-1.5 text-[11px] text-green-400">
-              <Icon
-                icon="lucide:check-circle"
-                class="h-3.5 w-3.5"
-              />
-              Analysed
+            <span class="inline-flex overflow-hidden rounded-md border border-green-500/15 bg-green-500/5">
+              <span class="inline-flex cursor-help items-center gap-1.5 px-2 py-1 text-[11px] text-green-400">
+                <Icon
+                  icon="lucide:check-circle"
+                  class="h-3.5 w-3.5"
+                />
+                Analysed
+              </span>
+              <button
+                type="button"
+                class="inline-flex items-center border-l border-green-500/15 px-1.5 text-green-500 transition-colors hover:bg-accent-500/10 hover:text-accent-300"
+                title="Analyse this document again"
+                aria-label="Analyse this document again"
+                @click.stop="extractKnowledgeFromFile(file.fileName)"
+              >
+                <Icon
+                  icon="lucide:refresh-cw"
+                  class="h-3.5 w-3.5"
+                />
+              </button>
             </span>
             <template #content>
               <div class="w-[340px] max-w-full">
@@ -839,8 +844,8 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             </template>
           </HoverTooltip>
           <span
-            v-if="!isJobRunning('knowledge-extraction', file.fileName) && !file.knowledgeExtracted"
-            class="inline-flex items-center gap-1.5 text-[11px] text-theme-500"
+            v-if="!isJobRunning('knowledge-extraction', file.fileName) && !file.knowledgeExtracted && file.status !== 'indexed'"
+            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-500"
           >
             <Icon
               icon="lucide:circle-dashed"
@@ -849,18 +854,17 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             Not analysed
           </span>
           <button
-            v-if="!isJobRunning('knowledge-extraction', file.fileName) && file.status === 'indexed'"
+            v-if="!isJobRunning('knowledge-extraction', file.fileName) && !file.knowledgeExtracted && file.status === 'indexed'"
             type="button"
-            class="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors"
-            :class="file.knowledgeExtracted ? 'text-theme-600 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-accent-500/10 hover:text-accent-300' : 'bg-accent-500/10 text-accent-300 hover:bg-accent-500/20'"
-            :title="file.knowledgeExtracted ? 'Analyse this document again' : 'Extract and classify facts from this document'"
+            class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/15 bg-accent-500/10 px-2 py-1 text-[11px] text-accent-300 transition-colors hover:bg-accent-500/20"
+            title="Extract and classify facts from this document"
             @click.stop="extractKnowledgeFromFile(file.fileName)"
           >
             <Icon
-              :icon="file.knowledgeExtracted ? 'lucide:refresh-cw' : 'lucide:network'"
+              icon="lucide:network"
               class="h-3.5 w-3.5"
             />
-            <span v-if="!file.knowledgeExtracted">Analyse</span>
+            Analyse
           </button>
         </div>
       </template>
@@ -893,31 +897,55 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           class="flex items-center gap-1.5"
           :title="statusLabel(file.status)"
         >
-          <span
-            class="inline-flex items-center gap-1.5 text-[11px]"
-            :class="statusClass(file.status)"
+          <div
+            v-if="file.status === 'indexed'"
+            class="inline-flex overflow-hidden rounded-md border border-green-500/15 bg-green-500/5"
+          >
+            <span class="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] text-green-400">
+              <Icon
+                icon="lucide:check-circle"
+                class="h-3.5 w-3.5"
+              />
+              Searchable
+            </span>
+            <button
+              type="button"
+              class="inline-flex items-center border-l border-green-500/15 px-1.5 text-green-500 transition-colors hover:bg-accent-500/10 hover:text-accent-300"
+              title="Re-index semantic search vectors"
+              aria-label="Re-index semantic search vectors"
+              @click.stop="reindexFile(file.fileName)"
+            >
+              <Icon
+                icon="lucide:refresh-cw"
+                class="h-3.5 w-3.5"
+              />
+            </button>
+          </div>
+          <button
+            v-else-if="file.supported"
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors"
+            :class="file.status === 'needs_reindex' ? 'border-orange-500/15 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20' : 'border-accent-500/15 bg-accent-500/10 text-accent-300 hover:bg-accent-500/20'"
+            :title="file.status === 'needs_reindex' ? 'Re-index semantic search vectors' : 'Build semantic search vectors for this document'"
+            @click.stop="reindexFile(file.fileName)"
           >
             <Icon
               :icon="statusIcon(file.status)"
               class="h-3.5 w-3.5"
             />
-            {{ statusLabel(file.status) }}
-          </span>
-          <button
-            v-if="file.supported"
-            type="button"
-            class="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors"
-            :class="file.status === 'indexed' ? 'text-theme-600 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-accent-500/10 hover:text-accent-300' : file.status === 'needs_reindex' ? 'bg-orange-500/10 text-orange-400 hover:bg-orange-500/20' : 'bg-accent-500/10 text-accent-300 hover:bg-accent-500/20'"
-            :title="file.status === 'indexed' ? 'Rebuild semantic search vectors' : 'Build semantic search vectors for this document'"
-            @click.stop="reindexFile(file.fileName)"
+            <span v-if="file.status === 'needs_reindex'">Re-index</span>
+            <span v-else>Make searchable</span>
+          </button>
+          <span
+            v-else
+            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-600"
           >
             <Icon
-              icon="lucide:refresh-cw"
+              icon="lucide:slash"
               class="h-3.5 w-3.5"
             />
-            <span v-if="file.status === 'needs_reindex'">Re-index</span>
-            <span v-else-if="file.status !== 'indexed'">Make searchable</span>
-          </button>
+            Not supported
+          </span>
         </div>
       </template>
     </DataTable>
