@@ -362,6 +362,52 @@ describe('memory knowledge v3', () => {
             .get(result.entity.id) as { count: number }).count).toBe(2)
     })
 
+    test('merges entities across selected memory spaces and keeps future indexing resolved', async () => {
+        getDb().prepare(`
+            INSERT INTO memory_spaces (id, name, description, folder_path, sort_order, is_default, created_at)
+            VALUES ('second-space', 'Second', '', ?, 2, 0, ?)
+        `).run(dataDir, Date.now())
+        addDocument('doc-primary-person', 'primary.md', 'revision-1')
+        addDocument('doc-alternate-person', 'alternate.md', 'revision-1', 'second-space')
+        store.publishDocument({
+            documentId: 'doc-primary-person', contentHash: 'revision-1', spaceId: 'test-space',
+            fileName: 'primary.md', sourceId: 'memory:test-space:primary.md', chunks: [chunk('Herbert Hagen uses Atlas.', 0)],
+            relations: [{ from: { name: 'Herbert Hagen', type: 'person' }, relation: 'uses', to: { name: 'Atlas', type: 'technology' }, sourceChunkIndex: 0 }],
+        })
+        store.publishDocument({
+            documentId: 'doc-alternate-person', contentHash: 'revision-1', spaceId: 'second-space',
+            fileName: 'alternate.md', sourceId: 'memory:second-space:alternate.md', chunks: [chunk('Herbert H. created Beacon.', 0)],
+            relations: [{ from: { name: 'Herbert H.', type: 'person', aliases: ['H. Hagen'] }, relation: 'created', to: { name: 'Beacon', type: 'project' }, sourceChunkIndex: 0 }],
+        })
+
+        const primary = store.suggestNodes('Herbert Hagen', 5, ['test-space'])[0]
+        const alternate = store.suggestNodes('Herbert H.', 5, ['second-space'])[0]
+        const result = await store.mergeEntities({
+            // A canonical-name owner in any selected space is retained even
+            // when only the duplicate ID is supplied.
+            entityIds: [alternate.id],
+            canonicalName: 'Herbert Hagen',
+            spaceIds: ['test-space', 'second-space'],
+        })
+
+        expect(result.mergedEntityIds).toEqual([alternate.id])
+        expect(result.entity.id).toBe(primary.id)
+        expect(store.browseGraph({ spaceIds: ['test-space'] }).nodes.some((node) => node.id === result.entity.id)).toBe(true)
+        expect(store.browseGraph({ spaceIds: ['second-space'] }).nodes.some((node) => node.id === result.entity.id)).toBe(true)
+
+        getDb().prepare("UPDATE memory_file_index SET content_hash = 'revision-2' WHERE document_id = 'doc-alternate-person'").run()
+        store.publishDocument({
+            documentId: 'doc-alternate-person', contentHash: 'revision-2', spaceId: 'second-space',
+            fileName: 'alternate.md', sourceId: 'memory:second-space:alternate.md', chunks: [chunk('H. Hagen created Beacon.', 0)],
+            relations: [{ from: { name: 'H. Hagen', type: 'person' }, relation: 'created', to: { name: 'Beacon', type: 'project' }, sourceChunkIndex: 0 }],
+        })
+
+        const resolved = store.suggestNodes('Herbert', 10, ['test-space', 'second-space'])
+            .filter((node) => node.type === 'person')
+        expect(resolved).toHaveLength(1)
+        expect(resolved[0].id).toBe(result.entity.id)
+    })
+
     test('atomically retires claims removed by a newer document revision', async () => {
         addDocument('doc-versioned', 'versioned.md', 'revision-old')
         store.publishDocument({
