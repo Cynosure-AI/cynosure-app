@@ -435,6 +435,63 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         return { files: files.filter((file): file is NonNullable<typeof file> => file !== null) }
     })
 
+    // Resolve generated artifacts into the same payload shapes as freshly
+    // attached chat inputs. Local artifact URLs are converted server-side so
+    // providers never receive browser-only /api/files references.
+    app.post<{
+        Body: {
+            artifacts?: {
+                id?: string
+                href?: string
+                label?: string
+                kind?: 'file' | 'image' | 'video' | 'audio'
+            }[]
+        }
+    }>('/artifacts/resolve', async (req, reply) => {
+        const artifacts = Array.isArray(req.body?.artifacts) ? req.body.artifacts : []
+        if (artifacts.length > 100) {
+            return reply.status(400).send({ error: 'No more than 100 artifacts can be selected' })
+        }
+
+        const images: { id: string; name: string; url: string }[] = []
+        const audio: { id: string; name: string; url: string }[] = []
+        const files: { id: string; name: string; content: string }[] = []
+        const seen = new Set<string>()
+
+        for (const artifact of artifacts) {
+            const id = typeof artifact.id === 'string' ? artifact.id : ''
+            const href = typeof artifact.href === 'string' ? artifact.href : ''
+            const label = typeof artifact.label === 'string' ? basename(artifact.label) : ''
+            const kind = artifact.kind
+            if (!id || !href || !label || !kind || seen.has(id)) continue
+            seen.add(id)
+
+            if (kind === 'video') {
+                return reply.status(400).send({ error: 'Video artifacts cannot currently be used as chat context' })
+            }
+
+            if (kind === 'file') {
+                const path = extractFilePathFromFileUrl(href)
+                if (!path || !existsSync(path)) {
+                    return reply.status(404).send({ error: `Artifact "${label}" is no longer available` })
+                }
+                const encoded = readFileSync(path).toString('base64')
+                files.push({ id, name: label, content: `data:application/octet-stream;base64,${encoded}` })
+                continue
+            }
+
+            const resolved = artifactFileUrlToDataUrl(href)
+            if (!resolved && href.startsWith('/api/files?')) {
+                return reply.status(404).send({ error: `Artifact "${label}" is no longer available` })
+            }
+            const item = { id, name: label, url: resolved || href }
+            if (kind === 'image') images.push(item)
+            else audio.push(item)
+        }
+
+        return { images, audio, files }
+    })
+
     // GET /api/chat/conversations — list (optionally filtered by agent_id or ma_workspace_id)
     // Supports pagination via ?limit=N&offset=N — when limit is set, returns { items, total }
     app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; limit?: string; offset?: string; sort?: string; search?: string } }>('/conversations', async (req) => {

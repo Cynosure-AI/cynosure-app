@@ -46,9 +46,9 @@ const draftStorageKey = computed(() => getDraftStorageKey(
 const inputText = ref(readDraft(draftStorageKey.value))
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
-const attachedImages = ref<{ url: string; name: string }[]>([])
+const attachedImages = ref<{ url: string; name: string; sourceId?: string }[]>([])
 const attachedFiles = ref<{ name: string; content: string; sourceId?: string }[]>([])
-const attachedAudio = ref<{ url: string; name: string }[]>([])
+const attachedAudio = ref<{ url: string; name: string; sourceId?: string }[]>([])
 const editingQueueId = ref<string | null>(null)
 const showFileLibrary = ref(false)
 
@@ -105,12 +105,24 @@ function openFilePicker(): void {
   fileInputRef.value?.click()
 }
 
-function addLibraryFiles(files: { id: string; name: string; content: string }[]): void {
-  const existing = new Set(attachedFiles.value.map((file) => file.sourceId).filter(Boolean))
-  for (const file of files) {
-    if (!existing.has(file.id)) {
-      attachedFiles.value.push({ name: file.name, content: file.content, sourceId: file.id })
-    }
+function addLibrarySelection(selection: {
+  images: { id: string; name: string; url: string }[]
+  files: { id: string; name: string; content: string }[]
+  audio: { id: string; name: string; url: string }[]
+}): void {
+  const existing = new Set([
+    ...attachedImages.value.flatMap((item) => item.sourceId ? [item.sourceId] : []),
+    ...attachedFiles.value.flatMap((item) => item.sourceId ? [item.sourceId] : []),
+    ...attachedAudio.value.flatMap((item) => item.sourceId ? [item.sourceId] : []),
+  ])
+  for (const image of selection.images) {
+    if (!existing.has(image.id)) attachedImages.value.push({ url: image.url, name: image.name, sourceId: image.id })
+  }
+  for (const file of selection.files) {
+    if (!existing.has(file.id)) attachedFiles.value.push({ name: file.name, content: file.content, sourceId: file.id })
+  }
+  for (const audio of selection.audio) {
+    if (!existing.has(audio.id)) attachedAudio.value.push({ url: audio.url, name: audio.name, sourceId: audio.id })
   }
 }
 
@@ -475,9 +487,13 @@ defineExpose({ processFiles })
 
     <FileLibraryModal
       :show="showFileLibrary"
-      :already-selected-ids="attachedFiles.flatMap((file) => file.sourceId ? [file.sourceId] : [])"
+      :already-selected-ids="[
+        ...attachedImages.flatMap((item) => item.sourceId ? [item.sourceId] : []),
+        ...attachedFiles.flatMap((item) => item.sourceId ? [item.sourceId] : []),
+        ...attachedAudio.flatMap((item) => item.sourceId ? [item.sourceId] : []),
+      ]"
       @close="showFileLibrary = false"
-      @add="addLibraryFiles"
+      @add="addLibrarySelection"
     />
 
     <!-- Context window usage ring — pinned to the far right of the bar -->

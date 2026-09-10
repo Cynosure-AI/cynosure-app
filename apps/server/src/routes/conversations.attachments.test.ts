@@ -189,4 +189,48 @@ describe('conversation message attachment resolution', () => {
         expect(resolved.map((file) => file.name)).toEqual(['second.txt', 'first.txt'])
         expect(Buffer.from(resolved[0].content.split(',')[1], 'base64').toString('utf8')).toBe('second contents')
     })
+
+    test('resolves generated artifacts into chat context payloads', async () => {
+        const images = await materializeImageArtifacts(['data:image/png;base64,aW1hZ2U='], 'source-conversation')
+        const audio = await materializeAudioArtifacts(['data:audio/wav;base64,YXVkaW8='], 'source-conversation')
+        const files = await materializeFileAttachments([{ name: 'report.md', content: '# Findings' }], 'source-conversation')
+        const app = Fastify()
+        await app.register(registerConversationRoutes, { prefix: '/api/chat' })
+        const response = await app.inject({
+            method: 'POST',
+            url: '/api/chat/artifacts/resolve',
+            payload: {
+                artifacts: [
+                    { id: 'image', href: images[0].url, label: 'concept.png', kind: 'image' },
+                    { id: 'audio', href: audio[0].url, label: 'narration.wav', kind: 'audio' },
+                    { id: 'file', href: `/api/files?path=${encodeURIComponent(files[0].originalPath)}`, label: 'report.md', kind: 'file' },
+                ],
+            },
+        })
+        await app.close()
+
+        expect(response.statusCode, response.body).toBe(200)
+        const resolved = response.json() as {
+            images: { id: string; name: string; url: string }[]
+            audio: { id: string; name: string; url: string }[]
+            files: { id: string; name: string; content: string }[]
+        }
+        expect(resolved.images[0]).toMatchObject({ id: 'image', name: 'concept.png', url: expect.stringMatching(/^data:image\/png;base64,/) })
+        expect(resolved.audio[0]).toMatchObject({ id: 'audio', name: 'narration.wav', url: expect.stringMatching(/^data:audio\/wav;base64,/) })
+        expect(Buffer.from(resolved.files[0].content.split(',')[1], 'base64').toString('utf8')).toBe('# Findings')
+    })
+
+    test('rejects video artifacts because chat has no video input contract', async () => {
+        const app = Fastify()
+        await app.register(registerConversationRoutes, { prefix: '/api/chat' })
+        const response = await app.inject({
+            method: 'POST',
+            url: '/api/chat/artifacts/resolve',
+            payload: { artifacts: [{ id: 'video', href: 'https://example.com/video.mp4', label: 'video.mp4', kind: 'video' }] },
+        })
+        await app.close()
+
+        expect(response.statusCode).toBe(400)
+        expect(response.json()).toEqual({ error: 'Video artifacts cannot currently be used as chat context' })
+    })
 })
