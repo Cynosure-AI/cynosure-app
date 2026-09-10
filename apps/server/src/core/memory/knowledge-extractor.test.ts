@@ -80,4 +80,26 @@ describe('knowledge extractor notes', () => {
     ])
     expect(normalizeKnowledgeTags(['Ｃｏｄｅｘ', ' codex ', '#Memory'])).toEqual(['codex', 'memory'])
   })
+
+  test('extends a resumed result and checkpoints after each completed segment', async () => {
+    complete.mockResolvedValue({
+      content: JSON.stringify([{ action: 'tags', tags: ['new chunk'], source_chunk_index: 1 }]),
+    })
+    const onCheckpoint = vi.fn()
+    const onProgress = vi.fn()
+
+    const result = await extractKnowledgeFromContent({
+      segments: [{ content: '<source_chunk index="1">New.</source_chunk>', chunkIndex: 1, chunkIndexes: [1] }],
+      initialResult: { relations: [], mentions: [], chunkTags: [{ sourceChunkIndex: 0, tags: ['saved chunk'] }] },
+      onCheckpoint,
+      onProgress,
+    })
+
+    expect(result.chunkTags).toEqual([
+      { sourceChunkIndex: 0, tags: ['saved chunk'] },
+      { sourceChunkIndex: 1, tags: ['new chunk'] },
+    ])
+    expect(onCheckpoint).toHaveBeenCalledWith(result)
+    expect(onProgress).toHaveBeenCalledWith(1, 1)
+  })
 })

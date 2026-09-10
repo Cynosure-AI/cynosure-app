@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 import { closeDb, getDb } from '../../db/database.js'
-import { cancelAllMemoryIndexJobs, getMemoryIndexJob, startMemoryIndexJob } from './memory-index-jobs.js'
+import { cancelAllMemoryIndexJobs, cancelMemoryIndexJob, discardMemoryIndexJob, getMemoryIndexJob, latestResumableMemoryIndexJob, startMemoryIndexJob } from './memory-index-jobs.js'
 
 let dataDir: string
 
@@ -71,5 +71,32 @@ describe('durable memory index jobs', () => {
 
         expect(run).toHaveBeenCalledTimes(1)
         expect(getMemoryIndexJob(started.id)).toMatchObject({ attempt: 1, maxAttempts: 1, error: 'provider failure' })
+    })
+
+    test('retains and explicitly discards a cancelled extraction checkpoint', async () => {
+        const started = startMemoryIndexJob({
+            kind: 'knowledge-extraction',
+            spaceId: 'default',
+            fileName: 'resumable.md',
+            run: async (signal, reportProgress) => {
+                reportProgress(4, 7, { contentHash: 'same-revision', completedChunkIndexes: [0, 1, 2, 3] })
+                await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }))
+                return { indexed: true }
+            },
+        })
+        await vi.waitFor(() => expect(getMemoryIndexJob(started.id)?.progressCurrent).toBe(4))
+
+        cancelMemoryIndexJob(started.id)
+        await vi.waitFor(() => expect(getMemoryIndexJob(started.id)?.status).toBe('cancelled'))
+        expect(latestResumableMemoryIndexJob('default', 'resumable.md')).toMatchObject({
+            id: started.id,
+            progressCurrent: 4,
+            progressTotal: 7,
+            result: { resumeCheckpoint: { contentHash: 'same-revision', completedChunkIndexes: [0, 1, 2, 3] } },
+        })
+
+        expect(discardMemoryIndexJob(started.id)).toBe(true)
+        expect(getMemoryIndexJob(started.id)).toBeUndefined()
+        expect(latestResumableMemoryIndexJob('default', 'resumable.md')).toBeUndefined()
     })
 })

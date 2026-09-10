@@ -39,6 +39,10 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
         jobs.value = [...jobs.value.filter(item => item.id !== job.id), job]
     }
 
+    function removeJob(jobId: string): void {
+        jobs.value = jobs.value.filter(item => item.id !== jobId)
+    }
+
     async function cancelJob(jobId: string): Promise<void> {
         try {
             upsertJob(await api.memorySpaces.cancelJob(jobId))
@@ -79,6 +83,7 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
         statusLabel,
         refresh,
         upsertJob,
+        removeJob,
         cancelJob,
         cancelRunningJobs,
         startPolling,

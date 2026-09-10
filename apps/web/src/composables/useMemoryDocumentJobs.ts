@@ -27,6 +27,15 @@ export function useMemoryDocumentJobs(options: {
     return Boolean(activeJob(kind, fileName));
   }
 
+  function resumableJob(fileName: string): MemoryIndexJob | undefined {
+    const latest = jobs.value
+      .filter((job) => job.kind === "knowledge-extraction" && job.fileName === fileName)
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+    return latest?.status === "cancelled" && (latest.progressCurrent || 0) > 0 && latest.progressCurrent! < (latest.progressTotal || 0)
+      ? latest
+      : undefined;
+  }
+
   function upsertJob(job: MemoryIndexJob): void {
     jobs.value = [...jobs.value.filter((item) => item.id !== job.id), job];
     appJobs.upsertJob(job);
@@ -104,6 +113,17 @@ export function useMemoryDocumentJobs(options: {
     }
   }
 
+  async function discardJob(job?: MemoryIndexJob): Promise<void> {
+    if (!job) return;
+    try {
+      await api.memorySpaces.discardJob(job.id);
+      jobs.value = jobs.value.filter((item) => item.id !== job.id);
+      appJobs.removeJob(job.id);
+    } catch {
+      await loadJobs();
+    }
+  }
+
   function reset(): void {
     // Show app-wide active work immediately while loadJobs refreshes the
     // authoritative folder-specific list.
@@ -129,12 +149,14 @@ export function useMemoryDocumentJobs(options: {
     activeJob,
     isJobActive,
     isJobRunning: isJobActive,
+    resumableJob,
     upsertJob,
     loadJobs,
     reindexFile,
     extractKnowledgeFromFile,
     reindexAll,
     cancelJob,
+    discardJob,
     reset,
     entityExtractionProgress,
     searchIndexProgress,

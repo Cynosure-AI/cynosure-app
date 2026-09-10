@@ -6,6 +6,7 @@ import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 import DataTable, { type Column } from "../shared/DataTable.vue";
 import HoverTooltip from "../shared/HoverTooltip.vue";
+import SplitButton from "../shared/SplitButton.vue";
 import { useMemoryDocumentJobs } from "../../composables/useMemoryDocumentJobs";
 import MemoryDocumentMoveDialog from "./MemoryDocumentMoveDialog.vue";
 
@@ -130,12 +131,14 @@ const {
   activeJob: runningJob,
   isJobActive,
   isJobRunning,
+  resumableJob,
   upsertJob,
   loadJobs,
   reindexFile,
   extractKnowledgeFromFile,
   reindexAll,
   cancelJob,
+  discardJob,
   reset: resetJobs,
   entityExtractionProgress,
   searchIndexProgress,
@@ -766,7 +769,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             </span>
           </button>
           <HoverTooltip
-            v-if="!isJobRunning('knowledge-extraction', file.fileName) && file.knowledgeExtracted"
+            v-if="!isJobRunning('knowledge-extraction', file.fileName) && !resumableJob(file.fileName) && file.knowledgeExtracted"
             :max-width="380"
             @show="loadKnowledgePreview(file.fileName)"
           >
@@ -843,6 +846,38 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
               </div>
             </template>
           </HoverTooltip>
+          <SplitButton
+            v-if="!isJobRunning('knowledge-extraction', file.fileName) && file.status === 'indexed' && resumableJob(file.fileName)"
+            :primary-label="`Resume analysis of ${file.fileName}`"
+            :menu-label="`Analysis options for ${file.fileName}`"
+            title="Continue analysing the remaining document parts"
+            @primary="extractKnowledgeFromFile(file.fileName)"
+          >
+            <Icon
+              icon="lucide:play"
+              class="h-3.5 w-3.5"
+            />
+            <span class="text-[11px] font-medium">
+              Resume {{ resumableJob(file.fileName)?.progressCurrent }}/{{ resumableJob(file.fileName)?.progressTotal }}
+            </span>
+            <template #menu="{ close }">
+              <button
+                type="button"
+                class="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left text-red-300 transition-colors hover:bg-red-500/10 focus:outline-none focus-visible:bg-red-500/10"
+                role="menuitem"
+                @click.stop="close(); discardJob(resumableJob(file.fileName))"
+              >
+                <Icon
+                  icon="lucide:x"
+                  class="mt-0.5 h-4 w-4 shrink-0"
+                />
+                <span>
+                  <span class="block text-xs font-medium">Cancel</span>
+                  <span class="mt-0.5 block text-[11px] leading-4 text-theme-400">Discard saved analysis progress and start over next time.</span>
+                </span>
+              </button>
+            </template>
+          </SplitButton>
           <span
             v-if="!isJobRunning('knowledge-extraction', file.fileName) && !file.knowledgeExtracted && file.status !== 'indexed'"
             class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-500"
@@ -854,7 +889,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             Not analysed
           </span>
           <button
-            v-if="!isJobRunning('knowledge-extraction', file.fileName) && !file.knowledgeExtracted && file.status === 'indexed'"
+            v-if="!isJobRunning('knowledge-extraction', file.fileName) && !resumableJob(file.fileName) && !file.knowledgeExtracted && file.status === 'indexed'"
             type="button"
             class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/15 bg-accent-500/10 px-2 py-1 text-[11px] text-accent-300 transition-colors hover:bg-accent-500/20"
             title="Extract and classify facts from this document"
