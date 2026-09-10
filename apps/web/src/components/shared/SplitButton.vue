@@ -1,9 +1,27 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { Icon } from '@iconify/vue'
 
-withDefaults(defineProps<{
+const emit = defineEmits<{ primary: [] }>()
+const root = ref<HTMLElement | null>(null)
+const menu = ref<HTMLElement | null>(null)
+const open = ref(false)
+const positionTick = ref(0)
+
+onClickOutside(root, () => { open.value = false }, { ignore: [menu] })
+
+const menuStyle = computed(() => {
+  void positionTick.value
+  const rect = root.value?.getBoundingClientRect()
+  if (!rect) return { top: '0', left: '0' }
+  const right = Math.max(8, window.innerWidth - rect.right)
+  return props.placement === 'above'
+    ? { bottom: `${window.innerHeight - rect.top + 8}px`, right: `${right}px` }
+    : { top: `${rect.bottom + 8}px`, right: `${right}px` }
+})
+
+const props = withDefaults(defineProps<{
   disabled?: boolean
   title?: string
   primaryLabel: string
@@ -15,15 +33,23 @@ withDefaults(defineProps<{
   placement: 'below',
 })
 
-const emit = defineEmits<{ primary: [] }>()
-const root = ref<HTMLElement | null>(null)
-const open = ref(false)
-
-onClickOutside(root, () => { open.value = false })
-
 function close(): void {
   open.value = false
 }
+
+function updatePosition(): void {
+  if (open.value) positionTick.value++
+}
+
+onMounted(() => {
+  window.addEventListener('resize', updatePosition)
+  window.addEventListener('scroll', updatePosition, true)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updatePosition)
+  window.removeEventListener('scroll', updatePosition, true)
+})
 </script>
 
 <template>
@@ -57,6 +83,9 @@ function close(): void {
         class="h-3.5 w-3.5"
       />
     </button>
+  </div>
+
+  <Teleport to="body">
     <Transition
       enter-active-class="transition duration-100 ease-out"
       leave-active-class="transition duration-75 ease-in"
@@ -65,8 +94,9 @@ function close(): void {
     >
       <div
         v-if="open"
-        class="absolute right-0 z-30 min-w-48 overflow-hidden rounded-xl border border-theme-700 bg-theme-900 p-1.5 shadow-2xl shadow-black/40"
-        :class="placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'"
+        ref="menu"
+        class="fixed z-50 min-w-48 overflow-hidden rounded-xl border border-theme-700 bg-theme-900 p-1.5 shadow-2xl shadow-black/40"
+        :style="menuStyle"
         role="menu"
         :aria-label="menuLabel"
         @keydown.esc="close"
@@ -77,5 +107,5 @@ function close(): void {
         />
       </div>
     </Transition>
-  </div>
+  </Teleport>
 </template>
