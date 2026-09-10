@@ -622,7 +622,7 @@ export interface MetricsSummary {
         estimatedCost: number | null
     }[]
     auxiliaryModelUsage: {
-        kind: 'embedding' | 'reranker' | 'knowledge-extraction'
+        kind: 'embedding' | 'reranker' | 'knowledge-extraction' | 'memory-router' | 'tool-router'
         provider: string
         model: string
         requestCount: number

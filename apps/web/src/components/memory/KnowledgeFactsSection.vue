@@ -31,6 +31,7 @@ const currentPage = ref(0);
 const visibleEdges = ref<KnowledgeGraphEdge[]>([]);
 const hydratedSourceChunks = ref<Record<string, KnowledgeSourceChunk>>({});
 const loadingSourceChunkIds = ref<Set<string>>(new Set());
+const expandedEdgeIds = ref<Set<string>>(new Set());
 
 const columns: Column<KnowledgeGraphEdge>[] = [
   { key: "fromName", label: "From", width: "minmax(0, 1.5fr)", sortable: true },
@@ -83,8 +84,7 @@ function sourceChunkLoading(chunk: KnowledgeSourceChunk): boolean {
   return loadingSourceChunkIds.value.has(chunk.textUnitId);
 }
 
-async function hydrateSourceChunk(chunk: KnowledgeSourceChunk, event: Event): Promise<void> {
-  if (!(event.currentTarget as HTMLDetailsElement).open) return;
+async function hydrateSourceChunk(chunk: KnowledgeSourceChunk): Promise<void> {
   if (chunk.text || hydratedSourceChunks.value[chunk.textUnitId] || loadingSourceChunkIds.value.has(chunk.textUnitId)) return;
 
   loadingSourceChunkIds.value = new Set(loadingSourceChunkIds.value).add(chunk.textUnitId);
@@ -101,6 +101,16 @@ async function hydrateSourceChunk(chunk: KnowledgeSourceChunk, event: Event): Pr
     next.delete(chunk.textUnitId);
     loadingSourceChunkIds.value = next;
   }
+}
+
+function toggleExpandedEdge(edge: KnowledgeGraphEdge): void {
+  const next = new Set(expandedEdgeIds.value);
+  if (next.has(edge.id)) next.delete(edge.id);
+  else {
+    next.add(edge.id);
+    if (edge.sourceChunk) void hydrateSourceChunk(edge.sourceChunk);
+  }
+  expandedEdgeIds.value = next;
 }
 
 const filteredEdges = computed(() =>
@@ -308,14 +318,23 @@ function handleBulkDelete() {
         :columns="columns"
         :selectable="true"
         :pagination="true"
+        :row-clickable="true"
+        :row-class="(item) => expandedEdgeIds.has(item.id) ? '[&_.dt-grid]:py-2 bg-theme-800/20' : '[&_.dt-grid]:py-2'"
         :page-size="PAGE_SIZE"
         initial-sort-key="lastSeenAt"
         initial-sort-direction="desc"
         :empty-message="graphQuery.trim() ? 'No relationships match this search.' : 'No relationships have been extracted yet.'"
         @visible-items-change="visibleEdges = $event"
+        @row-click="toggleExpandedEdge($event)"
       >
         <template #col-fromName="{ item }">
-          <span class="font-medium text-theme-100">{{ item.fromName }}</span>
+          <span class="flex items-center gap-2 font-medium text-theme-100">
+            <Icon
+              :icon="expandedEdgeIds.has(item.id) ? 'lucide:chevron-down' : 'lucide:chevron-right'"
+              class="h-3.5 w-3.5 shrink-0 text-theme-600"
+            />
+            {{ item.fromName }}
+          </span>
         </template>
 
         <template #col-relation="{ item }">
@@ -375,8 +394,8 @@ function handleBulkDelete() {
 
         <template #row-expand="{ item }">
           <div
-            v-if="item.note || item.sourceChunk"
-            class="space-y-2 pl-19 pr-5 pb-3 text-xs leading-relaxed"
+            v-if="expandedEdgeIds.has(item.id) && (item.note || item.sourceChunk)"
+            class="space-y-2 border-t border-theme-800/60 px-5 py-3 pl-19 text-xs leading-relaxed"
           >
             <p
               v-if="item.note"
@@ -384,21 +403,20 @@ function handleBulkDelete() {
             >
               {{ item.note }}
             </p>
-            <details
+            <div
               v-if="item.sourceChunk"
-              class="rounded-md border border-theme-800 bg-theme-950/60 p-2"
-              @toggle="hydrateSourceChunk(item.sourceChunk, $event)"
+              class="grid gap-1.5"
             >
-              <summary class="cursor-pointer text-[11px] font-medium text-accent-400">
+              <div class="text-[11px] font-medium text-accent-400">
                 Source chunk {{ item.sourceChunk.chunkIndex + 1 }}
                 <template v-if="item.sourceChunk.sectionPath || item.sourceChunk.documentTitle">
                   · {{ item.sourceChunk.sectionPath || item.sourceChunk.documentTitle }}
                 </template>
-              </summary>
-              <div class="mt-2 whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-theme-500">
-                {{ sourceChunkLoading(item.sourceChunk) ? "Loading source chunkâ€¦" : sourceChunkText(item.sourceChunk) }}
               </div>
-            </details>
+              <div class="whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-theme-500">
+                {{ sourceChunkLoading(item.sourceChunk) ? "Loading source chunk…" : sourceChunkText(item.sourceChunk) }}
+              </div>
+            </div>
           </div>
         </template>
       </DataTable>

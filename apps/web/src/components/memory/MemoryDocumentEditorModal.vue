@@ -11,6 +11,7 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableRow } from "@tiptap/extension-table-row";
 import { api } from "../../api/client";
+import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import ModalDialog from "../shared/ModalDialog.vue";
 
 const props = defineProps<{
@@ -23,6 +24,7 @@ const emit = defineEmits<{
   close: [];
   saved: [payload: { fileName: string; chunksStored: number }];
 }>();
+const memoryJobs = useMemoryJobsStore();
 
 const markdownParser = new Marked({ breaks: true });
 const headingLevels = [1, 2, 3] as const;
@@ -181,19 +183,19 @@ async function saveContent() {
   try {
     const markdown = editorToMarkdown();
     let chunksStored = 0;
+    const fileName = await applyRename();
     if (hasChanges.value) {
       const res = await api.memorySpaces.updateFileContent(
         props.spaceId,
-        currentFileName.value,
+        fileName,
         markdown,
         loadedRevision.value,
       );
       loadedMarkdown.value = markdown;
       loadedRevision.value = res.revision;
       currentFileName.value = res.fileName;
-      chunksStored = res.chunksStored;
+      memoryJobs.upsertJob(res.job);
     }
-    const fileName = await applyRename();
     editableTitle.value = splitFileName(fileName).stem;
     emit("saved", { fileName, chunksStored });
   } catch (err) {

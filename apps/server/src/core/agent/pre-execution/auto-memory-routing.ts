@@ -10,6 +10,7 @@ import { getUserSettings } from '../../user-settings.js'
 import { completeWithDebugCapture } from '../../chat/debug-context.js'
 import type { KnowledgeAssertion, KnowledgeGraphProjection } from '../../memory/knowledge-types.js'
 import type { ContextEvidence } from '@shared/types'
+import { recordAuxiliaryModelUsage } from '../../usage-metering.js'
 
 const MAX_SELECTED_MEMORIES = 5
 const MAX_SELECTED_GRAPH_EDGES = 3
@@ -334,6 +335,14 @@ async function selectMemoryContext(input: {
             gateway: input.gateway,
             providerId: input.providerId,
             request,
+        })
+
+        recordAuxiliaryModelUsage({
+            kind: 'memory-router',
+            provider: input.providerId || '',
+            model: result.model || input.model || '',
+            inputTokens: result.usage?.promptTokens,
+            outputTokens: result.usage?.completionTokens,
         })
 
         const selectionCall = result.toolCalls?.find((call) => call.function.name === MEMORY_CONTEXT_SELECTION_TOOL_NAME)
