@@ -48,7 +48,9 @@ describe('title generation', () => {
     expect(request).toMatchObject({
       model: 'reasoning-model',
       thinkingEnabled: false,
-      maxTokens: expect.any(Number),
+      // Mandatory-reasoning models need room for hidden reasoning tokens before
+      // they emit the short visible title.
+      maxTokens: 512,
     })
     // Fallback title is broadcast first, then the LLM title replaces it.
     expect(broadcast).toHaveBeenCalledWith('chat:title-updated', {
