@@ -761,7 +761,13 @@ onMounted(() => {
     ref="scrollContainer"
     class="flex-1 overflow-y-auto"
   >
-    <div v-if="forkError" role="alert" class="p-3 text-sm text-red-400">{{ forkError }}</div>
+    <div
+      v-if="forkError"
+      role="alert"
+      class="p-3 text-sm text-red-400"
+    >
+      {{ forkError }}
+    </div>
     <div
       v-if="props.searchOpen"
       role="search"
@@ -847,7 +853,7 @@ onMounted(() => {
       v-else-if="chatStore.messages.length === 0"
       class="flex flex-col items-center justify-center h-full text-theme-400"
     >
-      <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
+      <div class="relative flex items-center justify-center w-26 h-26 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
         <!--Icon Wrapped into a Routerlink to the agents config-->
         <RouterLink
           v-if="activeAgentIconUrl"
@@ -1076,28 +1082,28 @@ onMounted(() => {
         >
           <MessageBubble
             :role="entry.msg.role"
-          :message-id="entry.msg.id"
+            :message-id="entry.msg.id"
             :fork-disabled="chatStore.isConversationLocked"
-          :created-at="entry.msg.createdAt"
-          :content="entry.msg.content"
-          :thinking="entry.msg.thinking"
-          :image-data-urls="entry.msg.imageDataUrls"
-          :video-data-urls="entry.msg.videoDataUrls"
-          :audio-data-urls="entry.msg.audioDataUrls"
-          :file-attachments="entry.msg.fileAttachments"
-          :file-artifacts="assistantFileArtifacts(entry)"
-          :agent-id="resolveAgentId(entry.msg)"
-          :agent-icon-url="resolveAgentIconUrl(entry.msg)"
-          :agent-name="resolveAgentName(entry.msg)"
-          :model="entry.msg.model"
-          :prompt-tokens="entry.msg.promptTokens"
-          :completion-tokens="entry.msg.completionTokens"
-          :context-tokens="entry.msg.contextTokens"
-          :latency-ms="entry.msg.latencyMs"
-          :is-streaming="entry.msg.isStreaming"
-          :is-error="entry.msg.isError"
-          @retry="chatStore.retryFromMessage(entry.msg.id)"
-          @edit="(content) => chatStore.editMessage(entry.msg.id, content)"
+            :created-at="entry.msg.createdAt"
+            :content="entry.msg.content"
+            :thinking="entry.msg.thinking"
+            :image-data-urls="entry.msg.imageDataUrls"
+            :video-data-urls="entry.msg.videoDataUrls"
+            :audio-data-urls="entry.msg.audioDataUrls"
+            :file-attachments="entry.msg.fileAttachments"
+            :file-artifacts="assistantFileArtifacts(entry)"
+            :agent-id="resolveAgentId(entry.msg)"
+            :agent-icon-url="resolveAgentIconUrl(entry.msg)"
+            :agent-name="resolveAgentName(entry.msg)"
+            :model="entry.msg.model"
+            :prompt-tokens="entry.msg.promptTokens"
+            :completion-tokens="entry.msg.completionTokens"
+            :context-tokens="entry.msg.contextTokens"
+            :latency-ms="entry.msg.latencyMs"
+            :is-streaming="entry.msg.isStreaming"
+            :is-error="entry.msg.isError"
+            @retry="chatStore.retryFromMessage(entry.msg.id)"
+            @edit="(content) => chatStore.editMessage(entry.msg.id, content)"
             @fork="forkMessage(entry.msg.id)"
           />
         </div>
