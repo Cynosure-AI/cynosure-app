@@ -28,11 +28,9 @@ const { sidebarOpen, sidebarCollapsed, close: closeSidebar } = useSidebar()
 const route = useRoute()
 const router = useRouter()
 type ElectronQuickChatBridge = {
-  isQuickChat?: boolean
   onQuickChatOpen?: (listener: (agentId: string | null) => void) => () => void
 }
 const electronBridge = (window as unknown as { electron?: ElectronQuickChatBridge }).electron
-const isQuickChatWindow = Boolean(electronBridge?.isQuickChat)
 const isOnboardingRoute = computed(() => route.name === 'onboarding')
 
 // Close mobile sidebar on route change
@@ -107,7 +105,7 @@ function isExecutionUpdatePayload(data: unknown): data is { event: string; data:
 onMounted(async () => {
   loadAllStores()
 
-  if (isQuickChatWindow && electronBridge?.onQuickChatOpen) {
+  if (electronBridge?.onQuickChatOpen) {
     cleanups.push(electronBridge.onQuickChatOpen((agentId) => {
       void (async () => {
         await chatStore.setActiveAgent(agentId)
@@ -175,7 +173,7 @@ onUnmounted(() => {
   <div class="flex h-screen bg-theme-950 text-theme-100 antialiased selection:bg-accent-500/30 selection:text-accent-200">
     <!-- Mobile sidebar backdrop -->
     <Transition
-      v-if="!isOnboardingRoute && !isQuickChatWindow"
+      v-if="!isOnboardingRoute"
       enter-active-class="transition-opacity duration-200"
       enter-from-class="opacity-0"
       enter-to-class="opacity-100"
@@ -193,7 +191,7 @@ onUnmounted(() => {
 
     <!-- Sidebar: always visible on md+, slide-in overlay on mobile -->
     <div
-      v-if="!isOnboardingRoute && !isQuickChatWindow"
+      v-if="!isOnboardingRoute"
       id="primary-navigation"
       class="fixed inset-y-0 left-0 z-30 w-72 transition-all duration-200 md:static md:translate-x-0"
       :class="[
@@ -206,11 +204,11 @@ onUnmounted(() => {
 
     <div
       class="flex flex-col flex-1 min-w-0 bg-theme-950"
-      :class="isOnboardingRoute || isQuickChatWindow ? '' : 'p-2 pl-0 md:pl-0'"
+      :class="isOnboardingRoute ? '' : 'p-2 pl-0 md:pl-0'"
     >
       <!-- Mobile header with hamburger -->
       <div
-        v-if="!isOnboardingRoute && !isQuickChatWindow"
+        v-if="!isOnboardingRoute"
         class="flex items-center gap-2 px-2 py-1.5 md:hidden"
       >
         <button
@@ -232,9 +230,7 @@ onUnmounted(() => {
         class="flex-1 overflow-hidden relative flex flex-col"
         :class="isOnboardingRoute
           ? 'bg-theme-950'
-          : isQuickChatWindow
-            ? 'bg-theme-900'
-            : 'bg-theme-900 ring-1 ring-black/5 dark:ring-white/10 rounded-xl shadow-2xl ml-2 md:ml-0'"
+          : 'bg-theme-900 ring-1 ring-black/5 dark:ring-white/10 rounded-xl shadow-2xl ml-2 md:ml-0'"
       >
         <RouterView />
       </main>
