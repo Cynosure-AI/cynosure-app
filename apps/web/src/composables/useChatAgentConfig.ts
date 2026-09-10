@@ -92,6 +92,17 @@ function loadStoredValue(key: string): string | null {
     }
 }
 
+type ElectronQuickChatApi = {
+    isQuickChat?: boolean
+    getQuickChatAgentId?: () => string | null
+    setQuickChatAgentId?: (agentId: string | null) => void
+}
+
+function getElectronQuickChatApi(): ElectronQuickChatApi | null {
+    const electron = (window as unknown as { electron?: ElectronQuickChatApi }).electron
+    return electron ?? null
+}
+
 function persistStoredValue(key: string, value: string | null): void {
     try {
         if (value) {
@@ -112,9 +123,13 @@ export function useChatAgentConfig(
 ): ChatAgentConfigApi {
     const agentStore = useAgentStore()
 
+    const electronQuickChat = getElectronQuickChatApi()
     const activeAgentId = ref<string | null>(
-        sessionStorage.getItem(SK_ACTIVE_AGENT) || null
+        electronQuickChat?.isQuickChat && typeof electronQuickChat.getQuickChatAgentId === 'function'
+            ? electronQuickChat.getQuickChatAgentId()
+            : sessionStorage.getItem(SK_ACTIVE_AGENT) || null
     )
+    electronQuickChat?.setQuickChatAgentId?.(activeAgentId.value)
     const freeChatModelOverride = ref<string | null>(loadStoredValue(SK_FREE_CHAT_MODEL))
     const freeChatProviderOverride = ref<string | null>(loadStoredValue(SK_FREE_CHAT_PROVIDER))
     const sessionModelOverride = ref<string | null>(activeAgentId.value ? null : freeChatModelOverride.value)
@@ -397,6 +412,7 @@ export function useChatAgentConfig(
     function applyAgentSelection(id: string | null): void {
         if (!activeAgentId.value) captureFreeChatPreset()
         activeAgentId.value = id
+        electronQuickChat?.setQuickChatAgentId?.(id)
         if (id) {
             sessionStorage.setItem(SK_ACTIVE_AGENT, id)
             const { preset } = agentPreset(id)

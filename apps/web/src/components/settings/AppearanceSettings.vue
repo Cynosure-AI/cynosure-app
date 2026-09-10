@@ -16,6 +16,16 @@ const onboardingStore = useOnboardingStore()
 const router = useRouter()
 const nameSaveError = ref('')
 const profileStatus = ref<SettingsPersistenceState>('idle')
+type QuickChatShortcutState = { accelerator: string; registered: boolean }
+type ElectronQuickChatSettingsApi = {
+  getQuickChatShortcut?: () => Promise<QuickChatShortcutState>
+  setQuickChatShortcut?: (accelerator: string) => Promise<{ ok: boolean; accelerator?: string; error?: string }>
+}
+const electronApi = (window as unknown as { electron?: ElectronQuickChatSettingsApi }).electron
+const quickChatAvailable = Boolean(electronApi?.getQuickChatShortcut && electronApi?.setQuickChatShortcut)
+const quickChatShortcut = ref('Control+Space')
+const quickChatShortcutStatus = ref<SettingsPersistenceState>('idle')
+const quickChatShortcutError = ref('')
 const lastSavedName = ref(prefs.userName)
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
@@ -65,6 +75,75 @@ async function updateAvatar(value: string | null) {
     profileStatus.value = 'error'
   }
 }
+
+function formatShortcut(accelerator: string): string {
+  return accelerator
+    .replace(/Control/g, 'Ctrl')
+    .replace(/Command/g, 'Cmd')
+    .replace(/\+/g, ' + ')
+}
+
+function acceleratorFromEvent(event: KeyboardEvent): string | null {
+  const modifierKeys = new Set(['Control', 'Shift', 'Alt', 'Meta'])
+  if (modifierKeys.has(event.key)) return null
+
+  const modifiers: string[] = []
+  if (event.ctrlKey) modifiers.push('Control')
+  if (event.metaKey) modifiers.push('Command')
+  if (event.altKey) modifiers.push('Alt')
+  if (event.shiftKey) modifiers.push('Shift')
+
+  const keyAliases: Record<string, string> = {
+    ' ': 'Space',
+    ArrowUp: 'Up',
+    ArrowDown: 'Down',
+    ArrowLeft: 'Left',
+    ArrowRight: 'Right',
+    Escape: 'Esc',
+  }
+  const key = keyAliases[event.key] || (event.key.length === 1 ? event.key.toUpperCase() : event.key)
+  return [...modifiers, key].join('+')
+}
+
+async function saveQuickChatShortcut(accelerator: string): Promise<void> {
+  if (!electronApi?.setQuickChatShortcut) return
+  quickChatShortcutStatus.value = 'saving'
+  quickChatShortcutError.value = ''
+  try {
+    const result = await electronApi.setQuickChatShortcut(accelerator)
+    if (!result.ok) {
+      quickChatShortcutStatus.value = 'error'
+      quickChatShortcutError.value = result.error || 'Could not register that shortcut.'
+      return
+    }
+    quickChatShortcut.value = result.accelerator || accelerator
+    quickChatShortcutStatus.value = 'saved'
+  } catch {
+    quickChatShortcutStatus.value = 'error'
+    quickChatShortcutError.value = 'Could not update the shortcut.'
+  }
+}
+
+function captureQuickChatShortcut(event: KeyboardEvent): void {
+  event.preventDefault()
+  const accelerator = acceleratorFromEvent(event)
+  if (accelerator) void saveQuickChatShortcut(accelerator)
+}
+
+onMounted(async () => {
+  if (!electronApi?.getQuickChatShortcut) return
+  try {
+    const state = await electronApi.getQuickChatShortcut()
+    quickChatShortcut.value = state.accelerator
+    if (!state.registered) {
+      quickChatShortcutStatus.value = 'error'
+      quickChatShortcutError.value = 'This shortcut is currently unavailable. Choose another combination.'
+    }
+  } catch {
+    quickChatShortcutStatus.value = 'error'
+    quickChatShortcutError.value = 'Could not read the desktop shortcut.'
+  }
+})
 
 watch(() => prefs.userSettingsLoaded, (loaded) => {
   if (loaded) lastSavedName.value = prefs.userName
@@ -159,6 +238,72 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
           mode="auto"
           :state="profileStatus"
         />
+      </div>
+    </BaseCard>
+
+    <SettingsSubheading
+      v-if="quickChatAvailable && showAnySection(['quick-chat-hotkey'])"
+      label="Desktop"
+    />
+
+    <BaseCard
+      v-if="quickChatAvailable && showSection('quick-chat-hotkey')"
+      class="p-5"
+    >
+      <div class="flex items-start gap-3">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-900">
+          <Icon
+            icon="lucide:command"
+            class="h-5 w-5 text-theme-400"
+          />
+        </div>
+        <div class="min-w-0 flex-1">
+          <label
+            for="quick-chat-shortcut"
+            class="block text-sm font-medium text-theme-200"
+          >
+            Quick Chat shortcut
+          </label>
+          <p class="mt-0.5 text-xs text-theme-500">
+            Opens a compact new chat near your mouse cursor using the last selected chat mode.
+          </p>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              id="quick-chat-shortcut"
+              :value="formatShortcut(quickChatShortcut)"
+              type="text"
+              readonly
+              class="w-48 rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-100 outline-none transition focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+              aria-label="Quick Chat keyboard shortcut"
+              @keydown="captureQuickChatShortcut"
+            >
+            <button
+              type="button"
+              class="rounded-lg bg-theme-700 px-3 py-2 text-sm text-theme-300 transition-colors hover:bg-theme-600"
+              @click="saveQuickChatShortcut('Control+Space')"
+            >
+              Reset to Ctrl + Space
+            </button>
+          </div>
+          <p class="mt-2 text-xs text-theme-500">
+            Focus the field and press your preferred key combination.
+          </p>
+          <p
+            v-if="quickChatShortcutError"
+            class="mt-2 text-xs text-red-400"
+          >
+            {{ quickChatShortcutError }}
+          </p>
+          <div
+            v-if="quickChatShortcutStatus === 'saving'"
+            class="mt-3"
+          >
+            <SettingsPersistenceStatus
+              mode="auto"
+              :state="quickChatShortcutStatus"
+            />
+          </div>
+        </div>
       </div>
     </BaseCard>
 

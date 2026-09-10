@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, protocol, net, ipcMain, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, shell, protocol, net, ipcMain, Tray, Menu, nativeImage, globalShortcut, screen } from 'electron'
 import { spawn, execSync, type ChildProcess } from 'child_process'
 import { createServer } from 'net'
 import { join } from 'path'
@@ -15,11 +15,20 @@ import { checkForUpdates, initializeUpdater } from './updater'
 
 const PREFERRED_PORT = 3099
 const CYNOSURE_DATA_DIR_NAME = 'cynosure'
+const DEFAULT_QUICK_CHAT_SHORTCUT = 'Control+Space'
+const QUICK_CHAT_SHORTCUT_KEY = 'quick-chat-shortcut'
+const QUICK_CHAT_AGENT_KEY = 'quick-chat-agent-id'
+const QUICK_CHAT_WIDTH = 480
+const QUICK_CHAT_HEIGHT = 720
 
 let serverPort = PREFERRED_PORT
 let serverProcess: ChildProcess | null = null
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
+let quickChatWindow: BrowserWindow | null = null
+let uiPrefsStore: ElectronStore<Record<string, string>> | null = null
+let quickChatStore: ElectronStore<Record<string, string>> | null = null
+let registeredQuickChatShortcut: string | null = null
 let isQuitting = false
 let activeTasks = 0
 let trayWs: WebSocket | null = null
@@ -101,6 +110,10 @@ protocol.registerSchemesAsPrivileged([
         }
     }
 ])
+
+if (process.platform === 'linux') {
+    app.commandLine.appendSwitch('enable-features', 'GlobalShortcutsPortal')
+}
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
@@ -321,6 +334,111 @@ function registerAppProtocol(): void {
 
 // ── Window ─────────────────────────────────────────────────────────────────────
 
+function positionQuickChatWindow(win: BrowserWindow): void {
+    const cursor = screen.getCursorScreenPoint()
+    const { workArea } = screen.getDisplayNearestPoint(cursor)
+    const margin = 12
+    const x = Math.min(
+        Math.max(cursor.x + margin, workArea.x + margin),
+        workArea.x + workArea.width - QUICK_CHAT_WIDTH - margin
+    )
+    const y = Math.min(
+        Math.max(cursor.y + margin, workArea.y + margin),
+        workArea.y + workArea.height - QUICK_CHAT_HEIGHT - margin
+    )
+
+    win.setBounds({ x, y, width: QUICK_CHAT_WIDTH, height: QUICK_CHAT_HEIGHT }, false)
+}
+
+function createQuickChatWindow(): BrowserWindow {
+    const win = new BrowserWindow({
+        width: QUICK_CHAT_WIDTH,
+        height: QUICK_CHAT_HEIGHT,
+        minWidth: 360,
+        minHeight: 480,
+        show: false,
+        title: 'Cynosure Quick Chat',
+        autoHideMenuBar: true,
+        icon: nativeImage.createFromPath(appIcon),
+        webPreferences: {
+            preload: join(__dirname, '../preload/index.js'),
+            sandbox: false,
+            additionalArguments: ['--cynosure-quick-chat']
+        }
+    })
+
+    positionQuickChatWindow(win)
+    win.once('ready-to-show', () => {
+        win.show()
+        win.focus()
+    })
+    win.on('closed', () => {
+        quickChatWindow = null
+    })
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+            shell.openExternal(url)
+        }
+        return { action: 'deny' }
+    })
+
+    if (is.dev) {
+        win.loadURL('http://localhost:5173/chat')
+    } else {
+        win.loadURL('app://cynosure/chat')
+    }
+
+    return win
+}
+
+function showQuickChatWindow(): void {
+    if (!quickChatWindow || quickChatWindow.isDestroyed()) {
+        quickChatWindow = createQuickChatWindow()
+        return
+    }
+
+    positionQuickChatWindow(quickChatWindow)
+    if (quickChatWindow.isMinimized()) quickChatWindow.restore()
+    quickChatWindow.show()
+    quickChatWindow.focus()
+    const agentId = quickChatStore?.get(QUICK_CHAT_AGENT_KEY) || null
+    quickChatWindow.webContents.send('quick-chat:new', agentId)
+}
+
+function registerQuickChatShortcut(accelerator: string): boolean {
+    if (
+        registeredQuickChatShortcut === accelerator
+        && globalShortcut.isRegistered(accelerator)
+    ) {
+        return true
+    }
+
+    const previousShortcut = registeredQuickChatShortcut
+    if (previousShortcut) globalShortcut.unregister(previousShortcut)
+
+    try {
+        const registered = globalShortcut.register(accelerator, showQuickChatWindow)
+        if (registered) {
+            registeredQuickChatShortcut = accelerator
+            return true
+        }
+    } catch (error) {
+        console.error('[electron] Failed to register quick chat shortcut:', error)
+    }
+
+    registeredQuickChatShortcut = null
+    if (previousShortcut && previousShortcut !== accelerator) {
+        try {
+            if (globalShortcut.register(previousShortcut, showQuickChatWindow)) {
+                registeredQuickChatShortcut = previousShortcut
+            }
+        } catch {
+            // The previous shortcut may have become unavailable in the meantime.
+        }
+    }
+    return false
+}
+
 function createTray(win: BrowserWindow): Tray {
     const newTray = new Tray(trayNormalIcon)
 
@@ -369,6 +487,13 @@ function createWindow(): BrowserWindow {
     })
 
     win.on('ready-to-show', () => win.show())
+    win.on('closed', () => {
+        if (mainWindow === win) mainWindow = null
+        if (!isQuitting) {
+            quickChatWindow?.destroy()
+            app.quit()
+        }
+    })
 
     // Minimize (not close) hides to tray; pressing X actually quits the app
     win.on('minimize', () => {
@@ -433,23 +558,64 @@ app.whenReady().then(async () => {
     // Chromium's LevelDB "Reusing old log" optimization causes sequence-number
     // conflicts across app restarts, making localStorage unreliable in Electron.
     // electron-store persists prefs to a plain JSON file in the shared app data dir.
-    const uiPrefsStore = new ElectronStore<Record<string, string>>({
+    uiPrefsStore = new ElectronStore<Record<string, string>>({
         name: 'ui-prefs',
         cwd: getAppDataDir(),
     })
 
+    quickChatStore = new ElectronStore<Record<string, string>>({
+        name: 'quick-chat-prefs',
+        cwd: getAppDataDir(),
+    })
+
     ipcMain.on('get-ui-prefs', (event) => {
-        event.returnValue = uiPrefsStore.store
+        event.returnValue = uiPrefsStore?.store ?? {}
     })
 
     ipcMain.on('set-ui-prefs', (event, prefs: Record<string, string>) => {
-        uiPrefsStore.store = prefs
+        if (uiPrefsStore) uiPrefsStore.store = prefs
         event.returnValue = null
+    })
+
+    ipcMain.on('quick-chat:get-agent-id', (event) => {
+        event.returnValue = quickChatStore?.get(QUICK_CHAT_AGENT_KEY) || null
+    })
+
+    ipcMain.on('quick-chat:set-agent-id', (_event, agentId: string | null) => {
+        if (!quickChatStore) return
+        if (agentId) quickChatStore.set(QUICK_CHAT_AGENT_KEY, agentId)
+        else quickChatStore.delete(QUICK_CHAT_AGENT_KEY)
+    })
+
+    ipcMain.handle('quick-chat:get-shortcut', () => {
+        const accelerator = quickChatStore?.get(QUICK_CHAT_SHORTCUT_KEY) || DEFAULT_QUICK_CHAT_SHORTCUT
+        return {
+            accelerator,
+            registered: registeredQuickChatShortcut === accelerator
+                && globalShortcut.isRegistered(accelerator)
+        }
+    })
+
+    ipcMain.handle('quick-chat:set-shortcut', (_event, accelerator: string) => {
+        const normalized = typeof accelerator === 'string' ? accelerator.trim() : ''
+        if (!normalized) {
+            return { ok: false, error: 'Enter a keyboard shortcut.' }
+        }
+        if (!registerQuickChatShortcut(normalized)) {
+            return { ok: false, error: 'That shortcut is already in use or is not supported.' }
+        }
+        quickChatStore?.set(QUICK_CHAT_SHORTCUT_KEY, normalized)
+        return { ok: true, accelerator: normalized }
     })
 
     initializeUpdater()
 
     registerAppProtocol()
+
+    const configuredShortcut = quickChatStore?.get(QUICK_CHAT_SHORTCUT_KEY) || DEFAULT_QUICK_CHAT_SHORTCUT
+    if (!registerQuickChatShortcut(configuredShortcut)) {
+        console.warn(`[electron] Quick chat shortcut unavailable: ${configuredShortcut}`)
+    }
 
     // Start the server in the background — the UI handles reconnection.
     // Once ready, connect the tray monitor WS to track active tasks.
@@ -503,6 +669,8 @@ app.on('before-quit', () => {
     trayWs?.close()
     trayWs = null
     tray?.destroy()
+    globalShortcut.unregisterAll()
+    registeredQuickChatShortcut = null
     killServer()
 })
 process.on('exit', killServer)

@@ -35,6 +35,9 @@ interface SettingsSection {
 
 const route = useRoute()
 const router = useRouter()
+const isElectronBuild = Boolean(
+  (window as unknown as { electron?: { getQuickChatShortcut?: () => unknown } }).electron?.getQuickChatShortcut
+)
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const settingsPanelRef = ref<HTMLElement | null>(null)
@@ -247,6 +250,13 @@ const sections: SettingsSection[] = [
     description: 'Add, edit, test, enable, disable, and remove messaging channels.',
     terms: ['channels', 'channel', 'messaging', 'telegram', 'discord', 'slack', 'bot token', 'app token', 'socket mode', 'message content intent', 'allowed agents', 'remote agents']
   },
+  ...(isElectronBuild ? [{
+    id: 'quick-chat-hotkey',
+    categoryId: 'general' as const,
+    label: 'Quick Chat Shortcut',
+    description: 'Open a compact new chat from anywhere with a global keyboard shortcut.',
+    terms: ['quick chat', 'global hotkey', 'keyboard shortcut', 'ctrl space', 'desktop', 'electron']
+  }] : []),
   {
     id: 'theme',
     categoryId: 'general',

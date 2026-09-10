@@ -9,6 +9,9 @@ import HoverTooltip from '../shared/HoverTooltip.vue'
 import FileLibraryModal from './modals/FileLibraryModal.vue'
 
 const chatStore = useChatStore()
+const isQuickChatWindow = Boolean(
+  (window as unknown as { electron?: { isQuickChat?: boolean } }).electron?.isQuickChat
+)
 
 defineProps<{
   floating?: boolean
@@ -245,6 +248,9 @@ onMounted(() => {
   // The initial draft is read before the textarea exists, so its watcher does
   // not run on mount. Size the now-mounted composer to the restored content.
   autoResize()
+  if (isQuickChatWindow) {
+    nextTick(() => textareaRef.value?.focus())
+  }
 })
 
 onBeforeUnmount(() => {
