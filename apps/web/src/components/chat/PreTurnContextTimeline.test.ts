@@ -65,6 +65,29 @@ describe('PreTurnContextTimeline', () => {
     expect(cards[1].text()).toContain('lower.md')
   })
 
+  test('shows the full selected memory content in a hover tooltip', async () => {
+    const fullContent = 'First line of the memory.\nSecond line that remains available beyond the card preview.'
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: {
+        steps: [{
+          iteration: 0, taskId: 'memory', status: 'selecting-memory', timestamp: 100,
+          toolCalls: [{ name: 'memory', arguments: JSON.stringify({
+            type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker',
+            sourceFile: 'complete-memory.md', content: fullContent,
+          }) }],
+        }],
+        isActive: false,
+      },
+      global,
+    })
+
+    await wrapper.get('.pre-turn-card > button').trigger('click')
+    await wrapper.get('.memory-grid > div').trigger('mouseenter', { clientX: 100, clientY: 100 })
+
+    const tooltip = document.body.querySelector('[aria-label="Full memory content for complete-memory.md"]')
+    expect(tooltip?.textContent).toContain(fullContent)
+  })
+
   test('shows only MCPs when collapsed and tools inside the expanded completion step', async () => {
     const wrapper = mount(PreTurnContextTimeline, {
       props: {

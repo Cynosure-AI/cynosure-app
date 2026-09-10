@@ -2,6 +2,7 @@
 import { computed, reactive } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { ToolExecStep } from './ToolExecutionCard.vue'
+import HoverTooltip from '../shared/HoverTooltip.vue'
 
 type ToolCall = NonNullable<ToolExecStep['toolCalls']>[number]
 type Channel = 'memory' | 'tools'
@@ -335,29 +336,45 @@ function formatTimestamp(timestamp: number): string {
             class="memory-grid mt-3"
             aria-label="Selected memories"
           >
-            <article
+            <HoverTooltip
               v-for="(memory, index) in card.selected"
               :key="`${memory.name}-${index}`"
-              class="memory-card"
+              :disabled="!memory.content"
+              placement="mouse"
+              :max-width="480"
+              block
             >
-              <div class="flex items-start gap-2">
-                <h4
-                  class="min-w-0 flex-1 truncate text-[11px] font-semibold text-violet-200"
-                  :title="memory.name"
+              <article class="memory-card w-full">
+                <div class="flex items-start gap-2">
+                  <h4
+                    class="min-w-0 flex-1 truncate text-[11px] font-semibold text-violet-200"
+                    :title="memory.name"
+                  >
+                    {{ memory.name }}
+                  </h4><span
+                    v-if="memory.score"
+                    class="score-chip"
+                  >{{ memory.score }}</span>
+                </div>
+                <p
+                  v-if="memory.content"
+                  class="mt-1.5 line-clamp-3 text-[10px] leading-relaxed text-theme-400"
                 >
-                  {{ memory.name }}
-                </h4><span
-                  v-if="memory.score"
-                  class="score-chip"
-                >{{ memory.score }}</span>
-              </div>
-              <p
-                v-if="memory.content"
-                class="mt-1.5 line-clamp-3 text-[10px] leading-relaxed text-theme-400"
-              >
-                {{ memory.content }}
-              </p>
-            </article>
+                  {{ memory.content }}
+                </p>
+              </article>
+              <template #content>
+                <div
+                  class="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-theme-200"
+                  :aria-label="`Full memory content for ${memory.name}`"
+                >
+                  <div class="mb-1.5 font-semibold text-violet-200">
+                    {{ memory.name }}
+                  </div>
+                  {{ memory.content }}
+                </div>
+              </template>
+            </HoverTooltip>
           </div>
 
           <div
