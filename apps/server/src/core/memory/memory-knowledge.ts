@@ -296,20 +296,23 @@ export class MemoryKnowledgeStore {
     const identityHint = cleanDisplay(opts.entity.identityHint, 240)
     const normalizedHint = normalize(identityHint)
     const candidates = db.prepare(`
-      SELECT e.*,
+      SELECT DISTINCT e.*,
         EXISTS (
           SELECT 1 FROM memory_knowledge_entity_mentions m
           JOIN memory_knowledge_text_units tu ON tu.id = m.text_unit_id
           JOIN memory_knowledge_index_runs r ON r.id = m.run_id
           WHERE m.entity_id = e.id AND r.document_id = ? AND (r.status = 'active' OR r.id = ?)
         ) AS same_document
-      FROM memory_knowledge_entities e
-      WHERE e.namespace_id = ? AND e.entity_type = ? AND e.status = 'active'
-        AND (e.normalized_name = ? OR EXISTS (
+      FROM memory_knowledge_entities local
+      JOIN memory_knowledge_entities e
+        ON e.id = CASE WHEN local.status = 'merged' THEN local.merged_into_id ELSE local.id END
+        AND e.status = 'active'
+      WHERE local.namespace_id = ? AND local.entity_type = ? AND local.status IN ('active', 'merged')
+        AND (local.normalized_name = ? OR e.normalized_name = ? OR EXISTS (
           SELECT 1 FROM memory_knowledge_entity_aliases a
-          WHERE a.entity_id = e.id AND a.normalized_alias = ?
+          WHERE a.entity_id IN (local.id, e.id) AND a.normalized_alias = ?
         ))
-    `).all(opts.documentId, opts.runId, opts.namespaceId, type, normalizedName, normalizedName) as Array<Record<string, unknown>>
+    `).all(opts.documentId, opts.runId, opts.namespaceId, type, normalizedName, normalizedName, normalizedName) as Array<Record<string, unknown>>
 
     let selected: Record<string, unknown> | undefined
     let confidence = 0
@@ -871,25 +874,27 @@ export class MemoryKnowledgeStore {
     if (rows.length !== entityIds.length) throw new Error('ENTITY_MERGE_ENTITY_NOT_FOUND')
     const rowsById = new Map(rows.map((row) => [String(row.id), row]))
     const primary = rowsById.get(entityIds[0])!
-    const namespaceId = String(primary.namespace_id)
-    if (rows.some((row) => String(row.namespace_id) !== namespaceId)) {
-      throw new Error('ENTITY_MERGE_CROSS_NAMESPACE')
-    }
     const allowedSpaces = new Set((opts.spaceIds || []).filter(Boolean))
-    if (allowedSpaces.size > 0 && !allowedSpaces.has(namespaceId)) throw new Error('ENTITY_MERGE_OUT_OF_SCOPE')
+    if (allowedSpaces.size > 0 && rows.some((row) => !allowedSpaces.has(String(row.namespace_id)))) {
+      throw new Error('ENTITY_MERGE_OUT_OF_SCOPE')
+    }
 
     let primaryId = String(primary.id)
     const primaryType = String(primary.entity_type) as KnowledgeEntityType
     const suppliedCanonical = rows.find((row) =>
       String(row.normalized_name) === normalizedName && String(row.entity_type) === primaryType)
     if (suppliedCanonical) primaryId = String(suppliedCanonical.id)
+    const conflictSpaces = allowedSpaces.size > 0
+      ? [...allowedSpaces]
+      : Array.from(new Set(rows.map((row) => String(row.namespace_id))))
+    const conflictSpacePlaceholders = conflictSpaces.map(() => '?').join(', ')
     const conflict = suppliedCanonical ? undefined : getDb().prepare(`
       SELECT * FROM memory_knowledge_entities
-      WHERE namespace_id = ? AND normalized_name = ? AND entity_type = ?
+      WHERE namespace_id IN (${conflictSpacePlaceholders}) AND normalized_name = ? AND entity_type = ?
         AND status = 'active' AND id NOT IN (${placeholders})
       ORDER BY updated_at DESC
       LIMIT 1
-    `).get(namespaceId, normalizedName, primaryType, ...entityIds) as Record<string, unknown> | undefined
+    `).get(...conflictSpaces, normalizedName, primaryType, ...entityIds) as Record<string, unknown> | undefined
     if (conflict) {
       primaryId = String(conflict.id)
       entityIds = [primaryId, ...entityIds]
@@ -980,19 +985,19 @@ export class MemoryKnowledgeStore {
       }
 
       const activeAssertions = getDb().prepare(`
-        SELECT id, subject_entity_id, predicate_id, normalized_object_key, status,
+        SELECT id, namespace_id, subject_entity_id, predicate_id, normalized_object_key, status,
           importance, created_at, updated_at
         FROM memory_knowledge_assertions
-        WHERE namespace_id = ? AND status IN ('active', 'disputed')
+        WHERE status IN ('active', 'disputed')
           AND (subject_entity_id = ? OR object_entity_id = ?)
         ORDER BY (status = 'active') DESC, importance DESC, updated_at DESC
-      `).all(namespaceId, primaryId, primaryId) as Array<{
-        id: string; subject_entity_id: string; predicate_id: string; normalized_object_key: string
+      `).all(primaryId, primaryId) as Array<{
+        id: string; namespace_id: string; subject_entity_id: string; predicate_id: string; normalized_object_key: string
         status: string; importance: number; created_at: number; updated_at: number
       }>
       const assertionGroups = new Map<string, typeof activeAssertions>()
       for (const assertion of activeAssertions) {
-        const key = `${assertion.subject_entity_id}\u0000${assertion.predicate_id}\u0000${assertion.normalized_object_key}`
+        const key = `${assertion.namespace_id}\u0000${assertion.subject_entity_id}\u0000${assertion.predicate_id}\u0000${assertion.normalized_object_key}`
         assertionGroups.set(key, [...(assertionGroups.get(key) || []), assertion])
       }
       for (const group of assertionGroups.values()) {
@@ -1030,7 +1035,10 @@ export class MemoryKnowledgeStore {
         )
       }
 
-      getDb().prepare(`DELETE FROM memory_knowledge_entity_aliases WHERE entity_id IN (${placeholders})`).run(...entityIds)
+      // Preserve aliases on merged rows as namespace-local redirects so later
+      // indexing resolves to the shared canonical entity instead of recreating
+      // the duplicate in its original memory space.
+      getDb().prepare('DELETE FROM memory_knowledge_entity_aliases WHERE entity_id = ?').run(primaryId)
       const insertAlias = getDb().prepare(`
         INSERT INTO memory_knowledge_entity_aliases
           (id, entity_id, display_alias, normalized_alias, source, confidence, created_at)

@@ -1060,7 +1060,7 @@ export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): Tool
         name: 'knowledge_entity_merge',
         description:
             'Manually repair confirmed duplicate knowledge entities. Routine entity resolution happens during memory indexing; use this only for exceptional repairs, not uncertain candidate matches. Provide entity IDs returned by knowledge_search and a new canonical mainName. ' +
-            'If mainName already belongs to an active entity in scope, that entity automatically remains stable; otherwise the first supplied ID remains stable. ' +
+            'Entities may come from different selected memory folders. If mainName already belongs to an active entity anywhere in scope, that entity automatically remains stable; otherwise the first supplied ID remains stable. ' +
             'All other entities are redirected into it, and their former names and aliases become normalized aliases. ' +
             'Relationships, mentions, and resolution records are rewired; duplicate relationships are consolidated.',
         parameters: {
@@ -1108,7 +1108,6 @@ export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): Tool
                     ENTITY_MERGE_REQUIRES_MULTIPLE: 'Provide at least two distinct entities, either as IDs or as one ID plus an existing mainName owner.',
                     ENTITY_MERGE_INVALID_NAME: 'mainName is not valid.',
                     ENTITY_MERGE_ENTITY_NOT_FOUND: 'One or more entities no longer exist or were already merged. Search again and retry.',
-                    ENTITY_MERGE_CROSS_NAMESPACE: 'Entities from different memory folders cannot be merged.',
                     ENTITY_MERGE_OUT_OF_SCOPE: 'One or more entities are outside the selected memory folder scope.',
                 }
                 return { success: false, output: messages[code] || `Entity merge failed: ${code || 'unknown error'}` }
