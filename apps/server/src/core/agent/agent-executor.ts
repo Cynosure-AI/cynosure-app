@@ -1047,10 +1047,16 @@ export class AgentExecutor {
                 : this.imageArtifactsToDataUrls(images)
             const audioArtifacts = await this.materializeToolAudio(res)
             const hasReturnedMedia = Boolean(images?.length || audioArtifacts?.length || res?.audioDataUrls?.length)
+            const serializedResult = JSON.stringify(res)
+            const output = res?.output?.trim()
+                ? res.output
+                : res?.error
+                    ? `Error: ${res.error}`
+                    : serializedResult === undefined ? '(tool returned no output)' : serializedResult
             return {
                 toolCallId: tc.id,
                 name: tc.function.name,
-                output: res?.output ?? JSON.stringify(res),
+                output,
                 success: res?.success !== false,
                 images,
                 imageDataUrls,

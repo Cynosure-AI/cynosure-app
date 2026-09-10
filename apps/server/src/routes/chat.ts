@@ -788,6 +788,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             conversationId,
             db,
             broadcast,
+            signal: abortController.signal,
           })
           abortController.signal.throwIfAborted()
           messages = compactResult.messages

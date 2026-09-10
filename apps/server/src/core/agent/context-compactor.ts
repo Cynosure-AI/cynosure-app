@@ -23,6 +23,7 @@ export const COMPACT_EVENT_PREFIX = '[CONTEXT_COMPACT_EVENT] '
  * `ChatHistoryRow` in chat.ts is a structural superset and satisfies this.
  */
 export interface CompactHistoryRow {
+    id?: string
     role: string
     content: string
     tool_calls_json: string | null
@@ -51,6 +52,8 @@ export interface CompactStrategyInput {
     conversationId: string
     db: ReturnType<typeof getDb>
     broadcast: BroadcastFn
+    /** Cancels the auxiliary summary call and prevents marker persistence. */
+    signal?: AbortSignal
 }
 
 // ─── Private helpers ───────────────────────────────────────
@@ -94,6 +97,7 @@ async function summarizeConversation(
     gateway: LLMGateway,
     providerId: string | undefined,
     model: string,
+    signal?: AbortSignal,
 ): Promise<string> {
     const conversationText = formatForSummary(msgs)
     const response = await gateway.complete({
@@ -111,6 +115,7 @@ async function summarizeConversation(
         // Compaction is a mechanical summarization pass. Hidden reasoning only
         // consumes the completion budget and can truncate the actual summary.
         thinkingEnabled: false,
+        signal,
     }, providerId)
     return response.content
 }
@@ -144,11 +149,12 @@ export async function applyCompactStrategy({
     conversationId,
     db,
     broadcast,
+    signal,
 }: CompactStrategyInput): Promise<{ messages: ChatMessage[]; initialContextEstimate: number }> {
     const initialEstimate = estimateTotalTokens(messages) + estimateToolDefinitionTokens(tools)
 
     // Locate the most recent compact event marker in the raw history
-    let lastCompactEvent: { summary: string; compactedMessageCount: number; model: string } | null = null
+    let lastCompactEvent: { summary: string; compactedMessageCount: number; model: string; compactedThroughMessageId?: string; compactedThroughCreatedAt?: number } | null = null
     let lastCompactCreatedAt = 0
     for (const row of historyRows) {
         if (row.role === 'system' && row.content.startsWith(COMPACT_EVENT_PREFIX)) {
@@ -167,7 +173,13 @@ export async function applyCompactStrategy({
     // Build working messages: replay from last compact event if one exists
     let workingMessages: ChatMessage[]
     if (lastCompactEvent) {
-        const rowsAfterCompact = filteredRows.filter(r => r.created_at > lastCompactCreatedAt)
+        const boundaryIndex = lastCompactEvent.compactedThroughMessageId
+            ? filteredRows.findIndex((row) => row.id === lastCompactEvent!.compactedThroughMessageId)
+            : -1
+        const replayBoundary = lastCompactEvent.compactedThroughCreatedAt ?? lastCompactCreatedAt
+        const rowsAfterCompact = boundaryIndex >= 0
+            ? filteredRows.slice(boundaryIndex + 1)
+            : filteredRows.filter(r => r.created_at > replayBoundary)
         const msgsAfterCompact: ChatMessage[] = rowsAfterCompact.map(r => ({
             role: r.role as ChatMessage['role'],
             content: r.content,
@@ -176,7 +188,22 @@ export async function applyCompactStrategy({
         }))
 
         const summaryNote = `\n\n---\n[Earlier conversation — ${lastCompactEvent.compactedMessageCount} messages summarized by ${lastCompactEvent.model}]\n${lastCompactEvent.summary}`
-        workingMessages = [...injectSummaryNote(systemMsgs, summaryNote), ...msgsAfterCompact]
+        // Raw rows cannot reproduce turn-local retrieval evidence or a hydrated
+        // multimodal active request. Restore those values from the prepared input.
+        const turnLocalContext = messages.filter((message) => {
+            const contextKind = message.metadata?.contextKind
+            return Boolean(contextKind && contextKind !== 'conversation-summary')
+        })
+        const activeUser = [...messages].reverse().find((message) => message.role === 'user' && !message.metadata?.contextKind)
+        if (activeUser) {
+            const activeReplayIndex = findLastUserIndex(msgsAfterCompact)
+            if (activeReplayIndex >= 0) msgsAfterCompact[activeReplayIndex] = activeUser
+        }
+        const insertionIndex = findLastUserIndex(msgsAfterCompact)
+        const replayWithTurnContext = insertionIndex >= 0
+            ? [...msgsAfterCompact.slice(0, insertionIndex), ...turnLocalContext, ...msgsAfterCompact.slice(insertionIndex)]
+            : [...msgsAfterCompact, ...turnLocalContext]
+        workingMessages = [...injectSummaryNote(systemMsgs, summaryNote), ...replayWithTurnContext]
     } else {
         workingMessages = messages
     }
@@ -204,19 +231,27 @@ export async function applyCompactStrategy({
     // together; preserving only the final message can orphan a tool result.
     const workingSystemMsgs = workingMessages.filter(m => m.role === 'system')
     const workingNonSystemMsgs = workingMessages.filter(m => m.role !== 'system')
+    const turnLocalMessages = workingNonSystemMsgs.filter((message) => {
+        const contextKind = message.metadata?.contextKind
+        return Boolean(contextKind && contextKind !== 'conversation-summary')
+    })
+    const conversationMessages = workingNonSystemMsgs.filter((message) => !turnLocalMessages.includes(message))
     let latestRequestIndex = -1
-    for (let i = workingNonSystemMsgs.length - 1; i >= 0; i--) {
-        if (workingNonSystemMsgs[i].role === 'user') {
+    for (let i = conversationMessages.length - 1; i >= 0; i--) {
+        if (conversationMessages[i].role === 'user') {
             latestRequestIndex = i
             break
         }
     }
     const toSummarize = latestRequestIndex >= 0
-        ? workingNonSystemMsgs.slice(0, latestRequestIndex)
-        : workingNonSystemMsgs.slice(0, -1)
-    const latestRequestGroup = latestRequestIndex >= 0
-        ? workingNonSystemMsgs.slice(latestRequestIndex)
-        : workingNonSystemMsgs.slice(-1)
+        ? conversationMessages.slice(0, latestRequestIndex)
+        : conversationMessages.slice(0, -1)
+    const latestRequestGroup = [
+        ...turnLocalMessages,
+        ...(latestRequestIndex >= 0
+            ? conversationMessages.slice(latestRequestIndex)
+            : conversationMessages.slice(-1)),
+    ]
 
     if (toSummarize.length === 0) {
         return { messages: workingMessages, initialContextEstimate: initialEstimate }
@@ -227,8 +262,9 @@ export async function applyCompactStrategy({
 
     let summary: string
     try {
-        summary = await summarizeConversation(toSummarize, gateway, compactProviderId ?? providerId, compactModel ?? responseModel)
+        summary = await summarizeConversation(toSummarize, gateway, compactProviderId ?? providerId, compactModel ?? responseModel, signal)
     } catch (err) {
+        if (signal?.aborted || (err as Error).name === 'AbortError') throw err
         // Summarisation failed (e.g. provider error). Notify the UI and return the
         // unmodified working messages so the main request can still proceed.
         broadcast('chat:compact-error', { conversationId, error: String(err) })
@@ -236,11 +272,23 @@ export async function applyCompactStrategy({
     }
 
     // Persist the compact event as a sentinel system message in the DB
+    signal?.throwIfAborted()
     const compactMsgId = nanoid()
-    const compactData = { summary, compactedMessageCount: toSummarize.length, model: responseModel, createdAt: Date.now() }
+    const activeHistoryUserIndex = findLastUserIndex(filteredRows)
+    const compactedThroughRow = activeHistoryUserIndex > 0 ? filteredRows[activeHistoryUserIndex - 1] : undefined
+    const summaryModel = compactModel ?? responseModel
+    const createdAt = Date.now()
+    const compactData = {
+        summary,
+        compactedMessageCount: toSummarize.length,
+        model: summaryModel,
+        createdAt,
+        compactedThroughMessageId: compactedThroughRow?.id ?? lastCompactEvent?.compactedThroughMessageId,
+        compactedThroughCreatedAt: compactedThroughRow?.created_at ?? lastCompactEvent?.compactedThroughCreatedAt,
+    }
     db.prepare(
         'INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(compactMsgId, conversationId, 'system', `${COMPACT_EVENT_PREFIX}${JSON.stringify(compactData)}`, Date.now())
+    ).run(compactMsgId, conversationId, 'system', `${COMPACT_EVENT_PREFIX}${JSON.stringify(compactData)}`, createdAt)
 
     // Notify the UI so it can render the completed compact event card
     broadcast('chat:compact-event', {
@@ -248,13 +296,20 @@ export async function applyCompactStrategy({
         messageId: compactMsgId,
         summary,
         compactedMessageCount: toSummarize.length,
-        model: responseModel,
-        createdAt: Date.now(),
+        model: summaryModel,
+        createdAt,
     })
 
-    const summaryNote = `\n\n---\n[Conversation compacted — ${toSummarize.length} messages summarized by ${responseModel}]\n${summary}`
+    const summaryNote = `\n\n---\n[Conversation compacted — ${toSummarize.length} messages summarized by ${summaryModel}]\n${summary}`
     const finalSystemMsgs = injectSummaryNote(workingSystemMsgs, summaryNote)
     const finalMessages: ChatMessage[] = [...finalSystemMsgs, ...latestRequestGroup]
 
     return { messages: finalMessages, initialContextEstimate: initialEstimate }
+}
+
+function findLastUserIndex<T extends { role: string }>(messages: T[]): number {
+    for (let index = messages.length - 1; index >= 0; index--) {
+        if (messages[index].role === 'user') return index
+    }
+    return -1
 }
