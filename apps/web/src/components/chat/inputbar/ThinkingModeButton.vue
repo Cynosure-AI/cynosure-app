@@ -24,31 +24,31 @@ const levels: Array<{
   {
     value: 'minimal',
     label: 'Minimal',
-    shortLabel: 'XS',
+    shortLabel: 'MIN',
     description: 'Minimal reasoning for the lowest latency and token use.',
   },
   {
     value: 'low',
     label: 'Low',
-    shortLabel: 'S',
+    shortLabel: 'LOW',
     description: 'Quick reasoning for straightforward tasks.',
   },
   {
     value: 'medium',
     label: 'Medium',
-    shortLabel: 'M',
+    shortLabel: 'MED',
     description: 'Balanced reasoning, speed, and token use.',
   },
   {
     value: 'high',
     label: 'High',
-    shortLabel: 'L',
+    shortLabel: 'HIGH',
     description: 'Deep reasoning for complex tasks.',
   },
   {
     value: 'xhigh',
     label: 'Extra high',
-    shortLabel: 'XL',
+    shortLabel: 'XHIGH',
     description: 'Extra reasoning for especially difficult tasks.',
   },
   {
