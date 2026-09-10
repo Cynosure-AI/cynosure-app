@@ -114,6 +114,8 @@ export async function extractKnowledgeFromContent(opts: {
   model?: string
   signal?: AbortSignal
   onProgress?: (current: number, total: number) => void
+  initialResult?: KnowledgeExtractionResult
+  onCheckpoint?: (result: KnowledgeExtractionResult) => void
 }): Promise<KnowledgeExtractionResult> {
   const gateway = getGateway()
   const provider = opts.providerId
@@ -139,13 +141,12 @@ export async function extractKnowledgeFromContent(opts: {
     'Always return the tags object for the source chunk; omit relationship and mention objects when nothing durable and grounded is present.',
   ].join('\n')
 
-  const relations: KnowledgeExtractedRelation[] = []
-  const mentions: KnowledgeExtractedMention[] = []
-  const tagsByChunk = new Map<number, string[]>()
+  const relations: KnowledgeExtractedRelation[] = [...(opts.initialResult?.relations || [])]
+  const mentions: KnowledgeExtractedMention[] = [...(opts.initialResult?.mentions || [])]
+  const tagsByChunk = new Map<number, string[]>((opts.initialResult?.chunkTags || []).map((item) => [item.sourceChunkIndex, item.tags]))
   const totalSegments = opts.segments.length
   for (let segmentIndex = 0; segmentIndex < totalSegments; segmentIndex++) {
     const segment = opts.segments[segmentIndex]
-    opts.onProgress?.(segmentIndex + 1, totalSegments)
     const response = await gateway.complete({
       model: opts.model || provider.config.defaultModel,
       signal: opts.signal,
@@ -210,6 +211,15 @@ export async function extractKnowledgeFromContent(opts: {
         observedAt: typeof raw.observed_at === 'string' || typeof raw.observed_at === 'number' ? raw.observed_at : undefined,
       })
     }
+    const checkpoint = {
+      relations: [...relations],
+      mentions: [...mentions],
+      chunkTags: [...tagsByChunk.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([sourceChunkIndex, tags]) => ({ sourceChunkIndex, tags })),
+    }
+    opts.onCheckpoint?.(checkpoint)
+    opts.onProgress?.(segmentIndex + 1, totalSegments)
   }
   return {
     relations,

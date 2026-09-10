@@ -35,13 +35,17 @@ import {
     deleteMemoryKnowledgeSpace,
     indexMemoryFileIntoKnowledge,
     moveMemoryKnowledgeSource,
+    type KnowledgeExtractionCheckpoint,
 } from '../core/memory/memory-knowledge-extraction.js'
 import {
     cancelMemoryIndexJob,
+    discardMemoryIndexJob,
     getMemoryIndexJob,
+    latestResumableMemoryIndexJob,
     listMemoryIndexJobs,
     startMemoryIndexJob,
     cancelMemoryIndexJobsForFile,
+    waitForMemoryIndexJob,
 } from '../core/memory/memory-index-jobs.js'
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION } from '../core/memory/memory-knowledge.js'
 
@@ -161,6 +165,15 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const job = cancelMemoryIndexJob(req.params.jobId)
         if (!job) return reply.status(404).send({ error: 'Job not found' })
         return job
+    })
+
+    // DELETE /api/memory-spaces/jobs/:jobId — discard a paused extraction checkpoint.
+    app.delete<{ Params: { jobId: string } }>('/jobs/:jobId', async (req, reply) => {
+        await waitForMemoryIndexJob(req.params.jobId)
+        if (!discardMemoryIndexJob(req.params.jobId)) {
+            return reply.status(409).send({ error: 'Only finished or cancelled jobs can be discarded' })
+        }
+        return { success: true }
     })
 
     // GET /api/memory-spaces — list all spaces with file counts
@@ -492,10 +505,17 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             return reply.status(409).send({ error: status === 'not_indexed' ? 'File must be indexed before knowledge extraction.' : 'File must be re-indexed before knowledge extraction.' })
         }
 
+        const resumableJob = latestResumableMemoryIndexJob(row.id, req.params.fileName)
+        const resumeCheckpoint = (resumableJob?.result as { resumeCheckpoint?: KnowledgeExtractionCheckpoint } | undefined)?.resumeCheckpoint
         return startMemoryIndexJob({
             kind: 'knowledge-extraction',
             spaceId: row.id,
             fileName: req.params.fileName,
+            resume: resumableJob && resumeCheckpoint ? {
+                current: resumableJob.progressCurrent || 0,
+                total: resumableJob.progressTotal || 0,
+                checkpoint: resumeCheckpoint,
+            } : undefined,
             run: async (signal, reportProgress) => ({
                 success: true,
                 ...(await indexMemoryFileIntoKnowledge({
@@ -504,7 +524,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     fileName: req.params.fileName,
                     replaceExisting: true,
                     signal,
-                    onExtractionProgress: reportProgress,
+                    resumeCheckpoint,
+                    onExtractionCheckpoint: (checkpoint, current, total) => reportProgress(current, total, checkpoint),
                 })),
             }),
         })
