@@ -545,7 +545,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         }
     })
 
-    // PUT /api/memory-spaces/:id/files/:fileName/content — update editable file content and refresh vectors
+    // PUT /api/memory-spaces/:id/files/:fileName/content — persist editable content, then refresh vectors in the background
     app.put<{ Params: { id: string; fileName: string }; Body: { content: string; expectedRevision?: string } }>('/:id/files/:fileName/content', async (req, reply) => {
         const row = loadSpaceRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Space not found' })
@@ -559,7 +559,6 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             return reply.status(400).send({ error: (err as Error).message })
         }
 
-        const previousContent = readTextFile(row.folder_path, fileName)
         const currentRevision = computeFileHash(join(row.folder_path, fileName))
         if (req.body.expectedRevision && req.body.expectedRevision !== currentRevision) {
             return reply.status(409).send({
@@ -569,16 +568,23 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         }
         try {
             writeTextFile(row.folder_path, fileName, req.body.content)
-            const result = await getAgentMemory().reindexFile(row.folder_path, fileName, row.id)
+            const revision = computeFileHash(join(row.folder_path, fileName))
+            const job = startMemoryIndexJob({
+                kind: 'reindex',
+                spaceId: row.id,
+                fileName,
+                run: async (signal) => {
+                    const result = await getAgentMemory().reindexFile(row.folder_path, fileName, row.id, { signal })
+                    return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
+                },
+            })
             return {
                 success: true,
-                fileName: result.fileName,
-                chunksStored: result.chunkCount,
-                revision: computeFileHash(join(row.folder_path, result.fileName)),
+                fileName,
+                revision,
+                job,
             }
         } catch (err) {
-            writeTextFile(row.folder_path, fileName, previousContent)
-            await getAgentMemory().reindexFile(row.folder_path, fileName, row.id).catch(() => undefined)
             return reply.status(500).send({ error: (err as Error).message || 'Failed to update file' })
         }
     })

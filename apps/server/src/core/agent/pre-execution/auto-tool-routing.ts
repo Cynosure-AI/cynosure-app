@@ -6,6 +6,7 @@ import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../../tools/tool-registry.js'
 import { completeWithDebugCapture } from '../../chat/debug-context.js'
+import { recordAuxiliaryModelUsage } from '../../usage-metering.js'
 
 const TOOLSET_SELECTION_TOOL_NAME = 'select_toolsets'
 const TOOLSET_DESCRIPTION_CHAR_LIMIT = 1_200
@@ -220,6 +221,14 @@ async function selectToolsets(input: {
             gateway: input.gateway,
             providerId: input.providerId,
             request,
+        })
+
+        recordAuxiliaryModelUsage({
+            kind: 'tool-router',
+            provider: input.providerId || '',
+            model: result.model || input.model || '',
+            inputTokens: result.usage?.promptTokens,
+            outputTokens: result.usage?.completionTokens,
         })
 
         const selectionCall = result.toolCalls?.find((call) => call.function.name === TOOLSET_SELECTION_TOOL_NAME)

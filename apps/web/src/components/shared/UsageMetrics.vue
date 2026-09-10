@@ -370,7 +370,7 @@ async function confirmReset(): Promise<void> {
               />
             </div>
             <div class="text-[10px] text-theme-600 mt-0.5">
-              {{ m.kind === 'embedding' ? 'Embedding' : m.kind === 'reranker' ? 'Reranker' : 'Entity extraction' }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
+              {{ m.kind === 'embedding' ? 'Embedding' : m.kind === 'reranker' ? 'Reranker' : m.kind === 'knowledge-extraction' ? 'Entity extraction' : m.kind === 'memory-router' ? 'Memory router' : 'Tool router' }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
                 class="text-amber-500/80 ml-1"

@@ -440,7 +440,7 @@ export const api = {
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/content`
       ),
     updateFileContent: (spaceId: string, fileName: string, content: string, expectedRevision?: string) =>
-      put<{ success: boolean; chunksStored: number; fileName: string; revision: string }>(
+      put<{ success: boolean; fileName: string; revision: string; job: MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }> }>(
         `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/content`,
         { content, expectedRevision }
       ),
