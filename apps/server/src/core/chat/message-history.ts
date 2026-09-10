@@ -57,6 +57,65 @@ export function buildRecentImageArtifactsSystemHint(rows: ChatHistoryRow[], limi
     ].join('\n')
 }
 
+/**
+ * Treat the image produced by the preceding assistant turn as the implicit edit
+ * input for the active user turn. Explicitly attached user images take
+ * precedence, and crossing another user turn is deliberately avoided so an old
+ * generated image does not unexpectedly become the base for an unrelated chat.
+ */
+export function attachPreviousGeneratedImageToActiveUser(
+    rows: ChatHistoryRow[],
+    messages: ChatMessage[],
+): ChatMessage[] {
+    let activeUserRowIndex = -1
+    for (let i = rows.length - 1; i >= 0; i--) {
+        if (rows[i].role === 'user') {
+            activeUserRowIndex = i
+            break
+        }
+    }
+    if (activeUserRowIndex === -1) return messages
+
+    let generatedImageUrl: string | null = null
+    for (let i = activeUserRowIndex - 1; i >= 0; i--) {
+        const row = rows[i]
+        if (row.role === 'user') break
+        if (row.role !== 'assistant') continue
+
+        const urls = parseJsonArray<unknown>(row.image_urls_json)
+            .filter((url): url is string => typeof url === 'string')
+        if (urls.length) generatedImageUrl = urls.at(-1) || null
+        break
+    }
+    if (!generatedImageUrl) return messages
+
+    let activeUserMessageIndex = -1
+    for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') {
+            activeUserMessageIndex = i
+            break
+        }
+    }
+    if (activeUserMessageIndex === -1) return messages
+
+    const activeMessage = messages[activeUserMessageIndex]
+    const existingParts = typeof activeMessage.content === 'string'
+        ? [{ type: 'text' as const, text: activeMessage.content }]
+        : activeMessage.content
+    if (existingParts.some((part) => part.type === 'image_url')) return messages
+
+    const providerUrl = artifactFileUrlToDataUrl(generatedImageUrl) || generatedImageUrl
+    const nextMessages = [...messages]
+    nextMessages[activeUserMessageIndex] = {
+        ...activeMessage,
+        content: [
+            ...existingParts,
+            { type: 'image_url', image_url: { url: providerUrl } },
+        ],
+    }
+    return nextMessages
+}
+
 export function appendHiddenSystemContext(messages: ChatMessage[], hint: string | null): ChatMessage[] {
     if (!hint) return messages
     let systemIndex = -1

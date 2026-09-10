@@ -20,6 +20,7 @@ vi.mock('../artifacts/image-artifacts.js', () => ({
 
 import {
     appendHiddenSystemContext,
+    attachPreviousGeneratedImageToActiveUser,
     buildConversationHistory,
     buildRecentImageArtifactsSystemHint,
     insertTurnLocalUntrustedContext,
@@ -114,6 +115,63 @@ describe('conversation history construction', () => {
         expect(hint).toContain('generated image 2: path=/shared.png')
         expect(hint).not.toContain('/older.png')
         expect(buildRecentImageArtifactsSystemHint([row({ role: 'user' })])).toBeNull()
+    })
+
+    test('attaches the preceding assistant generated image to a follow-up user turn', () => {
+        const rows = [
+            row({ id: 'prompt', role: 'user', content: 'Draw a lighthouse' }),
+            row({
+                id: 'generated',
+                role: 'assistant',
+                content: 'Generated image.',
+                image_urls_json: JSON.stringify(['file:///first.png', 'file:///latest.png']),
+            }),
+            row({ id: 'correction', role: 'user', content: 'Make the sky darker' }),
+        ]
+        const messages = rows.map(({ role, content }) => ({
+            role: role as 'user' | 'assistant',
+            content,
+        }))
+
+        const result = attachPreviousGeneratedImageToActiveUser(rows, messages)
+
+        expect(result.at(-1)?.content).toEqual([
+            { type: 'text', text: 'Make the sky darker' },
+            { type: 'image_url', image_url: { url: 'data:mock;base64,/latest.png' } },
+        ])
+        expect(messages.at(-1)?.content).toBe('Make the sky darker')
+    })
+
+    test('does not replace an explicit image or reach across another user turn', () => {
+        const generated = row({
+            role: 'assistant',
+            image_urls_json: JSON.stringify(['file:///generated.png']),
+        })
+        const explicitMessages = [
+            { role: 'assistant' as const, content: 'Generated image.' },
+            {
+                role: 'user' as const,
+                content: [
+                    { type: 'text' as const, text: 'Use this instead' },
+                    { type: 'image_url' as const, image_url: { url: 'data:image/png;base64,explicit' } },
+                ],
+            },
+        ]
+        expect(attachPreviousGeneratedImageToActiveUser([
+            generated,
+            row({ role: 'user' }),
+        ], explicitMessages)).toBe(explicitMessages)
+
+        const unrelatedMessages = [
+            { role: 'assistant' as const, content: 'Generated image.' },
+            { role: 'user' as const, content: 'First follow-up' },
+            { role: 'system' as const, content: 'context' },
+        ]
+        expect(attachPreviousGeneratedImageToActiveUser([
+            generated,
+            row({ id: 'first-follow-up', role: 'user' }),
+            row({ id: 'active', role: 'user' }),
+        ], unrelatedMessages)).toBe(unrelatedMessages)
     })
 
     test('inserts retrieved context as an untrusted user message before the active request', () => {
