@@ -332,7 +332,7 @@ function statusIcon(status: MemoryFileStatus["status"]) {
   switch (status) {
     case "indexed": return "lucide:check-circle";
     case "needs_reindex": return "lucide:alert-circle";
-    case "not_indexed": return "lucide:info";
+    case "not_indexed": return "lucide:circle-dashed";
     default: return "lucide:slash";
   }
 }
@@ -341,7 +341,7 @@ function statusClass(status: MemoryFileStatus["status"]) {
   switch (status) {
     case "indexed": return "text-green-400";
     case "needs_reindex": return "text-orange-400";
-    case "not_indexed": return "text-accent-400";
+    case "not_indexed": return "text-theme-500";
     default: return "text-theme-600";
   }
 }
@@ -755,7 +755,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           <button
             v-if="isJobRunning('knowledge-extraction', file.fileName)"
             type="button"
-            class="job-cancel-control rounded px-1.5 py-1 text-[11px] text-emerald-500 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:bg-red-500/10 focus-visible:text-red-400"
+            class="job-cancel-control inline-flex items-center rounded-md px-2 py-1 text-[11px] text-accent-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:bg-red-500/10 focus-visible:text-red-400"
             title="Cancel fact extraction"
             @click.stop="cancelJob(runningJob('knowledge-extraction', file.fileName))"
           >
@@ -774,18 +774,16 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
               Cancel
             </span>
           </button>
-          <Icon
-            v-else
-            :icon="file.knowledgeExtracted ? 'lucide:network' : 'lucide:network-x'"
-            class="h-3.5 w-3.5"
-            :class="file.knowledgeExtracted ? 'text-green-400' : 'text-theme-700'"
-          />
           <HoverTooltip
             v-if="!isJobRunning('knowledge-extraction', file.fileName) && file.knowledgeExtracted"
             :max-width="380"
             @show="loadKnowledgePreview(file.fileName)"
           >
-            <span class="cursor-help text-[11px] text-green-600 underline decoration-green-700/60 decoration-dotted underline-offset-2">
+            <span class="inline-flex cursor-help items-center gap-1.5 text-[11px] text-green-400">
+              <Icon
+                icon="lucide:check-circle"
+                class="h-3.5 w-3.5"
+              />
               Analysed
             </span>
             <template #content>
@@ -842,15 +840,19 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           </HoverTooltip>
           <span
             v-if="!isJobRunning('knowledge-extraction', file.fileName) && !file.knowledgeExtracted"
-            class="text-[11px] text-theme-600"
+            class="inline-flex items-center gap-1.5 text-[11px] text-theme-500"
           >
+            <Icon
+              icon="lucide:circle-dashed"
+              class="h-3.5 w-3.5"
+            />
             Not analysed
           </span>
           <button
             v-if="!isJobRunning('knowledge-extraction', file.fileName) && file.status === 'indexed'"
             type="button"
-            class="ml-1 flex items-center gap-1 rounded px-1.5 py-1 text-[11px] transition-colors"
-            :class="file.knowledgeExtracted ? 'text-theme-600 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-emerald-500/10 hover:text-emerald-400' : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'"
+            class="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors"
+            :class="file.knowledgeExtracted ? 'text-theme-600 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-accent-500/10 hover:text-accent-300' : 'bg-accent-500/10 text-accent-300 hover:bg-accent-500/20'"
             :title="file.knowledgeExtracted ? 'Analyse this document again' : 'Extract and classify facts from this document'"
             @click.stop="extractKnowledgeFromFile(file.fileName)"
           >
@@ -867,7 +869,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         <button
           v-if="file.supported && isJobRunning('reindex', file.fileName)"
           type="button"
-          class="job-cancel-control rounded px-1.5 py-1 text-[11px] text-orange-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:bg-red-500/10 focus-visible:text-red-400"
+          class="job-cancel-control inline-flex items-center rounded-md px-2 py-1 text-[11px] text-accent-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:bg-red-500/10 focus-visible:text-red-400"
           title="Cancel search indexing"
           @click.stop="cancelJob(runningJob('reindex', file.fileName))"
         >
@@ -891,22 +893,21 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           class="flex items-center gap-1.5"
           :title="statusLabel(file.status)"
         >
-          <Icon
-            :icon="statusIcon(file.status)"
-            class="h-3.5 w-3.5"
-            :class="statusClass(file.status)"
-          />
           <span
-            class="text-[11px]"
+            class="inline-flex items-center gap-1.5 text-[11px]"
             :class="statusClass(file.status)"
           >
+            <Icon
+              :icon="statusIcon(file.status)"
+              class="h-3.5 w-3.5"
+            />
             {{ statusLabel(file.status) }}
           </span>
           <button
             v-if="file.supported"
             type="button"
-            class="ml-1 flex items-center gap-1 rounded px-1.5 py-1 text-[11px] transition-colors"
-            :class="file.status === 'indexed' ? 'text-theme-600 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-orange-500/10 hover:text-orange-400' : 'bg-orange-500/10 text-orange-400 hover:bg-orange-500/20'"
+            class="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors"
+            :class="file.status === 'indexed' ? 'text-theme-600 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-accent-500/10 hover:text-accent-300' : file.status === 'needs_reindex' ? 'bg-orange-500/10 text-orange-400 hover:bg-orange-500/20' : 'bg-accent-500/10 text-accent-300 hover:bg-accent-500/20'"
             :title="file.status === 'indexed' ? 'Rebuild semantic search vectors' : 'Build semantic search vectors for this document'"
             @click.stop="reindexFile(file.fileName)"
           >
@@ -914,7 +915,8 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
               icon="lucide:refresh-cw"
               class="h-3.5 w-3.5"
             />
-            <span v-if="file.status !== 'indexed'">Make searchable</span>
+            <span v-if="file.status === 'needs_reindex'">Re-index</span>
+            <span v-else-if="file.status !== 'indexed'">Make searchable</span>
           </button>
         </div>
       </template>
