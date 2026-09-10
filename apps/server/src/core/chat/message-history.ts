@@ -59,9 +59,10 @@ export function buildRecentImageArtifactsSystemHint(rows: ChatHistoryRow[], limi
 
 /**
  * Treat the image produced by the preceding assistant turn as the implicit edit
- * input for the active user turn. Explicitly attached user images take
- * precedence, and crossing another user turn is deliberately avoided so an old
- * generated image does not unexpectedly become the base for an unrelated chat.
+ * input for the active user turn. Explicitly attached user images remain in the
+ * request as additional references. Crossing another user turn is deliberately
+ * avoided so an old generated image does not unexpectedly become the base for
+ * an unrelated chat.
  */
 export function attachPreviousGeneratedImageToActiveUser(
     rows: ChatHistoryRow[],
@@ -102,15 +103,23 @@ export function attachPreviousGeneratedImageToActiveUser(
     const existingParts = typeof activeMessage.content === 'string'
         ? [{ type: 'text' as const, text: activeMessage.content }]
         : activeMessage.content
-    if (existingParts.some((part) => part.type === 'image_url')) return messages
 
     const providerUrl = artifactFileUrlToDataUrl(generatedImageUrl) || generatedImageUrl
+    if (existingParts.some((part) => part.type === 'image_url' && part.image_url.url === providerUrl)) {
+        return messages
+    }
+
+    // Keep the generated image ahead of explicitly attached images so providers
+    // receive it as the primary edit base and the uploads as supporting references.
+    const firstExplicitImageIndex = existingParts.findIndex((part) => part.type === 'image_url')
+    const insertAt = firstExplicitImageIndex === -1 ? existingParts.length : firstExplicitImageIndex
     const nextMessages = [...messages]
     nextMessages[activeUserMessageIndex] = {
         ...activeMessage,
         content: [
-            ...existingParts,
+            ...existingParts.slice(0, insertAt),
             { type: 'image_url', image_url: { url: providerUrl } },
+            ...existingParts.slice(insertAt),
         ],
     }
     return nextMessages
