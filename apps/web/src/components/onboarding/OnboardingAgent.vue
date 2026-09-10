@@ -36,7 +36,7 @@ const error = ref('')
 
 const internalName = computed(() => agentInternalName(name.value) || 'agent')
 const memoryPath = computed(() => agentMemoryRelativePath(internalName.value, name.value))
-const memoryPathPreview = computed(() => name.value.trim() ? memoryPath.value : 'agents/<agent-name>')
+const memoryPathPreview = computed(() => name.value.trim() ? memoryPath.value : '.agents/<agent-name>')
 const hasDraft = computed(() => Boolean(
   name.value.trim()
   || iconUrl.value
@@ -89,7 +89,7 @@ async function createAgent(): Promise<boolean> {
       const space = existing || await api.memorySpaces.create(
         agentMemoryFolderName(internalName.value, name.value),
         `Private memory folder for ${name.value.trim()}`,
-        'agents',
+        '.agents',
       )
       assignedMemorySpaces.push(space.id)
     }

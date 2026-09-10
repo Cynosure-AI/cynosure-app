@@ -37,7 +37,7 @@ const files = ref<MemoryFileStatus[]>([]);
 const filesLoading = ref(false);
 const selectedFiles = ref<Set<string>>(new Set());
 const deleting = ref(false);
-const droppingIndexes = ref(false);
+const forgettingMemories = ref(false);
 const moving = ref(false);
 const showMoveDialog = ref(false);
 const knowledgePreviews = ref<Record<string, { status: "loading" | "ready" | "error"; data?: MemoryDocumentKnowledgePreview }>>({});
@@ -85,9 +85,8 @@ const columns: Column<DocumentRow>[] = [
   { key: "fileName", label: "File", minWidth: "220px", grow: 3, sortable: true, sortValue: (file) => file.fileName },
   { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
   { key: "chunkCount", label: "Chunks", minWidth: "70px", grow: 0, sortable: true, sortValue: (file) => file.chunkCount || 0 },
-  { key: "knowledgeExtracted", label: "Facts Extracted", minWidth: "124px", sortable: true, sortValue: (file) => file.knowledgeExtracted },
-  { key: "status", label: "Search Indexed", minWidth: "146px", grow: 1.15, sortable: true, sortValue: (file) => file.status },
-  { key: "actions", label: "Actions", minWidth: "140px" },
+  { key: "knowledgeExtracted", label: "Analysed", minWidth: "190px", sortable: true, sortValue: (file) => file.knowledgeExtracted },
+  { key: "status", label: "Searchable", minWidth: "220px", grow: 1.15, sortable: true, sortValue: (file) => file.status },
 ];
 
 const allFilteredSelected = computed(
@@ -103,10 +102,10 @@ const needsAttentionCount = computed(
 const selectedKnowledgeExtractableFiles = computed(() =>
   files.value.filter((f) => f.supported && f.status === "indexed" && selectedFiles.value.has(f.fileName)),
 );
-const selectedIndexedFiles = computed(() =>
+const selectedRememberedFiles = computed(() =>
   files.value.filter((f) =>
     f.supported &&
-    f.status !== "not_indexed" &&
+    (f.status !== "not_indexed" || f.knowledgeExtracted) &&
     selectedFiles.value.has(f.fileName),
   ),
 );
@@ -197,12 +196,12 @@ async function deleteSelectedFiles() {
   deleting.value = false;
 }
 
-async function dropSelectedIndexes() {
-  const sourceFiles = selectedIndexedFiles.value.map((file) => file.fileName);
+async function forgetSelectedMemories() {
+  const sourceFiles = selectedRememberedFiles.value.map((file) => file.fileName);
   if (sourceFiles.length === 0) return;
-  droppingIndexes.value = true;
+  forgettingMemories.value = true;
   try {
-    await api.memorySpaces.dropIndexes(props.spaceId, sourceFiles);
+    await api.memorySpaces.forgetMemories(props.spaceId, sourceFiles);
     selectedFiles.value = new Set();
     await loadFiles();
     await loadJobs();
@@ -210,7 +209,7 @@ async function dropSelectedIndexes() {
   } catch {
     /* error */
   }
-  droppingIndexes.value = false;
+  forgettingMemories.value = false;
 }
 
 // --- Move ---
@@ -349,9 +348,9 @@ function statusClass(status: MemoryFileStatus["status"]) {
 
 function statusLabel(status: MemoryFileStatus["status"]) {
   switch (status) {
-    case "indexed": return "Search indexed";
-    case "needs_reindex": return "Needs search re-index";
-    case "not_indexed": return "Not search indexed";
+    case "indexed": return "Searchable";
+    case "needs_reindex": return "Update needed";
+    case "not_indexed": return "Not searchable";
     default: return "Not supported";
   }
 }
@@ -608,7 +607,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           v-if="selectedKnowledgeExtractableFiles.length > 0"
           :disabled="selectedKnowledgeExtractableIdleCount === 0"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
-          title="Extract facts from the selected search-indexed documents"
+          title="Extract and classify facts from the selected searchable documents"
           @click="knowledgeExtractionSelected"
         >
           <Icon
@@ -619,18 +618,18 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           Extract facts
         </button>
         <button
-          v-if="selectedIndexedFiles.length > 0"
-          :disabled="droppingIndexes"
+          v-if="selectedRememberedFiles.length > 0"
+          :disabled="forgettingMemories"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-orange-400 transition-colors hover:bg-orange-500/10 disabled:opacity-50"
-          title="Remove search and knowledge indexes while keeping the source files"
-          @click="dropSelectedIndexes"
+          title="Remove semantic search vectors and extracted facts while keeping the source files"
+          @click="forgetSelectedMemories"
         >
           <Icon
-            :icon="droppingIndexes ? 'lucide:loader-2' : 'lucide:database-x'"
+            :icon="forgettingMemories ? 'lucide:loader-2' : 'lucide:brain-circuit'"
             class="h-3.5 w-3.5"
-            :class="{ 'animate-spin': droppingIndexes }"
+            :class="{ 'animate-spin': forgettingMemories }"
           />
-          Remove indexes
+          Forget Memories
         </button>
         <button
           :disabled="deleting"
@@ -841,6 +840,26 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
               </div>
             </template>
           </HoverTooltip>
+          <span
+            v-if="!isJobRunning('knowledge-extraction', file.fileName) && !file.knowledgeExtracted"
+            class="text-[11px] text-theme-600"
+          >
+            Not analysed
+          </span>
+          <button
+            v-if="!isJobRunning('knowledge-extraction', file.fileName) && file.status === 'indexed'"
+            type="button"
+            class="ml-1 flex items-center gap-1 rounded px-1.5 py-1 text-[11px] transition-colors"
+            :class="file.knowledgeExtracted ? 'text-theme-600 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-emerald-500/10 hover:text-emerald-400' : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'"
+            :title="file.knowledgeExtracted ? 'Analyse this document again' : 'Extract and classify facts from this document'"
+            @click.stop="extractKnowledgeFromFile(file.fileName)"
+          >
+            <Icon
+              :icon="file.knowledgeExtracted ? 'lucide:refresh-cw' : 'lucide:network'"
+              class="h-3.5 w-3.5"
+            />
+            <span v-if="!file.knowledgeExtracted">Analyse</span>
+          </button>
         </div>
       </template>
 
@@ -883,66 +902,19 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           >
             {{ statusLabel(file.status) }}
           </span>
-        </div>
-      </template>
-
-      <template #col-actions="{ item: file }">
-        <div
-          class="flex items-center justify-start gap-1"
-          @click.stop
-        >
           <button
-            v-if="file.textDirect"
-            class="p-1.5 text-theme-500 hover:text-accent-300 rounded-lg hover:bg-theme-800/70 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-            title="Edit memory"
-            @click="openEditorModal(file.fileName)"
+            v-if="file.supported"
+            type="button"
+            class="ml-1 flex items-center gap-1 rounded px-1.5 py-1 text-[11px] transition-colors"
+            :class="file.status === 'indexed' ? 'text-theme-600 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-orange-500/10 hover:text-orange-400' : 'bg-orange-500/10 text-orange-400 hover:bg-orange-500/20'"
+            :title="file.status === 'indexed' ? 'Rebuild semantic search vectors' : 'Build semantic search vectors for this document'"
+            @click.stop="reindexFile(file.fileName)"
           >
             <Icon
-              icon="lucide:pencil"
+              icon="lucide:refresh-cw"
               class="h-3.5 w-3.5"
             />
-          </button>
-
-          <button
-            v-if="file.supported && (file.status === 'needs_reindex' || file.status === 'not_indexed')"
-            class="flex items-center gap-1 rounded px-2 py-1 text-xs bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors disabled:opacity-50"
-            :title="isJobRunning('reindex', file.fileName) ? 'Cancel search indexing' : 'Build the search index for this file'"
-            @click="isJobRunning('reindex', file.fileName) ? cancelJob(runningJob('reindex', file.fileName)) : reindexFile(file.fileName)"
-          >
-            <Icon
-              :icon="isJobRunning('reindex', file.fileName) ? 'lucide:loader-2' : 'lucide:refresh-cw'"
-              class="h-3.5 w-3.5"
-              :class="{ 'animate-spin': isJobRunning('reindex', file.fileName) }"
-            />
-            {{ isJobRunning("reindex", file.fileName) ? "Cancel" : "Index search" }}
-          </button>
-
-          <button
-            v-else-if="file.supported && file.status === 'indexed'"
-            class="p-1 text-theme-600 hover:text-theme-400 transition-colors opacity-0 group-hover:opacity-100"
-            :class="{ 'opacity-100 text-orange-400 hover:text-orange-300': isJobRunning('reindex', file.fileName) }"
-            :title="isJobRunning('reindex', file.fileName) ? 'Cancel search indexing' : 'Rebuild search index'"
-            @click="isJobRunning('reindex', file.fileName) ? cancelJob(runningJob('reindex', file.fileName)) : reindexFile(file.fileName)"
-          >
-            <Icon
-              :icon="isJobRunning('reindex', file.fileName) ? 'lucide:loader-2' : 'lucide:refresh-cw'"
-              class="h-3.5 w-3.5"
-              :class="{ 'animate-spin': isJobRunning('reindex', file.fileName) }"
-            />
-          </button>
-
-          <button
-            v-if="file.supported && file.status === 'indexed'"
-            class="p-1 text-theme-600 hover:text-emerald-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
-            :class="{ 'opacity-100 text-emerald-400': isJobRunning('knowledge-extraction', file.fileName) }"
-            :title="isJobRunning('knowledge-extraction', file.fileName) ? 'Cancel fact extraction' : 'Extract facts for the knowledge graph'"
-            @click="isJobRunning('knowledge-extraction', file.fileName) ? cancelJob(runningJob('knowledge-extraction', file.fileName)) : extractKnowledgeFromFile(file.fileName)"
-          >
-            <Icon
-              :icon="isJobRunning('knowledge-extraction', file.fileName) ? 'lucide:loader-2' : 'lucide:network'"
-              class="h-3.5 w-3.5"
-              :class="{ 'animate-spin': isJobRunning('knowledge-extraction', file.fileName) }"
-            />
+            <span v-if="file.status !== 'indexed'">Make searchable</span>
           </button>
         </div>
       </template>

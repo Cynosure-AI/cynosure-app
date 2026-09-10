@@ -8,10 +8,10 @@ describe('agent memory paths', () => {
 
   it('builds the dedicated agent memory path', () => {
     expect(agentMemoryFolderName('research_assistant', 'Research Assistant')).toBe('research_assistant')
-    expect(agentMemoryRelativePath('research_assistant', 'Research Assistant')).toBe('agents/research_assistant')
+    expect(agentMemoryRelativePath('research_assistant', 'Research Assistant')).toBe('.agents/research_assistant')
   })
 
   it('sanitizes fallback display names', () => {
-    expect(agentMemoryRelativePath('', 'Writer / Editor')).toBe('agents/Writer_-_Editor')
+    expect(agentMemoryRelativePath('', 'Writer / Editor')).toBe('.agents/Writer_-_Editor')
   })
 })
