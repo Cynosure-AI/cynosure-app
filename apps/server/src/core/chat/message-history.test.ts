@@ -142,7 +142,7 @@ describe('conversation history construction', () => {
         expect(messages.at(-1)?.content).toBe('Make the sky darker')
     })
 
-    test('does not replace an explicit image or reach across another user turn', () => {
+    test('keeps explicit images as references after the generated image base', () => {
         const generated = row({
             role: 'assistant',
             image_urls_json: JSON.stringify(['file:///generated.png']),
@@ -157,10 +157,37 @@ describe('conversation history construction', () => {
                 ],
             },
         ]
+        const result = attachPreviousGeneratedImageToActiveUser([
+            generated,
+            row({ role: 'user' }),
+        ], explicitMessages)
+
+        expect(result.at(-1)?.content).toEqual([
+            { type: 'text', text: 'Use this instead' },
+            { type: 'image_url', image_url: { url: 'data:mock;base64,/generated.png' } },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,explicit' } },
+        ])
+    })
+
+    test('does not duplicate the generated base or reach across another user turn', () => {
+        const generated = row({
+            role: 'assistant',
+            image_urls_json: JSON.stringify(['file:///generated.png']),
+        })
+        const duplicateMessages = [
+            { role: 'assistant' as const, content: 'Generated image.' },
+            {
+                role: 'user' as const,
+                content: [
+                    { type: 'text' as const, text: 'Keep improving it' },
+                    { type: 'image_url' as const, image_url: { url: 'data:mock;base64,/generated.png' } },
+                ],
+            },
+        ]
         expect(attachPreviousGeneratedImageToActiveUser([
             generated,
             row({ role: 'user' }),
-        ], explicitMessages)).toBe(explicitMessages)
+        ], duplicateMessages)).toBe(duplicateMessages)
 
         const unrelatedMessages = [
             { role: 'assistant' as const, content: 'Generated image.' },
