@@ -88,15 +88,50 @@ describe('durable memory index jobs', () => {
 
         cancelMemoryIndexJob(started.id)
         await vi.waitFor(() => expect(getMemoryIndexJob(started.id)?.status).toBe('cancelled'))
-        expect(latestResumableMemoryIndexJob('default', 'resumable.md')).toMatchObject({
+        const checkpoint = latestResumableMemoryIndexJob('default', 'resumable.md')
+        expect(checkpoint).toMatchObject({
             id: started.id,
             progressCurrent: 4,
             progressTotal: 7,
             result: { resumeCheckpoint: { contentHash: 'same-revision', completedChunkIndexes: [0, 1, 2, 3] } },
         })
 
-        expect(discardMemoryIndexJob(started.id)).toBe(true)
+        // Recover checkpoints hidden by resume jobs created before checkpoint
+        // handoff was made atomic.
+        const emptyResume = startMemoryIndexJob({
+            kind: 'knowledge-extraction', spaceId: 'default', fileName: 'resumable.md',
+            run: async (signal) => new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true })),
+        })
+        cancelMemoryIndexJob(emptyResume.id)
+        await vi.waitFor(() => expect(getMemoryIndexJob(emptyResume.id)?.status).toBe('cancelled'))
+        expect(latestResumableMemoryIndexJob('default', 'resumable.md')?.id).toBe(started.id)
+
+        const resumed = startMemoryIndexJob({
+            kind: 'knowledge-extraction',
+            spaceId: 'default',
+            fileName: 'resumable.md',
+            resume: {
+                current: checkpoint!.progressCurrent!,
+                total: checkpoint!.progressTotal!,
+                checkpoint: (checkpoint!.result as { resumeCheckpoint: unknown }).resumeCheckpoint,
+            },
+            run: async (signal) => new Promise<void>((resolve) => {
+                signal.addEventListener('abort', () => resolve(), { once: true })
+            }),
+        })
+        expect(getMemoryIndexJob(resumed.id)).toMatchObject({
+            progressCurrent: 4,
+            progressTotal: 7,
+            result: checkpoint!.result,
+        })
+
+        cancelMemoryIndexJob(resumed.id)
+        await vi.waitFor(() => expect(getMemoryIndexJob(resumed.id)?.status).toBe('cancelled'))
+        expect(latestResumableMemoryIndexJob('default', 'resumable.md')?.id).toBe(resumed.id)
+
+        expect(discardMemoryIndexJob(resumed.id)).toBe(true)
         expect(getMemoryIndexJob(started.id)).toBeUndefined()
+        expect(getMemoryIndexJob(resumed.id)).toBeUndefined()
         expect(latestResumableMemoryIndexJob('default', 'resumable.md')).toBeUndefined()
     })
 })

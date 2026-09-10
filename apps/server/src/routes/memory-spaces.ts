@@ -511,6 +511,11 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             kind: 'knowledge-extraction',
             spaceId: row.id,
             fileName: req.params.fileName,
+            resume: resumableJob && resumeCheckpoint ? {
+                current: resumableJob.progressCurrent || 0,
+                total: resumableJob.progressTotal || 0,
+                checkpoint: resumeCheckpoint,
+            } : undefined,
             run: async (signal, reportProgress) => ({
                 success: true,
                 ...(await indexMemoryFileIntoKnowledge({

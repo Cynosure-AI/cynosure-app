@@ -159,6 +159,7 @@ export function startMemoryIndexJob<T>(opts: {
     spaceId: string
     fileName: string
     replaceExisting?: boolean
+    resume?: { current: number; total: number; checkpoint: unknown }
     run: (signal: AbortSignal, reportProgress: (current: number, total: number, checkpoint?: unknown) => void) => Promise<T>
 }): MemoryIndexJobSnapshot<T> {
     ensurePersistedJobsLoaded()
@@ -179,6 +180,9 @@ export function startMemoryIndexJob<T>(opts: {
         id: nanoid(), kind: opts.kind, spaceId: opts.spaceId, fileName: opts.fileName,
         status: 'queued', createdAt: now, updatedAt: now, attempt: 0,
         maxAttempts: DEFAULT_MAX_ATTEMPTS,
+        progressCurrent: opts.resume?.current,
+        progressTotal: opts.resume?.total,
+        result: opts.resume ? { resumeCheckpoint: opts.resume.checkpoint } as T : undefined,
         controller: new AbortController(), promise: Promise.resolve(), run: opts.run,
     }
     jobs.set(job.id, job)
@@ -328,21 +332,34 @@ export function cancelMemoryIndexJob(id: string): MemoryIndexJobSnapshot | undef
 
 export function latestResumableMemoryIndexJob(spaceId: string, fileName: string): MemoryIndexJobSnapshot | undefined {
     ensurePersistedJobsLoaded()
-    const latest = Array.from(jobs.values())
+    const matching = Array.from(jobs.values())
         .filter((job) => job.kind === 'knowledge-extraction' && job.spaceId === spaceId && job.fileName === fileName)
         .sort((a, b) => b.createdAt - a.createdAt)
-        [0]
-    return latest?.status === 'cancelled' && (latest.progressCurrent || 0) > 0 && latest.progressCurrent! < (latest.progressTotal || 0)
-        ? snapshot(latest)
-        : undefined
+    if (matching[0]?.status !== 'cancelled') return undefined
+    const resumable = matching.find((job) => job.status === 'cancelled'
+        && (job.progressCurrent || 0) > 0
+        && job.progressCurrent! < (job.progressTotal || 0))
+    return resumable ? snapshot(resumable) : undefined
 }
 
 export function discardMemoryIndexJob(id: string): boolean {
     ensurePersistedJobsLoaded()
     const job = jobs.get(id)
     if (!job || isActive(job)) return false
-    jobs.delete(id)
-    getDb().prepare('DELETE FROM memory_index_jobs WHERE id = ?').run(id)
+    const discardedIds = Array.from(jobs.values())
+        .filter((candidate) => candidate.status === 'cancelled'
+            && candidate.kind === job.kind
+            && candidate.spaceId === job.spaceId
+            && candidate.fileName === job.fileName)
+        .map((candidate) => candidate.id)
+    for (const discardedId of discardedIds) jobs.delete(discardedId)
+    if (discardedIds.length) {
+        const placeholders = discardedIds.map(() => '?').join(', ')
+        getDb().prepare(`DELETE FROM memory_index_jobs WHERE id IN (${placeholders})`).run(...discardedIds)
+    } else {
+        jobs.delete(id)
+        getDb().prepare('DELETE FROM memory_index_jobs WHERE id = ?').run(id)
+    }
     return true
 }
 
