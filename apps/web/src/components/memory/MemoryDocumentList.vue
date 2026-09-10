@@ -851,6 +851,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             :primary-label="`Resume analysis of ${file.fileName}`"
             :menu-label="`Analysis options for ${file.fileName}`"
             title="Continue analysing the remaining document parts"
+            placement="above"
             @primary="extractKnowledgeFromFile(file.fileName)"
           >
             <Icon
