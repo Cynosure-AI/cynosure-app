@@ -99,7 +99,7 @@ function record(event: KeyboardEvent): void {
     v-if="isElectron && visible"
     class="space-y-4"
   >
-    <SettingsSubheading label="Desktop" />
+    <SettingsSubheading label="Global Shortcut" />
     <BaseCard class="p-5">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex items-start gap-3">

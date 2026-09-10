@@ -10,7 +10,6 @@ import SettingsSubheading from './SettingsSubheading.vue'
 import SettingsPersistenceStatus, { type SettingsPersistenceState } from './SettingsPersistenceStatus.vue'
 import IconUpload from '../shared/IconUpload.vue'
 import { ref, watch } from 'vue'
-import DesktopSettings from './DesktopSettings.vue'
 
 const prefs = usePreferencesStore()
 const onboardingStore = useOnboardingStore()
@@ -87,7 +86,6 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
 
 <template>
   <div class="space-y-4">
-    <DesktopSettings :visible-sections="visibleSections" />
     <SettingsSubheading
       v-if="showAnySection(['user-profile'])"
       label="Profile"
