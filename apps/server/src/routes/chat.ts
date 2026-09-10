@@ -35,7 +35,7 @@ import {
 } from '../core/chat/active-executions.js'
 import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
-import { appendHiddenSystemContext, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
+import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemorySpaceOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
 import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
@@ -426,6 +426,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           content: userContent
         }
       }
+
+      // A follow-up to an image-producing assistant turn is an image edit by
+      // default. Supply that generated image to the model as the base without
+      // duplicating it as a visible/user-owned attachment in conversation data.
+      messages = attachPreviousGeneratedImageToActiveUser(filteredRows, messages)
 
       // Resolve agent for this conversation (used by both MA planning and normal chat)
       const convCheck = db.prepare('SELECT agent_id, ma_workspace_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null; ma_workspace_id: string | null } | undefined
