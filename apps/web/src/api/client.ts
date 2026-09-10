@@ -93,6 +93,12 @@ export const api = {
     },
     resolveUploads: (ids: string[]) =>
       post<{ files: { id: string; name: string; content: string }[] }>('/api/chat/uploads/resolve', { ids }),
+    resolveArtifacts: (artifacts: { id: string; href: string; label: string; kind: 'file' | 'image' | 'video' | 'audio' }[]) =>
+      post<{
+        images: { id: string; name: string; url: string }[]
+        audio: { id: string; name: string; url: string }[]
+        files: { id: string; name: string; content: string }[]
+      }>('/api/chat/artifacts/resolve', { artifacts }),
     getMessages: (conversationId: string) =>
       get<ConversationMessagesResponse>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
     getDebugContext: (conversationId: string) =>

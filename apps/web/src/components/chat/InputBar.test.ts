@@ -135,7 +135,11 @@ describe('InputBar drafts', () => {
 
     const library = wrapper.findComponent({ name: 'FileLibraryModal' })
     expect(library.props('show')).toBe(true)
-    library.vm.$emit('add', [{ id: 'upload-1', name: 'notes.txt', content: 'saved notes' }])
+    library.vm.$emit('add', {
+      images: [],
+      files: [{ id: 'upload-1', name: 'notes.txt', content: 'saved notes' }],
+      audio: [],
+    })
     await wrapper.get('textarea').setValue('Use this again')
     await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
     await flushPromises()
@@ -145,6 +149,26 @@ describe('InputBar drafts', () => {
       undefined,
       [{ name: 'notes.txt', content: 'saved notes' }],
       undefined,
+    )
+  })
+
+  test('adds generated image and audio artifacts to the next message', async () => {
+    const wrapper = mountInputBar()
+    const library = wrapper.findComponent({ name: 'FileLibraryModal' })
+    library.vm.$emit('add', {
+      images: [{ id: 'image-artifact', name: 'concept.png', url: 'data:image/png;base64,image' }],
+      files: [],
+      audio: [{ id: 'audio-artifact', name: 'voice.wav', url: 'data:audio/wav;base64,audio' }],
+    })
+    await wrapper.get('textarea').setValue('Use these artifacts')
+    await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(chatStore.sendMessage).toHaveBeenCalledWith(
+      'Use these artifacts',
+      ['data:image/png;base64,image'],
+      undefined,
+      ['data:audio/wav;base64,audio'],
     )
   })
 })
