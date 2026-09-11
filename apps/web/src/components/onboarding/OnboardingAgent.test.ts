@@ -2,8 +2,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { api } from '../../api/client'
-import type { AgentDefinition, LLMProviderConfig, MemorySpace } from '../../api/types'
+import type { AgentDefinition, LLMProviderConfig } from '../../api/types'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useProviderStore } from '../../stores/provider.store'
 import OnboardingAgent from './OnboardingAgent.vue'
@@ -44,46 +43,18 @@ describe('OnboardingAgent', () => {
     expect(definitions.create).not.toHaveBeenCalled()
   })
 
-  test('creates and assigns a dedicated memory space', async () => {
+  test('creates an agent without creating a dedicated memory space', async () => {
     const definitions = useAgentDefinitionsStore()
     definitions.create = vi.fn().mockResolvedValue({ id: 'agent-1' } as AgentDefinition)
-    vi.spyOn(api.memorySpaces, 'list').mockResolvedValue([])
-    vi.spyOn(api.memorySpaces, 'create').mockResolvedValue({
-      id: 'space-1',
-      relativePath: '.agents/research_assistant',
-    } as MemorySpace)
-
     const wrapper = mountStep()
     await wrapper.get('#onboarding-agent-name').setValue('Research Assistant')
     await wrapper.get('#onboarding-agent-description').setValue('Finds reliable sources.')
 
     await expect(wrapper.vm.createAgent()).resolves.toBe(true)
-    expect(api.memorySpaces.create).toHaveBeenCalledWith(
-      'research_assistant',
-      'Private memory folder for Research Assistant',
-      '.agents',
-    )
     expect(definitions.create).toHaveBeenCalledWith(expect.objectContaining({
       name: 'Research Assistant',
       internalName: 'research_assistant',
       description: 'Finds reliable sources.',
-      autoMemory: true,
-      memorySpaces: ['space-1'],
-    }))
-  })
-
-  test('creates an agent without default memory when memory is disabled', async () => {
-    const definitions = useAgentDefinitionsStore()
-    definitions.create = vi.fn().mockResolvedValue({ id: 'agent-1' } as AgentDefinition)
-    const listSpaces = vi.spyOn(api.memorySpaces, 'list')
-
-    const wrapper = mountStep()
-    await wrapper.get('#onboarding-agent-name').setValue('Writer')
-    await wrapper.get('button[role="switch"]').trigger('click')
-
-    await expect(wrapper.vm.createAgent()).resolves.toBe(true)
-    expect(listSpaces).not.toHaveBeenCalled()
-    expect(definitions.create).toHaveBeenCalledWith(expect.objectContaining({
       autoMemory: false,
       memorySpaces: [],
     }))
