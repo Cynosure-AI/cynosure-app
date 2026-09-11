@@ -51,12 +51,6 @@ const chunkSaving = ref(false)
 const savedChunking = ref({ chunkSize: 512, chunkOverlap: 64 })
 const chunkStatus = ref<SettingsPersistenceState>('idle')
 
-// Retrieval state
-const retrievalResultCount = ref(10)
-const retrievalSaving = ref(false)
-const savedRetrievalResultCount = ref(10)
-const retrievalStatus = ref<SettingsPersistenceState>('idle')
-
 // Reranker state
 const rerankEnabled = ref(false)
 const rerankProviderId = ref('')
@@ -125,7 +119,6 @@ onMounted(async () => {
   await loadEmbeddingConfig()
   await loadEntityExtractionConfig()
   await loadChunkingConfig()
-  await loadRetrievalConfig()
   await loadRerankerConfig()
 })
 
@@ -196,30 +189,6 @@ async function loadRerankerConfig() {
       candidateCount: rerankCandidateCount.value,
     }
   }
-}
-
-async function loadRetrievalConfig() {
-  try {
-    const config = await api.memory.getRetrievalConfig()
-    retrievalResultCount.value = config.resultCount
-    savedRetrievalResultCount.value = config.resultCount
-  } catch { /* defaults */ }
-}
-
-async function saveRetrieval() {
-  const requested = retrievalResultCount.value
-  retrievalSaving.value = true
-  retrievalStatus.value = 'saving'
-  try {
-    const config = await api.memory.configureRetrieval({ resultCount: requested })
-    retrievalResultCount.value = config.resultCount
-    savedRetrievalResultCount.value = config.resultCount
-    retrievalStatus.value = 'saved'
-  } catch {
-    retrievalResultCount.value = savedRetrievalResultCount.value
-    retrievalStatus.value = 'error'
-  }
-  retrievalSaving.value = false
 }
 
 async function loadEntityExtractionConfig() {
@@ -389,7 +358,7 @@ function cancelDrop() {
 <template>
   <div class="space-y-4">
     <SettingsSubheading
-      v-if="showAnySection(['embedding-model', 'retrieval', 'knowledge-extraction', 'reranker'])"
+      v-if="showAnySection(['embedding-model', 'knowledge-extraction', 'reranker'])"
       label="Retrieval"
     />
 
@@ -484,55 +453,6 @@ function cancelDrop() {
       </div>
     </BaseCard>
 
-    <!-- Automatic Retrieval -->
-    <BaseCard
-      v-if="showSection('retrieval')"
-      class="p-5 space-y-4"
-    >
-      <div class="flex items-start gap-3">
-        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
-          <Icon
-            icon="lucide:search"
-            class="w-5 h-5 text-theme-400"
-          />
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-theme-200">
-            Automatic Memory Retrieval
-          </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
-            Control how many ranked memories each automatic retrieval query returns before context selection.
-          </p>
-        </div>
-      </div>
-
-      <div>
-        <label class="block text-xs text-theme-400 mb-1">Results per Query</label>
-        <input
-          v-model.number="retrievalResultCount"
-          type="number"
-          min="1"
-          max="50"
-          step="1"
-          :disabled="retrievalSaving"
-          class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-          @change="saveRetrieval"
-        >
-        <p class="text-xs text-theme-500 mt-1">
-          Automatic routing may run both direct and contextual queries, deduplicate their results, then select up to 5 memories for chat context.
-        </p>
-      </div>
-      <div
-        v-if="retrievalStatus === 'saving' || retrievalStatus === 'error'"
-        class="flex justify-end"
-      >
-        <SettingsPersistenceStatus
-          mode="auto"
-          :state="retrievalStatus"
-        />
-      </div>
-    </BaseCard>
-
     <!-- Reranking -->
     <BaseCard
       v-if="showSection('reranker')"
@@ -597,7 +517,7 @@ function cancelDrop() {
             class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
           >
           <p class="text-xs text-theme-500 mt-1">
-            Candidates fetched before reranking. Keep this above Results per Query to give the reranker a wider pool; lower values are automatically raised to the requested result count.
+            Candidates fetched before reranking. Larger pools can improve relevance but increase reranking cost.
           </p>
         </div>
       </div>
